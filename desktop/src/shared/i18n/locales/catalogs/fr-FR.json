@@ -2891,6 +2891,8 @@
     "profileInvalid": "Le profil de navigateur du CodeSpace est illisible. Restaurez codespace-profiles.json avant de rouvrir ce CodeSpace."
   },
   "sshSettings": {
+    "nameHelp": "Le nom de l’environnement affiché dans Desktop.",
+    "destinationHelp": "Accepte les alias d’hôte de ~/.ssh/config.",
     "title": "Paramètres de l’environnement",
     "connection": "Connexion",
     "connectionHelp": "À propos de cette connexion",

@@ -1,0 +1,18 @@
+[data-floe-dialog-panel].redeven-terminal-settings-dialog { max-width: min(800px, 92vw); border-radius: 14px; height: min(710px, 90dvh); background: var(--background); }
+.redeven-terminal-settings-dialog [data-floe-dialog-header] { padding: 24px 24px 12px; }
+.redeven-terminal-settings-dialog [data-floe-dialog-header] h2 { font-size: 16px; font-weight: 600; }
+.redeven-terminal-settings-dialog [data-floe-dialog-body] > p { padding: 0 28px 12px; font-size: 13px; line-height: 1.7; }
+.terminal-settings-body { padding: 12px 28px 28px; }
+.terminal-settings-body > section + section { margin-top: 28px; }
+.terminal-settings-body > section > .rounded-md { border-radius: 14px; padding: 14px 17px; }
+.terminal-settings-choice-details { border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.terminal-settings-choice-details > summary { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; font-size: 13px; cursor: pointer; list-style: none; }
+.terminal-settings-choice-details > summary::-webkit-details-marker { display: none; }
+.terminal-settings-choice-details > summary::after { content: '›'; transform: rotate(90deg); }
+.terminal-settings-choice-details[open] > summary { border-bottom: 1px solid var(--border); }
+.terminal-settings-choice-details[open] > summary::after { transform: rotate(-90deg); }
+.terminal-settings-choice-details > :not(summary) { margin: 14px; }
+@media (max-width: 600px) {
+  .terminal-settings-body { padding-inline: 12px; }
+  .terminal-settings-choice-details > :not(summary) { margin: 6px; }
+}

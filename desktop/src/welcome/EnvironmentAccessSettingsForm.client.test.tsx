@@ -80,6 +80,17 @@ const ready = { status: 'ready', code: '', identity: 'ready', trust: 'untrusted'
 const disabledSecurity: SecurityResult = { https_ready: true, enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
 
 describe('Environment access workflows', () => {
+  it('keeps connection facts compact and defers address lists until requested', async () => {
+    await mount({ url: 'http://localhost:23998/', urls: [
+      'http://localhost:23998/', 'http://127.0.0.1:23998/', 'http://192.168.1.11:23998/',
+    ] });
+    expect(document.querySelector('.redeven-environment-settings-dialog')?.textContent).toContain('Local Environment');
+    const summaries = [...document.querySelectorAll<HTMLDetailsElement>('.redeven-address-group--summary')];
+    expect(summaries).toHaveLength(2);
+    expect(summaries.every(summary => !summary.open)).toBe(true);
+    expect(document.querySelectorAll('.access-flow-summary > section')).toHaveLength(3);
+  });
+
   it('starts with task summaries and opens only the selected configuration workflow', async () => {
     await mount();
     expect(document.querySelector('#local-ui-port')).toBeNull();

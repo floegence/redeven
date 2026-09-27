@@ -13,3 +13,122 @@
 @media (pointer: coarse) {
   .redeven-settings-header select { min-height: 44px; font-size: max(16px, 1rem); }
 }
+
+/* Settings presentation contract: one quiet page rhythm shared by every
+ * runtime section. Floe owns the primitives and focus treatment; Redeven only
+ * supplies product spacing, palette roles, and responsive limits. */
+.redeven-settings-shell .redeven-settings-page {
+  max-width: 860px;
+  margin-inline: auto;
+  padding: 44px 40px 64px;
+}
+
+.redeven-settings-shell .redeven-settings-page .floe-settings-section__body {
+  gap: 1.75rem;
+}
+
+.redeven-settings-section + .redeven-settings-section {
+  margin-top: 2rem;
+}
+
+.redeven-settings-shell .redeven-settings-page .floe-settings-list {
+  border: 1px solid var(--redeven-settings-inset-border);
+  border-radius: 14px;
+  background: var(--redeven-settings-inset-bg);
+  box-shadow: none;
+}
+
+.redeven-settings-shell .redeven-settings-page .floe-setting-row {
+  min-height: 65px;
+  padding: 14px 17px;
+  background: transparent;
+}
+
+.redeven-settings-shell .redeven-settings-page .floe-setting-row__main {
+  gap: 1.75rem;
+}
+
+.redeven-settings-shell .redeven-settings-page .floe-setting-row__control {
+  max-width: 56%;
+}
+
+.redeven-settings-shell .redeven-settings-page .floe-setting-row__title {
+  font-weight: 400;
+}
+
+.redeven-settings-shell .redeven-settings-page .floe-setting-row__label p,
+.redeven-settings-shell .redeven-settings-page .floe-settings-section__heading > p {
+  max-width: 38rem;
+  line-height: 1.6;
+}
+
+.redeven-settings-shell .redeven-settings-page .redeven-settings-inset {
+  box-shadow: none;
+}
+
+.runtime-status-summary .floe-setting-row[data-tone='default'] {
+  background: transparent;
+}
+
+.runtime-status-details {
+  margin-top: -.75rem;
+  font-size: .75rem;
+  color: var(--redeven-settings-note-fg);
+}
+
+.runtime-status-details > summary {
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+}
+
+.runtime-status-details > summary::-webkit-details-marker { display: none; }
+.runtime-status-details > summary::before { content: '›'; display: inline-block; margin-right: .35rem; transition: transform 120ms ease; }
+.runtime-status-details[open] > summary::before { transform: rotate(90deg); }
+
+@container redeven-settings (max-width: 600px) {
+  .redeven-settings-shell .redeven-settings-page {
+    padding: 1.75rem 1.25rem 3rem;
+  }
+
+  .redeven-settings-shell .redeven-settings-page .floe-setting-row__control {
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-status-details > summary::before { transition: none; }
+}
+
+/* Product page scale follows the approved reference. Floe owns interaction. */
+.redeven-settings-shell .floe-settings-layout__sidebar { width: 228px; border-inline-end: 0; }
+.redeven-settings-shell .floe-settings-navigation__search { padding: 20px 14px 8px; }
+.redeven-settings-shell .floe-settings-navigation__groups { padding: 0 14px 20px; }
+.redeven-settings-shell .floe-settings-navigation__label { padding: 19px 9px 6px; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.redeven-settings-shell .floe-settings-navigation__group + .floe-settings-navigation__group { margin-top: 0; }
+.redeven-settings-shell .floe-settings-navigation__item { min-height: 35px; margin-block: 2px; padding: 8px 10px; gap: 10px; font-size: 13px; font-weight: 400; }
+:root:not([data-floe-shell-theme^='hc-']) .redeven-settings-shell .floe-settings-navigation__item[aria-current='page']::before { display: none; }
+.redeven-settings-shell .redeven-settings-page h1 { font-size: 25px; line-height: 1.4; letter-spacing: -.6px; font-weight: 600; }
+.redeven-settings-shell .floe-settings-section[data-settings-variant='page'] > .floe-settings-section__header { margin-bottom: 33px; }
+.redeven-settings-shell .floe-settings-section[data-settings-variant='page'] > .floe-settings-section__header .floe-settings-section__heading > p { margin-top: 8px; font-size: 13px; line-height: 1.7; }
+.redeven-settings-shell .floe-setting-row__title { font-size: 13px; line-height: 1.6; }
+.redeven-settings-shell .floe-setting-row__label p { font-size: 12px; line-height: 1.65; margin-top: 3px; }
+.redeven-settings-shell .floe-setting-row__icon { display: none; }
+.redeven-settings-shell .floe-setting-row__control > input:not([type='checkbox']):not([type='radio']) { width: 258px; height: 34px; font-size: 12px; }
+@container redeven-settings (max-width: 767px) {
+  .redeven-settings-shell .floe-settings-layout__sidebar { display: none; }
+  .redeven-settings-shell .redeven-settings-page { padding: 28px 20px 48px; }
+}
+@media (pointer: coarse) {
+  .redeven-settings-shell .floe-setting-row__control input, .redeven-settings-shell .floe-setting-row__control select { font-size: 16px; min-height: 44px; }
+}
+
+.dark .redeven-settings-shell {
+  --redeven-settings-content-bg: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  --redeven-settings-sidebar-bg: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  --redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--foreground) 4%, var(--redeven-settings-sidebar-bg));
+  --redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--foreground) 10%, var(--redeven-settings-sidebar-bg));
+  --redeven-settings-inset-bg: color-mix(in srgb, var(--foreground) 9%, var(--background));
+  --redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 5%, transparent);
+  --redeven-settings-divider: color-mix(in srgb, var(--foreground) 4%, transparent);
+}

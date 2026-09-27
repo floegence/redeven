@@ -19,15 +19,16 @@ The window, tab, draft lifetime and asynchronous recovery contract belongs to
 ## SSH fields and validation
 
 The form presents name, connection and authentication, automatic status detection,
-and advanced configuration in that order. The form is one continuous reading
-surface with quiet section dividers; identity and transport fields are not
-wrapped in separate cards. Advanced settings start collapsed even
+and advanced configuration in that order. Identity, connection and probing
+use quiet grouped rows on one canvas, with a 258px control column and an 88px
+port field. Groups have a 14px radius and at least 65px row height; narrow
+screens stack labels above their controls. Advanced settings start collapsed even
 for customized registrations. A wrapping summary names package delivery, default
 or custom directory, release source, and connection timeout. Expanding preserves
 the draft. Invalid advanced fields expand on Save and the first invalid field
 receives focus. Creation and editing use the same canonical SSH normalizers.
-Editing one field clears only its error. Fields and controls are 13px, and
-supporting text is 12px; modal material remains owned by Floe.
+Editing one field clears only its error. Labels are 13px; controls and supporting text are 12px. Touch inputs use
+at least 16px text and a 44px height. Floe owns input focus and modal lifecycle.
 
 Cmd/Ctrl+Enter saves unless composition or a nested selector owns the key.
 Collapsed fields stay outside the tab order. Nested help and destination selectors

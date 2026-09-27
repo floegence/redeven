@@ -2891,6 +2891,8 @@
     "profileInvalid": "No se pudo leer el perfil de navegador guardado del CodeSpace. Restaure codespace-profiles.json antes de volver a abrir este CodeSpace."
   },
   "sshSettings": {
+    "nameHelp": "El nombre del entorno que aparece en Desktop.",
+    "destinationHelp": "Admite alias de host de ~/.ssh/config.",
     "title": "Ajustes del entorno",
     "connection": "Conexión",
     "connectionHelp": "Acerca de esta conexión",

@@ -25,14 +25,15 @@ import type { BrowserEditorSetupProgress } from '../../services/browserEditorSet
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
 import { BrowserEditorInstallMethodSelector } from '../BrowserEditorInstallMethodSelector';
-import { SettingsList, SettingsSection, SettingsPill } from './SettingsPrimitives';
+import { SettingsList, SettingsSection, SettingsPill, SettingRow } from './SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../i18n';
 
 type RuntimeDetailRow = Readonly<{
   label: string;
   value: JSX.Element | string;
-  note?: JSX.Element | string;
+  note?: string;
   mono?: boolean;
+  detail?: boolean;
 }>;
 
 function runtimeSourceLabel(source: string | null | undefined, i18n: I18nHelpers): string {
@@ -120,18 +121,20 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined, i18n: I18n
 }
 
 function RuntimeDetailsSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
-  return (
-    <div class="space-y-2">
-      <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.title}</div>
-      <dl class="redeven-settings-inset grid grid-cols-1 overflow-hidden rounded-lg border md:grid-cols-2">
-        <For each={props.rows}>{(row) => <div class="min-w-0 border-b border-[var(--redeven-settings-divider)] px-4 py-4">
-          <dt class="text-xs text-muted-foreground">{row.label}</dt>
-          <dd class={`mt-2 break-all text-[length:var(--floe-type-body)] text-foreground ${row.mono ? 'font-mono text-xs' : 'font-medium'}`}>{row.value}</dd>
-          <Show when={row.note}><p class="mt-2 text-xs leading-relaxed text-muted-foreground">{row.note}</p></Show>
-        </div>}</For>
-      </dl>
-    </div>
-  );
+  const i18n = useI18n();
+  const rows = (details: boolean) => <SettingsList>
+    <For each={props.rows.filter(row => Boolean(row.detail || row.mono) === details)}>{row =>
+      <SettingRow title={row.label} description={row.note} control={<span class={row.mono ? 'font-mono text-xs break-all' : 'text-xs'}>{row.value}</span>} />
+    }</For>
+  </SettingsList>;
+  return <div class="space-y-3">
+    <h3 class="text-[13px] font-medium text-muted-foreground">{props.title}</h3>
+    {rows(false)}
+    <details class="code-runtime-details">
+      <summary>{i18n.t('settings.connection.technicalInformation')}</summary>
+      <div class="pt-3">{rows(true)}</div>
+    </details>
+  </div>;
 }
 
 function ActionButtonTooltip(props: { content: string; disabled?: boolean; children: JSX.Element }) {
@@ -293,6 +296,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     return [
       {
         label: i18n.t('codeRuntime.rows.managedEditorSource'),
+        detail: true,
         value: props.status?.managed_runtime_source === 'managed' ? i18n.t('codeRuntime.selectedManagedVersion') : i18n.t('codeRuntime.noManagedVersionSelected'),
         note:
           props.status?.managed_runtime_source === 'managed'
@@ -318,6 +322,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       },
       {
         label: i18n.t('codeRuntime.rows.activeSource'),
+        detail: true,
         value: runtimeSourceLabel(active?.source, i18n),
         note:
           active?.source === 'env_override'

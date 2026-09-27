@@ -1,3 +1,4 @@
+import './terminal-settings.css';
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Checkbox, Input, NumberInput } from '@floegence/floe-webapp-core/ui';
@@ -213,7 +214,6 @@ function TerminalThemeOptionCard(props: {
         name="terminal-theme"
         value={props.item.id}
         checked={props.selected}
-        data-floe-autofocus={props.selected ? 'true' : undefined}
         onChange={props.onSelect}
         onFocus={(event) => {
           const card = event.currentTarget.closest('label');
@@ -301,10 +301,10 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
       bodyDescription={i18n.t('terminal.settings.description')}
       contentClass="flex min-h-0 flex-1 flex-col overflow-hidden p-0 [&>p]:px-3 [&>p]:pt-3 [&>p]:break-words"
       class={cn(
-        'flex flex-col overflow-hidden rounded-md p-0',
+        'redeven-terminal-settings-dialog flex flex-col overflow-hidden p-0',
         isMobile()
           ? 'h-full w-full max-w-none'
-          : 'w-[min(30rem,92vw)]'
+          : 'w-[min(50rem,92vw)]'
       )}
       footer={
         <Button size="sm" variant="primary" onClick={() => props.onOpenChange(false)}>
@@ -314,7 +314,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
     >
       <div
         {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
-        class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 space-y-5"
+        class="terminal-settings-body min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
         <Show when={isMobile()}>
           <section class="space-y-3">
@@ -353,6 +353,8 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
           title={i18n.t('terminal.settings.themeTitle')}
           description={i18n.t('terminal.settings.themeDescription')}
         />
+        <details class="terminal-settings-choice-details" data-terminal-preview="theme">
+          <summary data-floe-autofocus>{itemLabel(TERMINAL_THEME_ITEMS.find(item => isThemeSelected(item.id)) ?? SYSTEM_THEME_ITEM)}</summary>
         <div
           class="grid grid-cols-1 gap-2 sm:grid-cols-2"
           role="radiogroup"
@@ -401,6 +403,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
             }}
           </For>
         </div>
+        </details>
         <div class="sr-only" aria-live="polite">{themeAnnouncement()}</div>
         </section>
 
@@ -434,6 +437,8 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
             ? i18n.t('terminal.settings.sharedWorkbenchFontDescription')
             : i18n.t('terminal.settings.localFontDescription')}
         />
+        <details class="terminal-settings-choice-details" data-terminal-preview="font">
+          <summary>{TERMINAL_FONT_OPTIONS.find(option => option.id === props.fontFamilyId)?.label ?? props.fontFamilyId}</summary>
         <Show when={fontSearchVisible()}>
           <Input type="search" value={fontQuery()} onInput={(event) => setFontQuery(event.currentTarget.value)}
             aria-label={i18n.t('terminal.settings.fontSearch')} placeholder={i18n.t('terminal.settings.fontSearch')} />
@@ -486,6 +491,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         <Show when={fontQuery().trim() && filteredFonts().length === 0}>
           <p role="status" class="text-xs text-muted-foreground">{i18n.t('terminal.settings.fontNoMatches')}</p>
         </Show>
+        </details>
         <TerminalFontStatus font={resolvedFont()} showReady />
         <pre class="overflow-x-auto rounded-md border border-border/70 bg-muted/[0.14] p-3"
           aria-label={i18n.t('terminal.settings.fontPreview')}

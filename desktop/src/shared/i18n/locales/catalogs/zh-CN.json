@@ -2887,6 +2887,8 @@
     "profileInvalid": "无法读取保存的 CodeSpace 浏览器配置。请先恢复 codespace-profiles.json，再重新打开此 CodeSpace。"
   },
   "sshSettings": {
+    "nameHelp": "在 Desktop 中显示的环境名称。",
+    "destinationHelp": "支持 ~/.ssh/config 中的主机别名。",
     "title": "环境设置",
     "connection": "连接",
     "connectionHelp": "了解连接方式",

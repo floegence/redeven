@@ -2920,6 +2920,8 @@
     "profileInvalid": "Не удалось прочитать сохранённый профиль браузера CodeSpace. Восстановите codespace-profiles.json, прежде чем снова открыть этот CodeSpace."
   },
   "sshSettings": {
+    "nameHelp": "Имя окружения, отображаемое в Desktop.",
+    "destinationHelp": "Поддерживаются псевдонимы хостов из ~/.ssh/config.",
     "title": "Настройки окружения",
     "connection": "Подключение",
     "connectionHelp": "Об этом подключении",

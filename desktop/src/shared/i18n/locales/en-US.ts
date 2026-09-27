@@ -1617,6 +1617,8 @@ export const enUS = {
     providerAuthorizedDetail: 'Desktop has active Redeven Cloud authorization and a fresh Environment catalog.',
   },
   sshSettings: {
+    nameHelp: "The environment name shown in Desktop.",
+    destinationHelp: "Supports host aliases from ~/.ssh/config.",
     advanced: "Advanced settings",
     delivery: "Package delivery",
     directory: "Runtime directory",

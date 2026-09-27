@@ -43,15 +43,24 @@ it.each([1280, 1024, 768, 390, 320])('keeps all ten pages readable without overf
   for (const item of SETTINGS_NAV_ITEMS) {
     const panel = await openSection(item.id); expectNoOverflow(panel);
     expect(panel.querySelectorAll('h1')).toHaveLength(1);
-    expect(getComputedStyle(panel.querySelector('h1')!).fontSize).toBe('16px');
-    expect(getComputedStyle(panel.querySelector('h1')!).fontWeight).toBe('500');
-    for (const description of panel.querySelectorAll('.floe-setting-row__label p, .floe-settings-section__header p')) {
+    expect(getComputedStyle(panel.querySelector('h1')!).fontSize).toBe('25px');
+    expect(getComputedStyle(panel.querySelector('h1')!).fontWeight).toBe('600');
+    for (const description of panel.querySelectorAll('.floe-setting-row__label p')) {
       expect(getComputedStyle(description).fontSize).toBe('12px');
     }
+    expect(getComputedStyle(panel.querySelector('.floe-settings-section__heading > p')!).fontSize).toBe('13px');
     if (item.id === 'config') {
       expect(getComputedStyle(panel.querySelector('code')!).fontSize).toBe('12px');
     }
-    if (width === 1280) await page.screenshot({ path: `runtime-settings-${item.id}.png` });
+    if (width === 1280) {
+      const content = panel.querySelector<HTMLElement>('.redeven-settings-page')!;
+      expect(content.getBoundingClientRect().width).toBe(860);
+      expect(getComputedStyle(content).padding).toBe('44px 40px 64px');
+      for (const list of content.querySelectorAll<HTMLElement>('.floe-settings-list')) {
+        expect(getComputedStyle(list).borderRadius).toBe('14px');
+      }
+      await page.screenshot({ path: `../../../dist/settings-design/runtime-settings-${item.id}.png` });
+    }
   }
 });
 
@@ -98,7 +107,7 @@ it('opens every provider step at a mobile width with a reachable footer', async 
     const bounds = save.getBoundingClientRect();
     expect(bounds.bottom).toBeLessThanOrEqual(800);
   }
-  await page.screenshot({ path: 'runtime-settings-provider-mobile.png' });
+  await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-provider-mobile.png' });
 });
 
 it('switches Flower groups without losing permissions or health access and respects read-only state', async () => {
@@ -108,7 +117,7 @@ it('switches Flower groups without losing permissions or health access and respe
   await expect.element(page.getByText('Approval required', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Health & storage', exact: true }).click();
   await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
-  await page.screenshot({ path: 'runtime-settings-health-dark.png' });
+  await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-health-dark.png' });
   fixture.setCanAdmin(false);
   await openSection('runtime');
   await expect.element(page.getByPlaceholder('/home/user')).toBeDisabled();

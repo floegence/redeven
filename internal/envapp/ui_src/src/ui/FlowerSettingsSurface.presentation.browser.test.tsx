@@ -70,8 +70,8 @@ for (const [locale, dark, width] of [
     document.documentElement.classList.toggle('dark', dark);
     const frame = host.querySelector<HTMLElement>('.flower-settings-frame')!;
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth);
-    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('13px');
-    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontWeight).toBe('500');
+    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('25px');
+    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontWeight).toBe('600');
     expect(getComputedStyle(frame.querySelector('.flower-settings-subsection-description')!).fontSize).toBe('12px');
     expect(getComputedStyle(frame.querySelector('.flower-settings-model-select')!).fontSize).toBe('12px');
     const sections = [...frame.querySelectorAll<HTMLElement>(':scope > section')];
@@ -119,7 +119,8 @@ it('aligns section headings separately from controls and discloses provider deta
   const contentEdges = sections.map(section => {
     const heading = section.querySelector<HTMLElement>('.flower-settings-subsection-header')!;
     const content = section.querySelector<HTMLElement>('.flower-settings-section-content')!;
-    expect(content.getBoundingClientRect().left - heading.getBoundingClientRect().right).toBeGreaterThanOrEqual(24);
+    expect(content.getBoundingClientRect().top - heading.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(11);
+    expect(content.getBoundingClientRect().left).toBe(heading.getBoundingClientRect().left);
     expect(parseFloat(getComputedStyle(section).paddingTop)).toBeGreaterThanOrEqual(20);
     return content.getBoundingClientRect().left;
   });
@@ -163,7 +164,7 @@ it('keeps the independently portaled provider dialog on the Flower reading scale
   await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-add')!);
   await expect.poll(() => document.querySelector('.flower-provider-dialog')).not.toBeNull();
   const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
-  expect(getComputedStyle(dialog.querySelector('[data-floe-dialog-header] h2')!).fontSize).toBe('13px');
+  expect(getComputedStyle(dialog.querySelector('[data-floe-dialog-header] h2')!).fontSize).toBe('16px');
   expect(getComputedStyle(dialog.querySelector('.flower-settings-subsection-description')!).fontSize).toBe('12px');
   for (const copy of dialog.querySelectorAll('.flower-body-copy')) {
     expect(getComputedStyle(copy).fontSize).toBe('12px');

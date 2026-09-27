@@ -108,9 +108,9 @@ closed opening is a notification, never an error in the next editor.
 
 The window uses released Floe Dialog, Tabs and retained TabPanel components.
 Multiple sections expose tabs; a single section omits the tab bar. The responsive
-panel is at most 48rem wide, respects the Desktop titlebar and viewport, and keeps
+panel is at most 50rem (800px) wide, respects the Desktop titlebar and viewport, and keeps
 title, tabs and actions fixed while each body scrolls. All settings windows use
-one stable 44rem height capped by the available viewport, including Local and
+one stable 44.375rem (710px) height capped by the available viewport, including Local and
 other single-section windows. Expanding settings, showing certificates, changing
 tabs or resolving an access read must not resize or recenter the window or move
 its action baseline. Viewport resizing may change the cap. A stable native
@@ -123,8 +123,12 @@ configuration. Access changes proceed through scope/protocol, required password
 or certificate preparation, and one next-start review. Advanced bind and port
 controls remain available in that task. The same session owns every draft;
 task navigation adds no configuration copy or alternate save path. Connection
-forms use one continuous reading surface with section dividers; identity,
-transport, probing, and advanced controls do not become unrelated nested cards.
+forms group identity, transport, and probing into quiet 14px-radius lists.
+Labels and guidance align left; desktop controls share a 258px right column,
+with 88px port fields. Narrow screens stack labels and controls. Advanced fields
+start collapsed. Local and network browser addresses use disclosures in the
+Access overview; remote internal listeners retain their scope explanation.
+Copy, filtering, and opening actions remain available inside each disclosure.
 
 A protected HTTP or password change first explains the dependency, verifies
 identity and explicitly commits disabling two-factor, then resumes the original
@@ -200,6 +204,7 @@ SSH field and secret details are owned by
 - `redeven:desktop/scripts/check-settings-expansion.mjs` - Per-frame window, footer and disclosure measurements, rapid reversals, immediate focus exclusion and reduced motion.
 - `redeven:desktop/scripts/check-access-settings.mjs` - Browser evidence for control proportions, all shipped themes and locales, narrow panels, enlarged text, real scrolling, certificate presentation and save recovery.
 - `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.tsx` - Task navigation, prerequisite continuation and contextual review/save feedback.
+- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Product geometry, responsive fields and fixed action baseline.
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Published modal and tabs with retained, independently scrolling panels.
 - `redeven:desktop/src/welcome/environmentSettingsSession.ts` - Opening identity, independent drafts and asynchronous result isolation.
 - `redeven:desktop/src/welcome/EnvironmentSettingsEntry.client.test.tsx` - Actual card entry, real health-store refresh continuity, read failures, reopening, deletion and late save behavior.

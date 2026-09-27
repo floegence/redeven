@@ -2891,6 +2891,8 @@
     "profileInvalid": "Das gespeicherte Browserprofil des CodeSpace konnte nicht gelesen werden. Stellen Sie codespace-profiles.json wieder her, bevor Sie diesen CodeSpace erneut öffnen."
   },
   "sshSettings": {
+    "nameHelp": "Der in Desktop angezeigte Umgebungsname.",
+    "destinationHelp": "Unterstützt Host-Aliasse aus ~/.ssh/config.",
     "title": "Umgebungseinstellungen",
     "connection": "Verbindung",
     "connectionHelp": "Über diese Verbindung",

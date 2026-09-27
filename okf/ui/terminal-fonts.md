@@ -27,6 +27,16 @@ Different sessions on the same Runtime retain independent grids. Multiple views 
 
 The [terminal interaction contract](workbench-terminal-interaction.md) owns controller transfer and canonical geometry. Passive observer font, viewport, and DPR changes update only local presentation and cannot send resize or activation requests. Activity and Workbench show font fallback in their existing fixed-height status bar, so a remote font update cannot resize the controller by adding or removing a message row. Closing the settings dialog restores local keyboard focus without activating an observer. Passive shared typography updates and font completion refresh local metrics even on the controller, without proposing new geometry. An explicit font or size choice on the controlling client waits for shared preference persistence to apply before proposing its newly measured grid; superseded selections and failed saves cannot dispatch that proposal; ordinary controller viewport changes retain the existing resize path. Losing control drops queued local resize proposals. Published Floeterm 0.19.1 preserves monotonically increasing controller epochs when a departed controller is replaced and notifies remaining observers, so an older open view can still explicitly take control. Explicit activation measures the current viewport and converges through the existing atomic controller and geometry protocol. Existing clipping and navigation apply when the canonical grid does not fit the local viewport.
 
+## Settings presentation
+
+Terminal settings show the current theme and font before their preview galleries.
+Each native disclosure starts closed and keeps its selection mounted when
+collapsed. Opening a gallery exposes the existing keyboard-operable options,
+font search, and preview samples; it does not change preferences. Initial focus
+belongs to the visible theme summary. The 800px-wide dialog is capped by the
+viewport, with a stable 710px height and a separately scrolling body. Narrow
+galleries retain one readable card column, including at 320px and 200% zoom.
+
 # Boundaries
 
 Font files and menu behavior are Runtime-served Env App assets. Updating Desktop alone cannot deploy them to an unchanged remote Runtime. Validate an isolated task Runtime first; installing the font feature does not authorize upgrading or restarting other running environments. Font license text is included in the generated root third-party notice.

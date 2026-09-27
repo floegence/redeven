@@ -1,18 +1,18 @@
 .access-workflow, .access-workflow-panel { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
 .access-workflow-panel[hidden], .access-workflow [hidden] { display: none; }
-.access-workflow .environment-settings-scroll { padding: 1.25rem 1.75rem; }
-.access-workflow .environment-access-form { gap: 1.25rem; }
+
+.access-workflow .environment-access-form { gap: 28px; }
 .access-flow-intro { min-width: 0; }
 .access-flow-intro h3 { font-size: 1.25rem; line-height: 1.4; font-weight: 600; letter-spacing: -.025em; outline: none; }
 .access-flow-intro > p { margin-top: .5rem; color: var(--muted-foreground); font-size: .75rem; line-height: 1.75; max-width: 38rem; }
 .access-flow-back { padding: 0; gap: .375rem; height: auto; min-height: 1.5rem; margin-bottom: 1rem; color: var(--muted-foreground); }
-.access-flow-summary { overflow: hidden; border: 1px solid var(--border); border-radius: .75rem; background: color-mix(in srgb, var(--card) 76%, var(--background)); }
-.access-flow-summary > section { display: flex; align-items: center; gap: .875rem; padding: .875rem 1rem; min-width: 0; }
-.access-flow-summary > section + section { border-top: 1px solid var(--border); }
+.access-flow-summary { overflow: hidden; border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--foreground) 9%, var(--background)); }
+.access-flow-summary > section { display: flex; align-items: center; gap: 28px; padding: 14px 17px; min-height: 71px; min-width: 0; }
+.access-flow-summary > section + section { border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
 .access-flow-summary > section > div { min-width: 0; flex: 1; }
-.access-flow-summary h3 { font-size: .8125rem; font-weight: 550; }
+.access-flow-summary h3 { font-size: 13px; font-weight: 400; }
 .access-flow-summary p { margin-top: .3rem; font-size: .75rem; line-height: 1.6; color: var(--muted-foreground); overflow-wrap: anywhere; }
-.access-flow-summary button { flex-shrink: 0; max-width: none; height: auto; min-height: 2rem; white-space: nowrap; }
+.access-flow-summary button { border: 0; background: transparent; color: var(--muted-foreground); flex-shrink: 0; max-width: none; height: auto; min-height: 2rem; white-space: nowrap; }
 .access-flow-icon { flex: none; width: 2.125rem; height: 2.125rem; padding: .5rem; border: 1px solid var(--border); border-radius: .5rem; background: color-mix(in srgb, var(--muted) 40%, transparent); color: var(--muted-foreground); }
 .access-flow-steps { display: flex; gap: .875rem; list-style: none; padding: 0; margin: 0; }
 .access-flow-steps li { display: flex; align-items: center; gap: .5rem; flex: 1; font-size: .6875rem; line-height: 1.5; color: var(--muted-foreground); }
@@ -34,7 +34,7 @@
 .access-flow-notice > svg { flex: none; margin-top: .15rem; }
 .access-flow-notice > span { flex: 1; min-width: 0; }
 .access-flow-notice button { height: auto; min-height: 1.875rem; white-space: normal; flex-shrink: 0; max-width: 45%; }
-.access-flow-footer-copy { width: 100%; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.6; }
+.access-flow-footer-copy { flex: 1; min-width: 180px; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.6; }
 .access-flow-network { grid-template-columns: minmax(0,1fr) 7.5rem; }
 .access-flow-network label, .access-flow-password label { display: grid; gap: .5rem; min-width: 0; font-size: .75rem; font-weight: 500; }
 .access-flow-network > :not(label) { grid-column: 1 / -1; }
@@ -69,7 +69,113 @@
   .access-flow-notice button { margin-inline-start: auto; }
 }
 
-.access-workflow .environment-access-overview { padding-inline: 0; }
+
 .access-workflow .redeven-address-group { padding-block: .5rem; }
 .access-workflow .redeven-address-list { margin-top: .25rem; }
 .access-workflow .two-factor-heading h3:focus { outline: none; }
+
+/* The overview is the landing surface for access settings. Keep the current
+ * connection factual and compact; address lists remain available on demand. */
+.access-workflow .environment-access-overview {
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.access-workflow .environment-access-overview-header {
+  padding: 0 0 10px;
+  border: 0;
+  background: transparent;
+}
+.access-workflow .redeven-settings-connections--summary {
+  padding: 0 17px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--foreground) 9%, var(--background));
+}
+.access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row {
+  grid-template-columns: 7rem minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: .75rem;
+  padding-block: 14px;
+}
+.access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row .redeven-card-endpoint-content {
+  grid-column: 2;
+  grid-row: 1;
+}
+.access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row .redeven-card-endpoint-label {
+  padding-top: 0;
+  font-size: var(--floe-type-caption);
+}
+.access-workflow .redeven-settings-connections--summary .redeven-card-endpoint-value {
+  font-size: var(--floe-type-control);
+}
+.access-workflow .redeven-settings-connections--summary .redeven-address-group--summary {
+  padding-block: 14px;
+}
+.access-workflow .redeven-settings-connections--summary .redeven-address-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  width: 100%;
+  min-height: 28px;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  list-style: none;
+}
+.access-workflow .redeven-settings-connections--summary .redeven-address-summary::-webkit-details-marker { display: none; }
+.access-workflow .redeven-settings-connections--summary .redeven-address-summary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  color: var(--muted-foreground);
+}
+.access-workflow .redeven-settings-connections--summary .redeven-address-summary-chevron {
+  transition: transform 160ms ease;
+}
+.access-workflow .redeven-settings-connections--summary .redeven-address-group--summary[open] .redeven-address-summary-chevron {
+  transform: rotate(90deg);
+}
+.access-workflow .redeven-settings-connections--summary .redeven-address-summary-content {
+  padding: .625rem 0 .125rem 7.75rem;
+}
+.access-workflow .redeven-settings-connections--summary .redeven-address-summary-content .redeven-address-list {
+  margin-top: .5rem;
+}
+@media (max-width: 560px) {
+  .access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row {
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+    column-gap: .5rem;
+  }
+  .access-workflow .redeven-settings-connections--summary .redeven-address-summary-content {
+    padding-left: 6rem;
+  }
+}
+@media (max-width: 420px) {
+  .access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row .redeven-card-endpoint-label {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row .redeven-card-endpoint-content {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .access-workflow .redeven-settings-connections--summary .redeven-address-summary-content {
+    padding-left: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .access-workflow .redeven-settings-connections--summary .redeven-address-summary-chevron { transition: none; }
+}
+
+.access-workflow .environment-access-actions { width: auto; }
+.access-flow-summary button:hover { background: var(--muted); color: var(--foreground); }
+.access-flow-summary .access-flow-icon { display: none; }
+.access-workflow .environment-access-overview h3 { font-weight: 500; color: var(--muted-foreground); }

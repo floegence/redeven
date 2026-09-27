@@ -1,0 +1,249 @@
+/* Product geometry; Floe owns floating material and modal entry/exit motion. */
+[data-floe-dialog-panel].redeven-environment-settings-dialog {
+  --redeven-welcome-dialog-panel-max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
+  width: min(50rem, calc(100vw - 2rem));
+  max-width: 50rem;
+  height: min(44.375rem, var(--redeven-welcome-dialog-panel-max-height));
+  max-height: var(--redeven-welcome-dialog-panel-max-height);
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  font-size: var(--floe-type-body);
+}
+.redeven-environment-settings-dialog > div:first-child {
+  padding: 24px 24px 12px;
+  border-bottom: 0;
+  flex-shrink: 0;
+}
+.redeven-environment-settings-dialog > div:first-child > div { min-width: 0; }
+.redeven-environment-settings-dialog h2 { font-size: 16px; line-height: 1.3; font-weight: 600; }
+.redeven-environment-settings-dialog > div:first-child p {
+  margin-top: 4px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;
+}
+.redeven-environment-settings-dialog button, .redeven-environment-settings-dialog select { cursor: pointer; }
+.redeven-environment-settings-dialog button:disabled { cursor: not-allowed; }
+.environment-settings-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+.environment-settings-content > p {
+  margin: 0;
+  padding: 1rem 1.25rem .75rem;
+  overflow-wrap: anywhere;
+}
+.environment-settings-tabs { background: transparent; flex: none; padding-inline: 1.5rem; }
+.environment-settings-tabs .environment-settings-tab-trigger {
+  height: 2.5rem;
+  padding-inline: 0; margin-inline-end: 1.5rem;
+  font-size: var(--floe-type-control);
+  background: transparent;
+}
+.environment-settings-tab-trigger[aria-selected="true"] { color: var(--primary); }
+.environment-settings-tab-trigger:hover { background: color-mix(in srgb, var(--foreground) 4%, transparent); }
+.environment-settings-indicator { border-radius: 2px 2px 0 0; }
+.environment-settings-tab:not([aria-hidden="true"]) {
+  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.environment-settings-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.environment-settings-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; overflow-anchor: none; padding: 24px 28px; }
+
+/* Native details and Floe-retained sections expand inside the fixed viewport. */
+.redeven-environment-settings-dialog details::details-content,
+.redeven-endpoint-listener::details-content {
+  interpolate-size: allow-keywords;
+  block-size: 0;
+  opacity: 0;
+  overflow: clip;
+  transition: block-size 180ms ease-out, opacity 180ms ease-out, content-visibility 180ms allow-discrete;
+}
+.redeven-environment-settings-dialog details[open]::details-content,
+.redeven-endpoint-listener[open]::details-content { block-size: auto; opacity: 1; }
+.redeven-environment-settings-dialog details:not([open]) > :not(summary),
+.redeven-endpoint-listener:not([open]) > :not(summary) { interactivity: inert; }
+[data-settings-reveal] {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 180ms ease-out, opacity 180ms ease-out;
+}
+[data-settings-reveal][data-state='open'] { grid-template-rows: 1fr; opacity: 1; }
+@starting-style {
+  [data-settings-reveal][data-state='open'] { grid-template-rows: 0fr; opacity: 0; }
+}
+.environment-settings-reveal-content { min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .redeven-environment-settings-dialog details::details-content,
+  .redeven-endpoint-listener::details-content,
+  [data-settings-reveal] { transition: none; }
+  [data-settings-reveal][data-state='entering'] { grid-template-rows: 1fr; opacity: 1; }
+}
+.environment-settings-actions { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; padding: 15px 24px; min-height: 64px; align-items: center; border-top: 1px solid var(--border); }
+.environment-settings-actions button,
+.environment-access-overview-header > button {
+  height: auto;
+  min-height: 1.75rem;
+  max-width: 100%;
+  padding-block: .25rem;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.environment-access-form {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.environment-access-overview {
+  display: flex;
+  flex-direction: column;
+  gap: .375rem;
+  padding: .25rem 1.25rem 0;
+}
+.environment-access-overview-header,
+.environment-access-overview-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem .75rem;
+}
+.environment-access-overview-header { justify-content: space-between; }
+.environment-access-overview h3 { font-size: 13px; font-weight: 600; }
+.environment-access-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .125rem;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.environment-access-status[data-status-tone='success'] { color: var(--success); }
+.environment-access-status[data-status-tone='warning'] { color: var(--warning); }
+.environment-access-control { display: flex; justify-content: flex-end; min-width: 0; }
+.environment-access-control > * { max-width: 100%; }
+.environment-access-control button { height: auto; min-height: 1.75rem; white-space: normal; }
+.environment-access-advanced { margin-top: .875rem; }
+.environment-access-advanced summary {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.environment-access-advanced summary::-webkit-details-marker { display: none; }
+.environment-access-advanced summary:hover { color: var(--foreground); }
+.environment-access-advanced summary svg { flex-shrink: 0; transition: transform 160ms ease-out; }
+.environment-access-advanced[open] summary svg { transform: rotate(90deg); }
+.environment-access-advanced-content { display: grid; gap: .875rem; padding-top: 1rem; }
+.environment-settings-draft-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-bottom: .75rem; color: var(--muted-foreground); font-size: .75rem; }
+.environment-access-actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
+
+.environment-access-blocked-action { display: inline-flex; min-width: 0; border-radius: var(--radius); cursor: not-allowed; }
+.environment-access-blocked-action:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.environment-access-save-error {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  width: 100%;
+  max-height: min(8rem, 20vh);
+  overflow-y: auto;
+  padding: .625rem .75rem;
+  border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--error) 6%, var(--background));
+  color: var(--error);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.environment-access-save-error > svg { margin-top: .0625rem; }
+
+@container (max-width: 36rem) {
+  .environment-access-control { justify-content: flex-start; }
+  .environment-access-overview { padding: .25rem 1rem 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .environment-access-advanced summary svg { transition: none; }
+}
+
+.environment-settings-tab[aria-hidden="true"] { display: none; }
+
+
+/* Redeven's form composes published settings lists with native labels. */
+.ssh-settings-form { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.ssh-settings-section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ssh-settings-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ssh-settings-section h3 { font-size: 13px; font-weight: 500; color: var(--muted-foreground); }
+.ssh-settings-fields.floe-settings-list { padding: 0 17px; border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--foreground) 9%, var(--background)); }
+.ssh-settings-field, .ssh-settings-probe { display: flex; align-items: center; justify-content: space-between; gap: 28px; min-height: 65px; padding: 14px 0; min-width: 0; }
+.ssh-settings-field + .ssh-settings-field { border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
+.ssh-settings-field-label, .ssh-settings-probe > div { flex: 1; min-width: 0; }
+.ssh-settings-field-label label, .ssh-settings-field-label > span, .ssh-settings-probe label { font-size: 13px; font-weight: 400; line-height: 1.6; }
+.ssh-settings-field-control { width: 258px; max-width: 56%; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 0; }
+.ssh-settings-field:has(#ssh-settings-ssh_port) .ssh-settings-field-control { width: 88px; }
+.ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { width: 100%; min-width: 0; height: 34px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--foreground) 9%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--foreground) 2%, var(--background)); color: var(--foreground); font-size: 12px; }
+.ssh-settings-form select { padding-right: 24px; }
+.ssh-settings-help { font-size: 12px; line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: 3px; }
+.ssh-settings-help-link { color: var(--muted-foreground); font-size: 12px; text-align: left; width: fit-content; }
+.ssh-settings-help-link:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+.ssh-settings-help-link:focus-visible, .ssh-settings-disclosure:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: 4px; }
+.ssh-settings-disclosure { display: flex; align-items: center; width: 100%; gap: 8px; text-align: left; color: var(--muted-foreground); font-size: 12px; }
+.ssh-settings-disclosure > span { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex: 1; min-width: 0; }
+.ssh-settings-summary { margin: 0; text-align: right; font-size: 11px; }
+.ssh-settings-disclosure-title { flex: none; }
+.ssh-settings-chevron { width: 14px; height: 14px; flex: none; transition: transform 160ms ease; }
+.ssh-settings-chevron--open { transform: rotate(90deg); }
+.ssh-settings-advanced-fields { margin-top: 16px; }
+.ssh-settings-timeout { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.ssh-settings-timeout input { width: 88px !important; }
+.ssh-settings-field--invalid { scroll-margin-block: 16px; }
+.ssh-settings-error { color: var(--destructive); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.ssh-settings-help-popover { max-width: min(340px, calc(100vw - 32px)); padding: 16px; font-size: 13px; line-height: 1.6; }
+.ssh-settings-form [role='radiogroup'] { align-self: flex-end; width: fit-content; max-width: 100%; border: 0; border-radius: 8px; padding: 3px; background: color-mix(in srgb, var(--foreground) 4%, transparent); }
+.ssh-settings-form [role='radio'] { min-height: 28px; padding: 4px 10px; font-size: 12px; border: 0; box-shadow: none; }
+@media (max-width: 600px) {
+  [data-floe-dialog-panel].redeven-environment-settings-dialog { width: calc(100vw - 16px); }
+  .environment-settings-scroll { padding: 20px 16px; }
+  .ssh-settings-field { align-items: stretch; flex-direction: column; gap: 10px; }
+  .ssh-settings-field-control { width: 100%; max-width: 100%; }
+  .ssh-settings-form [role='radiogroup'] { align-self: flex-start; }
+  .ssh-settings-disclosure > span { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .ssh-settings-summary { text-align: start; }
+  .environment-settings-actions { padding-inline: 16px; }
+}
+@media (pointer: coarse) {
+  .ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { min-height: 44px; font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .ssh-settings-chevron { transition: none; } }
+
+@media (max-height: 850px) {
+  .ssh-settings-form { gap: 18px; }
+  .ssh-settings-section { gap: 8px; }
+  .environment-settings-scroll { padding-block: 20px; }
+}
+
+.environment-connection-form { display: flex; flex-direction: column; gap: 24px; }
+.environment-connection-section-title { font-size: 13px; font-weight: 500; color: var(--muted-foreground); }
+.environment-connection-group { margin-top: 10px; padding: 0 17px; border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--foreground) 9%, var(--background)); }
+.environment-connection-field { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,258px); align-items: center; column-gap: 28px; row-gap: 4px; min-width: 0; min-height: 65px; padding-block: 14px; }
+.environment-connection-field + .environment-connection-field { border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
+.environment-connection-field > label { grid-column: 1; grid-row: 1; font-size: 13px; font-weight: 400; }
+.environment-connection-field > :not(label) { grid-column: 2; min-width: 0; }
+.environment-connection-field > input, .environment-connection-field > select, .environment-connection-field > div:has(input) { grid-row: 1 / span 2; width: 100%; height: 34px; font-size: 12px; }
+.environment-connection-field > .text-muted-foreground { grid-column: 1; grid-row: 2; font-size: 12px; line-height: 1.65; }
+.environment-connection-group > .space-y-3 { margin-block: 0; }
+.environment-connection-group .environment-connection-field { margin-block: 0; }
+.environment-connection-group > .flex { padding-block: 14px; }
+.environment-connection-form .grid:has(> .environment-connection-field) { display: block; }
+.environment-connection-form .border-dashed { border: 0; background: transparent; padding-inline: 0; }
+@media (max-width: 600px) {
+  .environment-connection-field { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+}
+@media (pointer: coarse) {
+  .environment-connection-field input, .environment-connection-field select { font-size: 16px; min-height: 44px; }
+}

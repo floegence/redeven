@@ -84,6 +84,8 @@ try {
   assert.equal(await page.locator('#local-ui-port').evaluate(el => el === document.activeElement), true);
   await page.locator('#local-ui-port').fill('25000'); await button('accessFlow.checkChanges').click();
   await button('settings.saveForNextRestart').click(); await button('accessFlow.changeAccess').waitFor();
+  await dialog.locator('.redeven-address-group--summary > summary').click();
+  await dialog.getByText('http://localhost:23998/', { exact: true }).waitFor();
   assert.ok((await dialog.innerText()).includes('http://localhost:23998/'), 'saved draft does not replace the current connection');
   await dialog.getByText(t('settings.pendingChanges'), { exact: true }).waitFor();
   await capture('saved-for-later'); await button('accessFlow.checkChanges').click(); await button('settings.saveAndRestart').click();

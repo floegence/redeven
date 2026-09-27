@@ -37,7 +37,10 @@ The settings controller owns metadata and Runtime drafts but commits them indepe
 - Compose: the same typed fields per existing service; service identity, topology, and image remain template-owned;
 - host: install, start, stop, and uninstall scripts for custom templates. Built-in scripts remain locked and direct the user to duplicate the definition.
 
-The UI uses one full-height settings drawer with stable sections, compact typed rows, directory selection for host paths, script editing, Compose service selection, persistent validation space, keyboard/focus behavior, reduced motion, and a fixed action footer. It explains every locked field instead of exposing unexplained disabled controls. Running services may edit a draft, but the action explicitly requests Stop; Redeven never stops or rebuilds in the background.
+The UI uses one full-height settings drawer with stable sections, compact typed rows, directory selection for host paths, script editing, Compose service selection, persistent validation space, keyboard/focus behavior, reduced motion, and a fixed action footer. The desktop navigation is 184px wide; content uses a 25px heading and quiet
+14px-radius groups with labels left and controls right. Narrow screens move
+navigation into a horizontal strip and stack fields. The action footer remains
+visible across all sections. It explains every locked field instead of exposing unexplained disabled controls. Running services may edit a draft, but the action explicitly requests Stop; Redeven never stops or rebuilds in the background.
 
 # Anchors and risks
 
