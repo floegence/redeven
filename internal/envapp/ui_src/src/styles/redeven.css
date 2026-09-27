@@ -1846,44 +1846,6 @@ html.dark .git-changes-table-pending {
   background: color-mix(in srgb, var(--error) 10%, transparent);
 }
 
-.redeven-permission-segment {
-  display: inline-flex;
-  min-height: 2rem;
-  cursor: pointer;
-  align-items: center;
-  gap: 0.375rem;
-  border: 1px solid color-mix(in srgb, var(--redeven-stroke-control) 82%, transparent);
-  border-radius: 0.375rem;
-  background: color-mix(in srgb, var(--redeven-settings-panel-bg) 70%, transparent);
-  color: var(--muted-foreground);
-  padding: 0.25rem 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 650;
-  transition:
-    border-color 120ms ease, background-color 120ms ease, color 120ms ease;
-}
-
-.redeven-permission-segment > span:last-child {
-  color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
-  font-size: 0.625rem;
-  font-weight: 600;
-}
-
-.redeven-permission-segment--active {
-  border-color: color-mix(in srgb, var(--success) 36%, var(--redeven-stroke-control));
-  background: color-mix(in srgb, var(--success) 12%, var(--redeven-settings-panel-bg));
-  color: color-mix(in srgb, var(--success) 74%, var(--foreground));
-}
-
-.redeven-permission-segment--active > span:last-child {
-  color: color-mix(in srgb, var(--success) 74%, var(--foreground));
-}
-
-.redeven-permission-segment:disabled {
-  cursor: not-allowed;
-  opacity: 0.62;
-}
-
 .ai-model-select-trigger {
   overflow: hidden;
 }

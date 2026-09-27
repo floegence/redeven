@@ -4,15 +4,25 @@
 .redeven-terminal-settings-dialog [data-floe-dialog-body] > p { padding: 0 28px 12px; font-size: 13px; line-height: 1.7; }
 .terminal-settings-body { padding: 12px 28px 28px; }
 .terminal-settings-body > section + section { margin-top: 28px; }
-.terminal-settings-body > section > .rounded-md { border-radius: 14px; padding: 14px 17px; }
-.terminal-settings-choice-details { border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
-.terminal-settings-choice-details > summary { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; font-size: 13px; cursor: pointer; list-style: none; }
+.terminal-settings-preview { margin: 0 0 20px; overflow-x: auto; padding: 20px; border: 1px solid var(--border); border-radius: 14px; }
+.terminal-settings-group { padding: 0 17px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--foreground) 4%, var(--background)); }
+.terminal-settings-choice-details ~ .terminal-settings-choice-details,
+.terminal-settings-size-row { border-top: 1px solid var(--border); }
+.terminal-settings-choice-details > summary { display: flex; align-items: center; gap: 24px; padding: 17px 0; font-size: 13px; cursor: pointer; list-style: none; }
 .terminal-settings-choice-details > summary::-webkit-details-marker { display: none; }
-.terminal-settings-choice-details > summary::after { content: '›'; transform: rotate(90deg); }
+.terminal-settings-choice-label { min-width: 0; flex: 1; font-weight: 500; }
+.terminal-settings-choice-label > small { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--muted-foreground); font-weight: 400; }
+.terminal-settings-choice-value { display: flex; align-items: center; gap: 12px; max-width: 45%; color: var(--muted-foreground); }
+.terminal-settings-choice-value::after { content: '›'; display: inline-block; transform: rotate(90deg); }
 .terminal-settings-choice-details[open] > summary { border-bottom: 1px solid var(--border); }
-.terminal-settings-choice-details[open] > summary::after { transform: rotate(-90deg); }
-.terminal-settings-choice-details > :not(summary) { margin: 14px; }
+.terminal-settings-choice-details[open] .terminal-settings-choice-value::after { transform: rotate(-90deg); }
+.terminal-settings-choice-details > :not(summary) { margin-block: 14px; }
+.terminal-settings-size-row,
+.terminal-settings-activity { padding-block: 17px; }
 @media (max-width: 600px) {
   .terminal-settings-body { padding-inline: 12px; }
-  .terminal-settings-choice-details > :not(summary) { margin: 6px; }
+  .terminal-settings-group { padding-inline: 8px; }
+  .terminal-settings-choice-details > summary { flex-wrap: wrap; gap: 8px; }
+  .terminal-settings-choice-label { flex-basis: 100%; }
+  .terminal-settings-choice-value { max-width: 100%; margin-left: auto; }
 }

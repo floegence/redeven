@@ -225,9 +225,10 @@ describe('AIReadinessSettingsSection', () => {
   it('checks Flower stores together and keeps backups in the same settings surface', () => {
     const fixture = mountSettings();
     const rows = fixture.host.querySelectorAll('.redeven-setting-row');
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     expect(rows[0]?.textContent).toContain('Conversation history, product settings, read status, and uploads are checked together.');
-    expect(rows[1]?.textContent).toContain('Flower backups');
+    expect(rows[1]?.textContent).toContain('View diagnostics');
+    expect(rows[2]?.textContent).toContain('Flower backups');
     expect(buttonWithText(fixture.host, 'View backups')).toBeTruthy();
     fixture.dispose();
   });
@@ -302,20 +303,20 @@ describe('AIReadinessSettingsSection', () => {
   it('shows refresh pending synchronously and clears it after the request settles', async () => {
     const refreshResult = deferred<AIReadinessSnapshot>();
     const fixture = mountSettings(refreshResult);
-    const refresh = buttonWithText(fixture.host, 'Refresh');
+    const refresh = fixture.host.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')!;
 
     refresh.click();
     expect(fixture.refresh).toHaveBeenCalledOnce();
     expect(refresh.disabled).toBe(true);
     expect(refresh.dataset.pending).toBe('true');
     expect(refresh.getAttribute('aria-busy')).toBe('true');
-    expect(refresh.textContent).toContain('Refreshing...');
+    expect(refresh.getAttribute('aria-label')).toBe('Refreshing...');
 
     refreshResult.resolve(blockedSnapshot());
     await flushMicrotasks();
     expect(refresh.disabled).toBe(false);
     expect(refresh.dataset.pending).toBeUndefined();
-    expect(refresh.textContent).toContain('Refresh');
+    expect(refresh.getAttribute('aria-label')).toBe('Refresh');
     fixture.dispose();
   });
 

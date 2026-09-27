@@ -1,8 +1,8 @@
 import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
-import { Shield, Trash, Package, ShieldCheck, User } from '@floegence/floe-webapp-core/icons';
-import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { Shield, Trash, ShieldCheck } from '@floegence/floe-webapp-core/icons';
+import { Button, Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, SettingsList, AutoSaveIndicator, SubSectionHeader, PermissionDot, SettingRow } from '../SettingsPrimitives';
+import { SettingsSection, SettingsList, AutoSaveIndicator, SubSectionHeader, SettingRow } from '../SettingsPrimitives';
 import { buildPermissionPolicyValue } from '../permissionPolicy';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
@@ -89,98 +89,63 @@ export function PermissionPolicySection() {
     setError(null); setDirty(true);
   };
 
+  // One matrix owns the shared user/app rule interaction and permission ceiling.
+  const renderRules = (kind: 'user' | 'app') => {
+    const rows = kind === 'user' ? byUser : byApp;
+    const setRows = kind === 'user' ? setByUser : setByApp;
+    const permissions = ['read', 'write', 'execute'] as const;
+    const ceiling = (permission: typeof permissions[number]) => ({ read: localRead(), write: localWrite(), execute: localExecute() })[permission];
+    const changed = () => { setError(null); setDirty(true); };
+    return <div class="space-y-3">
+      <SubSectionHeader title={i18n.t(kind === 'user' ? 'settingsDesign.userOverrides' : 'settingsDesign.appOverrides')}
+        description={i18n.t(kind === 'user' ? 'permissionPolicy.byUserDescription' : 'permissionPolicy.byAppDescription')}
+        actions={<Button size="sm" variant="ghost" onClick={kind === 'user' ? addUserRule : addAppRule} disabled={!canEdit()}>{i18n.t('permissionPolicy.addRule')}</Button>} />
+      <div class="settings-permission-table">
+        <table>
+          <thead><tr>
+            <th scope="col">{i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader')}</th>
+            <For each={permissions}>{permission => <th scope="col">{i18n.t(`permissionPolicy.permission.${permission}`)}</th>}</For>
+            <th scope="col"><span class="sr-only">{i18n.t('common.actions.delete')}</span></th>
+          </tr></thead>
+          <tbody>
+            <For each={rows()}>{(row, index) => <tr>
+              <td><Input value={row.key} size="sm" class="w-full min-w-0 font-mono text-xs" disabled={!canEdit()}
+                aria-label={i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader')}
+                placeholder={i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader')}
+                onInput={e => { setRows(previous => previous.map((item, i) => i === index() ? { ...item, key: e.currentTarget.value } : item)); changed(); }} /></td>
+              <For each={permissions}>{permission => <td>
+                <Checkbox checked={row[permission]} disabled={!canEdit() || !ceiling(permission)}
+                  aria-label={`${row.key || i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader')}: ${i18n.t(`permissionPolicy.permission.${permission}`)}`}
+                  onChange={value => { setRows(previous => previous.map((item, i) => i === index() ? { ...item, [permission]: value } : item)); changed(); }} />
+              </td>}</For>
+              <td><Button size="icon" variant="ghost" icon={Trash} disabled={!canEdit()}
+                aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: row.key || i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader') })}
+                onClick={() => { setRows(previous => previous.filter((_, i) => i !== index())); changed(); }} /></td>
+            </tr>}</For>
+            <Show when={!rows().length}><tr><td colSpan={5} class="settings-permission-empty">{i18n.t(kind === 'user' ? 'permissionPolicy.noUserOverrides' : 'permissionPolicy.noAppOverrides')}</td></tr></Show>
+          </tbody>
+        </table>
+      </div>
+    </div>;
+  };
+
   return (
-    <SettingsSection
-      variant="page"
-      icon={Shield}
-      title={i18n.t('permissionPolicy.title')}
-      description={i18n.t('permissionPolicy.description')}
-      badge={i18n.t('permissionPolicy.manualRestartRequired')}
-      badgeVariant="warning"
-      error={error()}
-      actions={
-        <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />
-      }
-    >
-      {/* local_max matrix card */}
+    <SettingsSection variant="page" icon={Shield} title={i18n.t('permissionPolicy.title')} description={i18n.t('permissionPolicy.description')}
+      badge={i18n.t('permissionPolicy.manualRestartRequired')} badgeVariant="warning" error={error()}
+      actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />}>
       <SettingsList>
-        <SettingRow
-          icon={ShieldCheck}
-          title={i18n.t('settingsDesign.permissionCeiling')}
-          description={localMaxDescription()}
-          tone="warning"
-          control={
-            <PermissionDot
-              read={localRead()} write={localWrite()} execute={localExecute()}
-              onReadChange={canEdit() ? (v) => { setLocalRead(v); setError(null); setDirty(true); } : undefined}
-              onWriteChange={canEdit() ? (v) => { setLocalWrite(v); setError(null); setDirty(true); } : undefined}
-              onExecuteChange={canEdit() ? (v) => { setLocalExecute(v); setError(null); setDirty(true); } : undefined}
-            />
-          }
-        />
+        <SettingRow icon={ShieldCheck} title={i18n.t('settingsDesign.permissionCeiling')} description={localMaxDescription()}
+          control={<div class="settings-permission-ceiling">
+            <For each={[
+              { key: 'read' as const, value: localRead, set: setLocalRead },
+              { key: 'write' as const, value: localWrite, set: setLocalWrite },
+              { key: 'execute' as const, value: localExecute, set: setLocalExecute },
+            ]}>{permission => <Checkbox label={i18n.t(`permissionPolicy.permission.${permission.key}`)}
+              checked={permission.value()} disabled={!canEdit()} onChange={value => { permission.set(value); setError(null); setDirty(true); }} />}</For>
+          </div>} />
       </SettingsList>
-
-      {/* by_user rules */}
-      <div class="mt-5">
-        <SubSectionHeader title={i18n.t('settingsDesign.userOverrides')} description={i18n.t('permissionPolicy.byUserDescription')}
-          actions={<Button size="sm" variant="outline" onClick={addUserRule} disabled={!canEdit()}>{i18n.t('permissionPolicy.addRule')}</Button>} />
-        <div class="mt-3">
-          <Show when={byUser().length > 0} fallback={<p class="text-[11px] text-muted-foreground py-2">{i18n.t('permissionPolicy.noUserOverrides')}</p>}>
-            <SettingsList>
-              <For each={byUser()}>
-                {(row, index) => (
-                  <div class="redeven-settings-list-row flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-center">
-                  <div class="flex min-w-0 flex-1 items-center gap-2">
-                    <span class="redeven-setting-row__icon inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
-                      <User class="h-3.5 w-3.5" />
-                    </span>
-                    <Input value={row.key} onInput={(e) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, key: e.currentTarget.value } : it)); setError(null); setDirty(true); }}
-                      placeholder="user_public_id" size="sm" class="min-w-0 flex-1 font-mono text-xs" disabled={!canEdit()} />
-                  </div>
-                  <PermissionDot read={row.read} write={row.write} execute={row.execute}
-                    readonly={!canEdit()}
-                    onReadChange={localRead() && canEdit() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, read: v } : it)); setError(null); setDirty(true); } : undefined}
-                    onWriteChange={localWrite() && canEdit() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, write: v } : it)); setError(null); setDirty(true); } : undefined}
-                    onExecuteChange={localExecute() && canEdit() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, execute: v } : it)); setError(null); setDirty(true); } : undefined} />
-                  <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive" onClick={() => { setByUser((prev) => prev.filter((_, i) => i !== index())); setError(null); setDirty(true); }} disabled={!canEdit()} aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: row.key || i18n.t('permissionPolicy.userHeader') })} />
-                  </div>
-                )}
-              </For>
-            </SettingsList>
-          </Show>
-        </div>
-      </div>
-
-      {/* by_app rules */}
-      <div class="mt-5">
-        <SubSectionHeader title={i18n.t('settingsDesign.appOverrides')} description={i18n.t('permissionPolicy.byAppDescription')}
-          actions={<Button size="sm" variant="outline" onClick={addAppRule} disabled={!canEdit()}>{i18n.t('permissionPolicy.addRule')}</Button>} />
-        <div class="mt-3">
-          <Show when={byApp().length > 0} fallback={<p class="text-[11px] text-muted-foreground py-2">{i18n.t('permissionPolicy.noAppOverrides')}</p>}>
-            <SettingsList>
-              <For each={byApp()}>
-                {(row, index) => (
-                  <div class="redeven-settings-list-row flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-center">
-                  <div class="flex min-w-0 flex-1 items-center gap-2">
-                    <span class="redeven-setting-row__icon inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
-                      <Package class="h-3.5 w-3.5" />
-                    </span>
-                    <Input value={row.key} onInput={(e) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, key: e.currentTarget.value } : it)); setError(null); setDirty(true); }}
-                      placeholder="floe_app identifier" size="sm" class="min-w-0 flex-1 font-mono text-xs" disabled={!canEdit()} />
-                  </div>
-                  <PermissionDot read={row.read} write={row.write} execute={row.execute}
-                    readonly={!canEdit()}
-                    onReadChange={localRead() && canEdit() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, read: v } : it)); setError(null); setDirty(true); } : undefined}
-                    onWriteChange={localWrite() && canEdit() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, write: v } : it)); setError(null); setDirty(true); } : undefined}
-                    onExecuteChange={localExecute() && canEdit() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, execute: v } : it)); setError(null); setDirty(true); } : undefined} />
-                  <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive" onClick={() => { setByApp((prev) => prev.filter((_, i) => i !== index())); setError(null); setDirty(true); }} disabled={!canEdit()} aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: row.key || i18n.t('permissionPolicy.appHeader') })} />
-                  </div>
-                )}
-              </For>
-            </SettingsList>
-          </Show>
-        </div>
-      </div>
+      {renderRules('user')}
+      {renderRules('app')}
     </SettingsSection>
   );
 }

@@ -2565,9 +2565,9 @@
     "saveFailed": "保存失败。",
     "agentHomeDirNote": "留空时默认使用用户 home 目录。",
     "shellNote": "留空时默认使用 `$SHELL`。",
-    "filesystemRootsTitle": "文件系统根",
+    "filesystemRootsTitle": "可访问目录",
     "filesystemRootsDescription": "向文件、Git、Flower 工具和 Code App 提供的目录级文件访问权限。",
-    "addRoot": "添加 Root",
+    "addRoot": "添加目录",
     "rootHeader": "根",
     "pathHeader": "路径",
     "accessHeader": "访问",
@@ -2577,11 +2577,11 @@
     "allowWrites": "允许写入",
     "systemRoot": "系统",
     "customRoot": "自定义",
-    "removeRoot": "移除 root",
+    "removeRoot": "移除目录",
     "systemRootsNote": "系统根目录由运行时管理。自定义根目录保存后需要手动重启。",
     "allowWritesDialogTitle": "允许 filesystem 写入？",
     "allowWritesDialogDescription": "此自定义根目录将允许运行时的文件功能执行创建、重命名、覆盖和删除操作。",
-    "rootLabel": "根"
+    "rootLabel": "目录名称"
   },
   "loggingSettings": {
     "title": "日志",
@@ -2854,19 +2854,19 @@
   },
   "skillsSettings": {
     "title": "技能",
-    "description": "管理 Flower skills：从 GitHub 安装、浏览 skill 文件、切换启用状态并维护本地 skills。",
+    "description": "管理 Flower 技能：安装、创建、浏览文件并控制启用状态。",
     "loading": "正在加载",
     "skillCount": {
-      "one": "{count} 个 skill",
-      "other": "{count} 个 skills"
+      "one": "{count} 个技能",
+      "other": "{count} 个技能"
     },
     "reload": "重新加载",
     "installFromGitHub": "从 GitHub 安装",
-    "createSkill": "创建 Skill",
+    "createSkill": "创建技能",
     "searchLabel": "搜索",
     "searchPlaceholder": "按名称、描述或路径搜索",
     "scopeLabel": "范围",
-    "scopeAll": "全部 scopes",
+    "scopeAll": "全部范围",
     "scopeUserRedeven": "用户 (.redeven)",
     "scopeUserAgents": "用户 (.agents)",
     "conflictsDetected": "检测到冲突：{count}",
@@ -4879,7 +4879,7 @@
     "permissionApprovalRequiredDescription": "所有工具可用。Shell、文件修改和子任务运行前需确认。",
     "permissionFullAccessTitle": "完全访问",
     "permissionFullAccessDescription": "所有工具无需确认直接运行。限制与审计仍适用。",
-    "currentModelTitle": "当前 Model",
+    "currentModelTitle": "当前模型",
     "currentModelDescription": "创建新聊天线程时使用的默认模型。",
     "noModelSelected": "未选择型号",
     "textCapability": "文本",
@@ -7077,6 +7077,10 @@
     "touchHelpDescription": "轻点即可单击。单指滑动可滚动。长按后移动可拖拽；长按不移动后松开可右键。双指可缩放页面。"
   },
   "settingsDesign": {
+    "editDirectory": "编辑目录",
+    "availableEditorVersion": "可供新启动的 Codespaces 使用。",
+    "computerRoot": "计算机",
+    "installationDetails": "安装与路径",
     "startPort": "起始端口",
     "endPort": "结束端口",
     "relatedSettings": "相关设置",

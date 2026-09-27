@@ -317,6 +317,15 @@ try {
         }),
       }));
       assert.equal(geometry.overflow, false, `${kind} dialog fits ${width}px`);
+      if (kind === 'wsl') {
+        assert.equal(await dialog.locator('.environment-connection-facts > div').count(), 3, 'WSL facts use labeled rows');
+      }
+      if (kind === 'container' && width === 1280) {
+        const label = await dialog.locator('label[for="environment-container-picker"]').boundingBox();
+        const picker = await dialog.locator('#environment-container-picker').boundingBox();
+        assert.ok(picker.x > label.x + label.width, 'container selection shares the right control column');
+        assert.ok(Math.abs(picker.y - label.y) < 16, 'container label and picker share one row');
+      }
       for (const field of geometry.fields) {
         if (field.controlLeft == null) continue;
         assert.ok(field.controlLeft >= field.left && field.controlRight <= field.right + 1, `${kind} control stays within its row`);

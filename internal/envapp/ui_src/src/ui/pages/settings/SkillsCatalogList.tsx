@@ -50,6 +50,8 @@ export function SkillsCatalogList(props: {
               <Show when={item.dependency_state === 'degraded'}><SettingsPill tone="warning">{i18n.t('skillsSettings.status.dependencyDegraded')}</SettingsPill></Show>
               <Show when={item.shadowed_by}><SettingsPill tone="warning">{i18n.t('skillsSettings.status.shadowed')}</SettingsPill></Show>
             </div>
+            <details class="settings-technical-details settings-skill-details">
+              <summary>{i18n.t('settings.connection.technicalInformation')}</summary>
             <code class="mt-2 block break-all text-[11px] text-muted-foreground">{item.path}</code>
             <Show when={source()?.source_id}><code class="mt-1 block break-all text-[11px] text-muted-foreground">{source()?.source_id}</code></Show>
             <Show when={item.shadowed_by}><p class="mt-2 break-all text-xs text-warning">{i18n.t('skillsSettings.shadowedBy', { path: item.shadowed_by ?? '' })}</p></Show>
@@ -58,6 +60,7 @@ export function SkillsCatalogList(props: {
               <Show when={source()?.source_type === 'github_import'}><Button size="sm" variant="outline" onClick={() => props.onReinstall(item)} loading={!!props.reinstalling[item.path]} disabled={!props.canInteract || !props.canAdmin}>{i18n.t('skillsSettings.reinstall')}</Button></Show>
               <Button size="sm" variant="ghost" onClick={() => props.onDelete(item)} disabled={!props.canInteract || !props.canAdmin || !!props.toggleSaving[item.path] || !!props.reinstalling[item.path]}>{i18n.t('common.actions.delete')}</Button>
             </div>
+            </details>
           </SettingRow>
         );
       }}</For>

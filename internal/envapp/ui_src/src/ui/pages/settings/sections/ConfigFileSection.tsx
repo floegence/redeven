@@ -22,12 +22,11 @@ export function ConfigFileSection() {
           icon={FileText}
           title={i18n.t('settingsDesign.fileLocation')}
           description={i18n.t('settings.configFile.readOnlyRuntimeManaged')}
-          control={<CopyButton value={configPath() || ''} />}
-        >
-          <code class="block break-all font-mono text-[length:var(--floe-type-body)] leading-relaxed text-foreground">
-            {configPath() || i18n.t('settings.configFile.unknownPath')}
-          </code>
-        </SettingRow>
+          control={<div class="settings-copy-value">
+            <code title={configPath()}>{configPath() || i18n.t('settings.configFile.unknownPath')}</code>
+            <CopyButton value={configPath()} />
+          </div>}
+        />
       </SettingsList>
     </SettingsSection>
   );

@@ -679,15 +679,13 @@ describe('EnvSettingsPage', () => {
     const connectionCard = host.querySelector('[data-settings-card="Connection"]');
     expect(connectionCard).toBeTruthy();
     expect(connectionCard?.textContent).toContain('Read-only');
-    expect(connectionCard?.textContent).toContain('Connected to Runtime');
+    expect(connectionCard?.textContent).toContain('Connected');
     expect(connectionCard?.textContent).toContain('Provisioned');
-    expect(connectionCard?.textContent).toContain('Core information');
-    expect(connectionCard?.textContent).toContain('Current environment ID');
+    expect(connectionCard?.textContent).toContain('Environment ID');
     expect(connectionCard?.textContent).toContain('env_current');
     expect(connectionCard?.textContent).toContain('Connection service address');
-    expect(connectionCard?.textContent).toContain('Control Plane URL');
     expect(connectionCard?.textContent).toContain('https://console.example.com');
-    expect(connectionCard?.textContent).toContain('Runtime instance');
+    expect(connectionCard?.textContent).toContain('Instance ID');
     expect(connectionCard?.textContent).toContain('ai_runtime_123');
     expect(connectionCard?.textContent).toContain('Security key');
     expect(connectionCard?.textContent).toContain('Change connection');
@@ -702,10 +700,10 @@ describe('EnvSettingsPage', () => {
     expect(connectionCard?.textContent).not.toContain('Direct Suite');
     expect(connectionCard?.textContent).not.toContain('Channel ID');
 
-    const detailsButton = Array.from(connectionCard?.querySelectorAll('button') ?? [])
-      .find((node) => node.textContent?.includes('Technical information')) as HTMLButtonElement | undefined;
-    expect(detailsButton).toBeTruthy();
-    detailsButton?.click();
+    const details = connectionCard?.querySelector<HTMLDetailsElement>('details');
+    expect(details?.open).toBe(false);
+    expect(details?.textContent).toContain('env_current');
+    details?.querySelector('summary')?.click();
     await flushPage();
 
     expect(connectionCard?.textContent).toContain('Key initialization expires at');
@@ -1090,7 +1088,7 @@ describe('EnvSettingsPage', () => {
       expect(button).toBeTruthy();
       expect(button?.disabled).toBe(false);
     });
-    expect(host.textContent).toContain('OpenAI Compatible');
+    expect(host.textContent).toContain('OpenAI-compatible');
     const editButton = host.querySelectorAll('button[aria-label="Edit provider"]')[1] as HTMLButtonElement;
     editButton?.click();
     await flushPage();

@@ -241,8 +241,23 @@
 .environment-connection-group > .flex { padding-block: 14px; }
 .environment-connection-form .grid:has(> .environment-connection-field) { display: block; }
 .environment-connection-form .border-dashed { border: 0; background: transparent; padding-inline: 0; }
+.environment-connection-facts { margin: 0; }
+.environment-connection-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; gap: 28px; min-height: 65px; padding-block: 14px; }
+.environment-connection-facts > div + div { border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
+.environment-connection-facts dt { font-size: 13px; }
+.environment-connection-facts dd { margin: 0; font-size: 12px; text-align: right; overflow-wrap: anywhere; }
+.environment-connection-form .environment-container-picker { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); column-gap: 28px; row-gap: 8px; padding-block: 14px; border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
+.environment-connection-form .environment-container-picker-heading { display: contents; }
+.environment-connection-form .environment-container-picker-heading label { grid-column: 1; grid-row: 1; align-self: center; font-size: 13px; font-weight: 400; }
+.environment-connection-form .environment-container-picker-heading button { grid-column: 2; grid-row: 2; justify-self: end; }
+.environment-connection-form .environment-container-picker-control { grid-column: 2; grid-row: 1; margin: 0; }
+.environment-connection-form .environment-container-picker > :not(.environment-container-picker-heading):not(.environment-container-picker-control) { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 600px) {
   .environment-connection-field { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+  .environment-connection-facts > div { grid-template-columns: 1fr; gap: 8px; }
+  .environment-connection-facts dd { text-align: left; }
+  .environment-connection-form .environment-container-picker { display: flex; flex-direction: column; }
+  .environment-connection-form .environment-container-picker-heading { display: flex; }
 }
 @media (pointer: coarse) {
   .environment-connection-field input, .environment-connection-field select { font-size: 16px; min-height: 44px; }

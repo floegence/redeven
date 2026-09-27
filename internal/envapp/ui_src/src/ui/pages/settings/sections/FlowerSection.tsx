@@ -3,14 +3,12 @@ import { modelCatalogCopy } from '../../../../../../../flower_ui/src/settings/mo
 import { hydrateFlowerProviderCatalog, applyFlowerModelDiscovery, flowerProviderModelChoices, setFlowerModelsEnabled, defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../../flower_ui/src/settings/modelSelection';
 import type { FlowerProvider, FlowerProviderDraft } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { For, Show, createMemo, createSignal, createEffect, onCleanup, untrack } from 'solid-js';
-import { Bot, Eye, Globe, Image, Key, Pencil, Plus, ShieldCheck, Sparkles, Trash, Zap } from '@floegence/floe-webapp-core/icons';
+import { Bot, Pencil, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Select, Tabs } from '@floegence/floe-webapp-core/ui';
-import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { fetchLocalApiJSON } from '../../../services/localApi';
-import { SettingsSection, AutoSaveIndicator, SubSectionHeader, DotIndicator } from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator, SubSectionHeader, DotIndicator, SettingsList, SettingRow } from '../SettingsPrimitives';
 import { AIProviderDialog } from '../AIProviderDialog';
-import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { flowerProviderSearchSummary, withFlowerProviderSearchAvailability } from '../../../../../../../flower_ui/src/webSearchCapability';
 import type { FlowerWebSearchAvailability } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { formatUnknownError } from '../../../maintenance/shared';
@@ -63,11 +61,6 @@ function permissionTypeCopy(i18n: I18nHelpers, kind: AIPermissionType): Readonly
         description: i18n.t('flowerSettings.permissionApprovalRequiredDescription'),
       };
   }
-}
-
-function PermissionTypeIcon(props: Readonly<{ kind: AIPermissionType; class?: string }>) {
-  const Icon = props.kind === 'readonly' ? Eye : props.kind === 'full_access' ? Zap : ShieldCheck;
-  return <Icon class={props.class} />;
 }
 
 function newProviderID(): string {
@@ -384,34 +377,24 @@ export function FlowerSection() {
   });
 
   const renderDefaultPermissionSection = () => (
-    <div class="mt-5">
+    <div>
       <SubSectionHeader
         title={i18n.t('flowerSettings.defaultPermissionTitle')}
         description={i18n.t('flowerSettings.defaultPermissionDescription')}
         actions={<AutoSaveIndicator dirty={permissionDirty()} saving={permissionSaving()} error={permissionError()} savedAt={permissionSavedAt()} enabled={canEdit()} />}
       />
-      <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3" role="radiogroup" aria-label={i18n.t('flowerSettings.defaultPermissionTitle')}>
+      <div class="settings-permission-options mt-3" role="radiogroup" aria-label={i18n.t('flowerSettings.defaultPermissionTitle')}>
         <For each={PERMISSION_TYPES}>
           {(kind) => {
             const copy = () => permissionTypeCopy(i18n, kind);
             return (
-              <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('redeven-settings-choice group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left', permissionType() === kind && 'redeven-settings-choice--selected-neutral', !canEdit() && 'cursor-not-allowed opacity-50')}
-                role="radio" aria-checked={permissionType() === kind}
-                tabIndex={permissionType() === kind ? 0 : -1}
-                onKeyDown={onPermissionTypeKeyDown}
+              <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button"
+                class="settings-permission-option" role="radio" aria-checked={permissionType() === kind}
+                tabIndex={permissionType() === kind ? 0 : -1} onKeyDown={onPermissionTypeKeyDown}
                 onClick={() => choosePermissionType(kind)} disabled={!canEdit()}>
-                <div class="flex items-center justify-between gap-3">
-                  <div class="flex items-center gap-2.5">
-                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--redeven-status-info-soft)]">
-                      <PermissionTypeIcon kind={kind} class="h-4 w-4 text-[var(--redeven-status-info)]" />
-                    </div>
-                    <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{copy().title}</span>
-                  </div>
-                  <span class={cn('text-[11px] font-medium', permissionType() === kind ? 'text-success' : 'text-muted-foreground')}>
-                    {permissionType() === kind ? i18n.t('flowerSettings.defaultPermissionBadge') : ''}
-                  </span>
-                </div>
-                <p class="text-xs leading-relaxed text-muted-foreground">{copy().description}</p>
+                <span class="settings-permission-option-copy"><span>{copy().title}</span>
+                  <span class="text-xs text-muted-foreground">{copy().description}</span></span>
+                <span class="settings-permission-option-mark" aria-hidden="true" />
               </button>
             );
           }}
@@ -444,40 +427,22 @@ export function FlowerSection() {
           { id: 'health', label: i18n.t('settingsDesign.healthAndStorage') },
         ]} aria-label={i18n.t('aiChrome.flowerTitle')} />
         <div hidden={activeTab() !== 'models'} data-flower-settings-panel="models" class="space-y-6">
-        {/* Current model */}
-        <div class="redeven-settings-choice redeven-settings-choice--selected-neutral rounded-xl border p-5">
-          <Show when={currentModelID() && !aiCurrentModelOption()}><p role="alert" class="mb-3 text-[length:var(--floe-type-body)] text-destructive">{modelCatalogCopy(i18n.locale()).unavailable}</p></Show>
-          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('flowerSettings.currentModelTitle')}</div>
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div class="flex min-w-0 flex-1 items-center gap-4">
-              <div class="redeven-settings-inset flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
-                <Show when={aiCurrentModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
-                  <ProviderBrandIcon type={providers().find((p) => currentModelID().startsWith(String(p.id ?? '').trim() + '/'))?.type ?? 'openai'} class="h-6 w-6" />
-                </Show>
-              </div>
-              <div class="min-w-0 flex-1">
-                <Show when={aiCurrentModelOption()} fallback={<div class="text-[length:var(--floe-type-body)] font-semibold text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
-                  <div class="break-words text-[length:var(--floe-type-body)] font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
-                  <div class="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <DotIndicator active label={i18n.t('flowerSettings.textCapability')} />
-                    <Show when={aiCurrentModelOption()?.supportsImageInput}><DotIndicator active label={i18n.t('flowerSettings.imageInputCapability')} /></Show>
-                  </div>
-                </Show>
-              </div>
-            </div>
+        <Show when={currentModelID() && !aiCurrentModelOption()}><p role="alert" class="text-xs text-destructive">{modelCatalogCopy(i18n.locale()).unavailable}</p></Show>
+        <SettingsList>
+          <SettingRow title={i18n.t('flowerSettings.currentModelTitle')}
+            description={aiCurrentModelOption() ? [i18n.t('flowerSettings.textCapability'), aiCurrentModelOption()?.supportsImageInput ? i18n.t('flowerSettings.imageInputCapability') : ''].filter(Boolean).join(' · ') : i18n.t('flowerSettings.noModelSelected')}
+            control={
             <Select value={currentModelID()} options={aiModelOptions().map((it) => ({ value: it.id, label: it.label }))}
               onChange={(v) => { const nid = String(v ?? '').trim(); if (!aiModelOptions().some((option) => option.id === nid)) return; const pid = String(currentModelID() ?? '').trim(); if (nid === pid) return; setCurrentModelID(nid); if (!dirty() && !saving()) { void saveAICurrentModelDirectly(nid, pid); return; } setError(null); setDirty(true); }}
               placeholder={i18n.t('flowerSettings.selectModelPlaceholder')} class="w-full sm:w-56" disabled={!canEdit() || aiModelOptions().length === 0 || saving()} />
-          </div>
-        </div>
-
-
+            } />
+        </SettingsList>
 
         {/* Providers gallery */}
-        <div class="mt-5">
+        <div class="space-y-3">
           <SubSectionHeader title={i18n.t('flowerSettings.providersTitle')} description={i18n.t('flowerSettings.providersDescription')}
-            actions={<Button size="sm" variant="default" icon={Plus} onClick={addAIProviderAndOpenDialog} disabled={!canEdit()}>{i18n.t('flowerSettings.addProvider')}</Button>} />
-          <div class="mt-3 grid grid-cols-1 gap-3">
+            actions={<Button size="sm" variant="ghost" icon={Plus} onClick={addAIProviderAndOpenDialog} disabled={!canEdit()}>{i18n.t('flowerSettings.addProvider')}</Button>} />
+          <SettingsList>
             <For each={providers()}>{(provider, index) => {
               const pid = () => String(provider.id ?? '').trim(); const dn = () => localizedProviderDisplayName(provider, i18n.locale(), i18n.t('flowerSettings.providerFallbackName', { count: index() + 1 }));
               const mns = () => (Array.isArray(provider.models) ? provider.models : []).map((m) => String(m.model_name ?? '').trim()).filter(Boolean);
@@ -485,64 +450,29 @@ export function FlowerSection() {
               const isDef = () => currentModelID().startsWith(`${pid()}/`); const keyOk = () => providerKeySet()?.[pid()];
               const wss = () => flowerProviderSearchSummary(provider.models, modelCatalogCopy(i18n.locale()));
               return (
-                <div class={cn('redeven-settings-choice rounded-xl border p-4', isDef() && 'redeven-settings-choice--selected-neutral')}>
-                  <div class="flex items-start gap-3">
-                    <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted"><ProviderBrandIcon type={provider.type} class="h-5 w-5" /></div>
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center justify-between gap-2">
-                        <div class="flex items-center gap-2 min-w-0">
-                          <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground truncate">{dn()}</span>
-                          <span class="text-[11px] text-muted-foreground">{localizedProviderTypeLabel(provider.type, i18n.locale())}</span>
-                          <Show when={isDef()}><span class="flex-shrink-0 rounded-full bg-[var(--redeven-settings-selection-bg)] px-1.5 py-px text-[10px] font-medium text-[var(--redeven-settings-selection-fg)]">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
-                        </div>
-                        <div class="flex items-center flex-shrink-0">
-                          <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openAIProviderDialog(index())} disabled={!canEdit()} aria-label={i18n.t('flowerSettings.editProvider')}><Pencil class="h-3.5 w-3.5" /></Button>
-                          <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => { setProviders((p) => normalizeAIProviders(p.filter((_, i) => i !== index()))); setError(null); setDirty(true); }} disabled={!canEdit() || providers().length <= 1} aria-label={i18n.t('flowerSettings.removeProvider')}><Trash class="h-3.5 w-3.5" /></Button>
-                        </div>
-                      </div>
-                      <div class="mt-2 space-y-1.5">
-                        <div class="flex items-center gap-2 text-xs">
-                          <span class="flex w-20 flex-shrink-0 items-center gap-1.5 text-muted-foreground">
-                            <Key class="h-3.5 w-3.5" />
-                            <span>{i18n.t('flowerProviderDialog.apiKey')}</span>
-                          </span>
-                          <DotIndicator active={Boolean(keyOk())} label={provider.type === 'ollama' ? modelCatalogCopy(i18n.locale()).optionalKey : keyOk() ? i18n.t('flowerSettings.keyVerified') : i18n.t('flowerSettings.needsKey')} />
-                        </div>
-                        <div class="flex items-start gap-2 text-xs">
-                          <span class="flex w-20 flex-shrink-0 items-center gap-1.5 pt-0.5 text-muted-foreground">
-                            <Sparkles class="h-3.5 w-3.5" />
-                            <span>{i18n.t('flowerChat.model.label')}</span>
-                          </span>
-                          <div class="flex flex-wrap gap-1">
-                            <For each={mns().slice(0, 3)}>{(name) => (
-                              <code class={cn('rounded px-1.5 py-0.5 text-[11px] font-mono', isDef() && currentModelID() === `${pid()}/${name}` ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground')}>{name}</code>
-                            )}</For>
-                            <Show when={mns().length > 3}><span class="text-[11px] text-muted-foreground">+{mns().length - 3}</span></Show>
-                          </div>
-                        </div>
-                        <div class="flex items-center gap-2 text-xs">
-                          <span class="flex w-20 flex-shrink-0 items-center gap-1.5 text-muted-foreground">
-                            <Globe class="h-3.5 w-3.5" />
-                            <span>{i18n.t('flowerProviderDialog.webSearch')}</span>
-                          </span>
-                          <DotIndicator active={wss().enabled} label={wss().label} />
-                        </div>
-                        <Show when={hasImg()}>
-                          <div class="flex items-center gap-2 text-xs">
-                            <span class="flex w-20 flex-shrink-0 items-center gap-1.5 text-muted-foreground">
-                              <Image class="h-3.5 w-3.5" />
-                              <span>{i18n.t('flowerSettings.imageInput')}</span>
-                            </span>
-                            <DotIndicator active label={i18n.t('flowerSettings.imageInput')} />
-                          </div>
-                        </Show>
+                <div class="settings-provider-row">
+                  <SettingRow title={dn()} description={provider.type === 'ollama' ? modelCatalogCopy(i18n.locale()).optionalKey : keyOk() ? i18n.t('flowerSettings.keyVerified') : i18n.t('flowerSettings.needsKey')}
+                    control={<div class="settings-row-actions">
+                      <Show when={isDef()}><span class="text-xs text-muted-foreground">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
+                      <Button size="icon" variant="ghost" icon={Pencil} onClick={() => openAIProviderDialog(index())} disabled={!canEdit()} aria-label={i18n.t('flowerSettings.editProvider')} />
+                      <Show when={providers().length > 1}><Button size="icon" variant="ghost" icon={Trash}
+                        onClick={() => { setProviders((p) => normalizeAIProviders(p.filter((_, i) => i !== index()))); setError(null); setDirty(true); }}
+                        disabled={!canEdit()} aria-label={i18n.t('flowerSettings.removeProvider')} /></Show>
+                    </div>} />
+                  <details class="settings-provider-details settings-technical-details">
+                    <summary>{i18n.t('flowerChat.model.label')} · {mns().length}</summary>
+                    <div class="space-y-3 pt-3">
+                      <p class="text-xs text-muted-foreground">{localizedProviderTypeLabel(provider.type, i18n.locale())}</p>
+                      <div class="flex flex-wrap gap-2"><For each={mns()}>{name => <code class="break-all text-xs">{name}</code>}</For></div>
+                      <div class="flex flex-wrap gap-4"><DotIndicator active={wss().enabled} label={wss().label} />
+                        <Show when={hasImg()}><DotIndicator active label={i18n.t('flowerSettings.imageInput')} /></Show>
                       </div>
                     </div>
-                  </div>
+                  </details>
                 </div>
               );
             }}</For>
-          </div>
+          </SettingsList>
         </div>
         </div>
         <div hidden={activeTab() !== 'permissions'} data-flower-settings-panel="permissions">{renderDefaultPermissionSection()}</div>

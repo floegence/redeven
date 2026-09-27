@@ -38,6 +38,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
   ChevronRight: (props: any) => <span class={props.class} data-testid="chevron-right-icon" />,
   Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
+  Trash: (props: any) => <span class={props.class} />,
   Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
   Cloud: (props: any) => <span class={props.class} data-testid="cloud-icon" />,
   Cpu: (props: any) => <span class={props.class} data-testid="cpu-icon" />,
@@ -52,7 +53,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
   Button: (props: any) => (
-    <button type="button" onClick={props.onClick} disabled={props.disabled}>
+    <button type="button" onClick={props.onClick} disabled={props.disabled} aria-label={props['aria-label']}>
       {props.children}
     </button>
   ),
@@ -85,6 +86,7 @@ vi.mock('../../primitives/Tooltip', () => ({
 }));
 
 vi.mock('./SettingsPrimitives', () => ({
+  CopyButton: (props: any) => <button aria-label={props.label}>Copy</button>,
   SettingRow: (props: any) => <div><div>{props.title}</div><div>{props.description}</div>{props.control}</div>,
   SettingsSection: (props: any) => (
     <section>
@@ -219,7 +221,7 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(host.textContent).toContain('Browser Editor');
     expect(host.textContent).toContain('Shared runtime root');
-    expect(host.textContent).toContain('Refresh');
+    expect(host.querySelector('button[aria-label="Refresh"]')).not.toBeNull();
     expect(host.textContent).toContain('Update Browser Editor');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
@@ -239,8 +241,8 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.textContent).toContain('共享运行时根');
     expect(host.textContent).toContain('已安装的编辑器版本');
     expect(host.textContent).toContain('二进制路径');
-    expect(host.textContent).toContain('使用此版本');
-    expect(host.textContent).toContain('移除版本');
+    expect(host.textContent).not.toContain('使用此版本');
+    expect(host.textContent).not.toContain('移除版本');
     expect(host.textContent).not.toContain('Managed editor source');
     expect(host.textContent).not.toContain('Use this version');
 

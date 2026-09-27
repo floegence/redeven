@@ -7081,6 +7081,10 @@
     "touchHelpDescription": "Toca para hacer clic. Desliza un dedo para desplazarte. Mantén pulsado y mueve para arrastrar; suelta sin mover para hacer clic derecho. Pellizca con dos dedos para ampliar la página."
   },
   "settingsDesign": {
+    "editDirectory": "Editar directorio",
+    "availableEditorVersion": "Disponible para nuevos Codespaces.",
+    "computerRoot": "Equipo",
+    "installationDetails": "Instalación y rutas",
     "startPort": "Puerto inicial",
     "endPort": "Puerto final",
     "relatedSettings": "Ajustes relacionados",

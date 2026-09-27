@@ -14,7 +14,7 @@ vi.mock('../../../primitives/EnvAppModal', () => ({
 import { SkillsSection } from './SkillsSection';
 let dispose: (() => void) | undefined;
 function mount() { const host = document.createElement('div'); document.body.append(host); dispose = render(() => <SkillsSection />, host); return host; }
-function click(host: HTMLElement, text: string) { const button = [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === text); expect(button, text).toBeTruthy(); button!.click(); }
+function click(host: HTMLElement, text: string) { const button = [...host.querySelectorAll('button')].find((item) => (item.getAttribute('aria-label') ?? item.textContent?.trim()) === text); expect(button, text).toBeTruthy(); button!.click(); }
 const skill = { id: 'one', name: 'example', description: 'Example skill', path: '/skills/example/SKILL.md', scope: 'user', enabled: true, effective: true };
 beforeEach(() => { state.canAdmin = true; state.canInteract = () => true; state.api.mockReset().mockImplementation(async (path: string) => path.endsWith('/sources') ? { items: [] } : { skills: [skill], catalog_version: 1 }); });
 afterEach(() => { dispose?.(); document.body.innerHTML = ''; });
@@ -31,14 +31,14 @@ describe('Skills settings API integration', () => {
     const host = mount();
     await vi.waitFor(() => expect(state.api).toHaveBeenCalledWith('/_redeven_proxy/api/ai/skills', { method: 'GET' }));
     await vi.waitFor(() => expect(host.textContent).toContain('example'));
-    await vi.waitFor(() => expect([...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Reload')?.disabled).toBe(false));
+    await vi.waitFor(() => expect([...host.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Reload')?.disabled).toBe(false));
     state.api.mockRejectedValue(new Error('Catalog is unavailable'));
     click(host, 'Reload');
     await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('Catalog is unavailable'));
   });
   it('creates a skill using the confirmed form and keeps the form after failure', async () => {
     const host = mount();
-    await vi.waitFor(() => expect([...host.querySelectorAll('button')].find((button) => button.textContent === 'Reload')?.disabled).toBe(false));
+    await vi.waitFor(() => expect([...host.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Reload')?.disabled).toBe(false));
     click(host, 'Create Skill');
     const fields = host.querySelectorAll('[role="dialog"] input');
     const fill = (field: Element, value: string) => { (field as HTMLInputElement).value = value; field.dispatchEvent(new Event('input', { bubbles: true })); };
@@ -58,11 +58,11 @@ describe('Skills settings API integration', () => {
   it('keeps failed toggles visible and prevents catalog reload during a mutation', async () => {
     const host = mount();
     await vi.waitFor(() => expect(host.textContent).toContain('example'));
-    await vi.waitFor(() => expect([...host.querySelectorAll('button')].find((button) => button.textContent === 'Reload')?.disabled).toBe(false));
+    await vi.waitFor(() => expect([...host.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Reload')?.disabled).toBe(false));
     let rejectToggle!: (error: Error) => void;
     state.api.mockImplementation((_path: string, options: { method: string }) => options.method === 'PUT' ? new Promise((_, reject) => { rejectToggle = reject; }) : Promise.resolve({ skills: [] }));
     click(host, 'Disable');
-    expect([...host.querySelectorAll('button')].find((button) => button.textContent === 'Reload')?.disabled).toBe(true);
+    expect([...host.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Reload')?.disabled).toBe(true);
     rejectToggle(new Error('Toggle rejected'));
     await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('Toggle rejected'));
     expect(host.textContent).toContain('example');

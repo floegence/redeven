@@ -243,6 +243,7 @@ export const enUS = {
     appliesToDesktopAndEnvApp: 'Language applies to Redeven Desktop and Env App sessions opened from this Desktop.',
   },
   settings: {
+    "linuxUser": "Linux user",
     connectionTab: "Connection",
     accessTab: "Access & security",
     discardChanges: "Discard changes",

@@ -436,7 +436,7 @@ export function EmptyState(props: {
 
 // ── Copy Button ──────────────────────────────────────────────
 
-export function CopyButton(props: { value: string; label?: string }) {
+export function CopyButton(props: { value: string; label?: string; iconOnly?: boolean }) {
   const i18n = useI18n();
   const [copied, setCopied] = createSignal(false);
   let timer: ReturnType<typeof setTimeout>;
@@ -458,9 +458,11 @@ export function CopyButton(props: { value: string; label?: string }) {
       size="xs"
       icon={copied() ? Check : Copy}
       onClick={handleCopy}
-      aria-label={props.label ?? i18n.t('settings.copyValue', { value: props.value })}
+      disabled={!props.value}
+      aria-label={copied() ? i18n.t('common.actions.copied') : props.label ?? i18n.t('settings.copyValue', { value: props.value })}
+      title={copied() ? i18n.t('common.actions.copied') : props.label ?? i18n.t('settings.copyValue', { value: props.value })}
     >
-      {copied() ? i18n.t('common.actions.copied') : (props.label ?? '')}
+      {props.iconOnly || !props.label ? null : copied() ? i18n.t('common.actions.copied') : props.label}
     </Button>
   );
 }
@@ -528,55 +530,6 @@ export function PropertyRow(props: {
           </div>
         </Show>
       </div>
-    </div>
-  );
-}
-
-// ── Permission Dot (read / write / execute indicator group) ─
-
-export function PermissionDot(props: {
-  read: boolean;
-  write: boolean;
-  execute: boolean;
-  onReadChange?: (v: boolean) => void;
-  onWriteChange?: (v: boolean) => void;
-  onExecuteChange?: (v: boolean) => void;
-  readonly?: boolean;
-}) {
-  const i18n = useI18n();
-
-  return (
-    <div class="redeven-permission-segmented inline-flex flex-wrap items-center gap-1">
-      <button
-        type="button"
-        class={cn('redeven-permission-segment', props.read && 'redeven-permission-segment--active')}
-        onClick={props.readonly ? undefined : () => props.onReadChange?.(!props.read)}
-        disabled={props.readonly || !props.onReadChange}
-        aria-pressed={props.read}
-      >
-        <span>{i18n.t('permissionPolicy.permission.read')}</span>
-        <span>{props.read ? i18n.t('permissionPolicy.allowed') : i18n.t('permissionPolicy.denied')}</span>
-      </button>
-      <button
-        type="button"
-        class={cn('redeven-permission-segment', props.write && 'redeven-permission-segment--active')}
-        onClick={props.readonly ? undefined : () => props.onWriteChange?.(!props.write)}
-        disabled={props.readonly || !props.onWriteChange}
-        aria-pressed={props.write}
-      >
-        <span>{i18n.t('permissionPolicy.permission.write')}</span>
-        <span>{props.write ? i18n.t('permissionPolicy.allowed') : i18n.t('permissionPolicy.denied')}</span>
-      </button>
-      <button
-        type="button"
-        class={cn('redeven-permission-segment', props.execute && 'redeven-permission-segment--active')}
-        onClick={props.readonly ? undefined : () => props.onExecuteChange?.(!props.execute)}
-        disabled={props.readonly || !props.onExecuteChange}
-        aria-pressed={props.execute}
-      >
-        <span>{i18n.t('permissionPolicy.permission.execute')}</span>
-        <span>{props.execute ? i18n.t('permissionPolicy.allowed') : i18n.t('permissionPolicy.denied')}</span>
-      </button>
     </div>
   );
 }

@@ -78,7 +78,7 @@ type TerminalSettingsDialogProps = {
 function SectionTitle(props: { title: string; description: string }) {
   return (
     <div class="space-y-1">
-      <div class="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{props.title}</div>
+      <div class="text-[13px] font-medium text-foreground">{props.title}</div>
       <p class="text-xs text-muted-foreground">{props.description}</p>
     </div>
   );
@@ -348,13 +348,19 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
           </section>
         </Show>
 
-        <section class="space-y-3">
-        <SectionTitle
-          title={i18n.t('terminal.settings.themeTitle')}
-          description={i18n.t('terminal.settings.themeDescription')}
-        />
+        <pre class="terminal-settings-preview"
+          aria-label={i18n.t('terminal.settings.fontPreview')}
+          style={{ 'background-color': itemColors(TERMINAL_THEME_ITEMS.find(item => isThemeSelected(item.id)) ?? SYSTEM_THEME_ITEM).background, color: itemColors(TERMINAL_THEME_ITEMS.find(item => isThemeSelected(item.id)) ?? SYSTEM_THEME_ITEM).foreground, 'font-family': resolvedFont().family, 'font-size': `${props.fontSize}px`, 'line-height': '1.5', 'font-feature-settings': '"liga" 0, "calt" 0' }}>
+          {TERMINAL_FONT_PREVIEW_SAMPLE}
+        </pre>
+
+        <TerminalFontStatus font={resolvedFont()} />
+        <section class="terminal-settings-group">
         <details class="terminal-settings-choice-details" data-terminal-preview="theme">
-          <summary data-floe-autofocus>{itemLabel(TERMINAL_THEME_ITEMS.find(item => isThemeSelected(item.id)) ?? SYSTEM_THEME_ITEM)}</summary>
+          <summary data-floe-autofocus>
+            <span class="terminal-settings-choice-label"><span>{i18n.t('terminal.settings.themeTitle')}</span><small>{i18n.t('terminal.settings.themeDescription')}</small></span>
+            <span class="terminal-settings-choice-value">{itemLabel(TERMINAL_THEME_ITEMS.find(item => isThemeSelected(item.id)) ?? SYSTEM_THEME_ITEM)}</span>
+          </summary>
         <div
           class="grid grid-cols-1 gap-2 sm:grid-cols-2"
           role="radiogroup"
@@ -405,40 +411,11 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         </div>
         </details>
         <div class="sr-only" aria-live="polite">{themeAnnouncement()}</div>
-        </section>
-
-        <section class="space-y-3">
-        <SectionTitle
-          title={i18n.t('terminal.settings.activityBorderTitle')}
-          description={i18n.t('terminal.settings.activityBorderDescription')}
-        />
-        <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="space-y-1">
-              <div class="text-xs font-medium text-foreground">{i18n.t('terminal.settings.showRunningBorder')}</div>
-              <p class="text-xs text-muted-foreground">
-                {i18n.t('terminal.settings.statusTrackingUnchanged')}
-              </p>
-            </div>
-            <Checkbox
-              checked={props.workIndicatorEnabled}
-              onChange={props.onWorkIndicatorEnabledChange}
-              label={props.workIndicatorEnabled ? i18n.t('terminal.settings.shown') : i18n.t('terminal.settings.hidden')}
-              size="sm"
-            />
-          </div>
-        </div>
-        </section>
-
-        <section class="space-y-3">
-        <SectionTitle
-          title={i18n.t('terminal.settings.fontTitle')}
-          description={props.fontScope === 'shared-workbench'
-            ? i18n.t('terminal.settings.sharedWorkbenchFontDescription')
-            : i18n.t('terminal.settings.localFontDescription')}
-        />
         <details class="terminal-settings-choice-details" data-terminal-preview="font">
-          <summary>{TERMINAL_FONT_OPTIONS.find(option => option.id === props.fontFamilyId)?.label ?? props.fontFamilyId}</summary>
+          <summary>
+            <span class="terminal-settings-choice-label"><span>{i18n.t('terminal.settings.fontTitle')}</span><small>{props.fontScope === 'shared-workbench' ? i18n.t('terminal.settings.sharedWorkbenchFontDescription') : i18n.t('terminal.settings.localFontDescription')}</small></span>
+            <span class="terminal-settings-choice-value">{TERMINAL_FONT_OPTIONS.find(option => option.id === props.fontFamilyId)?.label ?? props.fontFamilyId}</span>
+          </summary>
         <Show when={fontSearchVisible()}>
           <Input type="search" value={fontQuery()} onInput={(event) => setFontQuery(event.currentTarget.value)}
             aria-label={i18n.t('terminal.settings.fontSearch')} placeholder={i18n.t('terminal.settings.fontSearch')} />
@@ -492,14 +469,8 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
           <p role="status" class="text-xs text-muted-foreground">{i18n.t('terminal.settings.fontNoMatches')}</p>
         </Show>
         </details>
-        <TerminalFontStatus font={resolvedFont()} showReady />
-        <pre class="overflow-x-auto rounded-md border border-border/70 bg-muted/[0.14] p-3"
-          aria-label={i18n.t('terminal.settings.fontPreview')}
-          style={{ 'font-family': resolvedFont().family, 'font-size': `${props.fontSize}px`, 'line-height': '1.5', 'font-feature-settings': '"liga" 0, "calt" 0' }}>
-          {TERMINAL_FONT_PREVIEW_SAMPLE}
-        </pre>
 
-        <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
+        <div class="terminal-settings-size-row">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div class="space-y-1">
               <div class="text-xs font-medium text-foreground">{i18n.t('terminal.settings.fontSize')}</div>
@@ -519,6 +490,29 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
           </div>
         </div>
         </section>
+        <section class="space-y-3">
+        <SectionTitle
+          title={i18n.t('terminal.settings.activityBorderTitle')}
+          description={i18n.t('terminal.settings.activityBorderDescription')}
+        />
+        <div class="terminal-settings-group terminal-settings-activity">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="space-y-1">
+              <div class="text-xs font-medium text-foreground">{i18n.t('terminal.settings.showRunningBorder')}</div>
+              <p class="text-xs text-muted-foreground">
+                {i18n.t('terminal.settings.statusTrackingUnchanged')}
+              </p>
+            </div>
+            <Checkbox
+              checked={props.workIndicatorEnabled}
+              onChange={props.onWorkIndicatorEnabledChange}
+              label={props.workIndicatorEnabled ? i18n.t('terminal.settings.shown') : i18n.t('terminal.settings.hidden')}
+              size="sm"
+            />
+          </div>
+        </div>
+        </section>
+
       </div>
     </Dialog>
   );

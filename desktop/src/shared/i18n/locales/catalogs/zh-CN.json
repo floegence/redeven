@@ -1209,6 +1209,7 @@
     "appliesToDesktopAndEnvApp": "语言会应用到 Redeven Desktop，以及从此 Desktop 打开的 Env App 会话。"
   },
   "settings": {
+    "linuxUser": "Linux 用户",
     "remoteSettingsDescription": "{label} · 运行于服务器",
     "managementConnection": "管理连接",
     "remoteCertificateHelp": "证书文件保存在此服务器上，各连接设备需分别验证对签发 CA 的信任。",

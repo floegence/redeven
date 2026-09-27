@@ -7081,6 +7081,10 @@
     "touchHelpDescription": "Tippen klickt. Mit einem Finger wischen scrollt. Nach langem Drücken bewegen Sie zum Ziehen; ohne Bewegung loslassen öffnet das Kontextmenü. Mit zwei Fingern zoomen Sie die Seite."
   },
   "settingsDesign": {
+    "editDirectory": "Verzeichnis bearbeiten",
+    "availableEditorVersion": "Für neue Codespaces verfügbar.",
+    "computerRoot": "Computer",
+    "installationDetails": "Installation und Pfade",
     "startPort": "Startport",
     "endPort": "Endport",
     "relatedSettings": "Verwandte Einstellungen",

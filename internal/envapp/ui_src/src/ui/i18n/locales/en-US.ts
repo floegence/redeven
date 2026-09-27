@@ -2620,6 +2620,11 @@ export const enUS = defineDictionary({
     },
   },
   settingsDesign: {
+    "editDirectory": "Edit directory",
+    "availableEditorVersion": "Available for new Codespaces.",
+    computerRoot: "Computer",
+    installationDetails: "Installation & paths",
+
     startPort: "Starting port",
     endPort: "Ending port",
     maintenanceWarning: 'This operation may interrupt active terminals and sessions. Continue?',

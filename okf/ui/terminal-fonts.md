@@ -29,7 +29,10 @@ The [terminal interaction contract](workbench-terminal-interaction.md) owns cont
 
 ## Settings presentation
 
-Terminal settings show the current theme and font before their preview galleries.
+Terminal settings start with the actual resolved font and current theme preview.
+Theme, font, and size share one quiet group with inset dividers, labels and
+guidance on the left, and current values or controls on the right. The separate
+activity section retains the preference's Workbench-specific scope.
 Each native disclosure starts closed and keeps its selection mounted when
 collapsed. Opening a gallery exposes the existing keyboard-operable options,
 font search, and preview samples; it does not change preferences. Initial focus

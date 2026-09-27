@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
-import { Code, RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { Code, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, HighlightBlock } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog } from '../../primitives/EnvAppModal';
 
@@ -25,7 +25,7 @@ import type { BrowserEditorSetupProgress } from '../../services/browserEditorSet
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
 import { BrowserEditorInstallMethodSelector } from '../BrowserEditorInstallMethodSelector';
-import { SettingsList, SettingsSection, SettingsPill, SettingRow } from './SettingsPrimitives';
+import { SettingsList, SettingsSection, SettingsPill, SettingRow, CopyButton } from './SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../i18n';
 
 type RuntimeDetailRow = Readonly<{
@@ -33,7 +33,6 @@ type RuntimeDetailRow = Readonly<{
   value: JSX.Element | string;
   note?: string;
   mono?: boolean;
-  detail?: boolean;
 }>;
 
 function runtimeSourceLabel(source: string | null | undefined, i18n: I18nHelpers): string {
@@ -120,23 +119,6 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined, i18n: I18n
   return i18n.t('codeRuntime.operation.idle');
 }
 
-function RuntimeDetailsSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
-  const i18n = useI18n();
-  const rows = (details: boolean) => <SettingsList>
-    <For each={props.rows.filter(row => Boolean(row.detail || row.mono) === details)}>{row =>
-      <SettingRow title={row.label} description={row.note} control={<span class={row.mono ? 'font-mono text-xs break-all' : 'text-xs'}>{row.value}</span>} />
-    }</For>
-  </SettingsList>;
-  return <div class="space-y-3">
-    <h3 class="text-[13px] font-medium text-muted-foreground">{props.title}</h3>
-    {rows(false)}
-    <details class="code-runtime-details">
-      <summary>{i18n.t('settings.connection.technicalInformation')}</summary>
-      <div class="pt-3">{rows(true)}</div>
-    </details>
-  </div>;
-}
-
 function ActionButtonTooltip(props: { content: string; disabled?: boolean; children: JSX.Element }) {
   return (
     <Tooltip content={props.content} placement="top" delay={0}>
@@ -156,49 +138,31 @@ function VersionRow(props: {
   onRemove: (version: string) => void;
 }) {
   const i18n = useI18n();
-  const detectionTone = () => runtimeStatusTone(props.version.detection_state);
-
   return (
-    <div class="redeven-settings-version-row p-4">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="space-y-2">
-          <div class="flex flex-wrap items-center gap-2">
-            <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.version.version}</div>
-            <SettingsPill tone={detectionTone()}>{runtimeStatusLabel(props.version.detection_state, i18n)}</SettingsPill>
-            <Show when={props.version.selected_by_local_environment}>
-              <SettingsPill tone="success">{i18n.t('codeRuntime.currentEditor')}</SettingsPill>
-            </Show>
-          </div>
-          <div class="grid gap-1 text-[11px] text-muted-foreground">
-            <div>
-              {i18n.t('codeRuntime.binaryPath')}: <span class="font-mono text-foreground break-all">{props.version.binary_path || '-'}</span>
-            </div>
-            <Show when={props.version.error_message}>
-              <div class="text-destructive">{props.version.error_message}</div>
-            </Show>
-          </div>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => props.onUse(props.version.version)}
-            disabled={!props.canInteract || !props.canManage || props.busy || props.version.selected_by_local_environment}
-          >
+    <SettingRow class="redeven-settings-version-row"
+      title={props.version.version}
+      description={props.version.error_message || i18n.t(props.version.selected_by_local_environment
+        ? 'codeRuntime.notes.codespacesUsesSelectedManagedVersion' : 'settingsDesign.availableEditorVersion')}
+      control={<div class="settings-row-actions">
+        <Show when={props.version.selected_by_local_environment} fallback={<>
+          <Show when={props.version.detection_state !== 'ready'}>
+            <SettingsPill tone={runtimeStatusTone(props.version.detection_state)}>{runtimeStatusLabel(props.version.detection_state, i18n)}</SettingsPill>
+          </Show>
+          <Button size="sm" variant="ghost" onClick={() => props.onUse(props.version.version)}
+            disabled={!props.canInteract || !props.canManage || props.busy}>
             {i18n.t('codeRuntime.useThisVersion')}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
+        </>}>
+          <SettingsPill>{i18n.t('codeRuntime.currentEditor')}</SettingsPill>
+        </Show>
+        <Show when={props.version.removable}>
+          <Button size="icon" variant="ghost" icon={Trash}
+            title={i18n.t('codeRuntime.removeVersionAction')} aria-label={i18n.t('codeRuntime.removeVersionAction')}
             onClick={() => props.onRemove(props.version.version)}
-            disabled={!props.canInteract || !props.canManage || props.busy || !props.version.removable}
-          >
-            {i18n.t('codeRuntime.removeVersionAction')}
-          </Button>
-        </div>
-      </div>
-    </div>
+            disabled={!props.canInteract || !props.canManage || props.busy} />
+        </Show>
+      </div>}
+    />
   );
 }
 
@@ -296,7 +260,6 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     return [
       {
         label: i18n.t('codeRuntime.rows.managedEditorSource'),
-        detail: true,
         value: props.status?.managed_runtime_source === 'managed' ? i18n.t('codeRuntime.selectedManagedVersion') : i18n.t('codeRuntime.noManagedVersionSelected'),
         note:
           props.status?.managed_runtime_source === 'managed'
@@ -304,25 +267,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             : i18n.t('codeRuntime.notes.setupOrSelectManagedVersion'),
       },
       {
-        label: i18n.t('codeRuntime.rows.selectedVersion'),
-        value: props.status?.managed_runtime_version || i18n.t('codeRuntime.none'),
-        note:
-          props.status?.managed_runtime_version
-            ? i18n.t('codeRuntime.notes.managedVersionSelected')
-            : i18n.t('codeRuntime.notes.valueAppearsAfterSetup'),
-      },
-      {
-        label: i18n.t('codeRuntime.rows.activeRuntime'),
-        value: (
-          <SettingsPill tone={runtimeStatusTone(active?.detection_state)}>
-            {runtimeStatusLabel(active?.detection_state, i18n)}
-          </SettingsPill>
-        ),
-        note: active?.error_message || i18n.t('codeRuntime.notes.codespacesUsingRuntimeSource', { source: runtimeSourceLabel(active?.source, i18n) }),
-      },
-      {
         label: i18n.t('codeRuntime.rows.activeSource'),
-        detail: true,
         value: runtimeSourceLabel(active?.source, i18n),
         note:
           active?.source === 'env_override'
@@ -392,36 +337,18 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         icon={Code}
         title={i18n.t('codeRuntime.title')}
         description={i18n.t('codeRuntime.description')}
-        badge={operationRunning() ? operationLabel(props.status, i18n) : runtimeReady() ? i18n.t('common.status.ready') : i18n.t('codeRuntime.needsSetup')}
-        badgeVariant={operationRunning() ? 'warning' : runtimeReady() ? 'success' : 'warning'}
+        badge={operationRunning() ? operationLabel(props.status, i18n) : undefined}
+        badgeVariant="warning"
         error={props.error}
         actions={
           <>
             <ActionButtonTooltip content={refreshActionTooltip()} disabled={props.loading}>
-              <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
-                <RefreshIcon class="mr-2 h-4 w-4" />
-                {props.loading ? i18n.t('codeRuntime.refreshing') : refreshActionLabel()}
-              </Button>
+              <Button size="icon" variant="ghost" icon={RefreshIcon} onClick={props.onRefresh} disabled={props.loading} aria-label={refreshActionLabel()} />
             </ActionButtonTooltip>
             <Show when={operationRunning() && !prepareOperationActive()}>
               <ActionButtonTooltip content={cancelActionTooltip()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
                 <Button size="sm" variant="outline" onClick={() => void props.onCancel()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
                   {props.cancelLoading ? i18n.t('codeRuntime.cancelling') : cancelActionLabel()}
-                </Button>
-              </ActionButtonTooltip>
-            </Show>
-            <Show when={!operationRunning() && !platformUnsupported() && !showSetupActivity()}>
-              <ActionButtonTooltip
-                content={prepareActionTooltip()}
-                disabled={!props.canInteract || !props.canManage || props.actionLoading}
-              >
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={openPrepareConfirmation}
-                  disabled={!props.canInteract || !props.canManage || props.actionLoading}
-                >
-                  {props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}
                 </Button>
               </ActionButtonTooltip>
             </Show>
@@ -512,7 +439,25 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
 
-          <RuntimeDetailsSection title={i18n.t('codeRuntime.currentEditorSection')} rows={currentRuntimeRows()} />
+          <SettingsList>
+            <SettingRow title={i18n.t('codeRuntime.currentEditorSection')}
+              description={props.status?.managed_runtime_version
+                ? `${props.status.managed_runtime_version} · ${i18n.t('codeRuntime.notes.codespacesUsesSelectedManagedVersion')}`
+                : i18n.t('codeRuntime.notes.setupOrSelectManagedVersion')}
+              control={<SettingsPill tone={runtimeStatusTone(activeRuntime()?.detection_state)}>{runtimeStatusLabel(activeRuntime()?.detection_state, i18n)}</SettingsPill>} />
+            <SettingRow title={i18n.t('codeRuntime.rows.activeSource')}
+              description={activeRuntime()?.error_message}
+              control={<span class="text-xs">{runtimeSourceLabel(activeRuntime()?.source, i18n)} · {activeRuntime()?.version || i18n.t('codeRuntime.none')}</span>} />
+            <Show when={!operationRunning() && !platformUnsupported() && !showSetupActivity()}>
+              <SettingRow title={prepareActionLabel()} description={i18n.t('codeRuntime.confirm.workspaceFilesStay')}
+                control={<ActionButtonTooltip content={prepareActionTooltip()} disabled={!props.canInteract || !props.canManage || props.actionLoading}>
+                  <Button size="sm" variant="outline" onClick={openPrepareConfirmation}
+                    disabled={!props.canInteract || !props.canManage || props.actionLoading}>
+                    {props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}
+                  </Button>
+                </ActionButtonTooltip>} />
+            </Show>
+          </SettingsList>
 
           <Show
             when={installedVersions().length > 0}
@@ -545,6 +490,15 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               </SettingsList>
             </div>
           </Show>
+          <details class="settings-technical-details code-runtime-details">
+            <summary>{i18n.t('settingsDesign.installationDetails')}</summary>
+            <SettingsList>
+              <For each={currentRuntimeRows()}>{row => <SettingRow title={row.label} description={row.note}
+                control={row.mono ? <div class="settings-copy-value"><code>{row.value}</code><CopyButton value={String(row.value)} /></div> : <span class="text-xs">{row.value}</span>} />}</For>
+              <For each={installedVersions()}>{version => <SettingRow title={`${i18n.t('codeRuntime.binaryPath')} · ${version.version}`}
+                control={<div class="settings-copy-value"><code>{version.binary_path || '—'}</code><CopyButton value={version.binary_path || ''} /></div>} />}</For>
+            </SettingsList>
+          </details>
         </div>
       </SettingsSection>
 

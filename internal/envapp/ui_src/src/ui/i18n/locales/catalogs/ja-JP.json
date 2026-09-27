@@ -7077,6 +7077,10 @@
     "touchHelpDescription": "タップでクリックします。1本指でスワイプするとスクロールします。長押ししてから動かすとドラッグ、動かさずに離すと右クリックです。2本指でページを拡大縮小できます。"
   },
   "settingsDesign": {
+    "editDirectory": "ディレクトリを編集",
+    "availableEditorVersion": "新しい Codespaces で使用できます。",
+    "computerRoot": "コンピューター",
+    "installationDetails": "インストールとパス",
     "startPort": "開始ポート",
     "endPort": "終了ポート",
     "relatedSettings": "関連設定",

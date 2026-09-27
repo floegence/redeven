@@ -12,6 +12,7 @@ import type { EnvSettingsSection } from './EnvContext';
 import { UIFirstKeepAlivePanel } from '../primitives/UIFirstKeepAlivePanel';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 
+import { SettingsList, SettingRow } from './settings/SettingsPrimitives';
 import { ConfigFileSection } from './settings/sections/ConfigFileSection';
 import { ConnectionSection } from './settings/sections/ConnectionSection';
 import { RuntimeStatusSection } from './settings/sections/RuntimeStatusSection';
@@ -203,15 +204,15 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                       </Show>
                       <Section />
                       <Show when={['config', 'logging', 'debug_console'].includes(item.id)}>
-                        <div class="redeven-settings-related mt-8 border-t pt-5">
+                        <div class="redeven-settings-related mt-8">
                           <h2 class="mb-3 text-xs font-medium text-muted-foreground">{i18n.t('settingsDesign.relatedSettings')}</h2>
-                          <div class="flex flex-wrap gap-2">
-                            <For each={item.id === 'config' ? ['runtime', 'logging'] : item.id === 'logging' ? ['agent', 'debug_console'] : ['logging', 'agent']}>
-                              {(target) => <Button size="sm" variant="outline" onClick={() => sectionSelection.request(target as EnvSettingsSection)}>
-                                {navLabel(target as EnvSettingsSection, target, i18n.t)}<ChevronRight class="ml-2 h-3 w-3" />
-                              </Button>}
+                          <SettingsList>
+                            <For each={item.id === 'config' ? ['runtime', 'permission_policy', 'logging'] : item.id === 'logging' ? ['agent', 'debug_console'] : ['logging', 'agent']}>
+                              {(target) => <SettingRow title={navLabel(target as EnvSettingsSection, target, i18n.t)}
+                                control={<Button size="icon" variant="ghost" icon={ChevronRight} aria-label={navLabel(target as EnvSettingsSection, target, i18n.t)}
+                                  onClick={() => sectionSelection.request(target as EnvSettingsSection)} />} />}
                             </For>
-                          </div>
+                          </SettingsList>
                         </div>
                       </Show>
                     </div>

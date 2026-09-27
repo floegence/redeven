@@ -1,5 +1,5 @@
 import { Show, createSignal } from 'solid-js';
-import { Activity, Cpu, RefreshIcon, ShieldCheck } from '@floegence/floe-webapp-core/icons';
+import { Activity, Cpu, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -89,63 +89,54 @@ export function RuntimeStatusSection() {
       icon={Activity}
       title={i18n.t('runtimeStatus.title')}
       description={i18n.t('runtimeStatus.description')}
-      badge={statusLabel()}
-      badgeVariant={statusOnline() ? 'success' : ctx.displayedStatus() === 'offline' ? 'warning' : 'default'}
       error={ctx.maintenanceError()}
-      actions={
-        <>
-          <Button size="sm" variant="outline" class="gap-1.5" onClick={() => setMaintenanceAction('restart')}
-            loading={ctx.isRestarting()} disabled={!ctx.canStartRestart()}>
-            <RefreshIcon class="w-3.5 h-3.5" />{i18n.t('runtimeStatus.restartAction')}
-          </Button>
-          <Show when={ctx.upgradeState().allowsUpgradeAction}>
-            <Button size="sm" variant="default" onClick={() => setMaintenanceAction('upgrade')}
-              loading={ctx.isUpgrading()} disabled={!ctx.canStartUpgrade()}>
-              {upgradeActionLabel()}
-            </Button>
-          </Show>
-        </>
-      }
     >
       <SettingsList class="runtime-status-summary">
-        <SettingRow icon={Activity} title={i18n.t('runtimeStatus.statusLabel')} description={i18n.t('runtimeStatus.description')}
+        <SettingRow icon={Activity} title={i18n.t('runtimeStatus.statusLabel')}
           control={<span class={cn('font-medium', statusOnline() ? 'text-success' : 'text-warning')}>{statusLabel()}</span>} />
-        <SettingRow icon={Cpu} title={i18n.t('runtimeStatus.currentVersion')}
+        <SettingRow icon={Cpu} title={i18n.t('runtimeStatus.currentVersion')} description={compatLabel()}
           control={<code class="font-mono text-xs text-foreground">{version()}</code>} />
-        <SettingRow icon={ShieldCheck} title={i18n.t('runtimeStatus.compatibilityLabel')}
-          control={<span class={compatOk() ? 'text-success' : 'text-warning'}>{compatLabel()}</span>} />
+        <SettingRow title={i18n.t('runtimeStatus.activeWork')} control={<span class="text-xs">{activeWorkSummary()}</span>} />
+        <SettingRow title={i18n.t('runtimeStatus.desktopModelSource')}
+          control={<DotIndicator active={desktopModelSourceActive(ctx.runtimeDesktopModelSourceBinding()?.state)} label={formatDesktopModelSourceBindingState(ctx.runtimeDesktopModelSourceBinding()?.state, i18n)} />} />
+      </SettingsList>
+      <SettingsList>
+        <SettingRow title={i18n.t('runtimeStatus.restartAction')} description={i18n.t('settingsDesign.maintenanceWarning')}
+          control={<Button size="sm" variant="outline" onClick={() => setMaintenanceAction('restart')}
+            loading={ctx.isRestarting()} disabled={!ctx.canStartRestart()}>
+            <RefreshIcon class="mr-1.5 h-3.5 w-3.5" />{i18n.t('runtimeStatus.restartAction')}
+          </Button>} />
+        <Show when={ctx.upgradeState().allowsUpgradeAction}>
+          <Show when={ctx.upgradeState().requiresTargetVersion}>
+            <SettingRow title={i18n.t('runtimeStatus.targetVersion')}
+              control={<Input value={ctx.targetVersionInput()} onInput={(e) => ctx.setTargetVersionInput(e.currentTarget.value)}
+                placeholder="v1.2.3" size="sm" class="w-40" disabled={ctx.maintaining()} />} />
+          </Show>
+          <SettingRow title={upgradeActionLabel()} description={ctx.upgradeState().message}
+            control={<Button size="sm" variant="outline" onClick={() => setMaintenanceAction('upgrade')}
+              loading={ctx.isUpgrading()} disabled={!ctx.canStartUpgrade()}>{upgradeActionLabel()}</Button>} />
+        </Show>
+      </SettingsList>
+      <details class="settings-technical-details runtime-status-details">
+        <summary>{i18n.t('settings.connection.technicalInformation')}</summary>
+        <SettingsList>
         <SettingRow title={i18n.t('runtimeStatus.latestVersion')}
           control={<code class="font-mono text-xs text-foreground">{ctx.latestVersionLoading() ? i18n.t('runtimeStatus.loading') : latestVersion()}</code>} />
-        <SettingRow title={i18n.t('runtimeStatus.activeWork')} description={activeWorkSummary()} />
+        <SettingRow title={i18n.t('runtimeStatus.compatibilityLabel')}
+          control={<span class={compatOk() ? 'text-success' : 'text-warning'}>{compatLabel()}</span>} />
         <SettingRow title={i18n.t('runtimeStatus.maintenanceAuthority')}
           control={<span class="text-xs text-muted-foreground">{maintenanceAuthority()}</span>} />
         <SettingRow title={i18n.t('runtimeStatus.runtimeProtocol')}
           control={<code class="font-mono text-xs text-foreground">{ctx.runtimeService()?.protocolVersion || '—'}</code>} />
-        <SettingRow title={i18n.t('runtimeStatus.desktopModelSource')}
-          control={<DotIndicator active={desktopModelSourceActive(ctx.runtimeDesktopModelSourceBinding()?.state)} label={formatDesktopModelSourceBindingState(ctx.runtimeDesktopModelSourceBinding()?.state, i18n)} />} />
-      </SettingsList>
-      <details class="runtime-status-details">
-        <summary>{i18n.t('runtimeStatus.manifestETag')}</summary>
-        <div class="redeven-settings-inset mt-2 rounded-lg border px-3 py-2">
-          <code class="break-all font-mono text-[11px] text-muted-foreground">{ctx.latestVersion()?.manifest_etag ? String(ctx.latestVersion()!.manifest_etag) : '—'}</code>
-        </div>
+          <SettingRow title={i18n.t('runtimeStatus.manifestETag')}
+            control={<code class="break-all font-mono text-xs">{ctx.latestVersion()?.manifest_etag || '—'}</code>} />
+        </SettingsList>
       </details>
 
-      <Show when={ctx.upgradeState().allowsUpgradeAction && ctx.upgradeState().requiresTargetVersion}>
-        <div class="mt-3 flex items-center gap-3">
-          <span class="text-xs text-muted-foreground">{i18n.t('runtimeStatus.targetVersion')}</span>
-          <Input value={ctx.targetVersionInput()} onInput={(e) => ctx.setTargetVersionInput(e.currentTarget.value)}
-            placeholder="v1.2.3" size="sm" class="w-40" disabled={ctx.maintaining()} />
-        </div>
-      </Show>
-
       {/* Status messages */}
-      <div class="mt-4 space-y-1.5 border-t border-[var(--redeven-settings-divider)] pt-4">
+      <div class="space-y-2 text-xs">
         <Show when={ctx.upgradeState().requiresTargetVersion && ctx.targetUpgradeVersion() && !ctx.targetUpgradeVersionValid()}>
           <div class="text-[11px] text-destructive">{i18n.t('runtimeStatus.validReleaseTagHint')}</div>
-        </Show>
-        <Show when={ctx.upgradeState().message}>
-          <div class="text-[11px] text-muted-foreground">{ctx.upgradeState().message}</div>
         </Show>
         <Show when={compatibilityMessage()}>
           <div class="text-[11px] text-muted-foreground">{compatibilityMessage()}</div>
