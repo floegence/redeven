@@ -40,7 +40,7 @@ func TestStopSharingClosesUpgradedConnectionsWithoutStoppingApplication(t *testi
 		}
 	}))
 	defer backend.Close()
-	proxy, address, err := newApplicationProxy(backend.URL, nil)
+	proxy, address, err := newApplicationProxy(backend.URL, viewerFixture(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,12 +356,7 @@ func TestWindowCloseRequestsPreserveSaveDialogs(t *testing.T) {
 
 func TestShutdownWaitsForAdmittedApplicationShare(t *testing.T) {
 	m := macFixture(t)
-	root, _ := filepath.Abs("testdata/client")
-	assets, err := nativeapps.OpenClientAssets(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := &linuxApplication{record: linuxApplicationRecord{ID: strings.Repeat("a", 64), Owner: "alice", Address: "127.0.0.1:9"}, ready: true, assets: assets}
+	a := &linuxApplication{record: linuxApplicationRecord{ID: strings.Repeat("a", 64), Owner: "alice", Address: "127.0.0.1:9"}, ready: true}
 	if err := os.MkdirAll(m.applicationDir(a.record.ID), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +369,7 @@ func TestShutdownWaitsForAdmittedApplicationShare(t *testing.T) {
 		t.Fatal("shutdown skipped in-progress admission")
 	case <-time.After(30 * time.Millisecond):
 	}
-	view, err := m.shareApplication(context.Background(), "alice", a, Presentation{})
+	view, err := m.shareApplication(context.Background(), "alice", a, Presentation{}, viewerFixture(t))
 	m.appsMu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -460,6 +455,9 @@ func TestInstalledLinuxRecoveryAfterRuntimeProcessExit(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if legacy := os.Getenv("REDEVEN_TEST_LEGACY_RUNTIME"); legacy != "" {
+				executable = legacy
+			}
 			child := exec.Command(executable, "-test.run=^TestInstalledLinuxRecoveryAfterRuntimeProcessExit$")
 			child.Env = append(os.Environ(), "REDEVEN_TEST_LIFECYCLE_CHILD_STATE="+state)
 			if orderly {
@@ -497,6 +495,13 @@ func TestInstalledLinuxRecoveryAfterRuntimeProcessExit(t *testing.T) {
 					_ = m.Terminate(context.Background(), "alice", target)
 				}
 			}()
+			share, err := m.Launch(context.Background(), "alice", LaunchRequest{ApplicationID: target.ApplicationID, Presentation: Presentation{Starting: "Starting", Failed: "Failed", Ended: "Ended", Retry: "Retry", Connecting: "Connecting", Reconnecting: "Reconnecting", Disconnected: "Disconnected", ConnectionHint: "Reconnect", Reconnect: "Reconnect", Locale: "en-US"}})
+			if err != nil {
+				t.Fatal("current viewer could not attach to the retained backend", err)
+			}
+			if m.sessions[share.ID].viewer == nil || !identity.Alive() {
+				t.Fatal("viewer attachment lost its snapshot or original application")
+			}
 			if err = m.Terminate(context.Background(), "bob", target); err != ErrNotFound {
 				t.Fatal("foreign termination accepted", err)
 			}
@@ -568,7 +573,7 @@ func TestInstalledLinuxUnconfirmedStartupReleasesSharingWithoutKillingProcess(t 
 	if err := os.MkdirAll(m.applicationDir(a.record.ID), 0700); err != nil {
 		t.Fatal(err)
 	}
-	share, err := m.shareApplication(context.Background(), "alice", a, Presentation{})
+	share, err := m.shareApplication(context.Background(), "alice", a, Presentation{}, viewerFixture(t))
 	if err != nil {
 		t.Fatal(err)
 	}

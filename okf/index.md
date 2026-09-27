@@ -33,7 +33,9 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Linux application lifecycle](architecture/linux-application-lifecycle.md) - Recover surviving application instances and separate sharing, normal window closure and explicit force quit.
 - [Host application input](architecture/host-application-input.md) - Use client input methods across streamed applications, bind confirmed text to painted targets, and recover without replay.
 - [Host application pointer gestures](architecture/host-application-pointer.md) — Trace touch scrolling, clicks, drag and cancellation through the shared client owner.
-- [Host application viewer](architecture/host-application-viewer.md) - Interpret connection, waiting and terminal states and preserve application-controlled window geometry.
+- [Host application display](architecture/host-application-display.md) - Stabilize SDK window layout, display density and cursor coordinates while preserving native window state.
+- [Host application viewer resources](architecture/host-application-viewer-resources.md) - Upgrade viewer snapshots independently of applications and enforce digest, owner and active-share cache boundaries.
+- [Host application viewer](architecture/host-application-viewer.md) - Interpret connection, waiting and terminal states without inferring application exit from transport loss.
 - [Host Application Platforms](architecture/host-application-platforms.md) - Prepare a headless host, diagnose missing capabilities, and distinguish Linux capability requirements from native macOS initialization.
 - [macOS Application Picture](architecture/macos-application-picture.md) - Adjust Retina resolution and streaming quality, and understand actual frame rate and bandwidth.
 - [Native macOS Applications](architecture/macos-host-applications.md) - Open local Mac apps directly or operate owned remote windows with capture, input and reconnection.

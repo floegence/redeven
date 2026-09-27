@@ -154,6 +154,8 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 func writeHostAppError(w http.ResponseWriter, err error) {
 	status, code := http.StatusInternalServerError, "HOST_APP_FAILED"
 	switch {
+	case errors.Is(err, hostapps.ErrViewerPreparation):
+		status, code = http.StatusServiceUnavailable, "HOST_APP_VIEWER_PREPARATION_FAILED"
 	case errors.Is(err, nativeapps.ErrForbidden):
 		status, code = http.StatusForbidden, "HOST_APP_FORBIDDEN"
 	case errors.Is(err, nativeapps.ErrBusy):

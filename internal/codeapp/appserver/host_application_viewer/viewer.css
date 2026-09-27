@@ -150,3 +150,7 @@ body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; 
   .mac-app-picture-modes button[aria-pressed="true"] { forced-color-adjust:none; background:Highlight; color:HighlightText; border-color:Highlight; }
   .mac-app-toolbar>button:disabled { opacity:1; color:GrayText; }
 }
+
+.host-app-input-notice { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:1; pointer-events:none; width:min(520px,calc(100% - 32px)); padding:12px 16px; border:1px solid var(--border); border-radius:var(--floe-radius-group); color:var(--foreground); background:var(--background); box-shadow:0 4px 16px #0002; font-size:13px; }
+.host-app-input-notice[hidden] { display:none; }
+.host-app-input-notice p { margin:4px 0 0; color:var(--muted-foreground); line-height:1.5; }

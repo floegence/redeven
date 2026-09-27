@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application input validation
 description: Verify actual toolkit text delivery, click focus and immutable old sessions without substituting simulated IME evidence.
 tags: [applications, input, linux, macos, validation]
-timestamp: 2026-09-24T19:25:00Z
+timestamp: 2026-09-27T09:00:00Z
 ---
 # Summary
 
@@ -11,20 +11,24 @@ This record qualifies the [client input contract](../architecture/host-applicati
 through application text receipts and saved bytes. Published upstream qualification
 owns toolkit modules and prepared Xpra event ownership; Redeven verifies its viewer,
 launch, cache and recovery adapters. Sending a request or focusing a DOM element is
-insufficient. Old applications retain their process and prepared resources until
-normal exit. Real system candidate selection and physical mobile acceptance remain
+insufficient. Old applications retain their backend and loaded modules until
+normal exit; each new share prepares current viewer resources independently.
+Real system candidate selection and physical mobile acceptance remain
 separate, unpassed items; simulated events must never be reported as those checks.
 
 # Contract
 
 ## Published Linux qualification
 
-The September 25, 2026 local qualification consumes `floe-native-apps` v0.10.1 and
-Floe webapp core 0.77.3. Immutable upstream tag qualification passed on native
+The September 27, 2026 integration consumes `floe-native-apps` v0.12.4 and
+Floe webapp core 0.79.1 with `GOWORK=off`. Immutable upstream tag qualification passed on native
 amd64 and arm64 with managed Xpra 6.2.2 and system Xpra 6.5.3. Source/race/vet,
 artifact provenance, clean installation, cancellation/recovery, cursor, pointer
 and browser-focus checks passed before publication. Go proxy and checksum database
-readback match the released commit `74c31c63c65cdfd7377c52d9759915531c60ddc4`.
+readback match the released commit `11a2aa164527e1e889c0ac6e01c20b149a0a0ac2`.
+The release also includes the integrated launcher/backend contract changes.
+Redeven retains the existing Xpra launcher path; combined Wayland backend
+preparation is outside this product change.
 
 GTK3, GTK4 Entry/TextView, Qt5, Qt6, Chromium and xterm receive exact Unicode,
 including ordered commit/Enter pairs and a 15,000-byte commit. Editing, alternating
@@ -71,7 +75,7 @@ typing, so cursor qualification restores real hover after the click-to-type asse
 GNOME runs with `--standalone`, private display/D-Bus and XDG directories, memory
 GSettings and an empty task document. Its PID/start identity and module paths are
 recorded; no user document or existing editor is used. Evidence includes component
-identity, preparation version, asset digest, client version, received strings,
+identity, viewer contract version, asset digest, client version, received strings,
 saved bytes and screenshots. Authentication credentials are excluded from exported
 receipts. Only controlled test text belongs in these records.
 
@@ -83,17 +87,28 @@ receipts are historical evidence, not a substitute for this host.
 
 ## Upgrade and regression checks
 
-To check a real old instance, launch the fixture binary built against the previous
-published upstream version, then run the current driver with
-`REDEVEN_INPUT_EXPECT_UNSUPPORTED=1`. Chromium, Firefox and WebKit verify the
-save/quit/reopen guidance before content input, reload, and viewer closure. The
-process start identity, prepared file hashes and empty application receipts stay
-unchanged. WebKit worker-origin revocation diagnostics during rejected iframe
-teardown are recorded separately; unrelated script errors still fail.
+The upstream native upgrade fixture starts published v0.7.0 input/backend resources
+and a preparation-v1 viewer, writes unsaved text, then attaches the current SDK
+snapshot. Acceptance requires unchanged PID/content, working Unicode input and an
+explicit logical-only display limit. Historical preparation is no longer a reason
+to reject the complete Linux viewer or request an application restart.
 
-Manager cache tests require different content digests/ETags for changed resources,
-retain old immutable snapshots, enforce owners, and prevent old-instance cleanup
-from revoking a new snapshot. Installed lifetime checks passed delayed first
+For product Runtime replacement, compile the previous revision's hostapps test
+executable with its published dependency and record both revisions. Start its
+`TestInstalledClientInputViewer` in a task-owned evidence directory, enter unsaved
+text, and stop only that fixture Runtime process. Run the current
+`TestInstalledClientInputViewerResume` with
+`REDEVEN_TEST_CLIENT_INPUT_RESUME_EVIDENCE` pointing to that directory. The same
+browser driver verifies retained text, current viewer capabilities and further
+Unicode input; the fixture verifies the original backend PID and reaps only its
+test application after completion. `REDEVEN_TEST_LEGACY_RUNTIME` additionally
+selects the old executable for orderly and abrupt Runtime-exit recovery checks.
+
+Redeven cache tests bind immutable documents/assets to active shares, enforce
+owners and exact digests, and revoke retired shares without ending applications.
+The product input driver consumes the current snapshot proxy and content-addressed
+asset route; it no longer bypasses this boundary through the backend's HTML tree.
+Installed lifetime checks passed delayed first
 window, detach, normal last-window close and recovery after both orderly and abrupt
 Runtime exit while preserving the same application process.
 
@@ -103,6 +118,20 @@ tests pass. Real Electron titlebar checks verify popovers, one content click,
 reconnection, locale/theme changes and native chrome. An idempotent pointer release
 on native blur is lifecycle cleanup; the header assertion prohibits actual content
 input rather than forbidding that release request.
+
+The release also qualifies prepared HTML5 v20/v21 layout against GTK3, GTK4,
+Qt5 and Qt6, including minimum-size constraints, workarea/density changes,
+regular/offscreen canvas painting and reconnection. The upgrade fixture retains
+unsaved application content and PID with the published preparation-v1 backend.
+These native results come from the exact immutable tag on both architectures.
+
+The final local integration rechecks viewer/API/localization, three-engine
+display/pointer/appearance, Desktop window/component, cache authorization and
+hostapps/appserver race/vet contracts against the published module. udesk24 was
+unreachable during that final pass; its earlier local debugging receipts are not
+claimed as a rerun on the released module. This delivery is a local fast-forward
+merge with focused validation. The user explicitly excludes Redeven's push,
+pre-push hook and full integration gate.
 
 ## macOS and device boundary
 
@@ -121,9 +150,9 @@ only, not physical-device or OS candidate behavior.
 
 # Evidence
 
-- [Native v0.10.1 qualification](https://github.com/floegence/floe-native-apps/actions/runs/36044188361): immutable dual-architecture release matrix and application receipts.
+- [Native v0.12.4 qualification](https://github.com/floegence/floe-native-apps/actions/runs/36306440189): immutable dual-architecture release matrix, layout, upgrade and application receipts.
 - `internal/hostapps/client_input_test.go`, `testdata/client_input_gtk4.py` and `scripts/check_host_application_input.mjs`: isolated product launch, real click and application bytes.
 - `internal/hostapps/client_assets_test.go` and `linux_lifecycle_test.go`: immutable resources, owner isolation and surviving process recovery.
-- `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts`: preparation v2 before binding and stale initialization rejection.
+- `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts`: current viewer capability mapping and stale initialization rejection.
 - `desktop/scripts/fixtures/host-application-titlebar.ts`: real Electron chrome and input ownership.
 - `scripts/check_macos_host_applications.py` and `scripts/check_macos_host_application_input_targets.py`: disposable native application and browser/terminal receipts.

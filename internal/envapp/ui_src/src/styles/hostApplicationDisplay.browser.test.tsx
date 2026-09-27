@@ -15,9 +15,9 @@ import viewerJS from '../../../../codeapp/appserver/host_application_viewer/view
 const catalog = JSON.parse(catalogJS.slice(catalogJS.indexOf(' = ') + 3).trim().slice(0, -1)) as {
   locales: Record<string, Record<string, string>>;
 };
-const fixtureCommands = commands as unknown as {hostApplicationDisplayFixture: (html: string | null) => Promise<void>};
+const fixtureCommands = commands as unknown as {hostApplicationDisplayFixture: (html: string | null) => Promise<void>; typeHostApplicationDisplayContent: (activation: 'pixels' | 'keyboard') => Promise<void>};
 type DisplayState = {available:boolean; policy:string; density:number; width:number; height:number; limit:null | 'display' | 'density'};
-type Fixture = Window & {client: {do_send_damage_sequence: (...args: unknown[]) => void}; emitDisplay: (state: Partial<DisplayState>) => void; controlsSent:number; refreshes:number; closes:number};
+type Fixture = Window & {client: {do_send_damage_sequence: (...args: unknown[]) => void}; emitDisplay: (state: Partial<DisplayState>) => void; controlsSent:number; refreshes:number; closes:number; keys:{key:string;pressed:boolean}[]};
 
 afterEach(async () => { document.body.replaceChildren(); await fixtureCommands.hostApplicationDisplayFixture(null); await page.viewport(1280,800); });
 
@@ -26,7 +26,8 @@ async function viewer(width: number, theme: string, locale = 'en-US') {
   await fixtureCommands.hostApplicationDisplayFixture(`<!doctype html><html><body><div id="screen"></div><script>
     const noop=()=>{};let notify=noop;
     let state={available:true,policy:'logical',density:1,width:2200,height:1254,limit:null};
-    window.controlsSent=0;window.refreshes=0;window.closes=0;
+    window.controlsSent=0;window.refreshes=0;window.closes=0;window.keys=[];
+    const canvas=document.createElement('canvas');canvas.dataset.hostDisplayFixture='';canvas.width=640;canvas.height=480;document.getElementById('screen').append(canvas);
     const div=document.createElement('div');document.getElementById('screen').append(div);
     const win={wid:1,div,metadata:{title:'Text editor'},windowtype:['NORMAL'],
       override_redirect:false,tray:false,has_windowtype:types=>types.includes('NORMAL'),
@@ -34,15 +35,16 @@ async function viewer(width: number, theme: string, locale = 'en-US') {
       move_resize:noop,update_metadata:noop,destroy:noop,handle_resized:noop};
     const target={wid:1,window:win};
     window.client={connected:true,scale:1,focused_wid:1,supported_encodings:['h264'],id_to_window:{1:win},
-      floeInput:{version:1,target:null,bindTarget(value){this.target=value?target:null;return this.target},commitText:noop,sendKey:noop,release:noop,clipboard:noop,paste:noop},
+      floeInput:{version:1,target:null,bindTarget(value){this.target=value?target:null;return this.target},commitText:noop,sendKey:key=>window.keys.push(key),release:noop,clipboard:noop,paste:noop},
       floePointer:{version:1,targetForWindow:()=>target,resolveTarget:()=>target,isTargetValid:()=>true,sendPointer:()=>true,release:noop},
       _new_window:noop,do_send_damage_sequence:noop,send_configure_window:noop,_get_desktop_size:()=>[state.width,state.height],
+      set_window_layout:noop,
       set_display_density(policy){state={...state,policy};notify(state);return true},
       subscribe_display(listener){notify=listener;notify(state);return()=>{notify=noop}},
       send(){window.controlsSent++},send_control_refresh(){window.refreshes++},
       send_close_window:noop,set_focus:noop,close(){window.closes++},on_last_window:noop};
     window.emitDisplay=next=>{state={...state,...next};notify(state)};
-    window.floeXpraInput={version:2,getClient:()=>window.client};
+    window.floeXpraViewer={version:1,getClient:()=>window.client,capabilities:()=>({display:state.available?'native':'logical',input:'ready',pointer:'ready'})};
   </script></body></html>`);
   const frame = document.createElement('iframe');
   frame.style.cssText = `width:${width}px;height:620px;border:0`;
@@ -104,4 +106,17 @@ it.each(Object.keys(catalog.locales))('keeps display feedback readable and react
   doc.documentElement.lang='ja-JP';
   await expect.poll(() => doc.querySelector('.host-app-display-notice')!.textContent).toContain(catalog.locales['ja-JP'].pictureDensityLimitHint);
   expect(runtime.controlsSent).toBe(sent);expect(runtime.refreshes).toBe(refreshed);
+});
+
+it.each(['pixels', 'keyboard'] as const)('returns keyboard focus from picture controls through %s', async activation => {
+  const {doc, runtime, toggle} = await viewer(900, 'porcelain-light');
+  toggle.click();
+  toggle.focus();
+  expect(doc.activeElement).toBe(toggle);
+  await fixtureCommands.typeHostApplicationDisplayContent(activation);
+  const content = doc.querySelector<HTMLIFrameElement>('#application')!.contentDocument!;
+  expect(content.activeElement).toBe(content.querySelector('.floe-remote-input'));
+  expect(runtime.keys.map(key => [key.key, key.pressed])).toEqual([
+    ['a', true], ['a', false], ['b', true], ['b', false], ['c', true], ['c', false],
+  ]);
 });

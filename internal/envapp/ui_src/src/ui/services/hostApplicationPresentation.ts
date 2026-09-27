@@ -4,6 +4,11 @@ import type { HostApplicationPresentation } from './hostApplicationsApi';
 
 // One mapping owns launch copy and the generated standalone locale catalogs.
 export const hostApplicationCopyKeys = {
+  inputUnsupported: 'hostApplications.inputUnsupported',
+  inputUnsupportedHint: 'hostApplications.inputUnsupportedHint',
+  viewerPreparationFailed: 'hostApplications.viewerPreparationFailed',
+  viewerPreparationHint: 'hostApplications.viewerPreparationHint',
+
   menu: 'hostApplications.macMenu',
   windows: 'hostApplications.macWindows',
   closeWindow: 'hostApplications.macCloseWindow',
@@ -15,7 +20,7 @@ export const hostApplicationCopyKeys = {
   picture: 'hostApplications.macPicture',
   pictureAuto: 'hostApplications.macPictureAuto',
   pictureClarity: 'hostApplications.macPictureClarity',
-  pictureReopenHint: 'hostApplications.sessionPictureReopenHint',
+  pictureBackendLimitHint: 'hostApplications.pictureBackendLimitHint',
   pictureRenderResolution: 'hostApplications.pictureRenderResolution',
   pictureLimited: 'hostApplications.pictureLimited',
   pictureDisplayLimitHint: 'hostApplications.pictureDisplayLimitHint',

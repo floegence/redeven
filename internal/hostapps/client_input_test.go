@@ -9,6 +9,10 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -190,17 +194,14 @@ finally:
 	a := m.sessions[session.ID].application
 	t.Cleanup(func() {
 		if a.record.Process.Alive() {
-			_ = m.Terminate(context.Background(), "fixture", QuitRequest{ApplicationID: appID, Instances: []string{a.record.ID}})
+			if err := m.Terminate(context.Background(), "fixture", QuitRequest{ApplicationID: appID, Instances: []string{a.record.ID}}); err != nil {
+				t.Fatal("terminate owned input fixture:", err)
+			}
 			waitUntil(t, func() bool { return !a.record.Process.Alive() }, 8*time.Second)
 		}
 	})
 	waitUntil(t, func() bool { return m.Sessions("fixture")[0].State == "running" }, 45*time.Second)
-	metadata, _ := json.Marshal(map[string]any{"address": a.record.Address, "password": m.sessions[session.ID].password,
-		"pid": a.record.Process.PID, "process": a.record.Process, "state": state, "component": a.record.Component,
-		"input_version": 1, "preparation_version": 2, "assets_digest": a.assets.Digest(), "kind": target})
-	if err := os.WriteFile(filepath.Join(root, "connection.json"), metadata, 0600); err != nil {
-		t.Fatal(err)
-	}
+	publishClientInputFixture(t, m, session, root, state, target, nil)
 	t.Logf("owned input fixture ready: pid=%d address=%s state=%s", a.record.Process.PID, a.record.Address, state)
 	waitUntil(t, func() bool { _, err := os.Stat(filepath.Join(root, "done.json")); return err == nil }, 180*time.Second)
 	if target == "gnome" {
@@ -246,5 +247,107 @@ finally:
 	data, err = os.ReadFile(filepath.Join(root, "receipt.json"))
 	if err != nil || json.Unmarshal(data, &actual) != nil || len(actual) != 2 || actual[0] != expected[0] || actual[1] != expected[1] {
 		t.Fatal("application did not receive the exact expected strings")
+	}
+}
+
+// Reattach a task-owned application left by the previous Runtime executable.
+// The driver kills only that fixture Runtime after entering unsaved text; this
+// process opens its original database and never rewrites the instance modules.
+func TestInstalledClientInputViewerResume(t *testing.T) {
+	root := os.Getenv("REDEVEN_TEST_CLIENT_INPUT_RESUME_EVIDENCE")
+	if root == "" {
+		t.Skip("requires a surviving task-owned legacy application")
+	}
+	state := filepath.Join(root, "state")
+	before, err := os.ReadFile(filepath.Join(root, "connection.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacy struct {
+		PID int `json:"pid"`
+	}
+	if err := json.Unmarshal(before, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	var retained []string
+	data, err := os.ReadFile(filepath.Join(root, "receipt.json"))
+	if err != nil || json.Unmarshal(data, &retained) != nil || len(retained) != 2 || retained[0] == "" {
+		t.Fatal("missing retained unsaved input")
+	}
+	m := installedLifecycleManager(t, state)
+	running, err := m.Running(context.Background(), "fixture")
+	if err != nil || len(running) != 1 {
+		t.Fatal("legacy application recovery failed", running, err)
+	}
+	appID := running[0].ApplicationID
+	instance := running[0].Instances[0]
+	a := m.applications[instance]
+	if a.record.Process.PID != legacy.PID {
+		t.Fatal("recovery replaced the backend")
+	}
+	t.Cleanup(func() {
+		if a.record.Process.Alive() {
+			if err := m.Terminate(context.Background(), "fixture", QuitRequest{ApplicationID: appID, Instances: []string{instance}}); err != nil {
+				t.Fatal("terminate owned upgrade fixture:", err)
+			}
+			waitUntil(t, func() bool { return !a.record.Process.Alive() }, 8*time.Second)
+		}
+	})
+	session, err := m.Launch(context.Background(), "fixture", LaunchRequest{ApplicationID: appID, Locale: "en-US", Presentation: Presentation{Locale: "en-US", Starting: "Starting", Failed: "Failed", Ended: "Ended", Retry: "Retry", Connecting: "Connecting", Reconnecting: "Reconnecting", Disconnected: "Disconnected", ConnectionHint: "Reconnect", Reconnect: "Reconnect"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, func() bool { return m.Sessions("fixture")[0].State == "running" }, 45*time.Second)
+	if err := os.WriteFile(filepath.Join(root, "legacy-connection.json"), before, 0600); err != nil {
+		t.Fatal(err)
+	}
+	publishClientInputFixture(t, m, session, root, state, "", retained)
+	t.Logf("same backend PID %d recovered with current viewer %s", legacy.PID, m.sessions[session.ID].viewer.Assets().Digest())
+	waitUntil(t, func() bool { _, err := os.Stat(filepath.Join(root, "done.json")); return err == nil }, 180*time.Second)
+	var expected, actual []string
+	done, err := os.ReadFile(filepath.Join(root, "done.json"))
+	if err != nil || json.Unmarshal(done, &expected) != nil {
+		t.Fatal("invalid upgrade receipt")
+	}
+	data, err = os.ReadFile(filepath.Join(root, "receipt.json"))
+	if err != nil || json.Unmarshal(data, &actual) != nil || len(actual) != 2 || len(expected) != 2 || actual[0] != expected[0] || actual[1] != expected[1] || !strings.HasPrefix(actual[0], retained[0]) || actual[0] == retained[0] {
+		t.Fatal("upgrade lost contents or input")
+	}
+	if !a.record.Process.Alive() {
+		t.Fatal("upgrade replaced the live application")
+	}
+}
+
+func publishClientInputFixture(t *testing.T, m *Manager, session Session, root, state, target string, retained []string) {
+	t.Helper()
+	a := m.sessions[session.ID].application
+	share := m.sessions[session.ID]
+	backendURL, err := url.Parse("http://" + share.proxy.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(backendURL)
+	// The fixture supplies one fixed admitted owner. Production origin and
+	// permission guards are exercised by the appserver authorization tests.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, ClientAssetsPath) {
+			digest, resource, ok := strings.Cut(strings.TrimPrefix(r.URL.Path, ClientAssetsPath), "/")
+			assets := m.ClientAssets("fixture", digest)
+			if !ok || assets == nil {
+				http.NotFound(w, r)
+				return
+			}
+			r.URL.Path = "/" + resource
+			assets.ServeHTTP(w, r)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	metadata, _ := json.Marshal(map[string]any{"address": server.Listener.Addr().String(), "backend_address": a.record.Address, "password": share.password,
+		"pid": a.record.Process.PID, "process": a.record.Process, "state": state, "component": a.record.Component,
+		"input_version": 1, "viewer_version": 1, "assets_digest": share.viewer.Assets().Digest(), "kind": target, "retained": retained})
+	if err := os.WriteFile(filepath.Join(root, "connection.json"), metadata, 0600); err != nil {
+		t.Fatal(err)
 	}
 }

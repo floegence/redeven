@@ -25,7 +25,6 @@ const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const remote = command => host==='local' ? execFileSync('/bin/sh',['-c',command],{encoding:'utf8'}) : execFileSync('ssh', ['-x', host, command], {encoding:'utf8'});
 const metadata = JSON.parse(remote(`cat ${quote(remoteRoot + '/connection.json')}`));
 const pointerMode=metadata.kind?.startsWith('pointer-');
-const unsupportedMode = process.env.REDEVEN_INPUT_EXPECT_UNSUPPORTED === '1';
 if(pointerMode)assert.equal(browserName,'chromium','native browser touch driver requires Chromium');
 const remotePort = Number(metadata.address.split(':')[1]);
 assert(remotePort > 0 && metadata.address.startsWith('127.0.0.1:'));
@@ -48,6 +47,7 @@ let page;
 let electronChild;
 let electronDirectory;
 let browserVersion;
+let frame;
 const source = path.join(repository, 'internal/codeapp/appserver/host_application_viewer');
 const asset = name => readFile(path.join(source, name), 'utf8');
 const catalogSource = await asset('catalog.generated.js');
@@ -110,7 +110,7 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
     browserVersion = desktopRequire('electron/package.json').version;
   } else {
     browser = await browserType.launch({headless:true, executablePath:process.env.REDEVEN_INPUT_BROWSER_EXECUTABLE || undefined});
-    page = await browser.newPage({viewport:{width:900,height:640},hasTouch:pointerMode});
+    page = await browser.newPage({viewport:{width:900,height:640},deviceScaleFactor:2,hasTouch:pointerMode});
     browserVersion = browser.version();
   }
   if(pointerMode)await page.addInitScript(()=>{
@@ -136,52 +136,35 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
     };
   });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  const legacySnapshot = () => JSON.parse(remote(`python3 - <<'PY'
-from pathlib import Path
-import hashlib,json,os
-process=Path('/proc')/${JSON.stringify(String(metadata.pid))}
-state=Path(${JSON.stringify(metadata.state)})
-files={str(p.relative_to(state)):hashlib.sha256(p.read_bytes()).hexdigest()
-       for p in state.rglob('*') if p.is_file() and not p.is_symlink()
-       and any(part in ('www','input') for part in p.relative_to(state).parts)}
-assert files, 'Prepared fixture resources are missing'
-print(json.dumps({'executable':os.readlink(process/'exe'),
- 'started':(process/'stat').read_text().split(') ')[1].split()[19], 'resources':files}))
-PY`));
-  const beforeLegacy = unsupportedMode ? legacySnapshot() : null;
   await page.goto(`http://127.0.0.1:${port}/fixture/_redeven_host_app/`);
-  if (unsupportedMode) {
-    for (const reload of [false, true]) {
-      if (reload) await page.reload();
-      await page.waitForFunction(() => document.body.dataset.state === 'inputVersionUnsupported');
-      assert.equal(page.isClosed(), false);
-      assert((await page.locator('#hint').innerText()).includes('Save your work on the host'));
-      assert.equal(await page.locator('#application').getAttribute('src'), null);
-      assert.equal(await page.locator('.floe-remote-input').count(), 0);
-      assert.deepEqual(legacySnapshot(), beforeLegacy);
-    }
-    await page.screenshot({path:path.join(output,'viewer.png')});
-    await page.close();
-    assert.deepEqual(legacySnapshot(), beforeLegacy, 'Closing the rejected viewer changed the application');
-    assert.deepEqual(JSON.parse(remote(`cat ${quote(remoteRoot + '/receipt.json')}`)), ['', '']);
-    // Removing the rejected iframe revokes its worker origin in WebKit. Keep
-    // those teardown diagnostics in evidence; reject unrelated script errors.
-    const unexpected = errors.filter(message => browserName !== 'webkit' ||
-      !/^\/127\.0\.0\.1:\d+\/fixture\/js\/(Protocol|DecodeWorker)\.js due to access control checks\.$/.test(message));
-    assert.deepEqual(unexpected, []);
-    const identity={...metadata}; delete identity.password;
-    await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,browserName,browser:browserVersion,
-      process:beforeLegacy,teardownDiagnostics:errors,checks:['old preparation rejected before input','save and reopen guidance','reload preserves resources','viewer close preserves process','no application input']},null,2));
-    remote(`printf %s '${JSON.stringify(['',''])}' > ${quote(remoteRoot + '/done.json')}`);
-    console.log('PASS: old preparation is rejected without changing its application or resources');
-  } else {
   await page.waitForFunction(() => document.body.dataset.state === 'active', undefined, {timeout:30000});
-  const frame = page.frames().find(item => item.url().includes('/fixture/index.html'));
+  frame = page.frames().find(item => item.url().includes('/fixture/index.html'));
   if(metadata.backend!=='macos')assert(frame, 'prepared Xpra frame is missing');
   const receipt = () => JSON.parse(remote(`cat ${quote(metadata.receipt || remoteRoot + '/receipt.json')}`));
-  if(pointerMode){
+  if(metadata.retained){
+    assert.deepEqual(receipt(),metadata.retained,'Runtime upgrade lost unsaved text before viewer attach');
+    const capabilities=await frame.evaluate(()=>floeXpraViewer.capabilities(floeXpraViewer.getClient()));
+    assert.deepEqual(capabilities,{display:'logical',input:'ready',pointer:'ready'});
+    await page.mouse.click(300,170);
+    await page.keyboard.press('End');
+    const suffix=' upgraded 中文🙂';
+    await frame.locator('.floe-remote-input').evaluate((element,text)=>{
+      element.dispatchEvent(new CompositionEvent('compositionstart'));element.value=text;
+      element.dispatchEvent(new InputEvent('input',{inputType:'insertCompositionText',data:text,isComposing:true}));
+      element.dispatchEvent(new CompositionEvent('compositionend',{data:text}));
+      element.dispatchEvent(new InputEvent('input',{inputType:'insertText',data:text}));
+    },suffix);
+    const expected=[metadata.retained[0]+suffix,metadata.retained[1]];
+    await waitFor(()=>JSON.stringify(receipt())===JSON.stringify(expected),'Retained application input failed after Runtime upgrade');
+    await page.screenshot({path:path.join(output,'retained-application.png')});
+    assert.deepEqual(errors,[]);
+    const identity={...metadata};delete identity.password;
+    await writeFile(path.join(output,'result.json'),JSON.stringify({passed:true,...identity,capabilities,received:expected},null,2));
+    remote(`printf %s ${quote(JSON.stringify(expected))} > ${quote(remoteRoot + '/done.json')}`);
+    console.log('PASS: previous Runtime → current viewer → same backend and unsaved application contents');
+  } else if(pointerMode){
     if(frame)await frame.evaluate(()=>{
-      const client=window.floeXpraInput.getClient(),send=client.send;
+      const client=window.floeXpraViewer.getClient(),send=client.send;
       client.send=function(packet){
         if(['pointer-position','button-action','wheel-motion'].includes(packet[0]))parent.pointerPackets.push(packet);
         return send.call(this,packet);
@@ -203,10 +186,48 @@ PY`));
     await waitFor(() => readDocument() === expected, 'Editor did not save the exact UTF-8 bytes');
   };
   await frame.evaluate(() => {
-    const adapter = window.floeXpraInput.getClient().floeInput;
+    const adapter = window.floeXpraViewer.getClient().floeInput;
     const previous = adapter.onError;
     adapter.onError = code => { window.parent.fixtureInputError = code; previous?.(code); };
   });
+  // Exercise the production quality controls against the actual toolkit before
+  // validating input coordinates and contents on the final logical surface.
+  await frame.evaluate(() => {
+    const client=window.floeXpraViewer.getClient(),send=client.send;
+    window.layoutCommands=[];
+    client.send=function(packet){
+      if(['configure-display','configure-window','quality','speed'].includes(packet[0]))window.layoutCommands.push(packet);
+      return send.call(this,packet);
+    };
+  });
+  const layouts=[];
+  const settle=async()=>{
+    let previous='',unchanged=0,record;
+    await waitFor(async()=>{
+      await page.waitForTimeout(100);
+      record=await frame.evaluate(()=>{
+        const c=window.floeXpraViewer.getClient();
+        return {commands:window.layoutCommands.length,scale:c.scale,viewport:[c.desktop_width,c.desktop_height],
+          windows:Object.values(c.id_to_window).map(w=>[w.wid,w.x,w.y,w.w,w.h])};
+      });
+      const key=JSON.stringify(record);unchanged=key===previous?unchanged+1:0;previous=key;
+      return unchanged>=8;
+    },'Quality change did not settle');
+    return record;
+  };
+  await page.locator('.mac-app-controls-toggle').click();
+  for(const mode of ['auto','clarity','smooth','data','clarity','auto']){
+    await page.locator(`[data-picture-mode="${mode}"]`).click();
+    const accepted=await settle();
+    await page.locator(`[data-picture-mode="${mode}"]`).click();
+    assert.deepEqual(await settle(),accepted,'Repeated quality selection changed layout or sent commands');
+    layouts.push({mode,...accepted});
+  }
+  await page.evaluate(()=>{for(const mode of ['clarity','smooth','data','clarity','auto'])document.querySelector(`[data-picture-mode="${mode}"]`).click()});
+  layouts.push({mode:'rapid-final-auto',...await settle()});
+  await page.locator('.mac-app-controls-toggle').click();
+  await page.screenshot({path:path.join(output,'after-quality.png')});
+  await writeFile(path.join(output,'quality-layouts.json'),JSON.stringify(layouts,null,2));
   await page.mouse.click(300, 170);
   await page.keyboard.type('abc');
   if (editorMode) await saveDocument('abc\n');
@@ -217,11 +238,11 @@ PY`));
   // before checking its shape; the preceding click-to-key test stays intact.
   await page.mouse.move(301, 170);
   await frame.waitForFunction(() => {
-    const cursor = window.floeXpraInput.getClient().floeCursor;
+    const cursor = window.floeXpraViewer.getClient().floeCursor;
     return cursor?.source?.width === 48 && cursor.current?.width === 24;
   });
   cursor = await frame.evaluate(async () => {
-    const client = window.floeXpraInput.getClient(), owner = client.floeCursor;
+    const client = window.floeXpraViewer.getClient(), owner = client.floeCursor;
     const {width,height,xhot,yhot,url,css} = owner.current;
     const image = new Image(); image.src=url; await image.decode();
     return {source:[owner.source.width,owner.source.height,owner.source.xhot,owner.source.yhot],
@@ -287,12 +308,12 @@ PY`));
   }
   console.log('PASS: published controller → prepared Xpra → actual application text receipt');
   }
-  }
 } catch (error) {
   await page?.screenshot({path:path.join(output,'failure.png')}).catch(() => {});
   let received=null;
   try { received=metadata.kind === 'gnome' ? remote(`cat ${quote(remoteRoot + '/document.txt')}`) : JSON.parse(remote(`cat ${quote(metadata.receipt || remoteRoot + '/receipt.json')}`)); } catch { /* Startup may fail before the application writes a receipt. */ }
   await writeFile(path.join(output,'failure.json'), JSON.stringify({message:error.message,
+    client:await frame?.evaluate(()=>{const c=window.floeXpraViewer?.getClient();return c?{capabilities:floeXpraViewer.capabilities(c),focused:c.focused_wid,active:document.activeElement?.tagName,inputTarget:c.floeInput.target,windows:Object.values(c.id_to_window).map(w=>({wid:w.wid,geometry:[w.x,w.y,w.w,w.h],pointerReady:!!c.floePointer.targetForWindow(w)}))}:null}).catch(()=>undefined),
     inputError:await page?.evaluate(() => window.fixtureInputError).catch(()=>undefined),pointerPackets:await page?.evaluate(()=>window.pointerPackets).catch(()=>undefined),nativeStates:await page?.evaluate(()=>window.nativeStates).catch(()=>undefined),received},null,2));
   // An invalid completion receipt fails the host fixture and runs its cleanup.
   remote(`printf %s ${quote(JSON.stringify({error:error.message}))} > ${quote(remoteRoot + '/done.json')}`);

@@ -1,14 +1,11 @@
 package hostapps
 
 import (
-	"bytes"
-	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,7 +63,14 @@ func (p *applicationProxy) Close() error {
 	p.transport.CloseIdleConnections()
 	return p.Listener.Close()
 }
-func newApplicationProxy(target string, assets *nativeapps.ClientAssets) (*applicationProxy, string, error) {
+func newApplicationProxy(target string, viewer *nativeapps.PreparedViewer) (*applicationProxy, string, error) {
+	if viewer == nil {
+		return nil, "", ErrViewerPreparation
+	}
+	document, err := viewer.Document(ClientAssetsPath + viewer.Assets().Digest() + "/")
+	if err != nil {
+		return nil, "", err
+	}
 	u, err := url.Parse(target)
 	if err != nil {
 		return nil, "", err
@@ -82,36 +86,39 @@ func newApplicationProxy(target string, assets *nativeapps.ClientAssets) (*appli
 		r.SetURL(u)
 		// The native application's WebSocket origin check sees the sharing host.
 		r.Out.Host = r.In.Host
-		// Let the transport decompress documents before the SDK rewrites references.
-		r.Out.Header.Del("Accept-Encoding")
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		resp.Header.Set("Cache-Control", "no-store")
 		resp.Header.Del("ETag")
 		resp.Header.Del("Last-Modified")
-		if assets == nil || resp.StatusCode != http.StatusOK || resp.Request.Method != http.MethodGet ||
-			(resp.Request.URL.Path != "/index.html" && resp.Request.URL.Path != "/") {
-			return nil
-		}
-		const limit = 2 << 20
-		body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-		_ = resp.Body.Close()
-		if err != nil {
-			return err
-		}
-		if len(body) > limit {
-			return fmt.Errorf("application document exceeds size limit")
-		}
-		body, err = assets.RewriteHTML(body, ClientAssetsPath+assets.Digest()+"/")
-		if err != nil {
-			return err
-		}
-		resp.Body = io.NopCloser(bytes.NewReader(body))
-		resp.ContentLength = int64(len(body))
-		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
 		return nil
 	}
-	server := &http.Server{Handler: proxy, ReadHeaderTimeout: 5 * time.Second}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/index.html") && strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			proxy.ServeHTTP(w, r)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		switch r.URL.Path {
+		case "/", "/index.html":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if r.Method == http.MethodGet {
+				_, _ = w.Write(document)
+			}
+		case "/default-settings.txt":
+			// The current viewer uses its reviewed defaults and explicit host
+			// parameters. A retained backend cannot supply an older client tree.
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = server.Serve(p) }()
 	return p, listener.Addr().String(), nil
 }

@@ -30,7 +30,7 @@ func TestSessionLaunchDisablesAudioSubsystem(t *testing.T) {
 	}
 }
 
-func TestApplicationInputUsesPrivatePublishedLauncherAndHTML(t *testing.T) {
+func TestApplicationInputUsesPrivateLauncherWithoutApplicationHTML(t *testing.T) {
 	m := macFixture(t)
 	a := &linuxApplication{record: linuxApplicationRecord{ID: strings.Repeat("a", 64)}}
 	arguments := m.applicationArgs(a)
@@ -38,8 +38,8 @@ func TestApplicationInputUsesPrivatePublishedLauncherAndHTML(t *testing.T) {
 	if strings.Contains(joined, "--input-method=none") || !strings.Contains(joined, "--input-method=keep") {
 		t.Fatal("application launch does not select the published client input environment")
 	}
-	if !strings.Contains(joined, "--html="+filepath.Join(m.applicationDir(a.record.ID), "www")) {
-		t.Fatal("application launch serves the original keyboard-owning HTML client")
+	if !strings.Contains(joined, "--html=no\n") {
+		t.Fatal("application launch retains an application-owned viewer resource tree")
 	}
 }
 

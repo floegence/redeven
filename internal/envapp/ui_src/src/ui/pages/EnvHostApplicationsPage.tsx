@@ -117,6 +117,7 @@ export function EnvHostApplicationsPage() {
   const translateError = (e: unknown, fallback: EnvAppTranslationKey = 'hostApplications.errors.failed') => {
     if (e instanceof ComponentAcquisitionError) return i18n.t(e.translationKey);
     const keys: Record<string, EnvAppTranslationKey> = {
+      HOST_APP_VIEWER_PREPARATION_FAILED: 'hostApplications.viewerPreparationHint',
       HOST_APP_UNAVAILABLE: 'hostApplications.errors.unavailable', HOST_APP_NOT_FOUND: 'hostApplications.errors.notFound',
       HOST_APP_QUIT_REJECTED: isMac() ? 'hostApplications.macQuitRejected' : 'hostApplications.macOperationFailed', HOST_APP_INVALID: 'hostApplications.errors.invalid', HOST_APP_LIMIT: 'hostApplications.errors.limit',
     };

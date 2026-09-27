@@ -22,7 +22,8 @@ for (const [key, value] of Object.entries(enUS.hostApplications)) {
 copy.quitDescription = enUS.hostApplications.sessionQuitDescription;
 copy.pictureHint = enUS.hostApplications.sessionPictureHint;
 const clientScript = `
-window.operations=[];
+window.operations=[];window.inputTrace=[];
+for(const event of ['pointerdown','pointerup','focus','blur'])window.addEventListener(event,e=>window.inputTrace.push({event, target:e.target?.tagName, focused:document.hasFocus(), active:document.activeElement?.className}),true);
 
 const pointerTargets=new Map();const painted=new Set();
 function remoteWindow(wid,title){
@@ -38,7 +39,7 @@ const client={floeInput:{version:1,target:null,bindTarget(wid){if(this.target?.w
 _new_window(){},do_send_damage_sequence(_sequence,wid){painted.add(wid)},send_configure_window(){},set_display_density(){return true},send_control_refresh(){},on_last_window(){},callback_close(){},
 set_focus(win){this.focused_wid=win.wid;Object.values(this.id_to_window).forEach(w=>w.div.hidden=w!==win)},
 send(packet){window.operations.push(packet)},send_close_window(win){window.operations.push(['close-window',win.wid])},close(){}};
-client.floePointer=floePointer;window.floeXpraInput={version:2,getClient:()=>client};
+client.floePointer=floePointer;client.set_window_layout=()=>{};window.floeXpraViewer={version:1,getClient:()=>client,capabilities:()=>({display:'native',input:'ready',pointer:'ready'})};
 client.set_focus(client.id_to_window[1]);
 window.paintFixture=()=>[1,2].forEach(wid=>client.do_send_damage_sequence(1,wid,800,600,1,''));`;
 const catalogSource = readFileSync(path.join(source, 'catalog.generated.js'), 'utf8');
@@ -86,14 +87,15 @@ async function run() {
       if (await evaluate(expression)) return;
       await new Promise(resolve => setTimeout(resolve, 25));
     }
-    throw new Error('Timed out: ' + expression + ': ' + JSON.stringify(await evaluate(`({visibility:document.visibilityState,raf:window.fixtureFrameReached,state:document.body.dataset.state,operations:document.querySelector('#application').contentWindow.operations,focus:document.querySelector('#application').contentDocument.activeElement?.className})`)));
+    throw new Error('Timed out: ' + expression + ': ' + JSON.stringify({nativeFocused:win.isFocused(), viewerFocused:view.webContents.isFocused(), renderer:await evaluate(`({visibility:document.visibilityState,raf:window.fixtureFrameReached,state:document.body.dataset.state,operations:document.querySelector('#application').contentWindow.operations,inputTrace:document.querySelector('#application').contentWindow.inputTrace,focus:document.querySelector('#application').contentDocument.activeElement?.className})`)}));
   };
   const activate = async () => {
-    await wait(`document.querySelector('#application').contentWindow.floeXpraInput?.getClient().reconnect===false`);
+    await wait(`document.querySelector('#application').contentWindow.floeXpraViewer?.getClient().reconnect===false`);
     await evaluate(`window.fixtureFrameReached=false;requestAnimationFrame(()=>window.fixtureFrameReached=true);document.querySelector('#application').contentWindow.paintFixture()`);
     await wait(`document.body.dataset.state==='active'`);
   };
   const click = async (selector: string, content = false) => {
+    assert(win.isFocused(), 'Native titlebar fixture lost foreground focus before input');
     const position = await evaluate(`(()=>{const frame=document.querySelector('#application');const element=${content ? 'frame.contentDocument' : 'document'}.querySelector(${JSON.stringify(selector)});const rect=element.getBoundingClientRect();const offset=${content ? 'frame.getBoundingClientRect()' : '{left:0,top:0}'};return {x:Math.round(offset.left+rect.left+rect.width/2),y:Math.round(offset.top+rect.top+Math.min(rect.height/2,100))};})()`);
     view.webContents.sendInputEvent({ type: 'mouseDown', ...position, button: 'left', clickCount: 1 });
     view.webContents.sendInputEvent({ type: 'mouseUp', ...position, button: 'left', clickCount: 1 });
@@ -101,6 +103,18 @@ async function run() {
   try {
     await view.webContents.loadURL(url);
     await activate();
+    // Electron injection does not perform the OS window activation that a
+    // real click does. Establish native focus without repairing DOM focus.
+    app.focus({ steal: true });
+    win.focus();
+    view.webContents.focus();
+    await wait('document.hasFocus()');
+    // A newly shown native window can report the system cursor already over
+    // its content. Start the header assertion after placing our test pointer
+    // in the header and draining that initial hover.
+    view.webContents.sendInputEvent({ type: 'mouseMove', x: 100, y: 20 });
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    await evaluate(`document.querySelector('#application').contentWindow.operations=[]`);
     const geometry = await evaluate(`(()=>{const frame=document.querySelector('#application');return {toolbar:document.querySelector('.mac-app-controls').getBoundingClientRect().height,left:document.querySelector('.host-app-identity').getBoundingClientRect().left,content:frame.getBoundingClientRect().top,bridge:Object.keys(window.redevenHostApplicationWindow),childBridge:typeof frame.contentWindow.redevenHostApplicationWindow};})()`);
     assert.equal(geometry.toolbar, 40);
     assert.equal(geometry.content, 40);
@@ -135,7 +149,7 @@ async function run() {
     // still reach the application exactly once, including after reconnection.
     for (const reconnect of [false, true]) {
       if (reconnect) {
-        await evaluate(`document.querySelector('#application').contentWindow.floeXpraInput.getClient().callback_close()`);
+        await evaluate(`document.querySelector('#application').contentWindow.floeXpraViewer.getClient().callback_close()`);
         await wait(`document.body.dataset.state==='disconnected'`);
         await click('#retry');
         await activate();
@@ -162,18 +176,18 @@ async function run() {
     }
     console.log('Titlebar outside-input acceptance passed: four popovers, exactly one pointer click, internal controls and reconnect');
     await evaluate(`document.querySelector('.mac-app-windows-toggle').click();document.querySelectorAll('.mac-app-window-list button')[1].click()`);
-    assert.equal(await evaluate(`document.querySelector('#application').contentWindow.floeXpraInput.getClient().focused_wid`), 2);
+    assert.equal(await evaluate(`document.querySelector('#application').contentWindow.floeXpraViewer.getClient().focused_wid`), 2);
     await evaluate(`document.querySelector('.mac-app-controls-toggle').click();document.querySelector('[data-picture-mode="auto"]').click();document.querySelector('[data-picture-mode="clarity"]').click()`);
     const operations = await evaluate(`document.querySelector('#application').contentWindow.operations`);
     assert(operations.some((v: unknown[]) => v[0] === 'quality' && v[1] === 95));
     await evaluate(`document.querySelector('.mac-app-controls-toggle').focus();if(document.querySelector('.mac-app-popover').hidden)document.querySelector('.mac-app-controls-toggle').click();Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished))`);
-    await evaluate(`window.savedFrame=document.querySelector('#application');window.savedClient=savedFrame.contentWindow.floeXpraInput.getClient();window.savedToggle=document.querySelector('.mac-app-controls-toggle');`);
+    await evaluate(`window.savedFrame=document.querySelector('#application');window.savedClient=savedFrame.contentWindow.floeXpraViewer.getClient();window.savedToggle=document.querySelector('.mac-app-controls-toggle');`);
     const operationCount = operations.length;
     for (const nextLocale of REDEVEN_SUPPORTED_LOCALES) {
       locale = nextLocale; publishAppearance();
       await wait(`document.querySelector('.mac-app-controls-toggle').title===${JSON.stringify(catalog.locales[locale].picture)}`);
       assert.equal(await evaluate(`document.querySelector('.mac-app-picture p').textContent`), catalog.locales[locale].sessionPictureHint);
-      assert.equal(await evaluate(`document.activeElement===savedToggle && document.querySelector('#application')===savedFrame && savedFrame.contentWindow.floeXpraInput.getClient()===savedClient && savedClient.focused_wid===2`), true);
+      assert.equal(await evaluate(`document.activeElement===savedToggle && document.querySelector('#application')===savedFrame && savedFrame.contentWindow.floeXpraViewer.getClient()===savedClient && savedClient.focused_wid===2`), true);
       assert.equal(await evaluate(`savedFrame.contentWindow.operations.length`), operationCount);
       assert.equal(await evaluate(`document.querySelector('[data-picture-mode="clarity"]').getAttribute('aria-pressed')`), 'true');
     }

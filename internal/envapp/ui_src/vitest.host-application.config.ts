@@ -8,7 +8,7 @@ export default defineConfig({
   ...base,
   test: {
     ...base.test,
-    include: ['src/styles/hostApplicationPointer.browser.test.tsx', 'src/styles/hostApplicationAppearance.browser.test.tsx'],
+    include: ['src/styles/hostApplicationPointer.browser.test.tsx', 'src/styles/hostApplicationAppearance.browser.test.tsx', 'src/styles/hostApplicationDisplay.browser.test.tsx'],
     browser: {
       ...base.test?.browser,
       provider: playwright(),
