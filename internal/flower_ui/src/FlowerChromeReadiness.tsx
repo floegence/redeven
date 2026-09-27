@@ -1,5 +1,5 @@
+import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import { Check, ChevronRight, Info, MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerChromeDiagnostic, FlowerChromeStatus } from './contracts/flowerSurfaceContracts';
@@ -64,7 +64,7 @@ export function FlowerChromeReadiness(props: {
             <Show when={diagnostic()}><details class="flower-chrome-diagnostics">
               <summary>{props.copy.chromeDiagnostics}</summary>
               <textarea ref={diagnosticInput} readOnly aria-label={props.copy.chromeDiagnostics} class="flower-settings-text-input mt-2 min-h-32 w-full resize-y font-mono text-xs" value={diagnosticText()} onFocus={event => event.currentTarget.select()} />
-              <Button size="sm" variant="ghost" onClick={copyDiagnostics}>{copied() === diagnosticText() ? props.copy.chromeDiagnosticCopied : props.copy.chromeCopyDiagnostics}</Button>
+              <Button size="sm" variant="ghost" onClick={copyDiagnostics}><StableText reserve={[props.copy.chromeDiagnosticCopied, props.copy.chromeCopyDiagnostics]}>{copied() === diagnosticText() ? props.copy.chromeDiagnosticCopied : props.copy.chromeCopyDiagnostics}</StableText></Button>
               <Show when={copyFailed()}><p role="status">{props.copy.chromeDiagnosticCopyFailed}</p></Show>
             </details></Show>
           </div>

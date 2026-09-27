@@ -1,3 +1,4 @@
+import { controlText } from '../testSupport/controlText';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from './App';
@@ -16,7 +17,7 @@ import { DesktopWelcomeRuntimeHealthStore, desktopWelcomeOnlineRuntimeHealth, ty
 const disposers: Array<() => void> = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
 function button(label: string) {
-  const find = () => [...document.querySelectorAll<HTMLElement>('button, [role=tab]')].find(el => !el.closest('[hidden], [aria-hidden="true"]') && (el.textContent?.trim() === label || el.getAttribute('aria-label') === label || el.title === label));
+  const find = () => [...document.querySelectorAll<HTMLElement>('button, [role=tab]')].find(el => !el.closest('[hidden], [aria-hidden="true"]') && (controlText(el) === label || el.getAttribute('aria-label') === label || el.title === label));
   if (!find() && ['Save and restart', 'Save for next restart'].includes(label)) button('Review changes').click();
   if (!find() && label === 'Configure HTTPS') button('Manage protection').click();
   const found = find();
@@ -455,7 +456,7 @@ describe('settings restart handoff', () => {
     httpsReady = ready;
     button('Continue two-factor setup').click(); await finishMotion();
     expect(security).toHaveBeenCalledTimes(2);
-    if (ready) expect(document.activeElement?.textContent).toBe('Set up');
+    if (ready) expect(controlText(document.activeElement)).toBe('Set up');
     else expect(document.querySelector('.two-factor-setting')?.textContent).toContain('Set up HTTPS first');
   });
   it('does not restart a registration removed while saving', async () => {

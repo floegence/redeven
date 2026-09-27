@@ -1,3 +1,4 @@
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -294,7 +295,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
             </Show>
             <Show when={stage() === 'source'}>
               <button data-floe-control="button" data-external-plugin-inspect type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-control)] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!canInspect()} onClick={() => void inspect()}>
-                {pending() ? i18n.t('uiCopy.plugin.external.inspecting') : i18n.t('uiCopy.plugin.external.inspect')}
+                <StableText reserve={[i18n.t('uiCopy.plugin.external.inspecting'), i18n.t('uiCopy.plugin.external.inspect')]}>{pending() ? i18n.t('uiCopy.plugin.external.inspecting') : i18n.t('uiCopy.plugin.external.inspect')}</StableText>
               </button>
             </Show>
             <Show when={stage() === 'review' && !reviewBlocked()}>

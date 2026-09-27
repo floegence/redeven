@@ -1,8 +1,8 @@
+import { StatusRegion, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { Accessor, JSX } from 'solid-js';
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Bot, ChevronDown, Clock, Refresh } from '@floegence/floe-webapp-core/icons';
-import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerSubagentsCopy } from './copy';
 import { FlowerThinkingOrb } from './FlowerThinkingOrb';
@@ -339,13 +339,13 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         </Show>
 
         <Show when={props.detailAvailable}>
-          <Show when={props.error}>
+          <StatusRegion lines={3} class="text-xs"><Show when={props.error}>
             <div class="flower-subagent-detail-inline-error" role="alert">
               <AlertTriangle class="h-3.5 w-3.5" />
               <span>{props.error}</span>
               <button type="button" onClick={props.onRetryLoad}>{props.copy.detailRetry}</button>
             </div>
-          </Show>
+          </Show></StatusRegion>
           <div
             ref={props.bindScroll}
             class="flower-subagent-detail-transcript"

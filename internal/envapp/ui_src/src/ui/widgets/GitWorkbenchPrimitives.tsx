@@ -505,7 +505,7 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
         props.class,
       )}
     >
-      <div class="min-w-0 justify-self-start">
+      <div class="min-h-5 min-w-0 justify-self-start">
         <Show when={loadingStatus()}>
           {(status) => (
             <GitInlineLoadingStatus>{status()}</GitInlineLoadingStatus>

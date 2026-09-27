@@ -156,7 +156,7 @@ export function LocalCertificateSettings(props: Readonly<{
             </div>
             <Show when={identity() === 'ready' && validUntil()}><p class="mt-1 text-xs text-muted-foreground">{validUntil()}</p></Show>
           </div>
-          <Show when={report()?.can_export && identity() === 'ready'}><Button size="sm" variant="outline" disabled={Boolean(operation())} loading={operation() === 'export'} onClick={() => void perform('export')}><Download class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('accessFlow.exportCertificate')}</Button></Show>
+          <Show when={report()?.can_export && identity() === 'ready'}><Button size="sm" variant="outline" disabled={Boolean(operation())} loading={operation() === 'export'} onClick={() => void perform('export')} icon={Download}>{props.i18n.t('accessFlow.exportCertificate')}</Button></Show>
           <Show when={report()?.can_manage}>
             <Button ref={manageButton} size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal" disabled={Boolean(operation())}
               aria-expanded={managing()} aria-controls={managementID}

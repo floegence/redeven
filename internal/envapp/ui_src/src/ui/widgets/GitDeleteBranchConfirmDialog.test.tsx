@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
+import { controlText } from '../../testSupport/controlText';
 import { GitDeleteBranchConfirmDialog } from './GitDeleteBranchConfirmDialog';
 
 function makeRect(left: number, top: number, width: number, height: number): DOMRect {
@@ -134,7 +135,7 @@ describe('GitDeleteBranchConfirmDialog', () => {
       expect(dialog?.textContent).toContain('Force delete consequences');
 
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find(
-        (node) => node.textContent?.trim() === 'Force Delete Branch',
+        (node) => controlText(node) === 'Force Delete Branch',
       ) as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);

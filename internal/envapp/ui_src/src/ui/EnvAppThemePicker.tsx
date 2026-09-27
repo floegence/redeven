@@ -373,7 +373,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                         }
                       }}
                     >
-                      <Show when={pending() === `mode-${source}`}><span class="mr-1 inline-block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent align-middle motion-reduce:animate-none" aria-hidden="true" /></Show>
+                      <span class="mr-1 inline-block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent align-middle motion-reduce:animate-none" aria-hidden="true" style={{ visibility: pending() === `mode-${source}` ? 'visible' : 'hidden' }} />
                       {i18n.t(`shell.themePicker.mode.${source}` as EnvAppTranslationKey)}
                     </button>
                   );

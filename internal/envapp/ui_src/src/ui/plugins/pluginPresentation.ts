@@ -138,6 +138,14 @@ export function pluginPendingCommandLabel(
   }
 }
 
+/** Labels which may replace a primary action while the host completes a lifecycle command. */
+export function pluginPendingActionLabels(i18n: I18nHelpers): string[] {
+  return (['install', 'enable', 'disable', 'uninstall', 'update', 'grant_permission', 'revoke_permission', 'open_surface'] as const)
+    .flatMap(command => command === 'install'
+      ? [pluginPendingCommandLabel(command, i18n), pluginPendingCommandLabel(command, i18n, 'finalizing')]
+      : [pluginPendingCommandLabel(command, i18n)]);
+}
+
 export function pluginTrustLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
   switch (item.trustBadge) {
     case 'official': return i18n.t('uiCopy.plugin.official');

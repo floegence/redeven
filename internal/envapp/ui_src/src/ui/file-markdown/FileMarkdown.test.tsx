@@ -273,8 +273,8 @@ describe('FileMarkdown', () => {
         expect(runMermaidMock).toHaveBeenCalledTimes(2);
         expect(activeTocText(host)).toBe('New Heading');
       });
-      expect(postProcessMock).toHaveBeenCalledTimes(1);
-      expect(buildTocMock).toHaveBeenCalledTimes(1);
+      expect(postProcessMock).toHaveBeenCalledTimes(2);
+      expect(buildTocMock).toHaveBeenCalledTimes(2);
       expect(shouldContinueForRun(0)?.()).toBe(false);
       expect(shouldContinueForRun(1)?.()).toBe(true);
 
@@ -282,8 +282,8 @@ describe('FileMarkdown', () => {
       await flushAsync();
 
       expect(activeTocText(host)).toBe('New Heading');
-      expect(postProcessMock).toHaveBeenCalledTimes(1);
-      expect(buildTocMock).toHaveBeenCalledTimes(1);
+      expect(postProcessMock).toHaveBeenCalledTimes(2);
+      expect(buildTocMock).toHaveBeenCalledTimes(2);
       expect(previewWarning(host)).toBeNull();
       expect(previewFatal(host)).toBeNull();
     } finally {
@@ -323,8 +323,8 @@ describe('FileMarkdown', () => {
       resolveRender();
       await flushAsync();
 
-      expect(postProcessMock).not.toHaveBeenCalled();
-      expect(buildTocMock).not.toHaveBeenCalled();
+      expect(postProcessMock).toHaveBeenCalledTimes(1);
+      expect(buildTocMock).toHaveBeenCalledTimes(1);
       expect(unhandledReasons).toEqual([]);
     } finally {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);

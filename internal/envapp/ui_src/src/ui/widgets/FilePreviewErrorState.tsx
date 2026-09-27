@@ -1,3 +1,4 @@
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { Show, createSignal, type JSX } from 'solid-js';
 import {
@@ -92,13 +93,8 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
             ].join(' ')}
             onClick={handleCopy}
           >
-            <Show
-              when={copied()}
-              fallback={<Copy class="h-3 w-3" />}
-            >
-              <span class="text-[11px] font-medium text-primary">{i18n.t('chatChrome.copied')}</span>
-            </Show>
-            <span>{i18n.t('filePreview.copyErrorDetails')}</span>
+            <Copy class="h-3 w-3" aria-hidden="true" />
+            <StableText reserve={[i18n.t('chatChrome.copied'), i18n.t('filePreview.copyErrorDetails')]}>{copied() ? i18n.t('chatChrome.copied') : i18n.t('filePreview.copyErrorDetails')}</StableText>
           </button>
         </Show>
 

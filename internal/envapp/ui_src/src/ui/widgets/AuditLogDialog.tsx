@@ -1,7 +1,7 @@
+import { StatusRegion, Button } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createMemo, createResource } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
 
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
@@ -239,14 +239,14 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
       <div class="space-y-2">
         <div class="text-xs text-muted-foreground">{i18n.t('uiCopy.audit.description')}</div>
 
-        <Show when={errorText()}>
+        <StatusRegion lines={2} class="text-xs"><Show when={errorText()}>
           <div class="text-xs text-error break-words">{errorText()}</div>
-        </Show>
+        </Show></StatusRegion>
 
         <div class="relative" style={{ 'min-height': '160px' }}>
           <RedevenLoadingCurtain visible={entries.loading} eyebrow={i18n.t('uiCopy.audit.title')} message={i18n.t('uiCopy.audit.loading')} />
 
-          <Show when={!entries.loading}>
+          <Show when={!entries.loading || (entries() ?? []).length > 0}>
             <Show when={(entries() ?? []).length > 0} fallback={<div class="text-xs text-muted-foreground">{i18n.t('uiCopy.audit.empty')}</div>}>
               <div class="max-h-[60vh] overflow-auto">
                 <table class="w-full text-xs">

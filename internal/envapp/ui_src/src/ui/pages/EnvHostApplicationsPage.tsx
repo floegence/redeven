@@ -1,9 +1,9 @@
+import { StatusRegion, Button, Dropdown, Input } from '@floegence/floe-webapp-core/ui';
 import { createEnvCachedResource } from '../services/envResourceCache';
 import { hostApplicationSnapshot } from '../services/envResourceSnapshots';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useViewActivation, useResizeObserver } from '@floegence/floe-webapp-core';
 import { Check, Filter, MoreHorizontal, ExternalLink, Plus, Refresh, Search, Stop } from '@floegence/floe-webapp-core/icons';
-import { Button, Dropdown, Input } from '@floegence/floe-webapp-core/ui';
 import { hostApplicationPresentation } from '../services/hostApplicationPresentation';
 import { renderHostApplicationLaunchDocument } from '../services/hostApplicationLaunchDocument';
 import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
@@ -605,16 +605,16 @@ export function EnvHostApplicationsPage() {
         <Button aria-label={i18n.t('hostApplications.add')} title={i18n.t('hostApplications.add')} variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch() || !catalog()?.availability.supported}><Plus class="w-3.5 h-3.5" /><span>{i18n.t('hostApplications.add')}</span></Button>
           </>} />
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="host-apps-content min-h-0 flex-1 overflow-auto" data-floe-reload-scroll="host-applications">
-      <Show when={displayError()}><div class="host-apps-notice text-destructive" role="alert">{displayError()}</div></Show>
+      <StatusRegion lines={3} class="text-xs"><Show when={displayError()}><div class="host-apps-notice text-destructive" role="alert">{displayError()}</div></Show></StatusRegion>
       <Show when={ctx.env()?.permissions?.can_read === false}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
       <Show when={ctx.env()?.permissions?.can_read !== false}>
         <Show when={catalog()} fallback={<HostApplicationsListSkeleton />}>
-          <Show when={ready() && !isMac() && setup()?.installed?.ready && (setup()?.update_available || preparationActive() || setup()?.state === 'failed')}>
+          <StatusRegion lines={4} class="text-xs"><Show when={ready() && !isMac() && setup()?.installed?.ready && (setup()?.update_available || preparationActive() || setup()?.state === 'failed')}>
             <div class="host-apps-notice host-apps-update-notice" role="status">
               <div class="min-w-0 flex-1"><strong>{i18n.t(preparationActive() ? hostApplicationSetupHeading(setup(), acquisitionProgress()) : 'hostApplications.update.available')}</strong><p>{i18n.t(setup()?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description')}</p></div>
               <Button variant="outline" size="sm" onClick={() => void viewUpdate()}>{i18n.t('hostApplications.update.view')}</Button>
             </div>
-          </Show>
+          </Show></StatusRegion>
           <Show when={!ready() && catalog()!.availability.supported && !isMac()}>{preparationPanel()}</Show>
           <Show when={!ready() && (isMac() || !catalog()!.availability.supported)}>
             <div class="host-apps-notice"><ActivityBarHostApplicationsIcon class="w-5 h-5 shrink-0" /><div><strong>{i18n.t(catalog()!.availability.supported ? 'hostApplications.setupTitle' : 'hostApplications.unsupportedTitle')}</strong><p>{i18n.t(availabilityDescription())}</p>

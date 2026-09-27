@@ -1,3 +1,4 @@
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
@@ -473,7 +474,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                           disabled={saving()}
                           onClick={(event) => requestRootWriteToggle(event, root, false)}
                         >
-                          {saving() ? '...' : i18n.t('files.readOnlyBadge')}
+                          <StableText reserve={['...', i18n.t('files.readOnlyBadge')]}>{saving() ? '...' : i18n.t('files.readOnlyBadge')}</StableText>
                         </button>
                         <button
                           type="button"
@@ -489,7 +490,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                           disabled={saving()}
                           onClick={(event) => requestRootWriteToggle(event, root, true)}
                         >
-                          {saving() ? '...' : i18n.t('files.readWriteBadge')}
+                          <StableText reserve={['...', i18n.t('files.readWriteBadge')]}>{saving() ? '...' : i18n.t('files.readWriteBadge')}</StableText>
                         </button>
                       </div>
                     </Show>

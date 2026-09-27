@@ -1,7 +1,7 @@
+import { StableText, Button, Tag } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Check, ChevronDown, ChevronRight, Code, RefreshIcon, X } from '@floegence/floe-webapp-core/icons';
-import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { type BrowserEditorSetupActivity } from '../services/browserEditorSetupActivity';
 import type { BrowserEditorInstallMethod } from '../services/codeRuntimeApi';
@@ -347,7 +347,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
                 </Show>
                 <Show when={activity().can_cancel && props.onCancel}>
                   <Button size="sm" variant="outline" onClick={() => props.onCancel?.()} disabled={props.cancelSubmitting}>
-                    {props.cancelSubmitting ? i18n.t('codeRuntime.cancelling') : i18n.t('common.actions.cancel')}
+                    <StableText reserve={[i18n.t('codeRuntime.cancelling'), i18n.t('common.actions.cancel')]}>{props.cancelSubmitting ? i18n.t('codeRuntime.cancelling') : i18n.t('common.actions.cancel')}</StableText>
                   </Button>
                 </Show>
               </div>

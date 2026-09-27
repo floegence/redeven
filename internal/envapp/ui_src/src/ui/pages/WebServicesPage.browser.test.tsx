@@ -95,6 +95,7 @@ describe('Web Services product interaction', () => {
     for (const row of host.querySelectorAll<HTMLElement>('[data-testid="managed-service-row"], [data-testid="port-forward-row"]')) {
       const bounds = row.getBoundingClientRect();
       for (const child of row.querySelectorAll<HTMLElement>('button, [data-testid="managed-service-status"], [data-testid="managed-service-notice"]')) {
+        if (!child.getClientRects().length) continue;
         const rect = child.getBoundingClientRect();
         expect(rect.left, child.textContent ?? '').toBeGreaterThanOrEqual(bounds.left - 1);
         expect(rect.right, child.textContent ?? '').toBeLessThanOrEqual(bounds.right + 1);
@@ -234,7 +235,7 @@ describe('Web Services product interaction', () => {
   it('keeps expanded recovery success readable and dismisses it after collapse', async () => {
     const row = await executeRecovery('immediate');
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
-    const trigger = page.getByTestId('managed-service-operation-trigger');
+    const trigger = page.elementLocator(document.querySelector<HTMLButtonElement>('.web-service-status-trigger')!);
     await userEvent.click(trigger);
     await new Promise((resolve) => setTimeout(resolve, 2_200));
     expect(trigger.element().getAttribute('aria-expanded')).toBe('true');
@@ -316,7 +317,7 @@ describe('Web Services product interaction', () => {
     await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Stop', exact: true }));
     await expect.poll(() => host.querySelector('[data-testid="managed-operation-terminal-icon"]')).toBeTruthy();
     expect(host.querySelector('[data-managed-service-id="sample-running"] [data-testid="managed-service-status"]')?.textContent).toBe('Running');
-    await userEvent.click(page.getByTestId('managed-service-operation-trigger'));
+    await userEvent.click(page.elementLocator(document.querySelector<HTMLButtonElement>('.web-service-status-trigger')!));
     await expect.poll(() => host.textContent).toContain('The request did not complete. Check the service before trying again.');
     expect(host.textContent).not.toContain('The operation request was not accepted.');
     expect((page.getByRole('button', { name: 'Example dashboard: Stop', exact: true }).element() as HTMLButtonElement).disabled).toBe(false);

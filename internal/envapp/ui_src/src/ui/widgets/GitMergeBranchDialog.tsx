@@ -1,6 +1,6 @@
+import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
 import type { GitBranchSummary, GitCommitFileSummary, GitPreviewMergeBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
 import { branchDisplayName, changeSecondaryPath, exactGitPath, gitDiffEntryIdentity, type GitStashWindowRequest } from '../utils/gitWorkbench';
@@ -203,7 +203,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                   props.onConfirm?.(branch, { planFingerprint: currentPreview.planFingerprint });
                 }}
               >
-                {confirmLabel()}
+                <StableText reserve={[i18n.t('uiCopy.git.mergeBranch'), i18n.t('uiCopy.git.fastForwardTarget', { target: currentRef() }), i18n.t('uiCopy.git.mergeIntoTarget', { target: currentRef() }), i18n.t('git.notifications.upToDateTitle')]}>{confirmLabel()}</StableText>
               </Button>
             </div>
           </div>

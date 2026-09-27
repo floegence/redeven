@@ -480,6 +480,7 @@ export default mergeConfig(viteConfig, defineConfig({
                 const bounds = row.getBoundingClientRect();
                 return Array.from(row.querySelectorAll<HTMLElement>('button, [data-testid="managed-service-status"], [data-testid="managed-service-notice"]'))
                   .filter((child) => {
+                    if (!child.getClientRects().length) return false;
                     const rect = child.getBoundingClientRect();
                     return rect.left < bounds.left - 1 || rect.right > bounds.right + 1
                       || rect.bottom > bounds.bottom + 1 || child.scrollWidth > child.clientWidth + 1;

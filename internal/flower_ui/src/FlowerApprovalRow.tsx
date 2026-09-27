@@ -1,6 +1,6 @@
+import { StatusRegion, Button } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { AlertCircle, Copy, Globe, Pencil, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FlowerApprovalAction } from './contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from './copy';
 import type { FlowerApprovalPresentation } from './flowerApprovalPresentation';
@@ -117,9 +117,9 @@ export function FlowerApprovalRow(props: Readonly<{
           <For each={props.presentation.details}>{detail => <div class="flower-approval-target">{detail}</div>}</For>
         </details>
       </Show>
-      <Show when={props.status || props.error}>
+      <StatusRegion lines={1} class="text-xs"><Show when={props.status || props.error}>
         <p id={`${id}-status`} class="flower-approval-status" role={props.error ? 'alert' : 'status'}>{props.error || props.status}</p>
-      </Show>
+      </Show></StatusRegion>
       <span class="flower-visually-hidden" role="status">{props.submitting ? props.copy.toolApprovalSubmitting : ''}</span>
     </div>
   </section>;

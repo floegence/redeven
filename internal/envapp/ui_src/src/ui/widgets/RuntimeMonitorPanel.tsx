@@ -1,9 +1,9 @@
+import { StatusRegion, MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { Copy, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
-import { MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { sortContextActionMenuItems } from '../contextActions/menu';
@@ -526,14 +526,14 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
       >
         <Show when={data() || error()} fallback={<ActivityPageLoading />}>
         <div class="max-w-7xl mx-auto space-y-3 h-full flex flex-col">
-          <Show when={error()}>
+          <StatusRegion lines={4} class="text-xs"><Show when={error()}>
             <Panel class="border-error/40">
               <PanelContent class="p-3 text-xs">
                 <div class="text-error font-medium">{i18n.t('runtimeMonitor.monitorRequestFailed')}</div>
                 <div class="text-muted-foreground break-words mt-1">{error()}</div>
               </PanelContent>
             </Panel>
-          </Show>
+          </Show></StatusRegion>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-shrink-0">
           <Panel class="overflow-hidden">
@@ -698,9 +698,9 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                 </div>
               </div>
 
-              <Show when={sessionsError()}>
+              <StatusRegion lines={2} class="text-xs"><Show when={sessionsError()}>
                 <div class="text-[11px] text-error break-words mb-2">{sessionsError()}</div>
-              </Show>
+              </Show></StatusRegion>
 
               <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex-1 min-h-0 overflow-auto rounded border border-border bg-background">
                 <table class="w-full text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)] relative">

@@ -240,13 +240,20 @@ it('keeps a failed decision local, retryable, and separate from other approvals'
   fixture.surfaceAdapter.submitApproval.mockRejectedValueOnce(new Error(error));
   await waitFor(() => Boolean(fixture.mount.querySelector('[data-flower-composer-approval]')));
   const rows = [...fixture.mount.querySelectorAll<HTMLElement>('[data-flower-composer-approval]')];
+  await waitFor(() => fixture.phase() === 'expanded');
+  const before = rows.map(row => row.getBoundingClientRect());
   await userEvent.click(rows[0].querySelector('.flower-approval-decision-approve')!);
   await waitFor(() => Boolean(rows[0].querySelector('[role="alert"]')));
   expect(rows[0].textContent).toContain('Connection interrupted. Try again.');
   expect(rows[1].querySelector('[role="alert"]')).toBeNull();
   expect(rows[1].querySelector<HTMLButtonElement>('.flower-approval-decision-approve')!.disabled).toBe(false);
-  const list = fixture.mount.querySelector<HTMLElement>('.flower-approval-queue-list')!;
-  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+  const feedback = rows[0].querySelector<HTMLElement>('[role="alert"]')!.parentElement!;
+  expect(feedback.scrollHeight).toBeGreaterThan(feedback.clientHeight);
+  expect(getComputedStyle(feedback).overflowY).toBe('auto');
+  rows.forEach((row, index) => {
+    expect(row.getBoundingClientRect().height).toBeCloseTo(before[index].height, 0);
+    expect(row.getBoundingClientRect().top).toBeCloseTo(before[index].top, 0);
+  });
   expectFooterInside(fixture.mount);
 });
 

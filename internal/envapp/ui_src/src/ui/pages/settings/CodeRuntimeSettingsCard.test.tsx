@@ -1,3 +1,4 @@
+import { controlText } from '../../../testSupport/controlText';
 // @vitest-environment jsdom
 
 import { Show, createSignal } from 'solid-js';
@@ -46,7 +47,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   X: (props: any) => <span class={props.class} data-testid="x-icon" />,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -219,10 +221,10 @@ describe('CodeRuntimeSettingsCard', () => {
   it('renders Browser Editor inventory sections with update wording', () => {
     renderCard(host);
 
-    expect(host.textContent).toContain('Browser Editor');
-    expect(host.textContent).toContain('Shared runtime root');
+    expect(controlText(host)).toContain('Browser Editor');
+    expect(controlText(host)).toContain('Shared runtime root');
     expect(host.querySelector('button[aria-label="Refresh"]')).not.toBeNull();
-    expect(host.textContent).toContain('Update Browser Editor');
+    expect(controlText(host)).toContain('Update Browser Editor');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
     expect(tooltipContents).toContain('Re-scan the Browser Editor inventory and active runtime.');
@@ -233,18 +235,18 @@ describe('CodeRuntimeSettingsCard', () => {
     i18nTestState.locale = 'zh-CN';
     renderCard(host);
 
-    expect(host.textContent).toContain('Browser Editor');
-    expect(host.textContent).toContain('当前编辑器');
-    expect(host.textContent).toContain('托管编辑器来源');
-    expect(host.textContent).toContain('已选择托管版本');
-    expect(host.textContent).toContain('Codespaces 使用选定的托管 Browser Editor 版本。');
-    expect(host.textContent).toContain('共享运行时根');
-    expect(host.textContent).toContain('已安装的编辑器版本');
-    expect(host.textContent).toContain('二进制路径');
-    expect(host.textContent).not.toContain('使用此版本');
-    expect(host.textContent).not.toContain('移除版本');
-    expect(host.textContent).not.toContain('Managed editor source');
-    expect(host.textContent).not.toContain('Use this version');
+    expect(controlText(host)).toContain('Browser Editor');
+    expect(controlText(host)).toContain('当前编辑器');
+    expect(controlText(host)).toContain('托管编辑器来源');
+    expect(controlText(host)).toContain('已选择托管版本');
+    expect(controlText(host)).toContain('Codespaces 使用选定的托管 Browser Editor 版本。');
+    expect(controlText(host)).toContain('共享运行时根');
+    expect(controlText(host)).toContain('已安装的编辑器版本');
+    expect(controlText(host)).toContain('二进制路径');
+    expect(controlText(host)).not.toContain('使用此版本');
+    expect(controlText(host)).not.toContain('移除版本');
+    expect(controlText(host)).not.toContain('Managed editor source');
+    expect(controlText(host)).not.toContain('Use this version');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
     expect(tooltipContents).toContain('重新扫描 Browser Editor 库存和活动运行时。');
@@ -273,17 +275,17 @@ describe('CodeRuntimeSettingsCard', () => {
 
     const activity = host.querySelector('[data-testid="browser-editor-setup-activity"]');
     expect(activity?.getAttribute('data-layout')).toBe('compact');
-    expect(activity?.textContent).toContain('环境不受支持');
-    expect(activity?.textContent).toContain('此环境暂不支持托管 Browser Editor。');
-    expect(activity?.textContent).toContain('检测到');
-    expect(activity?.textContent).toContain('linux / amd64 / musl');
-    expect(activity?.textContent).toContain('Linux amd64/arm64 · glibc');
-    expect(activity?.textContent).not.toContain('重试设置');
-    expect(activity?.textContent).not.toContain('Detected');
-    expect(activity?.textContent).not.toContain('Required');
-    expect(host.textContent).not.toContain('设置 Browser Editor');
+    expect(controlText(activity)).toContain('环境不受支持');
+    expect(controlText(activity)).toContain('此环境暂不支持托管 Browser Editor。');
+    expect(controlText(activity)).toContain('检测到');
+    expect(controlText(activity)).toContain('linux / amd64 / musl');
+    expect(controlText(activity)).toContain('Linux amd64/arm64 · glibc');
+    expect(controlText(activity)).not.toContain('重试设置');
+    expect(controlText(activity)).not.toContain('Detected');
+    expect(controlText(activity)).not.toContain('Required');
+    expect(controlText(host)).not.toContain('设置 Browser Editor');
 
-    const dismiss = Array.from(activity?.querySelectorAll('button') ?? []).find((button) => button.textContent?.includes('关闭'));
+    const dismiss = Array.from(activity?.querySelectorAll('button') ?? []).find((button) => controlText(button)?.includes('关闭'));
     expect(dismiss).toBeTruthy();
     dismiss?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
@@ -310,9 +312,9 @@ describe('CodeRuntimeSettingsCard', () => {
       }),
     });
 
-    expect(host.textContent).toContain('Set up Browser Editor');
-    expect(host.textContent).not.toContain('Browser Editor setup required');
-    expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Set up Browser Editor')).toHaveLength(1);
+    expect(controlText(host)).toContain('Set up Browser Editor');
+    expect(controlText(host)).not.toContain('Browser Editor setup required');
+    expect(Array.from(host.querySelectorAll('button')).filter((button) => controlText(button) === 'Set up Browser Editor')).toHaveLength(1);
   });
 
   it('selects the Browser Editor update method in the confirmation before preparing', () => {
@@ -320,11 +322,11 @@ describe('CodeRuntimeSettingsCard', () => {
     const onInstallMethodChange = vi.fn();
     renderCard(host, { onPrepare, onInstallMethodChange });
 
-    const prepareButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Update Browser Editor');
+    const prepareButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Update Browser Editor');
     prepareButton?.click();
 
-    expect(host.textContent).toContain('Update Browser Editor');
-    expect(host.textContent).toContain('Desktop downloads and verifies the Browser Editor package');
+    expect(controlText(host)).toContain('Update Browser Editor');
+    expect(controlText(host)).toContain('Desktop downloads and verifies the Browser Editor package');
     expect(onInstallMethodChange).toHaveBeenCalledWith('desktop_transfer');
 
     const methodButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
@@ -335,10 +337,10 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(onInstallMethodChange).toHaveBeenLastCalledWith('remote_download');
     expect(methodButtons[1].getAttribute('aria-checked')).toBe('true');
-    expect(host.textContent).toContain('Environment network → Redeven package service');
-    expect(host.textContent).toContain('This environment downloads and verifies the Browser Editor package directly');
+    expect(controlText(host)).toContain('Environment network → Redeven package service');
+    expect(controlText(host)).toContain('This environment downloads and verifies the Browser Editor package directly');
 
-    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Update Browser Editor').at(-1);
+    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => controlText(button) === 'Update Browser Editor').at(-1);
     confirmButton?.click();
 
     expect(onPrepare).toHaveBeenCalledTimes(1);
@@ -353,13 +355,13 @@ describe('CodeRuntimeSettingsCard', () => {
     renderCard(host, { onPrepare });
 
     Array.from(host.querySelectorAll('button'))
-      .find((button) => button.textContent === 'Update Browser Editor')
+      .find((button) => controlText(button) === 'Update Browser Editor')
       ?.click();
 
     expect(host.querySelector('[role="dialog"]')).not.toBeNull();
 
     Array.from(host.querySelectorAll('button'))
-      .filter((button) => button.textContent === 'Update Browser Editor')
+      .filter((button) => controlText(button) === 'Update Browser Editor')
       .at(-1)
       ?.click();
 
@@ -378,7 +380,7 @@ describe('CodeRuntimeSettingsCard', () => {
       onInstallMethodChange,
     });
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Update Browser Editor')?.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Update Browser Editor')?.click();
 
     const methodButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
     expect(methodButtons).toHaveLength(2);
@@ -386,7 +388,7 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(methodButtons[0].tabIndex).toBe(-1);
     expect(methodButtons[1].getAttribute('aria-checked')).toBe('true');
     expect(methodButtons[1].tabIndex).toBe(0);
-    expect(host.textContent).toContain('Desktop transfer is unavailable because this session does not include the Desktop package bridge.');
+    expect(controlText(host)).toContain('Desktop transfer is unavailable because this session does not include the Desktop package bridge.');
     expect(onInstallMethodChange).toHaveBeenCalledWith('remote_download');
   });
 
@@ -402,11 +404,11 @@ describe('CodeRuntimeSettingsCard', () => {
       }),
     });
 
-    expect(host.textContent).toContain('Retry setup');
-    expect(host.textContent).toContain('Download failed.');
+    expect(controlText(host)).toContain('Retry setup');
+    expect(controlText(host)).toContain('Download failed.');
     expect(host.querySelector('[role="progressbar"]')).toBeNull();
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')?.getAttribute('data-layout')).toBe('compact');
-    expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Retry setup')).toHaveLength(1);
+    expect(Array.from(host.querySelectorAll('button')).filter((button) => controlText(button) === 'Retry setup')).toHaveLength(1);
   });
 
   it('locks the method and keeps one cancel action while Browser Editor setup is running', () => {
@@ -425,8 +427,8 @@ describe('CodeRuntimeSettingsCard', () => {
     const methodButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
     expect(methodButtons).toHaveLength(2);
     expect(methodButtons.every((button) => button.disabled)).toBe(true);
-    expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Cancel')).toHaveLength(1);
-    expect(host.textContent).not.toContain('Update Browser Editor');
+    expect(Array.from(host.querySelectorAll('button')).filter((button) => controlText(button) === 'Cancel')).toHaveLength(1);
+    expect(controlText(host)).not.toContain('Update Browser Editor');
   });
 
   it('uses the Runtime operation stage for the badge while the current editor stays usable', () => {
@@ -444,9 +446,9 @@ describe('CodeRuntimeSettingsCard', () => {
       installMethod: 'remote_download',
     });
 
-    expect(host.querySelector('[data-testid="settings-section-badge"]')?.textContent)
+    expect(controlText(host.querySelector('[data-testid="settings-section-badge"]')))
       .toBe('This environment is downloading the Browser Editor...');
-    expect(host.querySelector('[data-testid="settings-section-badge"]')?.textContent).not.toBe('Ready');
+    expect(controlText(host.querySelector('[data-testid="settings-section-badge"]'))).not.toBe('Ready');
   });
 
   it('shows local Desktop preparation failures before the runtime records an operation failure', () => {
@@ -471,10 +473,10 @@ describe('CodeRuntimeSettingsCard', () => {
       localPrepareFailure: browserEditorLocalFailureFromError(new BrowserEditorSetupError('desktop_release_lookup', 'Redeven Browser Editor catalog lookup failed with HTTP 503.'), 'desktop_transfer', () => 123),
     });
 
-    expect(host.textContent).toContain('Browser Editor');
-    expect(host.textContent).toContain('Setup failed');
-    expect(host.textContent).toContain('Couldn’t check the latest Browser Editor.');
-    expect(host.textContent).toContain('Redeven Browser Editor catalog lookup failed with HTTP 503.');
+    expect(controlText(host)).toContain('Browser Editor');
+    expect(controlText(host)).toContain('Setup failed');
+    expect(controlText(host)).toContain('Couldn’t check the latest Browser Editor.');
+    expect(controlText(host)).toContain('Redeven Browser Editor catalog lookup failed with HTTP 503.');
   });
 
   it('does not expose retry or cancel actions without Browser Editor management permission', () => {
@@ -504,9 +506,9 @@ describe('CodeRuntimeSettingsCard', () => {
       localPrepareFailure: browserEditorLocalFailureFromError(new BrowserEditorSetupError('desktop_release_lookup', 'Redeven Browser Editor catalog lookup failed with HTTP 503.'), 'desktop_transfer', () => 123),
     });
 
-    expect(host.textContent).toContain('Setup failed');
-    expect(host.textContent).not.toContain('Retry setup');
-    expect(host.textContent).not.toContain('Cancel');
+    expect(controlText(host)).toContain('Setup failed');
+    expect(controlText(host)).not.toContain('Retry setup');
+    expect(controlText(host)).not.toContain('Cancel');
     expect(onPrepare).not.toHaveBeenCalled();
     expect(onCancel).not.toHaveBeenCalled();
   });

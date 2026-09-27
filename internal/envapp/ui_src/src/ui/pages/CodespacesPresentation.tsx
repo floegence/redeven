@@ -3,7 +3,16 @@ import './resource-header.css';
 import { For, Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { RefreshIcon } from '@floegence/floe-webapp-core/icons';
-import { Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@floegence/floe-webapp-core/ui';
+import {
+  StatusRegion,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../i18n';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
@@ -99,5 +108,5 @@ export function CodespacesListSkeleton() {
 }
 
 export function CodespacesPageSkeleton() {
-  return <CodespacesPageFrame refreshing><CodespacesListSkeleton /></CodespacesPageFrame>;
+  return <CodespacesPageFrame refreshing><div><StatusRegion lines={2} class="text-xs" /><CodespacesListSkeleton /></div></CodespacesPageFrame>;
 }

@@ -1,3 +1,4 @@
+import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
@@ -14,7 +15,8 @@ import type {
   PluginInventoryItem,
 } from './pluginTypes';
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Dialog: (props: {
     open: boolean;
     title: string;
@@ -209,7 +211,7 @@ function renderDialog(overrides: Partial<Parameters<typeof ExternalPluginInstall
 
 function button(label: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>('button')]
-    .find((candidate) => candidate.textContent?.trim() === label);
+    .find((candidate) => controlText(candidate)?.trim() === label);
   if (!found) throw new Error(`Button not found: ${label}`);
   return found;
 }
@@ -239,15 +241,15 @@ describe('ExternalPluginInstallDialog', () => {
     expect(dialog.className).toContain('max-w-[54rem]');
     expect(dialog.className).toContain('bg-background');
     expect(progress.children).toHaveLength(4);
-    expect(progress.querySelector('[aria-current="step"]')?.textContent).toContain('Plugin source');
-    expect(progress.textContent).toContain('Review package');
-    expect(progress.textContent).toContain('Install plugin');
-    expect(progress.textContent).toContain('Ready');
+    expect(controlText(progress.querySelector('[aria-current="step"]'))).toContain('Plugin source');
+    expect(controlText(progress)).toContain('Review package');
+    expect(controlText(progress)).toContain('Install plugin');
+    expect(controlText(progress)).toContain('Ready');
     expect(progress.querySelectorAll('[data-install-progress-segment]')).toHaveLength(4);
     expect(document.querySelector('[data-install-progress-track]')).not.toBeNull();
     expect(document.querySelector<HTMLElement>('[data-install-progress-track-active]')?.style.width).toBe('0%');
-    expect(document.querySelector('[data-install-progress-current]')?.textContent).toBe('Plugin source');
-    expect(document.querySelector('[data-install-progress]')?.textContent).toContain('Step 1 of 4');
+    expect(controlText(document.querySelector('[data-install-progress-current]'))).toBe('Plugin source');
+    expect(controlText(document.querySelector('[data-install-progress]'))).toContain('Step 1 of 4');
   });
 
   it('provides roving keyboard navigation and labelled source tab panels', async () => {
@@ -295,7 +297,7 @@ describe('ExternalPluginInstallDialog', () => {
     packageURL.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
     expect(packageURL.getAttribute('aria-invalid')).toBe('true');
     expect(button('Review package').disabled).toBe(true);
-    expect(document.body.textContent).toContain('Enter a valid HTTPS package URL');
+    expect(controlText(document.body)).toContain('Enter a valid HTTPS package URL');
 
     button('GitHub').click();
     const githubURL = inputWithPlaceholder('https://github.com/owner/repository');
@@ -347,7 +349,7 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    const copy = document.body.textContent ?? '';
+    const copy = controlText(document.body) ?? '';
     if (code) expect(copy).toContain(code);
     expect(copy).toContain(recovery);
     expect(copy).not.toContain('user:secret');
@@ -367,8 +369,8 @@ describe('ExternalPluginInstallDialog', () => {
     Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
     upload.dispatchEvent(new Event('change', { bubbles: true }));
     expect(button('Review package').disabled).toBe(false);
-    expect(document.querySelector('[data-external-plugin-selected-file]')?.textContent).toContain('toolbox.redevplugin');
-    expect(document.querySelector('[data-external-plugin-selected-file]')?.textContent).toContain('7 B');
+    expect(controlText(document.querySelector('[data-external-plugin-selected-file]'))).toContain('toolbox.redevplugin');
+    expect(controlText(document.querySelector('[data-external-plugin-selected-file]'))).toContain('7 B');
 
     const remove = document.querySelector<HTMLButtonElement>('button[aria-label="Delete"]')!;
     remove.click();
@@ -401,7 +403,7 @@ describe('ExternalPluginInstallDialog', () => {
 
       const install = button('Install plugin');
       expect(install.disabled).toBe(true);
-      expect(document.body.textContent).toContain(confirmationDigest);
+      expect(controlText(document.body)).toContain(confirmationDigest);
       const confirmation = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
       expect(confirmation.disabled).toBe(false);
       expect(confirmation.closest('footer')).not.toBeNull();
@@ -427,25 +429,25 @@ describe('ExternalPluginInstallDialog', () => {
 
     const trustReview = document.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
     const confirmation = document.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
-    expect(trustReview.textContent).toContain('Confirm this package source');
-    expect(trustReview.textContent).toContain('This package is unsigned');
-    expect(trustReview.textContent).not.toContain('Update mode');
-    expect(trustReview.textContent).not.toContain('Waiting for your approval');
-    expect(trustReview.textContent).not.toContain('execution_approval=pending');
-    expect(trustReview.textContent).not.toContain('unsigned_package_requires_user_confirmation');
+    expect(controlText(trustReview)).toContain('Confirm this package source');
+    expect(controlText(trustReview)).toContain('This package is unsigned');
+    expect(controlText(trustReview)).not.toContain('Update mode');
+    expect(controlText(trustReview)).not.toContain('Waiting for your approval');
+    expect(controlText(trustReview)).not.toContain('execution_approval=pending');
+    expect(controlText(trustReview)).not.toContain('unsigned_package_requires_user_confirmation');
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     expect(report.open).toBe(false);
-    expect(report.textContent).toContain('execution_approval=pending');
-    expect(report.textContent).toContain('unsigned_package_requires_user_confirmation');
-    expect(report.textContent).toContain(inspected.inspection_id);
-    expect(report.textContent).toContain(inspected.expires_at);
-    expect(report.textContent).toContain('action=install');
+    expect(controlText(report)).toContain('execution_approval=pending');
+    expect(controlText(report)).toContain('unsigned_package_requires_user_confirmation');
+    expect(controlText(report)).toContain(inspected.inspection_id);
+    expect(controlText(report)).toContain(inspected.expires_at);
+    expect(controlText(report)).toContain('action=install');
     expect(document.activeElement).toBe(trustReview);
     expect(confirmation.querySelector('input[type="checkbox"]')).not.toBeNull();
-    expect(confirmation.textContent).toContain('Confirm installation of this plugin package');
-    expect(confirmation.textContent).toContain('grants allowed required permissions and enables the plugin');
-    expect(confirmation.textContent).not.toContain(confirmationDigest);
-    expect(report.textContent).toContain(confirmationDigest);
+    expect(controlText(confirmation)).toContain('Confirm installation of this plugin package');
+    expect(controlText(confirmation)).toContain('grants allowed required permissions and enables the plugin');
+    expect(controlText(confirmation)).not.toContain(confirmationDigest);
+    expect(controlText(report)).toContain(confirmationDigest);
     button('Back').click();
     await flush();
     expect(document.activeElement).toBe(inputWithPlaceholder('https://example.com/plugin.redevplugin'));
@@ -459,9 +461,9 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     const decision = document.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
-    expect(decision.textContent).toContain('Publisher identity verified');
-    expect(decision.textContent).toContain('publisher signature is verified');
-    expect(decision.textContent).not.toContain('Waiting for your approval');
+    expect(controlText(decision)).toContain('Publisher identity verified');
+    expect(controlText(decision)).toContain('publisher signature is verified');
+    expect(controlText(decision)).not.toContain('Waiting for your approval');
     expect(button('Install plugin').disabled).toBe(true);
   });
 
@@ -477,7 +479,7 @@ describe('ExternalPluginInstallDialog', () => {
       expect(document.querySelector('[data-external-plugin-confirmation]')).not.toBeNull();
       expect(button('Install plugin').disabled).toBe(true);
       const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
-      expect(report.textContent).toContain(`execution_approval=${approvalState}`);
+      expect(controlText(report)).toContain(`execution_approval=${approvalState}`);
     },
   );
 
@@ -510,17 +512,17 @@ describe('ExternalPluginInstallDialog', () => {
     const summary = document.querySelector<HTMLElement>('[data-external-plugin-access-summary]')!;
     const operations = document.querySelector<HTMLElement>('[data-external-plugin-declared-operations]')!;
     for (const label of ['View information', 'Change content', 'Run actions', 'Delete content', 'Administrative control', 'Other high-attention operations']) {
-      expect(operations.textContent).toContain(label);
+      expect(controlText(operations)).toContain(label);
     }
-    expect(document.querySelector('[data-external-plugin-review-highlights]')?.textContent).toContain('1 operation needs extra attention');
-    expect(operations.textContent).toContain('1 operation is limited to preflight checks');
-    expect(summary.textContent).not.toContain('workspace.inspect');
-    expect(summary.textContent).not.toContain('effect=');
+    expect(controlText(document.querySelector('[data-external-plugin-review-highlights]'))).toContain('1 operation needs extra attention');
+    expect(controlText(operations)).toContain('1 operation is limited to preflight checks');
+    expect(controlText(summary)).not.toContain('workspace.inspect');
+    expect(controlText(summary)).not.toContain('effect=');
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
-    expect(report.textContent).toContain('workspace.inspect');
-    expect(report.textContent).toContain('effect=read');
-    expect(report.textContent).toContain('workspace.future');
-    expect(report.textContent).toContain('effect=future_effect');
+    expect(controlText(report)).toContain('workspace.inspect');
+    expect(controlText(report)).toContain('effect=read');
+    expect(controlText(report)).toContain('workspace.future');
+    expect(controlText(report)).toContain('effect=future_effect');
   });
 
   it('distinguishes no declarations from standard declarations without claiming safety', async () => {
@@ -528,7 +530,7 @@ describe('ExternalPluginInstallDialog', () => {
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/empty.redevplugin');
     button('Review package').click();
     await flush();
-    expect(document.querySelector('[data-external-plugin-review-highlights]')?.textContent)
+    expect(controlText(document.querySelector('[data-external-plugin-review-highlights]')))
       .toContain('declares no plugin capabilities or access');
 
     dispose?.();
@@ -539,12 +541,12 @@ describe('ExternalPluginInstallDialog', () => {
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/standard.redevplugin');
     button('Review package').click();
     await flush();
-    const highlights = document.querySelector('[data-external-plugin-review-highlights]')?.textContent ?? '';
+    const highlights = controlText(document.querySelector('[data-external-plugin-review-highlights]')) ?? '';
     expect(highlights).toContain('Protected access');
     expect(highlights).not.toContain('Workspace read');
     expect(highlights).not.toContain('Methods');
     expect(highlights).not.toContain('safe');
-    expect(document.querySelector('[data-external-plugin-report]')?.textContent).toContain('workspace.read');
+    expect(controlText(document.querySelector('[data-external-plugin-report]'))).toContain('workspace.read');
   });
 
   it('identifies standard added access by category before the full report', async () => {
@@ -568,9 +570,9 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     const requestedPermissions = document.querySelector<HTMLElement>('[data-external-plugin-requested-permissions]')!;
-    expect(requestedPermissions.textContent).toContain('Protected access');
-    expect(requestedPermissions.textContent).not.toContain('Workspace read');
-    expect(document.querySelector('[data-external-plugin-standard-changes]')?.textContent).toContain('Added');
+    expect(controlText(requestedPermissions)).toContain('Protected access');
+    expect(controlText(requestedPermissions)).not.toContain('Workspace read');
+    expect(controlText(document.querySelector('[data-external-plugin-standard-changes]'))).toContain('Added');
     expect(document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')?.open).toBe(false);
   });
 
@@ -678,7 +680,7 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    const copy = document.body.textContent ?? '';
+    const copy = controlText(document.body) ?? '';
     for (const expected of [
       'workspace.read',
       'route=kind=capability; binding_id=workspace-v1; target_method=files.list',
@@ -706,14 +708,14 @@ describe('ExternalPluginInstallDialog', () => {
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     const highlights = document.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
     expect(report.open).toBe(false);
-    expect(report.querySelector('summary')?.textContent).toContain('3 changes');
-    expect(highlights.textContent).toContain('Network rules');
-    expect(highlights.textContent).toContain('api.github.com:443');
-    expect(highlights.textContent).toContain('Changed');
+    expect(controlText(report.querySelector('summary'))).toContain('3 changes');
+    expect(controlText(highlights)).toContain('Network rules');
+    expect(controlText(highlights)).toContain('api.github.com:443');
+    expect(controlText(highlights)).toContain('Changed');
     const declarations = document.querySelectorAll<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details');
     expect(declarations.length).toBeGreaterThan(0);
     const declarationFor = (category: string) => [...declarations]
-      .find((details) => details.querySelector('summary')?.textContent?.includes(category));
+      .find((details) => controlText(details.querySelector('summary'))?.includes(category));
     expect(declarationFor('Permissions')?.open).toBe(true);
     expect(declarationFor('Network rules')?.open).toBe(true);
     expect(declarationFor('Storage')?.open).toBe(false);
@@ -740,20 +742,20 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     const highlights = document.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
-    expect(highlights.textContent).toContain('Network rules');
-    expect(highlights.textContent).toContain('api.github.com:443');
-    expect(highlights.textContent).toContain('Protected access');
-    expect(highlights.textContent).not.toContain('Workspace read');
+    expect(controlText(highlights)).toContain('Network rules');
+    expect(controlText(highlights)).toContain('api.github.com:443');
+    expect(controlText(highlights)).toContain('Protected access');
+    expect(controlText(highlights)).not.toContain('Workspace read');
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     expect(report.open).toBe(false);
-    expect(report.textContent).toContain('permissions the plugin may ask');
-    expect(report.textContent).toContain('declared external destinations');
-    expect(document.body.textContent).toContain('A fresh installation grants the required permissions allowed by Host policy');
+    expect(controlText(report)).toContain('permissions the plugin may ask');
+    expect(controlText(report)).toContain('declared external destinations');
+    expect(controlText(document.body)).toContain('A fresh installation grants the required permissions allowed by Host policy');
     const permissionDisclosure = [...document.querySelectorAll<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details')]
-      .find((details) => details.querySelector('summary')?.textContent?.includes('Permissions'));
+      .find((details) => controlText(details.querySelector('summary'))?.includes('Permissions'));
     expect(permissionDisclosure?.open).toBe(false);
-    expect(permissionDisclosure?.querySelector('summary')?.textContent).not.toContain('workspace.read');
-    expect(permissionDisclosure?.querySelector('code')?.textContent).toBe('workspace.read');
+    expect(controlText(permissionDisclosure?.querySelector('summary'))).not.toContain('workspace.read');
+    expect(controlText(permissionDisclosure?.querySelector('code'))).toBe('workspace.read');
   });
 
   it.each([
@@ -771,15 +773,15 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     expect(document.querySelector<HTMLInputElement>('input[type="checkbox"]')).toBeNull();
-    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Install plugin')).toBe(false);
+    expect([...document.querySelectorAll('button')].some((candidate) => controlText(candidate)?.trim() === 'Install plugin')).toBe(false);
     if (approvalState === 'policy_blocked') {
-      expect(document.body.textContent).toContain('Blocked by environment policy');
-      expect(document.body.textContent).toContain('enterprise_source_policy');
+      expect(controlText(document.body)).toContain('Blocked by environment policy');
+      expect(controlText(document.body)).toContain('enterprise_source_policy');
       const blockedDecision = document.querySelector<HTMLElement>('[role="alert"]')!;
       const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
-      expect(blockedDecision.textContent).not.toContain('enterprise_source_policy');
+      expect(controlText(blockedDecision)).not.toContain('enterprise_source_policy');
       expect(report.open).toBe(false);
-      expect(report.textContent).toContain('enterprise_source_policy');
+      expect(controlText(report)).toContain('enterprise_source_policy');
     }
     expect(props.onCommit).not.toHaveBeenCalled();
   });
@@ -799,10 +801,10 @@ describe('ExternalPluginInstallDialog', () => {
     button('Install plugin').click();
     await flush();
 
-    expect(document.body.textContent).toContain('Installation status could not be confirmed');
-    expect(document.body.textContent).toContain(confirmationDigest);
-    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Back')).toBe(false);
-    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Cancel')).toBe(false);
+    expect(controlText(document.body)).toContain('Installation status could not be confirmed');
+    expect(controlText(document.body)).toContain(confirmationDigest);
+    expect([...document.querySelectorAll('button')].some((candidate) => controlText(candidate)?.trim() === 'Back')).toBe(false);
+    expect([...document.querySelectorAll('button')].some((candidate) => controlText(candidate)?.trim() === 'Cancel')).toBe(false);
     (document.querySelector('[data-dialog-dismiss]') as HTMLButtonElement).click();
     expect(onOpenChange).not.toHaveBeenCalled();
     button('Retry').click();
@@ -823,10 +825,10 @@ describe('ExternalPluginInstallDialog', () => {
     button('Install plugin').click();
     await flush();
 
-    expect(document.body.textContent).toContain('The plugin could not be installed');
-    expect(document.body.textContent).not.toContain('Installation status could not be confirmed');
+    expect(controlText(document.body)).toContain('The plugin could not be installed');
+    expect(controlText(document.body)).not.toContain('Installation status could not be confirmed');
     expect(button('Install plugin')).toBeTruthy();
-    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Retry')).toBe(false);
+    expect([...document.querySelectorAll('button')].some((candidate) => controlText(candidate)?.trim() === 'Retry')).toBe(false);
   });
 
   it('cannot close during commit and refreshes inventory after a successful result', async () => {
@@ -845,15 +847,15 @@ describe('ExternalPluginInstallDialog', () => {
 
     (document.querySelector('[data-dialog-dismiss]') as HTMLButtonElement).click();
     expect(onOpenChange).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain('Completing installation...');
+    expect(controlText(document.body)).toContain('Completing installation...');
 
     const result = committedResult(inspected);
     resolveCommit(result);
     await flush();
     expect(onCommitted).toHaveBeenCalledWith(result);
-    expect(document.body.textContent).toContain('Example Toolbox was installed');
+    expect(controlText(document.body)).toContain('Example Toolbox was installed');
     expect([...document.querySelectorAll('button')]
-      .some((candidate) => candidate.textContent?.trim() === 'Review required permissions')).toBe(false);
+      .some((candidate) => controlText(candidate)?.trim() === 'Review required permissions')).toBe(false);
     expect(button('Close')).toBeTruthy();
   });
 
@@ -874,15 +876,15 @@ describe('ExternalPluginInstallDialog', () => {
 
     expect(onCommit).toHaveBeenCalledOnce();
     expect(onCommitted).toHaveBeenCalledWith(committed);
-    expect(document.body.textContent).toContain('Example Toolbox was installed');
-    expect(document.body.textContent).toContain('Installation completed, but the plugin list could not be refreshed');
-    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Install plugin')).toBe(false);
-    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Review required permissions')).toBe(false);
+    expect(controlText(document.body)).toContain('Example Toolbox was installed');
+    expect(controlText(document.body)).toContain('Installation completed, but the plugin list could not be refreshed');
+    expect([...document.querySelectorAll('button')].some((candidate) => controlText(candidate)?.trim() === 'Install plugin')).toBe(false);
+    expect([...document.querySelectorAll('button')].some((candidate) => controlText(candidate)?.trim() === 'Review required permissions')).toBe(false);
     button('Refresh plugins').click();
     await flush();
     expect(onCommitted).toHaveBeenNthCalledWith(2, committed);
     expect([...document.querySelectorAll('button')]
-      .some((candidate) => candidate.textContent?.trim() === 'Review required permissions')).toBe(false);
+      .some((candidate) => controlText(candidate)?.trim() === 'Review required permissions')).toBe(false);
     expect(button('Close')).toBeTruthy();
   });
 
@@ -902,7 +904,7 @@ describe('ExternalPluginInstallDialog', () => {
     expect(onCommit).toHaveBeenCalledOnce();
     expect(button('Review package').disabled).toBe(false);
     expect([...document.querySelectorAll('button')]
-      .some((candidate) => candidate.textContent?.trim() === 'Install plugin')).toBe(false);
+      .some((candidate) => controlText(candidate)?.trim() === 'Install plugin')).toBe(false);
     expect(document.querySelector<HTMLInputElement>('input[type="checkbox"]')).toBeNull();
   });
 
@@ -928,7 +930,7 @@ describe('ExternalPluginInstallDialog', () => {
 
     expect(document.querySelector<HTMLInputElement>('input[type="file"]')?.files).toHaveLength(0);
     expect(button('Review package').disabled).toBe(true);
-    expect(document.body.textContent).not.toContain(confirmationDigest);
+    expect(controlText(document.body)).not.toContain(confirmationDigest);
 
     const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
     const file = new File(['new package'], 'toolbox-1.2.4.redevplugin');
@@ -946,19 +948,19 @@ describe('ExternalPluginInstallDialog', () => {
         expected_management_revision: 9,
       },
     }, expect.any(AbortSignal));
-    expect(document.body.textContent).toContain(confirmationDigest);
+    expect(controlText(document.body)).toContain(confirmationDigest);
     const identity = document.querySelector<HTMLElement>('[data-external-plugin-identity]')!;
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     const hashes = document.querySelector<HTMLElement>('[data-external-plugin-hashes]')!;
-    expect(identity.textContent).not.toContain(packageHash);
+    expect(controlText(identity)).not.toContain(packageHash);
     expect(report.open).toBe(false);
-    expect(hashes.textContent).toContain(packageHash);
-    expect(hashes.textContent).toContain(manifestHash);
-    expect(hashes.textContent).toContain(entriesHash);
-    expect(report.textContent).toContain('algorithm=ed25519');
-    expect(report.textContent).toContain('key_id=example-signing-key');
-    expect(report.textContent).toContain('assessment_epoch=42');
-    expect(report.textContent).toContain('approved_at=2026-07-24T10:01:00Z');
+    expect(controlText(hashes)).toContain(packageHash);
+    expect(controlText(hashes)).toContain(manifestHash);
+    expect(controlText(hashes)).toContain(entriesHash);
+    expect(controlText(report)).toContain('algorithm=ed25519');
+    expect(controlText(report)).toContain('key_id=example-signing-key');
+    expect(controlText(report)).toContain('assessment_epoch=42');
+    expect(controlText(report)).toContain('approved_at=2026-07-24T10:01:00Z');
   });
 
   it('uses update-specific copy for progress, unknown reconciliation, and completion', async () => {
@@ -987,16 +989,16 @@ describe('ExternalPluginInstallDialog', () => {
     button('Update plugin').click();
     await flush();
 
-    expect(document.body.textContent).toContain('Update status could not be confirmed');
-    expect(document.body.textContent).not.toContain('Installation status could not be confirmed');
+    expect(controlText(document.body)).toContain('Update status could not be confirmed');
+    expect(controlText(document.body)).not.toContain('Installation status could not be confirmed');
     button('Retry').click();
     await flush();
-    expect(document.body.textContent).toContain('Completing update...');
-    expect(document.body.textContent).not.toContain('Completing installation...');
+    expect(controlText(document.body)).toContain('Completing update...');
+    expect(controlText(document.body)).not.toContain('Completing installation...');
     resolveCommit(committedResult(inspected));
     await flush();
-    expect(document.body.textContent).toContain('Example Toolbox was updated');
-    expect(document.body.textContent).not.toContain('Example Toolbox was installed');
+    expect(controlText(document.body)).toContain('Example Toolbox was updated');
+    expect(controlText(document.body)).not.toContain('Example Toolbox was installed');
   });
 
   it('reinstalls the exact package when version and package hash match', async () => {
@@ -1017,7 +1019,7 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    expect(document.querySelector('[data-external-plugin-identity]')?.textContent).toContain('This exact package is already installed; no update is needed · v1.2.3');
+    expect(controlText(document.querySelector('[data-external-plugin-identity]'))).toContain('This exact package is already installed; no update is needed · v1.2.3');
     expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Reinstall Example Toolbox');
     document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
     button('Reinstall this version').click();
@@ -1043,9 +1045,9 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    expect(document.querySelector('[data-external-plugin-identity]')?.textContent).toContain('Same version, different package · v1.2.3');
+    expect(controlText(document.querySelector('[data-external-plugin-identity]'))).toContain('Same version, different package · v1.2.3');
     expect(button('Replace with inspected package').disabled).toBe(true);
-    expect(document.body.textContent).not.toContain('latest version');
+    expect(controlText(document.body)).not.toContain('latest version');
   });
 
   it('does not claim a package match when the installed hash is unavailable', async () => {
@@ -1061,7 +1063,7 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    expect(document.querySelector('[data-external-plugin-identity]')?.textContent).toContain('Same version, package match unknown · v1.2.3');
+    expect(controlText(document.querySelector('[data-external-plugin-identity]'))).toContain('Same version, package match unknown · v1.2.3');
     expect(button('Install inspected package').disabled).toBe(true);
   });
 
@@ -1084,15 +1086,15 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     const reviewFacts = document.querySelector<HTMLElement>('[data-external-plugin-install-outcome]')!;
-    expect(reviewFacts.textContent).toContain('Current state retained');
-    expect(reviewFacts.textContent).toContain('No new grants');
+    expect(controlText(reviewFacts)).toContain('Current state retained');
+    expect(controlText(reviewFacts)).toContain('No new grants');
     document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
     button('Update plugin').click();
     await flush();
     const completionFacts = document.querySelector<HTMLElement>('[data-external-plugin-install-outcome]')!;
-    expect(completionFacts.textContent).toContain('Enabled');
-    expect(completionFacts.textContent).not.toContain('Disabled');
-    expect(completionFacts.textContent).toContain('No new grants');
+    expect(controlText(completionFacts)).toContain('Enabled');
+    expect(controlText(completionFacts)).not.toContain('Disabled');
+    expect(controlText(completionFacts)).toContain('No new grants');
   });
 
   it('checks the latest eligible GitHub release instead of pinning the previously resolved tag', async () => {
@@ -1183,6 +1185,6 @@ describe('ExternalPluginInstallDialog', () => {
 
     expect(inputWithPlaceholder('https://example.com/plugin.redevplugin').value).toBe('');
     expect(button('Review package').disabled).toBe(true);
-    expect(document.body.textContent).not.toContain('version=1.2.4');
+    expect(controlText(document.body)).not.toContain('version=1.2.4');
   });
 });

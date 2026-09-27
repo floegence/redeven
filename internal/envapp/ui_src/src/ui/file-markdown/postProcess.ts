@@ -348,6 +348,17 @@ function normalizeEmbeddedHtml(root: HTMLElement): void {
   const images = root.querySelectorAll<HTMLImageElement>('img');
   for (const image of images) {
     image.classList.add('fm-image');
+    const width = Number(image.getAttribute('width'));
+    const height = Number(image.getAttribute('height'));
+    // Authored dimensions reserve space before decoding and remain responsive.
+    if (width > 0 && Number.isFinite(width)) {
+      image.style.width = `${width}px`;
+      image.style.aspectRatio = `${width} / ${height > 0 && Number.isFinite(height) ? height : width}`;
+    } else if (height > 0 && Number.isFinite(height)) {
+      image.style.width = `${height}px`;
+      image.style.aspectRatio = '1';
+    }
+    if (width > 0 || height > 0) image.style.height = 'auto';
     if (!image.hasAttribute('loading')) {
       image.setAttribute('loading', 'lazy');
     }

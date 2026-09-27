@@ -221,8 +221,14 @@ try {
   await page.setViewportSize({ width: 1280, height: 800 });
   await open('en-US', 'dark', '&fail-save=1');
   await page.locator('#ssh-settings-label').fill('Unsaved');
+  const feedbackGeometry = () => page.locator('.redeven-environment-settings-dialog').evaluate(dialog =>
+    [...dialog.querySelectorAll('input, .environment-access-actions')].map(element => {
+      const { x, y, width, height } = element.getBoundingClientRect(); return { x, y, width, height };
+    }));
+  const beforeFeedback = await feedbackGeometry();
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'could not save' }).waitFor();
+  assert.deepEqual(await feedbackGeometry(), beforeFeedback, 'save errors preserve field and footer geometry');
   assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'Unsaved');
   await page.getByRole('button', { name: 'About this connection', exact: true }).click();
   await page.locator('.ssh-settings-help-popover').waitFor();

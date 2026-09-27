@@ -1,9 +1,9 @@
+import { StatusRegion, StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import './plugin-center-compact.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, Filter, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
-import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { useI18n, type I18nHelpers } from '../i18n';
@@ -28,7 +28,7 @@ import type {
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginLifecycleLabel, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginLifecycleLabel, pluginPendingActionLabels, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
@@ -755,7 +755,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       runtimeRecovery={props.runtimeRecovery}
       onRetryRuntimeRecovery={props.onRetryRuntimeRecovery}
     >
-      <Show when={errorMessage()}>
+      <StatusRegion lines={4} class="text-xs"><Show when={errorMessage()}>
         <div role="alert" data-plugin-center-error class={cn('flex flex-wrap items-center gap-3 border-b border-destructive bg-background px-4 py-3 text-[length:var(--floe-type-body)] text-destructive', PLUGIN_ENTER_MOTION_CLASS)}>
           <AlertTriangle class="h-4 w-4 shrink-0" />
           <div class="min-w-0 flex-1">
@@ -773,7 +773,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             {i18n.t('common.actions.retry')}
           </button>
         </div>
-      </Show>
+      </Show></StatusRegion>
       <div
         ref={pluginCenterPanelRef}
         id={`${idPrefix}-panel`}
@@ -991,9 +991,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               disabled={retainedDataRecoveryPending()}
               onClick={() => void confirmRetainedDataRecovery()}
             >
-              {retainedDataRecoveryPending()
+              <StableText reserve={[i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.installing'), i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.confirm')]}>{retainedDataRecoveryPending()
                 ? i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.installing')
-                : i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.confirm')}
+                : i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.confirm')}</StableText>
             </button>
           </div>
         )}
@@ -1708,7 +1708,7 @@ function PluginAuthorContent(props: {
   };
   return (
     <section class="min-w-0 space-y-4" data-plugin-author-content>
-      <Show when={props.loading}>
+      <StatusRegion lines={3} class="text-xs"><Show when={props.loading}>
         <div class="rounded-md border bg-muted/20 px-3 py-3 text-xs text-muted-foreground" role="status">
           {i18n.t('uiCopy.plugin.loadingOfficial')}
         </div>
@@ -1720,7 +1720,7 @@ function PluginAuthorContent(props: {
             {i18n.t('common.actions.retry')}
           </Button>
         </div>
-      </Show>
+      </Show></StatusRegion>
       <Show when={presentation()}>
         {(resolved) => (
           <div class="min-w-0 space-y-4" lang={resolved().resolved_locale} dir="auto">
@@ -2285,9 +2285,9 @@ function PluginActions(props: {
           icon={primaryActionIcon(presentation().primaryAction)}
           onClick={runPrimaryAction}
         >
-          {props.commandPendingType
+          <StableText reserve={[...pluginPendingActionLabels(i18n), primaryActionLabel(presentation().primaryAction)]}>{props.commandPendingType
               ? pluginPendingCommandLabel(props.commandPendingType, i18n, props.installOperation?.observation)
-              : primaryActionLabel(presentation().primaryAction)}
+              : primaryActionLabel(presentation().primaryAction)}</StableText>
         </Button>
         <Show when={overflowItems().length > 0}>
           <Dropdown

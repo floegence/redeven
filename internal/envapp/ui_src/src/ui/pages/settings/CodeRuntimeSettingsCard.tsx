@@ -1,6 +1,6 @@
+import { StableText, Button, HighlightBlock } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { Code, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
-import { Button, HighlightBlock } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog } from '../../primitives/EnvAppModal';
 
 import {
@@ -348,7 +348,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             <Show when={operationRunning() && !prepareOperationActive()}>
               <ActionButtonTooltip content={cancelActionTooltip()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
                 <Button size="sm" variant="outline" onClick={() => void props.onCancel()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
-                  {props.cancelLoading ? i18n.t('codeRuntime.cancelling') : cancelActionLabel()}
+                  <StableText reserve={[i18n.t('codeRuntime.cancelling'), cancelActionLabel()]}>{props.cancelLoading ? i18n.t('codeRuntime.cancelling') : cancelActionLabel()}</StableText>
                 </Button>
               </ActionButtonTooltip>
             </Show>
@@ -453,7 +453,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                 control={<ActionButtonTooltip content={prepareActionTooltip()} disabled={!props.canInteract || !props.canManage || props.actionLoading}>
                   <Button size="sm" variant="outline" onClick={openPrepareConfirmation}
                     disabled={!props.canInteract || !props.canManage || props.actionLoading}>
-                    {props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}
+                    <StableText reserve={[localizedPrepareCopy().runningLabel, prepareActionLabel()]}>{props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}</StableText>
                   </Button>
                 </ActionButtonTooltip>} />
             </Show>

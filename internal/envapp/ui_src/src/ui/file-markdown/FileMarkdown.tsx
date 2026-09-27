@@ -1,3 +1,4 @@
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
@@ -331,7 +332,38 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
       clearWarningIssue();
     });
     target.innerHTML = html;
-
+    try {
+      postProcess(target);
+    } catch (error) {
+      if (!isCurrentTask()) return;
+      console.error('Markdown preview post-process failed:', error);
+      batch(() => {
+        commitWarningIssue({
+          severity: 'warning',
+          phase: 'postprocess',
+          message: formatMarkdownPreviewError(error),
+        });
+        setTocItemsIfChanged([]);
+        setActiveTocIdIfChanged('');
+      });
+      return;
+    }
+    // Heading geometry is known before asynchronous diagram enhancement.
+    try {
+      commitTocState(target, shouldShowToc);
+    } catch (error) {
+      if (!isCurrentTask()) return;
+      console.error('Markdown preview table of contents failed:', error);
+      batch(() => {
+        commitWarningIssue({
+          severity: 'warning',
+          phase: 'toc',
+          message: formatMarkdownPreviewError(error),
+        });
+        setTocItemsIfChanged([]);
+        setActiveTocIdIfChanged('');
+      });
+    }
     void (async () => {
       try {
         await runMermaid(target, { shouldContinue: isCurrentTask });
@@ -342,41 +374,6 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
           severity: 'warning',
           phase: 'mermaid',
           message: formatMarkdownPreviewError(error),
-        });
-      }
-      if (!isCurrentTask()) return;
-
-      try {
-        postProcess(target);
-      } catch (error) {
-        if (!isCurrentTask()) return;
-        console.error('Markdown preview post-process failed:', error);
-        batch(() => {
-          commitWarningIssue({
-            severity: 'warning',
-            phase: 'postprocess',
-            message: formatMarkdownPreviewError(error),
-          });
-          setTocItemsIfChanged([]);
-          setActiveTocIdIfChanged('');
-        });
-        return;
-      }
-      if (!isCurrentTask()) return;
-
-      try {
-        commitTocState(target, shouldShowToc);
-      } catch (error) {
-        if (!isCurrentTask()) return;
-        console.error('Markdown preview table of contents failed:', error);
-        batch(() => {
-          commitWarningIssue({
-            severity: 'warning',
-            phase: 'toc',
-            message: formatMarkdownPreviewError(error),
-          });
-          setTocItemsIfChanged([]);
-          setActiveTocIdIfChanged('');
         });
       }
     })();
@@ -867,10 +864,8 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
             class="fm-preview-warning-action"
             onClick={() => void copyWarningDetails(issue)}
           >
-            <Show when={warningDetailsCopied()} fallback={<Copy class="fm-preview-warning-action-icon" />}>
-              <span class="fm-preview-warning-copied">{i18n.t('chatChrome.copied')}</span>
-            </Show>
-            {i18n.t('filePreview.copyErrorDetails')}
+            <Copy class="fm-preview-warning-action-icon" aria-hidden="true" />
+            <StableText reserve={[i18n.t('chatChrome.copied'), i18n.t('filePreview.copyErrorDetails')]}>{warningDetailsCopied() ? i18n.t('chatChrome.copied') : i18n.t('filePreview.copyErrorDetails')}</StableText>
           </button>
         </div>
         <Show when={warningDetailsOpen()}>

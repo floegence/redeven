@@ -1,3 +1,4 @@
+import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 
 import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
@@ -91,7 +92,7 @@ async function revealTooltipForButton(button: HTMLButtonElement | undefined): Pr
 
 function findContextMenuItem(label: string, key: string): HTMLButtonElement | undefined {
   return Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((item) => {
-    const text = item.textContent?.trim() ?? '';
+    const text = controlText(item)?.trim() ?? '';
     return text === label || text === key || text.includes(label) || text.includes(key);
   });
 }
@@ -379,26 +380,26 @@ describe('GitStashWindow', () => {
     }, host);
 
     try {
-      expect(host.textContent).toContain('Stash current workspace');
-      expect(host.textContent).toContain('Stash Changes');
+      expect(controlText(host)).toContain('Stash current workspace');
+      expect(controlText(host)).toContain('Stash Changes');
       const stashTabs = host.querySelector('[role="group"][aria-label="Stash tabs"]') as HTMLDivElement | null;
       expect(stashTabs).toBeTruthy();
       expect(stashTabs?.className).toContain('floe-segmented-control');
       const activeRadio = host.querySelector('[role="radio"][aria-checked="true"]') as HTMLButtonElement | null;
-      expect(activeRadio?.textContent).toContain('Save Changes');
+      expect(controlText(activeRadio)).toContain('Save Changes');
       expect(activeRadio?.className).not.toContain('git-browser-selection-chip');
 
-      const stashesTab = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Saved Stashes')) as HTMLButtonElement | undefined;
+      const stashesTab = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.includes('Saved Stashes')) as HTMLButtonElement | undefined;
       expect(stashesTab).toBeTruthy();
       stashesTab!.click();
       await flush();
 
-      expect(host.textContent).toContain('WIP linked worktree');
-      expect(host.textContent).toContain('Changed Files');
-      expect(host.textContent).toContain('Apply');
-      expect(host.textContent).toContain('Apply & Remove');
-      expect(host.textContent).toContain('Delete');
-      const selectedStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('WIP linked worktree')) as HTMLButtonElement | undefined;
+      expect(controlText(host)).toContain('WIP linked worktree');
+      expect(controlText(host)).toContain('Changed Files');
+      expect(controlText(host)).toContain('Apply');
+      expect(controlText(host)).toContain('Apply & Remove');
+      expect(controlText(host)).toContain('Delete');
+      const selectedStashButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.includes('WIP linked worktree')) as HTMLButtonElement | undefined;
       expect(selectedStashButton?.className).toContain('border-l-[var(--redeven-status-info)]');
       expect(selectedStashButton?.className).toContain('bg-[var(--redeven-status-info-soft)]');
       const actionRow = host.querySelector('[data-git-stash-actions]') as HTMLDivElement | null;
@@ -409,14 +410,14 @@ describe('GitStashWindow', () => {
       const actionDivider = host.querySelector('[data-git-stash-actions-divider]') as HTMLDivElement | null;
       expect(actionDivider?.className).toContain('sm:block');
 
-      const applyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Apply') as HTMLButtonElement | undefined;
-      const applyRemoveButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Apply & Remove') as HTMLButtonElement | undefined;
-      const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
-      expect((await revealTooltipForButton(applyButton))?.textContent).toContain('Review and apply this stash. The stash remains available after confirmation.');
-      expect((await revealTooltipForButton(applyRemoveButton))?.textContent).toContain('Review and apply this stash, then remove it after confirmation.');
-      expect((await revealTooltipForButton(deleteButton))?.textContent).toContain('Review permanent deletion without applying the stash changes.');
+      const applyButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.trim() === 'Apply') as HTMLButtonElement | undefined;
+      const applyRemoveButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.trim() === 'Apply & Remove') as HTMLButtonElement | undefined;
+      const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.trim() === 'Delete') as HTMLButtonElement | undefined;
+      expect(controlText((await revealTooltipForButton(applyButton)))).toContain('Review and apply this stash. The stash remains available after confirmation.');
+      expect(controlText((await revealTooltipForButton(applyRemoveButton)))).toContain('Review and apply this stash, then remove it after confirmation.');
+      expect(controlText((await revealTooltipForButton(deleteButton)))).toContain('Review permanent deletion without applying the stash changes.');
 
-      const selectedFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'src/app.ts') as HTMLButtonElement | undefined;
+      const selectedFileButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.trim() === 'src/app.ts') as HTMLButtonElement | undefined;
       expect(selectedFileButton).toBeTruthy();
       selectedFileButton!.click();
       await flush();
@@ -431,9 +432,9 @@ describe('GitStashWindow', () => {
         stackId: 'git-stash-diff',
       });
       expect(latestDialog?.description).toContain('src/app.ts');
-      expect(host.textContent).toContain('diff-open:yes');
-      expect(host.textContent).toContain('diff-source:stash');
-      expect(host.textContent).toContain('diff-stash:stash-1');
+      expect(controlText(host)).toContain('diff-open:yes');
+      expect(controlText(host)).toContain('diff-source:stash');
+      expect(controlText(host)).toContain('diff-stash:stash-1');
     } finally {
       dispose();
     }
@@ -507,8 +508,8 @@ describe('GitStashWindow', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Current workspace must be clean before applying a stash (1 unstaged).');
-      const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Confirm Apply') as HTMLButtonElement | undefined;
+      expect(controlText(host)).toContain('Current workspace must be clean before applying a stash (1 unstaged).');
+      const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.trim() === 'Confirm Apply') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
     } finally {
@@ -592,12 +593,12 @@ describe('GitStashWindow', () => {
 
     try {
       await flush();
-      expect(host.textContent).not.toContain('Delete this stash entry');
+      expect(controlText(host)).not.toContain('Delete this stash entry');
       const previewWindow = host.querySelector('[data-testid="preview-window"]') as HTMLDivElement | null;
-      expect(previewWindow?.textContent).toContain('Delete Stash');
-      expect(previewWindow?.textContent).toContain('Remove this stash entry from the shared stack without applying its changes.');
-      expect(previewWindow?.textContent).toContain('Deleting a stash removes it from the shared stack.');
-      const confirmButton = Array.from(previewWindow?.querySelectorAll('button') ?? []).find((node) => node.textContent?.trim() === 'Confirm Delete') as HTMLButtonElement | undefined;
+      expect(controlText(previewWindow)).toContain('Delete Stash');
+      expect(controlText(previewWindow)).toContain('Remove this stash entry from the shared stack without applying its changes.');
+      expect(controlText(previewWindow)).toContain('Deleting a stash removes it from the shared stack.');
+      const confirmButton = Array.from(previewWindow?.querySelectorAll('button') ?? []).find((node) => controlText(node)?.trim() === 'Confirm Delete') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.className).toContain('w-full');
     } finally {
@@ -675,9 +676,9 @@ describe('GitStashWindow', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Delete');
-      expect(host.textContent).not.toContain('Confirm Delete');
-      expect(host.textContent).not.toContain('Delete this stash entry');
+      expect(controlText(host)).toContain('Delete');
+      expect(controlText(host)).not.toContain('Confirm Delete');
+      expect(controlText(host)).not.toContain('Delete this stash entry');
     } finally {
       dispose();
     }
@@ -729,9 +730,9 @@ describe('GitStashWindow', () => {
     try {
       await flush();
       expect(mockGetDiffContent).not.toHaveBeenCalled();
-      expect(host.textContent).not.toContain('Select a stash file to inspect its patch.');
+      expect(controlText(host)).not.toContain('Select a stash file to inspect its patch.');
 
-      const viewDiffButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'View Diff') as HTMLButtonElement | undefined;
+      const viewDiffButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.trim() === 'View Diff') as HTMLButtonElement | undefined;
       expect(viewDiffButton).toBeTruthy();
       viewDiffButton!.click();
       await flush();

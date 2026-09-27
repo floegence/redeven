@@ -1,7 +1,7 @@
+import { StableText, Button, PersistentHorizontalScrollbar } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { cn, useLayout, useNotification } from '@floegence/floe-webapp-core';
-import { Button, PersistentHorizontalScrollbar } from '@floegence/floe-webapp-core/ui';
 import type { GitDiffFileContent } from '../protocol/redeven_v1';
 import {
   GIT_PATCH_PREVIEW_LINES,
@@ -114,7 +114,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
 
                 <Show when={showCopyButton()}>
                   <Button size="xs" variant="ghost" class={cn('self-start', gitToneActionButtonClass())} onClick={() => void handleCopyPatch()} disabled={!canCopyPatch()}>
-                    {copied() ? i18n.t('common.actions.copied') : i18n.t('git.patchViewer.copyPatch')}
+                    <StableText reserve={[i18n.t('common.actions.copied'), i18n.t('git.patchViewer.copyPatch')]}>{copied() ? i18n.t('common.actions.copied') : i18n.t('git.patchViewer.copyPatch')}</StableText>
                   </Button>
                 </Show>
               </div>

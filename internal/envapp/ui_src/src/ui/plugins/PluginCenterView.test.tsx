@@ -1,3 +1,4 @@
+import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
@@ -128,7 +129,7 @@ function metricsPermissionProjection(granted = false): PluginInventoryProjection
 
 function findDocumentButton(label: string): HTMLButtonElement {
   const button = [...document.querySelectorAll<HTMLButtonElement>('button')]
-    .find((candidate) => candidate.textContent?.trim() === label);
+    .find((candidate) => controlText(candidate)?.trim() === label);
   if (!button) throw new Error(`Button not found: ${label}`);
   return button;
 }
@@ -251,7 +252,7 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const status = mount.querySelector('[data-plugin-center-preparing]');
-    expect(status?.textContent).toContain('Preparing plugin features');
+    expect(controlText(status)).toContain('Preparing plugin features');
     expect(mount.querySelectorAll('[data-plugin-center-preparing]')).toHaveLength(1);
   });
 
@@ -273,7 +274,7 @@ describe('PluginCenterView', () => {
     const details = mount.querySelector('[data-plugin-center-item="catalog:metrics"]') as HTMLButtonElement;
     const install = mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement;
     expect(details).not.toBeNull();
-    expect(install.textContent).toContain('Install');
+    expect(controlText(install)).toContain('Install');
     expect(install.closest('article')?.querySelector('.h-10.w-10')).not.toBeNull();
     install.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -307,8 +308,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const card = mount.querySelector('[data-plugin-directory-card="catalog:metrics"]');
-    expect(card?.textContent).toContain('v1.9.0');
-    expect(card?.textContent).not.toContain('v2.0.0');
+    expect(controlText(card)).toContain('v1.9.0');
+    expect(controlText(card)).not.toContain('v2.0.0');
   });
 
   it('omits a repeated author summary and redundant availability badge without replacing author copy', () => {
@@ -319,10 +320,10 @@ describe('PluginCenterView', () => {
       loading={false} onCommand={vi.fn()} onRefresh={vi.fn()} canManagePlugins canOpenPluginSurfaces
     />, mount);
     const card = mount.querySelector('[data-plugin-directory-card]')!;
-    expect(card.textContent?.match(/Metrics/g)).toHaveLength(1);
-    expect(card.textContent).not.toContain('Available');
+    expect(controlText(card)?.match(/Metrics/g)).toHaveLength(1);
+    expect(controlText(card)).not.toContain('Available');
     openInventoryDetails(mount);
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Metrics');
   });
 
   it('opens a real card action menu instead of treating the ellipsis as a detail button', async () => {
@@ -356,10 +357,10 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
 
     expect(findDocumentButton('Open')).not.toBeNull();
-    expect(document.body.textContent).not.toContain('Open in Workbench');
+    expect(controlText(document.body)).not.toContain('Open in Workbench');
     findDocumentButton('View plugin details').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Metrics');
   });
 
   it('keeps disabled card actions aligned with the lifecycle state', async () => {
@@ -393,8 +394,8 @@ describe('PluginCenterView', () => {
     const card = mount.querySelector('[data-plugin-center-card-menu="catalog:metrics"]') as HTMLButtonElement;
     card.click();
     await Promise.resolve();
-    expect([...document.querySelectorAll('[role="menu"]')].some((menu) => menu.textContent?.includes('Open in Activity'))).toBe(false);
-    expect([...document.querySelectorAll('[role="menu"]')].some((menu) => menu.textContent?.includes('Open in Workbench'))).toBe(false);
+    expect([...document.querySelectorAll('[role="menu"]')].some((menu) => controlText(menu)?.includes('Open in Activity'))).toBe(false);
+    expect([...document.querySelectorAll('[role="menu"]')].some((menu) => controlText(menu)?.includes('Open in Workbench'))).toBe(false);
     expect(findDocumentButton('Enable')).not.toBeNull();
     expect(findDocumentButton('View plugin details')).not.toBeNull();
   });
@@ -430,11 +431,11 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const primary = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:metrics"]');
-    expect(primary?.textContent).toContain('View trust details');
+    expect(controlText(primary)).toContain('View trust details');
     primary?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(onCommand).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'open_surface' }), expect.anything());
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Metrics');
   });
 
   it('does not use market presentation when an installed record has no host presentation', async () => {
@@ -462,9 +463,9 @@ describe('PluginCenterView', () => {
     (mount.querySelector('[data-plugin-center-item="catalog:metrics"]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const details = mount.querySelector('[data-plugin-center-details]')!;
-    expect(details.querySelector('[data-plugin-center-detail-heading]')?.textContent).toContain('Installed Name');
-    expect(details.textContent).toContain('Installed summary');
-    expect(details.textContent).not.toContain('Show neutral runtime metrics.');
+    expect(controlText(details.querySelector('[data-plugin-center-detail-heading]'))).toContain('Installed Name');
+    expect(controlText(details)).toContain('Installed summary');
+    expect(controlText(details)).not.toContain('Show neutral runtime metrics.');
   });
 
   it('loads complete market author content only after an uninstalled plugin is selected', async () => {
@@ -499,7 +500,7 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-author-description]')).not.toBeNull());
     const author = mount.querySelector<HTMLElement>('[data-plugin-author-content]')!;
     expect(author.querySelector('[lang="en-US"]')).not.toBeNull();
-    expect(author.textContent).toContain('Shows neutral runtime metrics for general plugin platform tests.');
+    expect(controlText(author)).toContain('Shows neutral runtime metrics for general plugin platform tests.');
     expect(mount.querySelector('[data-plugin-author-highlights]')).not.toBeNull();
   });
 
@@ -576,9 +577,9 @@ describe('PluginCenterView', () => {
 
     openInventoryDetails(mount);
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(mount.textContent).toContain('The plugin catalog is unavailable'));
+    await vi.waitFor(() => expect(controlText(mount)).toContain('The plugin catalog is unavailable'));
     expect(mount.querySelector('[data-plugin-author-description]')).toBeNull();
-    expect(mount.textContent).toContain('Show neutral runtime metrics.');
+    expect(controlText(mount)).toContain('Show neutral runtime metrics.');
     expect(mount.querySelector('[data-plugin-center-install="catalog:metrics"]')).not.toBeNull();
     expect(findDocumentButton('Retry')).not.toBeNull();
   });
@@ -630,7 +631,7 @@ describe('PluginCenterView', () => {
     (mount.querySelector('[role="tab"][id$="-tab-updates"]') as HTMLButtonElement).click();
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-center-update="catalog:metrics"]')).not.toBeNull());
     const update = mount.querySelector('[data-plugin-center-update="catalog:metrics"]') as HTMLButtonElement;
-    expect(update.textContent).toContain('Review update');
+    expect(controlText(update)).toContain('Review update');
     expect(update.closest('article')?.className).not.toContain('border-t-[var(--redeven-status-info-foreground)]');
     expect(update.className).toContain('h-9');
     expect(mount.querySelector('[data-plugin-center-list]')?.className).toContain('grid');
@@ -696,8 +697,8 @@ describe('PluginCenterView', () => {
 
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
-    expect(menu.textContent).toContain('Open');
-    expect(menu.textContent).not.toContain('Open in Workbench');
+    expect(controlText(menu)).toContain('Open');
+    expect(controlText(menu)).not.toContain('Open in Workbench');
   });
 
   it('keeps identity and primary actions outside the independently scrolling detail body', () => {
@@ -841,11 +842,11 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-list]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(mount.querySelector('[data-settings-nav-item="plugins"]')).toBeNull();
-    expect(mount.textContent).toContain('Installed');
-    expect(mount.textContent).toContain('Discover');
-    expect(mount.textContent).toContain('Updates');
-    expect(mount.textContent).toContain('Metrics');
-    expect(mount.textContent).not.toMatch(/Developer|Install from URL|Install from file|unsigned|marketplace/i);
+    expect(controlText(mount)).toContain('Installed');
+    expect(controlText(mount)).toContain('Discover');
+    expect(controlText(mount)).toContain('Updates');
+    expect(controlText(mount)).toContain('Metrics');
+    expect(controlText(mount)).not.toMatch(/Developer|Install from URL|Install from file|unsigned|marketplace/i);
     (mount.querySelector('[data-plugin-center-close]') as HTMLButtonElement).click();
     expect(onClose).toHaveBeenCalledOnce();
 
@@ -910,7 +911,7 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const alert = mount.querySelector('[data-plugin-center-error]');
-    expect(alert?.textContent).toContain('The plugin catalog is unavailable');
+    expect(controlText(alert)).toContain('The plugin catalog is unavailable');
     expect(mount.querySelector('[data-plugin-center-item="catalog:metrics"]')).not.toBeNull();
     (alert?.querySelector('button') as HTMLButtonElement).click();
     expect(onRefresh).toHaveBeenCalledOnce();
@@ -930,7 +931,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect(mount.textContent).not.toContain('Install from source');
+    expect(controlText(mount)).not.toContain('Install from source');
     (mount.querySelector('[data-plugin-center-install-external]') as HTMLButtonElement).click();
     await Promise.resolve();
     findDocumentButton('Install from source').click();
@@ -1010,9 +1011,9 @@ describe('PluginCenterView', () => {
     const source = mount.querySelector<HTMLElement>('[data-plugin-center-filter="source"]')!;
     const trust = mount.querySelector<HTMLElement>('[data-plugin-center-filter="trust"]')!;
     const lifecycle = mount.querySelector<HTMLElement>('[data-plugin-center-filter="lifecycle"]')!;
-    expect(source.textContent).toContain('Plugin source: All');
-    expect(trust.textContent).toContain('Trust: All');
-    expect(lifecycle.textContent).toContain('Lifecycle: All');
+    expect(controlText(source)).toContain('Plugin source: All');
+    expect(controlText(trust)).toContain('Trust: All');
+    expect(controlText(lifecycle)).toContain('Lifecycle: All');
     for (const trigger of [source, trust, lifecycle]) {
       const owner = trigger.closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
       expect(owner.getAttribute('aria-haspopup')).toBe('menu');
@@ -1026,13 +1027,13 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     findDocumentButton('Official').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(source.textContent).toContain('Plugin source: Official');
+    expect(controlText(source)).toContain('Plugin source: Official');
     const clear = mount.querySelector<HTMLElement>('[data-plugin-center-clear-filters]')!;
     expect(clear).not.toBeNull();
     expect(clear.closest('[data-plugin-center-filter-scroll]')).toBeNull();
 
     (mount.querySelector('[data-plugin-center-clear-filters]') as HTMLButtonElement).click();
-    expect(source.textContent).toContain('Plugin source: All');
+    expect(controlText(source)).toContain('Plugin source: All');
     expect(mount.querySelector('[data-plugin-center-clear-filters]')).toBeNull();
   });
 
@@ -1065,8 +1066,8 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Metrics');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Disabled');
   });
 
   it('consumes an exact shell selection once so inventory refresh does not reopen closed details', async () => {
@@ -1121,7 +1122,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     const heading = mount.querySelector<HTMLHeadingElement>('[data-plugin-center-detail-heading]')!;
     expect(document.activeElement).toBe(heading);
-    expect(heading.textContent).toBe('Metrics');
+    expect(controlText(heading)).toBe('Metrics');
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
   });
 
@@ -1271,17 +1272,17 @@ describe('PluginCenterView', () => {
       const scrollIntoView = vi.fn();
       Object.defineProperty(technicalSummary, 'scrollIntoView', { configurable: true, value: scrollIntoView });
       const primary = mount.querySelector<HTMLButtonElement>(`[data-plugin-action="${action}"]`)!;
-      expect(primary.textContent).toContain(label);
+      expect(controlText(primary)).toContain(label);
       primary.click();
 
       expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
       expect(document.activeElement).toBe(technicalSummary);
       expect(technicalDetails.open).toBe(false);
-      expect(issue.textContent).toContain(recovery);
-      const issueEvidence = issue.querySelector('[data-plugin-issue-evidence]')?.textContent ?? '';
+      expect(controlText(issue)).toContain(recovery);
+      const issueEvidence = controlText(issue.querySelector('[data-plugin-issue-evidence]')) ?? '';
       for (const fact of evidence) expect(issueEvidence).toContain(fact);
-      expect(issue.textContent).toContain('0.9.0');
-      expect(issue.textContent).toContain('3.0.0');
+      expect(controlText(issue)).toContain('0.9.0');
+      expect(controlText(issue)).toContain('3.0.0');
     },
   );
 
@@ -1314,8 +1315,8 @@ describe('PluginCenterView', () => {
     const scrollIntoView = vi.fn();
     Object.defineProperty(details, 'scrollIntoView', { configurable: true, value: scrollIntoView });
     const primary = mount.querySelector<HTMLButtonElement>('[data-plugin-action="details"]')!;
-    expect(primary.textContent).toContain('Technical details');
-    expect(primary.textContent).not.toContain('View issue');
+    expect(controlText(primary)).toContain('Technical details');
+    expect(controlText(primary)).not.toContain('View issue');
 
     primary.click();
 
@@ -1344,9 +1345,9 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     const review = document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')!;
     expect(review).not.toBeNull();
-    expect(review.textContent).toContain('Metrics');
-    expect(review.textContent).toContain('2.0.0');
-    expect(review.textContent).not.toContain('sha256:');
+    expect(controlText(review)).toContain('Metrics');
+    expect(controlText(review)).toContain('2.0.0');
+    expect(controlText(review)).not.toContain('sha256:');
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
     expect(onCommand).toHaveBeenCalledWith(metricsInstallCommand, expect.any(AbortSignal));
@@ -1401,7 +1402,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(document.querySelector('[data-plugin-install-preview-loading]')).toBeNull();
-    expect(document.querySelector('[data-plugin-install-review-dialog]')?.textContent).toContain('2.0.0');
+    expect(controlText(document.querySelector('[data-plugin-install-review-dialog]'))).toContain('2.0.0');
   });
 
   it('fills a missing preview with one market detail request without refreshing Host inventory', async () => {
@@ -1436,7 +1437,7 @@ describe('PluginCenterView', () => {
       expect.any(AbortSignal),
     );
     expect(onRefresh).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.9'));
+    await vi.waitFor(() => expect(controlText([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1))).toContain('4.4.9'));
   });
 
   it('uses the current market release when the cached catalog version is stale', async () => {
@@ -1477,7 +1478,7 @@ describe('PluginCenterView', () => {
 
     (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('[data-plugin-install-review-confirm]')].at(-1)).not.toBeUndefined());
-    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.9'));
+    await vi.waitFor(() => expect(controlText([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1))).toContain('4.4.9'));
     [...document.querySelectorAll<HTMLButtonElement>('[data-plugin-install-review-confirm]')].at(-1)?.click();
     await vi.waitFor(() => expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({
       type: 'install',
@@ -1509,7 +1510,7 @@ describe('PluginCenterView', () => {
 
     (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector('[data-plugin-install-preview-error]')?.textContent).toContain('plugin catalog is unavailable');
+    expect(controlText(document.querySelector('[data-plugin-install-preview-error]'))).toContain('plugin catalog is unavailable');
     expect(document.querySelectorAll('[data-plugin-install-preview-retry]')).toHaveLength(1);
     expect(mount.querySelector('[data-plugin-install-error]')).toBeNull();
   });
@@ -1545,8 +1546,8 @@ describe('PluginCenterView', () => {
     expect(summary).not.toBeNull();
     expect(summary?.querySelector('[data-plugin-install-stage]')).toBeNull();
     expect(summary?.querySelector('[data-plugin-install-progress]')?.getAttribute('aria-valuenow')).toBe('1');
-    expect(summary?.textContent).toContain('Security check');
-    expect(summary?.textContent).toContain('2 / 4');
+    expect(controlText(summary)).toContain('Security check');
+    expect(controlText(summary)).toContain('2 / 4');
     expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).not.toBeNull();
   });
 
@@ -1572,7 +1573,7 @@ describe('PluginCenterView', () => {
 
     const target = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install-summary]')!;
     const other = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:database"]')!;
-    expect(target.textContent).toContain('Finalizing installation...');
+    expect(controlText(target)).toContain('Finalizing installation...');
     expect(target.disabled).toBe(false);
     expect(mount.querySelector('[data-plugin-center-install="catalog:metrics"]')).toBeNull();
     expect(target.closest('[data-plugin-install-summary]')?.getAttribute('aria-busy')).toBe('true');
@@ -1624,8 +1625,8 @@ describe('PluginCenterView', () => {
     expect(progress.getAttribute('aria-valuenow')).toBe('262144');
     expect(progress.getAttribute('aria-valuemax')).toBe('524288');
     expect(progress.title).toContain('256');
-    expect(target.querySelector('[data-plugin-center-install-summary]')?.textContent).toContain('50%');
-    expect(target.querySelector('[data-plugin-center-install-summary]')?.textContent).toContain('Get package');
+    expect(controlText(target.querySelector('[data-plugin-center-install-summary]'))).toContain('50%');
+    expect(controlText(target.querySelector('[data-plugin-center-install-summary]'))).toContain('Get package');
     expect(other.querySelector('[data-plugin-install-execution]')).toBeNull();
 
     (mount.querySelector('[data-plugin-center-item="catalog:database"]') as HTMLButtonElement).click();
@@ -1670,8 +1671,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const status = mount.querySelector('[data-plugin-install-execution]')!;
-    expect(status.textContent).toContain('The plugin release could not be reached');
-    expect(status.textContent).not.toContain('PLUGIN_RELEASE_NETWORK');
+    expect(controlText(status)).toContain('The plugin release could not be reached');
+    expect(controlText(status)).not.toContain('PLUGIN_RELEASE_NETWORK');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
     expect(onRetryInstall).toHaveBeenCalledWith(metricsPlugin.officialCatalog.pluginInstanceID);
   });
@@ -1760,10 +1761,10 @@ describe('PluginCenterView', () => {
 
     const statuses = document.querySelectorAll('[data-plugin-install-execution]');
     expect(statuses).toHaveLength(1);
-    expect(statuses[0]?.textContent).toContain('historical data is incompatible');
+    expect(controlText(statuses[0])).toContain('historical data is incompatible');
     (statuses[0]?.querySelector('[data-plugin-install-resolve-retained-data]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.body.textContent).toContain('Erase the plugin historical data and install the current version?');
+    expect(controlText(document.body)).toContain('Erase the plugin historical data and install the current version?');
     expect(document.querySelectorAll('[data-plugin-install-execution]')).toHaveLength(0);
     expect(onDiscardRetainedDataAndRetry).not.toHaveBeenCalled();
 
@@ -1909,14 +1910,14 @@ describe('PluginCenterView', () => {
     };
     setCurrentProjection({ items: [installed] });
     await Promise.resolve();
-    expect(document.querySelector('[data-plugin-install-review-dialog]')?.textContent).toContain('Needs attention');
+    expect(controlText(document.querySelector('[data-plugin-install-review-dialog]'))).toContain('Needs attention');
 
     setCurrentProjection({ items: [{ ...installed, lifecycleState: 'enabled', attentionReason: undefined }] });
     await Promise.resolve();
     const dialog = document.querySelector('[data-plugin-install-review-dialog]')?.closest('[role="dialog"]') as HTMLElement;
-    expect(dialog.textContent).toContain('Enabled');
-    expect(dialog.textContent).not.toContain('Needs attention');
-    expect(dialog.textContent?.match(/Installation complete\./g)).toHaveLength(1);
+    expect(controlText(dialog)).toContain('Enabled');
+    expect(controlText(dialog)).not.toContain('Needs attention');
+    expect(controlText(dialog)?.match(/Installation complete\./g)).toHaveLength(1);
 
     (dialog.querySelector('[data-plugin-install-open]') as HTMLButtonElement).click();
     await Promise.resolve();
@@ -1964,8 +1965,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const status = mount.querySelector('[data-plugin-install-execution]')!;
-    expect(status.textContent).toContain('did not respond in time');
-    expect(status.textContent?.toLowerCase()).not.toContain('permission');
+    expect(controlText(status)).toContain('did not respond in time');
+    expect(controlText(status)?.toLowerCase()).not.toContain('permission');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
     expect(onRetryInstall).toHaveBeenCalledWith(metricsPlugin.officialCatalog.pluginInstanceID);
   });
@@ -2005,8 +2006,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const status = mount.querySelector('[data-plugin-install-execution]')!;
-    expect(status.textContent).toContain('installed, but Plugin Center could not refresh');
-    expect(status.textContent).not.toContain('installation failed');
+    expect(controlText(status)).toContain('installed, but Plugin Center could not refresh');
+    expect(controlText(status)).not.toContain('installation failed');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
     expect(onRetryInstall).toHaveBeenCalledWith(metricsPlugin.officialCatalog.pluginInstanceID);
   });
@@ -2171,11 +2172,11 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect(mount.textContent).toContain('Example Toolbox permissions');
+    expect(controlText(mount)).toContain('Example Toolbox permissions');
     (mount.querySelector('[data-plugin-permission="metrics.read"] [role="switch"]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.body.textContent).toContain('Grant Read data to Example Toolbox?');
-    expect(document.body.textContent).not.toContain('Grant Read data to Metrics?');
+    expect(controlText(document.body)).toContain('Grant Read data to Example Toolbox?');
+    expect(controlText(document.body)).not.toContain('Grant Read data to Metrics?');
   });
 
   it('distinguishes generic permission IDs in switches and confirmation', async () => {
@@ -2216,17 +2217,17 @@ describe('PluginCenterView', () => {
     const writeSwitch = mount.querySelector('[data-plugin-permission="workspace.write"] [role="switch"]') as HTMLButtonElement;
     expect(readSwitch.getAttribute('aria-label')).toBe('Change Workspace read permission');
     expect(writeSwitch.getAttribute('aria-label')).toBe('Change Workspace write permission');
-    expect(mount.textContent).toContain('Optional');
+    expect(controlText(mount)).toContain('Optional');
     const permissionNames = mount.querySelectorAll<HTMLElement>('[data-plugin-permission-name]');
-    expect([...permissionNames].map((name) => name.textContent)).toEqual(['Workspace read', 'Workspace write']);
+    expect([...permissionNames].map((name) => controlText(name))).toEqual(['Workspace read', 'Workspace write']);
     const technicalDetails = mount.querySelectorAll<HTMLDetailsElement>('[data-plugin-permission-technical-details]');
     expect(technicalDetails).toHaveLength(2);
     expect([...technicalDetails].every((details) => !details.open)).toBe(true);
-    expect([...technicalDetails].every((details) => !details.querySelector('summary')?.textContent?.includes('workspace.'))).toBe(true);
-    expect(technicalDetails[1].textContent).toContain('workspace.write');
+    expect([...technicalDetails].every((details) => !controlText(details.querySelector('summary'))?.includes('workspace.'))).toBe(true);
+    expect(controlText(technicalDetails[1])).toContain('workspace.write');
     writeSwitch.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.body.textContent).toContain('Grant Workspace write to Example Toolbox?');
+    expect(controlText(document.body)).toContain('Grant Workspace write to Example Toolbox?');
     findDocumentButton('Grant').click();
     await Promise.resolve();
     expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({
@@ -2266,9 +2267,9 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const permission = mount.querySelector<HTMLElement>('[data-plugin-permission="metrics.read"]')!;
-    expect(permission.textContent).toContain('Optional');
-    expect(permission.textContent).toContain('Managed by policy');
-    expect(permission.textContent).toContain('cannot be granted under the current environment policy');
+    expect(controlText(permission)).toContain('Optional');
+    expect(controlText(permission)).toContain('Managed by policy');
+    expect(controlText(permission)).toContain('cannot be granted under the current environment policy');
     expect(permission.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled).toBe(true);
   });
 
@@ -2300,7 +2301,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
 
     expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
-    expect(mount.textContent).toContain('permission update failed');
+    expect(controlText(mount)).toContain('permission update failed');
   });
 
   it('allows enabled official plugin surfaces to open through the sandbox host', () => {
@@ -2540,7 +2541,7 @@ describe('PluginCenterView', () => {
     openInventoryDetails(mount);
     (mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement).click();
     await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-retry]')).not.toBeNull());
-    expect(document.querySelector('[data-plugin-update-dialog]')?.textContent).toContain('plugin catalog is unavailable');
+    expect(controlText(document.querySelector('[data-plugin-update-dialog]'))).toContain('plugin catalog is unavailable');
     expect(onInspectExternal).not.toHaveBeenCalled();
 
     (document.querySelector('[data-plugin-update-retry]') as HTMLButtonElement).click();
@@ -2648,7 +2649,7 @@ describe('PluginCenterView', () => {
     ), mount);
 
     openInventoryDetails(mount);
-    expect(mount.textContent).toContain('Needs attention');
+    expect(controlText(mount)).toContain('Needs attention');
     expect(mount.querySelector('[data-plugin-action="enable"]')).toBeNull();
     expect(mount.querySelector('[data-plugin-action="open"]')).toBeNull();
 
@@ -2758,9 +2759,9 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="failed"]');
-    expect(recovery?.textContent).toContain('Activation evidence is unavailable.');
-    expect(recovery?.textContent).toContain('Review the error above, then retry runtime recovery.');
-    expect(recovery?.textContent).not.toContain('restart the runtime');
+    expect(controlText(recovery)).toContain('Activation evidence is unavailable.');
+    expect(controlText(recovery)).toContain('Review the error above, then retry runtime recovery.');
+    expect(controlText(recovery)).not.toContain('restart the runtime');
     const retry = recovery?.querySelector<HTMLButtonElement>('[data-plugin-runtime-recovery-retry]');
     expect(retry?.disabled).toBe(false);
     retry?.click();
@@ -2769,7 +2770,7 @@ describe('PluginCenterView', () => {
     expect(retry?.disabled).toBe(true);
 
     const open = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:metrics"]');
-    expect(open?.textContent).toContain('Open');
+    expect(controlText(open)).toContain('Open');
     expect(open?.disabled).toBe(true);
   });
 
@@ -2823,7 +2824,7 @@ describe('PluginCenterView', () => {
     const recoveringOpen = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:database"]');
     expect(readyOpen?.disabled).toBe(false);
     expect(recoveringOpen?.disabled).toBe(false);
-    expect(mount.querySelector('[data-plugin-runtime-recovery="recovering"]')?.textContent)
+    expect(controlText(mount.querySelector('[data-plugin-runtime-recovery="recovering"]')))
       .toContain('This plugin is still recovering.');
 
     readyOpen?.click();
@@ -2875,9 +2876,9 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="failed"]');
-    expect(recovery?.textContent).toContain('This plugin release is no longer trusted.');
-    expect(recovery?.textContent).toContain('Reinstall the plugin from a trusted source');
-    expect(recovery?.textContent).not.toContain('then retry runtime recovery');
+    expect(controlText(recovery)).toContain('This plugin release is no longer trusted.');
+    expect(controlText(recovery)).toContain('Reinstall the plugin from a trusted source');
+    expect(controlText(recovery)).not.toContain('then retry runtime recovery');
     expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:metrics"]')?.disabled).toBe(true);
   });
 
@@ -2916,8 +2917,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="failed"]');
-    expect(recovery?.textContent).toContain('Plugin runtime recovery took longer than expected.');
-    expect(recovery?.textContent).toContain('Review the error above, then retry runtime recovery.');
+    expect(controlText(recovery)).toContain('Plugin runtime recovery took longer than expected.');
+    expect(controlText(recovery)).toContain('Review the error above, then retry runtime recovery.');
     const retry = recovery?.querySelector<HTMLButtonElement>('[data-plugin-runtime-recovery-retry]');
     retry?.click();
     retry?.click();
@@ -2945,8 +2946,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="recovering"]');
-    expect(recovery?.textContent).toContain('Plugin runtime access is being restored.');
-    expect(recovery?.textContent).toContain('Plugin surfaces will remain unavailable until recovery completes.');
+    expect(controlText(recovery)).toContain('Plugin runtime access is being restored.');
+    expect(controlText(recovery)).toContain('Plugin surfaces will remain unavailable until recovery completes.');
     expect(recovery?.querySelector('[data-plugin-runtime-recovery-retry]')).toBeNull();
   });
 
@@ -2976,7 +2977,7 @@ describe('PluginCenterView', () => {
     ), mount);
 
     openInventoryDetails(mount);
-    expect(mount.querySelector('[data-plugin-primary-actions]')?.textContent).toContain('Enable');
+    expect(controlText(mount.querySelector('[data-plugin-primary-actions]'))).toContain('Enable');
     expect(mount.querySelector('[data-plugin-action="open"]')).toBeNull();
     expect(mount.querySelector('[data-plugin-action="open-workbench"]')).toBeNull();
   });
@@ -3094,8 +3095,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const error = mount.querySelector('[data-plugin-center-error]')!;
-    expect(error.textContent).toContain('Inventory unavailable');
-    expect(error.textContent).toContain('environment administrator');
+    expect(controlText(error)).toContain('Inventory unavailable');
+    expect(controlText(error)).toContain('environment administrator');
     findDocumentButton('Retry').click();
     expect(onRefresh).toHaveBeenCalledOnce();
   });
@@ -3198,15 +3199,15 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Catalog');
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Alpha');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Toolbox Beta');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).not.toContain('Toolbox Catalog');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).not.toContain('Toolbox Alpha');
     const beta = mount.querySelector('[data-plugin-center-item="instance:plugini_toolbox_beta"]') as HTMLButtonElement;
     const alpha = mount.querySelector('[data-plugin-center-item="instance:plugini_toolbox_alpha"]') as HTMLButtonElement;
     expect(beta.getAttribute('aria-current')).toBe('true');
     expect(alpha.getAttribute('aria-current')).toBeNull();
     alpha.click();
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Alpha');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Toolbox Alpha');
     expect(beta.getAttribute('aria-current')).toBeNull();
     expect(alpha.getAttribute('aria-current')).toBe('true');
   });
@@ -3281,11 +3282,11 @@ describe('PluginCenterView', () => {
 
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(mount.querySelector('[data-plugin-center-item="instance:plugini_external_beta"]')).toBeNull();
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Alpha');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Toolbox Beta');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).not.toContain('Toolbox Alpha');
 
-    expect(document.body.textContent).not.toContain('Review required permissions');
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
+    expect(controlText(document.body)).not.toContain('Review required permissions');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Toolbox Beta');
   });
 
   it('preserves an exact shell detail request when retained filters exclude it', async () => {
@@ -3332,8 +3333,8 @@ describe('PluginCenterView', () => {
     setFocusRequest(1);
     await Promise.resolve();
     await Promise.resolve();
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Alpha');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Toolbox Beta');
+    expect(controlText(mount.querySelector('[data-plugin-center-details]'))).not.toContain('Toolbox Alpha');
 
     const back = mount.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
     back.focus();

@@ -1,7 +1,7 @@
+import { StatusRegion, Input, Tag } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertCircle, Refresh } from '@floegence/floe-webapp-core/icons';
-import { Input, Tag } from '@floegence/floe-webapp-core/ui';
 
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import type { DesktopI18n } from '../shared/i18n';
@@ -176,7 +176,7 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
             overlayRef = element;
           }}
         >
-          <Show when={props.loading}>
+          <StatusRegion lines={3} class="text-xs"><Show when={props.loading}>
             <div class="flex items-center gap-2 border-b border-border/70 px-3 py-2 text-[11px] text-muted-foreground" role="status">
               <Refresh class="h-3.5 w-3.5 shrink-0 animate-spin" />
               <span>{props.i18n.t('connectionDialog.sshConfigLoading')}</span>
@@ -200,7 +200,7 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
                 </button>
               </DesktopTooltip>
             </div>
-          </Show>
+          </Show></StatusRegion>
           <div
             id={optionsID()}
             ref={optionsRef}

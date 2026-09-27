@@ -1,9 +1,5 @@
-import './adaptive-sidebar.css';
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, untrack } from 'solid-js';
-import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
-
 import {
+  StatusRegion,
   Button,
   Dropdown,
   Dialog,
@@ -12,6 +8,11 @@ import {
   TabPanel,
   type DropdownItem,
 } from '@floegence/floe-webapp-core/ui';
+import './adaptive-sidebar.css';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, untrack } from 'solid-js';
+import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1';
@@ -5368,9 +5369,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               onConfirm={confirmDeleteGroup}
             />
 
-            <Show when={error()}>
+            <StatusRegion lines={2} class="text-xs"><Show when={error()}>
               <div class="p-2 text-[11px] text-error border-t border-border bg-background/80 break-words">{error()}</div>
-            </Show>
+            </Show></StatusRegion>
             <Show when={showTerminalStatusBar()}>
               <div
                 data-testid="terminal-status-bar"

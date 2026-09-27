@@ -1,7 +1,17 @@
+import {
+  StatusRegion,
+  StableText,
+  Tag,
+  Button,
+  SettingsSection as FloeSettingsSection,
+  SettingsList as FloeSettingsList,
+  SettingRow as FloeSettingRow,
+  type SettingRowProps,
+  type TagProps,
+} from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Tag, Button, SettingsSection as FloeSettingsSection, SettingsList as FloeSettingsList, SettingRow as FloeSettingRow, type SettingRowProps, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { Copy, Check } from '@floegence/floe-webapp-core/icons';
 import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 import { useI18n } from '../../i18n';
@@ -76,12 +86,12 @@ export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; erro
   });
 
   return (
-    <Show when={label()}>
-      <span role="status" class="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
+    <span style={{ visibility: label() ? 'visible' : 'hidden' }}>
+      <span role="status" class="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground whitespace-nowrap tabular-nums">
         <span aria-hidden="true" class={cn('inline-block h-1.5 w-1.5 rounded-full bg-current', dotColor())} />
-        {label()}
+        <StableText reserve={[i18n.t('settings.autoSave.saving'), i18n.t('settings.autoSave.paused'), i18n.t('settings.autoSave.needsAttention'), i18n.t('settings.autoSave.unsavedChanges'), i18n.t('settings.autoSave.saved'), ...[11, 23].map(hour => i18n.t('settings.autoSave.savedAt', { time: formatSavedTime(new Date(2000, 0, 1, hour, 59, 59).getTime()) }))]}>{label()}</StableText>
       </span>
-    </Show>
+    </span>
   );
 }
 
@@ -108,9 +118,9 @@ export function SettingsSection(props: SettingsSectionProps) {
       actions={props.actions}
       badge={<Show when={props.badge}><Tag variant={settingsTagVariant(props.badgeVariant ?? 'default')} tone="soft" size="sm">{props.badge}</Tag></Show>}
     >
-      <Show when={props.error}>
+      <Show when={'error' in props}><StatusRegion lines={3} class="text-xs"><Show when={props.error}>
         <div role="alert" class="redeven-settings-alert redeven-settings-alert--danger rounded-lg border p-3 text-xs">{props.error}</div>
-      </Show>
+      </Show></StatusRegion></Show>
       {props.children}
     </FloeSettingsSection>
   );
@@ -462,7 +472,7 @@ export function CopyButton(props: { value: string; label?: string; iconOnly?: bo
       aria-label={copied() ? i18n.t('common.actions.copied') : props.label ?? i18n.t('settings.copyValue', { value: props.value })}
       title={copied() ? i18n.t('common.actions.copied') : props.label ?? i18n.t('settings.copyValue', { value: props.value })}
     >
-      {props.iconOnly || !props.label ? null : copied() ? i18n.t('common.actions.copied') : props.label}
+      <Show when={!props.iconOnly && props.label}><StableText reserve={[i18n.t('common.actions.copied'), props.label ?? '']}>{copied() ? i18n.t('common.actions.copied') : props.label ?? ''}</StableText></Show>
     </Button>
   );
 }

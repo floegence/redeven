@@ -2990,7 +2990,7 @@
 .flower-message-image img {
   display: block;
   width: 100%;
-  max-height: 24rem;
+  height: 100%;
   object-fit: contain;
   background: var(--flower-chat-surface-elevated);
 }
@@ -7503,6 +7503,7 @@
 .flower-surface:not(.flower-surface-companion-collapsed) .flower-composer[data-flower-bottom-mode='approval'] {
   display: flex;
   min-height: 0;
+  max-height: 18.75rem;
   flex-direction: column;
   padding: 0.75rem;
 }
@@ -7672,6 +7673,14 @@
     white-space: normal;
     overflow-wrap: anywhere;
     text-align: center;
+  }
+}
+
+/* Enlarged text needs the full line for localized decision labels. */
+@container flower-bottom-composer (max-width: 14rem) {
+  .flower-approval-queue-row .flower-approval-decision-group,
+  .flower-approval-queue-footer > .flower-approval-decision-group {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -10667,3 +10676,8 @@ button.flower-attachment-preview-trigger:disabled {
 @media (pointer: coarse) {
   .flower-mobile-thread-drawer .flower-thread-search-input { min-height: 44px; font-size: max(16px, 1rem); }
 }
+
+/* Transient attachment feedback keeps the preview and following messages stationary. */
+.flower-attachment-feedback { display: block; height: 2lh; overflow: auto; font-size: 11px; line-height: 16px; }
+
+.flower-message-image, .flower-message-file[data-image-fallback] { aspect-ratio: 16 / 9; }

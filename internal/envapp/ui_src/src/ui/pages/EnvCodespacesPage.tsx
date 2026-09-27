@@ -1,3 +1,4 @@
+import { StatusRegion, StableText } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification, useViewActivation } from "@floegence/floe-webapp-core";
 import { AlertTriangle, ChevronDown, ExternalLink, Maximize, Play, RefreshIcon, Stop, Terminal, Trash } from "@floegence/floe-webapp-core/icons";
@@ -382,7 +383,7 @@ function StatusBadge(props: { running: boolean; pid?: number }) {
 
 function InlineButtonSnakeLoading(props: { class?: string }) {
   return (
-    <span class={cn("relative inline-flex w-4 h-4 shrink-0", props.class)} aria-hidden="true">
+    <span class={cn("relative inline-flex w-3.5 h-3.5 shrink-0", props.class)} aria-hidden="true">
       <span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 scale-[0.66] origin-center">
         <SnakeLoader size="sm" />
       </span>
@@ -438,7 +439,7 @@ function CodespaceCard(props: {
     if (props.busyLabel) return props.busyLabel;
     if (props.busyAction === "start") return i18n.t("codespaces.actions.starting");
     if (props.busyAction === "open") return i18n.t("codespaces.actions.opening");
-    return undefined;
+    return i18n.t("codespaces.actions.opening");
   };
   const openDropdownItems = (): DropdownItem[] => (
     isRunning()
@@ -510,7 +511,7 @@ function CodespaceCard(props: {
                 >
                   <InlineButtonSnakeLoading class="mr-1" />
                 </Show>
-                {props.busyAction === "start" ? busyActionLabel() : i18n.t("codespaces.actions.start")}
+                <StableText reserve={[i18n.t("codespaces.actions.starting"), i18n.t("codespaces.actions.opening"), i18n.t("codespaces.status.settingUpEditor"), i18n.t("codespaces.actions.start")]}>{props.busyAction === "start" ? busyActionLabel() : i18n.t("codespaces.actions.start")}</StableText>
               </Button>
               <Show
                 when={props.desktopOpenAvailable}
@@ -524,7 +525,7 @@ function CodespaceCard(props: {
                       aria-label={i18n.t("codespaces.actions.openWillAutoStart")}
                       class="px-2 text-muted-foreground"
                     >
-                      <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-4 h-4" />}>
+                      <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-3.5 h-3.5" />}>
                         <InlineButtonSnakeLoading />
                       </Show>
                     </Button>
@@ -548,7 +549,7 @@ function CodespaceCard(props: {
                       <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-3.5 h-3.5" />}>
                         <InlineButtonSnakeLoading />
                       </Show>
-                      <span class="hidden sm:inline">{props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}</span>
+                      <span class="hidden sm:inline"><StableText reserve={[i18n.t("codespaces.actions.starting"), i18n.t("codespaces.actions.opening"), i18n.t("codespaces.status.settingUpEditor"), i18n.t("codespaces.actions.open")]}>{props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}</StableText></span>
                       <ChevronDown class="w-3 h-3 text-muted-foreground" />
                     </Button>
                   }
@@ -572,7 +573,7 @@ function CodespaceCard(props: {
               >
                 <InlineButtonSnakeLoading class="mr-1" />
               </Show>
-              <span class="truncate">{props.busyAction === "open" ? busyActionLabel() : primaryOpenLabel()}</span>
+              <span class="truncate"><StableText reserve={[i18n.t("codespaces.actions.starting"), i18n.t("codespaces.actions.opening"), i18n.t("codespaces.status.settingUpEditor"), primaryOpenLabel()]}>{props.busyAction === "open" ? busyActionLabel() : primaryOpenLabel()}</StableText></span>
             </Button>
             <Show when={props.desktopOpenAvailable}>
               <Dropdown
@@ -594,7 +595,7 @@ function CodespaceCard(props: {
           <Show when={isRunning()}>
             <Tooltip content={i18n.t("codespaces.actions.stopTooltip")} placement="top">
               <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} aria-label={i18n.t("codespaces.actions.stopTooltip")} class={cn("px-2", redevenSurfaceRoleClass("control"))}>
-                <Show when={props.busyAction === "stop"} fallback={<Stop class="w-4 h-4" />}>
+                <Show when={props.busyAction === "stop"} fallback={<Stop class="w-3.5 h-3.5" />}>
                   <InlineButtonSnakeLoading />
                 </Show>
               </Button>
@@ -609,7 +610,7 @@ function CodespaceCard(props: {
               aria-label={i18n.t("codespaces.actions.deleteTooltip")}
               class="px-2 text-muted-foreground hover:text-destructive"
             >
-              <Show when={props.busyAction === "delete"} fallback={<Trash class="w-4 h-4" />}><InlineButtonSnakeLoading /></Show>
+              <Show when={props.busyAction === "delete"} fallback={<Trash class="w-3.5 h-3.5" />}><InlineButtonSnakeLoading /></Show>
             </Button>
           </Tooltip>
         </div>
@@ -1391,11 +1392,12 @@ export function EnvCodespacesPage() {
             aria-busy={spacesRefreshing() ? "true" : undefined}
             data-testid="codespaces-list-region"
           >
-            <Show when={initialSpacesLoading()}><CodespacesListSkeleton /></Show>
-            <Show when={inventory.snapshot().error}>{error => <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] text-destructive" role="alert">
+
+            <StatusRegion lines={2} class="text-xs"><Show when={inventory.snapshot().error}>{error => <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] text-destructive" role="alert">
               <AlertTriangle class="h-4 w-4 shrink-0" /><span>{String(error())}</span>
               <Button size="sm" variant="outline" onClick={() => void refetch().catch(() => undefined)}>{i18n.t('common.actions.retry')}</Button>
-            </div>}</Show>
+            </div>}</Show></StatusRegion>
+            <Show when={initialSpacesLoading()}><CodespacesListSkeleton /></Show>
             <Show when={spacesRenderable()}>
               <Show when={spaceList().length > 0} fallback={<EmptyState onCreateClick={() => setCreateDialogOpen(true)} />}>
                 <CodespacesGrid>
@@ -1446,10 +1448,7 @@ export function EnvCodespacesPage() {
             <Button size="sm" variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading()} class={outlineControlClass}>
               {i18n.t("codespaces.actions.cancel")}
             </Button>
-            <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleteLoading()}>
-              <Show when={deleteLoading()}>
-                <InlineButtonSnakeLoading class="mr-1" />
-              </Show>
+            <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} loading={deleteLoading()} disabled={deleteLoading()}>
               {i18n.t("codespaces.actions.delete")}
             </Button>
           </div>

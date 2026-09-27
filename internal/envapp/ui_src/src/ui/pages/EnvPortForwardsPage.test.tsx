@@ -1,3 +1,4 @@
+import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 
 import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
@@ -114,7 +115,8 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   SnakeLoader: () => <div data-testid="snake-loader" />,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -430,7 +432,7 @@ describe('web service metadata and template validation', () => {
       expect(name.value).toBe('Original service');
       name.value = '';
       name.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Save changes')?.click();
       await flushPage();
       expect(submit).not.toHaveBeenCalled();
       expect(name.getAttribute('aria-invalid')).toBe('true');
@@ -440,7 +442,7 @@ describe('web service metadata and template validation', () => {
       const description = host.querySelector<HTMLTextAreaElement>('#web-service-metadata-description')!;
       description.value = 'Internal status and release dashboard';
       description.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Save changes')?.click();
       expect(submit).toHaveBeenCalledWith('localhost:4173', 'Team dashboard', 'Internal status and release dashboard', 'unified_proxy');
     } finally {
       dispose();
@@ -468,7 +470,7 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       host.querySelector<HTMLButtonElement>('[data-access-mode="desktop_loopback"]')?.click();
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Save changes')?.click();
       expect(submit).toHaveBeenCalledWith('http://127.0.0.1:3080', 'Example Service', '', 'desktop_loopback');
     } finally {
       dispose();
@@ -496,7 +498,7 @@ describe('web service metadata and template validation', () => {
     try {
       const loopback = host.querySelector<HTMLButtonElement>('[data-access-mode="desktop_loopback"]');
       expect(loopback?.disabled).toBe(true);
-      expect(loopback?.textContent).toContain('only for HTTP services');
+      expect(controlText(loopback)).toContain('only for HTTP services');
     } finally {
       dispose();
       host.remove();
@@ -524,11 +526,11 @@ describe('web service metadata and template validation', () => {
       const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
       target.value = 'https://example.com';
       target.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Save changes')?.click();
       await flushPage();
       expect(submit).not.toHaveBeenCalled();
       expect(target.getAttribute('aria-invalid')).toBe('true');
-      expect(host.textContent).toContain('Available only inside this Environment');
+      expect(controlText(host)).toContain('Available only inside this Environment');
     } finally {
       dispose();
       host.remove();
@@ -575,8 +577,8 @@ describe('web service metadata and template validation', () => {
       />
     ), host);
     try {
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Containers')?.click();
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Images')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Containers')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Images')?.click();
       expect(openResource).toHaveBeenNthCalledWith(1, expect.objectContaining({ view: 'containers', identity: 'container-id' }));
       expect(openResource).toHaveBeenNthCalledWith(2, expect.objectContaining({ view: 'images', identity: 'lscr.io/example/desktop@sha256:abc' }));
     } finally {
@@ -597,11 +599,11 @@ describe('web service metadata and template validation', () => {
       }} busy={false} canOpen canManage onOpen={open} onOpenResource={() => undefined} onAction={() => undefined} onLogs={() => undefined} onUninstall={() => undefined}
     />, host);
     try {
-      expect(host.textContent).toContain('Running');
-      expect(host.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
-      expect(host.textContent).toContain('Changes pending');
-      expect(host.textContent).toContain('Apply and restart');
-      const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((item) => item.textContent?.trim() === 'Open');
+      expect(controlText(host)).toContain('Running');
+      expect(controlText(host.querySelector('[data-testid="managed-service-status"]'))).toBe('Running');
+      expect(controlText(host)).toContain('Changes pending');
+      expect(controlText(host)).toContain('Apply and restart');
+      const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((item) => controlText(item)?.trim() === 'Open');
       expect(button?.disabled).toBe(false);
       button?.click();
       expect(open).toHaveBeenCalledOnce();
@@ -670,10 +672,10 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
-      expect(row.textContent).not.toContain('Raw backend message');
+      expect(controlText(row)).not.toContain('Raw backend message');
       expect(row.querySelector('[data-testid="managed-service-copy-failure"]')).toBeNull();
-      expect(Array.from(row.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Retry')).toBeUndefined();
-      const review = Array.from(row.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => button.textContent?.trim() === 'Review and resolve');
+      expect(Array.from(row.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Retry')).toBeUndefined();
+      const review = Array.from(row.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => controlText(button)?.trim() === 'Review and resolve');
       review?.click(); expect(retry).toHaveBeenCalledOnce();
     } finally {
       dispose();
@@ -707,8 +709,8 @@ describe('web service metadata and template validation', () => {
       />
     ), host);
     try {
-      expect(host.textContent).not.toContain('/private/workspace: no such file or directory');
-      const button = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => button.textContent?.trim() === 'Review and resolve');
+      expect(controlText(host)).not.toContain('/private/workspace: no such file or directory');
+      const button = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => controlText(button)?.trim() === 'Review and resolve');
       button?.click(); expect(retry).toHaveBeenCalledOnce();
     } finally {
       dispose();
@@ -740,8 +742,8 @@ describe('web service metadata and template validation', () => {
       />
     ), host);
     try {
-      expect(host.textContent).not.toContain('private runtime path detail');
-      expect(Array.from(host.querySelectorAll<HTMLButtonElement>('button')).some((button) => button.textContent?.trim() === 'Review and resolve')).toBe(true);
+      expect(controlText(host)).not.toContain('private runtime path detail');
+      expect(Array.from(host.querySelectorAll<HTMLButtonElement>('button')).some((button) => controlText(button)?.trim() === 'Review and resolve')).toBe(true);
     } finally {
       dispose();
       host.remove();
@@ -776,23 +778,23 @@ describe('web service metadata and template validation', () => {
     try {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
       const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
-      expect(progress.textContent).toContain('Pulling image');
-      expect(progress.textContent).toContain('2.00 KB / 5.00 KB');
+      expect(controlText(progress)).toContain('Pulling image');
+      expect(controlText(progress)).toContain('2.00 KB / 5.00 KB');
       expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
-      expect(row.textContent).not.toContain('Error');
+      expect(controlText(row)).not.toContain('Error');
       expect(row.querySelector<HTMLButtonElement>('[data-testid="managed-service-primary"]')?.disabled).toBe(false);
 
       progress.click();
       const details = row.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
       expect(progress.getAttribute('aria-expanded')).toBe('true');
-      expect(details.textContent).toContain('ghcr.io/runzhliu/example-service');
-      expect(details.textContent).toContain('1.00 KB/s');
-      expect(details.textContent).toContain('2 / 5');
-      expect(details.textContent).toContain('2s');
+      expect(controlText(details)).toContain('ghcr.io/runzhliu/example-service');
+      expect(controlText(details)).toContain('1.00 KB/s');
+      expect(controlText(details)).toContain('2 / 5');
+      expect(controlText(details)).toContain('2s');
       expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
       expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
       expect(row.querySelector('[role="dialog"]')).toBeNull();
-      Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation')?.click();
+      Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Cancel operation')?.click();
       expect(cancel).toHaveBeenCalledOnce();
     } finally {
       dispose();
@@ -841,14 +843,14 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       const trigger = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
-      expect(trigger.textContent).toContain('2.00 KB / 5.00 KB');
+      expect(controlText(trigger)).toContain('2.00 KB / 5.00 KB');
       trigger.click();
       const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
-      expect(details.textContent).toContain('Software package');
-      expect(details.textContent).toContain('node-v24.19.0-darwin-arm64.tar.gz@sha256:reviewed');
-      expect(details.textContent).toContain('1.00 KB/s');
-      expect(details.textContent).not.toContain('Container image');
-      expect(details.textContent).not.toContain('Layers');
+      expect(controlText(details)).toContain('Software package');
+      expect(controlText(details)).toContain('node-v24.19.0-darwin-arm64.tar.gz@sha256:reviewed');
+      expect(controlText(details)).toContain('1.00 KB/s');
+      expect(controlText(details)).not.toContain('Container image');
+      expect(controlText(details)).not.toContain('Layers');
       expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
     } finally {
       dispose();
@@ -888,10 +890,10 @@ describe('web service metadata and template validation', () => {
     try {
       host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
       const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
-      expect(details.textContent).toContain('No byte transfer details are available for this stage.');
-      expect(details.textContent).toContain('3s');
+      expect(controlText(details)).toContain('No byte transfer details are available for this stage.');
+      expect(controlText(details)).toContain('3s');
       await vi.advanceTimersByTimeAsync(2_000);
-      expect(details.textContent).toContain('5s');
+      expect(controlText(details)).toContain('5s');
     } finally {
       dispose();
       host.remove();
@@ -943,13 +945,13 @@ describe('web service metadata and template validation', () => {
     try {
       host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
       const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
-      expect(details.textContent).toContain('0 B');
-      expect(details.textContent).toContain('0 B/s');
-      expect(details.textContent).toContain('18 / 18');
-      expect(details.textContent).toContain('3s');
+      expect(controlText(details)).toContain('0 B');
+      expect(controlText(details)).toContain('0 B/s');
+      expect(controlText(details)).toContain('18 / 18');
+      expect(controlText(details)).toContain('3s');
 
       await vi.advanceTimersByTimeAsync(2_000);
-      expect(details.textContent).toContain('5s');
+      expect(controlText(details)).toContain('5s');
     } finally {
       dispose();
       host.remove();
@@ -1035,12 +1037,12 @@ describe('EnvPortForwardsPage', () => {
     let dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await flushPage();
-      expect(host.textContent).toContain('Demo Forward');
+      expect(controlText(host)).toContain('Demo Forward');
       dispose();
       localApiMocks.fetchLocalApiJSON.mockReturnValue(new Promise(() => {}));
       dispose = render(() => <EnvPortForwardsPage />, host);
       await flushPage();
-      expect(host.textContent).toContain('Demo Forward');
+      expect(controlText(host)).toContain('Demo Forward');
       expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
     } finally { dispose(); }
   });
@@ -1084,7 +1086,7 @@ describe('EnvPortForwardsPage', () => {
       forwardsRequest.resolve({ forwards: [] });
       await flushMicrotasks();
       expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
-      expect(host.textContent).toContain('No web services yet');
+      expect(controlText(host)).toContain('No web services yet');
       expect(host.querySelector('[data-testid="web-services-toolbar-actions"]')).toBe(toolbar);
       expect(toolbar?.querySelector('input')).toBe(search);
     } finally {
@@ -1147,7 +1149,7 @@ describe('EnvPortForwardsPage', () => {
     });
     await flushPage();
 
-    expect(host.textContent).toContain('Demo Forward Updated');
+    expect(controlText(host)).toContain('Demo Forward Updated');
     expect(searchInput?.value).toBe('Demo');
     expect(host.querySelector('[data-testid="web-services-list-region"]')?.getAttribute('aria-busy')).toBeNull();
     expect(refreshButton?.getAttribute('aria-busy')).toBeNull();
@@ -1159,7 +1161,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const emptyTitle = Array.from(host.querySelectorAll('h3')).find((element) => element.textContent === 'No web services yet');
+    const emptyTitle = Array.from(host.querySelectorAll('h3')).find((element) => controlText(element) === 'No web services yet');
     expect(emptyTitle).toBeTruthy();
     const forwardsRequest = deferred<{ forwards: any[] }>();
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -1176,7 +1178,7 @@ describe('EnvPortForwardsPage', () => {
 
     forwardsRequest.resolve({ forwards: [] });
     await flushPage();
-    expect(host.textContent).toContain('No web services yet');
+    expect(controlText(host)).toContain('No web services yet');
   });
 
   it('keeps page content visible while the initiating service row reports opening progress', async () => {
@@ -1223,7 +1225,7 @@ describe('EnvPortForwardsPage', () => {
     const templates = host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]');
     const actions = templates?.parentElement?.querySelectorAll<HTMLButtonElement>(':scope > button');
     expect(templates).toBeTruthy();
-    expect(actions?.item((actions?.length ?? 1) - 1)?.textContent).toContain('Add Service');
+    expect(controlText(actions?.item((actions?.length ?? 1) - 1))).toContain('Add Service');
   });
 
   it('keeps the address launcher on the full content axis and lets its input shell fill the row', async () => {
@@ -1246,7 +1248,7 @@ describe('EnvPortForwardsPage', () => {
     const inputShell = host.querySelector<HTMLElement>('[data-testid="web-service-address-input-shell"]');
 
     expect(header?.className).not.toContain('flex-wrap');
-    expect(header?.querySelector('h1')?.textContent).toBe('Web Services');
+    expect(controlText(header?.querySelector('h1'))).toBe('Web Services');
     expect(header?.querySelector('p')).toBeNull();
     expect(host.querySelector('#web-service-address-label')).toBeNull();
     expect(inputShell?.className).toContain('relative');
@@ -1263,7 +1265,7 @@ describe('EnvPortForwardsPage', () => {
     expect(document.activeElement).toBe(input);
     expect(shell?.contains(openButton)).toBe(true);
     expect(openButton?.disabled).toBe(false);
-    expect(openButton?.textContent?.trim()).toBe('');
+    expect(controlText(openButton)?.trim()).toBe('');
     expect(openButton?.className).toContain('text-foreground/80');
     expect(openButton?.className).toContain('hover:text-foreground');
   });
@@ -1285,8 +1287,8 @@ describe('EnvPortForwardsPage', () => {
 
     expect(host.querySelectorAll('[data-testid="managed-service-row"]')).toHaveLength(1);
     expect(host.querySelectorAll('[data-testid="port-forward-row"]')).toHaveLength(0);
-    expect(host.textContent).toContain('Example Service');
-    expect(host.textContent).toContain('Running');
+    expect(controlText(host)).toContain('Example Service');
+    expect(controlText(host)).toContain('Running');
   });
 
   it('hands a managed image destination to the single Containers navigation channel', async () => {
@@ -1306,7 +1308,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
     const imageAction = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button'))
-      .find((button) => button.textContent?.trim() === 'Images');
+      .find((button) => controlText(button)?.trim() === 'Images');
     imageAction?.click();
 
     expect(containerNavigationMocks.request).toHaveBeenCalledWith({
@@ -1353,7 +1355,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
     const openButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button'))
-      .find((button) => button.textContent?.trim() === 'Open');
+      .find((button) => controlText(button)?.trim() === 'Open');
     openButton?.click();
 
     await waitForAssertion(() => {
@@ -1401,9 +1403,9 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
     Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button'))
-      .find((button) => button.textContent?.trim() === 'Open')?.click();
+      .find((button) => controlText(button)?.trim() === 'Open')?.click();
 
-    await waitForAssertion(() => expect(host.textContent).toContain('Stopping'));
+    await waitForAssertion(() => expect(controlText(host)).toContain('Stopping'));
     expect(openWindow).toHaveBeenCalledTimes(1);
     expect(assign).not.toHaveBeenCalled();
     streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-prepare-open', service_id: service.service_id, action: 'restart', state: 'succeeded', stage: 'completed', progress_current: 4, progress_total: 4 })}\n\n`));
@@ -1456,7 +1458,7 @@ describe('EnvPortForwardsPage', () => {
     expect(hostRow?.getAttribute('data-template-state')).toBe('available');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(false);
 
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
     await flushPage();
     const containerRow = host.querySelector<HTMLElement>('[data-template-id="example-container"]');
     expect(containerRow?.getAttribute('data-template-state')).toBe('installed');
@@ -1503,7 +1505,7 @@ describe('EnvPortForwardsPage', () => {
     expect(row?.className).not.toContain('bg-[var(--redeven-status-success-soft)]');
     expect(actions?.querySelector('[data-testid="managed-service-more"]')).toBeTruthy();
     expect(row?.querySelector('[data-template-kind="container"]')).toBeTruthy();
-    expect(workspace?.textContent).not.toContain('/');
+    expect(controlText(workspace)).not.toContain('/');
   });
 
   it('shows managed service status and read actions without lifecycle permission', async () => {
@@ -1521,11 +1523,11 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
 
     const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button'));
-    const open = buttons.find((button) => button.textContent?.trim() === 'Open');
+    const open = buttons.find((button) => controlText(button)?.trim() === 'Open');
     expect(open?.getAttribute('aria-disabled')).toBe('true');
     open?.click();
     expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([url]) => String(url).endsWith('/open-session'))).toBe(false);
-    expect(buttons.find((button) => button.textContent?.trim() === 'Stop')?.disabled).toBe(true);
+    expect(buttons.find((button) => controlText(button)?.trim() === 'Stop')?.disabled).toBe(true);
     expect(buttons.find((button) => button.title === 'View logs')?.disabled).toBe(false);
     expect(buttons.find((button) => button.title === 'Uninstall')?.disabled).toBe(true);
   });
@@ -1542,15 +1544,15 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
-    const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim().startsWith('Container templates'));
+    const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim().startsWith('Container templates'));
     containerTab?.click();
     await flushPage();
     const containerCard = document.querySelector('[data-template-id="example-container"]');
     const containerDetails = document.querySelector('[data-testid="service-template-details"][data-template-id="example-container"]');
     expect(containerCard).toBeTruthy();
     expect(containerDetails?.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
-    expect(containerDetails?.textContent).toContain('Docker is unavailable');
-    expect(containerCard?.textContent).toContain('Container deployment');
+    expect(controlText(containerDetails)).toContain('Docker is unavailable');
+    expect(controlText(containerCard)).toContain('Container deployment');
     expect(containerCard?.className).not.toContain('opacity');
   });
 
@@ -1570,20 +1572,20 @@ describe('EnvPortForwardsPage', () => {
 
     const drawer = host.querySelector<HTMLElement>('[data-testid="env-app-drawer-mock"]')!;
     expect(drawer.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(1);
-    expect(drawer.textContent).toContain('Redeven built-in');
-    expect(drawer.textContent).toContain('Host deployment');
+    expect(controlText(drawer)).toContain('Redeven built-in');
+    expect(controlText(drawer)).toContain('Host deployment');
     expect(drawer.querySelector('[data-template-kind="host"]')).toBeTruthy();
-    expect(drawer.textContent).toContain('Ready to deploy');
-    expect(Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).some((button) => button.textContent?.trim() === 'Cancel')).toBe(false);
+    expect(controlText(drawer)).toContain('Ready to deploy');
+    expect(Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).some((button) => controlText(button)?.trim() === 'Cancel')).toBe(false);
 
     const newHostTemplate = Array.from(drawer.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'New host template');
+      .find((button) => controlText(button)?.trim() === 'New host template');
     newHostTemplate?.click();
     await flushPage();
-    expect(drawer.querySelector('h2')?.textContent).toBe('New service template');
-    expect(drawer.textContent).toContain('Install script');
-    expect(drawer.querySelector('[data-testid="host-lifecycle-plan-pending"]')?.textContent).toContain('Save the template to let the Runtime validate and publish its read-only execution plan.');
-    expect(drawer.textContent).toContain('Save template');
+    expect(controlText(drawer.querySelector('h2'))).toBe('New service template');
+    expect(controlText(drawer)).toContain('Install script');
+    expect(controlText(drawer.querySelector('[data-testid="host-lifecycle-plan-pending"]'))).toContain('Save the template to let the Runtime validate and publish its read-only execution plan.');
+    expect(controlText(drawer)).toContain('Save template');
     expect(drawer.querySelector<HTMLInputElement>('[data-template-field="name"]')?.placeholder).toBe('Team dashboard');
     expect(drawer.querySelector<HTMLTextAreaElement>('[data-template-field="startScript"]')?.placeholder).toContain('REDEVEN_SERVICE_PORT');
     expect(drawer.querySelector('label[for="template-editor-name"]')?.textContent).toContain('*');
@@ -1593,7 +1595,7 @@ describe('EnvPortForwardsPage', () => {
     startScript.value = '';
     startScript.dispatchEvent(new InputEvent('input', { bubbles: true }));
 
-    Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save template')?.click();
+    Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Save template')?.click();
     await flushPage();
     expect(drawer.querySelector('[data-template-field="name"]')?.getAttribute('aria-invalid')).toBe('true');
     expect(drawer.querySelector('[data-template-field="startScript"]')?.getAttribute('aria-invalid')).toBe('true');
@@ -1628,13 +1630,13 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="managed-workspace-picker-trigger"]')?.click();
     await flushPage();
     expect(host.querySelector('[data-testid="managed-workspace-picker-mock"]')?.getAttribute('data-initial-path')).toBe('/Users/demo');
-    expect(host.textContent).toContain('This directory will be created when deployment begins.');
+    expect(controlText(host)).toContain('This directory will be created when deployment begins.');
     host.querySelector<HTMLButtonElement>('[data-testid="managed-workspace-picker-mock"] button')?.click();
     await flushPage();
     expect(workspace?.dataset.path).toBe('/Users/demo/Projects/Focused App');
-    expect(host.textContent).toContain('The service can read and modify the selected folder.');
+    expect(controlText(host)).toContain('The service can read and modify the selected folder.');
 
-    const restore = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Restore recommended workspace'));
+    const restore = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.includes('Restore recommended workspace'));
     restore?.click();
     await flushPage();
     expect(workspace?.dataset.path).toBe(template.default_workspace_path);
@@ -1691,30 +1693,30 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
     await flushPage();
 
     expect(host.querySelector('[data-template-id="example-desktop-a"] [data-template-kind="container"]')).toBeTruthy();
     expect(host.querySelector('[data-template-id="example-desktop-b"] [data-template-kind="container"]')).toBeTruthy();
-    expect(host.querySelector('[data-template-id="example-desktop-a"]')?.textContent).toContain('Example Desktop A');
-    expect(host.querySelector('[data-template-id="example-desktop-b"]')?.textContent).toContain('Example Desktop B');
+    expect(controlText(host.querySelector('[data-template-id="example-desktop-a"]'))).toContain('Example Desktop A');
+    expect(controlText(host.querySelector('[data-template-id="example-desktop-b"]'))).toContain('Example Desktop B');
     const templateDetails = host.querySelector('[data-testid="service-template-details"]')!;
-    expect(templateDetails.textContent).toContain('lscr.io/example/desktop@sha256:ubuntu');
-    expect(templateDetails.textContent).toContain('${WORKSPACE} → /workspace');
-    expect(templateDetails.textContent).toContain('1 GiB');
+    expect(controlText(templateDetails)).toContain('lscr.io/example/desktop@sha256:ubuntu');
+    expect(controlText(templateDetails)).toContain('${WORKSPACE} → /workspace');
+    expect(controlText(templateDetails)).toContain('1 GiB');
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
     await flushPage();
 
-    expect(host.textContent).toContain('Container root access and outbound network');
-    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review installation');
+    expect(controlText(host)).toContain('Container root access and outbound network');
+    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Review installation');
     expect(install?.disabled).toBe(true);
     host.querySelector<HTMLInputElement>('[data-testid="managed-template-notices"] input[type="checkbox"]')?.click();
     await flushPage();
     expect(install?.disabled).toBe(false);
-    expect(host.querySelector('[data-testid="managed-release-risk-hints"]')?.textContent).toContain('cannot be ordered safely');
+    expect(controlText(host.querySelector('[data-testid="managed-release-risk-hints"]'))).toContain('cannot be ordered safely');
     expect(host.querySelector('[data-testid="managed-release-risk-hints"] input[type="checkbox"]')).toBeNull();
     install?.click();
-    await waitForAssertion(() => expect(install?.textContent).toContain('Install and start'));
+    await waitForAssertion(() => expect(controlText(install)).toContain('Install and start'));
     install?.click();
 
     await waitForAssertion(() => expect(createBody).toMatchObject({
@@ -1776,34 +1778,34 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
     await flushPage();
 
-    const chooseVersion = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Choose version');
+    const chooseVersion = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Choose version');
     chooseVersion?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeTruthy());
     const staleButton = host.querySelector<HTMLButtonElement>('[data-release-id="stale-recommendation"]')!;
-    const deploySelected = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Deploy selected version');
+    const deploySelected = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Deploy selected version');
     expect(staleButton.disabled).toBe(true);
     expect(deploySelected?.disabled).toBe(true);
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Cancel')?.click();
     await flushPage();
 
-    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review installation');
+    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Review installation');
     expect(install?.disabled).toBe(true);
-    expect(host.textContent).toContain('The recommended release is unavailable. Refresh and choose an available release.');
+    expect(controlText(host)).toContain('The recommended release is unavailable. Refresh and choose an available release.');
 
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Choose version')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Choose version')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-release-id="verified-release"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('[data-release-id="verified-release"]')?.click();
     await flushPage();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Deploy selected version')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Deploy selected version')?.click();
     await flushPage();
     expect(install?.disabled).toBe(false);
     install?.click();
-    await waitForAssertion(() => expect(install?.textContent).toContain('Install and start'));
+    await waitForAssertion(() => expect(controlText(install)).toContain('Install and start'));
     install?.click();
     await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith(
       'Failed to add service',
@@ -1868,18 +1870,18 @@ describe('EnvPortForwardsPage', () => {
       await flushPage();
       host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
       await flushPage();
-      Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
       await flushPage();
       host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
       await flushPage();
 
-      const review = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review installation');
+      const review = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Review installation');
       review?.click();
-      await waitForAssertion(() => expect(review?.textContent).toContain('Install and start'));
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim().startsWith('Install'))?.click();
+      await waitForAssertion(() => expect(controlText(review)).toContain('Install and start'));
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim().startsWith('Install'))?.click();
 
       await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-services', expect.objectContaining({ method: 'POST' })));
-      const closeDrawer = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Close');
+      const closeDrawer = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Close');
       expect(closeDrawer?.disabled).toBe(false);
       closeDrawer?.click();
       await flushMicrotasks();
@@ -1890,7 +1892,7 @@ describe('EnvPortForwardsPage', () => {
 
       await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-background-install"]')).toBeTruthy());
       const serviceRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
-      expect(serviceRow.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('2/5 layers');
+      expect(controlText(serviceRow.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('2/5 layers');
       expect(serviceRow.querySelectorAll('[data-testid="managed-operation-disclosure"]')).toHaveLength(1);
       expect(streamSignal?.aborted).toBe(false);
       expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([url]) => String(url).includes('/cancel'))).toBe(false);
@@ -1900,9 +1902,9 @@ describe('EnvPortForwardsPage', () => {
       streamController?.close();
       await waitForAssertion(() => {
         const updatedRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
-        expect(updatedRow.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Completed');
+        expect(controlText(updatedRow.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('Completed');
         expect(updatedRow.querySelector('[data-testid="managed-operation-disclosure"]')?.getAttribute('data-presentation-state')).toBe('visible');
-        expect(updatedRow.textContent).toContain('Running');
+        expect(controlText(updatedRow)).toContain('Running');
       });
       expect(openWindow).not.toHaveBeenCalled();
     } finally {
@@ -1968,12 +1970,12 @@ describe('EnvPortForwardsPage', () => {
     expect(operationBody).toBeNull();
     expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeTruthy();
     expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(1);
-    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Review update plan'))).toBe(false);
+    expect(Array.from(host.querySelectorAll('button')).some((button) => controlText(button)?.includes('Review update plan'))).toBe(false);
     const update = host.querySelector<HTMLButtonElement>('[data-testid="managed-release-submit"]');
     expect(update?.disabled).toBe(true);
     const planChecks = host.querySelectorAll<HTMLInputElement>('[data-testid="managed-update-plan"] input[type="checkbox"]');
     expect(planChecks).toHaveLength(1);
-    expect(host.querySelector('[data-testid="managed-release-risk-hints"]')?.textContent).toContain('not the version recommended by Redeven');
+    expect(controlText(host.querySelector('[data-testid="managed-release-risk-hints"]'))).toContain('not the version recommended by Redeven');
     planChecks.forEach((checkbox) => checkbox.click());
     await flushPage();
     expect(update?.disabled).toBe(false);
@@ -1986,7 +1988,7 @@ describe('EnvPortForwardsPage', () => {
       accepted_notice_revisions: { 'interactive-desktop-root-and-network': 2 },
     }));
     expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeNull();
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Update'));
+    await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('Update'));
     expect(host.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
     streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-desktop-update', service_id: 'mws-desktop', action: 'update', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`));
     streamController?.close();
@@ -2016,8 +2018,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-version"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-candidates"]')?.textContent).toContain('Redeven could not read the container engine’s saved registry credentials.'));
-    expect(host.textContent).not.toContain('Container Registry credentials could not be read from the current engine store.');
+    await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-release-candidates"]'))).toContain('Redeven could not read the container engine’s saved registry credentials.'));
+    expect(controlText(host)).not.toContain('Container Registry credentials could not be read from the current engine store.');
   });
 
   it('keeps short request feedback visible while refreshing a stale snapshot without hiding cached releases', async () => {
@@ -2055,7 +2057,7 @@ describe('EnvPortForwardsPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 180));
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeNull());
     expect(host.querySelector('[data-release-id="cached-release"]')).toBeTruthy();
-    const refreshButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => button.textContent?.trim() === 'Refresh');
+    const refreshButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => controlText(button)?.trim() === 'Refresh');
     expect(refreshButton?.disabled).toBe(false);
   });
 
@@ -2084,7 +2086,7 @@ describe('EnvPortForwardsPage', () => {
       () => host.querySelector<HTMLButtonElement>('[data-testid="env-app-drawer-overlay"]')?.click(),
       () => host.querySelector<HTMLButtonElement>('[data-testid="env-app-drawer-close"]')?.click(),
       () => host.querySelector<HTMLElement>('[data-testid="env-app-drawer-mock"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
-      () => Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => button.textContent?.trim() === 'Cancel')?.click(),
+      () => Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => controlText(button)?.trim() === 'Cancel')?.click(),
     ];
     for (const close of closeActions) {
       host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
@@ -2096,7 +2098,7 @@ describe('EnvPortForwardsPage', () => {
       await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull());
       expect(signal?.aborted).toBe(true);
     }
-    expect(host.textContent).not.toContain('could not load available versions');
+    expect(controlText(host)).not.toContain('could not load available versions');
   });
 
   it('ignores a late release response after closing and opening another service', async () => {
@@ -2129,16 +2131,16 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-release-first"]')).toBeTruthy());
     host.querySelector<HTMLElement>('[data-managed-service-id="mws-release-first"]')?.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeTruthy());
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => button.textContent?.trim() === 'Cancel')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => controlText(button)?.trim() === 'Cancel')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull());
 
     host.querySelector<HTMLElement>('[data-managed-service-id="mws-release-second"]')?.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')?.textContent).toContain('2.0.0'));
+    await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-release-drawer-body"]'))).toContain('2.0.0'));
     late.resolve(releaseResult('1.0.0', 'candidate-first'));
     await flushPage();
     const drawer = host.querySelector<HTMLElement>('[data-testid="managed-release-drawer-body"]');
-    expect(drawer?.textContent).toContain('2.0.0');
-    expect(drawer?.textContent).not.toContain('1.0.0');
+    expect(controlText(drawer)).toContain('2.0.0');
+    expect(controlText(drawer)).not.toContain('1.0.0');
   });
 
   it('does not offer an update plan when no different application release is selected', async () => {
@@ -2162,7 +2164,7 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
     await flushPage();
     expect(host.querySelector('[data-testid="managed-release-keep-current"]')).toBeNull();
-    expect(host.textContent).toContain('Choose a different version to update this service.');
+    expect(controlText(host)).toContain('Choose a different version to update this service.');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-release-submit"]')?.disabled).toBe(true);
   });
 
@@ -2204,8 +2206,8 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
     const row = host.querySelector('[data-template-id="git_locale"]');
-    expect(row?.textContent).toContain('示例服务');
-    expect(row?.textContent).not.toContain('Metadata name');
+    expect(controlText(row)).toContain('示例服务');
+    expect(controlText(row)).not.toContain('Metadata name');
   });
 
   it('duplicates a built-in service template as an independent custom template', async () => {
@@ -2228,7 +2230,7 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     document.querySelector<HTMLButtonElement>('button[title="Duplicate"]')?.click();
     await flushPage();
-    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Duplicate' && !button.title);
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Duplicate' && !button.title);
     confirm?.click();
 
     await waitForAssertion(() => expect(duplicateBody).toMatchObject({ name: 'Example Service · Host copy' }));
@@ -2278,13 +2280,13 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     document.querySelector<HTMLButtonElement>('button[title="Edit template"]')?.click();
     await flushPage();
-    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('<managed-node> <managed-npm-cli> install @example/service-cli@0.1.1-rc.2 --package-lock=false --ignore-scripts');
-    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('Uses the editable command below.');
-    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).not.toContain('<template-start-script>');
-    expect(document.querySelector('label[for="template-editor-install-script"]')?.textContent).toContain('After-install hook');
-    expect(document.querySelector('#template-editor-install-script-help')?.textContent).toContain('No additional command configured.');
+    expect(controlText(document.querySelector('[data-testid="host-lifecycle-plan"]'))).toContain('<managed-node> <managed-npm-cli> install @example/service-cli@0.1.1-rc.2 --package-lock=false --ignore-scripts');
+    expect(controlText(document.querySelector('[data-testid="host-lifecycle-plan"]'))).toContain('Uses the editable command below.');
+    expect(controlText(document.querySelector('[data-testid="host-lifecycle-plan"]'))).not.toContain('<template-start-script>');
+    expect(controlText(document.querySelector('label[for="template-editor-install-script"]'))).toContain('After-install hook');
+    expect(controlText(document.querySelector('#template-editor-install-script-help'))).toContain('No additional command configured.');
     expect((document.querySelector('#template-editor-start-script') as HTMLTextAreaElement | null)?.value).toContain('--no-open');
-    const save = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save template');
+    const save = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Save template');
     save?.click();
 
     await waitForAssertion(() => expect(updateBody?.spec?.host?.npm).toEqual({ package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }));
@@ -2312,13 +2314,13 @@ describe('EnvPortForwardsPage', () => {
 
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
-      await waitForAssertion(() => expect(host.textContent).toContain('Pulling image'));
+      await waitForAssertion(() => expect(controlText(host)).toContain('Pulling image'));
       const trigger = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
       expect(trigger).toBeTruthy();
-      expect(host.textContent).not.toContain('Error');
+      expect(controlText(host)).not.toContain('Error');
       trigger.click();
-      expect(host.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/example-service');
-      const cancel = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation');
+      expect(controlText(host.querySelector('[data-testid="managed-operation-artifact"]'))).toContain('ghcr.io/runzhliu/example-service');
+      const cancel = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Cancel operation');
       expect(cancel).toBeTruthy();
       cancel?.click();
       await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-service-operations/mop-active/cancel', { method: 'POST' }));
@@ -2370,7 +2372,7 @@ describe('EnvPortForwardsPage', () => {
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-stable-details"]')).toBeTruthy());
-      const start = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Start')!;
+      const start = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Start')!;
       start.click();
       await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeTruthy());
       host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!.click();
@@ -2378,9 +2380,9 @@ describe('EnvPortForwardsPage', () => {
 
       listedOperation = acceptedOperation;
       operationRequest.resolve(acceptedOperation);
-      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-operation-output"]')?.textContent).toContain('server preparation started'));
+      await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-operation-output"]'))).toContain('server preparation started'));
       expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
-      expect(host.querySelector('[data-testid="managed-operation-command-output"]')?.textContent).toContain('<managed-executable> serve');
+      expect(controlText(host.querySelector('[data-testid="managed-operation-command-output"]'))).toContain('<managed-executable> serve');
       const stableRow = host.querySelector('[data-managed-service-id="mws-stable-details"]');
       const stableDisclosure = host.querySelector('[data-testid="managed-operation-disclosure"]');
 
@@ -2398,7 +2400,7 @@ describe('EnvPortForwardsPage', () => {
         },
       };
       streamControllers.get(acceptedOperation.operation_id)!.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(secondSnapshot)}\n\n`));
-      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-operation-output"]')?.textContent).toContain('waiting for health check'));
+      await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-operation-output"]'))).toContain('waiting for health check'));
       expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
 
       host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!.click();
@@ -2445,7 +2447,7 @@ describe('EnvPortForwardsPage', () => {
       const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="managed-service-row"]'));
       const firstRow = rows.find((row) => row.dataset.managedServiceId === 'mws-one')!;
       firstRow.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
-      expect(firstRow.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('example-service');
+      expect(controlText(firstRow.querySelector('[data-testid="managed-operation-artifact"]'))).toContain('example-service');
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('data-indeterminate')).toBe('true');
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBeNull();
       expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeNull();
@@ -2505,7 +2507,7 @@ describe('EnvPortForwardsPage', () => {
       await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-row"]')).toHaveLength(2));
       for (const serviceID of ['mws-first', 'mws-second']) {
         Array.from(host.querySelectorAll<HTMLButtonElement>(`[data-managed-service-id="${serviceID}"] button`))
-          .find((button) => button.textContent?.trim() === 'Start')?.click();
+          .find((button) => controlText(button)?.trim() === 'Start')?.click();
       }
       await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-operation-trigger"]')).toHaveLength(2));
       await waitForAssertion(() => {
@@ -2522,7 +2524,7 @@ describe('EnvPortForwardsPage', () => {
       await waitForAssertion(() => {
         const triggers = host.querySelectorAll('[data-testid="managed-service-operation-trigger"]');
         expect(triggers).toHaveLength(2);
-        for (const trigger of triggers) expect(trigger.textContent).toContain('Completed');
+        for (const trigger of triggers) expect(controlText(trigger)).toContain('Completed');
       });
     } finally {
       dispose();
@@ -2549,16 +2551,16 @@ describe('EnvPortForwardsPage', () => {
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-retry"]')).toBeTruthy());
-      Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Start')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => controlText(button)?.trim() === 'Start')?.click();
       await flushMicrotasks();
 
       const submitting = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
-      expect(submitting.textContent).toContain('Submitting request');
-      expect(submitting.textContent).toContain('0/3');
-      expect(host.querySelector('[data-managed-service-id="mws-retry"]')?.textContent).not.toContain('Error');
+      expect(controlText(submitting)).toContain('Submitting request');
+      expect(controlText(submitting)).toContain('0/3');
+      expect(controlText(host.querySelector('[data-managed-service-id="mws-retry"]'))).not.toContain('Error');
 
       operationRequest.resolve(running);
-      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Pulling image'));
+      await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('Pulling image'));
     } finally {
       dispose();
     }
@@ -2598,15 +2600,15 @@ describe('EnvPortForwardsPage', () => {
 
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-settings"]')).toBeTruthy());
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-settings"] button')).find((button) => button.textContent?.trim() === 'Settings')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-settings"] button')).find((button) => controlText(button)?.trim() === 'Settings')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-settings"]')).toBeTruthy());
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Parameters')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Parameters')?.click();
     const entrypoint = host.querySelector<HTMLInputElement>('input[placeholder="/usr/local/bin/start"]')!;
     entrypoint.value = '/usr/local/bin/dashboard';
     entrypoint.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review changes')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Review changes')?.click();
     await waitForAssertion(() => expect(preflightBody).toMatchObject({ configuration_revision: 3, runtime: { container: { entrypoint: '/usr/local/bin/dashboard' } } }));
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Apply configuration')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Apply configuration')?.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'reconfigure', reconfigure: { plan_digest: 'exact-plan', draft: { configuration_revision: 3 } } }));
     expect(host.querySelector('[data-testid="managed-service-settings"]')).toBeNull();
     await waitForAssertion(() => expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-reconfigure/events'), expect.objectContaining({ method: 'GET', priority: 'low' })));
@@ -2627,10 +2629,10 @@ describe('EnvPortForwardsPage', () => {
 
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-retry"]')).toBeTruthy());
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Start')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => controlText(button)?.trim() === 'Start')?.click();
 
     await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith('Failed to start service', 'The image registry is unavailable. Check the network connection, then retry.'));
-    expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Failed');
+    expect(controlText(host.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('Failed');
     expect(host.querySelector('[data-testid="managed-operation-disclosure"]')?.getAttribute('data-presentation-state')).toBe('visible');
     expect(notificationMocks.error).not.toHaveBeenCalledWith('Failed to open service', expect.anything());
   });
@@ -2658,7 +2660,7 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy());
     await flushPage();
-    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => button.textContent?.trim() === 'Keep data and complete uninstall').at(-1)!;
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => controlText(button)?.trim() === 'Keep data and complete uninstall').at(-1)!;
     await waitForAssertion(() => expect(confirm.disabled).toBe(false));
     confirm.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
@@ -2691,10 +2693,10 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy());
     const drawer = host.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
-    const label = Array.from(drawer.querySelectorAll('label')).find((item) => item.textContent?.includes('Delete service data'))!;
+    const label = Array.from(drawer.querySelectorAll('label')).find((item) => controlText(item)?.includes('Delete service data'))!;
     label.querySelector<HTMLInputElement>('input')?.click();
     await flushPage();
-    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => button.textContent?.trim() === 'Uninstall').at(-1)!;
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => controlText(button)?.trim() === 'Uninstall').at(-1)!;
     await waitForAssertion(() => expect(confirm.disabled).toBe(false));
     confirm.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
@@ -2732,10 +2734,10 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy());
     const drawer = host.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
-    const label = Array.from(drawer.querySelectorAll('label')).find((item) => item.textContent?.includes('Delete workspace'))!;
+    const label = Array.from(drawer.querySelectorAll('label')).find((item) => controlText(item)?.includes('Delete workspace'))!;
     label.querySelector<HTMLInputElement>('input')?.click();
     await flushPage();
-    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => button.textContent?.trim() === 'Uninstall').at(-1)!;
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => controlText(button)?.trim() === 'Uninstall').at(-1)!;
     await waitForAssertion(() => expect(confirm.disabled).toBe(false));
     confirm.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
@@ -2747,9 +2749,9 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    expect(host.textContent).toContain('Web Services');
-    expect(host.textContent).toContain('Add Service');
-    expect(host.textContent).not.toContain('Port Forwards');
+    expect(controlText(host)).toContain('Web Services');
+    expect(controlText(host)).toContain('Add Service');
+    expect(controlText(host)).not.toContain('Port Forwards');
   });
 
   it('explains an unsupported saved service target without a destructive error state', async () => {
@@ -2766,7 +2768,7 @@ describe('EnvPortForwardsPage', () => {
     const input = host.querySelector<HTMLInputElement>('[data-testid="web-service-dialog-target"]');
     const guidance = host.querySelector<HTMLElement>('[data-testid="web-service-dialog-target-guidance"]');
     expect(input).toBeTruthy();
-    expect(guidance?.textContent).toContain('loopback address');
+    expect(controlText(guidance)).toContain('loopback address');
 
     if (input) {
       input.value = 'baidu.com';
@@ -2780,11 +2782,11 @@ describe('EnvPortForwardsPage', () => {
     expect(guidance?.getAttribute('role')).toBe('alert');
     expect(guidance?.className).toContain('border-warning/25');
     expect(guidance?.className).not.toContain('text-destructive');
-    expect(guidance?.textContent).toContain('Available only inside this Environment');
-    expect(guidance?.textContent).toContain('Public websites and LAN addresses');
-    expect(guidance?.textContent).toContain('127.0.0.1');
+    expect(controlText(guidance)).toContain('Available only inside this Environment');
+    expect(controlText(guidance)).toContain('Public websites and LAN addresses');
+    expect(controlText(guidance)).toContain('127.0.0.1');
     const dialogAddButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'Add Service');
+      .find((button) => controlText(button)?.trim() === 'Add Service');
     expect(dialogAddButton?.disabled).toBe(true);
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
       '/_redeven_proxy/api/forwards',
@@ -2844,8 +2846,8 @@ describe('EnvPortForwardsPage', () => {
       });
       expect(assign).toHaveBeenCalledWith('https://localhost/pf/temporary-1/docs?tab=api');
       expect(addressInput?.value).toBe('http://localhost:3000/docs?tab=api');
-      expect(host.textContent).toContain('Temporary');
-      expect(host.textContent).toContain('Save service');
+      expect(controlText(host)).toContain('Temporary');
+      expect(controlText(host)).toContain('Save service');
     });
   });
 
@@ -2856,8 +2858,8 @@ describe('EnvPortForwardsPage', () => {
 
     const input = host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]');
     const guidance = host.querySelector<HTMLElement>('[data-testid="web-service-address-guidance"]');
-    expect(guidance?.textContent).toContain('Local services only');
-    expect(guidance?.textContent).toContain('loopback address');
+    expect(controlText(guidance)).toContain('Local services only');
+    expect(controlText(guidance)).toContain('loopback address');
 
     if (input) {
       input.value = 'baidu.com';
@@ -2872,8 +2874,8 @@ describe('EnvPortForwardsPage', () => {
     expect(guidance?.getAttribute('role')).toBe('alert');
     expect(guidance?.className).toContain('border-warning/25');
     expect(guidance?.className).not.toContain('text-destructive');
-    expect(guidance?.textContent).toContain('Available only inside this Environment');
-    expect(guidance?.textContent).toContain('127.0.0.1');
+    expect(controlText(guidance)).toContain('Available only inside this Environment');
+    expect(controlText(guidance)).toContain('127.0.0.1');
     expect(openWindow).not.toHaveBeenCalled();
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
       '/_redeven_proxy/api/forward-sessions',
@@ -2906,11 +2908,11 @@ describe('EnvPortForwardsPage', () => {
     addressInput.value = '3000/967d185dad?view=details#section';
     addressInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
     host.querySelector<HTMLFormElement>('[data-testid="web-service-address-form"]')?.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
-    await waitForAssertion(() => expect(host.textContent).toContain('Save service'));
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save service')?.click();
+    await waitForAssertion(() => expect(controlText(host)).toContain('Save service'));
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Save service')?.click();
     await flushPage();
 
-    expect(host.textContent).toContain('Save Web Service');
+    expect(controlText(host)).toContain('Save Web Service');
     const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
     expect(target.value).toBe('http://localhost:3000/967d185dad?view=details#section');
     if (edited) {
@@ -2921,8 +2923,8 @@ describe('EnvPortForwardsPage', () => {
     expect(name.value).toBe('localhost:3000');
     name.value = 'Local documentation';
     name.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    const dialog = Array.from(host.querySelectorAll('h2')).find((heading) => heading.textContent === 'Save Web Service')?.parentElement;
-    Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === 'Save service')?.click();
+    const dialog = Array.from(host.querySelectorAll('h2')).find((heading) => controlText(heading) === 'Save Web Service')?.parentElement;
+    Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => controlText(button)?.trim() === 'Save service')?.click();
 
     await waitForAssertion(() => expect(saveBody).toEqual({ target: edited ? '4173/edited?mode=full#content' : 'http://localhost:3000/967d185dad?view=details#section', name: 'Local documentation', description: '', access_mode: 'unified_proxy' }));
   });
@@ -2939,8 +2941,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-testid="port-forward-row"]')).toBeTruthy());
     const row = host.querySelector('[data-testid="port-forward-row"]')!;
-    expect(row.textContent).toContain('http://localhost:3000/967d185dad?view=details#section');
-    Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Open')?.click();
+    expect(controlText(row)).toContain('http://localhost:3000/967d185dad?view=details#section');
+    Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Open')?.click();
     await waitForAssertion(() => expect(assign).toHaveBeenCalled());
     expect(String(assign.mock.calls[0][0])).toContain('/967d185dad?view=details#section');
   });
@@ -2972,7 +2974,7 @@ describe('EnvPortForwardsPage', () => {
     const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;
     name.value = 'Renamed dashboard';
     name.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Save changes')?.click();
 
     await waitForAssertion(() => expect(updateBody).toEqual({ target: 'http://127.0.0.1:4173', name: 'Renamed dashboard', description: 'Browser preview', access_mode: 'unified_proxy' }));
   });

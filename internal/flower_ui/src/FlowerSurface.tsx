@@ -1,3 +1,11 @@
+import {
+  StableText,
+  Button,
+  ConfirmDialog,
+  Dialog,
+  DialogPlacementProvider,
+  SurfaceFloatingLayer,
+} from '@floegence/floe-webapp-core/ui';
 import { FlowerActivityRows } from './FlowerActivityRows';
 import { FlowerComputerConnections, type FlowerRequestedComputerAccess } from './FlowerComputerConnections';
 import { computerAssistance, computerAssistanceFromError, type ComputerAssistanceObservation } from './computerAssistance';
@@ -16,7 +24,6 @@ import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, cr
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
-import { Button, ConfirmDialog, Dialog, DialogPlacementProvider, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { createInputHistoryController, type InputHistoryEntry } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -6252,9 +6259,7 @@ webSearch: model.web_search,
           >
             <Shield class="flower-permission-icon" />
             <span class="flower-permission-label">{permissionLabel()}</span>
-            <Show when={permissionPatchPending()}>
-              <span class="flower-permission-saving-dot" aria-hidden="true" />
-            </Show>
+            <span class="flower-permission-saving-dot" aria-hidden="true" style={{ visibility: permissionPatchPending() ? 'visible' : 'hidden' }} />
           </button>
         </Show>
         <Show when={permissionMenuOpen()}>
@@ -12143,7 +12148,7 @@ webSearch: model.web_search,
                 disabled={renameSaving() || renameUnchanged()}
                 onClick={() => void submitRename()}
               >
-                {renameSaving() ? copy().threadList.saving : copy().threadList.save}
+                <StableText reserve={[copy().threadList.saving, copy().threadList.save]}>{renameSaving() ? copy().threadList.saving : copy().threadList.save}</StableText>
               </button>
             </div>
           </div>

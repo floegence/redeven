@@ -1,5 +1,5 @@
+import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerChromeDiagnostic, FlowerChromeStatus, FlowerComputerExtensionSetup, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
 
@@ -128,7 +128,7 @@ export function FlowerChromeConnection(props: {
         <p class="flower-body-copy leading-relaxed text-muted-foreground">{props.reuseConnected ? props.copy.setupConfirmHint : props.copy.pairingConfirmHint}</p>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('install')}>{props.copy.setupBack}</Button>
-          <Show when={manualDesktop()} fallback={<Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>}><Button onClick={copyConnection}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</Button></Show>
+          <Show when={manualDesktop()} fallback={<Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>}><Button onClick={copyConnection}><StableText reserve={[props.copy.chromeConnectionLinkCopied, props.copy.chromeCopyConnectionLink]}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</StableText></Button></Show>
         </div>
       </>}>
         <Show when={extensionsOpened()} fallback={<p class="flower-body-copy leading-relaxed text-muted-foreground">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p>}><div class="space-y-4">
@@ -177,13 +177,13 @@ export function FlowerChromeConnection(props: {
         <div class="mt-3 space-y-3 leading-relaxed">
           <p>{props.copy.setupHostHint}</p>
           <p>{props.copy.setupLabelsHint}</p>
-          <Show when={manualDesktop()}><label class="block space-y-1">{props.copy.chromeConnectionPage}<input ref={connectionInput} class="flower-settings-text-input w-full" readOnly value={connectionURL()} onFocus={event => event.currentTarget.select()} /></label><Button size="sm" variant="ghost" onClick={copyConnection}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</Button></Show>
+          <Show when={manualDesktop()}><label class="block space-y-1">{props.copy.chromeConnectionPage}<input ref={connectionInput} class="flower-settings-text-input w-full" readOnly value={connectionURL()} onFocus={event => event.currentTarget.select()} /></label><Button size="sm" variant="ghost" onClick={copyConnection}><StableText reserve={[props.copy.chromeConnectionLinkCopied, props.copy.chromeCopyConnectionLink]}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</StableText></Button></Show>
           <label class="block space-y-1">{props.copy.extensionPath}<input ref={pathInput} class="flower-settings-text-input w-full" readOnly value={setup()!.extension_path} onFocus={event => event.currentTarget.select()} /></label>
           <Button size="sm" variant="ghost" onClick={() => {
             void navigator.clipboard.writeText(setup()!.extension_path).then(() => { if (!disposed) setCopied(true); }, () => {
               if (!disposed) { pathInput?.focus(); pathInput?.select(); }
             });
-          }}>{copied() ? props.copy.pathCopied : props.copy.copyExtensionPath}</Button>
+          }}><StableText reserve={[props.copy.pathCopied, props.copy.copyExtensionPath]}>{copied() ? props.copy.pathCopied : props.copy.copyExtensionPath}</StableText></Button>
         </div>
       </details>
     </Show>

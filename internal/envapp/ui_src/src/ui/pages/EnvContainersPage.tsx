@@ -1,3 +1,17 @@
+import {
+  StatusRegion,
+  Button,
+  DirectoryPicker,
+  Dropdown,
+  FileOpenPicker,
+  Input,
+  MonitoringChart,
+  Select,
+  Tabs,
+  Tag,
+  type DropdownItem,
+  type TabItem,
+} from '@floegence/floe-webapp-core/ui';
 import './container-operation-dialogs.css';
 import { createEnvCachedResource, createEnvResourceCollection, isResourceAuthorizationError } from '../services/envResourceCache';
 import { containerInventorySnapshot, containerRuntimeSnapshot, containerServiceSnapshot } from '../services/envResourceSnapshots';
@@ -41,7 +55,6 @@ import {
   XCircle,
 } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
-import { Button, DirectoryPicker, Dropdown, FileOpenPicker, Input, MonitoringChart, Select, Tabs, Tag, type DropdownItem, type TabItem } from '@floegence/floe-webapp-core/ui';
 
 import { REDEVEN_ENV_APP_BASE_PATH } from '../../build/envAppBasePath';
 import { Dialog } from '../primitives/EnvAppModal';
@@ -3687,11 +3700,12 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Button size="sm" variant="ghost" class="container-icon-action" onClick={closeContainerServices} aria-label={i18n.t('containers.detail.back')}><ArrowLeft class="h-4 w-4" /></Button>
         <div><h2>{i18n.t('containers.services.title')}</h2><p>{i18n.t('containers.services.description')}</p></div>
       </header>
+          <StatusRegion lines={4} class="text-xs"><Show when={containerServicesError() && containerServices().length > 0}>
+            <div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.services.loadFailed')}</strong><small>{containerServicesError()}</small></div><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>
+          </Show></StatusRegion>
       <Show when={!containerServicesInitialLoading()} fallback={renderContainerServicesSkeleton()}>
         <Show when={!containerServicesError() || containerServices().length > 0} fallback={<div class="container-engine-state" role="alert"><AlertTriangle class="h-6 w-6" /><strong>{i18n.t('containers.services.loadFailed')}</strong><p>{containerServicesError()}</p><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>}>
-          <Show when={containerServicesError() && containerServices().length > 0}>
-            <div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.services.loadFailed')}</strong><small>{containerServicesError()}</small></div><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>
-          </Show>
+
           <div class="container-services-grid" data-refreshing={containerServicesLoading() ? 'true' : 'false'}>
             <For each={containerServices().map(service => service.service_id)}>{(serviceID) => {
               const service = () => servicesByID().get(serviceID)!;
@@ -3727,7 +3741,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   return (
     <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-env-reload-state={servicesOpen() ? servicesResource.data() !== undefined ? 'content' : containerServicesError() ? 'error' : 'pending' : readyConsole() ? 'content' : loading() ? 'pending' : 'error'} data-variant={props.variant ?? 'activity'} data-resource-view={view()}>
-      <Show when={readyConsole()?.refreshError}><div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><small>{readyConsole()?.refreshError}</small><Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}>{i18n.t('containers.actions.retry')}</Button></div></Show>
+      <StatusRegion lines={3} class="text-xs"><Show when={readyConsole()?.refreshError}><div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><small>{readyConsole()?.refreshError}</small><Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}>{i18n.t('containers.actions.retry')}</Button></div></Show></StatusRegion>
       <ContainersHeader controls={<>
 
             <Button size="sm" variant="ghost" class="container-icon-action container-services-entry" onClick={openContainerServices} aria-label={i18n.t('containers.services.title')} title={i18n.t('containers.services.title')} aria-pressed={servicesOpen()}>

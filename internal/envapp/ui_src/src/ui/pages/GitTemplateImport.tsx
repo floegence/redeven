@@ -352,10 +352,9 @@ export function GitTemplateImport(props: {
                 (preview() ? fileLoading() || !preview()?.changed : !!catalog() && selectedPath() === undefined)
               }
               onClick={advance}
+              loading={busy()}
+              icon={ArrowRight}
             >
-              <Show when={busy()}>
-                <Loader2 class="size-3.5 animate-spin" />
-              </Show>
               {i18n.t(
                 preview()
                   ? preview()?.expected_sha256
@@ -367,9 +366,6 @@ export function GitTemplateImport(props: {
                       ? 'webServices.sources.check'
                       : 'webServices.sources.findTemplates',
               )}
-              <Show when={!preview() && !busy()}>
-                <ArrowRight class="size-3.5 shrink-0" />
-              </Show>
             </Button>
           </div>
         </div>
