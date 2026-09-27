@@ -59,12 +59,21 @@ func discoverInstallations(platform, home string, lookup func(string) (string, e
 	}
 	add("google_chrome", "Google Chrome", chrome, filepath.Join(home, ".config/google-chrome/NativeMessagingHosts"), "", err == nil)
 	snap := exists("/snap/chromium/current/meta/snap.yaml") && exists("/snap/bin/chromium")
-	native, nativeErr := lookup("chromium")
-	if nativeErr != nil && !snap {
-		native, nativeErr = lookup("chromium-browser")
+	var native string
+	for _, name := range []string{"chromium", "chromium-browser"} {
+		candidate, err := lookup(name)
+		if err != nil || candidate == "/snap/bin/chromium" {
+			continue
+		}
+		// Ubuntu's transitional launcher can point to Snap. A separately
+		// installed native package keeps its own executable behind that launcher.
+		if snap && candidate == "/usr/bin/chromium-browser" && !exists("/usr/lib/chromium-browser/chromium-browser") {
+			continue
+		}
+		native = candidate
+		break
 	}
-	nativePresent := nativeErr == nil && native != "/snap/bin/chromium" && !(snap && native == "/usr/bin/chromium-browser")
-	add("chromium", "Chromium", native, filepath.Join(home, ".config/chromium/NativeMessagingHosts"), "", nativePresent)
+	add("chromium", "Chromium", native, filepath.Join(home, ".config/chromium/NativeMessagingHosts"), "", native != "")
 	common := filepath.Join(home, "snap/chromium/common")
 	add("chromium_snap", "Chromium (Snap)", "/snap/bin/chromium", filepath.Join(common, "chromium/NativeMessagingHosts"), common, snap)
 	return items
