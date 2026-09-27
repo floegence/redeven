@@ -34,16 +34,17 @@ describe('settingsStructure', () => {
     const labels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(new Set(labels).size).toBe(labels.length);
     expect(SETTINGS_NAV_ITEMS.map((item) => item.id)).toEqual(SETTINGS_SECTIONS.map((item) => item.id));
-    expect(SETTINGS_GROUPS.find((group) => group.id === 'overview')?.sections).toEqual(['config', 'connection', 'agent']);
-    expect(SETTINGS_GROUPS.find((group) => group.id === 'runtime_configuration')?.sections).toEqual(['runtime', 'codespaces', 'logging']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'overview')?.sections).toEqual(['connection', 'agent']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'runtime_configuration')?.sections).toEqual(['runtime', 'codespaces']);
     expect(SETTINGS_GROUPS.find((group) => group.id === 'ai_extensions')?.sections).toEqual(['ai', 'skills']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'diagnostics')?.sections).toEqual(['config', 'logging', 'debug_console']);
   });
 
   it('maps key sections into the expected groups', () => {
     expect(settingsGroupForSection('agent').id).toBe('overview');
     expect(settingsGroupForSection('runtime').id).toBe('runtime_configuration');
     expect(settingsGroupForSection('codespaces').id).toBe('runtime_configuration');
-    expect(settingsGroupForSection('logging').id).toBe('runtime_configuration');
+    expect(settingsGroupForSection('logging').id).toBe('diagnostics');
     expect(settingsGroupForSection('permission_policy').id).toBe('security');
     expect(settingsGroupForSection('ai').id).toBe('ai_extensions');
     expect(settingsGroupForSection('skills').id).toBe('ai_extensions');

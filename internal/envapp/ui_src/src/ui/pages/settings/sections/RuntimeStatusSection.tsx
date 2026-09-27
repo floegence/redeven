@@ -3,7 +3,7 @@ import { Activity, Cpu, RefreshIcon, ShieldCheck } from '@floegence/floe-webapp-
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, DotIndicator } from '../SettingsPrimitives';
+import { SettingsList, SettingsSection, SettingRow, DotIndicator } from '../SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../../i18n';
 import { ConfirmDialog } from '../../../primitives/EnvAppModal';
 import { runtimeServiceCompatibilityTone } from './helpers';
@@ -107,85 +107,29 @@ export function RuntimeStatusSection() {
         </>
       }
     >
-      {/* Metric cards */}
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div class={cn('rounded-xl border p-4', statusOnline() ? 'border-success/30 bg-success/5' : 'redeven-settings-inset')}>
-          <div class="flex items-center gap-2.5 mb-1">
-            <span class={cn('flex h-8 w-8 items-center justify-center rounded-lg', statusOnline() ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground')}>
-              <Activity class="h-4 w-4" />
-            </span>
-            <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{statusLabel()}</span>
-          </div>
-          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.statusLabel')}</div>
+      <SettingsList class="runtime-status-summary">
+        <SettingRow icon={Activity} title={i18n.t('runtimeStatus.statusLabel')} description={i18n.t('runtimeStatus.description')}
+          control={<span class={cn('font-medium', statusOnline() ? 'text-success' : 'text-warning')}>{statusLabel()}</span>} />
+        <SettingRow icon={Cpu} title={i18n.t('runtimeStatus.currentVersion')}
+          control={<code class="font-mono text-xs text-foreground">{version()}</code>} />
+        <SettingRow icon={ShieldCheck} title={i18n.t('runtimeStatus.compatibilityLabel')}
+          control={<span class={compatOk() ? 'text-success' : 'text-warning'}>{compatLabel()}</span>} />
+        <SettingRow title={i18n.t('runtimeStatus.latestVersion')}
+          control={<code class="font-mono text-xs text-foreground">{ctx.latestVersionLoading() ? i18n.t('runtimeStatus.loading') : latestVersion()}</code>} />
+        <SettingRow title={i18n.t('runtimeStatus.activeWork')} description={activeWorkSummary()} />
+        <SettingRow title={i18n.t('runtimeStatus.maintenanceAuthority')}
+          control={<span class="text-xs text-muted-foreground">{maintenanceAuthority()}</span>} />
+        <SettingRow title={i18n.t('runtimeStatus.runtimeProtocol')}
+          control={<code class="font-mono text-xs text-foreground">{ctx.runtimeService()?.protocolVersion || '—'}</code>} />
+        <SettingRow title={i18n.t('runtimeStatus.desktopModelSource')}
+          control={<DotIndicator active={desktopModelSourceActive(ctx.runtimeDesktopModelSourceBinding()?.state)} label={formatDesktopModelSourceBindingState(ctx.runtimeDesktopModelSourceBinding()?.state, i18n)} />} />
+      </SettingsList>
+      <details class="runtime-status-details">
+        <summary>{i18n.t('runtimeStatus.manifestETag')}</summary>
+        <div class="redeven-settings-inset mt-2 rounded-lg border px-3 py-2">
+          <code class="break-all font-mono text-[11px] text-muted-foreground">{ctx.latestVersion()?.manifest_etag ? String(ctx.latestVersion()!.manifest_etag) : '—'}</code>
         </div>
-        <div class="redeven-settings-inset rounded-xl border p-4">
-          <div class="mb-1 flex items-center gap-2.5">
-            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-              <Cpu class="h-4 w-4" />
-            </span>
-            <div class="text-[length:var(--floe-type-body)] font-semibold font-mono text-foreground">{version()}</div>
-          </div>
-          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</div>
-        </div>
-        <div class={cn('rounded-xl border p-4', compatOk() ? 'border-success/30 bg-success/5' : 'redeven-settings-inset')}>
-          <div class="flex items-center gap-2.5 mb-1">
-            <span class={cn('flex h-8 w-8 items-center justify-center rounded-lg', compatOk() ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning')}>
-              <ShieldCheck class="h-4 w-4" />
-            </span>
-            <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{compatLabel()}</span>
-          </div>
-          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.compatibilityLabel')}</div>
-        </div>
-      </div>
-
-      {/* Detail groups */}
-      <div class="mt-5 space-y-4">
-        <div class="redeven-settings-inset rounded-xl border px-4 py-3">
-          <div class="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            <Cpu class="h-3.5 w-3.5" />
-            <span>{i18n.t('runtimeStatus.currentVersion')}</span>
-          </div>
-          <div class="space-y-2.5">
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</span>
-              <code class="font-mono text-foreground">{version()}</code>
-            </div>
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">{i18n.t('runtimeStatus.latestVersion')}</span>
-              <code class="font-mono text-foreground">{ctx.latestVersionLoading() ? i18n.t('runtimeStatus.loading') : latestVersion()}</code>
-            </div>
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">{i18n.t('runtimeStatus.manifestETag')}</span>
-              <code class="font-mono text-[11px] text-foreground">{ctx.latestVersion()?.manifest_etag ? String(ctx.latestVersion()!.manifest_etag) : '—'}</code>
-            </div>
-          </div>
-        </div>
-
-        <div class="redeven-settings-inset rounded-xl border px-4 py-3">
-          <div class="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            <Activity class="h-3.5 w-3.5" />
-            <span>{i18n.t('runtimeStatus.activeWork')}</span>
-          </div>
-          <div class="space-y-2.5">
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">{i18n.t('runtimeStatus.activeWork')}</span>
-              <span class="text-foreground">{activeWorkSummary()}</span>
-            </div>
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">{i18n.t('runtimeStatus.maintenanceAuthority')}</span>
-              <span class="text-foreground">{maintenanceAuthority()}</span>
-            </div>
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">{i18n.t('runtimeStatus.runtimeProtocol')}</span>
-              <code class="font-mono text-foreground">{ctx.runtimeService()?.protocolVersion || '—'}</code>
-            </div>
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">{i18n.t('runtimeStatus.desktopModelSource')}</span>
-              <DotIndicator active={desktopModelSourceActive(ctx.runtimeDesktopModelSourceBinding()?.state)} label={formatDesktopModelSourceBindingState(ctx.runtimeDesktopModelSourceBinding()?.state, i18n)} />
-            </div>
-          </div>
-        </div>
-      </div>
+      </details>
 
       <Show when={ctx.upgradeState().allowsUpgradeAction && ctx.upgradeState().requiresTargetVersion}>
         <div class="mt-3 flex items-center gap-3">

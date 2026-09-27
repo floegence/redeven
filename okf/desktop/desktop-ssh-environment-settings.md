@@ -19,7 +19,9 @@ The window, tab, draft lifetime and asynchronous recovery contract belongs to
 ## SSH fields and validation
 
 The form presents name, connection and authentication, automatic status detection,
-and advanced configuration in that order. Advanced settings start collapsed even
+and advanced configuration in that order. The form is one continuous reading
+surface with quiet section dividers; identity and transport fields are not
+wrapped in separate cards. Advanced settings start collapsed even
 for customized registrations. A wrapping summary names package delivery, default
 or custom directory, release source, and connection timeout. Expanding preserves
 the draft. Invalid advanced fields expand on Save and the first invalid field

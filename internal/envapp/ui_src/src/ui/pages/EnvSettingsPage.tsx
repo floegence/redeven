@@ -192,7 +192,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                   testId={`settings-section-${item.id}`}
                   class="absolute inset-0 overflow-auto"
                   render={() => (
-                    <div class="floe-settings-page">
+                    <div class="floe-settings-page redeven-settings-page">
                       <Show when={ctx.settings.error}>
                         <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
                           <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />

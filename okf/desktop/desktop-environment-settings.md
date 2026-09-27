@@ -122,7 +122,9 @@ protection and HTTPS certificate. Choosing a task presents only its relevant
 configuration. Access changes proceed through scope/protocol, required password
 or certificate preparation, and one next-start review. Advanced bind and port
 controls remain available in that task. The same session owns every draft;
-task navigation adds no configuration copy or alternate save path.
+task navigation adds no configuration copy or alternate save path. Connection
+forms use one continuous reading surface with section dividers; identity,
+transport, probing, and advanced controls do not become unrelated nested cards.
 
 A protected HTTP or password change first explains the dependency, verifies
 identity and explicitly commits disabling two-factor, then resumes the original

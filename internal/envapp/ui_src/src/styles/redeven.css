@@ -5464,3 +5464,89 @@ html.dark .git-content-skeleton__block {
 .redeven-settings-related { border-color: var(--redeven-settings-divider); }
 .redeven-settings-shell [data-flower-settings-panel][hidden] { display: none; }
 .redeven-settings-shell .floe-setting-row__control > * { max-width: 100%; }
+
+/* Settings presentation contract: one quiet page rhythm shared by every
+ * runtime section. Floe owns the primitives and focus treatment; Redeven only
+ * supplies product spacing, palette roles, and responsive limits. */
+.redeven-settings-page {
+  max-width: 860px;
+  margin-inline: auto;
+  padding: 2.5rem 2.5rem 4rem;
+}
+
+.redeven-settings-page .floe-settings-section__body {
+  gap: 1.75rem;
+}
+
+.redeven-settings-section + .redeven-settings-section {
+  margin-top: 2rem;
+}
+
+.redeven-settings-page .floe-settings-list {
+  border: 1px solid var(--redeven-settings-inset-border);
+  border-radius: .75rem;
+  background: var(--redeven-settings-inset-bg);
+  box-shadow: none;
+}
+
+.redeven-settings-page .floe-setting-row {
+  min-height: 4.05rem;
+  padding: .875rem 1rem;
+  background: transparent;
+}
+
+.redeven-settings-page .floe-setting-row__main {
+  gap: 1.75rem;
+}
+
+.redeven-settings-page .floe-setting-row__control {
+  max-width: 60%;
+}
+
+.redeven-settings-page .floe-setting-row__title {
+  font-weight: 450;
+}
+
+.redeven-settings-page .floe-setting-row__label p,
+.redeven-settings-page .floe-settings-section__heading > p {
+  max-width: 38rem;
+  line-height: 1.6;
+}
+
+.redeven-settings-page .redeven-settings-inset {
+  box-shadow: none;
+}
+
+.runtime-status-summary .floe-setting-row[data-tone='default'] {
+  background: transparent;
+}
+
+.runtime-status-details {
+  margin-top: -.75rem;
+  font-size: .75rem;
+  color: var(--redeven-settings-note-fg);
+}
+
+.runtime-status-details > summary {
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+}
+
+.runtime-status-details > summary::-webkit-details-marker { display: none; }
+.runtime-status-details > summary::before { content: '›'; display: inline-block; margin-right: .35rem; transition: transform 120ms ease; }
+.runtime-status-details[open] > summary::before { transform: rotate(90deg); }
+
+@container redeven-settings (max-width: 600px) {
+  .redeven-settings-page {
+    padding: 1.75rem 1.25rem 3rem;
+  }
+
+  .redeven-settings-page .floe-setting-row__control {
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-status-details > summary::before { transition: none; }
+}
