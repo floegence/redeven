@@ -2,11 +2,12 @@ package ai
 
 import (
 	"encoding/json"
-	"github.com/floegence/redeven/internal/browserbridge"
 	"os"
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/floegence/redeven/internal/browserbridge"
 )
 
 func TestChromeMissingResourcesHaveActionableDiagnostics(t *testing.T) {
@@ -16,7 +17,13 @@ func TestChromeMissingResourcesHaveActionableDiagnostics(t *testing.T) {
 	}
 	host := NewComputerUseRuntime(registry, nil, t.TempDir())
 	t.Cleanup(func() { _ = host.Close() })
-	_, err := host.setupComputerExtension(t.Context(), "unknown")
+	installations, err := browserbridge.Installations()
+	if err != nil || len(installations) == 0 {
+		t.Fatalf("browser installation identities are unavailable: %v", err)
+	}
+	// Resource diagnostics require a discovered installation. Unknown IDs have
+	// their own rejection test and must fail before inspecting helper assets.
+	_, err = host.setupComputerExtension(t.Context(), installations[0].ID)
 	if err == nil || err.Error() != "browser_resources_missing" {
 		t.Fatalf("missing resources must identify the repairable prerequisite: %v", err)
 	}
