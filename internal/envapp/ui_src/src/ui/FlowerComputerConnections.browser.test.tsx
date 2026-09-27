@@ -1,3 +1,4 @@
+import { controlText } from '../testSupport/controlText';
 import type { FlowerChromeStatus } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import '../index.css';
 import './flower-feature.css';
@@ -12,12 +13,6 @@ import jaJP from './i18n/locales/catalogs/ja-JP.json';
 import { computerUseEnUS } from '../../../../flower_ui/src/computerUseCopy';
 import { adapter, waitFor } from './FlowerSurface.navigation.testHarness';
 
-function buttonText(button: Element): string {
-  const content = button.cloneNode(true) as Element;
-  content.querySelectorAll('[aria-hidden="true"]').forEach(node => node.remove());
-  return content.textContent ?? '';
-}
-
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); dispose = undefined; });
 
@@ -31,7 +26,7 @@ it('offers a separate browser without pretending that preparation connected or a
   };
   const stop = render(() => <FloeConfigProvider><FlowerChromeConnection management={management} copy={computerUseEnUS} onConnected={connected} onRemoteBrowserPrepared={prepared} /></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent === text);
+  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === text);
   await waitFor(() => Boolean(button(computerUseEnUS.chromeRemotePrepare)));
   expect(button(computerUseEnUS.openExtensions)).toBeUndefined();
   expect(host.textContent).not.toContain(computerUseEnUS.chromeDesktopHint);
@@ -74,7 +69,7 @@ it('prepares Chrome automatically and continues only after a real connection', a
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly onContinue={continued} onOpenChange={() => undefined} threadID="thread"
     adapter={{ ...adapter(true), computerManagement: management }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  const button = (text: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => buttonText(item) === text)!;
+  const button = (text: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => controlText(item) === text)!;
   await waitFor(() => management.setupExtension.mock.calls.length === 1);
   await waitFor(() => !!button(computerUseEnUS.openExtensions));
   expect(button(computerUseEnUS.openConnection), 'connection action waits until the installation step is complete').toBeUndefined();
@@ -113,7 +108,7 @@ it('starts with reconnection after prior setup and keeps installation available 
   const stop = render(() => <FloeConfigProvider><FlowerChromeConnection reuseConnected
     management={management} copy={computerUseEnUS} onConnected={continued} /></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(value => value.textContent === text);
+  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(value => controlText(value) === text);
   await waitFor(() => Boolean(button(computerUseEnUS.openConnection)));
   expect(button(computerUseEnUS.openExtensions)).toBeUndefined();
   expect(host.textContent).not.toContain(computerUseEnUS.extensionHint);
@@ -181,7 +176,7 @@ it('stops after a failed automatic continuation and exposes explicit retry witho
   expect(host.textContent).not.toContain('private adapter details');
   expect(management.loadExtensionStatus).toHaveBeenCalledTimes(1);
   continued.mockResolvedValue(undefined);
-  Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => buttonText(button) === computerUseEnUS.continueTask)!.click();
+  Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button) === computerUseEnUS.continueTask)!.click();
   await waitFor(() => continued.mock.calls.length === 2);
 });
 
@@ -200,7 +195,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
     const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly onContinue={continued} onOpenChange={() => undefined} threadID="guided-thread"
       adapter={{ ...adapter(true), computerManagement: management }} copy={copy} /></LayoutProvider></FloeConfigProvider>, host);
     dispose = () => { stop(); host.remove(); };
-    const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => buttonText(item) === text)!;
+    const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === text)!;
     const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
     const primary = () => [...dialog().querySelectorAll<HTMLButtonElement>('button.bg-primary')].filter(item => item.checkVisibility());
     try {
@@ -208,7 +203,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       await waitFor(() => !!button(copy.openExtensions));
       await waitFor(() => dialog().getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
       expect(primary()).toHaveLength(1);
-      expect(buttonText(primary()[0])).toBe(copy.openExtensions);
+      expect(controlText(primary()[0])).toBe(copy.openExtensions);
       expect(dialog().getBoundingClientRect().height).toBeLessThan(400);
       expect(dialog().innerText).not.toContain(copy.setupHostHint);
       expect(dialog().innerText).not.toContain('/fixture/');
@@ -219,7 +214,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       expect(dialog().querySelector('[aria-current="step"]')?.textContent).toContain(copy.setupInstallTitle);
       button(copy.setupAlreadyInstalled).focus(); await userEvent.keyboard('{Enter}');
       expect(primary()).toHaveLength(1);
-      expect(buttonText(primary()[0])).toBe(copy.openConnection);
+      expect(controlText(primary()[0])).toBe(copy.openConnection);
       expect(dialog().querySelector('[role="alert"]')).toBeNull();
       button(copy.setupBack).focus(); await userEvent.keyboard('{Enter}');
       button(copy.openExtensions).click();
@@ -238,7 +233,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       await waitFor(() => !button(copy.openExtensionFolder).disabled);
       expect(management.openExtension).toHaveBeenLastCalledWith('folder', 'browser-aaaaaaaaaaaaaaaaaaaaaaaa');
       expect(continued).not.toHaveBeenCalled();
-      const manual = [...dialog().querySelectorAll('summary')].find(item => item.textContent === copy.setupManualInstall)!;
+      const manual = [...dialog().querySelectorAll('summary')].find(item => controlText(item) === copy.setupManualInstall)!;
       expect(manual.parentElement?.hasAttribute('open')).toBe(false);
       manual.focus(); await userEvent.keyboard('{Enter}');
       expect(dialog().innerText).toContain(copy.setupLoadUnpacked);
@@ -247,7 +242,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-manual.png` });
       manual.focus(); await userEvent.keyboard('{Enter}');
       expect(dialog().innerText).not.toContain(copy.setupLoadUnpacked);
-      const summary = [...dialog().querySelectorAll('summary')].find(item => item.textContent === copy.setupHelp)!;
+      const summary = [...dialog().querySelectorAll('summary')].find(item => controlText(item) === copy.setupHelp)!;
       summary.focus(); await userEvent.keyboard('{Enter}');
       const path = dialog().querySelector<HTMLInputElement>('input[readonly]')!;
       expect(path.checkVisibility()).toBe(true);
@@ -284,7 +279,7 @@ it('routes an incompatible installed extension back to update without continuing
   };
   const stop = render(() => <FloeConfigProvider><FlowerChromeConnection reuseConnected management={management} copy={computerUseEnUS} onConnected={continued} /></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => buttonText(item) === text)!;
+  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === text)!;
   await waitFor(() => !!button(computerUseEnUS.setupAlreadyInstalled));
   button(computerUseEnUS.setupAlreadyInstalled).click();
   button(computerUseEnUS.openConnection).click();
@@ -322,8 +317,8 @@ it('explains missing Chrome resources before preparation and copies only safe di
   expect(dialog.innerText).not.toContain(zhCN.flowerSurface.computer.setupFailed);
   expect(management.setupExtension).not.toHaveBeenCalled();
   expect(continued).not.toHaveBeenCalled();
-  [...dialog.querySelectorAll('summary')].find(item => item.textContent === zhCN.flowerSurface.computer.details)!.click();
-  const details = [...dialog.querySelectorAll('summary')].find(item => item.textContent === zhCN.flowerSurface.computer.chromeDiagnostics)!;
+  [...dialog.querySelectorAll('summary')].find(item => controlText(item) === zhCN.flowerSurface.computer.details)!.click();
+  const details = [...dialog.querySelectorAll('summary')].find(item => controlText(item) === zhCN.flowerSurface.computer.chromeDiagnostics)!;
   details.click();
   const diagnostic = dialog.querySelector('textarea')!;
   expect(diagnostic.value).toContain('browser_resources_missing');
@@ -345,18 +340,18 @@ it('keeps installation guidance during a failed status check and resumes only a 
   await waitFor(() => !!host.querySelector('input[readonly]'));
   expect(host.textContent).toContain(computerUseEnUS.chromeDesktopTitle);
   expect(management.setupExtension).toHaveBeenCalledOnce();
-  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.setupInstalled)!.click();
-  expect([...host.querySelectorAll('button')].some(button => buttonText(button) === computerUseEnUS.chromeCopyConnectionLink)).toBe(true);
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => controlText(button) === computerUseEnUS.setupInstalled)!.click();
+  expect([...host.querySelectorAll('button')].some(button => controlText(button) === computerUseEnUS.chromeCopyConnectionLink)).toBe(true);
   expect([...host.querySelectorAll('input')].some(input => input.value === 'chrome-extension://mgfbpkkmocckooenpdfpefknffjanjce/popup.html#dev.floegence.redeven.r123456789abcdef0')).toBe(true);
   expect(management.openExtension).not.toHaveBeenCalled();
-  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.setupBack)!.click();
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => controlText(button) === computerUseEnUS.setupBack)!.click();
   status.mockRejectedValue(new Error('private transport detail'));
   await waitFor(() => host.textContent?.includes(computerUseEnUS.chromeCheckFailed) === true);
-  expect([...host.querySelectorAll('button')].some(button => buttonText(button) === computerUseEnUS.openExtensions)).toBe(true);
+  expect([...host.querySelectorAll('button')].some(button => controlText(button) === computerUseEnUS.openExtensions)).toBe(true);
   expect(host.querySelector('input[readonly]')).not.toBeNull();
   expect(host.textContent).not.toContain('private transport detail');
   status.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'connected', name: 'Chrome' }] });
-  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.retryConnection)!.click();
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => controlText(button) === computerUseEnUS.retryConnection)!.click();
   await waitFor(() => continued.mock.calls.length === 1);
 });
 
@@ -369,7 +364,7 @@ it('keeps an application launch failure visible with its diagnostic ID', async (
   const stop = render(() => <FloeConfigProvider><FlowerChromeConnection management={management} copy={computerUseEnUS} onConnected={vi.fn()} /></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
   await waitFor(() => !!host.querySelector('button'));
-  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.openExtensions)!.click();
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => controlText(button) === computerUseEnUS.openExtensions)!.click();
   await waitFor(() => host.textContent?.includes(computerUseEnUS.chromeLaunchTitle) === true);
   expect(host.querySelector('textarea')?.value).toContain('launch-fixture-123');
   expect(host.querySelector('textarea')?.value).not.toContain('secret launch details');
@@ -391,9 +386,9 @@ it('restarts connection observation when a manual connection link is copied afte
   await waitFor(() => host.textContent?.includes(computerUseEnUS.setupInstalled) === true);
   status.mockRejectedValue(new Error('connection temporarily unavailable'));
   await waitFor(() => host.textContent?.includes(computerUseEnUS.chromeCheckFailed) === true);
-  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.setupInstalled)!.click();
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => controlText(button) === computerUseEnUS.setupInstalled)!.click();
   status.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'confirmed', name: 'Chrome' }] });
-  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.chromeCopyConnectionLink)!.click();
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => controlText(button) === computerUseEnUS.chromeCopyConnectionLink)!.click();
   await waitFor(() => continued.mock.calls.length === 1);
   expect(clipboard).toHaveBeenCalledWith('chrome-extension://mgfbpkkmocckooenpdfpefknffjanjce/popup.html#dev.floegence.redeven.r123456789abcdef0');
   expect(management.setupExtension).toHaveBeenCalledOnce();
