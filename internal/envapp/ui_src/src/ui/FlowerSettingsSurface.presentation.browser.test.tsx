@@ -88,6 +88,12 @@ for (const [locale, dark, width] of [
     for (const control of frame.querySelectorAll<HTMLElement>('.flower-settings-policy-card, .flower-settings-provider-card')) {
       expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth);
     }
+    for (const control of frame.querySelectorAll<HTMLElement>('.flower-settings-policy-card')) {
+      const description = document.getElementById(control.getAttribute('aria-describedby')!);
+      expect(description).not.toBeNull();
+      expect(control.contains(description)).toBe(false);
+      expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+    }
     const currentModel = frame.querySelector<HTMLElement>('.flower-settings-current-model')!;
     const modelField = currentModel.querySelector<HTMLElement>('.flower-settings-model-field')!;
     expect(modelField.scrollWidth).toBeLessThanOrEqual(modelField.clientWidth);

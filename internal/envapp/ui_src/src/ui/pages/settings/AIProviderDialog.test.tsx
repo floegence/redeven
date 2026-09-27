@@ -8,7 +8,8 @@ import { AIProviderDialog } from './AIProviderDialog';
 import type { AIProviderDialogProps } from './AIProviderDialog';
 import type { AIProviderRow } from './types';
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
+  ...await original<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,

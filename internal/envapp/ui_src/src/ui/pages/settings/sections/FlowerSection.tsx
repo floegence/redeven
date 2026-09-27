@@ -1,4 +1,5 @@
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
+import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { modelCatalogCopy } from '../../../../../../../flower_ui/src/settings/modelCatalogCopy';
 import { hydrateFlowerProviderCatalog, applyFlowerModelDiscovery, flowerProviderModelChoices, setFlowerModelsEnabled, defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../../flower_ui/src/settings/modelSelection';
 import type { FlowerProvider, FlowerProviderDraft } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -451,7 +452,7 @@ export function FlowerSection() {
               const wss = () => flowerProviderSearchSummary(provider.models, modelCatalogCopy(i18n.locale()));
               return (
                 <div class="settings-provider-row">
-                  <SettingRow title={dn()} description={provider.type === 'ollama' ? modelCatalogCopy(i18n.locale()).optionalKey : keyOk() ? i18n.t('flowerSettings.keyVerified') : i18n.t('flowerSettings.needsKey')}
+                  <SettingRow icon={iconProps => <ProviderBrandIcon type={provider.type} class={iconProps.class} />} title={dn()} description={provider.type === 'ollama' ? modelCatalogCopy(i18n.locale()).optionalKey : keyOk() ? i18n.t('flowerSettings.keyVerified') : i18n.t('flowerSettings.needsKey')}
                     control={<div class="settings-row-actions">
                       <Show when={isDef()}><span class="text-xs text-muted-foreground">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
                       <Button size="icon" variant="ghost" icon={Pencil} onClick={() => openAIProviderDialog(index())} disabled={!canEdit()} aria-label={i18n.t('flowerSettings.editProvider')} />

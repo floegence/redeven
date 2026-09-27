@@ -52,7 +52,8 @@ async function motion(action = 'open') {
   }, action);
   assert.ok(frames.length > 1, `${action}: animation frames captured`);
   for (const frame of frames) {
-    assert.equal(frame.overflow, 0, `${action}: transient overflow at ${frame.elapsed.toFixed(1)}ms`);
+    // The fixed-height body may scroll; opening must not change its scroll range.
+    assert.equal(frame.overflow, frames.at(-1).overflow, `${action}: transient overflow at ${frame.elapsed.toFixed(1)}ms`);
     assert.equal(frame.width, frames[0].width, `${action}: body width changed`);
   }
   if (action === 'open') {
@@ -62,12 +63,14 @@ async function motion(action = 'open') {
 }
 async function assertFieldFocus() {
   const values = await page.evaluate(() => {
-    const snapshot = (el) => { const s = getComputedStyle(el); return { width: el.offsetWidth, height: el.offsetHeight, border: s.borderWidth, padding: s.padding, shadow: s.boxShadow, outline: s.outlineStyle, color: s.borderColor }; };
+    const snapshot = (el) => { const s = getComputedStyle(el); return { width: el.offsetWidth, height: el.offsetHeight, border: s.borderWidth, padding: s.padding, shadow: s.boxShadow, outline: s.outlineStyle, color: s.borderColor, radius: s.borderRadius }; };
     return [...document.querySelectorAll('.ssh-settings-form input:not([type="checkbox"]),.ssh-settings-form select')].map(el => {
       el.style.transition = 'none'; el.blur(); const before = snapshot(el); el.focus(); return { id: el.id, before, after: snapshot(el) };
     });
   });
   for (const field of values) {
+    assert.equal(field.before.radius, '8px', `${field.id}: settings corner scale`);
+    assert.equal(field.before.height, 34, `${field.id}: settings control height`);
     for (const key of ['width','height','border','padding','shadow']) assert.equal(field.after[key], field.before[key], `${field.id}: focus changes ${key}`);
     assert.equal(field.after.outline, 'none', `${field.id}: focus outline`);
     assert.notEqual(field.after.color, field.before.color, `${field.id}: invisible focus border`);
@@ -93,6 +96,7 @@ async function geometry() {
       bottom: rect.bottom,
       right: rect.right,
       horizontalOverflow: el.scrollWidth > el.clientWidth,
+      panelScroll: el.scrollHeight - el.clientHeight,
       scroll: body.scrollHeight - body.clientHeight,
       footerBottom: footer.bottom,
     };
@@ -107,7 +111,7 @@ try {
       assert.equal(bounds.width, 800);
       assert.equal(bounds.horizontalOverflow, false, `${theme}/${locale}: horizontal overflow`);
       assert.ok(bounds.footerBottom < 800, `${theme}/${locale}: actions clipped`);
-      assert.equal(bounds.scroll, 0, `${theme}/${locale}: default view scrolls`);
+      assert.equal(bounds.panelScroll, 0, `${theme}/${locale}: only the body scrolls`);
       await assertFieldFocus();
       if (['classic-light','ocean'].includes(preset.name) && (locale === 'zh-CN' || locale === 'en-US'))
         await page.screenshot({ path: `${output}/${theme}-${locale}.png`, animations: 'disabled' });

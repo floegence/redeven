@@ -3,7 +3,7 @@ type: UI Contract
 title: Runtime settings
 description: Navigate and edit runtime configuration through consistent, responsive settings surfaces while preserving API and permission ownership.
 tags: [ui, runtime, settings, skills]
-timestamp: 2026-09-27T16:18:00Z
+timestamp: 2026-09-27T17:29:30Z
 ---
 # Summary
 
@@ -67,6 +67,23 @@ installation paths use at least 8px horizontal padding and 32px target height,
 increasing to 44px for coarse pointers. The full padded summary activates the
 native disclosure; neutral hover and visible keyboard focus identify its bounds
 without promoting diagnostic content into a primary action.
+
+## Settings controls and identity
+
+Runtime, Desktop environment, Flower, terminal and managed-service settings share
+one product field treatment: 34px minimum height, 8px corners, 12px text, a quiet
+neutral fill and a subdued 1px border. Inputs, textareas and the published Select
+trigger use the same palette; compound inputs retain one frame. Coarse pointers
+use at least 44px and 16px text. Search fields reserve their icon spacing.
+High-contrast themes retain strong boundaries. Published Floe still owns keyboard
+operation, validation, menus and border-only focus; product styling never replaces
+those behaviors. The adapter consumes released controls without local overrides
+of dependency code or a parallel input implementation.
+
+Identity rows use semantic directory and skill icons. Provider rows use the
+shared provider brand catalog, including DeepSeek; monochrome brands inherit the
+foreground so they remain visible in light and dark themes. Scalar input labels
+do not need decorative identity icons.
 
 ## Configuration editing
 
@@ -153,6 +170,9 @@ Read access cannot edit administrator fields. All writes use existing authentica
 - `internal/envapp/ui_src/src/ui/pages/settings/SettingsPrimitives.tsx` and
   `internal/envapp/ui_src/src/ui/pages/runtime-settings-compact.css` adapt published Floe surfaces;
   `internal/envapp/ui_src/src/styles/redeven.css` owns semantic palette roles.
+- `internal/envapp/ui_src/src/styles/settings-controls.css` adapts released fields
+  across product settings; `internal/flower_ui/src/settings/providerBrandIcons.ts`
+  owns the shared brand definitions.
 - `internal/envapp/ui_src/src/ui/pages/settings/EnvSettingsPageContext.tsx`
   delegates settings writes and runtime maintenance.
 - `internal/envapp/ui_src/src/ui/pages/settings/sections/SkillsSection.tsx` and

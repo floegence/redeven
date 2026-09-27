@@ -1,3 +1,4 @@
+import { Layers } from '@floegence/floe-webapp-core/icons';
 import { For, Show } from 'solid-js';
 import { Button, Switch } from '@floegence/floe-webapp-core/ui';
 import { SettingsPill, SettingsList, SettingRow } from './SettingsPrimitives';
@@ -39,7 +40,7 @@ export function SkillsCatalogList(props: {
       <For each={props.skills}>{(item) => {
         const source = () => props.sources[String(item.path ?? '').trim()];
         return (
-          <SettingRow title={item.name} description={item.description || i18n.t('skillsSettings.noDescription')}
+          <SettingRow icon={Layers} title={item.name} description={item.description || i18n.t('skillsSettings.noDescription')}
             control={<Switch checked={!!item.enabled} onChange={(value) => props.onToggle(item, value)}
               disabled={!props.canInteract || !props.canAdmin || !!props.toggleSaving[item.path]}
               aria-label={`${item.name}: ${i18n.t('skillsSettings.enabled')}`} />}>

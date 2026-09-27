@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower setup and settings
 description: First-time model setup, actionable starter tasks, and shared provider, permission, and computer settings.
 tags: [ai, flower, settings, onboarding]
-timestamp: 2026-09-21T00:00:00Z
+timestamp: 2026-09-27T17:29:30Z
 ---
 # Summary
 
@@ -132,6 +132,8 @@ Computer-use save failures restore the confirmed switch and expose the error.
 # Boundaries
 
 Starter-task selection creates an editable draft, never a turn. Settings preserve drafts, model-source identity and permission ownership. Connection failures and configured profiles needing repair use their recovery controls rather than the first-time setup presentation.
+
+Settings fields follow the shared [product field treatment](runtime-settings.md#settings-controls-and-identity), and provider identities use the corresponding shared brand icon. Permission descriptions sit outside the single-line selection buttons and are linked through accessible descriptions; arrow-key selection and autosave retain their existing owner.
 
 # Evidence
 
