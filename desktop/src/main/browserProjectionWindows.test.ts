@@ -43,3 +43,37 @@ it('authorizes only the reserved child document and assets without granting envi
   child.emit('closed');
   expect(windows.staticRequestOwner(2, { url, method: 'GET' })).toBeUndefined();
 });
+
+it.each([false, true])('retires projection ownership after parent destruction with a previously closed child: %s', (childAlreadyClosed) => {
+  const contents = Object.assign(new EventEmitter(), { id: 1, session: {}, getURL: () => 'http://localhost:24498/_redeven_proxy/env/' });
+  let destroyed = false;
+  const parent = {
+    get webContents() {
+      if (destroyed) throw new Error('Object has been destroyed');
+      return contents;
+    },
+    isDestroyed: () => destroyed,
+  } as unknown as BrowserWindow;
+  const childContents = Object.assign(new EventEmitter(), { id: 2, setWindowOpenHandler: vi.fn() });
+  const close = vi.fn();
+  const child = Object.assign(new EventEmitter(), { webContents: childContents, isDestroyed: () => false, close }) as unknown as BrowserWindow;
+  const windows = new BrowserProjectionWindows(() => child);
+  const nonce = 'b2b9b64c-b986-4ec2-bfab-de739c46a0fc';
+  const url = `http://localhost:24498/_redeven_proxy/env/browser/?instance=${nonce}#${nonce}`;
+  expect(windows.prepare(parent, url)).toBe(true);
+  const response = windows.consume(parent, { url });
+  if (response?.action !== 'allow') throw new Error('Reserved browser document denied');
+  response.createWindow!({});
+  if (childAlreadyClosed) child.emit('closed');
+
+  destroyed = true;
+  expect(() => contents.emit('destroyed')).not.toThrow();
+  expect(close).toHaveBeenCalledTimes(childAlreadyClosed ? 0 : 1);
+  expect(contents.listenerCount('destroyed')).toBe(0);
+  expect(contents.listenerCount('did-start-navigation')).toBe(0);
+  expect(windows.staticRequestOwner(2, { url: url.split('#')[0]!, method: 'GET' })).toBeUndefined();
+  contents.emit('destroyed');
+  expect(close).toHaveBeenCalledTimes(childAlreadyClosed ? 0 : 1);
+  expect(windows.prepare(parent, url)).toBe(false);
+  expect(windows.consume(parent, { url })).toEqual({ action: 'deny' });
+});

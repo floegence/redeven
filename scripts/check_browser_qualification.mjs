@@ -104,6 +104,11 @@ async function main() {
       { ...env, REDEVEN_BROWSER_SOURCE: source, REDEVEN_BROWSER_CLIENT: client, REDEVEN_BROWSER_DEBUG_EVIDENCE: path.join(evidence, `projection-${source}-${client}.json`) },
       body => verifyGoTests(body, ['TestBrowserProjectionUsesOneFlowersecSession']));
   }
+  const desktopReport = path.join(evidence, 'desktop-windows.json');
+  await run('desktop-windows', 'pnpm', ['exec', 'vitest', 'run', 'src/main/browserProjectionWindows.test.ts',
+    'src/main/windowLifecycleContract.test.ts', 'src/main/windowRecord.test.ts', 'src/main/windowSpec.test.ts',
+    '--reporter=json', `--outputFile=${desktopReport}`], path.join(root, 'desktop'), env,
+    async () => verifyBrowserTests(await readFile(desktopReport, 'utf8')));
   const git = args => spawnSync('git', args, { cwd: root, encoding: 'utf8' }).stdout.trim();
   await writeFile(path.join(evidence, 'summary.json'), JSON.stringify({ commit: git(['rev-parse', 'HEAD']), sourceDiffSHA256: createHash('sha256').update(git(['diff', 'HEAD', '--binary'])).digest('hex'), dependency: JSON.parse(await readFile(path.join(ui, 'package.json'), 'utf8')).dependencies['@floegence/floebrowser'], package: pkg.id, results }, null, 2) + '\n');
   console.log(`[browser] evidence: ${evidence}`);
