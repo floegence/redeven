@@ -1201,7 +1201,7 @@ export type FlowerComputerInventory = Readonly<{
   current_target_id: string; default_candidate_ref?: string; candidates: readonly FlowerComputerCandidate[];
 }>;
 
-export type FlowerComputerCapability = Readonly<{ state: 'ready' | 'on_demand' | 'setup_required' | 'permission_required' | 'disabled' | 'installation_required'; reason?: string }>;
+export type FlowerComputerCapability = Readonly<{ state: 'ready' | 'on_demand' | 'setup_required' | 'permission_required' | 'disabled' | 'installation_required' | 'system_preparation_required' | 'unavailable'; reason?: string }>;
 export type FlowerComputerEnvironment = Readonly<{
   hostname: string; platform: string;
   managed: FlowerComputerCapability; desktop: FlowerComputerCapability;
@@ -1214,10 +1214,13 @@ export type FlowerComputerAccess = Readonly<{
   allow_foreground: boolean;
 }>;
 export type FlowerChromeDiagnostic = Readonly<{ stage: 'prepare' | 'open' | 'check' | 'continue'; reason: string; diagnostic_id?: string }>;
-export type FlowerChromeStatus = Readonly<{ profiles: readonly Readonly<{ id: string; name: string }>[]; prepared?: boolean; error?: 'extension_update_required'; hostname?: string; runtime_version?: string; platform?: string; browser_installed?: boolean; diagnostic?: FlowerChromeDiagnostic }>;
-export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string; extension_home_path: readonly string[]; platform: 'darwin' | 'linux' }>;
+export type FlowerBrowserDeviceInstallation = Readonly<{ id: string; kind: 'google_chrome' | 'chromium' | 'chromium_snap'; name: string; installed: boolean; prepared: boolean; connected: boolean; diagnostic?: FlowerChromeDiagnostic; reason?: string }>;
+export type FlowerChromeStatus = Readonly<{ installations: readonly FlowerBrowserDeviceInstallation[]; profiles: readonly Readonly<{ id: string; name: string; installation_id: string; library_id: string }>[]; prepared?: boolean; error?: 'extension_update_required'; hostname?: string; runtime_version?: string; platform?: string; browser_installed?: boolean; diagnostic?: FlowerChromeDiagnostic }>;
+export type FlowerComputerExtensionSetup = Readonly<{ installation_id: string; browser_name: string; native_host: string; extension_id: string; extension_path: string; extension_home_path: readonly string[]; platform: 'darwin' | 'linux' }>;
 export type FlowerBrowserInstallation = Readonly<{
-  enabled: boolean; state: 'not_installed' | 'installed' | 'downloading' | 'uploading' | 'verifying' | 'installing' | 'failed' | 'cancelled';
+  storage_bytes: number;
+  launch: Readonly<{ state: 'ready' | 'disabled' | 'installation_required' | 'system_preparation_required' | 'unavailable'; reason?: string; action?: string }>; authorization_command?: string;
+  enabled: boolean; state: 'awaiting_authorization' | 'verifying_system' | 'preparing_system' | 'not_installed' | 'installed' | 'downloading' | 'uploading' | 'verifying' | 'installing' | 'failed' | 'cancelled';
   package: Readonly<{ id: string; name: string; platform: string; architecture: string; version: string; url: string; sha256: string; size_bytes: number; installed_bytes: number }>;
   directory: string; operation_id?: string; received_bytes: number; error?: string;
 }>;
@@ -1226,7 +1229,7 @@ export type FlowerBrowserInstallationSnapshot = FlowerBrowserInstallation & Read
   desktop_progress?: Readonly<{ phase: 'checking' | 'downloading' | 'verifying'; received_bytes: number; total_bytes: number }>;
   desktop_error?: 'package_mismatch' | 'desktop_download_failed' | 'desktop_upload_failed' | 'status_failed';
 }>;
-export type FlowerBrowserInstallRequest = Readonly<{ action: 'start' | 'chunk' | 'complete' | 'cancel'; package_id?: string; source?: 'download' | 'upload'; operation_id?: string; offset?: number; data?: string }>;
+export type FlowerBrowserInstallRequest = Readonly<{ action: 'prepare_system' | 'start' | 'chunk' | 'complete' | 'cancel'; package_id?: string; source?: 'download' | 'upload'; operation_id?: string; offset?: number; data?: string }>;
 export type FlowerComputerManagement = Readonly<{
   loadBrowserInstallation?: () => Promise<FlowerBrowserInstallationSnapshot>;
   saveBrowserEnabled?: (enabled: boolean) => Promise<FlowerBrowserInstallationSnapshot>;
@@ -1241,8 +1244,8 @@ export type FlowerComputerManagement = Readonly<{
   selectCandidate: (threadID: string, candidateRef: string) => Promise<FlowerTargetDescriptor>;
   listManagedProfiles?: () => Promise<readonly Readonly<{ id: string; name: string }>[]>;
   createManagedProfile?: (name: string) => Promise<readonly Readonly<{ id: string; name: string }>[]>;
-  openExtension?: (action: 'extensions' | 'folder' | 'connect') => Promise<void>;
-  setupExtension?: () => Promise<FlowerComputerExtensionSetup>;
+  openExtension?: (action: 'extensions' | 'folder' | 'connect', installationID: string) => Promise<void>;
+  setupExtension?: (installationID: string) => Promise<FlowerComputerExtensionSetup>;
   loadExtensionStatus?: () => Promise<FlowerChromeStatus>;
   loadAccess: (threadID: string) => Promise<FlowerComputerAccess>;
   saveAccess: (threadID: string, access: FlowerComputerAccess) => Promise<void>;

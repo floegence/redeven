@@ -6,6 +6,12 @@ import readline from 'node:readline';
 const profile = process.argv[2];
 const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
 let context;
+function classifyManagedBrowserLaunch(error) {
+  const message = String(error?.message ?? '');
+  if (error?.code === 'ERR_MODULE_NOT_FOUND' || /error while loading shared libraries|Host system is missing dependencies|cannot open shared object file/u.test(message)) return 'browser_dependency_missing';
+  if (/No usable sandbox|Failed to move to new namespace|SUID sandbox helper|Running as root without --no-sandbox/u.test(message)) return 'browser_sandbox_unavailable';
+  return 'browser_launch_failed';
+}
 try {
   const { chromium } = await import('playwright');
   if (!path.isAbsolute(profile)) throw new Error('invalid profile');
@@ -43,5 +49,5 @@ try {
       if (disconnected) break;
     }
   }
-} catch (error) { emit({ type: 'ready', protocol_version: 2, error: 'TARGET_SETUP_REQUIRED', reason: error?.code === 'ERR_MODULE_NOT_FOUND' ? 'browser_dependency_missing' : 'browser_launch_failed' }); process.exitCode = 1; }
+} catch (error) { emit({ type: 'ready', protocol_version: 2, error: 'TARGET_SETUP_REQUIRED', reason: classifyManagedBrowserLaunch(error) }); process.exitCode = 1; }
 finally { await context?.close(); }

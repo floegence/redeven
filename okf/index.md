@@ -194,6 +194,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Computer and browser use runtime](ai/computer-use-runtime.md) - Keep authorization, execution, observation and packaged helper compatibility under one Runtime owner.
 - [Computer script execution](ai/computer-use-scripts.md) - Compose bounded semantic operations and preserve partial results without replaying effects.
 - [Optional built-in browser installation](ai/computer-use-browser-installation.md) - Confirm browser download or Desktop upload, persist the capability switch, and validate task continuation.
+- [Built-in browser Linux system preparation](ai/computer-use-browser-system.md) - Authorize exact versioned AppArmor preparation while preserving the browser sandbox and user data.
 - [Browser and desktop settings](ai/computer-use-environment-settings.md) - Inspect environment capabilities and manage pairing without changing conversation targets or permissions.
 - [Guided Chrome connection](ai/computer-use-browser-connection.md) - Install and confirm a browser connection, then resume the original task automatically.
 - [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md) - Diagnose missing components and graphical sessions, then recover on the correct environment host.

@@ -9,6 +9,8 @@ import type { BrowserFailureCode, BrowserWorkspaceState } from '../services/brow
 export function browserFailureMessage(code: BrowserFailureCode | undefined, messages: BrowserSourceMessages): string {
   const copy = messages.product;
   switch (code) {
+    case 'BROWSER_SANDBOX_UNAVAILABLE': return messages.computer.browserSystemPrepare;
+    case 'BROWSER_DEPENDENCIES_MISSING': return messages.computer.browserDependenciesMissing;
     case 'BROWSER_INSTALL_REQUIRED': return copy.installTitle;
     case 'BROWSER_DISABLED': return messages.computer.browserDisabledHint;
     case 'BROWSER_SERVICE_FAILED': return copy.recoverTitle;
@@ -34,8 +36,8 @@ export function BrowserWorkspaceNotice(props: {
 }) {
   const [confirming, setConfirming] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
-  const setup = () => ['BROWSER_INSTALL_REQUIRED', 'BROWSER_DISABLED'].includes(props.state.failure ?? '');
-  const canRetry = () => !['BROWSER_SOURCE_UNAVAILABLE', 'BROWSER_OUTCOME_UNKNOWN', 'BROWSER_RECOVERY_BLOCKED'].includes(props.state.failure ?? '');
+  const setup = () => ['BROWSER_INSTALL_REQUIRED', 'BROWSER_DISABLED', 'BROWSER_SANDBOX_UNAVAILABLE'].includes(props.state.failure ?? '');
+  const canRetry = () => !['BROWSER_DEPENDENCIES_MISSING', 'BROWSER_SOURCE_UNAVAILABLE', 'BROWSER_OUTCOME_UNKNOWN', 'BROWSER_RECOVERY_BLOCKED'].includes(props.state.failure ?? '');
   const run = async (action: () => Promise<void>) => {
     if (busy()) return;
     setBusy(true);
@@ -54,7 +56,7 @@ export function BrowserWorkspaceNotice(props: {
         </div>}>
           <FlowerManagedBrowser management={props.service.management} copy={props.messages.computer} canMutate={props.connected}
             requireEnabledForContinue installLabel={props.messages.product.installOpen}
-            continuationKey={JSON.stringify(props.state.selection.request)} onContinue={async enabled => { if (enabled) await props.retry(); }} />
+            continuationKey={JSON.stringify(props.state.selection?.request)} onContinue={async enabled => { if (enabled) await props.retry(); }} />
           <Button variant="ghost" onClick={props.chooseSource}>{props.messages.product.sources}</Button>
         </Show>
       </div>

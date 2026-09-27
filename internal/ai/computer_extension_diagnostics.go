@@ -4,18 +4,15 @@ import (
 	"crypto/rand"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/floegence/redeven/internal/browserbridge"
 )
 
 // Only these product facts cross the UI boundary. Platform errors stay in logs.
-type ComputerExtensionDiagnostic struct {
-	Stage        string `json:"stage"`
-	Reason       string `json:"reason"`
-	DiagnosticID string `json:"diagnostic_id,omitempty"`
-}
+type ComputerExtensionDiagnostic = browserbridge.Diagnostic
 
 type computerExtensionFailure struct {
 	diagnostic ComputerExtensionDiagnostic
@@ -66,24 +63,19 @@ func (r *ComputerUseRuntime) extensionResources() (*PlaywrightTargetExecutor, er
 	return managed, nil
 }
 
-func chromeExecutableAvailable() bool { _, err := exec.LookPath("google-chrome"); return err == nil }
-
 // This observes the Runtime's launch context; it never borrows another user's
 // graphical session. A manually opened Chrome can still complete the handshake.
-func checkComputerExtensionOpen(platform, action string, getenv func(string) string, lookPath func(string) (string, error)) error {
+func checkComputerExtensionOpen(platform, action string, installation browserbridge.Installation, getenv func(string) string, lookPath func(string) (string, error)) error {
+	if !installation.Installed {
+		return extensionFailure("open", "browser_not_installed", nil)
+	}
 	if platform != "linux" {
 		return nil
 	}
-	name := "google-chrome"
 	if action == "folder" {
-		name = "xdg-open"
-	}
-	if _, err := lookPath(name); err != nil {
-		reason := "chrome_not_installed"
-		if action == "folder" {
-			reason = "folder_opener_missing"
+		if _, err := lookPath("xdg-open"); err != nil {
+			return extensionFailure("open", "folder_opener_missing", err)
 		}
-		return extensionFailure("open", reason, err)
 	}
 	if strings.TrimSpace(getenv("DISPLAY")) == "" && strings.TrimSpace(getenv("WAYLAND_DISPLAY")) == "" {
 		return extensionFailure("open", "desktop_session_unavailable", nil)

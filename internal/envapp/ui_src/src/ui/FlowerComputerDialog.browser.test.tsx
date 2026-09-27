@@ -20,7 +20,7 @@ const waitFor = async (predicate: () => boolean) => {
 };
 const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === text)!;
 const radios = () => [...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
-const environment: FlowerComputerEnvironment = { hostname: 'Work Mac', platform: 'darwin', managed: { state: 'on_demand' }, desktop: { state: 'permission_required', reason: 'screen_recording_required' }, chrome: { profiles: [] } };
+const environment: FlowerComputerEnvironment = { hostname: 'Work Mac', platform: 'darwin', managed: { state: 'on_demand' }, desktop: { state: 'permission_required', reason: 'screen_recording_required' }, chrome: { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [] } };
 const manyTargets = () => [
   { candidate_ref: 'new', target_id: '', kind: 'browser.connected', display_name: 'Chrome', profile_name: 'Chrome', new_tab: true, state: 'ready' },
   ...Array.from({ length: 40 }, (_, index) => ({ candidate_ref: `page-${index}`, target_id: `page-${index}`, kind: 'browser.connected', display_name: 'Chrome', profile_name: 'Chrome', title: ['DeepSeek', 'floegence/floebrowser', 'API console', 'Project dashboard'][index % 4], url: `https://example.test/workspace/project-${index}/overview`, state: index === 2 ? 'in_use' : 'ready' })),
@@ -40,7 +40,7 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
 
     listManagedProfiles: vi.fn().mockResolvedValue([{ id: 'browser-main', name: 'Default' }]),
     createManagedProfile: vi.fn().mockResolvedValue([{ id: 'browser-main', name: 'Default' }, { id: 'work', name: 'Work' }]),
-    setupExtension: vi.fn(), openExtension: vi.fn(), loadExtensionStatus: vi.fn().mockResolvedValue({ profiles: [] }),
+    setupExtension: vi.fn(), openExtension: vi.fn(), loadExtensionStatus: vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [] }),
   };
   const [thread, setThread] = createSignal('thread');
   const [open, setOpen] = createSignal(true);
@@ -62,7 +62,7 @@ for (const width of [1000, 390]) {
     await page.viewport(width, 850);
     document.documentElement.classList.add('dark');
     const localized = zhCN.flowerSurface.computer;
-    const chrome = { profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
+    const chrome = { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
       diagnostic: { stage: 'open' as const, reason: 'desktop_session_unavailable' } };
     const { management } = mount({ copy: localized, environment: { ...environment, hostname: 'udesk26', platform: 'linux', chrome } });
     await waitFor(() => !!button(localized.switchTarget) && !button(localized.switchTarget).disabled);
@@ -349,7 +349,7 @@ it('does not resume another conversation when a Chrome guide finishes late', asy
   management.loadExtensionStatus.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   await waitFor(() => !!finish);
   setThread('second'); setOpen(false);
-  finish({ profiles: [{ id: 'late', name: 'Chrome' }] });
+  finish({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'late', name: 'Chrome' }] });
   await new Promise(resolve => requestAnimationFrame(resolve));
   expect(onContinue).not.toHaveBeenCalled();
 });
@@ -399,7 +399,7 @@ for (const [locale, localizedCopy, width, dark] of [
 it('keeps the connected overview and its settings pages balanced in Chinese', async () => {
   await page.viewport(1100, 900);
   const localizedCopy = zhCN.flowerSurface.computer;
-  mount({ fullAccess: true, copy: localizedCopy, environment: { ...environment, hostname: 'MacBook-Pro.local', desktop: { state: 'ready' }, chrome: { profiles: [{ id: 'chrome', name: 'Chrome' }] } } });
+  mount({ fullAccess: true, copy: localizedCopy, environment: { ...environment, hostname: 'MacBook-Pro.local', desktop: { state: 'ready' }, chrome: { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'chrome', name: 'Chrome' }] } } });
   await waitFor(() => !!button(localizedCopy.switchTarget) && !button(localizedCopy.switchTarget).disabled);
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
   await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
@@ -438,7 +438,7 @@ it('reconciles a lost selection response by reading inventory without retrying t
 it('keeps narrow settings pages and long resource names inside their scroll viewport', async () => {
   await page.viewport(390, 720);
   const localizedCopy = deDE.flowerSurface.computer;
-  const { management } = mount({ copy: localizedCopy, environment: { ...environment, hostname: 'runtime-with-a-long-workspace-and-device-name.example.test', chrome: { profiles: [{ id: 'work', name: 'Work-profile-with-a-long-unbroken-name-for-layout-qualification' }] } } });
+  const { management } = mount({ copy: localizedCopy, environment: { ...environment, hostname: 'runtime-with-a-long-workspace-and-device-name.example.test', chrome: { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'work', name: 'Work-profile-with-a-long-unbroken-name-for-layout-qualification' }] } } });
   management.listManagedProfiles.mockResolvedValue([{ id: 'work', name: 'Work-profile-with-a-long-unbroken-name-for-layout-qualification' }]);
   await waitFor(() => !!button(localizedCopy.switchTarget) && !button(localizedCopy.switchTarget).disabled);
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;

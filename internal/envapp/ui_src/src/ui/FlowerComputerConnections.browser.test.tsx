@@ -1,3 +1,4 @@
+import type { FlowerChromeStatus } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import '../index.css';
 import './flower-feature.css';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -22,7 +23,7 @@ afterEach(() => { dispose?.(); dispose = undefined; });
 
 it('prepares Chrome automatically and continues only after a real connection', async () => {
   const host = document.createElement('div'); document.body.append(host);
-  const connected = vi.fn().mockResolvedValue({ profiles: [] });
+  const connected = vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [] });
   const continued = vi.fn().mockResolvedValue(undefined);
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
@@ -43,7 +44,7 @@ it('prepares Chrome automatically and continues only after a real connection', a
   expect(continued).not.toHaveBeenCalled();
   button(computerUseEnUS.openExtensions).click();
   await waitFor(() => management.openExtension.mock.calls.length === 1);
-  expect(management.openExtension).toHaveBeenCalledWith('extensions');
+  expect(management.openExtension).toHaveBeenCalledWith('extensions', 'browser-aaaaaaaaaaaaaaaaaaaaaaaa');
   await waitFor(() => document.body.textContent?.includes('Developer mode') === true);
   expect(document.body.textContent).toContain('Load unpacked');
   button(computerUseEnUS.setupInstalled).click();
@@ -51,9 +52,9 @@ it('prepares Chrome automatically and continues only after a real connection', a
   expect(continued).not.toHaveBeenCalled();
   button(computerUseEnUS.openConnection).click();
   await waitFor(() => management.openExtension.mock.calls.length === 2);
-  expect(management.openExtension).toHaveBeenLastCalledWith('connect');
+  expect(management.openExtension).toHaveBeenLastCalledWith('connect', 'browser-aaaaaaaaaaaaaaaaaaaaaaaa');
   expect(continued).not.toHaveBeenCalled();
-  connected.mockResolvedValue({ profiles: [{ id: 'profile', name: 'Chrome' }] });
+  connected.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'profile', name: 'Chrome' }] });
   await waitFor(() => continued.mock.calls.length === 1);
   expect(management.selectCandidate).not.toHaveBeenCalled();
   expect(management.listCandidates).not.toHaveBeenCalled(); expect(management.loadAccess).not.toHaveBeenCalled();
@@ -61,7 +62,7 @@ it('prepares Chrome automatically and continues only after a real connection', a
 
 it('starts with reconnection after prior setup and keeps installation available as a separate action', async () => {
   const host = document.createElement('div'); document.body.append(host);
-  const loadExtensionStatus = vi.fn().mockResolvedValue({ prepared: true, profiles: [] });
+  const loadExtensionStatus = vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], prepared: true, profiles: [] });
   const continued = vi.fn().mockResolvedValue(undefined);
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
@@ -79,33 +80,33 @@ it('starts with reconnection after prior setup and keeps installation available 
   expect(continued).not.toHaveBeenCalled();
   button(computerUseEnUS.setupBack)!.click();
   expect(button(computerUseEnUS.openExtensions)).toBeDefined();
-  loadExtensionStatus.mockResolvedValue({ prepared: true, profiles: [{ id: 'restored', name: 'Chrome' }] });
+  loadExtensionStatus.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], prepared: true, profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'restored', name: 'Chrome' }] });
   await waitFor(() => continued.mock.calls.length === 1);
   expect(management.openExtension).not.toHaveBeenCalled();
 });
 
 it('does not continue a closed guide when profile discovery finishes late', async () => {
   const host = document.createElement('div'); document.body.append(host);
-  let resolve!: (value: {profiles: {id:string;name:string}[]}) => void;
+  let resolve!: (value: FlowerChromeStatus) => void;
   const continued = vi.fn();
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
 
     setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser fixture', platform: 'darwin', extension_home_path: ['Redeven', 'Flower Browser fixture'], native_host: 'fixture.host', extension_id: 'fixture' }),
-    openExtension: vi.fn(), loadExtensionStatus: vi.fn(() => new Promise<{profiles: {id:string;name:string}[]}>(done => { resolve = done; })),
+    openExtension: vi.fn(), loadExtensionStatus: vi.fn(() => new Promise<FlowerChromeStatus>(done => { resolve = done; })),
   };
   const stop = render(() => <FloeConfigProvider><FlowerChromeConnection reuseConnected
     management={management} copy={computerUseEnUS} onConnected={continued} /></FloeConfigProvider>, host);
   await waitFor(() => !!resolve);
   stop(); host.remove();
-  resolve({ profiles: [{ id: 'profile', name: 'Chrome' }] });
+  resolve({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'profile', name: 'Chrome' }] });
   await new Promise(done => setTimeout(done, 50));
   expect(continued).not.toHaveBeenCalled();
 });
 
 it('allows adding a second Chrome profile without treating the existing connection as completion', async () => {
   const host = document.createElement('div'); document.body.append(host);
-  const profiles = vi.fn().mockResolvedValue({ profiles: [{ id: 'first', name: 'Personal' }] });
+  const profiles = vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'first', name: 'Personal' }] });
   const continued = vi.fn().mockResolvedValue(undefined);
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
@@ -118,7 +119,7 @@ it('allows adding a second Chrome profile without treating the existing connecti
   await waitFor(() => management.setupExtension.mock.calls.length === 1);
   expect(continued).not.toHaveBeenCalled();
   expect(host.querySelector('[data-flower-chrome-connection]')).not.toBeNull();
-  profiles.mockResolvedValue({ profiles: [{ id: 'first', name: 'Personal' }, { id: 'second', name: 'Work' }] });
+  profiles.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'first', name: 'Personal' }, { installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'second', name: 'Work' }] });
   await waitFor(() => continued.mock.calls.length === 1);
   expect(host.textContent).toContain(computerUseEnUS.pairingSaved);
   expect(management.selectCandidate).not.toHaveBeenCalled();
@@ -131,7 +132,7 @@ it('stops after a failed automatic continuation and exposes explicit retry witho
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
 
-    loadExtensionStatus: vi.fn().mockResolvedValue({ profiles: [{ id: 'first', name: 'Personal' }] }),
+    loadExtensionStatus: vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'first', name: 'Personal' }] }),
   };
   const stop = render(() => <FloeConfigProvider><FlowerChromeConnection reuseConnected management={management} copy={computerUseEnUS} onConnected={continued} /></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
@@ -154,7 +155,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
 
       setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser 123456789abcdef0', platform, extension_home_path: ['Redeven', 'Flower Browser 123456789abcdef0'], native_host: 'fixture.host', extension_id: 'fixture' }),
       openExtension: vi.fn().mockRejectedValueOnce(new Error('private open details')).mockResolvedValue(undefined),
-      loadExtensionStatus: vi.fn().mockResolvedValue({ profiles: [] }),
+      loadExtensionStatus: vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [] }),
     };
     const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly onContinue={continued} onOpenChange={() => undefined} threadID="guided-thread"
       adapter={{ ...adapter(true), computerManagement: management }} copy={copy} /></LayoutProvider></FloeConfigProvider>, host);
@@ -195,7 +196,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-install.png` });
       button(copy.openExtensionFolder).focus(); await userEvent.keyboard('{Enter}');
       await waitFor(() => !button(copy.openExtensionFolder).disabled);
-      expect(management.openExtension).toHaveBeenLastCalledWith('folder');
+      expect(management.openExtension).toHaveBeenLastCalledWith('folder', 'browser-aaaaaaaaaaaaaaaaaaaaaaaa');
       expect(continued).not.toHaveBeenCalled();
       const manual = [...dialog().querySelectorAll('summary')].find(item => item.textContent === copy.setupManualInstall)!;
       expect(manual.parentElement?.hasAttribute('open')).toBe(false);
@@ -234,7 +235,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
 it('routes an incompatible installed extension back to update without continuing the task', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const continued = vi.fn();
-  const loadExtensionStatus = vi.fn().mockResolvedValue({ profiles: [] });
+  const loadExtensionStatus = vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [] });
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
 
@@ -247,7 +248,7 @@ it('routes an incompatible installed extension back to update without continuing
   await waitFor(() => !!button(computerUseEnUS.setupAlreadyInstalled));
   button(computerUseEnUS.setupAlreadyInstalled).click();
   button(computerUseEnUS.openConnection).click();
-  loadExtensionStatus.mockResolvedValue({ profiles: [{ id: 'stale', name: 'Outdated Chrome' }], error: 'extension_update_required' });
+  loadExtensionStatus.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false, reason: 'extension_update_required' }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'stale', name: 'Outdated Chrome' }] });
   await waitFor(() => host.textContent?.includes(computerUseEnUS.setupUpdateTitle) === true);
   expect(host.textContent).toContain(computerUseEnUS.setupUpdateHint);
   expect(button(computerUseEnUS.setupAlreadyInstalled)).toBeUndefined();
@@ -256,10 +257,10 @@ it('routes an incompatible installed extension back to update without continuing
   await waitFor(() => !!button(computerUseEnUS.setupInstalled));
   expect(host.querySelector('[data-extension-folder-route]')?.textContent).toContain('Flower Browser fixture');
   button(computerUseEnUS.setupInstalled).click();
-  loadExtensionStatus.mockResolvedValue({ profiles: [] });
+  loadExtensionStatus.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [] });
   button(computerUseEnUS.openConnection).click();
   expect(continued).not.toHaveBeenCalled();
-  loadExtensionStatus.mockResolvedValue({ profiles: [{ id: 'updated', name: 'Chrome' }] });
+  loadExtensionStatus.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'updated', name: 'Chrome' }] });
   await waitFor(() => continued.mock.calls.length === 1);
 });
 
@@ -267,7 +268,7 @@ it('explains missing Chrome resources before preparation and copies only safe di
   const { page } = await import('vitest/browser');
   const host = document.createElement('div'); document.body.append(host);
   const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
-    setupExtension: vi.fn(), openExtension: vi.fn(), loadExtensionStatus: vi.fn().mockResolvedValue({ profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
+    setupExtension: vi.fn(), openExtension: vi.fn(), loadExtensionStatus: vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
       diagnostic: { stage: 'prepare', reason: 'browser_resources_missing', detail: '/private/secret' } }) };
   const continued = vi.fn();
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly threadID="thread" onOpenChange={() => undefined}
@@ -296,8 +297,7 @@ it('explains missing Chrome resources before preparation and copies only safe di
 it('keeps installation guidance during a failed status check and resumes only a real connection', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const continued = vi.fn().mockResolvedValue(undefined);
-  const status = vi.fn().mockResolvedValue({ profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
-    diagnostic: { stage: 'open', reason: 'desktop_session_unavailable' } });
+  const status = vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false, reason: 'desktop_session_unavailable' }], profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true });
   const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
     loadExtensionStatus: status, openExtension: vi.fn(), setupExtension: vi.fn().mockResolvedValue({ extension_path: '/home/tang/Redeven/Flower Browser fixture', extension_home_path: ['Redeven', 'Flower Browser fixture'], platform: 'linux', extension_id: 'mgfbpkkmocckooenpdfpefknffjanjce', native_host: 'dev.floegence.redeven.r123456789abcdef0' }) };
   const stop = render(() => <FloeConfigProvider><FlowerChromeConnection reuseConnected management={management} copy={computerUseEnUS} onConnected={continued} /></FloeConfigProvider>, host);
@@ -315,7 +315,7 @@ it('keeps installation guidance during a failed status check and resumes only a 
   expect([...host.querySelectorAll('button')].some(button => buttonText(button) === computerUseEnUS.openExtensions)).toBe(true);
   expect(host.querySelector('input[readonly]')).not.toBeNull();
   expect(host.textContent).not.toContain('private transport detail');
-  status.mockResolvedValue({ profiles: [{ id: 'connected', name: 'Chrome' }] });
+  status.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'connected', name: 'Chrome' }] });
   [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.retryConnection)!.click();
   await waitFor(() => continued.mock.calls.length === 1);
 });
@@ -323,9 +323,9 @@ it('keeps installation guidance during a failed status check and resumes only a 
 it('keeps an application launch failure visible with its diagnostic ID', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
-    loadExtensionStatus: vi.fn().mockResolvedValue({ profiles: [] }),
+    loadExtensionStatus: vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [] }),
     setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser fixture', extension_home_path: ['Redeven', 'Flower Browser fixture'], platform: 'linux' }),
-    openExtension: vi.fn().mockRejectedValue({ code: 'chrome_start_failed', data: { stage: 'open', reason: 'chrome_start_failed', diagnostic_id: 'launch-fixture-123', stderr: 'secret launch details' } }) };
+    openExtension: vi.fn().mockRejectedValue({ code: 'browser_start_failed', data: { stage: 'open', reason: 'browser_start_failed', diagnostic_id: 'launch-fixture-123', stderr: 'secret launch details' } }) };
   const stop = render(() => <FloeConfigProvider><FlowerChromeConnection management={management} copy={computerUseEnUS} onConnected={vi.fn()} /></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
   await waitFor(() => !!host.querySelector('button'));
@@ -340,7 +340,7 @@ it('restarts connection observation when a manual connection link is copied afte
   const host = document.createElement('div'); document.body.append(host);
   const continued = vi.fn().mockResolvedValue(undefined);
   const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
-  const status = vi.fn().mockResolvedValue({ profiles: [], diagnostic: { stage: 'open', reason: 'desktop_session_unavailable' } });
+  const status = vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false, reason: 'desktop_session_unavailable' }], profiles: [] });
   const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
     loadExtensionStatus: status, openExtension: vi.fn(), setupExtension: vi.fn().mockResolvedValue({
       extension_path: '/fixture/Flower Browser', extension_home_path: ['Flower Browser'], platform: 'linux',
@@ -352,10 +352,24 @@ it('restarts connection observation when a manual connection link is copied afte
   status.mockRejectedValue(new Error('connection temporarily unavailable'));
   await waitFor(() => host.textContent?.includes(computerUseEnUS.chromeCheckFailed) === true);
   [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.setupInstalled)!.click();
-  status.mockResolvedValue({ profiles: [{ id: 'confirmed', name: 'Chrome' }] });
+  status.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'confirmed', name: 'Chrome' }] });
   [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonText(button) === computerUseEnUS.chromeCopyConnectionLink)!.click();
   await waitFor(() => continued.mock.calls.length === 1);
   expect(clipboard).toHaveBeenCalledWith('chrome-extension://mgfbpkkmocckooenpdfpefknffjanjce/popup.html#dev.floegence.redeven.r123456789abcdef0');
   expect(management.setupExtension).toHaveBeenCalledOnce();
   expect(management.openExtension).not.toHaveBeenCalled();
+});
+
+it('retries a recorded preparation failure for the selected installation after repair', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const setupExtension = vi.fn().mockResolvedValue({ extension_path: '/fixture', extension_home_path: ['fixture'], platform: 'linux', extension_id: 'fixture', native_host: 'fixture' });
+  const status = { installations: [{ id: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa', kind: 'chromium_snap' as const, name: 'Chromium (Snap)', installed: true, prepared: false, connected: false,
+    reason: 'extension_setup_failed', diagnostic: { stage: 'prepare' as const, reason: 'extension_setup_failed', diagnostic_id: 'repair-fixture' } }], profiles: [] };
+  const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    setupExtension, openExtension: vi.fn(), loadExtensionStatus: vi.fn().mockResolvedValue(status) };
+  const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly threadID="thread" onOpenChange={() => undefined}
+    adapter={{ ...adapter(true), computerManagement: management }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => setupExtension.mock.calls.length === 1);
+  expect(setupExtension).toHaveBeenCalledWith('browser-aaaaaaaaaaaaaaaaaaaaaaaa');
 });

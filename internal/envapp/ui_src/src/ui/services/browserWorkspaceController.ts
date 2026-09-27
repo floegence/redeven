@@ -1,5 +1,5 @@
 import type { Session } from '@floegence/flowersec-core';
-import type { BrowserSourceSelection, BrowserSourceService } from './browserSourceContract';
+import type { BrowserSourceSelection, BrowserSourceService, BrowserSourcePreference } from './browserSourceContract';
 import type { BrowserViewDescriptor, BrowserWorkspaceRequest } from './browserWindowProtocol';
 import { fetchSessionJSON } from './sessionHTTP';
 
@@ -8,7 +8,7 @@ import { BrowserWorkspaceError, browserFailureCode, type BrowserFailureCode } fr
 export type BrowserServiceStatus = { state: 'idle' | 'ready' | 'failed' | 'recovering'; generation: string };
 export type BrowserWorkspaceState = Readonly<{
   phase: 'idle' | 'opening' | 'live' | 'failed';
-  selection: BrowserSourceSelection;
+  selection?: BrowserSourceSelection;
   view?: BrowserViewDescriptor;
   failure?: BrowserFailureCode;
   service?: BrowserServiceStatus;
@@ -26,7 +26,7 @@ export function browserWorkspaceSource(view: BrowserViewDescriptor): BrowserWork
 
 /** Owns one product view. Surfaces own only their document/ports; installer and
  * environment Session lifetimes stay with their existing owners. */
-export function createBrowserWorkspaceController(service: BrowserSourceService, initial: BrowserSourceSelection) {
+export function createBrowserWorkspaceController(service: BrowserSourceService, initial?: BrowserSourceSelection) {
   let state: BrowserWorkspaceState = { phase: 'idle', selection: initial };
   let session: Session | undefined;
   let pending: AbortController | undefined;
@@ -63,11 +63,17 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
         const status = await service.management.loadBrowserInstallation!();
         combined.throwIfAborted();
         if (!status.enabled) throw new BrowserWorkspaceError('BROWSER_DISABLED');
+        if (status.launch?.state === 'system_preparation_required') throw new BrowserWorkspaceError('BROWSER_SANDBOX_UNAVAILABLE');
+        if (status.launch?.state === 'unavailable') throw new BrowserWorkspaceError(status.launch.reason === 'browser_dependencies_missing' ? 'BROWSER_DEPENDENCIES_MISSING' : 'BROWSER_OPEN_FAILED');
         if (status.state !== 'installed') throw new BrowserWorkspaceError('BROWSER_INSTALL_REQUIRED');
       }
       issued = await openBrowserWorkspace(selection.request, combined);
       combined.throwIfAborted();
       if (closed || pending !== attempt) throw new DOMException('Cancelled', 'AbortError');
+      // Persist only the successful latest intent; the server derives the source
+      // from this user/channel-bound view, never from renderer profile claims.
+      await fetchSessionJSON('/_redeven_proxy/api/browser/preference', { method: 'POST', body: JSON.stringify({ view_id: issued.id }), signal: combined });
+      combined.throwIfAborted();
       activeTarget = issued.initial_target;
       publish({ phase: 'live', selection: { label: selection.label, request: browserWorkspaceSource(issued) }, view: issued, service: { state: 'ready', generation: issued.generation } });
       issued = undefined;
@@ -78,12 +84,33 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
       if (!combined.aborted && !closed && pending === attempt && !previous) {
         const failure = browserFailureCode(error);
         publish({ ...state, phase: 'failed', failure });
-        if (!['BROWSER_INSTALL_REQUIRED', 'BROWSER_DISABLED'].includes(failure)) void inspectFailure(currentRevision);
+        if (!['BROWSER_INSTALL_REQUIRED', 'BROWSER_DISABLED', 'BROWSER_SANDBOX_UNAVAILABLE', 'BROWSER_DEPENDENCIES_MISSING'].includes(failure)) void inspectFailure(currentRevision);
       }
       throw error;
     } finally { if (pending === attempt) pending = undefined; }
   };
   const reconnect = async () => {
+    if (closed || !session) throw new BrowserWorkspaceError('BROWSER_DISCONNECTED');
+    if (!state.selection) {
+      const attempt = ++revision;
+      pending?.abort();
+      const reading = new AbortController(); pending = reading;
+      publish({ ...state, phase: 'opening', failure: undefined });
+      try {
+        const saved = await fetchSessionJSON<BrowserSourcePreference>('/_redeven_proxy/api/browser/preference', { method: 'GET', signal: reading.signal });
+        if (closed || revision !== attempt || reading.signal.aborted) return;
+        const request = saved.source_target ? { source_target: saved.source_target } : saved.managed_profile_id ? { managed_profile_id: saved.managed_profile_id } : undefined;
+        if (!request) { publish({ ...state, phase: 'failed', failure: 'BROWSER_SOURCE_UNAVAILABLE' }); return; }
+        await open({ request, label: '' });
+      } catch (error) {
+        if (!closed && revision === attempt && !reading.signal.aborted) {
+          publish({ ...state, phase: 'failed', failure: browserFailureCode(error) });
+          void inspectFailure(attempt);
+        }
+        throw error;
+      } finally { if (pending === reading) pending = undefined; }
+      return;
+    }
     const request = state.view ? { source_target: activeTarget || state.view.initial_target } : state.selection.request;
     if ('connection' in request && 'new_tab' in request.connection) {
       publish({ ...state, phase: 'failed', failure: 'BROWSER_OUTCOME_UNKNOWN' });
@@ -132,7 +159,7 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
           publish({ ...state, phase: 'opening' });
           await fetchSessionJSON('/_redeven_proxy/api/browser/recovery', { method: 'POST', body: JSON.stringify({ expected_generation: status.generation }) });
           if (closed || revision !== attempt) return;
-          if (!('managed_profile_id' in state.selection.request)) throw new BrowserWorkspaceError('BROWSER_SOURCE_UNAVAILABLE');
+          if (!state.selection || !('managed_profile_id' in state.selection.request)) throw new BrowserWorkspaceError('BROWSER_SOURCE_UNAVAILABLE');
           await reconnect();
         } catch (error) { if (!closed && revision === attempt) publish({ ...state, phase: 'failed', failure: browserFailureCode(error) }); throw error; }
       })();

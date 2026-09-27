@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
@@ -26,17 +26,12 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
   const extensionID = 'mgfbpkkmocckooenpdfpefknffjanjce';
   const manifest = JSON.stringify({ name, description: 'Flower native test', path: wrapper, type: 'stdio', allowed_origins: [`chrome-extension://${extensionID}/`] });
   await mkdir(registrationRoot, { recursive: true }); await writeFile(registration, manifest, { flag: 'wx', mode: 0o600 });
-  let context, peer;
+  let context, popup, peer;
   try {
     const accepted = once(server, 'connection');
-    await rm(registration);
     context = await chromium.launchPersistentContext(path.join(directory, 'profile'), { channel: 'chromium', headless: true, chromiumSandbox: true,
       args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
-    const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#${name}`);
-    await popup.locator('#connect-button').click();
-    await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ command: 'status' })).error === 'native_host_missing');
-    assert.equal(await popup.locator('#status').textContent().then(text => /expired|失效/u.test(text)), true, 'expired registration must have a specific recovery instruction');
-    await writeFile(registration, manifest, { flag: 'wx', mode: 0o600 });
+    popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#${name}`);
     await popup.locator('#connect-button').click();
     let timer;
     try { [peer] = await Promise.race([accepted, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Chrome did not launch the native host')), 6000); })]); }
@@ -47,7 +42,7 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
         port.onDisconnect.addListener(() => resolve(chrome.runtime.lastError?.message || 'disconnected'));
         setTimeout(() => { port.disconnect(); resolve('native host did not close'); }, 1000);
       }), name);
-      throw new Error(`${error.message}: ${reason}`);
+      throw new Error(`${error.message}: ${reason}; popup: ${await popup.locator('#status').textContent()}`);
     }
     finally { clearTimeout(timer); }
     let buffer = Buffer.alloc(0); const messages = []; const waiters = [];

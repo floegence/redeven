@@ -84,8 +84,8 @@ func (r *ComputerUseRuntime) ComputerEnvironment(ctx context.Context) (ComputerE
 		state := r.browserInstallation.Snapshot()
 		if !state.Enabled {
 			result.Managed = ComputerCapability{State: "disabled"}
-		} else if state.State != "installed" && result.Managed.State == "on_demand" {
-			result.Managed = ComputerCapability{State: "installation_required"}
+		} else if result.Managed.State == "on_demand" && state.Launch.State != "ready" {
+			result.Managed = ComputerCapability{State: state.Launch.State, Reason: state.Launch.Reason}
 		}
 	}
 	if r.browserInstallationErr != nil {

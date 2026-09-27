@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -20,25 +22,33 @@ var ErrInstallRequired = errors.New("built-in browser requires user-confirmed in
 
 // Status is the single installation observation. It does not own task continuation.
 type Status struct {
-	Enabled       bool    `json:"enabled"`
-	State         string  `json:"state"`
-	Package       Package `json:"package"`
-	Directory     string  `json:"directory"`
-	OperationID   string  `json:"operation_id,omitempty"`
-	ReceivedBytes int64   `json:"received_bytes"`
-	Error         string  `json:"error,omitempty"`
+	Launch               LaunchReadiness `json:"launch"`
+	StorageBytes         int64           `json:"storage_bytes"`
+	AuthorizationCommand string          `json:"authorization_command,omitempty"`
+	Enabled              bool            `json:"enabled"`
+	State                string          `json:"state"`
+	Package              Package         `json:"package"`
+	Directory            string          `json:"directory"`
+	OperationID          string          `json:"operation_id,omitempty"`
+	ReceivedBytes        int64           `json:"received_bytes"`
+	Error                string          `json:"error,omitempty"`
 }
 
 type Manager struct {
-	mu     sync.Mutex
-	root   string
-	status Status
-	client *http.Client
-	cancel context.CancelFunc
-	upload *os.File
-	ctx    context.Context
-	done   chan struct{}
-	closed bool
+	mu                 sync.Mutex
+	root               string
+	status             Status
+	client             *http.Client
+	cancel             context.CancelFunc
+	upload             *os.File
+	ctx                context.Context
+	done               chan struct{}
+	closed             bool
+	systemPrepare      bool
+	sandboxUnavailable bool
+	dependenciesPath   string
+	dependenciesUntil  time.Time
+	dependenciesError  error
 }
 
 func New(root string, pkg Package) (*Manager, error) {
@@ -85,7 +95,7 @@ func (m *Manager) installed() bool {
 	info, err := os.Stat(filepath.Join(m.status.Directory, m.status.Package.Executable))
 	return err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0
 }
-func (m *Manager) Snapshot() Status { m.mu.Lock(); defer m.mu.Unlock(); return m.status }
+func (m *Manager) Snapshot() Status { m.mu.Lock(); defer m.mu.Unlock(); return m.snapshotLocked() }
 func (m *Manager) Executable() (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -95,19 +105,19 @@ func (m *Manager) Executable() (string, error) {
 	if !m.installed() && m.status.State == "installed" {
 		m.status.State = "not_installed"
 	}
-	if m.closed || m.status.State != "installed" {
+	if m.closed || !m.installed() {
 		return "", ErrInstallRequired
 	}
-	return filepath.Join(m.status.Directory, m.status.Package.Executable), nil
+	return m.launchExecutableLocked(true)
 }
 func (m *Manager) SetEnabled(enabled bool) (Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
-		return m.status, errors.New("browser installer closed")
+		return m.snapshotLocked(), errors.New("browser installer closed")
 	}
 	if err := os.MkdirAll(m.root, 0700); err != nil {
-		return m.status, err
+		return m.snapshotLocked(), err
 	}
 	data, _ := json.Marshal(struct {
 		Version int  `json:"version"`
@@ -115,7 +125,7 @@ func (m *Manager) SetEnabled(enabled bool) (Status, error) {
 	}{1, enabled})
 	f, err := os.CreateTemp(m.root, ".settings-")
 	if err != nil {
-		return m.status, err
+		return m.snapshotLocked(), err
 	}
 	defer os.Remove(f.Name())
 	if _, err = f.Write(data); err == nil {
@@ -129,13 +139,13 @@ func (m *Manager) SetEnabled(enabled bool) (Status, error) {
 		err = os.Rename(f.Name(), filepath.Join(m.root, "settings.json"))
 	}
 	if err != nil {
-		return m.status, err
+		return m.snapshotLocked(), err
 	}
 	m.status.Enabled = enabled
 	if !enabled {
 		m.cancelLocked()
 	}
-	return m.status, nil
+	return m.snapshotLocked(), nil
 }
 func (m *Manager) cancelLocked() {
 	if m.cancel != nil {
@@ -153,10 +163,10 @@ func (m *Manager) Cancel(id string) (Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if id == "" || id != m.status.OperationID {
-		return m.status, errors.New("browser installation operation changed")
+		return m.snapshotLocked(), errors.New("browser installation operation changed")
 	}
 	m.cancelLocked()
-	return m.status, nil
+	return m.snapshotLocked(), nil
 }
 func (m *Manager) Close() {
 	m.mu.Lock()
@@ -171,6 +181,7 @@ func (m *Manager) Close() {
 func (m *Manager) finishLocked(state, reason string) {
 	m.status.State = state
 	m.status.Error = reason
+	m.status.AuthorizationCommand = ""
 	m.cancel = nil
 	if m.done != nil {
 		close(m.done)
@@ -178,33 +189,48 @@ func (m *Manager) finishLocked(state, reason string) {
 	}
 }
 func (m *Manager) Start(packageID, source string) (Status, error) {
+	return m.start(packageID, source, false)
+}
+func (m *Manager) start(packageID, source string, system bool) (Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.status.Enabled {
-		return m.status, ErrDisabled
+		return m.snapshotLocked(), ErrDisabled
 	}
 	if m.closed || packageID != m.status.Package.ID || (source != "download" && source != "upload") {
-		return m.status, errors.New("invalid browser installation request")
+		return m.snapshotLocked(), errors.New("invalid browser installation request")
 	}
 	if m.cancel != nil {
-		return m.status, errors.New("browser installation is already active")
+		return m.snapshotLocked(), errors.New("browser installation is already active")
 	}
-	if m.installed() {
+	if m.installed() && (!system || m.snapshotLocked().Launch.State == "ready") {
 		m.status.State = "installed"
-		return m.status, nil
+		return m.snapshotLocked(), nil
+	}
+	m.systemPrepare = system
+	if system && m.installed() {
+		if _, err := os.Stat(m.archivePath()); err == nil {
+			m.ctx, m.cancel = context.WithCancel(context.Background())
+			m.done = make(chan struct{})
+			m.status.OperationID = newBrowserOperationID()
+			m.status.State = "verifying_system"
+			m.status.Error = ""
+			go m.systemPreparation(m.ctx)
+			return m.snapshotLocked(), nil
+		}
 	}
 	if err := os.MkdirAll(m.root, 0700); err != nil {
-		return m.status, err
+		return m.snapshotLocked(), err
 	}
 	file, err := os.CreateTemp(m.root, ".browser-*.zip")
 	if err != nil {
-		return m.status, err
+		return m.snapshotLocked(), err
 	}
 	seed := make([]byte, 16)
 	if _, err = rand.Read(seed); err != nil {
 		_ = file.Close()
 		_ = os.Remove(file.Name())
-		return m.status, err
+		return m.snapshotLocked(), err
 	}
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.done = make(chan struct{})
@@ -218,33 +244,33 @@ func (m *Manager) Start(packageID, source string) (Status, error) {
 		m.status.State = "downloading"
 		go m.download(m.ctx, file)
 	}
-	return m.status, nil
+	return m.snapshotLocked(), nil
 }
 func (m *Manager) WriteChunk(id string, offset int64, data []byte) (Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.upload == nil || id != m.status.OperationID || offset != m.status.ReceivedBytes || len(data) == 0 || len(data) > 256*1024 || offset+int64(len(data)) > m.status.Package.SizeBytes {
-		return m.status, errors.New("invalid browser upload chunk")
+		return m.snapshotLocked(), errors.New("invalid browser upload chunk")
 	}
 	n, err := m.upload.Write(data)
 	m.status.ReceivedBytes += int64(n)
 	if err != nil {
 		m.cancelLocked()
-		return m.status, err
+		return m.snapshotLocked(), err
 	}
-	return m.status, nil
+	return m.snapshotLocked(), nil
 }
 func (m *Manager) CompleteUpload(id string) (Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.upload == nil || id != m.status.OperationID || m.status.ReceivedBytes != m.status.Package.SizeBytes {
-		return m.status, errors.New("browser upload is incomplete")
+		return m.snapshotLocked(), errors.New("browser upload is incomplete")
 	}
 	f := m.upload
 	m.upload = nil
 	m.status.State = "verifying"
 	go m.install(m.ctx, f)
-	return m.status, nil
+	return m.snapshotLocked(), nil
 }
 
 // ArchiveSpec maps the product's compiled browser catalog to the released
@@ -334,6 +360,26 @@ func (m *Manager) install(ctx context.Context, file *os.File) {
 		m.fail(ctx, file, "install_failed")
 		return
 	}
+	// Linux system preparation verifies the original archive again as root.
+	// Platforms without that flow retain only the installed package.
+	if runtime.GOOS == "linux" {
+		archive, err := os.OpenFile(filepath.Join(staging, ".archive.zip"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if err != nil {
+			m.fail(ctx, file, "install_failed")
+			return
+		}
+		if _, err = file.Seek(0, io.SeekStart); err == nil {
+			_, err = io.Copy(archive, file)
+		}
+		closeErr := archive.Close()
+		if err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			m.fail(ctx, file, "install_failed")
+			return
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if ctx.Err() != nil || !m.status.Enabled || m.closed {
@@ -346,12 +392,23 @@ func (m *Manager) install(ctx context.Context, file *os.File) {
 			err = os.RemoveAll(m.status.Directory)
 		}
 		if err == nil {
-			err = os.Rename(staging, m.status.Directory)
+			if m.installed() {
+				if runtime.GOOS == "linux" {
+					err = os.Rename(filepath.Join(staging, ".archive.zip"), m.archivePath())
+				}
+			} else {
+				err = os.Rename(staging, m.status.Directory)
+			}
 		}
 	}
 	if err != nil {
 		m.finishLocked("failed", "install_failed")
 		return
 	}
-	m.finishLocked("installed", "")
+	if m.systemPrepare {
+		m.status.State = "verifying_system"
+		go m.systemPreparation(ctx)
+	} else {
+		m.finishLocked("installed", "")
+	}
 }

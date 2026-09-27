@@ -15,8 +15,8 @@ export function browserSourceManagement(environment: string) {
     loadBrowserInstallation: () => installation.load(),
     saveBrowserEnabled: enabled => installation.setEnabled(enabled),
     installBrowser: input => installation.install(input),
-    setupExtension: () => request('POST', '/_redeven_proxy/api/browser/extension/setup'),
-    openExtension: action => request('POST', '/_redeven_proxy/api/browser/extension/open', { action }),
+    setupExtension: installationID => request('POST', '/_redeven_proxy/api/browser/extension/setup', { installation_id: installationID }),
+    openExtension: (action, installationID) => request('POST', '/_redeven_proxy/api/browser/extension/open', { action, installation_id: installationID }),
     loadExtensionStatus: () => request('GET', '/_redeven_proxy/api/browser/extension/status'),
   } satisfies Pick<FlowerComputerManagement, 'browserDesktopAvailable' | 'subscribeBrowserInstallation' | 'loadBrowserInstallation' | 'saveBrowserEnabled' | 'installBrowser' | 'setupExtension' | 'openExtension' | 'loadExtensionStatus'>;
 }
@@ -27,6 +27,7 @@ export function browserSourceService(environment: string): BrowserSourceService 
   });
   return {
     management: browserSourceManagement(environment),
+    preference: signal => api('preference', signal),
     profiles: signal => api('profiles', signal),
     createProfile: (name, signal) => api('profiles', signal, { name }),
     status: signal => api('extension/status', signal),

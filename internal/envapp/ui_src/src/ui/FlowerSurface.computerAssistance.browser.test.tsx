@@ -1,3 +1,4 @@
+import type { FlowerChromeStatus } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import '../index.css';
 import './flower-feature.css';
 import { expect, it, vi } from 'vitest';
@@ -30,10 +31,10 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   const gate = deferred<void>();
   const other = thread({ thread_id: 'other-conversation' });
   const saveAccess = vi.fn(() => gate.promise);
-  const loadExtensionStatus = vi.fn(async () => ({ profiles: [{ id: 'personal', name: 'Personal' }] }));
+  const loadExtensionStatus = vi.fn(async (): Promise<FlowerChromeStatus> => ({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'personal', name: 'Personal' }] }));
   const loadAccess = vi.fn(async () => ({ origins: ['https://existing.test'], apps: ['dev.Notes'], allow_foreground: false }));
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:step', current: { ...current, view_version: 2, activity: 'idle' as const, last_outcome: 'completed' as const, interactions: [] } }));
-  const browser = { enabled: true, state: 'not_installed' as const, directory: '/state/browser', received_bytes: 0,
+  const browser = { storage_bytes: 600000, enabled: true, state: 'not_installed' as const, launch: { state: 'installation_required' as const }, directory: '/state/browser', received_bytes: 0,
     package: { name: 'Chrome for Testing', id: 'fixture', version: '148', platform: 'linux', architecture: 'amd64', url: 'https://cdn.playwright.dev/fixture.zip', sha256: '0'.repeat(64), size_bytes: 180000000, installed_bytes: 390000000 } };
   const loadBrowserInstallation = vi.fn().mockResolvedValue(browser);
   let receiveInstallation: ((value: FlowerBrowserInstallationSnapshot) => void) | undefined;
@@ -43,7 +44,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
     return unsubscribeInstallation;
   });
   const publishInstallation = (value: FlowerBrowserInstallationSnapshot) => receiveInstallation!(value);
-  const installBrowser = vi.fn().mockResolvedValue({ ...browser, state: 'downloading', operation_id: 'confirmed' });
+  const installBrowser = vi.fn().mockResolvedValue({ ...browser, state: 'downloading', launch: { state: 'installation_required' as const }, operation_id: 'confirmed' });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput,
     computerManagement: { loadBrowserInstallation, subscribeBrowserInstallation, installBrowser, saveBrowserEnabled: vi.fn(), openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
@@ -206,7 +207,7 @@ it('opens the system-browser connection guide and resumes the canonical request 
 
 it('closes the connection guide when its conversation changes during a connection check', async () => {
   const s = await setup('connection', 'full_access');
-  const check = deferred<{ profiles: { id: string; name: string }[] }>();
+  const check = deferred<FlowerChromeStatus>();
   s.loadExtensionStatus.mockImplementationOnce(() => check.promise);
   const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
   Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect Chrome')!.click();
@@ -214,7 +215,7 @@ it('closes the connection guide when its conversation changes during a connectio
   s.surface.querySelector<HTMLButtonElement>('[data-thread-id="other-conversation"] .flower-thread-card-select-button')!.click();
   await waitFor(() => s.surface.querySelector('[data-thread-id="other-conversation"]')?.getAttribute('data-flower-thread-active') === 'true');
   await waitFor(() => !document.querySelector('[role="dialog"]'));
-  check.resolve({ profiles: [{ id: 'personal', name: 'Personal' }] });
+  check.resolve({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'personal', name: 'Personal' }] });
   await new Promise(resolve => setTimeout(resolve, 30));
   expect(s.submitInput).not.toHaveBeenCalled();
 });
@@ -238,7 +239,7 @@ it('shows one installation action and continues only after the confirmed browser
   const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Download and install')!;
   confirm.click(); await waitFor(() => s.installBrowser.mock.calls.length === 1);
   expect(s.submitInput).not.toHaveBeenCalled();
-  s.publishInstallation({ ...s.browser, state: 'installed' });
+  s.publishInstallation({ ...s.browser, state: 'installed', launch: { state: 'ready' as const } });
   await vi.waitFor(() => expect(s.submitInput).toHaveBeenCalledTimes(1), { timeout: 4000 });
   expect(JSON.stringify(s.submitInput.mock.calls)).toContain('Continue with installed browser');
 });
@@ -253,7 +254,7 @@ it('never continues another conversation after an installation completes', async
   await waitFor(() => s.surface.querySelector('[data-thread-id="other-conversation"]')?.getAttribute('data-flower-thread-active') === 'true');
   expect(s.unsubscribeInstallation).toHaveBeenCalledTimes(1);
   // A queued notification must remain harmless even after unsubscription.
-  s.publishInstallation({ ...s.browser, state: 'installed' });
+  s.publishInstallation({ ...s.browser, state: 'installed', launch: { state: 'ready' as const } });
   await new Promise(resolve => setTimeout(resolve, 30));
   expect(s.submitInput).not.toHaveBeenCalled();
 });

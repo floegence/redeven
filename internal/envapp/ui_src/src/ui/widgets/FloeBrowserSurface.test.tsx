@@ -76,7 +76,7 @@ describe('FloeBrowserSurface', () => {
     const unsubscribe = controller.subscribe(setWorkspace);
     const container = document.createElement('div'); document.body.append(container);
     try {
-      dispose = render(() => <Show when={workspace().view}><FloeBrowserSurface sources={{ ...sources, service, current: workspace().selection, select: controller.open }}
+      dispose = render(() => <Show when={workspace().view}><FloeBrowserSurface sources={{ ...sources, service, current: workspace().selection!, select: controller.open }}
         onOpenWindow={async () => undefined} session={session} view={workspace().view!} title="Remote Browser" locale="en-US" messages={englishMessages}
         copy={{ unavailable: 'Unavailable', connecting: 'Connecting' }} onReconnect={() => undefined} /></Show>, container);
       await vi.waitFor(() => expect(state.open).toHaveBeenCalledOnce());

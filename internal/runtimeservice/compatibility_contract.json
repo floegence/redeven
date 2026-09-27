@@ -3,10 +3,11 @@
   "release_review": {
     "release_version": "v0.13.0",
     "previous_release": "v0.11.0",
-    "reviewed_at": "2026-09-23",
-    "review_id": "local-access-cookie-scope-v1",
-    "summary": "Epoch 33 scopes Runtime access and MFA challenge cookies by transport and validated authority port. Desktop consumes Runtime-issued cookie names and native CodeSpace descriptors instead of the retired fixed name. Epoch 32 and older peers remain upgrade-only.",
+    "reviewed_at": "2026-09-27",
+    "review_id": "browser-source-system-preparation-v1",
+    "summary": "Epoch 34 requires installation-scoped personal browser setup and status, built-in browser launch readiness and explicit system preparation. Desktop and Runtime share this contract; epoch 33 and older peers remain upgrade-only.",
     "checked_surfaces": [
+      "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 34. Personal-browser setup/open requests select a Runtime-discovered installation ID; status exposes installation availability and connection diagnostics. Managed-browser status separates installation from executable readiness and adds the prepare_system action and bounded authorization phases. Source preference uses authenticated view identity. Old Desktop and Runtime combinations cannot interpret these required fields or authorize the new actions and must upgrade through the existing compatibility flow.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 33. HTTP/HTTPS browser refresh retains the existing absolute login lifetime; Runtime restart and security changes still revoke ordinary sessions. Flower HTTP requests retain the complete issued cookie pair, and native CodeSpace descriptors supply access_cookie_name across forwarded ports.",
       "Desktop management consumers share one leased bridge and isolate settings from model preparation. Desktop model connect and pre-upgrade RPC admission use existing AI readiness: transient 503, blocked 409, permanent request/authentication errors unchanged. The connector already classifies these statuses; endpoint paths, successful payloads, TOTP state and Runtime Service wire shapes are unchanged, so epoch 32 remains sufficient.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 32; epoch 31 is upgrade-only. Runtime owns encrypted authentication state, one-shot factors, recovery, absolute session expiry and revocation. Native CodeSpace receives a one-shot exact-resource delegation from its authenticated parent and resumes within that parent lifetime. Public URL query credentials are rejected. Private authenticated host management retains its independent authority and never claims TOTP verification.",
@@ -68,7 +69,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 33,
+  "compatibility_epoch": 34,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -93,7 +94,8 @@
     29,
     30,
     31,
-    32
+    32,
+    33
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

@@ -36,6 +36,10 @@ func BrowserErrorCode(err error) string {
 	switch {
 	case errors.Is(err, errBrowserOutcomeUnknown):
 		return "BROWSER_OUTCOME_UNKNOWN"
+	case errors.Is(err, browserinstall.ErrSystemPreparationRequired):
+		return "BROWSER_SANDBOX_UNAVAILABLE"
+	case errors.Is(err, browserinstall.ErrDependenciesMissing):
+		return "BROWSER_DEPENDENCIES_MISSING"
 	case errors.Is(err, browserinstall.ErrInstallRequired):
 		return "BROWSER_INSTALL_REQUIRED"
 	case errors.Is(err, browserinstall.ErrDisabled):
@@ -54,8 +58,15 @@ func BrowserErrorCode(err error) string {
 		return "BROWSER_REQUEST_CANCELLED"
 	}
 	var startup *TargetStartupError
-	if errors.As(err, &startup) && startup.Reason == "browser_connection_failed" {
-		return "BROWSER_SERVICE_FAILED"
+	if errors.As(err, &startup) {
+		switch startup.Reason {
+		case "browser_connection_failed":
+			return "BROWSER_SERVICE_FAILED"
+		case "browser_sandbox_unavailable":
+			return "BROWSER_SANDBOX_UNAVAILABLE"
+		case "browser_dependency_missing":
+			return "BROWSER_DEPENDENCIES_MISSING"
+		}
 	}
 	var policy *targetToolPolicyError
 	if errors.As(err, &policy) && policy.code == "target_selection_stale" {

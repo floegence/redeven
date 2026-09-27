@@ -88,6 +88,10 @@ func (c *cli) run(args []string) int {
 		return c.desktopTargetProcessInventoryCmd(args[1:])
 	case "desktop-target-process-stop":
 		return c.desktopTargetProcessStopCmd(args[1:])
+	case "browser-system-authorize":
+		return c.browserSystemAuthorizeCmd(args[1:])
+	case "browser-system-install":
+		return c.browserSystemInstallCmd(args[1:])
 	case "browser-package":
 		return c.browserPackageCmd(args[1:])
 	case "host-application-package":

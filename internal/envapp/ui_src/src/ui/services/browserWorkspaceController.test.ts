@@ -13,7 +13,7 @@ const view = (id: string) => ({ id, generation: 'fixture-generation', profile_id
 async function fixture(installed = true) {
   const request = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) => Response.json({ ok: true, data: view('browser-view-first') }));
   unbind = await bindTestSessionHTTP(request);
-  const load = vi.fn(async () => ({ enabled: true, state: installed ? 'installed' : 'not_installed' }));
+  const load = vi.fn(async () => ({ enabled: true, state: installed ? 'installed' : 'not_installed', launch: { state: installed ? 'ready' : 'installation_required' } }));
   const service = { management: { loadBrowserInstallation: load } } as unknown as BrowserSourceService;
   controller = createBrowserWorkspaceController(service, selection);
   controller.setSession({} as Session);
@@ -57,8 +57,8 @@ it('rebuilds presentation from the admitted target without opening another works
   expect(controller.currentRequest()).toEqual({ source_target: 'second-tab' });
   request.mockResolvedValueOnce(Response.json({ ok: true, data: view('browser-view-next') }));
   await controller.reconnect();
-  expect(String(request.mock.calls[1]![0])).toBe('/_redeven_proxy/api/browser/views');
-  expect(JSON.parse(String(request.mock.calls[1]![1]?.body))).toEqual({ targets: ['second-tab'] });
+  expect(String(request.mock.calls[2]![0])).toBe('/_redeven_proxy/api/browser/views');
+  expect(JSON.parse(String(request.mock.calls[2]![1]?.body))).toEqual({ targets: ['second-tab'] });
   controller.close(); controller.close();
   expect(() => controller.currentRequest()).toThrow('BROWSER_SOURCE_UNAVAILABLE');
   expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(2);
@@ -94,7 +94,7 @@ it('restores the preceding notice when the user cancels the current selection', 
   const { controller, request, load } = await fixture(false);
   await expect(controller.open(selection)).rejects.toThrow();
   const before = controller.snapshot();
-  load.mockResolvedValueOnce({ enabled: true, state: 'installed' });
+  load.mockResolvedValueOnce({ enabled: true, state: 'installed', launch: { state: 'ready' as const } });
   let resolve!: (response: Response) => void;
   request.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
   const abort = new AbortController();
@@ -105,4 +105,49 @@ it('restores the preceding notice when the user cancels the current selection', 
   await open;
   expect(controller.snapshot()).toEqual(before);
   expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1);
+});
+
+it('shows source selection on first use without starting a browser', async () => {
+  const request = vi.fn(async (_path: RequestInfo | URL) => Response.json({ ok: true, data: { preference: null } }));
+  unbind = await bindTestSessionHTTP(request);
+  controller = createBrowserWorkspaceController({ management: {} } as BrowserSourceService);
+  controller.setSession({} as Session);
+  await controller.reconnect();
+  expect(controller.snapshot()).toMatchObject({ phase: 'failed', failure: 'BROWSER_SOURCE_UNAVAILABLE' });
+  expect(controller.snapshot().selection).toBeUndefined();
+  expect(request).toHaveBeenCalledOnce();
+  expect(String(request.mock.calls[0]?.[0])).toBe('/_redeven_proxy/api/browser/preference');
+});
+
+it('does not persist a superseded source selection', async () => {
+  const { controller, request } = await fixture();
+  let resolve!: (response: Response) => void;
+  request.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  const abandoned = controller.open(selection).catch(() => undefined);
+  await vi.waitFor(() => expect(resolve).toBeDefined());
+  await controller.open(selection);
+  resolve(Response.json({ ok: true, data: view('browser-view-abandoned') }));
+  await abandoned;
+  const saved = request.mock.calls.filter(([path]) => String(path).endsWith('/preference'));
+  expect(saved).toHaveLength(1);
+  expect(JSON.parse(String(saved[0]![1]?.body))).toEqual({ view_id: 'browser-view-first' });
+});
+
+it('owns preference failure presentation and cancels obsolete reads on session replacement', async () => {
+  const request = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit): Promise<Response> => { throw new Error('Offline'); });
+  unbind = await bindTestSessionHTTP(request);
+  controller = createBrowserWorkspaceController({ management: {} } as BrowserSourceService);
+  controller.setSession({} as Session);
+  await expect(controller.reconnect()).rejects.toThrow('Offline');
+  expect(controller.snapshot()).toMatchObject({ phase: 'failed', failure: 'BROWSER_OPEN_FAILED' });
+  let reject!: (error: Error) => void;
+  request.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+  const obsolete = controller.reconnect().catch(() => undefined);
+  const signal = request.mock.calls.at(-1)?.[1]?.signal;
+  controller.setSession({} as Session);
+  expect(signal?.aborted).toBe(true);
+  const current = controller.snapshot();
+  reject(new Error('Old request failed'));
+  await obsolete;
+  expect(controller.snapshot()).toEqual(current);
 });

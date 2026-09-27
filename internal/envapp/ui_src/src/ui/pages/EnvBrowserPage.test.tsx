@@ -15,7 +15,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({ useTheme: () => ({ resolvedTheme
 vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: { children: unknown }) => <button>{props.children as never}</button> }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({ env_id: () => 'env_local' }) }));
 vi.mock('../i18n', () => ({ useI18n: () => ({ locale: () => fixture.locale(), t: (key: string) => key }) }));
-vi.mock('../services/browserSourceManagement', () => ({ browserSourceService: () => ({ management: { loadBrowserInstallation: async () => ({ enabled: true, state: 'installed' }) } }) }));
+vi.mock('../services/browserSourceManagement', () => ({ browserSourceService: () => ({ management: { loadBrowserInstallation: async () => ({ enabled: true, state: 'installed', launch: { state: 'ready' } }) } }) }));
 vi.mock('../widgets/FloeBrowserSurface', () => ({ FloeBrowserSurface: (props: { onInteraction?: () => void }) => <button data-browser-surface onClick={() => props.onInteraction?.()} /> }));
 vi.mock('../widgets/BrowserWorkspaceNotice', () => ({ BrowserWorkspaceNotice: () => <div /> }));
 vi.mock('../widgets/BrowserSourceDialog', () => ({ BrowserSourceDialog: () => <div /> }));
@@ -31,13 +31,13 @@ it('keeps the view stable when shell settings refresh without a presentation cha
   fixture.theme = theme; fixture.locale = locale; fixture.session = () => (session);
   const session = {} as Session;
   let sequence = 0;
-  const request = vi.fn(async (_path: RequestInfo | URL, init?: RequestInit) => Response.json({ ok: true, data: init?.method === 'DELETE' ? null : {
+  const request = vi.fn(async (path: RequestInfo | URL, init?: RequestInit) => Response.json({ ok: true, data: String(path).endsWith('/preference') ? (init?.method === 'POST' ? null : { preference: { profile_id: 'browser-main' }, managed_profile_id: 'browser-main' }) : init?.method === 'DELETE' ? null : {
     id: `browser-view-${++sequence}`, generation: 'generation', profile_id: 'browser-main', initial_target: 'confirmed-tab', protocol_version: 24, media_wire_version: 1,
   } }));
   unbind = await bindTestSessionHTTP(request);
   const root = document.createElement('div'); document.body.append(root);
   const interaction = vi.fn();
-  dispose = render(() => <EnvBrowserPage onInteraction={interaction} onOpenWindow={async () => undefined} />, root);
+  dispose = render(() => <EnvBrowserPage session={fixture.session()} onInteraction={interaction} onOpenWindow={async () => undefined} />, root);
   await vi.waitFor(() => expect(root.querySelector('[data-browser-surface]')).not.toBeNull());
   expect(root.querySelector('.redeven-browser-profile-bar')).toBeNull();
   expect(sequence).toBe(1);
@@ -48,8 +48,23 @@ it('keeps the view stable when shell settings refresh without a presentation cha
   expect(sequence).toBe(1);
   setLocale('zh-CN');
   await vi.waitFor(() => expect(sequence).toBe(2));
-  expect(request.mock.calls.filter(([, init]) => init?.method === 'POST').map(([path, init]) => [String(path), JSON.parse(String(init?.body))])).toEqual([
+  expect(request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference')).map(([path, init]) => [String(path), JSON.parse(String(init?.body))])).toEqual([
     ['/_redeven_proxy/api/browser/workspace', { managed_profile_id: 'browser-main' }],
     ['/_redeven_proxy/api/browser/views', { targets: ['confirmed-tab'] }],
   ]);
+});
+
+it('waits for the shell to admit the session before reading or opening a source', async () => {
+  const transport = {} as Session;
+  fixture.session = () => transport;
+  const [admitted, setAdmitted] = createSignal<Session>();
+  const request = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) => Response.json({ ok: true, data: { preference: null } }));
+  unbind = await bindTestSessionHTTP(request);
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <EnvBrowserPage session={admitted()} onOpenWindow={async () => undefined} />, root);
+  await Promise.resolve(); await Promise.resolve();
+  expect(request).not.toHaveBeenCalled();
+  setAdmitted(transport);
+  await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+  expect(String(request.mock.calls[0]?.[0])).toBe('/_redeven_proxy/api/browser/preference');
 });

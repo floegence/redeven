@@ -13,7 +13,7 @@ vi.mock('./browserWindow', () => ({ createBrowserWindow: (options: BrowserWindow
   const host = { options, close: vi.fn(() => options.onClose?.()), suspend: vi.fn() }; hosts.push(host); return host;
 } }));
 vi.mock('./desktopShellBridge', () => ({ desktopShellBridgeAvailable: () => false }));
-vi.mock('./browserSourceManagement', () => ({ browserSourceService: () => ({ management: { loadBrowserInstallation: async () => ({ enabled: true, state: 'installed' }) } }) }));
+vi.mock('./browserSourceManagement', () => ({ browserSourceService: () => ({ management: { loadBrowserInstallation: async () => ({ enabled: true, state: 'installed', launch: { state: 'ready' } }) } }) }));
 
 let release: (() => void) | undefined;
 let windows: ReturnType<typeof createBrowserWorkspaceWindows> | undefined;
@@ -51,7 +51,7 @@ it.each([
 
 async function setupWindows() {
   let sequence = 0;
-  const request = vi.fn(async (_path: RequestInfo | URL, init?: RequestInit) => Response.json({ ok: true, data: init?.method === 'DELETE' ? null : {
+  const request = vi.fn(async (path: RequestInfo | URL, init?: RequestInit) => Response.json({ ok: true, data: String(path).endsWith('/preference') || init?.method === 'DELETE' ? null : {
     generation: 'generation', id: `browser-view-${++sequence}`, profile_id: 'browser-main', initial_target: 'selected-tab', protocol_version: 24, media_wire_version: 1,
   } }));
   release = await bindTestSessionHTTP(request);
@@ -95,7 +95,7 @@ it('keeps the current document when source replacement fails and ignores retired
   original.options.onClose?.(); original.options.onFailure?.('BROWSER_SERVICE_FAILED');
   expect(children[0]!.close).not.toHaveBeenCalled();
   expect(hosts[1]!.suspend).not.toHaveBeenCalled();
-  const posts = request.mock.calls.filter(([, init]) => init?.method === 'POST');
+  const posts = request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference'));
   expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['current-tab'] });
 });
 
@@ -105,6 +105,6 @@ it('opens another window from the confirmed current source without replaying a s
   expect(hosts[0]!.options.configuration.openWindow).toBe(true);
   await hosts[0]!.options.onOpenWindow?.();
   expect(children).toHaveLength(2);
-  const posts = request.mock.calls.filter(([, init]) => init?.method === 'POST');
+  const posts = request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference'));
   expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['latest-tab'] });
 });

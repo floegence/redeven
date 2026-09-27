@@ -66,7 +66,7 @@ async function main() {
   stageComputerResources(resources);
   const helperArchive = path.join(staging, 'computer.zip');
   assert.equal(spawnSync('python3', ['-c', 'import shutil,sys; shutil.make_archive(sys.argv[1], "zip", sys.argv[2])', helperArchive.slice(0, -4), resources]).status, 0, 'Unable to archive staged product helpers');
-  const env = { ...process.env, GOWORK: 'off', REDEVEN_BROWSER_INTEGRATION: '1', REDEVEN_BROWSER_SOURCE: 'managed', REDEVEN_BROWSER_ARCHIVE: archive, REDEVEN_COMPUTER_ARCHIVE: helperArchive };
+  const env = { ...process.env, GOWORK: 'off', REDEVEN_BROWSER_INTEGRATION: '1', REDEVEN_BROWSER_SOURCE: 'managed', REDEVEN_BROWSER_ARCHIVE: archive, REDEVEN_COMPUTER_ARCHIVE: helperArchive, REDEVEN_BROWSER_TEST_EXECUTABLE: executable };
   const results = [];
   async function run(name, command, args, cwd, environment, verify) {
     console.log(`[browser] ${name}`);
@@ -77,26 +77,34 @@ async function main() {
     results.push({ name, count });
     console.log(`[browser] ${name}: ${count} tests passed, zero skipped`);
   }
-  await run('runtime', 'go', ['test', './internal/ai', '-run', '^TestBrowser|^TestManagedBrowser|^TestComputer(MissingBrowser|FullAccessManagedBrowser|AutonomousManaged|AutonomousProductionToolLoop|NavigationFailureContinuesProductionTurn)', '-count=1', '-json'], root, env,
+  await run('runtime', 'go', ['test', './internal/ai', '-parallel=1', '-run', '^TestBrowser|^TestExtension|^TestManagedBrowser|^TestComputer(MissingBrowser|FullAccessManagedBrowser|AutonomousManaged|AutonomousProductionToolLoop|NavigationFailureContinuesProductionTurn)', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestBrowserRecoveryRebuildsOnceAndPreservesSavedTabs', 'TestBrowserRecoveryDoesNotReviveFlowerInitialTarget', 'TestBrowserDirectoryBeforeUnloadKeepsOtherWorkspaceCommandsUsable', 'TestBrowserInputSaturationDoesNotRetireHealthyView', 'TestManagedBrowserRequestCancellationPreservesProcessAndResponseOrder', 'TestManagedBrowserForegroundPopupSelectsOnlyItsInputOwner', 'TestComputerNavigationFailureContinuesProductionTurn']));
-  await run('storage-installation', 'go', ['test', './internal/browserinstall', './internal/browserstore', '-count=1', '-json'], root, env, verifyGoTests);
+  await run('storage-installation', 'go', ['test', './internal/browserinstall', './internal/browserstore', './internal/browserbridge', '-count=1', '-json'], root, env, verifyGoTests);
   await run('api', 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowser(WorkspaceFailure|ViewAPI|Library)', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestBrowserWorkspaceFailureActionsAndRecoveryAuthorization']));
   const bridgeBinary = path.join(staging, 'redeven');
   const bridgeBuild = spawnSync('go', ['build', '-o', bridgeBinary, './cmd/redeven'], { cwd: root, env, encoding: 'utf8' });
   await writeFile(path.join(evidence, 'native-bridge-build.log'), bridgeBuild.stdout + bridgeBuild.stderr);
   assert.equal(bridgeBuild.status, 0, 'Unable to build the real Native Messaging bridge');
-  await run('chrome-extension', process.execPath, ['--test', '--test-reporter=tap', 'scripts/computerExtensionLifecycle.node-test.mjs', 'scripts/computerExtensionPopup.node-test.mjs', 'scripts/computerExtension.node-test.mjs', 'scripts/computerNativeMessaging.node-test.mjs'], ui, { ...env, REDEVEN_BROWSER_BRIDGE_BINARY: bridgeBinary }, verifyNodeTests);
+  await run('managed-launch', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'scripts/computerManagedLaunch.node-test.mjs'], ui, env, verifyNodeTests);
+  // Browser contexts and native-host registrations are process-wide on some
+  // Chromium builds. Keep this qualification lane serial so one test cannot
+  // race another context's extension worker or native host lookup.
+  await run('chrome-extension', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'scripts/computerExtensionLifecycle.node-test.mjs', 'scripts/computerExtensionPopup.node-test.mjs', 'scripts/computerExtension.node-test.mjs'], ui, env, verifyNodeTests);
+  // Native Messaging is a browser-process boundary. Run it in its own Node
+  // process so Chrome cannot retain an extension worker from another fixture
+  // while the disposable host manifest is being exercised.
+  await run('native-messaging', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'scripts/computerNativeMessaging.node-test.mjs'], ui, { ...env, REDEVEN_BROWSER_BRIDGE_BINARY: bridgeBinary }, verifyNodeTests);
   for (const [name, args] of [
-    ['ui-unit', ['src/browserDocument.test.ts', 'src/ui/services/browserWorkspaceController.test.ts', 'src/ui/services/browserWindow.test.ts', 'src/ui/services/browserWorkspaceWindows.test.ts', 'src/ui/widgets/FloeBrowserSurface.test.tsx', 'src/ui/pages/EnvBrowserPage.test.tsx']],
+    ['ui-unit', ['src/browserDocument.test.ts', 'src/ui/services/browserWorkspaceController.test.ts', 'src/ui/services/browserSourcePort.test.ts', 'src/ui/services/browserWindow.test.ts', 'src/ui/services/browserWorkspaceWindows.test.ts', 'src/ui/widgets/FloeBrowserSurface.test.tsx', 'src/ui/pages/EnvBrowserPage.test.tsx']],
     ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/browserDocument.browser.test.tsx', 'src/ui/widgets/BrowserSourceDialog.browser.test.tsx', 'src/ui/FlowerManagedBrowser.browser.test.tsx', 'src/ui/FlowerComputerConnections.browser.test.tsx']],
   ]) {
     const report = path.join(evidence, `${name}.json`);
     await run(name, 'pnpm', ['exec', 'vitest', 'run', ...args, '--reporter=json', `--outputFile=${report}`], ui, env, async () => verifyBrowserTests(await readFile(report, 'utf8')));
   }
-  for (const client of ['chrome', 'electron']) {
-    await run(`projection-${client}`, 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowserProjectionUsesOneFlowersecSession$', '-count=1', '-json'], root,
-      { ...env, REDEVEN_BROWSER_CLIENT: client, REDEVEN_BROWSER_DEBUG_EVIDENCE: path.join(evidence, `projection-${client}.json`) },
+  for (const [source, client] of [['managed', 'chrome'], ['managed', 'electron'], ['extension', 'chrome']]) {
+    await run(`projection-${source}-${client}`, 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowserProjectionUsesOneFlowersecSession$', '-count=1', '-json'], root,
+      { ...env, REDEVEN_BROWSER_SOURCE: source, REDEVEN_BROWSER_CLIENT: client, REDEVEN_BROWSER_DEBUG_EVIDENCE: path.join(evidence, `projection-${source}-${client}.json`) },
       body => verifyGoTests(body, ['TestBrowserProjectionUsesOneFlowersecSession']));
   }
   const git = args => spawnSync('git', args, { cwd: root, encoding: 'utf8' }).stdout.trim();

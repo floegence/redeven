@@ -8,6 +8,7 @@ export function browserSourcePort(service: BrowserSourceService, select: (select
     signal.throwIfAborted();
     const management = service.management;
     switch (operation.method) {
+      case 'source.preference': return service.preference(signal);
       case 'source.profiles': return service.profiles(signal);
       case 'source.status': return service.status(signal);
       case 'source.createProfile':
@@ -19,9 +20,12 @@ export function browserSourcePort(service: BrowserSourceService, select: (select
       case 'source.discover':
         if (bounded(operation.endpoint, 8192)) return service.discover(operation.endpoint, signal);
         break;
-      case 'source.setup': return management.setupExtension!();
+      case 'source.setup':
+        if (typeof operation.installationID !== 'string' || !/^browser-[a-f0-9]{24}$/u.test(operation.installationID)) throw new Error('Browser source operation unavailable');
+        return management.setupExtension!(operation.installationID);
       case 'source.openExtension':
-        if (['extensions', 'folder', 'connect'].includes(operation.action)) { await management.openExtension!(operation.action); return; }
+        if (typeof operation.installationID !== 'string' || !/^browser-[a-f0-9]{24}$/u.test(operation.installationID)) throw new Error('Browser source operation unavailable');
+        if (['extensions', 'folder', 'connect'].includes(operation.action)) { await management.openExtension!(operation.action, operation.installationID); return; }
         break;
       case 'source.installation': return management.loadBrowserInstallation!();
       case 'source.enabled':
@@ -30,7 +34,7 @@ export function browserSourcePort(service: BrowserSourceService, select: (select
       case 'source.install': {
         const request = operation.request;
         // Chunk transport remains inside the environment's existing installer.
-        if (request?.action === 'start' && bounded(request.package_id, 256) && ['download', 'upload'].includes(request.source ?? '')) return management.installBrowser!({ action: 'start', package_id: request.package_id, source: request.source });
+        if ((request?.action === 'start' || request?.action === 'prepare_system') && bounded(request.package_id, 256) && ['download', 'upload'].includes(request.source ?? '')) return management.installBrowser!({ action: request.action, package_id: request.package_id, source: request.source });
         if (request?.action === 'cancel' && (request.operation_id === undefined || bounded(request.operation_id, 256))) return management.installBrowser!({ action: 'cancel', operation_id: request.operation_id });
         break;
       }

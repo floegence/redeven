@@ -16,8 +16,8 @@ let dispose: (() => void) | undefined;
 afterEach(async () => { dispose?.(); dispose = undefined; document.documentElement.classList.remove('dark'); await page.viewport(1280, 800); });
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === label)!;
 const wait = (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 4000 });
-function mount(options: { pending?: boolean; upload?: boolean; state?: FlowerBrowserInstallation['state']; copy?: FlowerComputerCopy; size?: number } = {}) {
-  let state: FlowerBrowserInstallationSnapshot = { enabled: true, state: options.state ?? 'not_installed', directory: '/environment/state/computer/browser', received_bytes: 0,
+function mount(options: { pending?: boolean; upload?: boolean; state?: FlowerBrowserInstallation['state']; launch?: FlowerBrowserInstallation['launch']; copy?: FlowerComputerCopy; size?: number } = {}) {
+  let state: FlowerBrowserInstallationSnapshot = { storage_bytes: 999495418, enabled: true, state: options.state ?? 'not_installed', launch: options.launch ?? { state: options.state === 'installed' ? 'ready' : 'installation_required' }, directory: '/environment/state/computer/browser', received_bytes: 0,
     package: { name: 'Chrome for Testing', id: 'chromium-1223-linux-amd64', platform: 'linux', architecture: 'amd64', version: '148.0.7778.96', url: 'https://cdn.playwright.dev/example.zip', sha256: 'a'.repeat(64), size_bytes: options.size ?? 183945705, installed_bytes: 393407709 } };
   const observers = new Set<(value: FlowerBrowserInstallationSnapshot) => void>();
   const management: FlowerComputerManagement = {
@@ -27,9 +27,10 @@ function mount(options: { pending?: boolean; upload?: boolean; state?: FlowerBro
     loadBrowserInstallation: vi.fn(async () => ({ ...state })),
     saveBrowserEnabled: vi.fn(async enabled => { state = { ...state, enabled, state: state.state === 'uploading' ? 'cancelled' : state.state }; return state; }),
     installBrowser: vi.fn(async request => {
+      if (request.action === 'prepare_system') state = { ...state, state: 'awaiting_authorization', operation_id: 'system-1', authorization_command: 'redeven browser-system-authorize /private/fixture/authorize' };
       if (request.action === 'start') state = { ...state, state: request.source === 'upload' ? 'uploading' : 'downloading', operation_id: 'install-1' };
       if (request.action === 'chunk') state = { ...state, received_bytes: request.offset! + atob(request.data!).length };
-      if (request.action === 'complete') state = { ...state, state: 'installed' };
+      if (request.action === 'complete') state = { ...state, state: 'installed', launch: { state: 'ready' as const } };
       if (request.action === 'cancel') state = { ...state, state: 'cancelled' };
       return { ...state };
     }),
@@ -62,7 +63,7 @@ it('requires explicit confirmation and resumes only after confirmed installation
   const { management, onContinue, update } = mount({ pending: true, upload: false }); await ready();
   button(copy.browserConfirmDownload).click(); await wait(() => !!button(copy.browserCancelInstallation));
   expect(management.installBrowser).toHaveBeenCalledExactlyOnceWith({ action: 'start', package_id: 'chromium-1223-linux-amd64', source: 'download' });
-  expect(onContinue).not.toHaveBeenCalled(); update({ state: 'installed' });
+  expect(onContinue).not.toHaveBeenCalled(); update({ state: 'installed', launch: { state: 'ready' as const } });
   await wait(() => onContinue.mock.calls.length === 1); expect(onContinue).toHaveBeenCalledWith(true);
 });
 it('continues without the browser only after switching it off', async () => {
@@ -82,7 +83,7 @@ it('starts Desktop installation without a file and keeps it alive after closing'
   button(copy.browserConfirmUpload).click(); await wait(() => !!button(copy.browserCancelInstallation));
   expect(management.installBrowser).toHaveBeenCalledExactlyOnceWith({ action: 'start', source: 'upload', package_id: 'chromium-1223-linux-amd64' });
   expect(document.querySelector('input[type="file"]')).toBeNull();
-  dispose?.(); dispose = undefined; update({ state: 'installed' });
+  dispose?.(); dispose = undefined; update({ state: 'installed', launch: { state: 'ready' as const } });
   expect(management.installBrowser).toHaveBeenCalledTimes(1); expect(onContinue).not.toHaveBeenCalled();
 });
 it('does not cancel a start response arriving after the panel closes', async () => {
@@ -128,21 +129,21 @@ it('keeps retry consent through the previous failed snapshot and resumes once', 
   const current = await management.loadBrowserInstallation!();
   vi.mocked(management.installBrowser!).mockResolvedValueOnce({ ...current, transfer_active: true });
   button(copy.browserConfirmUpload).click(); await wait(() => !!button(copy.browserCancelInstallation));
-  update({ state: 'installed', transfer_active: false });
+  update({ state: 'installed', launch: { state: 'ready' as const }, transfer_active: false });
   await wait(() => onContinue.mock.calls.length === 1);
-  update({ state: 'installed', transfer_active: false }); expect(onContinue).toHaveBeenCalledTimes(1);
+  update({ state: 'installed', launch: { state: 'ready' as const }, transfer_active: false }); expect(onContinue).toHaveBeenCalledTimes(1);
 });
 it('revokes continuation when the interaction changes while installation continues', async () => {
   const { update, onContinue, setContinuationKey } = mount({ pending: true }); await ready();
   button(copy.browserConfirmUpload).click(); await wait(() => !!button(copy.browserCancelInstallation));
-  setContinuationKey('interaction-2'); update({ state: 'installed', transfer_active: false });
+  setContinuationKey('interaction-2'); update({ state: 'installed', launch: { state: 'ready' as const }, transfer_active: false });
   expect(onContinue).not.toHaveBeenCalled();
 });
 for (const outcome of ['failed', 'cancelled'] as const) {
   it(`does not continue after ${outcome} even if a later snapshot is installed`, async () => {
     const { update, onContinue } = mount({ pending: true }); await ready();
     button(copy.browserConfirmUpload).click(); await wait(() => !!button(copy.browserCancelInstallation));
-    update({ state: outcome, transfer_active: false }); update({ state: 'installed' });
+    update({ state: outcome, transfer_active: false }); update({ state: 'installed', launch: { state: 'ready' as const } });
     expect(onContinue).not.toHaveBeenCalled();
   });
 }
@@ -156,4 +157,22 @@ it('renders indeterminate cache checking and verification without assigning a no
   expect(document.querySelector('progress')?.value).toBe(1234);
   update({ transfer_active: true, desktop_progress: { phase: 'verifying', received_bytes: 183945705, total_bytes: 183945705 } });
   expect(document.querySelector('progress')?.hasAttribute('value')).toBe(false);
+});
+
+it('requires system preparation for installed bytes and continues exactly once after system readiness', async () => {
+  const { management, onContinue, update } = mount({ pending: true, upload: false, state: 'installed', launch: { state: 'system_preparation_required', action: 'prepare_system', reason: 'browser_sandbox_unavailable' } });
+  await ready();
+  expect(button(copy.browserContinue)).toBeUndefined();
+  expect(management.installBrowser).not.toHaveBeenCalled();
+  button(copy.browserSystemPrepare).click();
+  await wait(() => !!button(copy.browserSystemCopy));
+  expect(management.installBrowser).toHaveBeenCalledExactlyOnceWith({ action: 'prepare_system', package_id: 'chromium-1223-linux-amd64', source: 'download' });
+  expect(document.querySelector('textarea')?.value).toContain('browser-system-authorize');
+  expect(onContinue).not.toHaveBeenCalled();
+  update({ state: 'preparing_system', authorization_command: undefined });
+  expect(onContinue).not.toHaveBeenCalled();
+  update({ state: 'installed', launch: { state: 'ready' } });
+  await wait(() => onContinue.mock.calls.length === 1);
+  update({ state: 'installed', launch: { state: 'ready' } });
+  expect(onContinue).toHaveBeenCalledOnce();
 });

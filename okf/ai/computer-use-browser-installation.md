@@ -25,7 +25,7 @@ The shared Browser and desktop dialog opens Browser settings for this environmen
 A prominent switch controls permission to use the built-in headless browser.
 The installation panel names the exact distribution (Chrome for Testing or
 Chromium), its version and the Runtime platform,
-shows download and installed sizes, and presents two mutually exclusive sources:
+shows download and total storage sizes, and presents two mutually exclusive sources:
 
 - Environment download fetches the pinned official archive directly on the
   Runtime host after Download and install is pressed.
@@ -91,7 +91,9 @@ The Runtime never accepts a client-supplied URL, executable path or checksum.
 Bounded ZIP extraction rejects traversal, special files, duplicates and escaping
 symlinks. macOS framework links stay inside the new directory. A complete verified
 package is published under `state/computer/browser/packages/<digest>`; no system
-Chrome installation is required. Normal host OS dependencies still apply.
+Chrome installation is required. Normal host OS dependencies still apply. Installed bytes and launch readiness are
+separate facts; [Linux system preparation](computer-use-browser-system.md) owns
+the exact AppArmor preparation and authorization transaction.
 
 Desktop source-built Runtime upload suites also include `computer.zip`, with
 resources staged from that source snapshot for the target platform. Linux
@@ -107,7 +109,7 @@ installable and report their unavailable browser capability through
 
 ### Archive acquisition ownership
 
-Released `floe-native-apps` v0.2.0 owns the reusable `artifactcache.Acquire` and
+Released `floe-native-apps` v0.10.1 owns the reusable `artifactcache.Acquire` and
 `Verify` implementations. Redeven owns the Playwright-bound browser catalog,
 consent and placement. Desktop invokes its bundled Runtime's `browser-package`
 command with the target package ID, expected SHA-256 and size; the compiled

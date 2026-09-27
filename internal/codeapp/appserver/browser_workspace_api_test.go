@@ -54,6 +54,34 @@ func TestBrowserWorkspaceFailureActionsAndRecoveryAuthorization(t *testing.T) {
 				t.Fatalf("disabled: %s", response.Body.String())
 			}
 		}
+
+		for _, check := range []struct {
+			method, body string
+			status       int
+		}{
+			{http.MethodGet, "", http.StatusOK},
+			{http.MethodPost, `{"view_id":"missing"}`, http.StatusConflict},
+			{http.MethodPost, `{"view_id":"missing","profile_id":"browser-main"}`, http.StatusBadRequest},
+		} {
+			response := serveAIReadinessTestRequest(srv, origin, check.method, "/_redeven_proxy/api/browser/preference", []byte(check.body))
+			want := check.status
+			if !writable {
+				want = http.StatusForbidden
+			}
+			if response.Code != want {
+				t.Fatalf("preference %s: %d %s", check.method, response.Code, response.Body.String())
+			}
+			if writable && check.method == http.MethodGet {
+				var value struct {
+					Data struct {
+						Preference any `json:"preference"`
+					} `json:"data"`
+				}
+				if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.Data.Preference != nil {
+					t.Fatal("new owner inherited a source preference")
+				}
+			}
+		}
 		acquired, _, _ := provider.counts()
 		if acquired != 0 {
 			t.Fatal("browser recovery acquired AI service")

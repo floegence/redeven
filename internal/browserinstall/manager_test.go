@@ -366,3 +366,37 @@ func TestRestartDiscardsInterruptedTransferWithoutDownloading(t *testing.T) {
 		t.Fatal("website data changed")
 	}
 }
+
+func TestObservedSandboxFailureRequiresPreparationUntilRepair(t *testing.T) {
+	data, pkg := fixture(t, "browser/chrome")
+	m, err := New(t.TempDir(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	status, err := m.Start(pkg.ID, "upload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.WriteChunk(status.OperationID, 0, data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.CompleteUpload(status.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	if settle(t, m).Launch.State != "ready" {
+		t.Fatal("fixture failed to install")
+	}
+	m.status.Package.Platform = "linux"
+	m.RequireSystemPreparation()
+	if status = m.Snapshot(); status.Launch.State != "system_preparation_required" || status.Launch.Action != "prepare_system" {
+		t.Fatalf("readiness: %+v", status.Launch)
+	}
+	if _, err = m.Executable(); err != ErrSystemPreparationRequired {
+		t.Fatal("launch ignored observed sandbox failure", err)
+	}
+	m.finishLocked("failed", "system_preparation_failed")
+	if m.Snapshot().Launch.State != "system_preparation_required" {
+		t.Fatal("failed repair cleared observed failure")
+	}
+}
