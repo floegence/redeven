@@ -7,7 +7,7 @@ export type { BrowserFailureCode } from './browserFailure';
 import { BrowserWorkspaceError, browserFailureCode, type BrowserFailureCode } from './browserFailure';
 export type BrowserServiceStatus = { state: 'idle' | 'ready' | 'failed' | 'recovering'; generation: string };
 export type BrowserWorkspaceState = Readonly<{
-  phase: 'idle' | 'opening' | 'live' | 'failed';
+  phase: 'idle' | 'selecting' | 'opening' | 'live' | 'failed';
   selection?: BrowserSourceSelection;
   view?: BrowserViewDescriptor;
   failure?: BrowserFailureCode;
@@ -100,7 +100,11 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
         const saved = await fetchSessionJSON<BrowserSourcePreference>('/_redeven_proxy/api/browser/preference', { method: 'GET', signal: reading.signal });
         if (closed || revision !== attempt || reading.signal.aborted) return;
         const request = saved.source_target ? { source_target: saved.source_target } : saved.managed_profile_id ? { managed_profile_id: saved.managed_profile_id } : undefined;
-        if (!request) { publish({ ...state, phase: 'failed', failure: 'BROWSER_SOURCE_UNAVAILABLE' }); return; }
+        if (!request) {
+          publish(saved.preference ? { ...state, phase: 'failed', failure: 'BROWSER_SOURCE_UNAVAILABLE' }
+            : { ...state, phase: 'selecting', failure: undefined });
+          return;
+        }
         await open({ request, label: '' });
       } catch (error) {
         if (!closed && revision === attempt && !reading.signal.aborted) {

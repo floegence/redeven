@@ -113,10 +113,18 @@ it('shows source selection on first use without starting a browser', async () =>
   controller = createBrowserWorkspaceController({ management: {} } as BrowserSourceService);
   controller.setSession({} as Session);
   await controller.reconnect();
-  expect(controller.snapshot()).toMatchObject({ phase: 'failed', failure: 'BROWSER_SOURCE_UNAVAILABLE' });
+  expect(controller.snapshot()).toMatchObject({ phase: 'selecting', failure: undefined });
   expect(controller.snapshot().selection).toBeUndefined();
   expect(request).toHaveBeenCalledOnce();
   expect(String(request.mock.calls[0]?.[0])).toBe('/_redeven_proxy/api/browser/preference');
+});
+
+it('keeps a remembered but unavailable source distinct from first use', async () => {
+  unbind = await bindTestSessionHTTP(async () => Response.json({ ok: true, data: { preference: { profile_id: 'retired-profile', installation_id: 'personal-browser' } } }));
+  controller = createBrowserWorkspaceController({ management: {} } as BrowserSourceService);
+  controller.setSession({} as Session);
+  await controller.reconnect();
+  expect(controller.snapshot()).toMatchObject({ phase: 'failed', failure: 'BROWSER_SOURCE_UNAVAILABLE' });
 });
 
 it('does not persist a superseded source selection', async () => {
