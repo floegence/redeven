@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -468,6 +469,68 @@ func TestBrowserWorkspaceRecordsSourceNavigationAndRestorationState(t *testing.T
 		case <-deadline.C:
 			t.Fatalf("source navigation or directory state was not saved: tabs=%+v history=%+v", tabs, history)
 		}
+	}
+}
+
+func TestBrowserWorkspaceReopensManagedTabsWhileMetadataChanges(t *testing.T) {
+	runtime, meta := browserWorkspaceFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	view, err := runtime.OpenBrowserWorkspace(ctx, meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Preserve the real browser, source host and target identities. Make only
+	// the first directory reply stale, as happens while restoration navigates.
+	runtime.connectMu.Lock()
+	original := runtime.managedProfiles["browser-main"]
+	requests, input := io.Pipe()
+	output, replies := io.Pipe()
+	proxy := &managedBrowserProfile{input: input, reader: bufio.NewReader(output), output: output, endpoint: original.endpoint, done: make(chan struct{})}
+	runtime.managedProfiles["browser-main"] = proxy
+	runtime.connectMu.Unlock()
+	go func() {
+		defer close(proxy.done)
+		defer replies.Close()
+		defer requests.Close()
+		scanner := bufio.NewScanner(requests)
+		first := true
+		for scanner.Scan() {
+			var request struct{ ID, Command string }
+			if json.Unmarshal(scanner.Bytes(), &request) != nil {
+				return
+			}
+			tabs, err := original.call(ctx, request.Command)
+			if err != nil || len(tabs) != 1 {
+				return
+			}
+			if first {
+				tabs[0].Title = "Earlier page title"
+				first = false
+			}
+			if json.NewEncoder(replies).Encode(managedBrowserReply{ID: request.ID, Tabs: tabs}) != nil {
+				return
+			}
+		}
+	}()
+	defer func() {
+		runtime.connectMu.Lock()
+		runtime.managedProfiles["browser-main"] = original
+		runtime.connectMu.Unlock()
+		proxy.close()
+	}()
+	other, err := runtime.OpenBrowserWorkspace(ctx, meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"})
+	if err != nil || other.InitialTarget != view.InitialTarget {
+		t.Fatalf("managed workspace rejected changing metadata: %+v %v", other, err)
+	}
+	tabs, err := original.call(ctx, "inventory")
+	if err != nil || len(tabs) != 1 {
+		t.Fatalf("managed directory: %+v %v", tabs, err)
+	}
+	_, err = runtime.ConnectBrowser(ctx, ComputerBrowserConnection{ManagedProfileID: "browser-main", TabID: tabs[0].ID, TabURL: tabs[0].URL, TabTitle: "Earlier page title"})
+	var policy *targetToolPolicyError
+	if !errors.As(err, &policy) || policy.code != "target_selection_stale" {
+		t.Fatalf("explicit stale selection was admitted: %v", err)
 	}
 }
 

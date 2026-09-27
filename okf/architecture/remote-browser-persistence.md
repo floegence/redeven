@@ -58,6 +58,11 @@ Source metadata and Runtime directory actions own managed-profile recovery snaps
 
 Snapshots contain restorable HTTP/HTTPS GET addresses, titles, ordering, pins and the most recently selected page. They exclude credentials embedded in URLs, script/data URLs, form contents, input tokens and prior Runtime target identities. Browser startup does not visit recovery addresses. An explicit profile-open request restores a stopped managed profile using fresh source identities; a second view of an already running profile observes its existing sources.
 
+Opening an owned managed profile follows stable native tab identities even while
+navigation changes their URL or title. This internal enumeration does not reuse
+metadata as a selection precondition. Explicit selection of a candidate tab still
+validates the selected URL and title before admitting or reusing its target.
+
 Restoration first admits a blank page, then starts one source-owned GET navigation under user-browsing policy. Directory admission does not wait for the website response or restore an input controller. The source projection owns visible loading and failure states; cancellation follows the published source lifecycle. Later title changes update history metadata without creating another visit. Source closure preserves the last snapshot if the whole live directory disappears, so a browser failure does not erase the next explicit-open recovery input.
 
 # Boundaries

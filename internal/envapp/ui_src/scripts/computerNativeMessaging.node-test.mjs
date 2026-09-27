@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { chmod, copyFile, mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
@@ -12,6 +12,13 @@ import { stageBrowserExtension } from '../../../../scripts/stage_browser_extensi
 // The disposable registration has a unique name and is removed by exact bytes.
 test('native messaging launches the Runtime bridge and exchanges bounded profile commands', { skip: !process.env.REDEVEN_BROWSER_BRIDGE_BINARY, timeout: 20000 }, async () => {
   const directory = await mkdtemp('/tmp/flower-native-');
+  // Chrome launches an independently attributed native process. Keep this
+  // disposable deployment on the host's temporary volume; executing a newly
+  // built unsigned binary from a removable checkout can wait for macOS file
+  // access consent before main, which is not a Native Messaging handshake.
+  const bridgeBinary = path.join(directory, 'redeven');
+  await copyFile(process.env.REDEVEN_BROWSER_BRIDGE_BINARY, bridgeBinary);
+  await chmod(bridgeBinary, 0o700);
   const extension = path.join(directory, 'extension'); stageBrowserExtension(extension);
   const socket = path.join(directory, 'bridge');
   const peers = new Set();
@@ -22,16 +29,21 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
   const registration = path.join(registrationRoot, name + '.json');
   const wrapper = path.join(directory, 'native-host');
   const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
-  await writeFile(wrapper, `#!/bin/sh\nexec ${quote(process.env.REDEVEN_BROWSER_BRIDGE_BINARY)} browser-bridge ${quote(socket)} "$@"\n`, { mode: 0o700 });
+  await writeFile(wrapper, `#!/bin/sh\nexec ${quote(bridgeBinary)} browser-bridge ${quote(socket)} "$@"\n`, { mode: 0o700 });
   const extensionID = 'mgfbpkkmocckooenpdfpefknffjanjce';
   const manifest = JSON.stringify({ name, description: 'Flower native test', path: wrapper, type: 'stdio', allowed_origins: [`chrome-extension://${extensionID}/`] });
   await mkdir(registrationRoot, { recursive: true }); await writeFile(registration, manifest, { flag: 'wx', mode: 0o600 });
-  let context, popup, peer;
+  let context, peer;
   try {
     const accepted = once(server, 'connection');
+    await rm(registration);
     context = await chromium.launchPersistentContext(path.join(directory, 'profile'), { channel: 'chromium', headless: true, chromiumSandbox: true,
       args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
-    popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#${name}`);
+    const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#${name}`);
+    await popup.locator('#connect-button').click();
+    await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ command: 'status' })).error === 'native_host_missing');
+    assert.equal(await popup.locator('#status').textContent().then(text => /expired|失效/u.test(text)), true, 'expired registration must have a specific recovery instruction');
+    await writeFile(registration, manifest, { flag: 'wx', mode: 0o600 });
     await popup.locator('#connect-button').click();
     let timer;
     try { [peer] = await Promise.race([accepted, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Chrome did not launch the native host')), 6000); })]); }
@@ -42,7 +54,7 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
         port.onDisconnect.addListener(() => resolve(chrome.runtime.lastError?.message || 'disconnected'));
         setTimeout(() => { port.disconnect(); resolve('native host did not close'); }, 1000);
       }), name);
-      throw new Error(`${error.message}: ${reason}; popup: ${await popup.locator('#status').textContent()}`);
+      throw new Error(`${error.message}: ${reason}`);
     }
     finally { clearTimeout(timer); }
     let buffer = Buffer.alloc(0); const messages = []; const waiters = [];

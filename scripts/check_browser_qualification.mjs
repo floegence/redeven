@@ -77,7 +77,7 @@ async function main() {
     results.push({ name, count });
     console.log(`[browser] ${name}: ${count} tests passed, zero skipped`);
   }
-  await run('runtime', 'go', ['test', './internal/ai', '-parallel=1', '-run', '^TestBrowser|^TestExtension|^TestManagedBrowser|^TestComputer(MissingBrowser|FullAccessManagedBrowser|AutonomousManaged|AutonomousProductionToolLoop|NavigationFailureContinuesProductionTurn)', '-count=1', '-json'], root, env,
+  await run('runtime', 'go', ['test', './internal/ai', '-run', '^TestBrowser|^TestExtension|^TestManagedBrowser|^TestComputer(MissingBrowser|FullAccessManagedBrowser|AutonomousManaged|AutonomousProductionToolLoop|NavigationFailureContinuesProductionTurn)', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestBrowserRecoveryRebuildsOnceAndPreservesSavedTabs', 'TestBrowserRecoveryDoesNotReviveFlowerInitialTarget', 'TestBrowserDirectoryBeforeUnloadKeepsOtherWorkspaceCommandsUsable', 'TestBrowserInputSaturationDoesNotRetireHealthyView', 'TestManagedBrowserRequestCancellationPreservesProcessAndResponseOrder', 'TestManagedBrowserForegroundPopupSelectsOnlyItsInputOwner', 'TestComputerNavigationFailureContinuesProductionTurn']));
   await run('storage-installation', 'go', ['test', './internal/browserinstall', './internal/browserstore', './internal/browserbridge', '-count=1', '-json'], root, env, verifyGoTests);
   await run('api', 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowser(WorkspaceFailure|ViewAPI|Library)', '-count=1', '-json'], root, env,
@@ -86,15 +86,9 @@ async function main() {
   const bridgeBuild = spawnSync('go', ['build', '-o', bridgeBinary, './cmd/redeven'], { cwd: root, env, encoding: 'utf8' });
   await writeFile(path.join(evidence, 'native-bridge-build.log'), bridgeBuild.stdout + bridgeBuild.stderr);
   assert.equal(bridgeBuild.status, 0, 'Unable to build the real Native Messaging bridge');
-  await run('managed-launch', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'scripts/computerManagedLaunch.node-test.mjs'], ui, env, verifyNodeTests);
-  // Browser contexts and native-host registrations are process-wide on some
-  // Chromium builds. Keep this qualification lane serial so one test cannot
-  // race another context's extension worker or native host lookup.
-  await run('chrome-extension', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'scripts/computerExtensionLifecycle.node-test.mjs', 'scripts/computerExtensionPopup.node-test.mjs', 'scripts/computerExtension.node-test.mjs'], ui, env, verifyNodeTests);
-  // Native Messaging is a browser-process boundary. Run it in its own Node
-  // process so Chrome cannot retain an extension worker from another fixture
-  // while the disposable host manifest is being exercised.
-  await run('native-messaging', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'scripts/computerNativeMessaging.node-test.mjs'], ui, { ...env, REDEVEN_BROWSER_BRIDGE_BINARY: bridgeBinary }, verifyNodeTests);
+  await run('managed-launch', process.execPath, ['--test', '--test-reporter=tap', 'scripts/computerManagedLaunch.node-test.mjs'], ui, env, verifyNodeTests);
+  await run('chrome-extension', process.execPath, ['--test', '--test-reporter=tap', 'scripts/computerExtensionLifecycle.node-test.mjs', 'scripts/computerExtensionPopup.node-test.mjs', 'scripts/computerExtension.node-test.mjs'], ui, env, verifyNodeTests);
+  await run('native-messaging', process.execPath, ['--test', '--test-reporter=tap', 'scripts/computerNativeMessaging.node-test.mjs'], ui, { ...env, REDEVEN_BROWSER_BRIDGE_BINARY: bridgeBinary }, verifyNodeTests);
   for (const [name, args] of [
     ['ui-unit', ['src/browserDocument.test.ts', 'src/ui/services/browserWorkspaceController.test.ts', 'src/ui/services/browserSourcePort.test.ts', 'src/ui/services/browserWindow.test.ts', 'src/ui/services/browserWorkspaceWindows.test.ts', 'src/ui/widgets/FloeBrowserSurface.test.tsx', 'src/ui/pages/EnvBrowserPage.test.tsx']],
     ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/browserDocument.browser.test.tsx', 'src/ui/widgets/BrowserSourceDialog.browser.test.tsx', 'src/ui/FlowerManagedBrowser.browser.test.tsx', 'src/ui/FlowerComputerConnections.browser.test.tsx']],
