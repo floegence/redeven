@@ -34,6 +34,8 @@ request; advanced debugging endpoints occupy a secondary step. Each step shows
 only its applicable actions, with one concise body description and local errors.
 Successful source preferences follow the [persistence contract](remote-browser-persistence.md).
 A missing or invalid preference returns to selection without starting a browser.
+First use is a neutral selection state, including after the chooser is dismissed;
+only a previously remembered or selected source can be reported as unavailable.
 One browser workspace controller owns source choice, open intent, replacement,
 view release and recovery for both the page and independent windows. Surfaces
 own only their document and ports. Managed opens check current installation

@@ -28,7 +28,8 @@ export function EnvBrowserPage(props: { session: Session | undefined; onInteract
   createEffect(on(() => props.session, session => {
     controller.setSession(session ?? undefined);
     if (session) void controller.reconnect().then(() => {
-      if (props.session === session && controller.snapshot().failure === 'BROWSER_SOURCE_UNAVAILABLE' && !controller.snapshot().selection) setChoosing(true);
+      const state = controller.snapshot();
+      if (props.session === session && (state.phase === 'selecting' || state.failure === 'BROWSER_SOURCE_UNAVAILABLE') && !state.selection) setChoosing(true);
     }).catch(() => undefined);
   }));
   const presentation = createMemo(() => JSON.stringify([i18n.locale(), theme.resolvedTheme(), theme.shellPresetForMode(theme.resolvedTheme())?.name]));
