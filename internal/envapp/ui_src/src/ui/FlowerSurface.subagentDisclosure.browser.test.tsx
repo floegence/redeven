@@ -10,7 +10,7 @@ import {
   activityTimeline,
   adapter,
   liveBootstrap,
-  renderSurfaceWithAdapter,
+  renderSurfaceWithAdapterProps,
   subagentSummary,
   thread,
   waitFor,
@@ -100,15 +100,22 @@ async function nextFrame(): Promise<void> {
 
 async function mountFixture() {
   const snapshot = fixtureThread();
-  const runtime = renderSurfaceWithAdapter({
+  let contentPresented = false;
+  const runtime = renderSurfaceWithAdapterProps({
     ...adapter(true),
     listThreads: vi.fn(async () => [snapshot]),
     loadThread: vi.fn(async () => liveBootstrap(snapshot, 1)),
+  }, {
+    onThreadSelectionEvent: (event) => {
+      if (event.value === snapshot.thread_id && event.phase === 'content_presented') contentPresented = true;
+    },
   });
   runtime.style.height = '680px';
   await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`)));
   (runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`) as HTMLButtonElement).click();
-  await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="wait-three"]')));
+  // Detail hydration may render rows before the deferred selection commit.
+  // Start motion measurements after selection has finished restoring its tail.
+  await waitFor(() => contentPresented && Boolean(runtime.querySelector('[data-flower-activity-item-id="wait-three"]')));
   return {
     runtime,
     transcript: runtime.querySelector('.flower-chat-transcript') as HTMLDivElement,
