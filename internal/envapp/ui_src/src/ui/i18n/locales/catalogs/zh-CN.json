@@ -6880,8 +6880,8 @@
       "unsupported": "此运行时无法使用已安装的组件版本，原有文件已保留。请先更新运行时再继续。",
       "available": "组件有更新",
       "view": "查看更新",
-      "title": "更新主机应用组件",
-      "description": "当前组件仍可使用，更新期间也可以继续使用应用。",
+      "title": "更新主机应用依赖",
+      "description": "更新期间可以继续使用应用。",
       "start": "更新组件",
       "local": "使用本地缓存更新，无需下载或上传。",
       "installedVersion": "已安装",
@@ -6892,7 +6892,9 @@
       "repair": "修复组件",
       "cacheChanged": "准备期间缓存文件发生了变化，请重新检查可用文件后重试。",
       "desktopMismatch": "当前 Desktop 无法准备所需组件，请更新 Desktop 或选择主机下载。",
-      "checkingSize": "下载前计算"
+      "checkingSize": "下载前计算",
+      "required": "主机应用依赖需要更新",
+      "requiredDescription": "更新后即可打开新应用，运行中的应用不受影响。"
     },
     "linuxRunningHint": "停止共享后，应用会继续运行。你可以从此列表重新连接。",
     "stopSharingDescription": "断开此应用与 Redeven 的连接。应用窗口和未保存的工作会保留。",
@@ -6961,7 +6963,9 @@
       "desktopPacking": "正在准备传输文件…",
       "desktopUploading": "正在传输到主机…",
       "desktopCached": "使用本地缓存，无需下载。",
-      "desktopBytes": "本地缓存：{cached} · 需下载：{download}"
+      "desktopBytes": "本地缓存：{cached} · 需下载：{download}",
+      "summary": "准备显示与输入组件，即可打开主机应用。",
+      "details": "组件详情"
     },
     "macMenu": "应用菜单",
     "connecting": "正在连接应用…",
@@ -6976,8 +6980,8 @@
     "cancel": "取消",
     "category": "应用分类",
     "description": "在独立窗口中使用主机上的应用。",
-    "emptyDescription": "在主机上安装图形应用，或通过可执行文件路径添加。",
-    "emptyTitle": "暂无应用",
+    "emptyDescription": "主机应用用于打开这台主机上已安装的图形软件。",
+    "emptyTitle": "未发现图形应用",
     "ended": "此应用会话已结束。",
     "errors": {
       "failed": "无法打开应用。请检查主机上的应用后重试。",
@@ -7096,7 +7100,11 @@
     "touchHelpTitle": "触摸操作",
     "touchHelpDescription": "轻点即可单击。单指滑动可滚动。长按后移动可拖拽；长按不移动后松开可右键。双指可缩放页面。",
     "clipboardUnavailable": "无法访问剪贴板。请使用 HTTPS 并允许此网站访问剪贴板，然后重新复制。",
-    "openDescription": "应用在此环境所在的设备上运行，你可以从“应用”中再次打开。"
+    "openDescription": "应用在此环境所在的设备上运行，你可以从“应用”中再次打开。",
+    "emptyDetails": "关于主机应用",
+    "emptyHint": "准备组件不会安装应用或桌面环境。若已有图形软件，可通过可执行文件路径添加；安装图形软件后也可刷新列表。如需发现应用或准备依赖，可在此打开组件设置。",
+    "addExisting": "添加已有应用",
+    "componentSettings": "组件设置"
   },
   "settingsDesign": {
     "editDirectory": "编辑目录",

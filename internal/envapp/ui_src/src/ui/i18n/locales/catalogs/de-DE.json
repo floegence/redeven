@@ -6884,8 +6884,8 @@
       "unsupported": "Diese Laufzeitumgebung kann die installierte Komponentenversion nicht verwenden. Die Dateien bleiben erhalten. Aktualisieren Sie die Laufzeitumgebung, bevor Sie fortfahren.",
       "available": "Komponentenupdate verfügbar",
       "view": "Update ansehen",
-      "title": "Komponenten für Host-Anwendungen aktualisieren",
-      "description": "Installierte Komponenten bleiben verfügbar. Sie können Anwendungen während des Updates weiter nutzen.",
+      "title": "Abhängigkeiten für Host-Anwendungen aktualisieren",
+      "description": "Sie können Anwendungen während des Updates weiter nutzen.",
       "start": "Komponenten aktualisieren",
       "local": "Das Update verwendet zwischengespeicherte Dateien. Kein Download oder Upload erforderlich.",
       "installedVersion": "Installiert",
@@ -6896,7 +6896,9 @@
       "repair": "Komponenten reparieren",
       "cacheChanged": "Zwischengespeicherte Dateien haben sich geändert. Prüfen Sie die verfügbaren Dateien und versuchen Sie es erneut.",
       "desktopMismatch": "Diese Desktop-Version kann die Komponenten nicht vorbereiten. Aktualisieren Sie Desktop oder wählen Sie den Download auf dem Host.",
-      "checkingSize": "Wird vor dem Download berechnet"
+      "checkingSize": "Wird vor dem Download berechnet",
+      "required": "Abhängigkeiten für Host-Anwendungen müssen aktualisiert werden",
+      "requiredDescription": "Nach dem Update können Sie neue Anwendungen öffnen. Laufende Anwendungen bleiben unberührt."
     },
     "linuxRunningHint": "Nach dem Beenden der Freigabe laufen die Anwendungen weiter. Verbinden Sie sich über diese Liste erneut.",
     "stopSharingDescription": "Trennen Sie diese Anwendung von Redeven. Ihre Fenster und ungespeicherten Arbeiten bleiben geöffnet.",
@@ -6965,7 +6967,9 @@
       "desktopPacking": "Dateien für die Übertragung werden vorbereitet…",
       "desktopUploading": "Wird an den Host übertragen…",
       "desktopCached": "Der lokale Cache wird verwendet. Kein Download erforderlich.",
-      "desktopBytes": "Lokaler Cache: {cached} · Erforderlicher Download: {download}"
+      "desktopBytes": "Lokaler Cache: {cached} · Erforderlicher Download: {download}",
+      "summary": "Anzeige- und Eingabekomponenten zum Öffnen von Host-Anwendungen vorbereiten.",
+      "details": "Komponentendetails"
     },
     "macMenu": "App-Menü",
     "connecting": "Verbindung zur Anwendung wird hergestellt…",
@@ -6980,8 +6984,8 @@
     "cancel": "Abbrechen",
     "category": "Anwendungskategorie",
     "description": "Die Anwendungen Ihres Hosts, jede in einem eigenen Fenster.",
-    "emptyDescription": "Installieren Sie eine grafische Anwendung auf diesem Host oder fügen Sie sie über ihren Programmpfad hinzu.",
-    "emptyTitle": "Noch keine Anwendungen",
+    "emptyDescription": "Host-Anwendungen öffnet grafische Software, die bereits auf diesem Host installiert ist.",
+    "emptyTitle": "Keine grafischen Anwendungen gefunden",
     "ended": "Diese Anwendungssitzung wurde beendet.",
     "errors": {
       "failed": "Die Anwendung konnte nicht geöffnet werden. Prüfen Sie die Anwendung auf dem Host und versuchen Sie es erneut.",
@@ -7100,7 +7104,11 @@
     "touchHelpTitle": "Touchsteuerung",
     "touchHelpDescription": "Tippen klickt. Mit einem Finger wischen scrollt. Nach langem Drücken bewegen Sie zum Ziehen; ohne Bewegung loslassen öffnet das Kontextmenü. Mit zwei Fingern zoomen Sie die Seite.",
     "clipboardUnavailable": "Der Zugriff auf die Zwischenablage ist nicht verfügbar. Verwenden Sie HTTPS und erlauben Sie dieser Website den Zugriff auf die Zwischenablage. Kopieren Sie dann erneut.",
-    "openDescription": "Diese Anwendung läuft auf dem Gerät dieser Umgebung. Sie können sie unter „Anwendungen“ erneut öffnen."
+    "openDescription": "Diese Anwendung läuft auf dem Gerät dieser Umgebung. Sie können sie unter „Anwendungen“ erneut öffnen.",
+    "emptyDetails": "Über Host-Anwendungen",
+    "emptyHint": "Die Komponenteneinrichtung installiert weder Anwendungen noch eine Desktop-Umgebung. Fügen Sie eine installierte Anwendung über ihren ausführbaren Dateipfad hinzu oder aktualisieren Sie die Liste nach der Installation grafischer Software. Für die Erkennung oder Vorbereitung können Sie hier die Komponenteneinstellungen öffnen.",
+    "addExisting": "Vorhandene Anwendung hinzufügen",
+    "componentSettings": "Komponenteneinstellungen"
   },
   "settingsDesign": {
     "editDirectory": "Verzeichnis bearbeiten",

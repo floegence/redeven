@@ -1,9 +1,11 @@
-import { StatusRegion, StableText, Button, RadioList } from '@floegence/floe-webapp-core/ui';
+import { StableText, Button, RadioList } from '@floegence/floe-webapp-core/ui';
+import { ChevronRight, Download, FolderOpen, Info, MonitorPointer, Package, Upload } from '@floegence/floe-webapp-core/icons';
 import './host-application-preparation.css';
 import type { HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 import { Show } from 'solid-js';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { hostApplicationSetupActive, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export type HostApplicationDesktopProgress = Omit<HostApplicationComponentsProgress, 'phase'> & {
   phase: HostApplicationComponentsProgress['phase'] | 'uploading';
@@ -63,6 +65,7 @@ export function HostApplicationSetupPanel(props: {
   disconnected: boolean;
   applicationName?: string;
   inDialog?: boolean;
+  requiresUpdate?: boolean;
   downloadMethod: 'host' | 'desktop';
   onDownloadMethodChange: (method: 'host' | 'desktop') => void;
   onStart: () => void;
@@ -73,6 +76,11 @@ export function HostApplicationSetupPanel(props: {
   const i18n = useI18n();
   const active = () => Boolean(props.desktopProgress) || hostApplicationSetupActive(props.setup);
   const installed = () => props.setup?.installed;
+  const updateNeeded = () => Boolean(installed() && props.setup?.update_available);
+  const attention = () => props.disconnected || Boolean(props.setup?.installation_error_code) || ['failed', 'interrupted', 'cancelled', 'unsupported'].includes(props.setup?.state ?? '');
+  const heading = (): EnvAppTranslationKey => props.disconnected ? 'hostApplications.disconnected'
+    : !active() && !attention() && updateNeeded() ? props.requiresUpdate ? 'hostApplications.update.required' : 'hostApplications.update.available'
+    : hostApplicationSetupHeading(props.setup, props.desktopProgress);
   const unsupported = () => props.setup?.state === 'unsupported' || props.setup?.installation_error_code === 'unsupported_installation';
   const local = () => props.plan?.missing_bytes === 0;
   const progress = () => hostApplicationSetupProgress(props.setup, props.desktopProgress);
@@ -81,43 +89,52 @@ export function HostApplicationSetupPanel(props: {
   const canStart = () => props.allowed && !props.submitting && !props.checkingPlan && !unsupported()
     && (local() || (props.downloadMethod === 'desktop' ? props.canRelay : !receiving()));
   let fileInput: HTMLInputElement | undefined;
-  return <section class="host-apps-preparation" classList={{ "host-apps-preparation-dialog": props.inDialog }} aria-label={i18n.t('hostApplications.prepare.title')}>
+  return <section class={`host-apps-preparation ${props.inDialog ? '' : redevenSurfaceRoleClass('panel')}`} classList={{ "host-apps-preparation-dialog": props.inDialog }} aria-label={i18n.t(installed() ? 'hostApplications.update.title' : 'hostApplications.prepare.title')}>
     <div class="host-apps-preparation-content">
     <div class="host-apps-preparation-copy">
-      <Show when={!props.inDialog || active() || props.disconnected || ['failed', 'interrupted', 'cancelled', 'unsupported'].includes(props.setup?.state ?? '')}><h2 aria-live="polite">{i18n.t(props.disconnected ? 'hostApplications.disconnected' : hostApplicationSetupHeading(props.setup, props.desktopProgress))}</h2></Show>
-      <StatusRegion lines={2} class="text-xs"><Show when={props.desktopProgress}><p aria-live="polite">{hostApplicationDesktopDetail(props.desktopProgress, i18n)}</p></Show></StatusRegion>
-      <p>{i18n.t(props.disconnected ? 'hostApplications.prepare.connectionHint' : props.setup?.installation_error_code ? hostApplicationSetupError(props.setup.installation_error_code) : props.setup?.state === 'failed' ? hostApplicationSetupError(props.setup.error_code) : installed() ? 'hostApplications.update.stabilityFix' : 'hostApplications.prepare.description')}</p>
-      <Show when={installed()?.ready}><p class="host-apps-preparation-target">{i18n.t(props.setup?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description')}</p></Show>
-      <Show when={installed()}><dl class="host-apps-component-versions">
-        <div><dt>{i18n.t('hostApplications.update.installedVersion')}</dt><dd>{installed()?.id}</dd></div>
-        <div><dt>{i18n.t('hostApplications.update.targetVersion')}</dt><dd>{props.setup?.package?.id}</dd></div>
-      </dl></Show>
+      <Show when={!props.inDialog || (props.applicationName && updateNeeded()) || active() || attention()}><div class="host-apps-preparation-heading"><Show when={!props.inDialog}><span class="host-apps-preparation-icon" aria-hidden="true"><Package class="w-5 h-5" /></span></Show><h2 aria-live="polite">{i18n.t(heading())}</h2></div></Show>
+      <Show when={attention()} fallback={<p>{i18n.t(installed()?.ready ? props.requiresUpdate ? 'hostApplications.update.requiredDescription' : 'hostApplications.update.description' : 'hostApplications.prepare.summary')}</p>}>
+        <p role="status">{i18n.t(props.disconnected ? 'hostApplications.prepare.connectionHint' : props.setup?.installation_error_code ? hostApplicationSetupError(props.setup.installation_error_code) : hostApplicationSetupError(props.setup?.error_code))}</p>
+        <Show when={installed()?.ready && props.setup?.state === 'failed'}><p>{i18n.t('hostApplications.update.failedRetained')}</p></Show>
+      </Show>
+      <Show when={hostApplicationDesktopDetail(props.desktopProgress, i18n)}>{detail => <p aria-live="polite">{detail()}</p>}</Show>
       <Show when={props.applicationName}><p class="host-apps-preparation-target">{i18n.t('hostApplications.prepare.openAfter', { name: props.applicationName ?? '' })}</p></Show>
     </div>
     <Show when={!unsupported() && !local()}>
       <div class="host-apps-preparation-method">
-        <div class="host-apps-preparation-method-heading"><span>{i18n.t('hostApplications.prepare.missingComponents')}</span><span class="host-apps-preparation-size"><Show when={props.plan} fallback={i18n.t('hostApplications.update.checkingSize')}>{new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format((props.plan?.missing_bytes ?? 0) / 1000000)}</Show></span></div>
+        <div class="host-apps-preparation-method-heading"><span>{i18n.t('hostApplications.prepare.downloadMethod')}</span><Show when={props.plan}><span class="host-apps-preparation-size" title={i18n.t('hostApplications.prepare.missingComponents')}>{new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format((props.plan?.missing_bytes ?? 0) / 1000000)}</span></Show></div>
         <RadioList value={receiving() && props.downloadMethod === 'host' ? undefined : props.downloadMethod} onChange={value => props.onDownloadMethodChange(value as 'host' | 'desktop')}
-          size="lg" aria-label={i18n.t('hostApplications.prepare.downloadMethod')}
+          size="sm" variant="tile" aria-label={i18n.t('hostApplications.prepare.downloadMethod')}
           options={[
-            { value: 'host', label: i18n.t('hostApplications.prepare.hostDownload'), description: i18n.t('hostApplications.prepare.hostDownloadHint'), disabled: !props.allowed || !canChoose() || Boolean(receiving()) },
-            { value: 'desktop', label: i18n.t('hostApplications.prepare.desktopDownload'), description: i18n.t(props.canRelay ? 'hostApplications.prepare.desktopDownloadHint' : 'hostApplications.prepare.desktopUnavailable'), disabled: !props.allowed || !canChoose() || !props.canRelay },
+            { value: 'host', icon: Download, label: i18n.t('hostApplications.prepare.hostDownload'), disabled: !props.allowed || !canChoose() || Boolean(receiving()) },
+            { value: 'desktop', icon: MonitorPointer, label: i18n.t('hostApplications.prepare.desktopDownload'), description: props.canRelay ? undefined : i18n.t('hostApplications.prepare.desktopUnavailable'), disabled: !props.allowed || !canChoose() || !props.canRelay },
           ]} />
       </div>
     </Show>
     <Show when={local()}><p class="host-apps-preparation-target">{i18n.t('hostApplications.update.local')}</p></Show>
+    <div class="host-apps-preparation-disclosures">
+    <details class="host-apps-preparation-details host-apps-component-details">
+      <summary><Info class="w-3.5 h-3.5" aria-hidden="true" /><span>{i18n.t('hostApplications.prepare.details')}</span><ChevronRight class="host-apps-details-chevron w-3 h-3" aria-hidden="true" /></summary>
+      <p>{i18n.t(installed() ? 'hostApplications.update.stabilityFix' : 'hostApplications.prepare.description')}</p>
+      <Show when={installed()}><dl class="host-apps-component-versions">
+        <div><dt>{i18n.t('hostApplications.update.installedVersion')}</dt><dd>{installed()?.id}</dd></div>
+        <div><dt>{i18n.t('hostApplications.update.targetVersion')}</dt><dd>{props.setup?.package?.id}</dd></div>
+      </dl></Show>
+      <Show when={!unsupported() && !local()}><p>{i18n.t('hostApplications.prepare.hostDownloadHint')}</p><p>{i18n.t('hostApplications.prepare.desktopDownloadHint')}</p></Show>
+    </details>
     <Show when={!unsupported() && (!active() || (props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting))}><details class="host-apps-preparation-details">
-      <summary>{i18n.t('hostApplications.prepare.offline')}</summary>
+      <summary><FolderOpen class="w-3.5 h-3.5" aria-hidden="true" /><span>{i18n.t('hostApplications.prepare.offline')}</span><ChevronRight class="host-apps-details-chevron w-3 h-3" aria-hidden="true" /></summary>
       <p>{i18n.t('hostApplications.prepare.offlineHint')}</p>
       <input ref={fileInput} type="file" accept=".zip" hidden onChange={event => { const file = event.currentTarget.files?.[0]; if (file) props.onUpload(file); event.currentTarget.value = ''; }} />
-      <Button variant="outline" size="sm" disabled={!props.allowed || props.submitting} onClick={() => fileInput?.click()}>{i18n.t('hostApplications.prepare.choosePackage')}</Button>
+      <Button variant="outline" size="sm" disabled={!props.allowed || props.submitting} onClick={() => fileInput?.click()}><Upload class="w-3.5 h-3.5" aria-hidden="true" />{i18n.t('hostApplications.prepare.choosePackage')}</Button>
     </details></Show>
     </div>
-    <div class="host-apps-preparation-progress"><Show when={active()}>
+    </div>
+    <Show when={active()}><div class="host-apps-preparation-progress">
       <div class={`host-apps-preparation-track ${progress() === undefined ? 'indeterminate' : ''}`} role="progressbar" aria-label={i18n.t(hostApplicationSetupHeading(props.setup, props.desktopProgress))} aria-valuenow={progress() === undefined ? undefined : Math.round(progress()! * 100)} aria-valuemin={0} aria-valuemax={100}>
         <span style={{ width: progress() === undefined ? '35%' : `${progress()! * 100}%` }} />
       </div>
-    </Show></div>
+    </div></Show>
     <div class="host-apps-preparation-footer">
       <div class="host-apps-preparation-actions">
         <Show when={props.disconnected} fallback={

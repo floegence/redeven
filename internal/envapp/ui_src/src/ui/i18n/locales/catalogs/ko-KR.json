@@ -6880,8 +6880,8 @@
       "unsupported": "이 런타임에서는 설치된 구성 요소 버전을 사용할 수 없습니다. 기존 파일은 보존되었습니다. 런타임을 업데이트한 후 계속하세요.",
       "available": "구성 요소 업데이트 사용 가능",
       "view": "업데이트 확인",
-      "title": "호스트 앱 구성 요소 업데이트",
-      "description": "설치된 구성 요소를 계속 사용할 수 있습니다. 업데이트 중에도 앱을 사용할 수 있습니다.",
+      "title": "호스트 앱 종속 구성 요소 업데이트",
+      "description": "업데이트 중에도 앱을 계속 사용할 수 있습니다.",
       "start": "구성 요소 업데이트",
       "local": "캐시된 파일로 업데이트합니다. 다운로드나 업로드가 필요하지 않습니다.",
       "installedVersion": "설치됨",
@@ -6892,7 +6892,9 @@
       "repair": "구성 요소 복구",
       "cacheChanged": "준비 중에 캐시 파일이 변경되었습니다. 사용 가능한 파일을 확인한 후 다시 시도하세요.",
       "desktopMismatch": "현재 Desktop에서는 필요한 구성 요소를 준비할 수 없습니다. Desktop을 업데이트하거나 호스트 다운로드를 선택하세요.",
-      "checkingSize": "다운로드 전에 계산"
+      "checkingSize": "다운로드 전에 계산",
+      "required": "호스트 앱 종속 구성 요소를 업데이트해야 합니다",
+      "requiredDescription": "업데이트하면 새 앱을 열 수 있습니다. 실행 중인 앱에는 영향이 없습니다."
     },
     "linuxRunningHint": "공유를 중지해도 앱은 계속 실행됩니다. 이 목록에서 다시 연결할 수 있습니다.",
     "stopSharingDescription": "이 앱과 Redeven의 연결을 끊습니다. 앱 창과 저장하지 않은 작업은 그대로 유지됩니다.",
@@ -6961,7 +6963,9 @@
       "desktopPacking": "전송할 파일을 준비하는 중…",
       "desktopUploading": "호스트로 전송하는 중…",
       "desktopCached": "로컬 캐시를 사용합니다. 다운로드할 필요가 없습니다.",
-      "desktopBytes": "로컬 캐시: {cached} · 필요한 다운로드: {download}"
+      "desktopBytes": "로컬 캐시: {cached} · 필요한 다운로드: {download}",
+      "summary": "호스트 앱을 열 수 있도록 화면 및 입력 구성 요소를 준비합니다.",
+      "details": "구성 요소 세부 정보"
     },
     "macMenu": "앱 메뉴",
     "connecting": "앱에 연결하는 중…",
@@ -6976,8 +6980,8 @@
     "cancel": "취소",
     "category": "앱 분류",
     "description": "호스트의 앱을 각각 별도 창에서 사용하세요.",
-    "emptyDescription": "호스트에 GUI 앱을 설치하거나 실행 파일 경로로 추가하세요.",
-    "emptyTitle": "앱이 없습니다",
+    "emptyDescription": "호스트 앱에서는 이 호스트에 이미 설치된 그래픽 소프트웨어를 열 수 있습니다.",
+    "emptyTitle": "그래픽 앱을 찾지 못했습니다",
     "ended": "이 앱 세션이 종료되었습니다.",
     "errors": {
       "failed": "앱을 열 수 없습니다. 호스트의 앱을 확인한 후 다시 시도하세요.",
@@ -7096,7 +7100,11 @@
     "touchHelpTitle": "터치 조작",
     "touchHelpDescription": "탭하면 클릭합니다. 한 손가락으로 쓸어 넘기면 스크롤합니다. 길게 누른 뒤 움직이면 드래그하고, 움직이지 않고 놓으면 오른쪽 클릭입니다. 두 손가락으로 페이지를 확대하거나 축소할 수 있습니다.",
     "clipboardUnavailable": "클립보드에 접근할 수 없습니다. HTTPS를 사용하고 이 사이트의 클립보드 접근을 허용한 후 다시 복사하세요.",
-    "openDescription": "이 애플리케이션은 이 환경을 호스팅하는 기기에서 실행됩니다. 애플리케이션에서 다시 열 수 있습니다."
+    "openDescription": "이 애플리케이션은 이 환경을 호스팅하는 기기에서 실행됩니다. 애플리케이션에서 다시 열 수 있습니다.",
+    "emptyDetails": "호스트 앱 안내",
+    "emptyHint": "구성 요소를 준비해도 앱이나 데스크톱 환경은 설치되지 않습니다. 설치된 앱을 실행 파일 경로로 추가하거나 그래픽 소프트웨어를 설치한 후 목록을 새로 고치세요. 앱 검색이나 준비가 필요하면 여기서 구성 요소 설정을 열 수 있습니다.",
+    "addExisting": "기존 앱 추가",
+    "componentSettings": "구성 요소 설정"
   },
   "settingsDesign": {
     "editDirectory": "디렉터리 편집",

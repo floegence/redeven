@@ -53,6 +53,40 @@ async function inspectUpdate() {
   textButton('View update').click(); await settle();
 }
 describe('independent component updates', () => {
+  it.each([false, true])('does not promote dependency installation for an empty host with ready=%s', async ready => {
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready }, applications: [], sessions: [], running: [] });
+    state.setupStatus.mockResolvedValue(installedSetup);
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.querySelector('.host-apps-preparation')).toBeNull();
+    expect(controlText(host)).toContain('No graphical applications found');
+    expect(host.querySelector('.host-apps-library')).toBeNull();
+    expect(host.querySelector('[data-floe-status-indicator] button')!.getAttribute('aria-hidden')).toBe('true');
+    expect(state.setupStart).not.toHaveBeenCalled();
+    expect(state.setupPlan).not.toHaveBeenCalled();
+  });
+  it('keeps an active preparation cancellable when the host catalog is empty', async () => {
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [], sessions: [] });
+    state.setupStatus.mockResolvedValue({ ...installedSetup, state: 'downloading', operation_id: 'active', can_cancel: true });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.querySelector('[role=progressbar]')).not.toBeNull();
+    textButton('Cancel').click(); await settle();
+    expect(state.setupCancel).toHaveBeenCalledWith('active');
+  });
+  it.each(['failed', 'interrupted'])('keeps recovery visible after empty-host preparation is %s', async status => {
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [], sessions: [] });
+    state.setupStatus.mockResolvedValue({ ...installedSetup, state: status, error_code: 'download_failed' });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.querySelector('.host-apps-preparation')).not.toBeNull();
+    expect(controlText(host.querySelector('.host-apps-preparation')!)).toContain('Check the connection');
+    expect(textButton('Update components').disabled).toBe(false);
+    expect(state.setupStart).not.toHaveBeenCalled();
+  });
+  it('does not present failed catalog discovery as an empty server', async () => {
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready: false, reason: 'catalog_unavailable' }, applications: [], sessions: [] });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.querySelector('.host-apps-empty-host')).toBeNull();
+    expect(controlText(host)).toContain('could not');
+  });
   it('updates from a complete local cache with no Desktop acquisition or upload', async () => {
     window.redevenDesktopShell!.applicationComponents = state.components;
     state.setupPlan.mockResolvedValue({ ...transferPlan, missing_artifacts: [], missing_bytes: 0 });
@@ -398,7 +432,11 @@ it('ignores a download failure from a different operation', async () => {
 it('refreshes the real application library after preparation without a pending application', async () => {
  state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [], sessions: [] });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
- [...host.querySelectorAll('button')].find(el => controlText(el) === 'Prepare')!.click(); await settle();
+ expect(host.querySelector('.host-apps-preparation')).toBeNull();
+ host.querySelector<HTMLDetailsElement>('.host-apps-empty-host details')!.open = true;
+ textButton('Component settings').click(); await settle();
+ expect(state.setupStart).not.toHaveBeenCalled();
+ textButton('Prepare').click(); await settle();
  state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
  state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
  expect(button('Open in new window · Text Editor')).toBeDefined();

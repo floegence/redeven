@@ -8,7 +8,7 @@ import { SUPPORTED_LOCALES, type RedevenLocale } from '../ui/i18n/localeMeta';
 import { createTestI18nHelpers } from '../ui/i18n/locales/testDictionaries';
 import { EnvHostApplicationsPage } from '../ui/pages/EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ locale: 'en-US' as RedevenLocale, missing: 0, start: vi.fn() }));
+const state = vi.hoisted(() => ({ locale: 'en-US' as RedevenLocale, ready: true, empty: false, missing: 0, start: vi.fn() }));
 const status = { state: 'ready', received_bytes: 0, expected_bytes: 176668991, can_cancel: false, update_available: true,
   installed: { id: 'alpine-3.23-xpra-6.2.2-amd64-r1', digest: 'c'.repeat(64), ready: true },
   package: { id: 'alpine-3.23-xpra-6.2.2-amd64-r2', digest: 'a'.repeat(64), architecture: 'amd64', size_bytes: 176668991 } };
@@ -16,7 +16,7 @@ vi.mock('../ui/i18n', () => ({ useI18n: () => ({ ...createTestI18nHelpers(state.
 vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({ env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }), env_id: () => 'fixture', localRuntime: () => ({}) }) }));
 vi.mock('../ui/services/hostApplicationsApi', async importOriginal => ({
   ...await importOriginal<object>(),
-  listHostApplications: async () => ({ availability: { supported: true, ready: true }, applications: [{ id: 'editor.desktop', name: 'Text Editor', description: '', categories: [], icon: '', custom: false }], sessions: [], running: [] }),
+  listHostApplications: async () => ({ availability: { supported: true, ready: state.ready }, applications: state.empty ? [] : [{ id: 'editor.desktop', name: 'Text Editor', description: '', categories: [], icon: '', custom: false }], sessions: [], running: [] }),
   listHostApplicationSessions: async () => [], listRunningHostApplications: async () => [],
   getHostApplicationSetup: async () => status,
   getHostApplicationTransferPlan: async () => ({ package_digest: 'a'.repeat(64), architecture: 'amd64', missing_artifacts: state.missing ? ['b'.repeat(64)] : [], missing_bytes: state.missing }),
@@ -24,7 +24,68 @@ vi.mock('../ui/services/hostApplicationsApi', async importOriginal => ({
   startHostApplicationSetup: state.start,
 }));
 let dispose: (() => void) | undefined;
-afterEach(() => { dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark', 'light'); delete document.documentElement.dataset.floeShellTheme; state.locale = 'en-US'; state.missing = 0; vi.clearAllMocks(); });
+afterEach(() => { dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark', 'light'); delete document.documentElement.dataset.floeShellTheme; state.locale = 'en-US'; state.ready = true; state.empty = false; delete window.redevenDesktopShell; state.missing = 0; vi.clearAllMocks(); });
+
+it.each(SUPPORTED_LOCALES.flatMap(locale => [360, 1440].map(width => ({ locale, width }))))('identifies required dependency updates and keeps controls compact in $locale at $width px', async ({ locale, width }) => {
+  state.locale = locale; state.ready = false;
+  document.documentElement.dataset.floeShellTheme = 'porcelain-light';
+  Object.defineProperty(window, 'redevenDesktopShell', { configurable: true, value: { applicationComponents: vi.fn() } });
+  const copy = createTestI18nHelpers(locale);
+  await page.viewport(width, 900);
+  const host = document.createElement('main'); host.style.cssText = 'height:850px;background:var(--background)'; document.body.append(host);
+  dispose = render(() => <EnvHostApplicationsPage />, host);
+  await expect.poll(() => host.querySelector('.host-apps-preparation h2')?.textContent).toBe(copy.t('hostApplications.update.required'));
+  const panel = host.querySelector<HTMLElement>('.host-apps-preparation')!;
+  expect(panel.innerText).not.toContain(copy.t('hostApplications.prepare.ready'));
+  expect(panel.innerText).not.toContain(copy.t('hostApplications.update.stabilityFix'));
+  expect(panel.innerText).not.toContain(status.installed.id);
+  const action = page.elementLocator(panel).getByRole('button', { name: copy.t('hostApplications.update.start'), exact: true });
+  await expect.element(action).toBeVisible();
+  expect(panel.getBoundingClientRect().height).toBeLessThan(width === 1440 ? 360 : 450);
+  const content = panel.querySelector('.host-apps-preparation-content')!.getBoundingClientRect();
+  expect(action.element().getBoundingClientRect().top - content.bottom).toBeLessThanOrEqual(24);
+  expect(action.element().getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right);
+  expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+  expect(panel.querySelector('[role=progressbar]')).toBeNull();
+  expect(state.start).not.toHaveBeenCalled();
+  if (locale === 'zh-CN') await page.screenshot({ element: host, path: `__screenshots__/required-update-${width}.png` });
+  const details = panel.querySelector<HTMLDetailsElement>('.host-apps-component-details')!;
+  const summary = details.querySelector('summary')!;
+  expect(details.open).toBe(false);
+  expect(getComputedStyle(summary).cursor).toBe('pointer');
+  summary.focus(); await userEvent.keyboard('{Enter}');
+  expect(details.open).toBe(true);
+  await expect.element(page.elementLocator(panel).getByText(status.installed.id, { exact: true })).toBeVisible();
+  expect(panel.querySelector('dl')!.scrollWidth).toBeLessThanOrEqual(panel.querySelector('dl')!.clientWidth);
+  await userEvent.keyboard('{Enter}');
+  expect(details.open).toBe(false);
+  expect(panel.querySelector<HTMLInputElement>('input[value=host]')!.checked).toBe(true);
+});
+
+it.each(SUPPORTED_LOCALES)('presents empty hosts without a dependency installation prompt in %s', async locale => {
+  state.locale = locale; state.empty = true; state.ready = false;
+  document.documentElement.dataset.floeShellTheme = 'porcelain-light';
+  const copy = createTestI18nHelpers(locale);
+  await page.viewport(390, 850);
+  const host = document.createElement('main'); host.style.cssText = 'height:800px;background:var(--background)'; document.body.append(host);
+  dispose = render(() => <EnvHostApplicationsPage />, host);
+  await expect.element(page.getByRole('heading', { name: copy.t('hostApplications.emptyTitle'), exact: true })).toBeVisible();
+  expect(host.querySelector('.host-apps-preparation, .host-apps-library')).toBeNull();
+  const settings = page.getByRole('button', { name: copy.t('hostApplications.componentSettings'), exact: true });
+  await expect.element(host.querySelector<HTMLButtonElement>('.host-apps-empty-host details button')!).not.toBeVisible();
+  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+  const add = page.elementLocator(host.querySelector('.host-apps-empty-host')!).getByRole('button', { name: copy.t('hostApplications.addExisting'), exact: true });
+  expect(add.element().scrollWidth).toBeLessThanOrEqual(add.element().clientWidth);
+  expect((await axe.run(host, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
+  if (locale === 'zh-CN') await page.screenshot({ element: host, path: '__screenshots__/empty-host-zh-CN.png' });
+  const details = host.querySelector<HTMLDetailsElement>('.host-apps-empty-host details')!;
+  details.querySelector('summary')!.focus(); await userEvent.keyboard('{Enter}');
+  await expect.element(settings).toBeVisible();
+  expect(host.innerText).toContain(copy.t('hostApplications.emptyHint'));
+  await userEvent.click(settings);
+  await expect.element(page.getByRole('dialog', { name: copy.t('hostApplications.update.title'), exact: true })).toBeVisible();
+  expect(state.start).not.toHaveBeenCalled();
+});
 
 async function openUpdate(width = 390) {
   await page.viewport(width, 850);

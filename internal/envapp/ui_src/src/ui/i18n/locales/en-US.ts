@@ -7,14 +7,20 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   hostApplications: {
+    "componentSettings": "Component settings",
+    "addExisting": "Add existing application",
+    "emptyHint": "Component setup does not install applications or a desktop environment. Add an installed application by its executable path, or refresh after installing graphical software. Open component settings here if discovery or preparation is needed.",
+    "emptyDetails": "About host applications",
     openDescription: "This application runs on the device hosting this environment. You can return to it from Applications.",
     filterApplications: 'Filter applications',
     clearFilters: 'Clear filters',
     update: {
+      "required": "Host application dependencies need an update",
+      "requiredDescription": "Update to open new applications. Running applications are unaffected.",
       "available": "Component update available",
       "view": "View update",
-      "title": "Update host application components",
-      "description": "Your installed components remain available. You can keep using applications while updating.",
+      "title": "Update host application dependencies",
+      "description": "You can keep using applications during the update.",
       "start": "Update components",
       "local": "Use cached files to update. No download or upload is needed.",
       "installedVersion": "Installed",
@@ -31,6 +37,8 @@ export const enUS = defineDictionary({
     "clipboardUnavailable": "Clipboard access is unavailable. Use HTTPS and allow clipboard access for this site, then copy again.",
     "macControls": "Application controls",
     prepare: {
+      "summary": "Prepare display and input components to open host applications.",
+      "details": "Component details",
       "desktopBytes": "Local cache: {cached} · Download needed: {download}",
       "desktopCached": "Using the local cache. No download is needed.",
       "desktopUploading": "Transferring to the host…",
@@ -101,8 +109,8 @@ export const enUS = defineDictionary({
     "cancel": "Cancel",
     "category": "Application category",
     "description": "Your host’s applications, each in its own window.",
-    "emptyDescription": "Install a graphical application on this host, or add one by its executable path.",
-    "emptyTitle": "No applications yet",
+    "emptyDescription": "Host Applications opens graphical software already installed on this host.",
+    "emptyTitle": "No graphical applications found",
     "ended": "This application session has ended.",
     "errors": {
       "packageUnavailable": "The application’s package runtime is unavailable. Check its installation on this host, then refresh.",

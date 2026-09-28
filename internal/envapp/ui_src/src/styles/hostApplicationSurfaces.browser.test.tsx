@@ -49,7 +49,8 @@ it('keeps download choices and actions together on wide pages and inside compact
   expect(desktopRadio.checked).toBe(true);
   expect(document.activeElement).toBe(desktopRadio);
   const actions = preparation.querySelector('.host-apps-preparation-actions')!.getBoundingClientRect();
-  expect(actions.left - preparation.getBoundingClientRect().left).toBeLessThan(1);
+  expect(actions.left).toBeCloseTo(preparation.querySelector('.host-apps-preparation-method')!.getBoundingClientRect().left, 0);
+  expect(actions.top - preparation.querySelector('.host-apps-preparation-content')!.getBoundingClientRect().bottom).toBeLessThanOrEqual(24);
   host.style.width = '320px';
   expect(preparation.scrollWidth).toBeLessThanOrEqual(preparation.clientWidth);
   setDialog(true);
