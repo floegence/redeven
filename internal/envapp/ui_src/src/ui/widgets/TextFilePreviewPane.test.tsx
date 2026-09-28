@@ -164,7 +164,7 @@ describe('TextFilePreviewPane', () => {
     expect(host.textContent).toContain('typescript:const value = 2;:rw');
     expect(host.textContent).not.toContain('Editing');
     expect(editor?.dataset.readOnly).toBe('false');
-    expect(editor?.dataset.hoverEnabled).toBe('false');
+    expect(editor?.dataset.hoverEnabled).toBe('off');
     expect(editor?.dataset.codeLens).toBe('false');
     expect(editor?.dataset.inlayHints).toBe('off');
     expect(editor?.dataset.quickSuggestions).toBe('false');

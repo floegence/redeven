@@ -8,7 +8,7 @@ overrides:
   '@floegence/flowersec-core': 5.4.1
   '@babel/core': ^7.29.7
   brace-expansion: ^5.0.9
-  dompurify: ^3.4.13
+  dompurify: ^3.4.15
   flatted: ^3.4.2
   glob: ^13.0.6
   js-yaml: ^4.3.2
@@ -35,14 +35,14 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: 0.81.1
-        version: 0.81.1
+        specifier: 0.81.3
+        version: 0.81.3
       '@floegence/floe-webapp-core':
-        specifier: 0.81.1
-        version: 0.81.1(solid-js@1.9.13)
+        specifier: 0.81.3
+        version: 0.81.3(solid-js@1.9.13)
       '@floegence/floe-webapp-protocol':
-        specifier: 0.81.1
-        version: 0.81.1(solid-js@1.9.13)
+        specifier: 0.81.3
+        version: 0.81.3(solid-js@1.9.13)
       '@floegence/floebrowser':
         specifier: 0.1.25
         version: 0.1.25
@@ -56,11 +56,11 @@ importers:
         specifier: https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz
         version: https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz
       '@floegence/redevplugin-contracts':
-        specifier: 3.0.32
-        version: 3.0.32
+        specifier: 3.0.33
+        version: 3.0.33
       '@floegence/redevplugin-ui':
-        specifier: 3.0.32
-        version: 3.0.32
+        specifier: 3.0.33
+        version: 3.0.33
       '@fontsource-variable/inter':
         specifier: 5.2.8
         version: 5.2.8
@@ -86,8 +86,8 @@ importers:
         specifier: ^0.3.6
         version: 0.3.7
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.15
+        version: 3.4.16
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
@@ -101,11 +101,11 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0(marked@17.0.6)
       mermaid:
-        specifier: ^11.16.1
-        version: 11.16.1
+        specifier: ^11.17.2
+        version: 11.17.2
       monaco-editor:
-        specifier: ^0.55.1
-        version: 0.55.1
+        specifier: ^0.57.0
+        version: 0.57.0
       quickjs-emscripten:
         specifier: 0.32.0
         version: 0.32.0
@@ -542,18 +542,18 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-boot@0.81.1':
-    resolution: {integrity: sha512-1snEfbfHf64A4uMUVOV9EIvK9ON2tIFlnh73IUaOt503/LUHEPO90I3t9RoLv3lxk+QmCxCvV3a7ofF+fCqiCw==}
+  '@floegence/floe-webapp-boot@0.81.3':
+    resolution: {integrity: sha512-32mT5zCTCPENf2l3DSe8X/PsEv/H8aAIucpwjOu4Hkjxx3MpdkpvDIw/2EH3fagdd0tlTuPu9KSv0iyw0yI+yg==}
     engines: {node: '>=24.20.0'}
 
-  '@floegence/floe-webapp-core@0.81.1':
-    resolution: {integrity: sha512-1f07kGcUDGFnmFnQJIbDWGFiV6+n020zOp5i6t6UlhJN0R+A3BZs370l7Ovzn99ummk9jJ+I00ZtbzxFhJ7RxA==}
+  '@floegence/floe-webapp-core@0.81.3':
+    resolution: {integrity: sha512-4QA29+QNIW/BGx2hx8Jg8LjI40Jaqzrf4N7vG2HrdTuIXKq2gJNINsgGbk0l96ixNony8YzDZXtaMKuIZpCNxw==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.81.1':
-    resolution: {integrity: sha512-cXpDHV2DKlKjsT8Lxa38nhsa/SjkNcirIPI+/96Fj8xw27tFeMYPYEp85ZuXoawhRaBfcds9Du46o5sNL9Kz6Q==}
+  '@floegence/floe-webapp-protocol@0.81.3':
+    resolution: {integrity: sha512-2AGlmivsssC39lx0ot+Rsrnok6KQBxtSiTDuURBeYG7iJuqNjyRVl5e7+rg/UgfQHe4BaCdDZacAAqBk1yJVZg==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -606,11 +606,11 @@ packages:
     version: 0.6.0
     engines: {node: '>=26.0.0 <27'}
 
-  '@floegence/redevplugin-contracts@3.0.32':
-    resolution: {integrity: sha512-bnluPVWJn/Vbw3jGMWo7ZNoKbgwJ8PXlJLT6tQnrYrpMZy2i1BVAa+iD01MxR9w1i9IGbJ6C4N6yxifYQC8IiQ==}
+  '@floegence/redevplugin-contracts@3.0.33':
+    resolution: {integrity: sha512-3C5lkQoPa/+4RkK0gg1XC2VzCwI1b5a9JM8rr+SucAlcye18jJu1gvDG+s5GPY029nG3HBpyAFjKCSfwSj1e7g==}
 
-  '@floegence/redevplugin-ui@3.0.32':
-    resolution: {integrity: sha512-3srzCr35VK2M6SV/c6lPAJx6e0isOzaATvvOPQ23mjMcaIF2cceWtnzKxWMXDV70ae3zQUhPiI3To7eBmgB2fg==}
+  '@floegence/redevplugin-ui@3.0.33':
+    resolution: {integrity: sha512-lWI8rwvwAFBQWVrg5OohLYmvF4JqmW6Qi0T1XA+nqv5Ay/5ZKP04eCWMwWLMPr31MnRFlSJfP561NT9Gwx//RQ==}
 
   '@fontsource-variable/inter@5.2.8':
     resolution: {integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==}
@@ -684,8 +684,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@mermaid-js/parser@1.2.0':
-    resolution: {integrity: sha512-oYPyv8A4As1yH5Bx+04iQEQxXuIQDe0GKCNSRgao6z8AM9jixXIfP0vsppRLvGf+nKIOb9/LdpWA4YuJiVvESA==}
+  '@mermaid-js/parser@1.2.1':
+    resolution: {integrity: sha512-n12NohV3mrUyUL2o93IgG/ifeW9FTyeJn3zDxkhwa8MJ9Fxg3HQMlA3RiGmD/3UnJvheztkjjQAjA2T4LmUcpw==}
 
   '@motionone/animation@10.18.0':
     resolution: {integrity: sha512-9z2p5GFGCm0gBsZbi8rVMOAJCtw1WqBTIPw3ozk06gDvZInBPIsQcHgYogEJ4yuHJ+akuW8g1SEIOpTOvYs8hw==}
@@ -1513,8 +1513,8 @@ packages:
     peerDependencies:
       cytoscape: ^3.2.0
 
-  cytoscape@3.33.4:
-    resolution: {integrity: sha512-HIN5Pmd9MrX9BkV7tDwnOcEJCSFvCpc8X97h3f508J6I5FsqAY65wKOCvgH2CuP42CaahWaz4tuh32SOOIH7ww==}
+  cytoscape@3.34.3:
+    resolution: {integrity: sha512-yfYGhRcGAntq6YBD583j4n0Eg3jIxvWmZtz/5uz9UYkeIStSlMxuUja+ec5j3iBD8nv1rwaOAYMW09tBdkSeaQ==}
     engines: {node: '>=0.10'}
 
   d3-array@2.12.1:
@@ -1666,6 +1666,9 @@ packages:
   dayjs@1.11.20:
     resolution: {integrity: sha512-YbwwqR/uYpeoP4pu043q+LTDLFBLApUP6VxRihdfNTqu4ubqMlGDLd6ErXhEgsyvY0K6nCs7nggYumAN+9uEuQ==}
 
+  dayjs@1.11.23:
+    resolution: {integrity: sha512-QDTCU0M0MxR3hQfnlDJfwekQiaanm1ubOD231u73WBckQ/fsamwRLiE2GBz6D3a/xF1NgfiDLJjXBa1hYOYTtQ==}
+
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
     engines: {node: '>=6.0'}
@@ -1702,8 +1705,8 @@ packages:
   docx-preview@0.3.7:
     resolution: {integrity: sha512-Lav69CTA/IYZPJTsKH7oYeoZjyg96N0wEJMNslGJnZJ+dMUZK85Lt5ASC79yUlD48ecWjuv+rkcmFt6EVPV0Xg==}
 
-  dompurify@3.4.13:
-    resolution: {integrity: sha512-2vmYIoqjze2d+kakP8S/nS5shfsl587kzwEjcGlTdiksUVgFHnFCsLYDVj/JNqJVOQZGSYBTmuycv0PodwmnMQ==}
+  dompurify@3.4.16:
+    resolution: {integrity: sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==}
 
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
@@ -1817,6 +1820,9 @@ packages:
 
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
+
+  fastdom@1.0.12:
+    resolution: {integrity: sha512-LB+xjSTEbjHE1cWsxu+tN2Xqr1kpi+V9aADI7sVM5ZMaXyYGPHULQMzpJMYqOTULK/73pUkWVzzObFRBkPr+hg==}
 
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
@@ -2228,8 +2234,8 @@ packages:
     resolution: {integrity: sha512-eRtbOb1N5iyH0tkQDAoQ4Ipsp/5qSR79Dzrz8hEPxRX10RWWR/iQXdoKmBSRCThY1Fh5EhISDtpSc93fpxUniQ==}
     engines: {node: '>=12.13'}
 
-  mermaid@11.16.1:
-    resolution: {integrity: sha512-TQsq6u22fAn3rek5VOubrhKPo1g5hwC3FXUN9hiyupTckcYiGuuKGkNQrKYwGJkXUxZdojwRG46gsSCFZMDp4g==}
+  mermaid@11.17.2:
+    resolution: {integrity: sha512-V6K3C8EBdEsPFZXSKMJe6ppQOENxuHARr9GvHX4hh47lAbhMRD9qf4oEK7LoaRQxULMa80/qt5gHO73aCleBBg==}
 
   micromark-util-character@2.1.1:
     resolution: {integrity: sha512-wv8tdUTJ3thSFFFJKtpYKOYiGP2+v96Hvk4Tu8KpCAsTMs6yi+nVmGh1syvSCsaxz45J6Jbw+9DD6g97+NV67Q==}
@@ -2257,8 +2263,8 @@ packages:
   mitt@3.0.1:
     resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
 
-  monaco-editor@0.55.1:
-    resolution: {integrity: sha512-jz4x+TJNFHwHtwuV9vA9rMujcZRb0CEilTEwG2rRSpe/A7Jdkuj8xPKttCgOh+v/lkHy7HsZ64oj+q3xoAFl9A==}
+  monaco-editor@0.57.0:
+    resolution: {integrity: sha512-5BkI9KGoqrNvBGUe15/QlZq3OooZ8WLg1AxTpaqHRCP3HNpzPPZKE2EDz8M7c+VRmCeUw1Brp4cx/PWm3kI/5A==}
 
   mrmime@2.0.1:
     resolution: {integrity: sha512-Y3wQdFg2Va6etvQ5I82yUhGdsKrcYox6p7FfL1LbK2J4V01F9TGlepTIhnK24t7koZibmg82KGglhA1XK5IsLQ==}
@@ -2563,6 +2569,9 @@ packages:
   std-env@4.2.0:
     resolution: {integrity: sha512-oCUKSupKTHX53EyjDtuZQ64pjLJ6yYCtpmEw0goYxtjG9KpbRe8KAsl2tBUGU9DyMcJ0RwJ8GqJAFzMXcXW1Rw==}
 
+  strictdom@1.0.1:
+    resolution: {integrity: sha512-cEmp9QeXXRmjj/rVp9oyiqcvyocWab/HaoN4+bwFeZ7QzykJD6L3yD4v12K1x0tHpqRqVpJevN3gW7kyM39Bqg==}
+
   string_decoder@1.1.1:
     resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
 
@@ -2589,8 +2598,8 @@ packages:
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
 
-  tailwind-merge@3.6.0:
-    resolution: {integrity: sha512-uxL7qAVQriqRQPAyK3pj66VqskWqoZ37PW94jwOTwNfq/z9oyu1V+eqrZqtR2+fCiXdYOZe/Modt8GtvqNzu+w==}
+  tailwind-merge@3.7.0:
+    resolution: {integrity: sha512-XPPUyAc+cvspz3lHTcR/QgPfW2A0lv/xQNIjX3HGhLR+Nq2lHaLq5MtTesHn8GUr3W3DguT2KT5x3NVgRtYwmA==}
 
   tailwindcss@4.3.0:
     resolution: {integrity: sha512-y6nxMGB1nMW9R6k96e5gdIFzcfL/gTJRNaqGes1YvkLnPVXzWgbqFF2yLC0T8G774n24cx3Pe8XrKoniCOAH+Q==}
@@ -2613,10 +2622,6 @@ packages:
 
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
-
-  tinyexec@1.2.2:
-    resolution: {integrity: sha512-M/Q0B2cp4K7kynaT/vnED1j8TlLY+Pp7C6Wl2bl/7u/F0mUVwdyOpwomQb8JpYLitHUssAJRmLZdMCGsrx7i+g==}
-    engines: {node: '>=18'}
 
   tinyexec@1.3.1:
     resolution: {integrity: sha512-GCvB3aoys96IuDFBMcTB46JOR6mdMtAToqwiW8JlWhsoh1mhHi/xn9ss/Dg7N555GiJyEt2qzoG/NHCwM6h1EA==}
@@ -2926,7 +2931,7 @@ snapshots:
   '@antfu/install-pkg@1.1.0':
     dependencies:
       package-manager-detector: 1.6.0
-      tinyexec: 1.2.2
+      tinyexec: 1.3.1
 
   '@asamuzakjp/css-color@3.2.0':
     dependencies:
@@ -3234,7 +3239,7 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-boot@0.81.1':
+  '@floegence/floe-webapp-boot@0.81.3':
     dependencies:
       '@floegence/flowersec-core': 5.4.1
       '@noble/hashes': 2.4.0
@@ -3242,20 +3247,21 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.81.1(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.81.3(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
+      dompurify: 3.4.16
       marked: 17.0.6
-      mermaid: 11.16.1
-      monaco-editor: 0.55.1
+      mermaid: 11.17.2
+      monaco-editor: 0.57.0
       pdfjs-dist: 6.3.289
       shiki: 3.23.0
       solid-js: 1.9.13
       solid-motionone: 1.0.4(solid-js@1.9.13)
-      tailwind-merge: 3.6.0
+      tailwind-merge: 3.7.0
 
-  '@floegence/floe-webapp-protocol@0.81.1(solid-js@1.9.13)':
+  '@floegence/floe-webapp-protocol@0.81.3(solid-js@1.9.13)':
     dependencies:
       '@floegence/flowersec-core': 5.4.1
       solid-js: 1.9.13
@@ -3319,11 +3325,11 @@ snapshots:
 
   '@floegence/redeven-service-templates@https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz': {}
 
-  '@floegence/redevplugin-contracts@3.0.32': {}
+  '@floegence/redevplugin-contracts@3.0.33': {}
 
-  '@floegence/redevplugin-ui@3.0.32':
+  '@floegence/redevplugin-ui@3.0.33':
     dependencies:
-      '@floegence/redevplugin-contracts': 3.0.32
+      '@floegence/redevplugin-contracts': 3.0.33
       '@noble/hashes': 2.4.0
 
   '@fontsource-variable/inter@5.2.8': {}
@@ -3397,7 +3403,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@mermaid-js/parser@1.2.0':
+  '@mermaid-js/parser@1.2.1':
     dependencies:
       '@chevrotain/types': 11.1.2
 
@@ -4236,17 +4242,17 @@ snapshots:
 
   csstype@3.2.3: {}
 
-  cytoscape-cose-bilkent@4.1.0(cytoscape@3.33.4):
+  cytoscape-cose-bilkent@4.1.0(cytoscape@3.34.3):
     dependencies:
       cose-base: 1.0.3
-      cytoscape: 3.33.4
+      cytoscape: 3.34.3
 
-  cytoscape-fcose@2.2.0(cytoscape@3.33.4):
+  cytoscape-fcose@2.2.0(cytoscape@3.34.3):
     dependencies:
       cose-base: 2.2.0
-      cytoscape: 3.33.4
+      cytoscape: 3.34.3
 
-  cytoscape@3.33.4: {}
+  cytoscape@3.34.3: {}
 
   d3-array@2.12.1:
     dependencies:
@@ -4427,6 +4433,8 @@ snapshots:
 
   dayjs@1.11.20: {}
 
+  dayjs@1.11.23: {}
+
   debug@4.4.3:
     dependencies:
       ms: 2.1.3
@@ -4453,7 +4461,7 @@ snapshots:
     dependencies:
       jszip: 3.10.1
 
-  dompurify@3.4.13:
+  dompurify@3.4.16:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -4622,6 +4630,10 @@ snapshots:
   fast-json-stable-stringify@2.1.0: {}
 
   fast-levenshtein@2.0.6: {}
+
+  fastdom@1.0.12:
+    dependencies:
+      strictdom: 1.0.1
 
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
@@ -4981,22 +4993,23 @@ snapshots:
     dependencies:
       is-what: 4.1.16
 
-  mermaid@11.16.1:
+  mermaid@11.17.2:
     dependencies:
       '@braintree/sanitize-url': 7.1.2
       '@iconify/utils': 3.1.3
-      '@mermaid-js/parser': 1.2.0
+      '@mermaid-js/parser': 1.2.1
       '@types/d3': 7.4.3
       '@upsetjs/venn.js': 2.0.0
-      cytoscape: 3.33.4
-      cytoscape-cose-bilkent: 4.1.0(cytoscape@3.33.4)
-      cytoscape-fcose: 2.2.0(cytoscape@3.33.4)
+      cytoscape: 3.34.3
+      cytoscape-cose-bilkent: 4.1.0(cytoscape@3.34.3)
+      cytoscape-fcose: 2.2.0(cytoscape@3.34.3)
       d3: 7.9.0
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
-      dayjs: 1.11.20
-      dompurify: 3.4.13
+      dayjs: 1.11.23
+      dompurify: 3.4.16
       es-toolkit: 1.47.0
+      fastdom: 1.0.12
       katex: 0.16.47
       khroma: 2.1.0
       marked: 16.4.2
@@ -5030,9 +5043,9 @@ snapshots:
 
   mitt@3.0.1: {}
 
-  monaco-editor@0.55.1:
+  monaco-editor@0.57.0:
     dependencies:
-      dompurify: 3.4.13
+      dompurify: 3.4.16
       marked: 14.0.0
 
   mrmime@2.0.1: {}
@@ -5352,6 +5365,8 @@ snapshots:
 
   std-env@4.2.0: {}
 
+  strictdom@1.0.1: {}
+
   string_decoder@1.1.1:
     dependencies:
       safe-buffer: 5.1.2
@@ -5379,7 +5394,7 @@ snapshots:
 
   symbol-tree@3.2.4: {}
 
-  tailwind-merge@3.6.0: {}
+  tailwind-merge@3.7.0: {}
 
   tailwindcss@4.3.0: {}
 
@@ -5400,8 +5415,6 @@ snapshots:
       react: 18.3.1
 
   tinybench@2.9.0: {}
-
-  tinyexec@1.2.2: {}
 
   tinyexec@1.3.1: {}
 

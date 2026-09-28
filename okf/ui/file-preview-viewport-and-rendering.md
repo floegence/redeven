@@ -60,6 +60,10 @@ one viewport or change scale merely because another page becomes visible. PDF
 page labels consume unscaled reading space. DOCX measures native section layout
 and uses the document stack height only for scrolling.
 
+Text and Markdown editors consume Floe's published Monaco options. Preview
+interaction configuration disables hover through the current explicit `off` mode
+so editor upgrades retain the product's quiet reading and editing behavior.
+
 Text, Markdown, and spreadsheets retain their reading layout and scrolling; they
 are not scaled into one screen. Video contains the complete frame. Audio controls
 remain reachable. Native media retains authorized Range requests; the
