@@ -790,7 +790,8 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   ),
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   focusMenuItem: (menu: HTMLElement | null, target: 'first' | 'last') => {
     const items = Array.from(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? []);
     (target === 'last' ? items.at(-1) : items[0])?.focus();

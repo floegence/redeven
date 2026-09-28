@@ -54,7 +54,8 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
   WorkbenchWidgetHeader: (props: any) => <header data-testid="preview-header">{props.actions}</header>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,

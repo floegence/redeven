@@ -49,6 +49,24 @@ test('accepts semantic variables and color functions derived from them', () => {
   assert.deepEqual(violations, []);
 });
 
+test('published standalone palette colors belong only to their generated string export', () => {
+  const pathname = 'desktop/src/shared/floeStandaloneStyles.generated.ts';
+  const source = [
+    'export const floeStandaloneStyleText = ":root{--background:#123456}";',
+    'const handwrittenStyle = "color: #abcdef";',
+  ].join('\n');
+  assert.deepEqual(findThemeColorViolations(source, pathname), [
+    `${pathname}:2: replace #abcdef with a semantic theme token or add a precise owner/path/use exception`,
+  ]);
+  assert.equal(findThemeColorViolations(source, 'desktop/src/shared/other.ts').length, 2);
+  assert.equal(findThemeColorViolations(
+    'const floeStandaloneStyleText = "#123456";', pathname,
+  ).length, 1);
+  assert.equal(findThemeColorViolations(
+    'export const floeStandaloneStyleText = makeStyle("#123456");', pathname,
+  ).length, 1);
+});
+
 test('video letterboxing belongs only to the media renderer and does not require a fixed height', () => {
   const pathname = 'internal/envapp/ui_src/src/ui/file-preview/rendererRegistry.tsx';
   assert.deepEqual(findThemeColorViolations([

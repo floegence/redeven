@@ -512,7 +512,7 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    expect(runtime.querySelector('.flower-settings-title-feedback')?.textContent).toBe('');
+    expect(runtime.querySelector<HTMLElement>('.flower-settings-title-feedback [role="status"]')?.style.visibility).toBe('hidden');
     expect(runtime.querySelector('.flower-settings-current-model')).toBeTruthy();
     expect(runtime.textContent).toContain('Configure models and the default Flower permission for the Local AI Profile.');
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { textWithoutHiddenCopies } from './textContent.test-support';
 import {
   adapter, deferred, flowerSurfaceNotifications, liveBootstrap,
   launchReceipt, renderSurfaceWithAdapter, thread, waitFor,
@@ -9,7 +10,7 @@ async function forkFrom(runtime: HTMLElement, threadID: string) {
   const card = runtime.querySelector(`[data-thread-id="${threadID}"]`)!;
   (card.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
   await waitFor(() => !!document.querySelector('[role="menu"]'));
-  const button = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((item) => item.textContent === 'Fork')!;
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((item) => textWithoutHiddenCopies(item) === 'Fork')!;
   button.click();
 }
 
