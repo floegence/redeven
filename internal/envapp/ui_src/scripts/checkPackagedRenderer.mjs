@@ -1078,9 +1078,10 @@ async function verifyBuiltMobileFlowerVisibility(browser, tls) {
             assert.equal(await locator.evaluate(element => element.getClientRects().length), 0, 'Retained mobile Flower must not paint over the active page');
           }
           await file.waitFor({ state: 'visible' });
-          for (const slot of ['top-bar', 'main', 'mobile-tab-bar']) {
+          for (const slot of ['main', 'mobile-tab-bar']) {
             await page.locator(`[data-floe-shell-slot="${slot}"]`).waitFor({ state: 'visible' });
           }
+          await page.locator('[data-floe-shell-slot="top-bar"]').waitFor({ state: 'hidden' });
           assert.equal(await page.evaluate(() => globalThis.document.documentElement.scrollHeight <= globalThis.innerHeight), true, 'The shell must not create document scrolling');
         };
         await assertHiddenProduct();
@@ -1108,6 +1109,7 @@ async function verifyBuiltMobileFlowerVisibility(browser, tls) {
         await assertHiddenProduct();
         await assertRetainedDraft();
         await page.setViewportSize({ width: 1280, height: 800 });
+        await page.locator('[data-floe-shell-slot="top-bar"]').waitFor({ state: 'visible' });
         await page.locator('#redeven-activity-flower-companion').waitFor({ state: 'visible' });
         await composer.waitFor({ state: 'visible' });
         await assertRetainedDraft();
