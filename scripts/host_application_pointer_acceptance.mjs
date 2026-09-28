@@ -13,7 +13,7 @@ export async function checkPointer({page,frame,read,output,waitFor,backend}) {
   await wait(r=>Array.isArray(r.outer),'application ready');
   const inset=read().inset;
   let geometry,point;
-  if(backend==='macos'){
+  if(backend==='macos'||backend==='wayland'){
     point=async(x,y)=>{
       const state=read();
       geometry=await page.locator('canvas').evaluate(canvas=>{

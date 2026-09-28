@@ -1,3 +1,4 @@
+import canvasJS from '../../../../codeapp/appserver/host_application_viewer/canvas.js?raw';
 import { afterEach, expect, it } from 'vitest';
 import { commands } from 'vitest/browser';
 import viewerHTML from '../../../../codeapp/appserver/host_application_viewer/viewer.html?raw';
@@ -46,7 +47,7 @@ async function viewer() {
   frame.srcdoc=viewerHTML.replaceAll('{{.Locale}}','en-US').replaceAll('{{.Theme}}','porcelain-light').replaceAll('{{.Name}}','Pointer fixture')
     .replaceAll('{{.Nonce}}','fixture').replace('{{.Style}}',[appearanceCSS,inputCSS,pointerCSS,viewerCSS].join('\n'))
     .replace('{{.Config}}',JSON.stringify({base:location.origin+'/fixture',backend:'macos',copy}))
-    .replace('{{.Script}}',[fixture,catalogJS,viewportJS,inputJS,pointerJS,appearanceJS,connectionJS,toolbarJS,macosJS].join('\n'));
+    .replace('{{.Script}}',[fixture,catalogJS,viewportJS,inputJS,pointerJS,appearanceJS,connectionJS,toolbarJS,canvasJS,macosJS].join('\n'));
   document.body.append(frame);
   await expect.poll(()=>frame.contentDocument?.body.dataset.state).toBe('active');
   const doc=frame.contentDocument!;

@@ -54,6 +54,7 @@ type Session struct {
 	State               string                      `json:"state"`
 	EndReason           string                      `json:"end_reason,omitempty"`
 	ErrorCode           string                      `json:"error_code,omitempty"`
+	LaunchDiagnostic    *LaunchDiagnostic           `json:"launch_diagnostic,omitempty"`
 	StartedAt           int64                       `json:"started_at_unix_ms"`
 	Forward             *portforward.ForwardSession `json:"forward,omitempty"`
 	Presentation        Presentation                `json:"presentation"`
@@ -62,6 +63,12 @@ type Session struct {
 // Presentation comes from the caller's explicit localized catalog. The window
 // document renders these bounded strings as text, never as markup or script.
 type Presentation struct {
+	PackageUnavailable      string `json:"packageUnavailable,omitempty"`
+	HostServiceUnavailable  string `json:"hostServiceUnavailable,omitempty"`
+	GraphicsUnavailable     string `json:"graphicsUnavailable,omitempty"`
+	PlanStale               string `json:"planStale,omitempty"`
+	PackageUnsupported      string `json:"packageUnsupported,omitempty"`
+	ClipboardUnavailable    string `json:"clipboardUnavailable,omitempty"`
 	InputUnsupported        string `json:"inputUnsupported,omitempty"`
 	InputUnsupportedHint    string `json:"inputUnsupportedHint,omitempty"`
 	ViewerPreparationFailed string `json:"viewerPreparationFailed,omitempty"`

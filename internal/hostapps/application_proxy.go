@@ -60,7 +60,9 @@ func (p *applicationProxy) Close() error {
 	}
 	p.connections = nil
 	p.mu.Unlock()
-	p.transport.CloseIdleConnections()
+	if p.transport != nil {
+		p.transport.CloseIdleConnections()
+	}
 	return p.Listener.Close()
 }
 func newApplicationProxy(target string, viewer *nativeapps.PreparedViewer) (*applicationProxy, string, error) {

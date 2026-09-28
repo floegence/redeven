@@ -27,6 +27,7 @@ export const enUS = defineDictionary({
       "desktopMismatch": "This Desktop cannot prepare the requested components. Update Desktop or choose host download.",
       "checkingSize": "Calculated before downloading"
     },
+    "clipboardUnavailable": "Clipboard access is unavailable. Use HTTPS and allow clipboard access for this site, then copy again.",
     "macControls": "Application controls",
     prepare: {
       "desktopBytes": "Local cache: {cached} · Download needed: {download}",
@@ -103,6 +104,11 @@ export const enUS = defineDictionary({
     "emptyTitle": "No applications yet",
     "ended": "This application session has ended.",
     "errors": {
+      "packageUnavailable": "The application’s package runtime is unavailable. Check its installation on this host, then refresh.",
+      "hostServiceUnavailable": "A host service required by this application is unavailable. Check the host’s user session and package services, then try again.",
+      "graphicsUnavailable": "The graphical components required by this application are unavailable. Prepare or update host application components, then try again.",
+      "planStale": "The application changed while it was being opened. Refresh the application list and open it again.",
+      "packageUnsupported": "This application’s package or launch method could not be verified. Use its installed application-library entry or check its package installation.",
       "failed": "The application could not be opened. Check the host application and try again.",
       "invalid": "Check the name, executable path, and arguments.",
       "limit": "The host has reached its session limit. End a session to open another application.",
@@ -126,7 +132,7 @@ export const enUS = defineDictionary({
     "retry": "Try again",
     "running": "Running applications",
     "search": "Search applications…",
-    "setupDescription": "Install Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth, and Python GIO/GTK 3 bindings on this host, then refresh. Packages vary by distribution. No desktop environment or monitor is required.",
+    "setupDescription": "Prepare the graphical components in Redeven. Native applications do not require a desktop environment or monitor. Snap and Flatpak require their package runtime and host services.",
     "setupRequirements": "Needs attention: {requirements}",
     "setupGuide": "Installation guide",
     "catalogUnavailable": "The host application catalog could not be read. Check that the runtime is working on this host, then refresh.",

@@ -1,7 +1,7 @@
 ---
 type: Runtime Contract
 title: Linux application instances and independent sharing
-description: Preserve owned X11 applications across viewer and Runtime lifetimes, with verified recovery and explicit process termination.
+description: Preserve owned Linux graphical applications across viewer and Runtime lifetimes, with verified recovery and explicit process termination.
 tags: [runtime, applications, linux, lifecycle, security]
 timestamp: 2026-09-22T05:00:00Z
 ---
@@ -14,28 +14,28 @@ viewer, stopping sharing or exiting Runtime never requests application terminati
 After Runtime restart, the same host user and private state can recover a surviving
 backend only after matching its kernel process generation and private endpoint
 identity. No persisted PID alone authorizes signaling. Destroying the virtual
-display, a host reboot or external cgroup cleanup cannot preserve an X11 app.
+display, a host reboot or external cgroup cleanup cannot preserve an application dependent on that display.
 
 # Contract
 
 ## Instance and sharing ownership
 
-One instance has an opaque ID, authorized caller owner, application metadata,
-loopback address, kernel boot/PID/start identity, component identity, creation time and versioned private
-record. It owns one isolated Xpra/Xvfb display and D-Bus session. A private store
-lock permits one manager to admit or recover instances at a time. Unknown,
-ambiguous or incomplete records fail closed without being rewritten. Dead process
-generations cannot be reattached. Recovery resolves the instance's original tools
-and also verifies Xpra's session name over the private control socket.
+One instance has an opaque ID, authorized owner, application metadata, kernel
+boot/PID/start identity, component identity, backend and versioned private record.
+Version 3 discriminates Xpra's loopback address from the native helper's private
+authenticated endpoint. The endpoint binds the same instance and private socket;
+a reusable window ID or persisted PID alone never grants authority. One store lock
+serializes admission/recovery. Unknown, ambiguous and future records are read-only
+failures. The backend is immutable for the instance's lifetime.
 
-Version 2 records bind either the upstream component digest or a complete system
-installation. Updating managed components affects only newly created instances;
-control commands, environment and resumed sharing retain the original binding.
-Version 1 records migrate atomically after upstream process-to-installation
-identification and private backend verification. Recovery never substitutes the
-current recommendation. Unknown or unverifiable bindings fail explicitly without
-terminating the surviving process. Old component directories remain available;
-the [preparation contract](host-application-preparation.md) owns their selection.
+Supported version 1 records identify their installed component from live kernel
+evidence, then advance through version 2 to version 3 Xpra records. Version 2 also
+advances to version 3. Each recovered record is atomically replaced only after
+original-component and private-backend validation. Xpra verifies its session name;
+native recovery validates a bounded helper receipt against PID/start/instance.
+No record is rewritten to the current recommended backend. Unverifiable records
+never authorize terminating the surviving process. Old components remain owned
+by those instances; [preparation](host-application-preparation.md) is independent.
 
 A share has its own ID, route, credential and connection-tracking proxy. Stopping
 sharing closes HTTP and hijacked WebSocket connections immediately; deleting a
@@ -54,33 +54,31 @@ cgroup, and host policy remains authoritative. Redeven never changes that policy
 
 ## Launch and readiness
 
-The upstream monitored GIO launcher becomes a child subreaper before launching and
-reaps both direct and adopted descendants. Its lifetime, rather than the first
-window or viewer, drives Xpra's child-exit policy. Viewer/client and last-window
-exit policies remain disabled. Explicit launcher termination requires Linux
-pidfds (kernel 5.3 or later and a compatible Python interpreter) and fails before
-launch when unavailable. Applications delegating to unrelated existing services
-are outside this owned child-tree contract.
+The published supervisor owns GIO launch, descendant/sandbox identity, launcher
+exit status and application lifetime. Preparation, actual launcher failure,
+application exit, window presence and first pixels are separate observations.
+There is no first-window or unconfirmed-startup termination timeout. Explicit
+launcher failures retain stage, code and observed exit status; capture failure,
+a disconnected viewer or an HTTP error cannot manufacture application exit.
 
-A running receipt and responsive HTML endpoint admit sharing without an expensive
-window-inventory probe. They do not prove pixels. An unconfirmed infrastructure
-startup fails sharing after forty seconds while preserving the application; this
-deadline never applies to a connected viewer waiting for its first window. After the authenticated Xpra
-startup event, an empty inventory presents Waiting for a window indefinitely;
-an actual new window starts the bounded first-paint check. Closing the final
-established window dismisses the viewer while the application may keep running.
-A later opening reconnects the same process and waits if it has no window.
-Only the application can decide how to create another window; Linux has no
-universal AppKit-style reopen action.
+Native sharing waits for the helper's prepared receipt. One authenticated local
+attachment carries bounded window/state, PNG frame, cursor, input and clipboard
+messages. Exactly one reader multiplexes browser and product-control replies.
+A new viewer takes over the old attachment; cleanup checks the exact owner so an
+old connection cannot revoke its successor. Passive status reads inspect the
+bounded atomic receipt and never attach. Product controls reuse an active
+attachment, or create a short-lived attachment only when no viewer owns it.
 
-Silent sessions still use upstream's audio-disable policy. Application launch
-logs measure backend readiness, not first decoded pixels. A confirmed application
-exit ends sharing normally. A backend failure retains failed sharing state and
-recovery guidance rather than claiming a normal application exit.
+The viewer acknowledges frames only after decoding/painting; no transport receipt
+pretends to be pixels or application text consumption. Missing windows and capture
+remain recoverable. Runtime shutdown or viewer closure revokes only the share,
+not the helper. Recovery keeps the same application and modules, creates new
+credentials/generations and never replays pending input. Xpra retains its published
+readiness, final-window and audio-disable contracts.
 
 ## Normal close and explicit force quit
 
-The Linux ordinary operation is named Close all windows because X11 has no
+The Linux ordinary operation is named Close all windows because these Linux backends have no
 universal application-level graceful quit API. Both the viewer and library request
 normal closure of current top-level windows, excluding transients, modal save
 dialogs, trays and override-redirect surfaces. Save prompts and cancellation remain
@@ -88,7 +86,7 @@ application-owned. A background process may survive after every window closes.
 
 A separate library Force quit action requires a second explicit confirmation
 warning about unsaved work. It validates the caller, application and exact current
-instance, checks the live private backend identity, then requests Xpra shutdown.
+instance, checks the live private backend identity, then requests the selected upstream supervisor to terminate the owned instance.
 The monitored launcher terminates only its owned descendants using pidfds and
 verified parent relationships. This path never follows ordinary close, disconnect,
 save cancellation or an uncertain response automatically. Stale or foreign
@@ -98,7 +96,7 @@ snapshots remove the row only when the kernel confirms termination.
 # Boundaries
 
 Recovery requires the original private state and host OS user. A host reboot,
-external process cleanup or destroyed X server cannot be repaired by reconnecting.
+external process cleanup or destroyed compositor/X server cannot be repaired by reconnecting.
 The Runtime never adopts unrelated desktop processes or recreates them from a
 stale record. Ordinary closure always preserves native save/cancel decisions.
 
@@ -106,7 +104,9 @@ stale record. Ordinary closure always preserves native save/cancel decisions.
 
 - `internal/hostapps/linux.go`: records, kernel/endpoint validation, admission, readiness and explicit controls.
 - `internal/hostapps/application_proxy.go`: connection revocation including WebSocket hijacks.
+- `internal/hostapps/desktop_transport.go` and `desktop_transport_linux_test.go`: authenticated native attachment, bounded correlation and takeover.
+- `internal/hostapps/desktop_installed_test.go`: real input/save and same-helper Runtime recovery.
 - `internal/hostapps/linux_lifecycle_test.go`: delayed window, save cancellation, credential rotation, shutdown admission, real Runtime process exit, restoration and owned descendant termination.
 - `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts`: waiting, new-window paint, last-window closure and reconnect behavior.
-- `internal/hostapps/component_update_test.go`: component binding, v1 record migration, same-process recovery and new-instance selection after r1-to-r2 update.
+- `internal/hostapps/component_update_test.go`: component binding, v1 record migration, same-process recovery and new-instance selection after an Xpra-to-combined recommendation update.
 - [Floe Native Apps v0.4.0](https://github.com/floegence/floe-native-apps/releases/tag/v0.4.0): released lifetime, exact installation resolution and process identification.

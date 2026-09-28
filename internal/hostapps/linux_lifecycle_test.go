@@ -103,11 +103,11 @@ func TestInstalledLinuxApplicationLifetime(t *testing.T) {
 	defer forwards.Close()
 	newManager := func() *Manager {
 		m := New(state, state, forwards)
-		pkg, err := nativeapps.NativePackage()
+		pkg, err := nativeapps.DesktopForPlatform(runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			t.Fatal(err)
 		}
-		m.setup, err = nativeapps.New(os.Getenv("REDEVEN_TEST_NATIVE_COMPONENT_STATE"), pkg, nil)
+		m.setup, err = nativeapps.New(os.Getenv("REDEVEN_TEST_DESKTOP_COMPONENT_STATE"), pkg, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -173,6 +173,7 @@ Gtk.main()
 			id = app.ID
 		}
 	}
+	useXpraFixture(t, m, id)
 	req := LaunchRequest{ApplicationID: id, Presentation: Presentation{Starting: "Starting", Failed: "Failed", Ended: "Ended", Retry: "Retry", Connecting: "Connecting", Reconnecting: "Reconnecting", Disconnected: "Disconnected", ConnectionHint: "Reconnect", Reconnect: "Reconnect", Locale: "en-US"}}
 	first, err := m.Launch(context.Background(), "alice", req)
 	if err != nil {
@@ -397,11 +398,12 @@ func installedLifecycleManager(t *testing.T, state string) *Manager {
 	}
 	t.Cleanup(func() { _ = forwards.Close() })
 	m := New(state, state, forwards)
-	pkg, err := nativeapps.NativePackage()
+	pkg, err := nativeapps.DesktopForPlatform(runtime.GOOS, runtime.GOARCH)
+	components := os.Getenv("REDEVEN_TEST_DESKTOP_COMPONENT_STATE")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.setup, err = nativeapps.New(os.Getenv("REDEVEN_TEST_NATIVE_COMPONENT_STATE"), pkg, nil)
+	m.setup, err = nativeapps.New(components, pkg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +441,8 @@ func TestInstalledLinuxRecoveryAfterRuntimeProcessExit(t *testing.T) {
 		}
 		waitUntil(t, func() bool {
 			view, _, _ := m.ForForward(share.Forward.Forward.ForwardID)
-			return view.State == "running"
+			_, err := os.Stat(filepath.Join(state, "pid"))
+			return view.State == "running" && err == nil
 		}, 12*time.Second)
 		if os.Getenv("REDEVEN_TEST_LIFECYCLE_ORDERLY") == "1" {
 			_ = m.Close()
@@ -499,8 +502,11 @@ func TestInstalledLinuxRecoveryAfterRuntimeProcessExit(t *testing.T) {
 			if err != nil {
 				t.Fatal("current viewer could not attach to the retained backend", err)
 			}
-			if m.sessions[share.ID].viewer == nil || !identity.Alive() {
-				t.Fatal("viewer attachment lost its snapshot or original application")
+			attached := m.sessions[share.ID]
+			if !identity.Alive() || attached.application == nil ||
+				(share.Backend == "linux" && attached.viewer == nil) ||
+				(share.Backend == "wayland" && attached.application.record.Endpoint == nil) {
+				t.Fatal("viewer attachment lost its backend resources or original application")
 			}
 			if err = m.Terminate(context.Background(), "bob", target); err != ErrNotFound {
 				t.Fatal("foreign termination accepted", err)
@@ -560,7 +566,7 @@ func TestLinuxApplicationStoreRejectsCorruptionAndConcurrentOwners(t *testing.T)
 	}
 }
 
-func TestInstalledLinuxUnconfirmedStartupReleasesSharingWithoutKillingProcess(t *testing.T) {
+func TestInstalledLinuxUnconfirmedStartupKeepsSharingAndProcess(t *testing.T) {
 	if runtime.GOOS != "linux" || os.Getenv("REDEVEN_TEST_HOST_APPLICATIONS") != "1" {
 		t.Skip("requires explicit Linux lifetime qualification")
 	}
@@ -578,15 +584,18 @@ func TestInstalledLinuxUnconfirmedStartupReleasesSharingWithoutKillingProcess(t 
 		t.Fatal(err)
 	}
 	m.watchApplication(a, nil)
-	waitUntil(t, func() bool {
-		view, _, _ := m.ForForward(share.Forward.Forward.ForwardID)
-		return view.State == "failed" && view.ErrorCode == "launch_failed"
-	}, 43*time.Second)
+	deadline := time.NewTimer(42 * time.Second)
+	defer deadline.Stop()
+	<-deadline.C
+	view, _, _ := m.ForForward(share.Forward.Forward.ForwardID)
+	if view.State != "starting" || view.ErrorCode != "" {
+		t.Fatal("elapsed time converted uncertain startup into application failure", view)
+	}
 	if !process.Alive() {
 		t.Fatal("unconfirmed startup killed the observed process")
 	}
-	if m.Password(share.ID) != "" {
-		t.Fatal("failed startup retained its credential")
+	if m.Password(share.ID) == "" {
+		t.Fatal("unconfirmed startup lost its recovery credential")
 	}
 }
 

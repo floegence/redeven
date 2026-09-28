@@ -22,16 +22,13 @@ the [Linux lifecycle contract](linux-application-lifecycle.md) owns private disp
 recovery. [Env App resource snapshots](../ui/env-resource-cache.md) restore inventory
 presentation without granting process or route authority.
 
-The Linux backend uses Xpra 6.x with an HTML5 v20 or v21 client, Xvfb, D-Bus,
-xauth, and Python GIO/GTK 3 bindings. The [managed preparation contract](host-application-preparation.md)
-owns one-action private component acquisition through the published upstream.
-An already compatible complete system installation remains usable. The
-[platform and initialization contract](host-application-platforms.md) owns capability
-detection, installation boundaries, and distribution validation. A desktop
-environment and physical display are unnecessary. The launcher creates a private
-virtual X11 display and D-Bus session, clearing inherited desktop display and bus
-addresses. The application's files, OS permissions, executable, and home directory
-remain those of the Runtime user. This display separation is not an OS sandbox.
+Linux consumes published private Wayland/Xwayland and retained Xpra capabilities.
+The [managed preparation contract](host-application-preparation.md) owns private
+component acquisition; [platform initialization](host-application-platforms.md)
+owns immutable launch plans, package identity and limited host-service access.
+Native host applications need no physical display or complete desktop. Sandboxed
+packages still need their installed runtime and required host services. Private
+graphics is not an OS sandbox and does not change the user's files or permissions.
 
 GIO supplies standard application metadata, localized names, visibility, executable
 resolution, and field expansion. Descriptions and category identifiers come directly
@@ -43,22 +40,21 @@ GTK theme, or GTK's standard installed icon paths when no display is available;
 Redeven does not force an icon theme. An unresolved icon uses a neutral application
 glyph. Terminal-only desktop entries are excluded.
 For entries declaring D-Bus activation, a private launch copy disables activation
-so GIO executes the declared command within the new display/bus environment; this
-avoids delegation to the existing desktop through user systemd services.
+so GIO executes the declared command within the new display/bus environment; the published planner
+then owns package-specific scope/portal adaptation without adopting external windows.
 Applications without a desktop entry can be registered by absolute executable
 path and arguments. Redeven stores these entries in its private application
 directory, without changing the host's system menu. Arguments never pass through
 a shell; literal percent signs and Desktop Entry quoting are preserved. Custom
 entries are shared within this Runtime's host-user catalog.
 
-Applications must support X11 (including GTK/Qt applications with an X11 backend).
-Wayland-only applications, applications requiring a full desktop service stack,
-singletons that redirect through their own shared profile, hardware-accelerated
-graphics, and privileged system controls may require application-specific setup.
-The initial integration does not provide audio, microphone, webcam, printing,
-file-transfer, or remote notification forwarding. The [client input contract](host-application-input.md) owns composition and keys;
-Xpra retains Linux clipboard transport. Browser permissions and reserved shortcuts
-still apply.
+Support for native packages, Snap, Flatpak, AppImage, Wayland and Xwayland is
+bounded by real [platform evidence](../operations/host-application-platform-validation.md).
+Application-specific singleton, hardware, permissions and desktop service limits
+remain explicit. No failure retries the application with a second backend. The
+[client input contract](host-application-input.md) owns composition, keys and
+clipboard. Browser permissions and reserved shortcuts still apply. Audio,
+microphone, webcam, printing and remote notification forwarding remain excluded.
 
 # Contract
 
@@ -67,7 +63,7 @@ launching, ending, and every forwarded request including the WebSocket require
 read, write, and execute permissions under the existing
 [Runtime permission gates](runtime-session-permission-gates.md). Ownership comes
 from authorized session metadata, never a request-provided user ID. Only the owner
-can access or end a session. A per-session Xpra credential independently protects
+can access or end a session. A per-session sharing credential independently protects
 the loopback WebSocket and is never placed in URLs or catalog responses.
 
 Launching an active application for the same owner resumes sharing with that

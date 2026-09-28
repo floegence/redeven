@@ -1,3 +1,4 @@
+import canvasJS from '../../../../codeapp/appserver/host_application_viewer/canvas.js?raw';
 import '../index.css';
 import '../ui/pages/host-applications.css';
 import { createSignal } from 'solid-js';
@@ -70,7 +71,7 @@ it.each([320, 390, 1000].flatMap(width => ['light', 'dark'].map(scheme => ({widt
   const config = {base:'/fixture', icon:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', copy};
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS).replace('{{.Config}}', JSON.stringify(config))
-    .replace('{{.Script}}', `window.fetch = () => new Promise(() => {});\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `window.fetch = () => new Promise(() => {});\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.querySelector('.mac-app-controls-toggle')).toBeTruthy();
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -139,7 +140,7 @@ it.each([
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:'/fixture',copy,initial:{state:'ended',end_reason:reason}}))
-    .replace('{{.Script}}', `window.redevenHostApplicationWindow = {request() {}}; window.fetch = () => { throw Error('Terminal document must not reconnect'); };\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `window.redevenHostApplicationWindow = {request() {}}; window.fetch = () => { throw Error('Terminal document must not reconnect'); };\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe(state);
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -188,7 +189,7 @@ it.each([320, 390, 1000])('keeps the counted window picker usable at %s px while
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',copy}))
-    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe('active');
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -269,7 +270,7 @@ it('decodes and acknowledges a single static native video frame without waiting 
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Decoder Fixture')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',copy:{}}))
-    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.video).toBe('true');
   await expect.poll(() => frame.contentDocument?.body.dataset.ack, {timeout:2000}).toBe('1');
@@ -304,7 +305,7 @@ it.each([
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}','en-US').replaceAll('{{.Name}}','Text Editor')
     .replaceAll('{{.Nonce}}','fixture').replace('{{.Style}}',viewerCSS)
     .replace('{{.Config}}',JSON.stringify({base:'/fixture',copy,icon:''}))
-    .replace('{{.Script}}', `${native}\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `${native}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.querySelector('.mac-app-toolbar')).toBeTruthy();
   const doc=frame.contentDocument!, view=frame.contentWindow!;

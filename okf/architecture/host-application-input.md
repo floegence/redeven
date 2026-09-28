@@ -40,7 +40,7 @@ IME composition and candidate choice remain available. No input history or input
 logging is introduced.
 
 Touch content clicks position the remote caret without opening the system keyboard.
-When returning from local toolbar controls, the Linux viewer focuses its embedded
+When returning from local toolbar controls, the Xpra viewer focuses its embedded
 document before the shared textarea so Firefox can restore application typing.
 The toolbar Keyboard action explicitly focuses the existing textarea. Subsequent
 content touches keep an already visible keyboard usable. Viewport occlusion changes
@@ -53,7 +53,30 @@ Pointer cancellation releases only its buttons and wheel remainder, never keyboa
 composition. Platform adapters flush pending pointer output before sending keys,
 text or clipboard actions to preserve input order.
 
-## Linux delivery
+## Linux native delivery
+
+The combined backend consumes the published helper protocol through an authenticated
+Runtime stream. `remote-input` binds the exact connection/window/generation only
+after a native PNG has painted. The protocol adapter maps physical keys to the
+private seat keymap, preserves Command-to-Control shortcuts and native held-key
+repeat, and submits confirmed characters when a client layout differs from that
+keymap. It never registers another composition or gesture owner.
+
+The upstream chooses one verified context adapter for a commit: native Wayland
+text input with completion support, private GTK/Qt modules, XIM, or the package
+IBus/portal interface. The one upstream scheduler orders confirmed text, ordinary
+keys, pointer actions and clipboard publication. Socket flush is not application
+consumption. Any failed transaction retires the attachment input and cancels
+following operations; the viewer exposes explicit reconnect without replay.
+
+Copy/cut initiates browser clipboard permission within the shortcut gesture and
+resolves the selection when its native receipt arrives. Empty initial selections
+never erase the client clipboard. Paste publishes the browser-provided text then
+queues the native shortcut at the same ordering boundary; failed publication
+cancels that shortcut. Text commits never use this clipboard path. System clipboard
+normalization belongs to the browser/OS; confirmed Unicode remains byte-exact.
+
+## Retained Xpra delivery
 
 Released `floe-native-apps` owns the capability probe, private input environment,
 commit-only xcb-imdkit XIM bridge, GTK3/GTK4/Qt5/Qt6 context adapters, prepared HTML client

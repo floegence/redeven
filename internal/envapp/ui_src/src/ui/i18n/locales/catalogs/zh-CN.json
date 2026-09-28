@@ -6971,7 +6971,12 @@
       "invalid": "请检查名称、可执行文件路径和启动参数。",
       "limit": "主机已达到会话数量上限。请先结束一个会话。",
       "notFound": "此应用或会话已不可用。",
-      "unavailable": "主机应用尚未就绪。请检查主机依赖后刷新。"
+      "unavailable": "主机应用尚未就绪。请检查主机依赖后刷新。",
+      "packageUnavailable": "应用所需的包运行时不可用。请检查它在此主机上的安装情况，然后刷新。",
+      "hostServiceUnavailable": "应用所需的主机服务不可用。请检查主机的用户会话及软件包服务，然后重试。",
+      "graphicsUnavailable": "应用所需的图形组件不可用。请准备或更新主机应用组件，然后重试。",
+      "planStale": "应用在打开过程中发生了变化。请刷新应用列表后重新打开。",
+      "packageUnsupported": "无法验证此应用的软件包或启动方式。请使用应用库中已安装的条目，或检查软件包的安装情况。"
     },
     "executable": "可执行文件路径",
     "eyebrow": "当前主机",
@@ -6990,7 +6995,7 @@
     "retry": "重试",
     "running": "正在运行",
     "search": "搜索应用…",
-    "setupDescription": "请在主机上安装 Xpra 6.x、Xpra HTML5 v20 / v21、Xvfb、D-Bus、xauth 和 Python GIO/GTK 3 绑定，然后刷新。不同发行版的安装包有所区别，无需桌面环境或显示器。",
+    "setupDescription": "请在 Redeven 中准备图形组件。原生应用无需桌面环境或显示器；Snap 和 Flatpak 应用需要相应的包运行时及主机服务。",
     "setupRequirements": "需要准备：{requirements}",
     "setupGuide": "安装指南",
     "catalogUnavailable": "无法读取主机应用目录。请检查此主机上的运行时是否正常，然后刷新。",
@@ -7076,7 +7081,8 @@
     "macBundlePath": "应用包路径",
     "touchHelp": "触摸说明",
     "touchHelpTitle": "触摸操作",
-    "touchHelpDescription": "轻点即可单击。单指滑动可滚动。长按后移动可拖拽；长按不移动后松开可右键。双指可缩放页面。"
+    "touchHelpDescription": "轻点即可单击。单指滑动可滚动。长按后移动可拖拽；长按不移动后松开可右键。双指可缩放页面。",
+    "clipboardUnavailable": "无法访问剪贴板。请使用 HTTPS 并允许此网站访问剪贴板，然后重新复制。"
   },
   "settingsDesign": {
     "editDirectory": "编辑目录",

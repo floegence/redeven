@@ -9,7 +9,7 @@ timestamp: 2026-09-27T00:00:00Z
 
 Released `floe-native-apps` owns `PreparedViewer`, matching entry documents/static
 assets, content digests and capability results. Redeven pins one immutable snapshot
-per authorized Linux sharing session. Runtime or viewer updates can reconnect to
+per authorized Xpra sharing session. Runtime or viewer updates can reconnect to
 compatible surviving applications without changing their PID or unsaved content.
 Preparation failure is retryable and never selects historical client resources.
 Graphical backends and loaded modules keep their process lifetimes; they are not
@@ -17,7 +17,16 @@ hot-swapped. The [application contract](host-applications.md) owns authorization
 normal/forced termination, and the [input contract](host-application-input.md) owns
 safe input delivery.
 
-# Snapshot and application lifetimes
+# Native frames and Xpra snapshots
+
+New combined Linux sessions use the Runtime canvas viewer and the released
+native frame/input/cursor protocol. They do not prepare or load an Xpra document.
+The macOS and Linux native adapters share frame decoding/generation invalidation
+and controller binding; native menus, codecs and permissions remain platform
+adapters. No unsupported picture settings are shown for the Linux PNG stream.
+A helper/window generation mismatch discards late pixels and inputs.
+
+The remaining snapshot rules in this concept apply to Xpra sessions.
 
 A new share prepares current SDK resources from the current installed original
 HTML5 v20/v21 distribution. One reviewed upstream preparation pipeline produces the
@@ -33,7 +42,7 @@ rewritten during recovery. Fresh backends run without serving HTML. Readiness
 checks the backend's existing session identity, independently of viewer files;
 first decoded pixels remain the viewer's readiness boundary.
 
-Before a fresh application starts, current viewer preparation must succeed. A
+When sharing an Xpra application, current viewer preparation must succeed. A
 failed preparation for a surviving application returns
 `HOST_APP_VIEWER_PREPARATION_FAILED`; opening the viewer can be retried without
 terminating the application. Shared routes, credentials and upgraded sockets are

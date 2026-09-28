@@ -6975,7 +6975,12 @@
       "invalid": "Verifique o nome, o caminho do executável e os argumentos.",
       "limit": "O host atingiu o limite de sessões. Encerre uma sessão para abrir outro aplicativo.",
       "notFound": "Este aplicativo ou sessão não está mais disponível.",
-      "unavailable": "Os aplicativos do host não estão prontos. Verifique as dependências do host e atualize."
+      "unavailable": "Os aplicativos do host não estão prontos. Verifique as dependências do host e atualize.",
+      "packageUnavailable": "O ambiente de execução do pacote do aplicativo está indisponível. Verifique a instalação neste host e atualize a lista.",
+      "hostServiceUnavailable": "Um serviço do host necessário para este aplicativo está indisponível. Verifique a sessão do usuário e os serviços de pacotes do host e tente novamente.",
+      "graphicsUnavailable": "Os componentes gráficos necessários para este aplicativo estão indisponíveis. Prepare ou atualize os componentes dos aplicativos do host e tente novamente.",
+      "planStale": "O aplicativo mudou durante a abertura. Atualize a lista de aplicativos e abra-o novamente.",
+      "packageUnsupported": "Não foi possível verificar o pacote ou o método de inicialização deste aplicativo. Use a entrada instalada na biblioteca de aplicativos ou verifique a instalação do pacote."
     },
     "executable": "Caminho do executável",
     "eyebrow": "NESTE HOST",
@@ -6994,7 +6999,7 @@
     "retry": "Tentar novamente",
     "running": "Aplicativos em execução",
     "search": "Pesquisar aplicativos…",
-    "setupDescription": "Instale Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth e as vinculações Python GIO/GTK 3 neste host e atualize a lista. Os pacotes variam conforme a distribuição. Não é necessário um ambiente de desktop nem um monitor.",
+    "setupDescription": "Prepare os componentes gráficos no Redeven. Aplicativos nativos não exigem um ambiente de desktop nem um monitor. Snap e Flatpak precisam do ambiente de execução de pacotes e dos serviços do host.",
     "setupRequirements": "Requer atenção: {requirements}",
     "setupGuide": "Guia de instalação",
     "catalogUnavailable": "Não foi possível ler o catálogo de aplicativos do host. Verifique se o ambiente de execução está funcionando neste host e atualize a lista.",
@@ -7080,7 +7085,8 @@
     "macBundlePath": "Caminho do pacote do aplicativo",
     "touchHelp": "Guia de toque",
     "touchHelpTitle": "Controles de toque",
-    "touchHelpDescription": "Toque para clicar. Deslize um dedo para rolar. Pressione e mova para arrastar; solte sem mover para clicar com o botão direito. Use dois dedos para ampliar a página."
+    "touchHelpDescription": "Toque para clicar. Deslize um dedo para rolar. Pressione e mova para arrastar; solte sem mover para clicar com o botão direito. Use dois dedos para ampliar a página.",
+    "clipboardUnavailable": "O acesso à área de transferência está indisponível. Use HTTPS e permita que este site acesse a área de transferência. Depois, copie novamente."
   },
   "settingsDesign": {
     "editDirectory": "Editar diretório",

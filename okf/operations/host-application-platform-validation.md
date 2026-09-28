@@ -17,9 +17,14 @@ successful simulated acceptance.
 
 # Contract
 
-## Distribution validation
+The current combined backend and package matrix is owned by the
+[desktop compatibility record](host-application-desktop-validation.md). The older
+Xpra results below qualify that retained backend only; they are not evidence for
+Snap, Flatpak, Wayland or a newly prepared combined component.
 
-The September 2026 focused matrix covers userspace installations without a
+## Retained Xpra distribution validation
+
+The historical Xpra matrix below covers userspace installations without a
 desktop environment or monitor. Distribution checks run as an unprivileged user
 in disposable test images. These images are a test harness;
 the product runs applications directly on its host. Container checks cannot
@@ -70,7 +75,7 @@ graphical applications as verified.
 Run the reusable installed-stack checks on a prepared Linux host with Go and xterm:
 
 ```sh
-REDEVEN_TEST_HOST_APPLICATIONS=1 GOWORK=off go test ./internal/hostapps -run TestInstalled -count=1 -v
+REDEVEN_TEST_DESKTOP_COMPONENT_STATE=/absolute/private/components REDEVEN_TEST_HOST_APPLICATIONS=1 GOWORK=off go test ./internal/hostapps -run TestInstalledLinuxApplicationLifetime -count=1 -v
 ```
 
 The tests create their own custom entry, state, configuration fixture, and

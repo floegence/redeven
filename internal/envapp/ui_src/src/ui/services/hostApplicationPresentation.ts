@@ -2,8 +2,24 @@ import type { EnvAppTranslationKey } from '../i18n/locales';
 import type { I18nHelpers } from '../i18n/createI18n';
 import type { HostApplicationPresentation } from './hostApplicationsApi';
 
+export const hostApplicationLaunchFailures: Record<string, keyof typeof hostApplicationCopyKeys> = {
+  package_unavailable: 'packageUnavailable', host_service_unavailable: 'hostServiceUnavailable',
+  graphics_unavailable: 'graphicsUnavailable', plan_stale: 'planStale', package_unsupported: 'packageUnsupported',
+};
+
+export function hostApplicationLaunchFailureCopy(code: string): EnvAppTranslationKey {
+  const key = hostApplicationLaunchFailures[code.replace(/^HOST_APP_/, '').toLowerCase()];
+  return key ? hostApplicationCopyKeys[key] : 'hostApplications.errors.failed';
+}
+
 // One mapping owns launch copy and the generated standalone locale catalogs.
 export const hostApplicationCopyKeys = {
+  packageUnavailable: 'hostApplications.errors.packageUnavailable',
+  hostServiceUnavailable: 'hostApplications.errors.hostServiceUnavailable',
+  graphicsUnavailable: 'hostApplications.errors.graphicsUnavailable',
+  planStale: 'hostApplications.errors.planStale',
+  packageUnsupported: 'hostApplications.errors.packageUnsupported',
+  clipboardUnavailable: 'hostApplications.clipboardUnavailable',
   inputUnsupported: 'hostApplications.inputUnsupported',
   inputUnsupportedHint: 'hostApplications.inputUnsupportedHint',
   viewerPreparationFailed: 'hostApplications.viewerPreparationFailed',

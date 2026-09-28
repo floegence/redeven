@@ -1,3 +1,4 @@
+import canvasJS from '../../../../codeapp/appserver/host_application_viewer/canvas.js?raw';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import '../index.css';
 import { afterEach, expect, it } from 'vitest';
@@ -46,7 +47,7 @@ async function viewer(theme: string, locale = 'zh-CN', width = 420) {
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', locale).replaceAll('{{.Theme}}', theme).replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', appearanceCSS + '\n' + inputCSS + '\n' + pointerCSS + '\n' + viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',backend:'macos',copy}))
-    .replace('{{.Script}}', [fixture, inputJS, pointerJS, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
+    .replace('{{.Script}}', [fixture, inputJS, pointerJS, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, canvasJS, viewerJS].join('\n'));
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe('active');
   const doc = frame.contentDocument!, view = frame.contentWindow!;

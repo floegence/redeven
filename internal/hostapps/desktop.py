@@ -92,17 +92,14 @@ def main():
     elif action == "add":
         add_application(directory, sys.argv[3], json.load(sys.stdin))
         print("{}")
-    elif action == "launch":
-        import runpy
-        identity, receipt, launcher = sys.argv[3:6]
-        platform = runpy.run_path(launcher)
-        try:
-            app = applications(directory).get(identity)
-        except Exception:
-            platform["write_receipt"](pathlib.Path(receipt), "failed")
-            raise
-        platform["launch"](app, receipt)
-
+    elif action == "resolve":
+        app = applications(directory).get(sys.argv[3])
+        if not isinstance(app, Gio.DesktopAppInfo) or app.get_boolean("Terminal"):
+            raise ValueError("The authorized desktop entry is unavailable")
+        filename = app.get_filename()
+        if not filename or not os.path.isabs(filename):
+            raise ValueError("The desktop entry has no absolute source")
+        print(json.dumps({"desktop_file": filename}))
     else:
         raise ValueError("Unknown application operation")
 

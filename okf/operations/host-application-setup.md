@@ -1,25 +1,34 @@
 ---
 type: Operations Guide
 title: Prepare Linux hosts for native applications
-description: Install the Xpra 6, HTML5 and GIO stack on Arch, Enterprise Linux 9 and Alpine without a desktop environment.
+description: Prepare the default combined backend and identify the explicit system Xpra installation boundary.
 tags: [runtime, applications, linux, installation]
 timestamp: 2026-09-20T10:00:00Z
 ---
 # Summary
 
-Administrators install the host packages; Redeven detects their actual
-capabilities and starts private X11 application sessions as the Runtime user.
-No desktop environment, connected monitor, container, virtual machine, or
-systemd user session is required in production. Package names alone do not prove
-readiness: Xpra 6.x, HTML5 v20/v21 and working GIO/GTK 3 must all be available.
-Refresh the application library after changing the installation. Missing or
-incompatible dependencies prevent launch and appear in the library; Redeven
-does not run these privileged installation commands automatically.
+New Linux applications use the managed combined Wayland/Xwayland component from
+published Floe Native Apps. The application library provides its preparation and
+recovery flow; Desktop can transfer verified archives to an offline host. Native
+applications need no full desktop or physical monitor. Snap and Flatpak additionally
+need their installed package runtimes and required host services. Missing services
+produce explicit recovery guidance; Redeven never installs system packages or
+changes security policy automatically.
 
-The [platform contract](../architecture/host-application-platforms.md) owns
-capability detection, isolation, application restrictions and validation evidence.
+The [platform contract](../architecture/host-application-platforms.md) owns package,
+service and isolation requirements; [preparation](../architecture/host-application-preparation.md)
+owns acquisition and recovery. Refresh the library after administrative changes.
 
 # Contract
+
+## Optional system Xpra boundary
+
+The commands below prepare the retained/explicit X11-only path. They do not replace
+the combined default and are not an automatic fallback after application failure.
+Only an upstream-validated X11 launch contract selects these resources before
+execution. Existing Xpra instances continue using their original resources.
+Xpra 6.x, HTML5 v20/v21 and working GIO/GTK 3 must all pass capability checks.
+The administrator owns privileged installation and host policy.
 
 ## Arch Linux
 
@@ -151,13 +160,12 @@ Run as the same account and with the same PATH as Redeven:
 xpra --version
 xpra path-info
 python3 -c 'import gi; gi.require_version("Gtk", "3.0"); from gi.repository import Gio, Gtk; assert Gio.DesktopAppInfo'
-REDEVEN_TEST_HOST_APPLICATIONS=1 GOWORK=off go test ./internal/hostapps -run TestInstalled -count=1 -v
+REDEVEN_TEST_DESKTOP_COMPONENT_STATE=/absolute/private/components REDEVEN_TEST_HOST_APPLICATIONS=1 GOWORK=off go test ./internal/hostapps -run TestInstalledLinuxApplicationLifetime -count=1 -v
 ```
 
-The last command runs from a Redeven source checkout with Go and XTerm installed.
-It tests native metadata/icons, literal launch arguments, isolated launch,
-nonempty X11 window inventory, resume, explicit termination, and exclusion of
-unrelated host Xpra configuration. Finally open an installed application in
+The last command runs from a Redeven source checkout with the combined component
+and a verified Xpra installation available. Its task-owned entry explicitly selects
+Xpra and tests delayed windows, save-dialog cancellation, detach and recovery. Finally open an installed application in
 Redeven and verify input, reconnect and application-initiated window closure.
 
 ## macOS
@@ -172,7 +180,7 @@ do not apply to macOS.
 
 # Boundaries
 
-These administrator commands are an explicit setup route, not automatic Runtime actions. Package names alone cannot establish readiness. Missing or incompatible Xpra, HTML5 or GIO/GTK capabilities block launch and remain visible in the application library.
+These administrator commands apply to the optional system Xpra path, not automatic Runtime actions. Package names alone cannot establish readiness. Missing combined components or package services remain explicit launch/preparation failures.
 
 # Evidence
 

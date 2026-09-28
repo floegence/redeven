@@ -7,10 +7,11 @@ const hostApplicationConnection = (() => {
     if (window.redevenHostApplicationWindow) window.redevenHostApplicationWindow.request('close');
     else if (window.opener) window.close();
   }
-  const terminal = state => ended(state) || ['sessionFailed', 'sessionMissing', 'inputVersionUnsupported'].includes(state);
+  const launchFailures = hostApplicationCatalog.launchFailures;
+  const terminal = state => ended(state) || ['sessionFailed', 'sessionMissing', 'inputVersionUnsupported',...Object.values(launchFailures)].includes(state);
   function state(data) {
     if (data?.state === 'ended') return ({application_exited:'applicationExited', windows_closed:'windowsClosed', sharing_stopped:'sharingStopped'})[data.end_reason] || 'ended';
-    if (data?.state === 'failed') return 'sessionFailed';
+    if (data?.state === 'failed') return launchFailures[data.error_code] || 'sessionFailed';
     if (!['starting', 'running'].includes(data?.state) || typeof data.password !== 'string' || !data.password) throw Error('Invalid application session status');
     return data.state;
   }
