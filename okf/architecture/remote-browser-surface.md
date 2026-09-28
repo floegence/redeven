@@ -7,17 +7,17 @@ timestamp: 2026-09-27T00:00:00Z
 ---
 # Summary
 
-Embedded and independent views receive the Shell's admitted Session only after
-the existing local readiness handshake. Transport establishment alone does not
-authorize initial source reads. This prevents an early request from racing the
-Runtime's product-session registration without introducing retries.
-
 - Authority: the environment window owns its authenticated Session and private control token; FloeBrowser owns reusable browser chrome and inert page presentation.
 - Outcome: Desktop and Web clients browse through the same surface and can open independent windows without selecting their source again.
 - Invariants: fresh source selection and control admission precede input; child windows receive only named browser operations; cached documents confer no authority.
 - Failure boundary: replacing a source fails without destroying the current view; disconnect destroys stale presentation and never replays uncertain input.
 
 # Contract
+
+Embedded and independent views receive the Shell's admitted Session only after
+the existing local readiness handshake. Transport establishment alone does not
+authorize initial source reads. This prevents an early request from racing the
+Runtime's product-session registration without introducing retries.
 
 ## Window ownership
 
@@ -130,6 +130,8 @@ For a Desktop private Local UI bridge, the main process lends authentication
 headers only to that child's reserved static document and same-origin Env App
 assets. The child is not registered as an environment or IPC owner; API paths,
 other origins, other document instances and non-GET requests receive no grant.
+
+# Boundaries
 
 View creation, source management, control, preferences, library, resource reads,
 downloads and cleanup use the Shell's existing Session HTTP lifecycle. Local UI

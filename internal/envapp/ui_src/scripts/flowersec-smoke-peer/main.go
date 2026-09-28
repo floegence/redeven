@@ -334,6 +334,8 @@ func newHandlers(nativeCode, visualGit, fileContinuity bool, httpUpstream string
 					return
 				}
 				w.Header().Set("X-Native-Path", r.URL.RequestURI())
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.Header().Set("X-Content-Type-Options", "nosniff")
 				io.Copy(w, r.Body)
 			}), flowersec.HTTPStreamOptions{})
 		}); err != nil {

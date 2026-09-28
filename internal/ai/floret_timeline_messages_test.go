@@ -1,9 +1,11 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"os"
 	"slices"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
@@ -498,5 +501,39 @@ func TestQueuedAttachmentWithoutSafeResourceKeepsStableDisplayIdentity(t *testin
 	}
 	if view.Attachments[0].AttachmentID != "queued:queue_preview:0" || view.Attachments[0].URL != "" {
 		t.Fatalf("queued unsafe attachment=%#v", view.Attachments[0])
+	}
+}
+
+func TestTimelinePaginationBoundsUntrustedRowIDs(t *testing.T) {
+	t.Parallel()
+	const endpointID, threadID = "endpoint_pagination", "thread_pagination"
+	store := newAuthorityContinuityStore(t)
+	if err := store.CreateThreadSettings(t.Context(), threadstore.ThreadSettings{ThreadID: threadID, EndpointID: endpointID, PermissionType: "readonly"}); err != nil {
+		t.Fatal(err)
+	}
+	service := &Service{threadsDB: store, threadRuntime: &authorityContinuityRuntime{
+		view: func(context.Context, identity.ThreadID) (flruntime.ThreadView, error) {
+			return flruntime.ThreadView{Items: []flruntime.ThreadItem{
+				{ID: "first", TurnID: "turn", RunID: "run", Ordinal: 1, Kind: flruntime.ThreadItemUser, Text: "first", CreatedAt: time.UnixMilli(1_700_000_000_000)},
+				{ID: "second", TurnID: "turn", RunID: "run", Ordinal: 2, Kind: flruntime.ThreadItemUser, Text: "second", CreatedAt: time.UnixMilli(1_700_000_000_000)},
+				{ID: "third", TurnID: "turn", RunID: "run", Ordinal: 3, Kind: flruntime.ThreadItemUser, Text: "third", CreatedAt: time.UnixMilli(1_700_000_000_000)},
+			}}, nil
+		},
+	}}
+	for _, rowID := range []int64{math.MaxInt32 + 1, math.MaxInt64} {
+		before, _, _, err := service.listThreadTimelineMessages(t.Context(), endpointID, threadID, 2, rowID)
+		if err != nil || len(before) != 2 || before[0].MessageID != "second" || before[1].MessageID != "third" {
+			t.Fatalf("before %d = %#v, error %v; want final two items", rowID, before, err)
+		}
+		after, next, more, err := service.listThreadTimelineMessagesAfter(t.Context(), endpointID, threadID, 2, rowID, false)
+		if err != nil || len(after) != 0 || next != 3 || more {
+			t.Fatalf("after %d = %#v, next %d, more %v, error %v; want exhausted page", rowID, after, next, more, err)
+		}
+	}
+	for _, rowID := range []int64{-1, math.MinInt64} {
+		page, next, more, err := service.listThreadTimelineMessagesAfter(t.Context(), endpointID, threadID, 2, rowID, false)
+		if err != nil || len(page) != 2 || page[0].MessageID != "first" || next != 2 || !more {
+			t.Fatalf("after %d = %#v, next %d, more %v, error %v; want first page", rowID, page, next, more, err)
+		}
 	}
 }

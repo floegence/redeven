@@ -14,6 +14,11 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
+Redeven consumes published Floret v7.18.3, including its overflow-safe fallback
+title selection. The dependency gate requires the released dynamic tool surface
+and preservation of its initial provider surface; live permission ownership is
+defined in [Tool permission runtime](tool-permission-runtime.md).
+
 Published Floret v7.16.2 retains every ordinary/control call in a mixed model
 response and pairs each with its result in provider order. Valid ordinary tools
 execute once; mixed controls receive bounded correction to submit separately
@@ -33,7 +38,10 @@ calls publish description and command while pending; dispatch alone marks
 running, and results settle without waiting for output or the full turn.
 Canonical loading cannot overwrite newer live tool facts during execution.
 Redeven consumes the same current view for HTTP and workspace subscriptions;
-it does not cache raw tool arguments or own another tool lifecycle.
+it does not cache raw tool arguments or own another tool lifecycle. Pagination
+row identifiers are untrusted 64-bit values: Redeven bounds them against the
+current item count before narrowing to an index, including exhausted and
+negative cursor inputs.
 
 Ask User presentation preserves optional headers, placeholders, declared choice
 exhaustiveness, and rich choices across live views, summaries, restart, and

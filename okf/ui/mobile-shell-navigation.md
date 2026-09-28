@@ -48,6 +48,8 @@ scrollable content region. Touch targets are at least 44px, tools rows at least
 48px, and search text at least 16px. No drag, snap, or persisted geometry is owned
 by the product.
 
+# Boundaries
+
 The shared local dialog has no global aria-modal claim. Its scrim blocks covered
 page input while bottom navigation remains reachable by touch, horizontal
 scrolling, and keyboard. Initial focus goes to a close button, never search.

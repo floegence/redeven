@@ -11,6 +11,7 @@ import (
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
+	"github.com/floegence/redeven/internal/logsafe"
 )
 
 type aiServiceFactory func(context.Context, ai.Options) (*ai.Service, error)
@@ -506,11 +507,11 @@ func (c *aiReadinessController) finishFailure(err error) {
 			cause = startupErr.Unwrap()
 		}
 		c.opts.Logger.Error("ai: service startup failed",
-			"trace_id", snapshot.TraceID,
-			"startup_phase", snapshot.StartupPhase,
-			"classification", snapshot.ReasonCode,
-			"retry_reason", snapshot.RetryReason,
-			"error", cause,
+			"trace_id", logsafe.Text(snapshot.TraceID, 256),
+			"startup_phase", logsafe.Text(snapshot.StartupPhase, 256),
+			"classification", logsafe.Text(snapshot.ReasonCode, 256),
+			"retry_reason", logsafe.Text(snapshot.RetryReason, 256),
+			"error", logsafe.Error(cause),
 		)
 	}
 	c.mu.Lock()

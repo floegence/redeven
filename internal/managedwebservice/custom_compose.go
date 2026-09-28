@@ -295,7 +295,7 @@ func mergeComposeLabels(raw any, required map[string]string) map[string]string {
 }
 
 func composeEnvironment(workspace string, parameters, secrets map[string]string) []byte {
-	values := make(map[string]string, len(parameters)+len(secrets)+1)
+	values := make(map[string]string, len(parameters))
 	values["REDEVEN_WORKSPACE"] = workspace
 	for key, value := range parameters {
 		values[key] = value

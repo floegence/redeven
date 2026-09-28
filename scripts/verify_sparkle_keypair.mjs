@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { constants, lstatSync, openSync, closeSync, readFileSync } from 'node:fs';
+import { constants, fstatSync, openSync, closeSync, readFileSync } from 'node:fs';
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -40,12 +40,11 @@ export function verifySparkleKeypair(privateKeyValue, expectedPublicKeyValue) {
 
 function readPrivateKey(file) {
   const absolute = path.resolve(file);
-  const stat = lstatSync(absolute);
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new Error('Sparkle private key path must be a regular non-symlink file.');
-  }
   const fd = openSync(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
+    if (!fstatSync(fd).isFile()) {
+      throw new Error('Sparkle private key path must be a regular non-symlink file.');
+    }
     return readFileSync(fd, 'utf8');
   } finally {
     closeSync(fd);

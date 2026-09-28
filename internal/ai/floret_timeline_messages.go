@@ -226,7 +226,7 @@ func (service *Service) listThreadTimelineMessages(ctx context.Context, endpoint
 	}
 	limit = normalizeTimelineLimit(limit)
 	end := len(items)
-	if beforeRowID > 0 && int(beforeRowID) <= end {
+	if beforeRowID > 0 && beforeRowID <= int64(end) {
 		end = int(beforeRowID) - 1
 	}
 	start := max(0, end-limit)
@@ -243,12 +243,9 @@ func (service *Service) listThreadTimelineMessagesAfter(ctx context.Context, end
 		return nil, 0, false, err
 	}
 	limit = normalizeTimelineLimit(limit)
-	start := max(0, int(afterRowID))
+	start := int(min(max(int64(0), afterRowID), int64(len(items))))
 	if tail {
 		start = max(0, len(items)-limit)
-	}
-	if start > len(items) {
-		start = len(items)
 	}
 	end := min(len(items), start+limit)
 	page := append([]threadTimelineMessage(nil), items[start:end]...)

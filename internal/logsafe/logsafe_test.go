@@ -14,3 +14,10 @@ func TestErrorHandlesNil(t *testing.T) {
 		t.Fatalf("Error(nil) = %q, want empty string", got)
 	}
 }
+
+func TestTextPreservesSingleLineDiagnosticContent(t *testing.T) {
+	got := Text("  diagnostic\r\nforged entry\tcontrol\x1b  ", 100)
+	if got != "diagnostic  forged entry control" {
+		t.Fatalf("Text() = %q, want line and control boundaries escaped", got)
+	}
+}

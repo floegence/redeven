@@ -259,8 +259,8 @@ func validateControlArtifactPoolTopUpResponse(raw json.RawMessage, current *conf
 	highest := highestControlArtifactSequence(current.Entries)
 	outstanding := outstandingControlArtifactCount(current, now.Unix())
 	previous := uint64(0)
-	digests := make(map[string]struct{}, len(current.Entries)+len(pool.Entries))
-	channels := make(map[string]struct{}, len(current.Entries)+len(pool.Entries))
+	digests := make(map[string]struct{}, len(current.Entries))
+	channels := make(map[string]struct{}, len(current.Entries))
 	for _, entry := range current.Entries {
 		if entry.ArtifactDigest != "" {
 			digests[entry.ArtifactDigest] = struct{}{}

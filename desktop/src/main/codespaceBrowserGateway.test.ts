@@ -55,6 +55,7 @@ it('hands an unprivileged browser into one editor and relays resources, bodies a
   let calls = 0;
   const upstream = http.createServer((req, res) => {
     calls++;
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     expect(req.headers.cookie).toBe('editor=kept');
     expect(
       req.headers[CODESPACE_NATIVE_AUTH_HEADER.toLowerCase()],

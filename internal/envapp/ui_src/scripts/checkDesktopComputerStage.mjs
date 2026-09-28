@@ -197,6 +197,11 @@ const protocolErrors = [];
 const proxy = http.createServer(async (request, response) => {
   let record;
   try {
+    if (request.method !== 'POST' || request.url !== '/responses') {
+      response.writeHead(404);
+      response.end('Unknown qualification route');
+      return;
+    }
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const raw = Buffer.concat(chunks);
@@ -220,7 +225,7 @@ const proxy = http.createServer(async (request, response) => {
       protocol.push(record);
 
     }
-    const upstream = await fetch(new URL(request.url, provider.base_url), {
+    const upstream = await fetch(new URL('/responses', provider.base_url), {
       method: request.method, headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       ...(raw.length ? { body: raw } : {}),
     });

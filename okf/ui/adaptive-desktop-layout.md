@@ -56,6 +56,8 @@ Mobile navigation retains its product-specific bottom/side panel behavior under
 the [mobile Shell](mobile-shell-navigation.md) and [Flower](flower-mobile-navigation.md)
 contracts.
 
+# Boundaries
+
 ## Flower welcome
 
 Desktop Flower retains its mark, title, introduction, working directory, four

@@ -337,6 +337,7 @@ func (s *Server) redeemDesktopBrowserHandoff(w http.ResponseWriter, r *http.Requ
 		Path:     "/",
 		Expires:  session.expiresAt,
 		MaxAge:   int(desktopBrowserSessionTTL / time.Second),
+		Secure:   r.TLS != nil,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})

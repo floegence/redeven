@@ -37,6 +37,8 @@ Compatibility epoch 33 requires these synchronized Runtime/Desktop consumers. Ep
 
 # Boundaries
 
+Desktop Web Service handoff cookies are HttpOnly and SameSite=Strict. TLS redemption additionally sets Secure; the private HTTP loopback bridge retains its existing transport-compatible cookie behavior.
+
 Cookies isolate presentation scopes but cannot extend or create authorization. Expiry, logout, security changes and Runtime restart require authentication again. Invalid authorities and incompatible Desktop peers fail closed through accessgate.
 
 # Evidence

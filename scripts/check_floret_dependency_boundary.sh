@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.16\.2$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.16.2"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.18\.3$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.18.3"
 if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v7\s*=>' go.mod; then
   fail "Floret must not use a Go module replacement"
 fi
@@ -45,9 +45,12 @@ if rg -n --glob '*.go' --glob '!**/*_test.go' \
   fail "Redeven must not import Floret internals"
 fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
-  'WithAgentDynamicToolSurface|dynamicToolSurfaceProvider|buildDynamicToolSurfaceConfig|floretHostedPreparation' internal/ai; then
-  fail "Flower production must keep one fixed provider tool surface per hosted Agent"
+  'dynamicToolSurfaceProvider|buildDynamicToolSurfaceConfig|floretHostedPreparation' internal/ai; then
+  fail "Flower production must use the published dynamic tool surface boundary"
 fi
+require_source internal/ai/floret_runtime.go 'flruntime.WithAgentDynamicToolSurface(r.liveFloretToolSurface(surfaceConfig))'
+require_source internal/ai/run_tool_surface.go 'current.InitialProviderSurface = request.InitialProviderSurface'
+require_source internal/ai/run_tool_surface.go 'RefreshProviderSurface: true'
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
   'CREATE TABLE floret_|INSERT INTO floret_|UPDATE floret_|DELETE FROM floret_' internal cmd; then
   fail "Redeven must not access Floret-owned schema"

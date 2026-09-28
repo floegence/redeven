@@ -211,7 +211,7 @@ func pinnedImageReference(reference, digest string) (string, error) {
 }
 
 func renderedContainerEnvironment(values map[string]string, parameters map[string]string, runtimeProfile string) ([]string, error) {
-	replacements := make(map[string]string, len(parameters)+3)
+	replacements := make(map[string]string, len(parameters))
 	for name, value := range parameters {
 		replacements[name] = value
 	}

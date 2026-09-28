@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, lstatSync } from 'node:fs';
+import { readFileSync, openSync, fstatSync, closeSync, constants } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,10 +27,15 @@ export function verifyDesktopRuntimeSource(manifestPath, runtimeRoot, version, c
       throw new Error(`Linux Runtime source manifest executable contract is invalid: ${file.path}`);
     }
     const filename = path.join(runtimeRoot, file.path);
-    const stat = lstatSync(filename);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== file.size_bytes
-      || createHash('sha256').update(readFileSync(filename)).digest('hex') !== file.sha256) {
-      throw new Error(`Linux Runtime archive differs from its source manifest: ${file.path}`);
+    const fd = openSync(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const stat = fstatSync(fd);
+      if (!stat.isFile() || stat.size !== file.size_bytes
+        || createHash('sha256').update(readFileSync(fd)).digest('hex') !== file.sha256) {
+        throw new Error(`Linux Runtime archive differs from its source manifest: ${file.path}`);
+      }
+    } finally {
+      closeSync(fd);
     }
   }
   const helpers = execFileSync('python3', ['-c', `

@@ -47,7 +47,9 @@ Preparing an application does not prove a handshake or grant a tab to Flower.
 The [source admission contract](remote-browser-sources.md) continues to own
 Native Messaging, tab selection, grants and private descendants.
 
-# Product handoff
+# Boundaries
+
+## Product handoff
 
 The shared connection guide offers separate-profile preparation on Linux when
 its carrier can navigate to Host Applications. When the existing desktop is

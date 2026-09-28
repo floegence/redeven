@@ -76,7 +76,7 @@ func (s *Service) handleCanonicalThreadSummaryFailure(endpointID, threadID strin
 			"ai: publish canonical Flower thread summary",
 			"endpoint_id", logsafe.Text(endpointID, 256),
 			"thread_id", logsafe.Text(threadID, 256),
-			"error", err,
+			"error", logsafe.Error(err),
 		)
 	}
 	s.fenceFlowerLiveEndpoint(endpointID)

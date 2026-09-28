@@ -74,6 +74,8 @@ detaches. Removing its paused-request listener while interception is still
 enabled can block restoration and cleanup; input-release failures remain
 visible and do not grant a replacement controller.
 
+# Boundaries
+
 ## Qualification
 
 `scripts/check_browser_qualification.mjs` requires an explicit native catalog

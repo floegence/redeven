@@ -7,7 +7,7 @@ timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
-Published Floe owns reusable typography, control dimensions, responsive input targets, settings geometry, and virtual file row measurements. Redeven maps product roles to that released scale across Flower, Files, Git, runtime settings, monitoring, services, plugins, Codespaces, and Desktop Welcome. At a browser-controlled 16px root and 100% zoom, desktop body text is 12px/20px and conversation titles are 13px/20px; ordinary host navigation remains 12px/18px, and ordinary single-line rows occupy 28px including inter-row spacing. Touch and enlarged-text layouts grow naturally. No density preference, root-font reduction, transform scaling, or second theme state controls this behavior. A geometry failure is repaired at its owning component without changing permission, focus, draft, or scroll authority.
+Published Floe owns typography, control dimensions, responsive targets, settings geometry, and virtual file row measurements. Redeven maps product roles to that released scale across Flower, Files, Git, runtime settings, monitoring, services, plugins, Codespaces, and Desktop Welcome. At a browser-controlled 16px root and 100% zoom, desktop body text is 12px/20px and conversation titles are 13px/20px; ordinary host navigation remains 12px/18px, and ordinary single-line rows occupy 28px including inter-row spacing. Touch and enlarged-text layouts grow naturally. No density preference, root-font reduction, transform scaling, or second theme state controls this behavior. A geometry failure is repaired at its owning component without changing permission, focus, draft, or scroll authority.
 
 # Contract
 

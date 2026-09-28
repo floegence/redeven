@@ -8,10 +8,9 @@ import (
 )
 
 func Text(value string, maxRunes int) string {
+	value = strings.ReplaceAll(value, "\r", " ")
+	value = strings.ReplaceAll(value, "\n", " ")
 	value = strings.Map(func(r rune) rune {
-		if r == '\r' || r == '\n' || r == '\t' {
-			return ' '
-		}
 		if utf8.ValidRune(r) && r >= 0x20 {
 			return r
 		}

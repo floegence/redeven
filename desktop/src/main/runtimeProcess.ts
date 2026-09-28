@@ -996,15 +996,17 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     for (const stream of ['stdout', 'stderr'] as const) {
       const logPath = path.join(reportDir, `${stream}.log`);
       try {
-        const size = fsSync.statSync(logPath).size;
-        const start = Math.max(offsets[stream], size - 64 * 1024);
-        if (start >= size) continue;
-        const buffer = Buffer.alloc(size - start);
-        const fd = fsSync.openSync(logPath, 'r');
-        try { fsSync.readSync(fd, buffer, 0, buffer.length, start); }
-        finally { fsSync.closeSync(fd); }
-        offsets[stream] = size;
-        const chunk = buffer.toString('utf8');
+        const fd = fsSync.openSync(logPath, fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW);
+        let chunk: string;
+        try {
+          const size = fsSync.fstatSync(fd).size;
+          const start = Math.max(offsets[stream], size - 64 * 1024);
+          if (start >= size) continue;
+          const buffer = Buffer.alloc(size - start);
+          const bytesRead = fsSync.readSync(fd, buffer, 0, buffer.length, start);
+          offsets[stream] = start + bytesRead;
+          chunk = buffer.subarray(0, bytesRead).toString('utf8');
+        } finally { fsSync.closeSync(fd); }
         recentLogs[stream] = appendRecentLog(recentLogs[stream], chunk);
         args.onLog?.(stream, chunk);
       } catch (error) {

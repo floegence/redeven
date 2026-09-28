@@ -90,6 +90,8 @@ Desktop host-application tests, Swift host-application tests, dependency boundar
 generated viewer assets, attribution and OKF integrity. Test harnesses consume
 current session state rather than fabricating perpetual `running` status.
 
+# Boundaries
+
 ## Interpretation and remaining limits
 
 The earliest Qt product fixture incorrectly supplied KWrite's unsupported `--new`

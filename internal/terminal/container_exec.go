@@ -6,6 +6,7 @@ import (
 	"time"
 
 	termgo "github.com/floegence/floeterm/terminal-go"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionrpc"
 )
@@ -54,7 +55,7 @@ func (m *Manager) CreateContainerExecSession(req ContainerExecSessionRequest) (*
 	sess, err := m.term.CreateProgramSession(strings.TrimSpace(req.Name), m.agentHomeAbs, program)
 	if err != nil {
 		release()
-		m.log.Warn("container Exec session create failed", "executable", programName(program.Executable), "error", err)
+		m.log.Warn("container Exec session create failed", "executable", logsafe.Text(programName(program.Executable), 256), "error", logsafe.Error(err))
 		return nil, errors.New("failed to create container Exec session")
 	}
 	info := sess.ToSessionInfo()

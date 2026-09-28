@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -39,5 +39,8 @@ test('Windows staging binds the Linux source version and commit to every extract
     writeFileSync(manifestPath, JSON.stringify(manifest));
     writeFileSync(path.join(root, 'redeven'), 'tampered');
     assert.throws(() => verify(), /differs from its source manifest/u);
+    rmSync(path.join(root, 'redeven'));
+    symlinkSync(path.join(root, 'redevplugin-runtime'), path.join(root, 'redeven'));
+    assert.throws(() => verify(), /ELOOP/u);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

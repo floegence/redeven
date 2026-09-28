@@ -1827,8 +1827,8 @@ func subAgentOperationTargets(payload map[string]any, requestedIDs []string) []f
 		}
 	}
 	if len(requestedIDs) > 0 {
-		out := make([]fltools.SubAgentOperationTarget, 0, len(requestedIDs)+len(fromRecords))
-		seen := make(map[identity.ThreadID]struct{}, len(requestedIDs)+len(fromRecords))
+		out := make([]fltools.SubAgentOperationTarget, 0, len(requestedIDs))
+		seen := make(map[identity.ThreadID]struct{}, len(requestedIDs))
 		for _, rawID := range requestedIDs {
 			threadID := identity.ThreadID(strings.TrimSpace(rawID))
 			if threadID == "" {
