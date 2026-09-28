@@ -80,8 +80,9 @@ export function BrowserEditorInstallMethodSelector(props: BrowserEditorInstallMe
           onClick={() => selectInstallMethod('desktop_transfer')}
           onKeyDown={handleInstallMethodKeyDown}
         >
-          <Cpu class="h-4 w-4" />
-          <span>{i18n.t('codeRuntime.installMethod.desktopTransfer')}</span>
+          <span class="browser-editor-setup__method-radio" aria-hidden="true" />
+          <Cpu class="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span class="browser-editor-setup__method-name" title={i18n.t('codeRuntime.installMethod.desktopTransfer')}>{i18n.t('codeRuntime.installMethod.desktopTransfer')}</span>
         </button>
         <button
           ref={(element) => { remoteMethodButton = element; }}
@@ -96,8 +97,9 @@ export function BrowserEditorInstallMethodSelector(props: BrowserEditorInstallMe
           onClick={() => selectInstallMethod('remote_download')}
           onKeyDown={handleInstallMethodKeyDown}
         >
-          <Cloud class="h-4 w-4" />
-          <span>{i18n.t('codeRuntime.installMethod.remoteDownload')}</span>
+          <span class="browser-editor-setup__method-radio" aria-hidden="true" />
+          <Cloud class="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span class="browser-editor-setup__method-name" title={i18n.t('codeRuntime.installMethod.remoteDownload')}>{i18n.t('codeRuntime.installMethod.remoteDownload')}</span>
         </button>
       </div>
       <div class="browser-editor-setup__data-path">

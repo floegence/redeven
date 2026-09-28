@@ -2702,7 +2702,7 @@
     "prepare": {
       "description": "Redeven Desktop fará o download da versão mais recente Pacote Browser Editor, armazene em cache uma cópia neste computador e envie-a para o ambiente conectado.",
       "setup": {
-        "actionLabel": "Configurar Browser Editor",
+        "actionLabel": "Baixar e instalar",
         "confirmTitle": "Configurar Browser Editor",
         "runningLabel": "Configurando Browser Editor...",
         "tooltip": "Configure o Browser Editor usado por Codespaces no ambiente conectado. Atualização"

@@ -74,6 +74,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Cloud: (props: any) => <span class={props.class} data-testid="cloud-icon" />,
   ExternalLink: (props: any) => <span class={props.class} data-testid="external-link-icon" />,
   Maximize: (props: any) => <span class={props.class} data-testid="maximize-icon" />,
+  Download: (props: any) => <span class={props.class} data-testid="download-icon" />,
   Cpu: (props: any) => <span class={props.class} data-testid="cpu-icon" />,
   Play: (props: any) => <span class={props.class} data-testid="play-icon" />,
   RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
@@ -806,7 +807,7 @@ describe('EnvCodespacesPage', () => {
     expect(wizard).toBeTruthy();
     expect(controlText(wizard)).toContain('Browser Editor');
     expect(controlText(wizard)).toContain('Not ready');
-    expect(controlText(wizard)).toContain('Set up Browser Editor');
+    expect(controlText(wizard)).toContain('Download and install');
     expect(controlText(wizard)).toContain('sends it through the current connection to this environment');
     expect(controlText(wizard)).toContain('Desktop network → current connection → environment');
     expect(wizard?.getAttribute('data-layout')).toBe('wide');
@@ -857,7 +858,7 @@ describe('EnvCodespacesPage', () => {
     expect(controlText(wizard)).toContain('linux / amd64 / musl');
     expect(controlText(wizard)).toContain('Linux amd64/arm64 · glibc');
     expect(controlText(wizard)).not.toContain('Retry setup');
-    expect(controlText(wizard)).not.toContain('Set up Browser Editor');
+    expect(controlText(wizard)).not.toContain('Download and install');
     expect(controlText(host)).toContain('No codespaces yet');
 
     const detailsButton = Array.from(wizard?.querySelectorAll('button') ?? []).find((button) => controlText(button)?.includes('Technical details'));
@@ -1078,9 +1079,9 @@ describe('EnvCodespacesPage', () => {
     expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).not.toHaveBeenCalled();
 
     await vi.waitFor(() => {
-      expect(Array.from(host.querySelectorAll('button')).some(button => controlText(button)?.trim() === 'Set up Browser Editor' && !button.disabled)).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some(button => controlText(button)?.trim() === 'Download and install' && !button.disabled)).toBe(true);
     });
-    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Set up Browser Editor');
+    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Download and install');
     expect(setupButton).toBeTruthy();
     setupButton?.click();
     await vi.waitFor(() => {
@@ -1166,12 +1167,12 @@ describe('EnvCodespacesPage', () => {
     expect(startButton).toBeTruthy();
 
     startButton?.click();
-    await waitForHostText(host, 'Set up Browser Editor');
+    await waitForHostText(host, 'Download and install');
 
     await vi.waitFor(() => {
-      expect(Array.from(host.querySelectorAll('button')).some(button => controlText(button)?.trim() === 'Set up Browser Editor' && !button.disabled)).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some(button => controlText(button)?.trim() === 'Download and install' && !button.disabled)).toBe(true);
     });
-    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Set up Browser Editor');
+    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Download and install');
     expect(setupButton).toBeTruthy();
     setupButton?.click();
     await waitForHostText(host, 'Redeven Browser Editor catalog lookup failed with HTTP 503.');

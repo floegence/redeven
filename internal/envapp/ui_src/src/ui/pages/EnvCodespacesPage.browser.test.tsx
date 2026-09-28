@@ -21,6 +21,7 @@ vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: state.scope }),
 }) }));
 vi.mock('../services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellCodespaceWindowOpenAvailable: () => state.desktop, openCodespaceWindowInDesktopShell: async () => ({ ok: true }) }));
+vi.mock('../services/desktopCodeWorkspaceBridge', async original => ({ ...await original<object>(), desktopCodeWorkspacePrepareAvailable: () => state.desktop }));
 vi.mock('../services/controlplaneApi', async original => ({ ...await original<object>(), getEnvPublicIDFromSession: () => 'env-test', getLocalRuntime: async () => ({}) }));
 vi.mock('../services/filesystemPicker', () => ({ useEnvFilesystemPicker: () => ({}) }));
 vi.mock('../services/localApi', async original => ({ ...await original<object>(), fetchLocalApiJSON: (url: string) => {
@@ -392,4 +393,25 @@ it('keeps first-load codespace failure visible with a direct retry', async () =>
   await expect.poll(() => host.textContent).toContain('Inventory unavailable');
   expect(host.querySelector('[data-floe-status-indicator] button')?.getAttribute('aria-hidden')).toBe('true');
   expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeDefined();
+});
+
+it.each([390, 1440])('makes the missing editor installation explicit at %s px', async width => {
+  state.locale = 'zh-CN'; state.desktop = true;
+  await page.viewport(width, 900);
+  host.style.height = '850px';
+  state.spaces.mockResolvedValue({ spaces: [] });
+  state.runtime.mockResolvedValue({ active_runtime: { detection_state: 'missing', present: false }, operation: { state: 'idle' } });
+  dispose = render(() => <EnvCodespacesPage />, host);
+  const install = page.getByRole('button', { name: '下载并安装', exact: true });
+  await expect.element(install).toBeVisible();
+  await document.fonts.ready;
+  const panel = host.querySelector<HTMLElement>('[data-testid="browser-editor-setup-activity"]')!;
+  const body = panel.querySelector<HTMLElement>('.browser-editor-setup__body')!;
+  const actions = panel.querySelector<HTMLElement>('.browser-editor-setup__actions')!;
+  const button = actions.querySelector<HTMLButtonElement>('button')!;
+  expect(actions.getBoundingClientRect().top).toBeGreaterThanOrEqual(body.getBoundingClientRect().bottom);
+  expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+  assertButtonText(button);
+  if (width === 390) expect(button.getBoundingClientRect().width).toBeCloseTo(panel.clientWidth - 32, 0);
+  await page.screenshot({ element: host, path: `__screenshots__/codespaces-install-${width}.png` });
 });

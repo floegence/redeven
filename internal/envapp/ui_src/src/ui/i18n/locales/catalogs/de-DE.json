@@ -2702,7 +2702,7 @@
     "prepare": {
       "description": "Redeven Desktop lädt das neueste Browser Editor-Paket herunter, speichert eine Kopie auf diesem Computer zwischen und sendet sie an die verbundene Umgebung.",
       "setup": {
-        "actionLabel": "Browser Editor einrichten",
+        "actionLabel": "Herunterladen und installieren",
         "confirmTitle": "Browser Editor einrichten",
         "runningLabel": "Browser Editor einrichten...",
         "tooltip": "Browser Editor einrichten, das von Codespaces in der verbundenen Umgebung verwendet wird."

@@ -201,6 +201,7 @@ function mountPanel(
     installMethod?: 'desktop_transfer' | 'remote_download';
     desktopTransferAvailable?: boolean;
     installMethodLocked?: boolean;
+    onPrepare?: () => void;
     onInstallMethodChange?: (method: 'desktop_transfer' | 'remote_download') => void;
   }> = {},
 ) {
@@ -215,7 +216,7 @@ function mountPanel(
       <BrowserEditorSetupActivityPanel
         activity={currentActivity()}
         layout={layout}
-        actionLabel="Set up Browser Editor"
+        actionLabel="Download and install"
         runningLabel="Setting up..."
         installMethod={installMethod()}
         desktopTransferAvailable={options.desktopTransferAvailable ?? true}
@@ -224,7 +225,7 @@ function mountPanel(
           setInstallMethod(method);
           options.onInstallMethodChange?.(method);
         }}
-        onPrepare={() => undefined}
+        onPrepare={() => options.onPrepare?.()}
         onDismiss={() => undefined}
         extraDetails={(
           <dl class="browser-editor-setup__detail-list">
@@ -380,6 +381,13 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(panel?.scrollWidth).toBeLessThanOrEqual((panel?.clientWidth ?? 0) + 1);
     expect(host.textContent).not.toContain('Step 1 of 4');
 
+    const actions = panel!.querySelector<HTMLElement>('.browser-editor-setup__actions')!;
+    const install = actions.querySelector<HTMLButtonElement>('button')!;
+    const selectedMethod = panel!.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')!;
+    expect(actions.getBoundingClientRect().top).toBeGreaterThanOrEqual(body!.getBoundingClientRect().bottom);
+    expect(install.getBoundingClientRect().left).toBeGreaterThan(secondary!.getBoundingClientRect().left);
+    expect(getComputedStyle(install).backgroundColor).not.toBe(getComputedStyle(selectedMethod).backgroundColor);
+
     const screenshot = await page.screenshot({ save: false });
     expect(screenshot.length).toBeGreaterThan(1_000);
   });
@@ -406,8 +414,10 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
   it('switches install methods with radiogroup keyboard controls', async () => {
     await page.viewport(1440, 900);
     const changes: string[] = [];
+    const installs: string[] = [];
     const { host, dispose } = mountPanel(missingActivity(), '1180px', 'wide', {
       onInstallMethodChange: (method) => changes.push(method),
+      onPrepare: () => installs.push(changes.at(-1) ?? 'desktop_transfer'),
     });
     cleanup = dispose;
     await settle();
@@ -425,6 +435,9 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     await settle();
 
     expect(changes).toEqual(['remote_download']);
+    expect(installs).toEqual([]);
+    host.querySelector<HTMLButtonElement>('.browser-editor-setup__actions button')!.click();
+    expect(installs).toEqual(['remote_download']);
     expect(radios[1].getAttribute('aria-checked')).toBe('true');
     expect(document.activeElement).toBe(radios[1]);
     expect(host.querySelector('[role="tooltip"]')).toBeNull();
@@ -513,7 +526,7 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(host.textContent).toContain('Detected');
     expect(host.textContent).toContain('Linux / amd64 / musl');
     expect(host.textContent).toContain('Linux with glibc on amd64 or arm64');
-    expect(host.textContent).not.toContain('Set up Browser Editor');
+    expect(host.textContent).not.toContain('Download and install');
 
     const detailsTrigger = host.querySelector<HTMLButtonElement>('.browser-editor-setup__details-trigger');
     expect(detailsTrigger?.getAttribute('aria-expanded')).toBe('false');

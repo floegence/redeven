@@ -2702,7 +2702,7 @@
     "prepare": {
       "description": "Redeven Desktop は最新のものをダウンロードしますBrowser Editor パッケージを使用して、このコンピューターに 1 つのコピーをキャッシュし、接続された環境に送信します。",
       "setup": {
-        "actionLabel": "Browser Editor の設定",
+        "actionLabel": "ダウンロードしてインストール",
         "confirmTitle": "Browser Editor の設定",
         "runningLabel": "Browser Editor の設定...",
         "tooltip": "接続環境の Codespaces で使用する Browser Editor を設定します。"

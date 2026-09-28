@@ -2790,7 +2790,7 @@
     "prepare": {
       "description": "Redeven Desktop загрузит последнюю версию пакета Browser Editor, кэширует одну копию на этом компьютере и отправит ее в подключенную среду.",
       "setup": {
-        "actionLabel": "Настройка Browser Editor",
+        "actionLabel": "Скачать и установить",
         "confirmTitle": "Настройка Browser Editor",
         "runningLabel": "Настройка Browser Editor...",
         "tooltip": "Настройте Browser Editor, используемый Codespaces в подключенной среде."
