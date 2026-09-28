@@ -2308,7 +2308,7 @@
     "desktopUpdateRequired": "Desktop 需要更新",
     "invalidResponse": "响应无效",
     "statusStale": "状态已过期",
-    "authorized": "已授权"
+    "authorized": "账号已登录"
   },
   "environmentAction": {
     "open": "打开 Env App",
@@ -2986,7 +2986,24 @@
     "unknown": "连接尚未验证",
     "expired": "连接凭据已过期",
     "requested": "已请求连接 {label}，Redeven Cloud 状态将自动更新。",
-    "permissionRevoked": "Cloud 权限已撤销"
+    "permissionRevoked": "Cloud 权限已撤销",
+    "localAvailable": "本机可用",
+    "runtimeStatus": "运行时：{label}",
+    "waitingService": "等待 Redeven Cloud 恢复",
+    "waitingDetail": "Redeven Cloud 暂时不可用。服务恢复后，Desktop 将自动重新连接。",
+    "restoringDetail": "Desktop 正在恢复远程访问，本机仍可继续使用。",
+    "permissionDetail": "你的账号已无权连接此运行时，请联系管理员检查访问权限。",
+    "bindingDetail": "保存的关联已发生变化，请检查运行时和账号后再重新连接。",
+    "unknownDetail": "尚未确认云端连接，请检查运行时或刷新状态。",
+    "attentionDetail": "远程访问需要处理。请查看连接详情，或恢复已保存的连接。",
+    "restoreShort": "恢复连接",
+    "openLocally": "本机打开",
+    "details": "连接详情",
+    "runtimeOwner": "运行时",
+    "lastError": "最近错误",
+    "lastAttempt": "上次尝试",
+    "nextCheck": "下次检查",
+    "tlsDetail": "Desktop 无法验证云端证书。请检查设备的证书信任设置后再重新连接。"
   },
   "windowStatus": {
     "checkingService": "正在检查服务状态",

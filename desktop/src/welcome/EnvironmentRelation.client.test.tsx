@@ -53,6 +53,32 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('linked environment owner interactions', () => {
+  it('explains an expired Cloud connection on either tab and routes recovery to the exact Runtime owner', async () => {
+    const f = linkedEnvironmentFixture();
+    const runtime = { ...f.runtime, provider_runtime_link_target: { ...f.runtime.provider_runtime_link_target!,
+      provider_connection_state: 'authorization_required' as const, can_connect_provider: true,
+      credential_recovery: 'waiting_for_service' as const,
+      provider_link_binding: { state: 'linked' as const, connection_state: 'authorization_required' as const,
+        remote_enabled: true, last_error_code: 'CONTROL_CREDENTIALS_EXPIRED' },
+    } };
+    const cloud = { ...f.cloud, remote_route_state: 'offline' as const };
+    const h = await mount({ ...f.snapshot, environments: [runtime, cloud] });
+    await h.select('cloud');
+    const status = h.owner('cloud').querySelector('[data-cloud-connection-status]')!;
+    expect(status).not.toBeNull();
+    expect(status.textContent).toContain('Available on this device');
+    expect(status.textContent).toContain('Waiting for Redeven Cloud');
+    expect(status.closest('[aria-hidden="true"]')).toBeNull();
+    button(status, 'Open locally').click(); await settle();
+    expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'open_local_environment', environment_id: runtime.id }));
+    await h.select('runtime');
+    const runtimeStatus = h.owner('runtime').querySelector('[data-cloud-connection-status]')!;
+    expect(runtimeStatus.textContent).toContain('Waiting for Redeven Cloud');
+    button(runtimeStatus, 'Restore connection').click(); await settle();
+    // No Cloud card acquires management authority: the existing Runtime review owns the action.
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(runtime.label);
+    expect(h.performAction.mock.calls.some(([request]) => request.kind === 'connect_provider_runtime')).toBe(false);
+  });
   it('uses one visible owner and owner tabs instead of stacked action surfaces', async () => {
     await mount();
     const card = document.querySelector('[data-environment-group]')!;

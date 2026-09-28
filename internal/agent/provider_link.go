@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
@@ -357,6 +358,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 		code := ProviderLinkErrorExchangeFailed
 		var exchangeErr *config.RuntimeLinkExchangeError
 		var networkErr net.Error
+		var dnsErr *net.DNSError
 		if errors.As(err, &exchangeErr) {
 			switch {
 			case exchangeErr.Code == "RUNTIME_LINK_BINDING_STALE":
@@ -372,7 +374,12 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 			case exchangeErr.StatusCode == 429 || exchangeErr.StatusCode >= 500:
 				code = ProviderLinkErrorUnavailable
 			}
-		} else if errors.As(err, &networkErr) && networkErr.Timeout() {
+		} else if errors.As(err, &networkErr) && networkErr.Timeout() ||
+			errors.As(err, &dnsErr) && (dnsErr.IsTimeout || dnsErr.IsTemporary) ||
+			errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) ||
+			errors.Is(err, syscall.ENETUNREACH) || errors.Is(err, syscall.EHOSTUNREACH) {
+			// A Region that is not listening yet must not permanently stop Desktop recovery.
+			// Certificate and protocol failures remain terminal.
 			code = ProviderLinkErrorUnavailable
 		}
 		return nil, &ProviderLinkError{Code: code, Message: fmt.Sprintf("Provider link exchange failed: %v", err), Err: err}

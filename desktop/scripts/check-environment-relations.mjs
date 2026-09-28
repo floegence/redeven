@@ -54,7 +54,7 @@ try {
     await assertGridAlignment(page, `${locale}: overview`);
     const pairHeightBefore = (await pair.boundingBox()).height;
     const neighborsBefore = await cards.evaluateAll(elements => elements.filter(el => !el.querySelector('[role="tablist"]')).map(el => Math.round(el.getBoundingClientRect().height)));
-    assert.ok((await pair.boundingBox()).height < 370, 'linked card retains a compact single perspective');
+    assert.ok((await pair.boundingBox()).height < 370, `linked card retains a compact single perspective: ${JSON.stringify(await pair.evaluate(el => ({ height: el.getBoundingClientRect().height, status: el.querySelector('[data-cloud-connection-status]')?.textContent })))}`);
     await pair.locator('[data-owner-role="runtime"] .redeven-split-action-primary button').first().click();
     await pair.locator('[role="tab"]').nth(1).click();
     await pair.locator('[data-owner-role="cloud"] .redeven-split-action-primary button').first().click();

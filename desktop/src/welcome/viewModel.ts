@@ -751,7 +751,7 @@ export function buildEnvironmentCardFactsModel(environment: DesktopEnvironmentEn
     : state === 'connecting' ? 'providerRecovery.connecting'
     : state === 'retrying' ? 'providerRecovery.retrying'
     : state === 'restoring' ? 'providerRecovery.restoring'
-    : state === 'waiting' ? 'providerRecovery.waiting'
+    : state === 'waiting' || state === 'waiting_for_service' ? 'providerRecovery.waitingService'
     : state === 'disabled' ? 'providerRecovery.disabled'
     : state === 'unknown' ? 'providerRecovery.unknown' : 'providerRecovery.attention';
   return [...facts, { id: 'cloud-connection', label: 'Redeven Cloud', value: state, value_key: valueKey, value_tone: 'default' }];

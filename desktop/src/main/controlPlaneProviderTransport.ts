@@ -31,6 +31,8 @@ const CONNECTION_ERROR_CODES = new Set([
   'ERR_CONNECTION_RESET',
   'ERR_CONNECTION_TIMED_OUT',
   'ERR_FAILED',
+  'ERR_INTERNET_DISCONNECTED',
+  'ERR_NETWORK_CHANGED',
 ]);
 
 export type DesktopProviderRequestErrorCode =
@@ -137,6 +139,10 @@ function collectErrorMetadata(
   const message = compact(candidate.message).toLowerCase();
   if (message !== '') {
     messages.push(message);
+    // Electron exposes Chromium's network code in the message, without Error.code.
+    for (const match of message.matchAll(/\bnet::(err_[a-z0-9_]+)\b/gu)) {
+      codes.add(match[1].toUpperCase());
+    }
   }
 
   collectErrorMetadata(candidate.cause, codes, messages, visited);
@@ -171,7 +177,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
     );
   }
 
-  if (includesMessage('aborterror') || includesMessage('timed out') || includesMessage('timeout')) {
+  if (codes.has('ERR_TIMED_OUT') || includesMessage('aborterror') || includesMessage('timed out') || includesMessage('timeout')) {
     return new DesktopProviderRequestError(
       'provider_timeout',
       'Desktop timed out waiting for the provider to respond.',

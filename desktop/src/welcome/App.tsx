@@ -7448,6 +7448,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
       allGroups={props.allLibraryGroups}
       viewScope={gridProps.scope}
       defaultCloud={gridProps.cloud}
+      controlPlanes={props.controlPlanes}
+      reconnectControlPlane={props.reconnectControlPlane}
       presentation={ownerPresentation}
       Facts={EnvironmentCardFactsBlock}
       Actions={EnvironmentSplitActionButton}

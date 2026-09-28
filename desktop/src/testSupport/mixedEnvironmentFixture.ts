@@ -57,6 +57,8 @@ export function mixedEnvironmentFixture(options: {
     capabilities: { desktop_model_source: { supported: false }, provider_link: { supported: true, bind_method: 'runtime_control_v2' } },
     bindings: { desktop_model_source: { state: 'unsupported' }, provider_link: {
       state: options.linkState ?? 'linked', provider_origin: source.provider.provider_origin, provider_id: source.provider.provider_id,
+      connection_state: !options.linkState || options.linkState === 'linked' ? 'connected'
+        : options.linkState === 'linking' ? 'connecting' : 'disabled',
       env_public_id: 'env_0_0', access_point_origin: source.environments[0].access_point_origin, remote_enabled: true,
     } },
   };

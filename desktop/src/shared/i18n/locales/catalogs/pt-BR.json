@@ -2312,7 +2312,7 @@
     "desktopUpdateRequired": "Atualização do Desktop necessária",
     "invalidResponse": "Resposta inválida",
     "statusStale": "Status desatualizado",
-    "authorized": "Autorizado"
+    "authorized": "Sessão iniciada"
   },
   "environmentAction": {
     "open": "Abrir Env App",
@@ -2992,7 +2992,24 @@
     "unknown": "Conexão não verificada",
     "expired": "Credenciais expiradas",
     "requested": "Conexão solicitada para {label}. O status do Redeven Cloud será atualizado automaticamente.",
-    "permissionRevoked": "Permissão do Cloud revogada"
+    "permissionRevoked": "Permissão do Cloud revogada",
+    "localAvailable": "Disponível neste dispositivo",
+    "runtimeStatus": "Ambiente de execução: {label}",
+    "waitingService": "Aguardando o Redeven Cloud",
+    "waitingDetail": "O Redeven Cloud está temporariamente indisponível. O Desktop se reconectará quando o serviço estiver acessível.",
+    "restoringDetail": "O Desktop está restaurando o acesso remoto. Você pode continuar trabalhando neste dispositivo.",
+    "permissionDetail": "Sua conta não tem mais permissão para conectar este ambiente de execução. Peça a um administrador para revisar o acesso.",
+    "bindingDetail": "A associação salva foi alterada. Revise o ambiente de execução e a conta antes de reconectar.",
+    "unknownDetail": "A conexão com a nuvem ainda não foi confirmada. Verifique o ambiente de execução ou atualize o status.",
+    "attentionDetail": "O acesso remoto precisa de atenção. Revise os detalhes ou restaure a conexão salva.",
+    "restoreShort": "Restaurar conexão",
+    "openLocally": "Abrir localmente",
+    "details": "Detalhes da conexão",
+    "runtimeOwner": "Ambiente de execução",
+    "lastError": "Último erro",
+    "lastAttempt": "Última tentativa",
+    "nextCheck": "Próxima verificação",
+    "tlsDetail": "O Desktop não conseguiu verificar o certificado da nuvem. Verifique as configurações de confiança do dispositivo antes de reconectar."
   },
   "windowStatus": {
     "checkingService": "Verificando o status do serviço",

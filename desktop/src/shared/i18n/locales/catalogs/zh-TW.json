@@ -2308,7 +2308,7 @@
     "desktopUpdateRequired": "Desktop 需要更新",
     "invalidResponse": "回應無效",
     "statusStale": "狀態已過期",
-    "authorized": "已授權"
+    "authorized": "帳號已登入"
   },
   "environmentAction": {
     "open": "開啟 Env App",
@@ -2986,7 +2986,24 @@
     "unknown": "連線尚未驗證",
     "expired": "連線憑證已過期",
     "requested": "已要求連線至 {label}，Redeven Cloud 狀態將自動更新。",
-    "permissionRevoked": "Cloud 權限已撤銷"
+    "permissionRevoked": "Cloud 權限已撤銷",
+    "localAvailable": "本機可用",
+    "runtimeStatus": "執行階段：{label}",
+    "waitingService": "等待 Redeven Cloud 恢復",
+    "waitingDetail": "Redeven Cloud 暫時無法使用。服務恢復後，Desktop 將自動重新連線。",
+    "restoringDetail": "Desktop 正在恢復遠端存取，本機仍可繼續使用。",
+    "permissionDetail": "你的帳號已無權連線至此執行階段，請聯絡管理員檢查存取權限。",
+    "bindingDetail": "儲存的關聯已變更，請檢查執行階段與帳號後再重新連線。",
+    "unknownDetail": "尚未確認雲端連線，請檢查執行階段或重新整理狀態。",
+    "attentionDetail": "遠端存取需要處理。請查看連線詳細資料，或恢復已儲存的連線。",
+    "restoreShort": "恢復連線",
+    "openLocally": "在本機開啟",
+    "details": "連線詳細資料",
+    "runtimeOwner": "執行階段",
+    "lastError": "最近錯誤",
+    "lastAttempt": "上次嘗試",
+    "nextCheck": "下次檢查",
+    "tlsDetail": "Desktop 無法驗證雲端憑證。請檢查裝置的憑證信任設定後再重新連線。"
   },
   "windowStatus": {
     "checkingService": "正在檢查服務狀態",

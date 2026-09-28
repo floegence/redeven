@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -23,6 +24,60 @@ import (
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
+
+func TestConnectProviderRetriesWhenRegionHasNotStarted(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin := "https://" + listener.Addr().String()
+	_ = listener.Close()
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	a := newProviderLinkTestAgent(t, cfgPath, &config.Config{AgentHomeDir: t.TempDir()})
+	_, err = a.ConnectProvider(context.Background(), ProviderLinkRequest{
+		ProviderOrigin: "https://redeven.test", ProviderID: "example_control_plane",
+		EnvPublicID: "env_new", AccessPointOrigin: origin, RuntimeLinkTicket: "ticket-123",
+	})
+	var linkErr *ProviderLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorUnavailable {
+		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorUnavailable)
+	}
+}
+
+func TestConnectProviderDoesNotRetryUntrustedRegionCertificate(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("untrusted certificate must stop before the exchange")
+	}))
+	defer server.Close()
+	a := newProviderLinkTestAgent(t, filepath.Join(t.TempDir(), "config.json"), nil)
+	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
+		ProviderOrigin: "https://redeven.test", ProviderID: "example_control_plane",
+		EnvPublicID: "env_new", AccessPointOrigin: server.URL, RuntimeLinkTicket: "ticket-123",
+	})
+	var linkErr *ProviderLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorExchangeFailed {
+		t.Fatalf("ConnectProvider() error = %v, want certificate review", err)
+	}
+}
+
+func TestConnectProviderRetriesTemporaryDNSFailure(t *testing.T) {
+	a := newProviderLinkTestAgent(t, filepath.Join(t.TempDir(), "config.json"), nil)
+	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
+		ProviderOrigin: "https://redeven.test", ProviderID: "example_control_plane",
+		EnvPublicID: "env_new", AccessPointOrigin: "https://dev.redeven.test", RuntimeLinkTicket: "ticket-123",
+		runtimeLinkHTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, &net.DNSError{Name: "redeven.test", Err: "temporary resolver failure", IsTemporary: true}
+		})},
+	})
+	var linkErr *ProviderLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorUnavailable {
+		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorUnavailable)
+	}
+}
 
 type providerDisconnectFakeRPC struct {
 	mu       sync.Mutex
