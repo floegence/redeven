@@ -66,15 +66,18 @@ describe('linked environment owner interactions', () => {
     await h.select('cloud');
     const status = h.owner('cloud').querySelector('[data-cloud-connection-status]')!;
     expect(status).not.toBeNull();
-    expect(status.textContent).toContain('Available on this device');
-    expect(status.textContent).toContain('Waiting for Redeven Cloud');
+    expect(status.textContent).toContain('Waiting');
     expect(status.closest('[aria-hidden="true"]')).toBeNull();
-    button(status, 'Open locally').click(); await settle();
+    button(status, 'Connection details: Waiting for Redeven Cloud').click(); await settle();
+    const details = document.querySelector('[data-cloud-connection-details]')!;
+    expect(details.textContent).toContain('Available on this device');
+    button(details, 'Open locally').click(); await settle();
     expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'open_local_environment', environment_id: runtime.id }));
     await h.select('runtime');
     const runtimeStatus = h.owner('runtime').querySelector('[data-cloud-connection-status]')!;
-    expect(runtimeStatus.textContent).toContain('Waiting for Redeven Cloud');
-    button(runtimeStatus, 'Restore connection').click(); await settle();
+    expect(runtimeStatus.textContent).toContain('Waiting');
+    await h.select('cloud');
+    button(h.owner('cloud').querySelector('[data-cloud-connection-status]')!, 'Restore').click(); await settle();
     // No Cloud card acquires management authority: the existing Runtime review owns the action.
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(runtime.label);
     expect(h.performAction.mock.calls.some(([request]) => request.kind === 'connect_provider_runtime')).toBe(false);

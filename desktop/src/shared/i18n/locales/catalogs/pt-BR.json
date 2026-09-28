@@ -2979,6 +2979,12 @@
     "connectedBuild": "Ambiente de execução conectado: {version} · {commit}"
   },
   "providerRecovery": {
+    "waitingShort": "Aguardando",
+    "restoreAction": "Restaurar",
+    "signInAction": "Entrar",
+    "connectedDetail": "Este ambiente de execução está conectado ao Redeven Cloud. O acesso remoto está disponível.",
+    "tlsError": "Certificado não confiável",
+    "bindingChanged": "Associação alterada",
     "restore": "Restaurar conexão com Redeven Cloud",
     "required": "Restaure a conexão salva com Redeven Cloud. O trabalho local continua disponível. Se as permissões foram revogadas ou o vínculo mudou, verifique a conta e o vínculo antes de reconectar.",
     "needsAuthorization": "Autorização necessária",
@@ -2994,7 +3000,6 @@
     "requested": "Conexão solicitada para {label}. O status do Redeven Cloud será atualizado automaticamente.",
     "permissionRevoked": "Permissão do Cloud revogada",
     "localAvailable": "Disponível neste dispositivo",
-    "runtimeStatus": "Ambiente de execução: {label}",
     "waitingService": "Aguardando o Redeven Cloud",
     "waitingDetail": "O Redeven Cloud está temporariamente indisponível. O Desktop se reconectará quando o serviço estiver acessível.",
     "restoringDetail": "O Desktop está restaurando o acesso remoto. Você pode continuar trabalhando neste dispositivo.",

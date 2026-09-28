@@ -1,12 +1,12 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
-import { AlertTriangle, Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../internal/flower_ui/src';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton } from './App';
-import { CloudConnectionStatus } from './CloudConnectionStatus';
+import { CloudConnectionStatus, cloudConnectionState, cloudConnectionTitleKey } from './CloudConnectionStatus';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import { DesktopTooltip } from './DesktopTooltip';
 import { ConsoleActionIconButton, EnvironmentStatusIndicator } from './environmentCardPrimitives';
@@ -423,9 +423,10 @@ export function EnvironmentCardsPanel(
       environment={projectedEntriesByID()[environmentID]!}
       relationshipRole={projectedEntriesByID()[environmentID]!.kind === 'provider_environment' ? 'cloud' : projectedGroup(groupID).provider_entry ? 'runtime' : undefined}
       paired={!!projectedGroup(groupID).provider_entry}
-      connectionStatus={projectedGroup(groupID).provider_entry ? () => (
+      connectionStatus={() => (
         <CloudConnectionStatus runtime={projectedGroup(groupID).primary_entry}
           cloud={projectedGroup(groupID).provider_entry!} i18n={props.i18n}
+          active={activeOwnerID(projectedGroup(groupID)) === environmentID}
           busy={environmentOperationState(projectedGroup(groupID).primary_entry, props.actionProgress, props.busyState).actionsDisabled}
           onRuntimeAction={action => {
             // Keep management on the exact Runtime owner, including its existing review.
@@ -439,7 +440,7 @@ export function EnvironmentCardsPanel(
               && source.provider.provider_id === cloud.provider_id);
             if (source) void props.reconnectControlPlane(source);
           }} />
-      ) : undefined}
+      )}
       otherPinnedOwner={projectedGroup(groupID).member_entries.find(entry => entry.id !== environmentID && entry.pinned)}
       busyState={props.busyState}
       actionProgress={props.actionProgress}
@@ -507,7 +508,11 @@ export function EnvironmentCardsPanel(
       const entry = () => projectedEntriesByID()[ownerID]!;
       const model = () => props.presentation.card(entry());
       const busy = () => environmentOperationState(entry(), props.actionProgress, props.busyState).actionsDisabled;
-      const status = () => busy() ? props.i18n.t('environmentCenter.ownerOperationRunning') : model().status_label;
+      const cloudState = () => entry().kind === 'provider_environment' ? cloudConnectionState(group().primary_entry, entry()) : undefined;
+      const progressing = () => busy() || ['connecting', 'restoring', 'retrying'].includes(cloudState() ?? '');
+      const warning = () => model().status_tone === 'warning' || (cloudState() !== undefined && cloudState() !== 'connected');
+      const status = () => busy() ? props.i18n.t('environmentCenter.ownerOperationRunning')
+        : cloudState() !== undefined && cloudState() !== 'connected' ? props.i18n.t(cloudConnectionTitleKey(group().primary_entry, entry())) : model().status_label;
       return { id: ownerID,
         get label() {
           const name = entry().kind === 'provider_environment' ? props.i18n.t('environmentCenter.providerFilter') : model().kind_label;
@@ -522,9 +527,9 @@ export function EnvironmentCardsPanel(
             }>
               <Cloud aria-hidden="true" />
             </Show>
-            <Show when={busy() || model().status_tone === 'warning'}>
-              <span class="redeven-owner-tab-status" data-tone={busy() ? 'primary' : 'warning'} aria-hidden="true">
-                <Show when={busy()} fallback={<AlertTriangle />}>
+            <Show when={progressing() || warning()}>
+              <span class="redeven-owner-tab-status" data-tone={progressing() ? 'primary' : 'warning'} aria-hidden="true">
+                <Show when={progressing()}>
                   <Refresh class="motion-safe:animate-spin" />
                 </Show>
               </span>
@@ -659,7 +664,7 @@ function EnvironmentOwnerSurface(
     environment: DesktopEnvironmentEntry;
     relationshipRole?: 'runtime' | 'cloud';
     paired: boolean;
-    connectionStatus?: () => JSX.Element;
+    connectionStatus: () => JSX.Element;
     otherPinnedOwner?: DesktopEnvironmentEntry;
     busyState: DesktopLauncherBusyState;
     actionProgress: readonly DesktopLauncherActionProgress[];
@@ -714,7 +719,7 @@ function EnvironmentOwnerSurface(
 ) {
   const card = createMemo(() => props.presentation.card(props.environment));
   const facts = createMemo(() => props.presentation.facts(props.environment)
-    .filter(fact => !props.connectionStatus || fact.id !== 'cloud-connection'));
+    .filter(fact => !props.paired || fact.id !== 'cloud-connection'));
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
   const ownerLabel = createMemo(() => props.paired
     ? props.i18n.t('environmentCenter.relationshipOwnerLabel', {
@@ -843,16 +848,16 @@ function EnvironmentOwnerSurface(
           </Show>
         </div>
       </CardHeader>
-      {props.connectionStatus?.()}
       <CardContent class="flex flex-col px-4 pb-3 redeven-environment-owner-facts">
         <props.Facts
           environmentID={props.environment.id} i18n={props.i18n} facts={facts()}
-          environmentLabel={props.environment.label} minRows={3}
+          environmentLabel={props.environment.label} minRows={props.paired ? 2 : 3}
           onFactAction={props.runEnvironmentCardFactAction}
           openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
           endpointPopoverOpen={props.endpointPopoverOpen} onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
           selectedEndpointID={props.selectedEndpointID} selectEndpointForQRCode={props.selectEndpointForQRCode}
         />
+        <Show when={props.paired}>{props.connectionStatus()}</Show>
       </CardContent>
       <Show when={!props.environment.pinned && props.otherPinnedOwner}>
         <div class="redeven-other-owner-pin"><Pin class="h-3 w-3" />

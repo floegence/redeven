@@ -2973,6 +2973,12 @@
     "connectedBuild": "已连接的运行时：{version} · {commit}"
   },
   "providerRecovery": {
+    "waitingShort": "等待恢复",
+    "restoreAction": "恢复",
+    "signInAction": "登录",
+    "connectedDetail": "此运行时已连接到 Redeven Cloud，可远程访问。",
+    "tlsError": "证书不受信任",
+    "bindingChanged": "关联已变更",
     "restore": "恢复 Redeven Cloud 连接",
     "required": "恢复已保存的 Redeven Cloud 连接，本机工作可继续使用。如果权限已被撤销或关联已变更，请先检查账号和关联，再重新连接。",
     "needsAuthorization": "需要授权",
@@ -2988,7 +2994,6 @@
     "requested": "已请求连接 {label}，Redeven Cloud 状态将自动更新。",
     "permissionRevoked": "Cloud 权限已撤销",
     "localAvailable": "本机可用",
-    "runtimeStatus": "运行时：{label}",
     "waitingService": "等待 Redeven Cloud 恢复",
     "waitingDetail": "Redeven Cloud 暂时不可用。服务恢复后，Desktop 将自动重新连接。",
     "restoringDetail": "Desktop 正在恢复远程访问，本机仍可继续使用。",

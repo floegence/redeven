@@ -2973,6 +2973,12 @@
     "connectedBuild": "接続中のランタイム：{version} · {commit}"
   },
   "providerRecovery": {
+    "waitingShort": "待機中",
+    "restoreAction": "復元",
+    "signInAction": "ログイン",
+    "connectedDetail": "このランタイムは Redeven Cloud に接続されており、リモートアクセスが可能です。",
+    "tlsError": "証明書が信頼されていません",
+    "bindingChanged": "関連付けが変更されました",
     "restore": "Redeven Cloud 接続を復元",
     "required": "保存済みの Redeven Cloud 接続を復元します。ローカルでの作業は引き続き利用できます。権限が取り消された場合や関連付けが変更された場合は、アカウントと関連付けを確認してから再接続してください。",
     "needsAuthorization": "認証が必要",
@@ -2988,7 +2994,6 @@
     "requested": "{label} の接続を要求しました。Redeven Cloud の状態は自動的に更新されます。",
     "permissionRevoked": "Cloud 権限が取り消されました",
     "localAvailable": "このデバイスで利用可能",
-    "runtimeStatus": "ランタイム：{label}",
     "waitingService": "Redeven Cloud の復旧を待機中",
     "waitingDetail": "Redeven Cloud は一時的に利用できません。サービスに接続できるようになると、Desktop が自動的に再接続します。",
     "restoringDetail": "Desktop がリモートアクセスを復旧しています。このデバイスでの作業は続けられます。",

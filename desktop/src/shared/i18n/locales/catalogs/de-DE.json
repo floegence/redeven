@@ -2978,6 +2978,12 @@
     "connectedBuild": "Verbundene Laufzeit: {version} · {commit}"
   },
   "providerRecovery": {
+    "waitingShort": "Wartet",
+    "restoreAction": "Wiederherstellen",
+    "signInAction": "Anmelden",
+    "connectedDetail": "Diese Laufzeit ist mit Redeven Cloud verbunden. Der Fernzugriff ist verfügbar.",
+    "tlsError": "Zertifikat nicht vertrauenswürdig",
+    "bindingChanged": "Zuordnung geändert",
     "restore": "Redeven Cloud-Verbindung wiederherstellen",
     "required": "Die gespeicherte Redeven Cloud-Verbindung wiederherstellen. Lokales Arbeiten bleibt möglich. Wurden Berechtigungen entzogen oder die Zuordnung geändert, prüfe vor dem erneuten Verbinden das Konto und die Zuordnung.",
     "needsAuthorization": "Autorisierung erforderlich",
@@ -2993,7 +2999,6 @@
     "requested": "Verbindung für {label} angefordert. Der Redeven Cloud-Status wird automatisch aktualisiert.",
     "permissionRevoked": "Cloud-Berechtigung widerrufen",
     "localAvailable": "Auf diesem Gerät verfügbar",
-    "runtimeStatus": "Laufzeitumgebung: {label}",
     "waitingService": "Warten auf Redeven Cloud",
     "waitingDetail": "Redeven Cloud ist vorübergehend nicht verfügbar. Desktop verbindet sich erneut, sobald der Dienst erreichbar ist.",
     "restoringDetail": "Desktop stellt den Fernzugriff wieder her. Sie können auf diesem Gerät weiterarbeiten.",

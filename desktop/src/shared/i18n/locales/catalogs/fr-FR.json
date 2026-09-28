@@ -2979,6 +2979,12 @@
     "connectedBuild": "Moteur d’exécution connecté : {version} · {commit}"
   },
   "providerRecovery": {
+    "waitingShort": "En attente",
+    "restoreAction": "Rétablir",
+    "signInAction": "Se connecter",
+    "connectedDetail": "Cet environnement d’exécution est connecté à Redeven Cloud. L’accès à distance est disponible.",
+    "tlsError": "Certificat non approuvé",
+    "bindingChanged": "Association modifiée",
     "restore": "Rétablir la connexion à Redeven Cloud",
     "required": "Rétablissez la connexion enregistrée à Redeven Cloud. Le travail local reste disponible. Si les droits ont été révoqués ou si l’association a changé, vérifiez le compte et l’association avant de vous reconnecter.",
     "needsAuthorization": "Autorisation requise",
@@ -2994,7 +3000,6 @@
     "requested": "Connexion demandée pour {label}. L’état de Redeven Cloud sera mis à jour automatiquement.",
     "permissionRevoked": "Autorisation Cloud révoquée",
     "localAvailable": "Disponible sur cet appareil",
-    "runtimeStatus": "Environnement d’exécution : {label}",
     "waitingService": "En attente de Redeven Cloud",
     "waitingDetail": "Redeven Cloud est temporairement indisponible. Desktop se reconnectera lorsque le service sera accessible.",
     "restoringDetail": "Desktop rétablit l’accès à distance. Vous pouvez continuer à travailler sur cet appareil.",
