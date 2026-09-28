@@ -3,6 +3,7 @@ package hostapps
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,8 +48,12 @@ func (m *Manager) startDesktopApplication(ctx context.Context, owner string, app
 	if xpra.xpra != "" {
 		backends = append(backends, nativeapps.BackendCapability{ID: "xpra", Component: xpra.componentIdentity(), Protocols: []string{"x11"}})
 	}
+	profile, err := m.browserProfileDirectory(owner, app.ID)
+	if err != nil {
+		return nil, err
+	}
 	plan, err := nativeapps.PlanApplication(ctx, nativeapps.ApplicationPlanOptions{
-		Python: tools.python, Environment: tools.environment(environment), DesktopFile: resolved.DesktopFile, Backends: backends,
+		Python: tools.python, Environment: tools.environment(environment), DesktopFile: resolved.DesktopFile, Backends: backends, BrowserProfileDirectory: profile,
 	})
 	if err != nil {
 		return nil, err
@@ -190,4 +195,15 @@ func decodeDesktopReceipt(data []byte, record linuxApplicationRecord) (desktopLi
 		}
 	}
 	return result, nil
+}
+
+// Browser data survives viewer detach and application restarts. Only the released
+// planner decides whether this product-owned location applies to the launcher.
+func (m *Manager) browserProfileDirectory(owner, application string) (string, error) {
+	root, err := filepath.EvalSymlinks(m.state)
+	if err != nil {
+		return "", err
+	}
+	id := sha256.Sum256([]byte(owner + "\x00" + application))
+	return filepath.Join(root, "browser-profiles", fmt.Sprintf("%x", id)), nil
 }

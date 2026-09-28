@@ -80,8 +80,12 @@ it.each([320, 390, 1000].flatMap(width => ['light', 'dark'].map(scheme => ({widt
   expect(view.getComputedStyle(doc.querySelector('#fallback-icon')!).display).toBe('none');
   const identity = doc.querySelector('.app-identity')!.getBoundingClientRect();
   const title = doc.querySelector('h1')!.getBoundingClientRect();
-  expect(title.top - identity.bottom).toBeGreaterThanOrEqual(20);
-  for (const state of ['disconnected', 'waiting', 'captureUnavailable', 'permissionRequired', 'sessionUnavailable', 'sessionFailed']) {
+  expect(identity.width).toBe(44);
+  expect(title.top - identity.bottom).toBeGreaterThanOrEqual(18);
+  doc.body.dataset.state = 'waiting';
+  expect(view.getComputedStyle(doc.querySelector('.progress')!).display).not.toBe('none');
+  expect(doc.querySelector('.progress')!.getBoundingClientRect().height).toBe(3);
+  for (const state of ['disconnected', 'captureUnavailable', 'permissionRequired', 'sessionUnavailable', 'sessionFailed']) {
     doc.body.dataset.state = state;
     doc.querySelector('#connection')!.setAttribute('aria-busy', 'false');
     expect(view.getComputedStyle(doc.querySelector('.progress')!).display).toBe('none');

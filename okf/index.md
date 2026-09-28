@@ -35,6 +35,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Host application input](architecture/host-application-input.md) - Use client input methods across streamed applications, bind confirmed text to painted targets, and recover without replay.
 - [Host application pointer gestures](architecture/host-application-pointer.md) — Trace touch scrolling, clicks, drag and cancellation through the shared client owner.
 - [Host application display](architecture/host-application-display.md) - Stabilize SDK window layout, display density and cursor coordinates while preserving native window state.
+- [Native Linux picture streams](architecture/host-application-native-stream.md) - Negotiate image modes, compose bounded regions and retain legacy sessions without changing input authority.
 - [Host application viewer resources](architecture/host-application-viewer-resources.md) - Upgrade viewer snapshots independently of applications and enforce digest, owner and active-share cache boundaries.
 - [Host application viewer](architecture/host-application-viewer.md) - Interpret connection, waiting and terminal states without inferring application exit from transport loss.
 - [Host Application Platforms](architecture/host-application-platforms.md) - Prepare a headless host, diagnose missing capabilities, and distinguish Linux capability requirements from native macOS initialization.
@@ -46,6 +47,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [macOS application management and graceful quit](architecture/macos-application-management.md): Manage live host applications, distinguish quit from sharing, and reject stale process targets.
 - [Host Application Setup](operations/host-application-setup.md) - Prepare the combined backend and identify the optional administrator-managed Xpra path.
 - [Host Application Validation](operations/host-application-validation.md) - Qualify managed components, native client input and mobile pointer behavior.
+- [Host application picture performance](operations/host-application-performance.md) - Measure bandwidth, painted frames and input latency against reproducible native/browser workloads and explicit budgets.
 - [Host application input validation](operations/host-application-input-validation.md) - Verify actual toolkit text, click focus and old-session recovery while separating real IME acceptance.
 - [Linux desktop and package compatibility validation](operations/host-application-desktop-validation.md) - Assess released graphics/package evidence, product receipts and remaining desktop/device limits.
 - [Host application platform validation](operations/host-application-platform-validation.md) - Verify Linux userspace and native macOS evidence while retaining hardware, translation and policy limits.

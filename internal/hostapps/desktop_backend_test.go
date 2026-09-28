@@ -106,6 +106,7 @@ func TestDesktopReceiptRequiresExactHelperAndExplicitExit(t *testing.T) {
 	}{
 		{"slow startup", []map[string]any{{"state": "starting", "phase": "application"}}, false, "", ""},
 		{"waiting for first window", []map[string]any{{"state": "prepared", "phase": "sharing_ready"}}, true, "", ""},
+		{"no application window", []map[string]any{{"state": "failed", "phase": "application_start", "error_code": "APPLICATION_NO_WINDOW", "exit_code": 0}}, false, "no_window", ""},
 		{"launcher failure", []map[string]any{{"state": "failed", "phase": "application_start", "error_code": "APPLICATION_LAUNCHER_EXITED"}}, false, "launch_failed", ""},
 		{"launcher failure before cleanup exit", []map[string]any{{"state": "failed", "phase": "application_start", "error_code": "APPLICATION_LAUNCHER_EXITED", "exit_code": 46}, {"state": "exited", "phase": "cleanup"}}, false, "launch_failed", ""},
 		{"host services", []map[string]any{{"state": "failed", "phase": "host_services", "error_code": "APPLICATION_HOST_SERVICE_UNAVAILABLE"}}, false, "host_service_unavailable", ""},

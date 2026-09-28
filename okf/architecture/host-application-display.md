@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Host application display and window layout
 description: Keep Xpra layout, native window state, pixel density and cursor coordinates consistent across viewport and quality changes.
 tags: [applications, ui, desktop, display]
-timestamp: 2026-09-27T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 # Summary
 
@@ -19,12 +19,13 @@ explicitly restrict high resolution; no application is automatically restarted.
 ## Native Linux window families
 
 The published compositor owns Wayland/Xwayland surface geometry, native resize
-operations and window-family capture. A bounded PNG frame includes the current
+operations and window-family capture. Bounded image regions include the current
 application family and its popups. The canvas uses the actual frame dimensions
 for coordinate mapping and preserves aspect ratio. The selected surface and
 generation gate pointer/key delivery after paint. The shared released cursor
 normalizer retains shape/hotspot and bounds logical size to 24 CSS pixels.
-Unsupported macOS/Xpra picture controls are absent from this adapter.
+The [native stream contract](host-application-native-stream.md) owns picture modes,
+region composition, measured statistics and retained PNG-session compatibility.
 
 ## Xpra window geometry and closure
 
@@ -40,9 +41,8 @@ Xpra decorations, wallpaper, toolbar, and loading UI are hidden. Native viewer
 chrome owns primary-window movement and the authoritative maximize/minimize state.
 Application controls request that state through Xpra metadata; native state changes
 are reflected back to Xpra without confusing viewport filling with OS maximization.
-Native restore also clears the remote iconified state. Dialog controls remain local
-to their dialog. The application still owns
-its own client-side header and controls. Transient dialogs retain their stacking, close controls, and input behavior;
+Native restore clears iconification. Dialog controls remain local; the application
+owns its client-side header. Transient dialogs retain their stacking, close controls, and input behavior;
 dialogs negotiate bounded sizes while respecting native size constraints.
 Menus and popups keep their ordinary window geometry. No pixel
 stretching or cropping substitutes for application resize. Fixed-size or minimum-size
@@ -65,7 +65,7 @@ Xpra's confirmed destruction of its final application window uses the same
 terminal close policy above. The adapter does not infer closure from a missing
 paint, a close request or a transport failure.
 
-## Density and decoding
+## Xpra density and decoding
 
 Clarity first requests native display density through the published SDK. On a
 high-density viewer, applications render additional pixels with matching private
@@ -75,8 +75,7 @@ maximum display dimensions, and handles viewport and monitor changes. Redeven
 does not implement a second scaling path. Automatic, Smoother motion and Less data
 use logical density. Switching modes preserves the connection and application.
 Clarity retains adaptive encoding speed and quality 95; mode changes request a
-quality-100 refresh so a stationary view can recover exact pixels. Neither high
-quality encoding nor HTTPS alone can restore detail absent from the source raster.
+quality-100 refresh so a stationary view can recover exact pixels. Encoding quality and HTTPS cannot restore absent source detail.
 Extra pixels consume bandwidth and encoding time, so the picture panel explains
 that motion can slow. Application support for live DPI changes remains authoritative.
 
@@ -109,28 +108,13 @@ protocol, restarts a Runtime, or silently downgrades TLS.
 
 The [viewer resource contract](host-application-viewer-resources.md) owns current
 snapshots, cache authorization and independent viewer/backend upgrades. Viewer
-preparation failures permit retry. Unsupported input preserves pictures and local
-controls; only confirmed incompatible loaded modules show save/quit/reopen guidance.
+preparation failures permit retry. Unsupported input preserves viewing; confirmed incompatible modules require save/quit/reopen.
 
 ## Remote cursor geometry
 
-Published `floe-native-apps` prepares the only Linux cursor owner. Remote PNG
-shapes, alpha and complete bounds are retained; their longest edge is at most
-24 CSS pixels and smaller images are never enlarged. The hotspot uses the same
-scale, is rounded once and remains inside the image. Integral backing density
-declared through CSS `image-set()` affects resolution only. DPR and viewport
-changes render from the original decoded image, never from an already scaled copy.
-CSS cursors and the existing remote pointer use the same normalized result.
-
-One connection owns its current image and decode generation. A newer packet,
-reset or disconnect invalidates pending decodes; destroyed windows receive no
-late updates, and new windows inherit the current result. Transparent images
-remain invisible. Invalid metadata or failed decoding clears the old cursor and
-restores the system default without interrupting input. Redeven adds no cursor
-size setting, CSS override, mouse listener or second image-processing path.
-
-New sharing connections use current cursor resources while preserving application
-identity. macOS native applications retain the client's existing cursor.
+The [native stream contract](host-application-native-stream.md) owns the shared
+Linux cursor's complete bounds, hotspot, density and decode lifetime. Native and
+Xpra adapters use the released normalizer; macOS retains its local system cursor.
 
 # Evidence
 

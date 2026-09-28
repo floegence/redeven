@@ -3,7 +3,7 @@ type: Validation Guide
 title: Linux desktop and package compatibility validation
 description: Assess released native backend evidence separately from Redeven viewer, package, recovery and deployment acceptance.
 tags: [operations, host-applications, validation, linux, packages]
-timestamp: 2026-09-28T06:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 # Summary
 
@@ -19,19 +19,19 @@ applications, physical GPUs or every desktop version.
 
 ## Release identity and evidence layers
 
-Redeven consumes published `github.com/floegence/floe-native-apps` v0.20.0 at
-`742098d41f8d9ff57ec1178ba09dc5ffad511cf1`, with module checksum
-`h1:p9OBLYgxJ9n17+OS3RmUWhbUuYFr8F+BIIUZDGyTemc=`. Go proxy, checksum database
+Redeven consumes published `github.com/floegence/floe-native-apps` v0.21.0 at
+`a7f3b76a2a9dd64ba13b303c24d7bed645b33441`, with module checksum
+`h1:E1Wgl8aRB/h53ejCCDkUwlrj3uC2zx+SGcAODZZ5nWg=`. Go proxy, checksum database
 and release ZIP readback match. Formal tests set `GOWORK=off` and use that module.
 The upstream task branch/worktree is removed before product integration.
 
 | Architecture | Combined component digest |
 | --- | --- |
-| amd64 | `ee42fb12933a2ef4d1d1efbd1cddd9e5860817155726d041395fa726810a4023` |
-| arm64 | `9ec255e3234f2b587bbc4bf3eb9882791f3d847f8c0f1648080f6cfc52a256fb` |
+| amd64 | `f8f29cf383166c4e7c6728b6c1f696ab015391875dc2a370f283d4d4ca457a90` |
+| arm64 | `93a0210e630a54d176f9b8f6ff3fc21605a348d6f97c7c5c8127fa6cd7a484be` |
 
-The immutable tag Release gate and same-commit main qualification passed. They
-cover native installation, integrity, cancellation/recovery, source/race/vet,
+The immutable tag Release gate passed, alongside main source checks and security
+analysis. The tag qualification covers native installation, integrity, cancellation/recovery, source/race/vet,
 managed/system Xpra, toolkit ABI baselines and application input/save receipts.
 The retained upstream qualification archive records broader desktop/package
 experiments at their original source hashes; these are not relabelled as fresh
@@ -58,6 +58,16 @@ Test documents, profiles, displays and service endpoints are task-owned. Neither
 AppArmor/SELinux nor browser sandboxing is disabled.
 
 ## Product acceptance
+
+The v0.21.0 integration repeats production-viewer native input on Chromium,
+Firefox and WebKit and actual Chrome/Firefox stream acceptance on udesk26.
+The [performance guide](host-application-performance.md) owns picture modes,
+bandwidth, latency, bounded decode work and explicit claim limits. New browser
+launches use product-owned profiles while existing personal desktop browsers stay
+untouched. Fresh source tests cover launch diagnostics and retained legacy streams.
+The broader product/package receipts below are retained v0.20.0 integration
+evidence; the tag's upstream matrix supplies fresh native component qualification.
+
 
 Chromium, Firefox and WebKit run the production viewer and authenticated native
 transport against a real GTK application. The locked Electron 41.10.5 runtime
@@ -120,9 +130,9 @@ helper and readiness separately from upstream release evidence.
 
 # Evidence
 
-- [Upstream v0.20.0 release](https://github.com/floegence/floe-native-apps/releases/tag/v0.20.0): immutable module and component contract.
+- [Upstream v0.21.0 release](https://github.com/floegence/floe-native-apps/releases/tag/v0.21.0): immutable module and component contract.
 - [Exact-tag Release gate](https://github.com/floegence/floe-native-apps/actions/runs/36353860373) and [same-commit qualification](https://github.com/floegence/floe-native-apps/actions/runs/36352416815): native dual-architecture qualification.
-- [Published desktop qualification corpus](https://github.com/floegence/floe-native-apps/tree/v0.20.0/qualification/desktop_compatibility): pinned test definitions, prototype source identities and package/desktop limits.
+- [Published desktop qualification corpus](https://github.com/floegence/floe-native-apps/tree/v0.21.0/qualification/desktop_compatibility): pinned test definitions, prototype source identities and package/desktop limits.
 - `internal/hostapps/package_installed_test.go` and `desktop_installed_test.go`: actual package and native saved-byte receipts.
 - `internal/hostapps/component_update_test.go`, `linux_lifecycle_test.go` and `desktop_transport_linux_test.go`: retained instances, restart, takeover and request ownership.
 - `scripts/check_host_application_input.mjs`, `host_application_native_acceptance.mjs` and `host_application_pointer_acceptance.mjs`: production browser/desktop rendering and application assertions.

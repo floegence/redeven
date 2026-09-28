@@ -3,6 +3,7 @@ import type { I18nHelpers } from '../i18n/createI18n';
 import type { HostApplicationPresentation } from './hostApplicationsApi';
 
 export const hostApplicationLaunchFailures: Record<string, keyof typeof hostApplicationCopyKeys> = {
+  no_window: 'noWindow', browser_profile_unavailable: 'browserProfileUnavailable',
   package_unavailable: 'packageUnavailable', host_service_unavailable: 'hostServiceUnavailable',
   graphics_unavailable: 'graphicsUnavailable', plan_stale: 'planStale', package_unsupported: 'packageUnsupported',
 };
@@ -14,6 +15,10 @@ export function hostApplicationLaunchFailureCopy(code: string): EnvAppTranslatio
 
 // One mapping owns launch copy and the generated standalone locale catalogs.
 export const hostApplicationCopyKeys = {
+  noWindow: 'hostApplications.errors.noWindow',
+  browserProfileUnavailable: 'hostApplications.errors.browserProfileUnavailable',
+  nativePictureHint: 'hostApplications.macPictureHint',
+  pictureUpgradeHint: 'hostApplications.pictureUpgradeHint',
   packageUnavailable: 'hostApplications.errors.packageUnavailable',
   hostServiceUnavailable: 'hostApplications.errors.hostServiceUnavailable',
   graphicsUnavailable: 'hostApplications.errors.graphicsUnavailable',

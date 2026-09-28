@@ -24,7 +24,7 @@ const hostApplicationConnection = (() => {
     return {...data, state:state(data)};
   }
   function present(state) {
-    const busy = ['starting', 'connecting', 'reconnecting', 'checking'].includes(state);
+    const busy = ['starting', 'connecting', 'reconnecting', 'checking', 'waiting'].includes(state);
     document.body.dataset.state = state;
     document.getElementById('connection').setAttribute('aria-busy', String(busy));
     document.getElementById('status').textContent = config.copy[state] || config.copy.failed;

@@ -53,6 +53,10 @@ export type HostApplicationCatalog = Readonly<{
 }>;
 
 export type HostApplicationPresentation = Readonly<{
+  noWindow?: string;
+  browserProfileUnavailable?: string;
+  nativePictureHint?: string;
+  pictureUpgradeHint?: string;
   packageUnavailable?: string;
   hostServiceUnavailable?: string;
   graphicsUnavailable?: string;

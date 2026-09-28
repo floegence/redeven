@@ -8,11 +8,11 @@
   const identity = document.createElement('div');
   identity.className = 'host-app-identity'; identity.append(...menu.childNodes);
   identity.querySelector('.mac-app-dropdown-chevron').remove(); menu.replaceWith(identity);
-  chrome.controlsButton.remove(); chrome.menuPanel.remove();
+  chrome.menuPanel.remove();
   popover.append(windowPanel, helpPanel, quitPanel);
   const icon = document.getElementById('icon');
   if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(config.icon)) {
-    icon.src = config.icon; icon.hidden = false; document.getElementById('fallback-icon').hidden = true;
+    icon.src = config.icon; icon.hidden = false; document.getElementById('fallback-icon').setAttribute('hidden', '');
     const image = document.createElement('img'); image.src = config.icon; image.alt = ''; image.className = 'mac-app-toolbar-icon';
     identity.querySelector('svg').replaceWith(image);
   }
@@ -39,8 +39,43 @@
       if(valid(target))notify('clipboardUnavailable');
     });
   }
-  const toggles = {windows:windowToggle, help, quit};
-  const panels = {windows:windowPanel, help:helpPanel, quit:quitPanel};
+  let streamVersion = 0, receivedBytes = 0, paintedFrames = 0, measuredAt = performance.now(), paintTick;
+  const picture = {mode:'auto'}, preferenceKey = 'redeven.native-app.picture.v1';
+  try {
+    const saved = localStorage.getItem(preferenceKey);
+    if (['auto','clarity','smooth','data'].includes(saved)) picture.mode = saved;
+  } catch { /* Picture preferences are optional in private browsing. */ }
+  const picturePanel = document.createElement('section');
+  picturePanel.tabIndex=-1; picturePanel.id = 'picture-settings'; picturePanel.className = 'mac-app-picture';
+  hostApplicationAppearance.copy(picturePanel, 'picture', 'aria-label');
+  const pictureTitle = document.createElement('strong');
+  hostApplicationAppearance.copy(pictureTitle, 'picture'); picturePanel.append(pictureTitle);
+  const {modes, modeButtons} = createHostApplicationPictureModes(picture, () => {
+    try {localStorage.setItem(preferenceKey,picture.mode);} catch { /* Preferences are optional. */ }
+    configurePicture();
+  });
+  picturePanel.append(modes);
+  const pictureHint = document.createElement('p'); picturePanel.append(pictureHint);
+  const statistics = document.createElement('div'); statistics.className = 'mac-app-picture-statistics';
+  const statisticValues = {};
+  for (const [key,title] of [['resolution','picturePixels'],['rate','pictureActualRate'],['bandwidth','pictureBandwidth'],['transport','pictureTransport']]) {
+    const row = document.createElement('div'), label = document.createElement('span'), value = document.createElement('output');
+    hostApplicationAppearance.copy(label,title); hostApplicationAppearance.copy(value,title,'aria-label'); value.textContent='—';
+    statisticValues[key]=value; row.append(label,value); statistics.append(row);
+  }
+  hostApplicationAppearance.copy(statisticValues.transport,'pictureImages');
+  picturePanel.append(statistics); popover.append(picturePanel);
+  const statisticsTimer = setInterval(() => {
+    const now=performance.now(), elapsed=(now-measuredAt)/1000;
+    statisticValues.rate.textContent=`${hostApplicationAppearance.number(paintedFrames/elapsed,1)} FPS`;
+    statisticValues.bandwidth.textContent=`${hostApplicationAppearance.number(receivedBytes*8/elapsed/1e6,2)} Mb/s`;
+    paintedFrames=receivedBytes=0; measuredAt=now;
+  },1000);
+  function configurePicture() {
+    if(streamVersion===2)request({method:'configure_stream',mode:picture.mode},reply=>{if(reply.error)notify('operationFailed');});
+  }
+  const toggles = {windows:windowToggle, picture:chrome.controlsButton, help, quit};
+  const panels = {windows:windowPanel, picture:picturePanel, help:helpPanel, quit:quitPanel};
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform) || navigator.platform === 'MacIntel';
   const cursor = new FloeRemoteCursor(result => {canvas.style.cursor = result?.css || 'default';});
   const valid = target => target && target === current && target === painted && socket?.readyState === WebSocket.OPEN && document.body.dataset.state === 'active';
@@ -153,11 +188,12 @@
     input({kind:'clipboard',text:event.clipboardData.getData('text/plain')},target);
     shortcut(47,target);
   });
-  const player = createHostApplicationFramePlayer({canvas,
-    decode:packet=>createImageBitmap(new Blob([packet.bytes],{type:'image/png'})),
+  const player = new FloeDesktopFrames({canvas,
     isValid:packet=>packet?.target===current && packet.attempt===attempt && socket?.readyState===WebSocket.OPEN,
     onResize:()=>binding.pointer.reset(),
     onPaint(packet) {
+      statisticValues.resolution.textContent=`${packet.meta.width} × ${packet.meta.height}`;
+      if(!paintTick)paintTick=requestAnimationFrame(()=>{paintTick=null;paintedFrames++;});
       painted=current; binding.input.bindTarget(current); canvas.setAttribute('aria-busy','false');
       request({method:'frame_ack',frame:packet.meta.sequence});
       established=attachmentEstablished=true; clearTimeout(deadline); present('active');
@@ -179,6 +215,9 @@
   }
   function syncChrome() {
     const available=['active','waiting','captureUnavailable'].includes(document.body.dataset.state);
+    chrome.controlsButton.disabled=!available;
+    for(const button of modeButtons.values())button.disabled=streamVersion!==2;
+    hostApplicationAppearance.copy(pictureHint,streamVersion===2?'nativePictureHint':'pictureUpgradeHint');
     keyboard.disabled=!valid(current); help.disabled=!available; close.disabled=!valid(current);
     windowToggle.disabled=!available||!windows.length; quit.disabled=!available||!windows.length;
     windowCount.textContent=hostApplicationAppearance.number(windows.length); windowCount.hidden=windows.length<2;
@@ -237,7 +276,7 @@
       const opening=panel!==name; binding.pointer.reset(); binding.input.reset(); collapse();
       if(!opening)return;
       panel=name; popover.dataset.section=name; popover.hidden=false; panels[name].hidden=false; toggle.setAttribute('aria-expanded','true'); positionPanel();
-      (name==='windows'?windowList.querySelector('[aria-pressed="true"]')||windowList.querySelector('button'):name==='quit'?cancelQuit:helpPanel)?.focus();
+      (name==='windows'?windowList.querySelector('[aria-pressed="true"]')||windowList.querySelector('button'):name==='quit'?cancelQuit:name==='picture'?(streamVersion===2?modeButtons.get(picture.mode):picturePanel):helpPanel)?.focus();
     };
   }
   keyboard.onclick=()=>{const visible=!binding.keyboardVisible;collapse();binding.pointer.reset();binding.input.reset();binding.input.setKeyboardVisible(visible);};
@@ -261,7 +300,8 @@
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&panel){event.preventDefault();event.stopImmediatePropagation();collapse(true);}},true);
   function disconnect(state) {
     clearTimeout(deadline); abort?.abort(); invalidate(); socket?.close(); socket=null; current=null;
-    pending.clear(); connection=0; windows=[]; attachmentEstablished=false; feedback.hidden=true; present(state);
+    pending.clear(); connection=0; streamVersion=0; windows=[]; receivedBytes=paintedFrames=0; measuredAt=performance.now();
+    cancelAnimationFrame(paintTick);paintTick=null;statisticValues.resolution.textContent='—'; attachmentEstablished=false; feedback.hidden=true; present(state);
     hostApplicationConnection.dismissEnded(state,established,quitRequested);
   }
   async function connect() {
@@ -278,6 +318,7 @@
       ws.onmessage=event=>{
         if(mine!==attempt||socket!==ws)return;
         try {
+          receivedBytes+=typeof event.data==='string'?new TextEncoder().encode(event.data).byteLength:event.data.byteLength;
           if(event.data instanceof ArrayBuffer){
             const meta=binary; binary=null;
             if(!meta||event.data.byteLength!==meta.bytes)throw Error('Invalid native payload');
@@ -299,7 +340,8 @@
               }
             }
           }else if(value.event==='attached'){
-            if(value.version!==1||connection)throw Error('Unsupported native attachment');connection=value.connection;updateState(value.state);
+            if(value.version!==1||connection||![0,2].includes(value.stream_version||0))throw Error('Unsupported native attachment');
+            connection=value.connection;streamVersion=value.stream_version||0;updateState(value.state);configurePicture();
           }else if(value.event==='state'){
             if(value.connection!==connection)throw Error('Stale native state');updateState(value.state,true);
           }else if(value.event==='frame'||value.event==='cursor'){
@@ -337,7 +379,7 @@
     for(const axis of ['left','top','width','height'])document.body.style.setProperty(`--mac-viewport-${axis}`,document.body.style[axis]);positionPanel();
   });
   hostApplicationAppearance.subscribe(()=>{syncChrome();positionPanel();});
-  window.addEventListener('beforeunload',()=>{attempt++;stopViewport();binding.dispose();player.invalidate();cursor.dispose();socket?.close();abort?.abort();clearTimeout(deadline);});
+  window.addEventListener('beforeunload',()=>{attempt++;clearInterval(statisticsTimer);cancelAnimationFrame(paintTick);stopViewport();binding.dispose();player.invalidate();cursor.dispose();socket?.close();abort?.abort();clearTimeout(deadline);});
   document.getElementById('retry').onclick=()=>void connect();
   if(hostApplicationConnection.initial)present(hostApplicationConnection.initial);else void connect();
 })();

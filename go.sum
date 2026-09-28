@@ -59,8 +59,8 @@ github.com/ebitengine/purego v0.9.1 h1:a/k2f2HQU3Pi399RPW1MOaZyhKJL9w/xFpKAg4q1s
 github.com/ebitengine/purego v0.9.1/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
-github.com/floegence/floe-native-apps v0.20.0 h1:p9OBLYgxJ9n17+OS3RmUWhbUuYFr8F+BIIUZDGyTemc=
-github.com/floegence/floe-native-apps v0.20.0/go.mod h1:1TTeJvDmpWpJB6ROHBnfvUON68vmKatPV3ck+vHsNXI=
+github.com/floegence/floe-native-apps v0.21.0 h1:E1Wgl8aRB/h53ejCCDkUwlrj3uC2zx+SGcAODZZ5nWg=
+github.com/floegence/floe-native-apps v0.21.0/go.mod h1:YRiG2zL1J9ZRI3n8GLBcS4ndGeCeUZbBfmQZ27m2WBU=
 github.com/floegence/floeterm/terminal-go v0.19.2 h1:BCqhXYaxEMcjpXl4jNY6aldyqj0DHqqUtwS9X6KaJkI=
 github.com/floegence/floeterm/terminal-go v0.19.2/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=
 github.com/floegence/floret/v7 v7.18.3 h1:YVl30al8czCmB8JCllJa5udvB4YdBFeAu4HGYPbpZhM=

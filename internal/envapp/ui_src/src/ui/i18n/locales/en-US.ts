@@ -113,6 +113,8 @@ export const enUS = defineDictionary({
     "emptyTitle": "No graphical applications found",
     "ended": "This application session has ended.",
     "errors": {
+      "noWindow": "The application exited without opening a window. Check its launch command and try again.",
+      "browserProfileUnavailable": "The private browser profile is unavailable. Check the host’s storage permissions and try again.",
       "packageUnavailable": "The application’s package runtime is unavailable. Check its installation on this host, then refresh.",
       "hostServiceUnavailable": "A host service required by this application is unavailable. Check the host’s user session and package services, then try again.",
       "graphicsUnavailable": "The graphical components required by this application are unavailable. Prepare or update host application components, then try again.",
@@ -193,6 +195,7 @@ export const enUS = defineDictionary({
     "videoAvailable": "Available",
     "videoUnavailable": "Unavailable",
     "httpsPerformanceHint": "For smoother motion over your local network, enable HTTPS in the environment’s access settings in Redeven Desktop, trust its certificate on this device, then reopen the application.",
+    "pictureUpgradeHint": "To change picture quality, update the host application component, save your work, quit this application, then open it again.",
     "sessionPictureHint": "Clarity first sharpens text on high-density displays. It uses more bandwidth and may slow motion. Changes apply without reconnecting.",
     "inputUnsupported": "Application input is not supported",
     "inputUnsupportedHint": "This application's input protocol is not supported. Viewing and local controls remain available.",
