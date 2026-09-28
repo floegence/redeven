@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/runtimemanagement"
-	"golang.org/x/net/http2"
 )
 
 type SurfaceDialer func(context.Context, StreamSurface) (net.Conn, error)
@@ -49,28 +48,33 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		case <-stopWatch:
 		}
 	}()
-	server := &http2.Server{
-		MaxConcurrentStreams:         MaxConcurrentStreams,
-		MaxDecoderHeaderTableSize:    4 << 10,
-		MaxEncoderHeaderTableSize:    4 << 10,
-		MaxReadFrameSize:             16 << 10,
-		ReadIdleTimeout:              15 * time.Second,
-		PingTimeout:                  10 * time.Second,
-		WriteByteTimeout:             30 * time.Second,
-		MaxUploadBufferPerStream:     StreamReceiveWindowBytes,
-		MaxUploadBufferPerConnection: SessionReceiveWindowBytes,
-	}
-	server.ServeConn(conn, &http2.ServeConnOpts{
-		Context: ctx,
-		BaseConfig: &http.Server{
-			MaxHeaderBytes: MaxHeaderListBytes,
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	server := &http.Server{
+		Protocols:      protocols,
+		MaxHeaderBytes: MaxHeaderListBytes,
+		BaseContext:    func(net.Listener) context.Context { return ctx },
+		Handler:        http.HandlerFunc(s.serveHTTP),
+		HTTP2: &http.HTTP2Config{
+			MaxConcurrentStreams:          MaxConcurrentStreams,
+			MaxDecoderHeaderTableSize:     4 << 10,
+			MaxEncoderHeaderTableSize:     4 << 10,
+			MaxReadFrameSize:              16 << 10,
+			SendPingTimeout:               15 * time.Second,
+			PingTimeout:                   10 * time.Second,
+			WriteByteTimeout:              30 * time.Second,
+			MaxReceiveBufferPerStream:     StreamReceiveWindowBytes,
+			MaxReceiveBufferPerConnection: SessionReceiveWindowBytes,
 		},
-		Handler: http.HandlerFunc(s.serveHTTP),
-	})
+	}
+	err := server.Serve(&stdioListener{conn: conn})
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	return nil
+	if errors.Is(err, net.ErrClosed) || errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }
 
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -164,10 +168,11 @@ type stdioConn struct {
 	reader io.Reader
 	writer io.Writer
 	once   sync.Once
+	closed chan struct{}
 }
 
 func newStdioConn(reader io.Reader, writer io.Writer) *stdioConn {
-	return &stdioConn{reader: reader, writer: writer}
+	return &stdioConn{reader: reader, writer: writer, closed: make(chan struct{})}
 }
 
 func (c *stdioConn) Read(p []byte) (int, error)       { return c.reader.Read(p) }
@@ -179,6 +184,7 @@ func (c *stdioConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *stdioConn) SetWriteDeadline(time.Time) error { return nil }
 func (c *stdioConn) Close() error {
 	c.once.Do(func() {
+		defer close(c.closed)
 		if closer, ok := c.reader.(io.Closer); ok {
 			_ = closer.Close()
 		}
@@ -188,6 +194,26 @@ func (c *stdioConn) Close() error {
 	})
 	return nil
 }
+
+// stdioListener hands the existing connection to net/http exactly once. It binds
+// no socket and stops accepting only after that connection has closed.
+type stdioListener struct {
+	conn *stdioConn
+	once sync.Once
+}
+
+func (l *stdioListener) Accept() (net.Conn, error) {
+	var conn net.Conn
+	l.once.Do(func() { conn = l.conn })
+	if conn != nil {
+		return conn, nil
+	}
+	<-l.conn.closed
+	return nil, net.ErrClosed
+}
+
+func (l *stdioListener) Close() error   { return l.conn.Close() }
+func (l *stdioListener) Addr() net.Addr { return l.conn.LocalAddr() }
 
 type stdioAddr string
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -13,13 +14,11 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/net/http2"
 )
 
 type bridgeHTTP2Client struct {
 	conn   net.Conn
-	client *http2.ClientConn
+	client *http.ClientConn
 	cancel context.CancelFunc
 	done   chan error
 }
@@ -32,8 +31,15 @@ func newBridgeHTTP2Client(t *testing.T, server Server) *bridgeHTTP2Client {
 	go func() {
 		done <- server.Serve(ctx, serverConn, serverConn)
 	}()
-	transport := &http2.Transport{}
-	client, err := transport.NewClientConn(clientConn)
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	transport := &http.Transport{
+		Protocols: protocols,
+		DialContext: func(context.Context, string, string) (net.Conn, error) {
+			return clientConn, nil
+		},
+	}
+	client, err := transport.NewClientConn(context.Background(), "http", "redeven-placement:80")
 	if err != nil {
 		cancel()
 		_ = clientConn.Close()
@@ -41,7 +47,7 @@ func newBridgeHTTP2Client(t *testing.T, server Server) *bridgeHTTP2Client {
 	}
 	harness := &bridgeHTTP2Client{conn: clientConn, client: client, cancel: cancel, done: done}
 	t.Cleanup(func() {
-		client.Close()
+		_ = client.Close()
 		cancel()
 		_ = clientConn.Close()
 		select {
@@ -70,7 +76,7 @@ func bridgeRequest(method, authority, path string, body io.ReadCloser) *http.Req
 	}
 }
 
-func openSurface(t *testing.T, client *http2.ClientConn, surface StreamSurface) (*io.PipeWriter, *http.Response) {
+func openSurface(t *testing.T, client *http.ClientConn, surface StreamSurface) (*io.PipeWriter, *http.Response) {
 	t.Helper()
 	reader, writer := io.Pipe()
 	response, err := client.RoundTrip(bridgeRequest(http.MethodConnect, surface.Authority(), "", reader))
@@ -84,6 +90,114 @@ func openSurface(t *testing.T, client *http2.ClientConn, surface StreamSurface) 
 		t.Fatalf("CONNECT %s status = %d, want 200", surface, response.StatusCode)
 	}
 	return writer, response
+}
+
+func TestServerStopsBeforeHTTP2Preface(t *testing.T) {
+	for _, cancelContext := range []bool{false, true} {
+		name := "peer disconnect"
+		if cancelContext {
+			name = "context cancellation"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			peer, connection := net.Pipe()
+			defer peer.Close()
+			defer connection.Close()
+			done := make(chan error, 1)
+			go func() { done <- (&Server{}).Serve(ctx, connection, connection) }()
+			if cancelContext {
+				cancel()
+			} else {
+				_ = peer.Close()
+			}
+			select {
+			case err := <-done:
+				if cancelContext && !errors.Is(err, context.Canceled) {
+					t.Fatalf("Serve() error = %v, want context cancellation", err)
+				}
+				if !cancelContext && err != nil {
+					t.Fatalf("Serve() error = %v, want clean disconnect", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("server retained its single connection before the HTTP/2 preface")
+			}
+		})
+	}
+}
+
+func TestServerRejectsHTTP1WithoutDispatchingControl(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	peer, connection := net.Pipe()
+	defer peer.Close()
+	defer connection.Close()
+	var shutdownCalled atomic.Bool
+	done := make(chan error, 1)
+	go func() {
+		done <- (&Server{OnShutdown: func() { shutdownCalled.Store(true) }}).Serve(ctx, connection, connection)
+	}()
+	_, _ = io.WriteString(peer, "POST "+ShutdownRuntimePath+" HTTP/1.1\r\nHost: "+BridgeAuthority+"\r\nContent-Length: 0\r\n\r\n")
+	buffer := make([]byte, 1)
+	if n, err := peer.Read(buffer); n != 0 || !errors.Is(err, io.EOF) {
+		t.Fatalf("HTTP/1 response = %q, %v; want connection closure", buffer[:n], err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Serve() error = %v, want clean HTTP/1 rejection", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("HTTP/1 connection did not terminate")
+	}
+	if shutdownCalled.Load() {
+		t.Fatal("HTTP/1 request dispatched a bridge control action")
+	}
+}
+
+func TestServerTerminationCancelsConnectedSurface(t *testing.T) {
+	for _, cancelContext := range []bool{false, true} {
+		name := "peer disconnect"
+		if cancelContext {
+			name = "context cancellation"
+		}
+		t.Run(name, func(t *testing.T) {
+			surfaceContexts := make(chan context.Context, 1)
+			closed := make(chan error, 1)
+			bridge := newBridgeHTTP2Client(t, Server{DialSurface: func(ctx context.Context, _ StreamSurface) (net.Conn, error) {
+				surfaceContexts <- ctx
+				connection, peer := net.Pipe()
+				go func() {
+					defer peer.Close()
+					_, err := peer.Read(make([]byte, 1))
+					closed <- err
+				}()
+				return connection, nil
+			}})
+			writer, response := openSurface(t, bridge.client, StreamSurfaceLocalUI)
+			surfaceContext := <-surfaceContexts
+			defer writer.Close()
+			defer response.Body.Close()
+			if cancelContext {
+				bridge.cancel()
+			} else {
+				_ = bridge.client.Close()
+			}
+			select {
+			case <-surfaceContext.Done():
+			case <-time.After(time.Second):
+				t.Fatal("bridge termination did not cancel the active surface context")
+			}
+			select {
+			case err := <-closed:
+				if !errors.Is(err, io.EOF) {
+					t.Fatalf("surface Read() error = %v, want EOF", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("bridge termination retained the active surface connection")
+			}
+		})
+	}
 }
 
 func TestServerServesHelloOverHTTP2(t *testing.T) {
@@ -130,6 +244,12 @@ hello.once('error', fail);
 hello.once('end', () => {
   const payload = JSON.parse(Buffer.concat(helloChunks));
   if (payload.protocol_version !== 'redeven-desktop-placement-h2/1') return fail(new Error('bad hello'));
+  const limits = session.remoteSettings;
+  if (limits.maxConcurrentStreams !== 64 || limits.initialWindowSize !== 256 * 1024 ||
+      limits.headerTableSize !== 4096 || limits.maxFrameSize !== 16384 ||
+      limits.maxHeaderListSize !== 8192 + 320 || session.state.remoteWindowSize !== 16 * 1024 * 1024) {
+    return fail(new Error('bridge HTTP/2 limits changed: ' + JSON.stringify({ limits, state: session.state })));
+  }
   const stream = session.request({ ':method': 'CONNECT', ':authority': 'local-ui' }, { endStream: false });
   const chunks = [];
   stream.once('response', headers => {
