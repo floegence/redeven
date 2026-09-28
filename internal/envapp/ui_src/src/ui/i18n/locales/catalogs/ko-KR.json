@@ -7312,6 +7312,9 @@
     }
   },
   "browserProduct": {
+    "welcomeTitle": "작업 공간에서 웹 탐색",
+    "welcomeDescription": "개인 브라우저를 연결하거나 내장 브라우저를 사용해 여기에서 웹사이트를 여세요.",
+    "chooseSource": "브라우저 선택",
     "profile": "브라우저 프로필",
     "defaultProfile": "기본 프로필",
     "openWindow": "새 창에서 열기",

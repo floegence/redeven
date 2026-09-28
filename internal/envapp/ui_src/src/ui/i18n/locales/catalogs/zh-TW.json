@@ -7312,6 +7312,9 @@
     }
   },
   "browserProduct": {
+    "welcomeTitle": "在工作區中瀏覽網頁",
+    "welcomeDescription": "連接個人瀏覽器，或使用內建瀏覽器，在這裡開啟網站。",
+    "chooseSource": "選擇瀏覽器",
     "profile": "瀏覽器設定檔",
     "defaultProfile": "預設設定檔",
     "openWindow": "在新視窗中開啟",

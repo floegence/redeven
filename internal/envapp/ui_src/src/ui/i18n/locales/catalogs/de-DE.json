@@ -7316,6 +7316,9 @@
     }
   },
   "browserProduct": {
+    "welcomeTitle": "Im Arbeitsbereich surfen",
+    "welcomeDescription": "Verbinden Sie Ihren persönlichen Browser oder nutzen Sie den integrierten Browser, um hier Websites zu öffnen.",
+    "chooseSource": "Browser auswählen",
     "profile": "Browserprofil",
     "defaultProfile": "Standardprofil",
     "openWindow": "In neuem Fenster öffnen",

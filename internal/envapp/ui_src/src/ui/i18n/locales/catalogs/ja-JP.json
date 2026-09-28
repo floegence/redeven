@@ -7312,6 +7312,9 @@
     }
   },
   "browserProduct": {
+    "welcomeTitle": "ワークスペースでウェブを閲覧",
+    "welcomeDescription": "個人用ブラウザーに接続するか、内蔵ブラウザーを使って、ここでウェブサイトを開けます。",
+    "chooseSource": "ブラウザーを選択",
     "profile": "ブラウザープロファイル",
     "defaultProfile": "既定のプロファイル",
     "openWindow": "新しいウィンドウで開く",

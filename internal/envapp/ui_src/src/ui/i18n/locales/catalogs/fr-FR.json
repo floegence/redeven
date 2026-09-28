@@ -7316,6 +7316,9 @@
     }
   },
   "browserProduct": {
+    "welcomeTitle": "Naviguez dans votre espace de travail",
+    "welcomeDescription": "Connectez votre navigateur personnel ou utilisez le navigateur intégré pour ouvrir des sites ici.",
+    "chooseSource": "Choisir un navigateur",
     "profile": "Profil du navigateur",
     "defaultProfile": "Profil par défaut",
     "openWindow": "Ouvrir dans une nouvelle fenêtre",
