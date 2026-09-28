@@ -2554,6 +2554,11 @@ describe('DesktopWelcomeShell', () => {
     );
     const semanticPanelRule = cssRuleBlock(styles, '.redeven-welcome-dialog-panel');
     const dialogBodyRule = cssRuleBlock(styles, '.redeven-welcome-dialog-panel > div:nth-child(2)');
+    const environmentSettingsRule = cssRuleBlock(
+      fs.readFileSync(path.join(__dirname, 'EnvironmentSettingsDialog.css'), 'utf8'),
+      '[data-floe-dialog-panel].redeven-environment-settings-dialog',
+    );
+    const cloudConnectionPanelRule = cssRuleBlock(styles, '.redeven-cloud-connection-panel');
 
     expect(dialogSrc).toContain('data-floe-dialog-overlay-root');
     expect(dialogSrc).toContain('data-floe-dialog-mode');
@@ -2598,8 +2603,9 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogBodyRule).toContain('min-height: 0;');
     expect(dialogBodyRule).toContain('flex: 1 1 auto;');
     expect(dialogBodyRule).toContain('overflow: auto;');
-    expect(styles).toContain('.redeven-environment-settings-dialog');
-    expect(styles).toContain('width: min(48rem, calc(100vw - 2rem));');
+    expect(styles).toContain("@import './EnvironmentSettingsDialog.css';");
+    expect(environmentSettingsRule).toContain('width: min(50rem, calc(100vw - 2rem));');
+    expect(environmentSettingsRule).toContain('max-height: var(--redeven-welcome-dialog-panel-max-height);');
     expect(styles).toContain('.redeven-welcome-dialog-panel--connection');
     expect(styles).toContain('width: min(58rem, 96vw);');
 
@@ -2612,7 +2618,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('max-h-[calc(100dvh-1rem)]');
     expect(appSrc).not.toContain('max-h-[calc(100dvh-3rem)]');
     expect(appSrc).not.toContain('100dvh');
-    expect((styles.match(/100dvh/g) ?? []).length).toBe(3);
+    expect(cloudConnectionPanelRule).toContain(
+      'max-height: calc(var(--redeven-anchored-overlay-max-height, 100dvh - 1rem) - 2px);',
+    );
+    expect((styles.match(/100dvh/g) ?? []).length).toBe(4);
 
     expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
     expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);
