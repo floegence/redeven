@@ -22,6 +22,7 @@ import {
   liveBootstrap,
   readStatus,
   renderSurfaceWithAdapter,
+  renderSurfaceWithAdapterProps,
   runtimeCurrentView,
   settingsSnapshot,
   subagentDetail,
@@ -680,17 +681,15 @@ describe('Flower final thread cache and workspace transport', () => {
       kind: 'ready',
       summaries: [runningThread],
     }]);
-    const runtime = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapterProps({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
       loadThread: vi.fn(async () => liveBootstrap(runningThread, 1)),
       connectLiveStream: stream.connect,
-    });
+    }, { focusThreadRequest: { request_id: 'thinking-wrap', thread_id: threadID } });
     runtime.style.width = '640px';
     runtime.style.height = '720px';
 
-    await waitFor(() => runtime.querySelector(`[data-thread-id="${threadID}"] button`) !== null);
-    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('[data-flower-message-id="user:thinking-wrap"]') !== null);
     stream.push({
       schema_version: 1,
