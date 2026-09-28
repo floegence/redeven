@@ -44,9 +44,10 @@ it.each([900, 390])('keeps preparation actions and following applications still 
   await page.viewport(width, 900);
   const host = document.createElement('div'); document.body.append(host);
   type Props = ComponentProps<typeof HostApplicationSetupPanel>;
+  const [setup, setSetup] = createSignal<Props['setup']>(null);
   const [progress, setProgress] = createSignal<Props['desktopProgress']>();
   const [disconnected, setDisconnected] = createSignal(false);
-  dispose = render(() => <><HostApplicationSetupPanel setup={null} desktopProgress={progress()} allowed submitting={false} canRelay
+  dispose = render(() => <><HostApplicationSetupPanel setup={setup()} desktopProgress={progress()} allowed submitting={false} canRelay
     disconnected={disconnected()} downloadMethod="desktop" onDownloadMethodChange={() => {}} onStart={() => {}} onCancel={() => {}}
     onReconnect={() => {}} onUpload={() => {}} /><p data-neighbor>Applications</p></>, host);
   await settle(); const geometry = () => [...host.querySelectorAll('.host-apps-preparation, .host-apps-preparation-footer, [data-neighbor]')].map(rect);
@@ -54,7 +55,13 @@ it.each([900, 390])('keeps preparation actions and following applications still 
   for (const phase of ['checking', 'downloading', 'packing'] as const) {
     setProgress({ phase, component_bytes: 100, downloaded_bytes: 50, download_bytes: 100, cached_bytes: 25 }); await settle(); expect(geometry()).toEqual(initial);
   }
-  setProgress(undefined); setDisconnected(true); await settle(); expect(geometry()).toEqual(initial);
+  setProgress(undefined);
+  setSetup({ state: 'validating', received_bytes: 100, expected_bytes: 100, can_cancel: false });
+  await settle(); expect(geometry()).toEqual(initial);
+  expect(host.querySelector('.host-apps-preparation-actions')?.childElementCount).toBe(0);
+  setSetup({ state: 'failed', received_bytes: 100, expected_bytes: 100, can_cancel: false, error_code: 'download_failed' });
+  await settle(); expect(geometry()).toEqual(initial);
+  setDisconnected(true); await settle(); expect(geometry()).toEqual(initial);
 });
 
 it.each([900, 390])('keeps release rows still through verification and unavailable feedback at %ipx', async width => {

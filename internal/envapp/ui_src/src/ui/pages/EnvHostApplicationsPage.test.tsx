@@ -137,6 +137,20 @@ describe('independent component updates', () => {
     expect(state.setupPlan).not.toHaveBeenCalled();
     expect(state.components).not.toHaveBeenCalled();
   });
+  it('rejects a late offline file selection after preparation becomes busy', async () => {
+    await inspectUpdate();
+    const input = document.querySelector<HTMLInputElement>('[role=dialog] input[type=file]')!;
+    const file = new File([new Uint8Array(100)], 'components.zip');
+    state.setupObserve.mock.calls[0][0]({ ...installedSetup, state: 'downloading', operation_id: 'active', can_cancel: true });
+    await settle();
+    expect(input.isConnected).toBe(true);
+    expect(input.disabled).toBe(true);
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    expect(state.setupStart).not.toHaveBeenCalled();
+    expect(state.setupUpload).not.toHaveBeenCalled();
+  });
   it('does not enter Linux setup on macOS', async () => {
     state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [] });
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
