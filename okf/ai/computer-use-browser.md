@@ -25,6 +25,9 @@ native connection, walks through installation and confirmation, and observes the
 real handshake before resuming the original Floret interaction. It never binds
 a tab or creates a second conversation lifecycle. Native opening commands use
 fixed destinations; managed Chromium launches with its sandbox enabled.
+The shared browser-client boundary validates each target identity before cache
+lookup, admission or profile creation. Readiness probes and tool execution both
+reject path separators, dot segments and empty identities before starting helpers.
 
 **View in browser** is an authenticated user action on the current connected target.
 Runtime verifies thread ownership, selection, policy and occupancy under the target
