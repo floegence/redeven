@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>Remote application performance</title>
+<style>body{margin:0;background:#f5f5f5;font:16px sans-serif}article{padding:0 100px}p{height:36px;line-height:36px;margin:0;white-space:nowrap}p:nth-child(odd){background:#e5edf7}#marker{position:fixed;left:12px;top:12px;width:64px;height:64px;background:rgb(30,30,210)}</style>
+<div id="marker"></div><article></article>
+<script>
+const article=document.querySelector('article'),marker=document.querySelector('#marker');
+for(let n=0;n<300;n++){const p=document.createElement('p');p.textContent='Remote application document '+n+' — keyboard, scrolling and window capture';article.append(p);}
+let count=0,moving=false;
+onkeydown=e=>{if(['Space','KeyS','KeyI'].includes(e.code))e.preventDefault();if(e.code==='Space')marker.style.background=`rgb(${30+(++count)%4*50},30,210)`;if(e.code==='KeyS')moving=true;if(e.code==='KeyI')moving=false;};
+function tick(){if(moving){scrollBy(0,12);if(scrollY>6000)scrollTo(0,0);}requestAnimationFrame(tick);}tick();
+</script>

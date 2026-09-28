@@ -2,6 +2,7 @@
 // viewer assets and prepared Xpra page. Browser composition events are simulated;
 // this verifies transport and application delivery, not a real system IME.
 import assert from 'node:assert/strict';
+import {installStreamMetrics,checkNativeDesktopStream} from './host_application_stream_acceptance.mjs';
 import {checkNativeDesktopInput} from './host_application_native_acceptance.mjs';
 import {checkPointer} from './host_application_pointer_acceptance.mjs';
 import { spawn, execFileSync } from 'node:child_process';
@@ -59,9 +60,11 @@ const catalogSource = await asset('catalog.generated.js');
 const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3).trim().slice(0, -1));
 const css = (await Promise.all(['appearance.generated.css', 'remote-input.generated.css', 'remote-pointer.generated.css', 'viewer.css'].map(asset))).join('\n');
 const js = (await Promise.all(['catalog.generated.js', 'viewport.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'appearance.js', 'connection.js', 'toolbar.js','canvas.js', metadata.backend==='wayland' ? 'linux.js' : metadata.backend==='macos' ? 'macos.js' : 'viewer.js'].map(asset))).join('\n');
+// Use a real PNG fixture so loading also exercises exclusive icon presentation.
+const icon = metadata.kind?.startsWith('stream-') ? 'data:image/png;base64,' + (await readFile(path.join(repository,'assets/brand/redeven/png/app-icon-128.png'))).toString('base64') : '';
 const html = (await asset('viewer.html')).replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'porcelain-light')
   .replaceAll('{{.Name}}', 'Client input acceptance').replaceAll('{{.Nonce}}', 'fixture')
-  .replace('<script nonce=', (metadata.backend==='wayland' ? '<script src="/fixture/cursor.js"></script>' : '') + '<script nonce=').replace('{{.Style}}', css).replace('{{.Config}}', JSON.stringify({base:'/fixture',backend:metadata.backend,icon:'',copy:catalog.locales['en-US']})).replace('{{.Script}}', js);
+  .replace('<script nonce=', (metadata.backend==='wayland' ? '<script src="/fixture/cursor.js"></script>' : '') + '<script nonce=').replace('{{.Style}}', css).replace('{{.Config}}', JSON.stringify({base:'/fixture',backend:metadata.backend,icon,copy:catalog.locales['en-US']})).replace('{{.Script}}', js);
 const server = createServer((req, res) => {
   if (req.url === '/popup') {
     res.setHeader('Content-Type', 'text/html');res.end('<button onclick="window.open(\'/fixture/_redeven_host_app/\')">Open fixture</button>');return;
@@ -118,11 +121,13 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
     page = browser.contexts()[0].pages()[0];
     browserVersion = desktopRequire('electron/package.json').version;
   } else {
-    browser = await browserType.launch({headless:true, executablePath:process.env.REDEVEN_INPUT_BROWSER_EXECUTABLE || undefined});
+    browser = await browserType.launch({headless:true, executablePath:process.env.REDEVEN_INPUT_BROWSER_EXECUTABLE || undefined,
+      ...(browserName==='chromium'?{chromiumSandbox:true}:{})});
     page = await browser.newPage({viewport:{width:900,height:640},deviceScaleFactor:2,hasTouch:pointerMode});
     if(browserName==='chromium')await page.context().grantPermissions(['clipboard-read','clipboard-write']);
     browserVersion = browser.version();
   }
+  if(metadata.kind?.startsWith('stream-'))await installStreamMetrics(page);
   if(pointerMode)await page.addInitScript(()=>{
     window.pointerPackets=[];window.nativeStates=[];
     const Socket=window.WebSocket;
@@ -201,6 +206,13 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
     await writeFile(path.join(output,'result.json'),JSON.stringify({passed:true,...identity,browserName,browser:browserVersion,receipt,events:lifecycleEvents},null,2));
     remote(`printf %s '{"passed":true}' > ${quote(remoteRoot+'/done.json')}`);
     console.log('PASS: actual final window destruction closes browser popup and retains native application');
+  } else if(metadata.kind?.startsWith('stream-')) {
+    const result=await checkNativeDesktopStream({page,output,transport:host==='local'?'Host loopback HTTP':'LAN over the task SSH tunnel'});
+    assert.deepEqual(protocolErrors,[],'native protocol rejected stream acceptance');assert.deepEqual(errors,[]);
+    const identity={...metadata};delete identity.password;
+    await writeFile(path.join(output,'result.json'),JSON.stringify({passed:true,...identity,browserName,browser:browserVersion,...result},null,2));
+    remote(`printf %s '{"passed":true}' > ${quote(remoteRoot+'/done.json')}`);
+    console.log('PASS: production native viewer picture modes, presentation latency and stream budgets');
   } else if(metadata.backend==='wayland'&&!pointerMode) {
     const result=await checkNativeDesktopInput({page,read:receipt,waitFor,output,metadata,remote,quote,remoteRoot});
     await writeFile(path.join(output,'protocol-errors.json'),JSON.stringify(protocolErrors,null,2));

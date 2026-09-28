@@ -62,7 +62,7 @@ launcher failures retain stage, code and observed exit status; capture failure,
 a disconnected viewer or an HTTP error cannot manufacture application exit.
 
 Native sharing waits for the helper's prepared receipt. One authenticated local
-attachment carries bounded window/state, PNG frame, cursor, input and clipboard
+attachment carries bounded window/state, negotiated image frame, cursor, input and clipboard
 messages. Exactly one reader multiplexes browser and product-control replies.
 A new viewer takes over the old attachment; cleanup checks the exact owner so an
 old connection cannot revoke its successor. Passive status reads inspect the
@@ -75,6 +75,22 @@ remain recoverable. Runtime shutdown or viewer closure revokes only the share,
 not the helper. Recovery keeps the same application and modules, creates new
 credentials/generations and never replays pending input. Xpra retains its published
 readiness, final-window and audio-disable contracts.
+
+## Browser profile ownership
+
+Redeven supplies one stable private browser-profile directory per authorized
+owner and catalog application under its canonical state root. Only the released
+planner decides which native/deb/rpm Chrome, Chromium or Firefox launcher supports
+that profile. Explicit application profile arguments remain authoritative, and
+sandboxed package launch contracts are unchanged. The upstream launcher validates
+private ownership, permissions and path integrity before use.
+
+This prevents a browser's existing personal-desktop singleton from absorbing a
+remote launch. Personal profiles and their singleton locks are never read, copied,
+unlocked or terminated. The remote profile persists across viewer detach and app
+restart. Failure to prepare it is a localized storage/permissions error. An
+observed process-tree exit before its first window is an explicit no-window launch
+failure even when the exit status is zero; a still-live process can continue waiting.
 
 ## Normal close and explicit force quit
 

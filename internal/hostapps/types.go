@@ -63,16 +63,20 @@ type Session struct {
 // Presentation comes from the caller's explicit localized catalog. The window
 // document renders these bounded strings as text, never as markup or script.
 type Presentation struct {
-	PackageUnavailable      string `json:"packageUnavailable,omitempty"`
-	HostServiceUnavailable  string `json:"hostServiceUnavailable,omitempty"`
-	GraphicsUnavailable     string `json:"graphicsUnavailable,omitempty"`
-	PlanStale               string `json:"planStale,omitempty"`
-	PackageUnsupported      string `json:"packageUnsupported,omitempty"`
-	ClipboardUnavailable    string `json:"clipboardUnavailable,omitempty"`
-	InputUnsupported        string `json:"inputUnsupported,omitempty"`
-	InputUnsupportedHint    string `json:"inputUnsupportedHint,omitempty"`
-	ViewerPreparationFailed string `json:"viewerPreparationFailed,omitempty"`
-	ViewerPreparationHint   string `json:"viewerPreparationHint,omitempty"`
+	NoWindow                  string `json:"noWindow,omitempty"`
+	BrowserProfileUnavailable string `json:"browserProfileUnavailable,omitempty"`
+	NativePictureHint         string `json:"nativePictureHint,omitempty"`
+	PictureUpgradeHint        string `json:"pictureUpgradeHint,omitempty"`
+	PackageUnavailable        string `json:"packageUnavailable,omitempty"`
+	HostServiceUnavailable    string `json:"hostServiceUnavailable,omitempty"`
+	GraphicsUnavailable       string `json:"graphicsUnavailable,omitempty"`
+	PlanStale                 string `json:"planStale,omitempty"`
+	PackageUnsupported        string `json:"packageUnsupported,omitempty"`
+	ClipboardUnavailable      string `json:"clipboardUnavailable,omitempty"`
+	InputUnsupported          string `json:"inputUnsupported,omitempty"`
+	InputUnsupportedHint      string `json:"inputUnsupportedHint,omitempty"`
+	ViewerPreparationFailed   string `json:"viewerPreparationFailed,omitempty"`
+	ViewerPreparationHint     string `json:"viewerPreparationHint,omitempty"`
 
 	Keyboard                string `json:"keyboard,omitempty"`
 	TouchHelp               string `json:"touchHelp,omitempty"`

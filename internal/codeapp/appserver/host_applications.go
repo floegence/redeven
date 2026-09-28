@@ -240,7 +240,7 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 	case "macos":
 		script = macHostApplicationJS
 	case "wayland":
-		script = string(nativeapps.CursorClientSource()) + "\n" + linuxHostApplicationJS
+		script = string(nativeapps.CursorClientSource()) + "\n" + string(nativeapps.DesktopFramesClientSource()) + "\n" + linuxHostApplicationJS
 	default:
 		http.Error(w, "unsupported host application backend", http.StatusServiceUnavailable)
 		return

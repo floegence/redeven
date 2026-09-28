@@ -205,7 +205,7 @@ func (m *Manager) serveDesktopSession(w http.ResponseWriter, r *http.Request, s 
 		owner.Unlock()
 	}()
 	_ = ws.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	if ws.WriteJSON(nativeapps.DesktopEvent{Event: "attached", Version: 1, Connection: conn.Connection(), State: &state}) != nil {
+	if ws.WriteJSON(nativeapps.DesktopEvent{Event: "attached", Version: 1, StreamVersion: conn.StreamVersion(), Connection: conn.Connection(), State: &state}) != nil {
 		return
 	}
 	readerDone := make(chan struct{})

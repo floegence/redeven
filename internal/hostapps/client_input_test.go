@@ -373,7 +373,7 @@ func publishClientInputFixture(t *testing.T, m *Manager, session Session, root, 
 		}
 		if r.URL.Path == "/cursor.js" && session.Backend == "wayland" {
 			w.Header().Set("Content-Type", "text/javascript")
-			_, _ = w.Write(nativeapps.CursorClientSource())
+			_, _ = w.Write(append(append(nativeapps.CursorClientSource(), '\n'), nativeapps.DesktopFramesClientSource()...))
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, ClientAssetsPath) {

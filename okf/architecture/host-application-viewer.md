@@ -42,7 +42,12 @@ reconnecting, ended, and failed states. Application content appears only after a
 successful Xpra paint acknowledgement or decoded native macOS or Linux frame. Loading and
 error states share stable icon and title geometry; errors stop progress motion and
 provide a separate recovery action without covering the application icon.
-Reduced-motion preferences disable motion.
+Waiting for a live application's first window uses the same compact progress bar
+as startup, with one unframed application icon and a quiet status label. It remains
+busy and has no misleading retry button while the live process can still open its
+window. Reduced-motion preferences disable motion. A launcher that exits before
+opening any window produces an actionable launch failure instead of an endless
+waiting page; this must not impose a timeout on a live, slow-starting process.
 A broken connection provides explicit reconnection, reseeding credentials from the
 authorized state endpoint without starting another application process. Stale
 callbacks cannot restore a disconnected or superseded view. Terminated sessions

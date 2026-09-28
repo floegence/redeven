@@ -4,6 +4,10 @@ package hostapps
 // Unknown diagnostics stay failures; they never imply an application exit.
 func LaunchFailureCode(code string) string {
 	switch code {
+	case "APPLICATION_NO_WINDOW":
+		return "no_window"
+	case "APPLICATION_PROFILE_UNAVAILABLE":
+		return "browser_profile_unavailable"
 	case "APPLICATION_PLAN_STALE", "APPLICATION_PLAN_INVALID":
 		return "plan_stale"
 	case "PACKAGE_RUNTIME_UNAVAILABLE", "PACKAGE_PROBE_TIMEOUT":

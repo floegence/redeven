@@ -465,7 +465,8 @@ describe('macOS application viewer', () => {
     await vi.advanceTimersByTimeAsync(90000);
     expect(v.state()).toBe('waiting');
     expect(v.socket().close).not.toHaveBeenCalled();
-    expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(false);
+    expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(true);
+    expect(dom.window.document.getElementById('connection')!.getAttribute('aria-busy')).toBe('true');
     v.window(); v.socket().frame(); await drain();
     expect(v.state()).toBe('active');
     expect(v.fetch).toHaveBeenCalledOnce();

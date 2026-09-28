@@ -12,8 +12,12 @@ main { position:relative; width:min(400px,100%); padding:36px 28px; text-align:c
 h1 { font-size:20px; font-weight:600; letter-spacing:-.025em; line-height:1.35; margin:0 0 9px; overflow-wrap:anywhere; }
 #status { margin:0; color:var(--muted-foreground); font-size:13px; }
 #hint { color:var(--muted-foreground); font-size:12px; line-height:1.7; margin:16px auto 0; max-width:300px; text-wrap:pretty; }
-.progress { margin:21px auto 0; width:64px; height:2px; border-radius:2px; background:var(--border); overflow:hidden; }
-.progress span { display:block; width:40%; height:100%; border-radius:inherit; background:var(--ring); animation:travel 1.6s ease-in-out infinite; }
+.progress { margin:20px auto; width:11rem; height:3px; border-radius:999px; background:color-mix(in srgb,var(--foreground) 18%,transparent); overflow:hidden; }
+.progress span { display:block; width:42%; height:100%; border-radius:inherit; background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--foreground) 58%,transparent) 30%,var(--foreground) 52%,color-mix(in srgb,var(--primary) 60%,var(--foreground)) 68%,transparent); animation:travel 1.35s cubic-bezier(.42,0,.2,1) infinite; }
+main[aria-busy="true"] .app-identity,main[aria-busy="true"] .app-identity>img { width:44px; height:44px; }
+main[aria-busy="true"] .app-identity { margin-bottom:18px; }
+main[aria-busy="true"] h1 { font-size:14px; letter-spacing:0; }
+main[aria-busy="true"] #hint { display:none; }
 button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; margin-top:23px; padding:0 15px; border:1px solid var(--border); border-radius:var(--floe-radius-group); font:inherit; font-size:12px; font-weight:500; background:var(--card); color:var(--foreground); cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
 button:hover { border-color:var(--ring); }
 button:focus-visible { outline:2px solid var(--ring); outline-offset:3px; }
@@ -21,7 +25,7 @@ button svg { width:16px; height:16px; stroke:currentColor; stroke-width:1.5; str
 body[data-state="active"] #application { opacity:1; pointer-events:auto; }
 body[data-state="active"] main { display:none; }
 main[aria-busy="false"] .progress { display:none; }
-@keyframes travel { 0% { transform:translateX(-110%); } 100% { transform:translateX(360%); } }
+@keyframes travel { 0% { transform:translateX(-120%); } 100% { transform:translateX(260%); } }
 @keyframes arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } .progress span { width:100%; opacity:.5; } }
 /* A fixed application toolbar reserves space; remote pixels never sit beneath it. */

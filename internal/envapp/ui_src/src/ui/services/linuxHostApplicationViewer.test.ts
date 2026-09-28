@@ -1,15 +1,18 @@
+import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {createRequire} from 'node:module';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 const {JSDOM}=createRequire(import.meta.url)('jsdom') as {JSDOM:new(html:string,options:Record<string,unknown>)=>{window:Window & typeof globalThis}};
 const root=resolve(process.cwd(),'../../codeapp/appserver/host_application_viewer');
-const source=['catalog.generated.js','viewport.generated.js','remote-input.generated.js','remote-pointer.generated.js','appearance.js','connection.js','toolbar.js','canvas.js','linux.js'].map(name=>readFileSync(resolve(root,name),'utf8')).join('\n');
+const nativeModule=execFileSync('go',['list','-m','-f','{{.Dir}}','github.com/floegence/floe-native-apps'],{encoding:'utf8'}).trim();
+const nativeFrames=readFileSync(resolve(nativeModule,'desktop_frames.js'),'utf8');
+const source=nativeFrames+'\n'+['catalog.generated.js','viewport.generated.js','remote-input.generated.js','remote-pointer.generated.js','appearance.js','connection.js','toolbar.js','canvas.js','linux.js'].map(name=>readFileSync(resolve(root,name),'utf8')).join('\n');
 const html=readFileSync(resolve(root,'viewer.html'),'utf8').split('<script nonce=')[0].replace('{{.Style}}','').replace('{{.Locale}}','en-US');
 let dom:InstanceType<typeof JSDOM>;
 const drain=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
 afterEach(()=>{dom?.window.dispatchEvent(new dom.window.Event('beforeunload'));dom?.window.close();});
-async function viewer(platform='Linux x86_64') {
+async function viewer(platform='Linux x86_64', icon='', streamVersion=2) {
   dom=new JSDOM(html,{url:'http://localhost/pf/test/_redeven_host_app/',runScripts:'dangerously',pretendToBeVisual:true});
   const w=dom.window;
   Object.defineProperty(w.navigator,'platform',{value:platform});
@@ -19,18 +22,18 @@ async function viewer(platform='Linux x86_64') {
   const native={request:vi.fn()};
   type Message={id:number;method:string;operation?:{kind:string;code?:number;pressed?:boolean;text?:string;dy?:number};connection?:number;window?:number;generation?:number};
   class Socket {
-    static OPEN=1;static instances:Socket[]=[];readyState=1;messages:Message[]=[];
+    static OPEN=1;static instances:Socket[]=[];readyState=1;messages:Message[]=[];sequence=0;
     onmessage?:(event:{data:unknown})=>void;onclose?:()=>void;
     constructor(){Socket.instances.push(this);}
     send(raw:string){this.messages.push(JSON.parse(raw));} close(){this.readyState=3;}
     message(value:unknown){this.onmessage?.({data:JSON.stringify(value)});}
     state(generation=1,window=1){this.message({event:'state',connection:1,state:{state:'running',window,generation,windows:[{window,parent:0,title:'Native document'}]}});}
-    frame(generation=1,window=1){this.message({event:'frame',bytes:3,frame:{encoding:'png',sequence:1,connection:1,window,generation,width:640,height:480}});this.onmessage?.({data:new w.ArrayBuffer(3)});}
+    frame(generation=1,window=1){this.message({event:'frame',bytes:3,frame:{encoding:'png',sequence:++this.sequence,connection:1,window,generation,width:640,height:480}});this.onmessage?.({data:new w.ArrayBuffer(3)});}
   }
   Object.assign(w,{TextDecoder,TextEncoder,fetch,WebSocket:Socket,createImageBitmap:bitmap,redevenHostApplicationWindow:native,matchMedia:()=>({matches:false})});
-  w.eval(`class FloeRemoteCursor {reset(){}hide(){}receive(){}dispose(){}}\nconst config=${JSON.stringify({base:'/pf/test',backend:'wayland',copy:{packageUnavailable:'The application package runtime is unavailable',controls:'Controls',windows:'Windows',input:'Input',keyboard:'Keyboard',waiting:'Waiting',reconnect:'Reconnect',operationFailed:'Action failed',inputUnavailable:'Input unavailable',quit:'Quit',cancel:'Cancel',touchHelp:'Touch controls'}})};\n${source}`);
+  w.eval(`class FloeRemoteCursor {reset(){}hide(){}receive(){}dispose(){}}\nconst config=${JSON.stringify({base:'/pf/test',backend:'wayland',icon,copy:{packageUnavailable:'The application package runtime is unavailable',controls:'Controls',windows:'Windows',input:'Input',keyboard:'Keyboard',waiting:'Waiting',reconnect:'Reconnect',operationFailed:'Action failed',inputUnavailable:'Input unavailable',quit:'Quit',cancel:'Cancel',touchHelp:'Touch controls'}})};\n${source}`);
   await drain();const socket=()=>Socket.instances.at(-1)!;
-  socket().message({event:'attached',version:1,connection:1,state:{state:'running',window:1,generation:1,windows:[{window:1,parent:0,title:'Native document'}]}});
+  socket().message({event:'attached',version:1,stream_version:streamVersion,connection:1,state:{state:'running',window:1,generation:1,windows:[{window:1,parent:0,title:'Native document'}]}});
   const input=w.document.querySelector('textarea')!;
   const activate=async()=>{socket().frame();await drain();await new Promise(resolve=>w.requestAnimationFrame(resolve));socket().messages.length=0;};
   const key=(type:string,key:string,code:string,options:Record<string,unknown>={})=>input.dispatchEvent(new w.KeyboardEvent(type,{key,code,bubbles:true,cancelable:true,...options}));
@@ -38,9 +41,49 @@ async function viewer(platform='Linux x86_64') {
   return {w,socket,input,activate,key,text,bitmap,fetch,native,operations:()=>socket().messages.filter(m=>m.method==='input').map(m=>m.operation)};
 }
 describe('native Linux viewer',()=>{
-  it('uses one canvas and editor without unsupported platform controls',async()=>{
+  it('keeps one canvas and editor with native picture controls',async()=>{
     const v=await viewer();await v.activate();expect(v.w.document.querySelectorAll('textarea')).toHaveLength(1);expect(v.w.document.querySelectorAll('#application')).toHaveLength(1);
-    expect(v.w.document.querySelector('.mac-app-controls-toggle')).toBeNull();expect(v.w.document.querySelector('.mac-app-menu-toggle')).toBeNull();expect(v.w.document.querySelector('.host-app-identity')).not.toBeNull();
+    expect(v.w.document.querySelector('.mac-app-controls-toggle')).not.toBeNull();expect(v.w.document.querySelector('.mac-app-menu-toggle')).toBeNull();expect(v.w.document.querySelector('.host-app-identity')).not.toBeNull();
+  });
+  it('negotiates the saved picture mode and changes it without reconnecting',async()=>{
+    const v=await viewer();
+    expect(v.socket().messages.filter(m=>m.method==='configure_stream')).toEqual([expect.objectContaining({mode:'auto'})]);
+    await v.activate();
+    const toggle=v.w.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
+    toggle.click();expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const smooth=v.w.document.querySelector<HTMLButtonElement>('[data-picture-mode="smooth"]')!;
+    smooth.click();smooth.click();
+    expect(v.socket().messages.filter(m=>m.method==='configure_stream')).toEqual([expect.objectContaining({mode:'smooth'})]);
+    expect(v.w.localStorage.getItem('redeven.native-app.picture.v1')).toBe('smooth');
+    expect(smooth.getAttribute('aria-pressed')).toBe('true');
+    expect(v.fetch).toHaveBeenCalledTimes(1);
+    v.w.document.dispatchEvent(new v.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');expect(v.w.document.activeElement).toBe(toggle);
+  });
+  it('keeps retained PNG sessions viewable and explains disabled quality modes',async()=>{
+    const v=await viewer('Linux x86_64','',0);await v.activate();
+    expect(v.input.disabled).toBe(false);
+    expect(v.socket().messages.some(m=>m.method==='configure_stream')).toBe(false);
+    expect([...v.w.document.querySelectorAll<HTMLButtonElement>('[data-picture-mode]')].every(b=>b.disabled)).toBe(true);
+    expect(v.w.document.querySelector('[data-app-copy="pictureUpgradeHint"]')).not.toBeNull();
+  });
+  it('composes reference-dependent patches before acknowledging them',async()=>{
+    const v=await viewer();await v.activate();v.bitmap.mockResolvedValueOnce({width:12,height:9,close:vi.fn()});
+    v.socket().message({event:'frame',bytes:3,frame:{encoding:'webp',sequence:2,base:1,x:20,y:30,region_width:12,region_height:9,connection:1,window:1,generation:1,width:640,height:480}});
+    v.socket().onmessage?.({data:new v.w.ArrayBuffer(3)});await drain();
+    expect(v.socket().messages).toContainEqual(expect.objectContaining({method:'frame_ack',frame:2}));
+    expect(v.input.disabled).toBe(false);
+  });
+  it('hides the SVG fallback when an application icon is available',async()=>{
+    const v=await viewer('Linux x86_64','data:image/png;base64,aGVsbG8=');
+    expect(v.w.document.getElementById('icon')!.hasAttribute('hidden')).toBe(false);
+    expect(v.w.document.getElementById('fallback-icon')!.hasAttribute('hidden')).toBe(true);
+  });
+  it('keeps the first-window wait in the accessible loading presentation',async()=>{
+    const v=await viewer();
+    v.socket().message({event:'state',connection:1,state:{state:'waiting',window:0,generation:2,windows:[]}});
+    expect(v.w.document.getElementById('connection')!.getAttribute('aria-busy')).toBe('true');
+    expect(v.w.document.getElementById('retry')!.hidden).toBe(true);
   });
   it('admits consecutive Unicode commits only after paint and binds the target',async()=>{
     const v=await viewer();v.text('before');expect(v.operations()).toEqual([]);await v.activate();v.text('中文👩‍💻');v.text('中文👩‍💻');
@@ -116,7 +159,7 @@ describe('native Linux viewer',()=>{
     const v=await viewer();if(scenario!=='before paint')await v.activate();
     if(scenario==='reconnected'){
       await v.socket().onclose?.();await drain();v.w.document.querySelector<HTMLButtonElement>('#retry')!.click();await drain();
-      v.socket().message({event:'attached',version:1,connection:1,state:{state:'waiting',window:0,generation:2,windows:[]}});
+      v.socket().message({event:'attached',version:1,stream_version:2,connection:1,state:{state:'waiting',window:0,generation:2,windows:[]}});
     }else{
       v.socket().message({event:'state',connection:1,state:{state:scenario==='unavailable'?'unavailable':'waiting',window:0,generation:2,
         windows:scenario==='minimized'?[{window:1,parent:0,minimized:true,title:'Native document'}]:[]}});
