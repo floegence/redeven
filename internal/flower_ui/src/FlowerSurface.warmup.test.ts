@@ -40,7 +40,7 @@ describe('Flower warmup presentation', () => {
     expect(source).toContain('const searchDisabled = createMemo(() => showLoadingSkeleton())');
     expect(source).toContain('copy().warmupDescription');
     expect(source).toContain('flower-thread-warmup-list');
-    expect(source).toContain('disabled={props.refreshing || props.warmup}');
+    expect(source).toContain('disabled={props.refreshing || props.warmup || props.loading}');
     expect(source).toContain('disabled={searchDisabled()}');
     expect(source.indexOf('when={!showLoadingSkeleton()}')).toBeLessThan(source.indexOf('fallback={<div class="flower-thread-empty'));
   });
