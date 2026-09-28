@@ -5226,6 +5226,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
       const target = entry.provider_runtime_link_target;
       const environment = target ? { ...entry, provider_runtime_link_target: { ...target,
         credential_recovery: providerCredentialRecovery.state(target.id, target.provider_link_binding?.binding_generation ?? 0),
+        credential_recovery_details: providerCredentialRecovery.details(target.id, target.provider_link_binding?.binding_generation ?? 0),
       } } : entry;
       const descriptor = reinstallDescriptors.find((candidate) => candidate.environment_id === environment.id);
       if (!descriptor) {
@@ -12419,7 +12420,11 @@ async function recoverAttachedProviderCredentials(): Promise<void> {
         if (!observationIsCurrent()) return;
         const environment = current.provider_environments.find(candidate => desktopRuntimeProviderBindingMatches(binding, candidate));
         const account = savedControlPlaneByIdentity(current, binding.provider_origin!, binding.provider_id!);
-        if (!environment || !account || !controlPlaneRefreshToken(current, binding.provider_origin!, binding.provider_id!)) return;
+        if (!account || !controlPlaneRefreshToken(current, binding.provider_origin!, binding.provider_id!)) {
+          providerCredentialRecovery.requireSignIn(target.id, binding.binding_generation!);
+          return;
+        }
+        if (!environment) return;
         const accountKey = desktopControlPlaneKey(binding.provider_origin!, binding.provider_id!);
         const accountGeneration = launcherOperations.currentSubjectGeneration('control_plane', accountKey);
         const intentVersion = providerLinkIntentVersions.get(target.id) ?? 0;
@@ -12427,40 +12432,47 @@ async function recoverAttachedProviderCredentials(): Promise<void> {
           && !explicitProviderLinkTargets.has(target.id)
           && launcherOperations.currentSubjectGeneration('control_plane', accountKey) === accountGeneration;
         const generation = binding.binding_generation!;
+        const classifyFailure = (error: unknown) => {
+          const error_code = error instanceof RuntimeControlError || error instanceof DesktopProviderRequestError
+            ? error.code : 'provider_recovery_failed';
+          if (!isCurrent()) return { outcome: 'attention' as const, error_code };
+          console.warn('[redeven:provider-recovery]', { target_id: target.id, binding_generation: generation, error_code });
+          if (error instanceof RuntimeControlError && error.code === 'PROVIDER_LINK_PERMISSION_REVOKED'
+            || error instanceof DesktopProviderRequestError && error.status === 403) return { outcome: 'permission_required' as const, error_code };
+          if (error instanceof RuntimeControlError && error.code === 'PROVIDER_LINK_BINDING_CHANGED') return { outcome: 'binding_changed' as const, error_code };
+          if (controlPlaneAuthorizationNeedsReconnect(error)) {
+            setControlPlaneSyncRecord(binding.provider_origin!, binding.provider_id!, {
+              sync_state: 'auth_required', last_sync_attempt_at_ms: Date.now(),
+              last_sync_error_code: 'authorization_expired', last_sync_error_message: DESKTOP_PROVIDER_RECONNECT_MESSAGE,
+            });
+            return { outcome: 'sign_in_required' as const, error_code };
+          }
+          const transient = (error instanceof RuntimeControlError && ['PROVIDER_LINK_UNAVAILABLE', 'RUNTIME_CONTROL_TIMEOUT', 'RUNTIME_CONTROL_UNREACHABLE'].includes(error.code))
+            || (error instanceof DesktopProviderRequestError && (error.status === 429 || error.status >= 500
+              || ['provider_timeout', 'provider_dns_failed', 'provider_connection_failed'].includes(error.code)));
+          return { outcome: transient ? 'retry' as const : 'attention' as const, error_code };
+        };
         await providerCredentialRecovery.renew({
           targetID: target.id, generation, now: Date.now(),
           identity: JSON.stringify([binding.provider_origin, binding.provider_id, binding.env_public_id,
             binding.local_environment_public_id, target.record.startup.started_at_unix_ms,
-            account.account.user_public_id, account.account.authorization_expires_at_unix_ms, accountGeneration, intentVersion]),
+            account.account.user_public_id, accountGeneration, intentVersion]),
           isCurrent, changed: broadcastDesktopWelcomeSnapshots,
+          probe: async () => {
+            try {
+              // Observe the exact saved access point without issuing a new Runtime credential.
+              await refreshProviderEnvironmentRuntimeHealth(binding.provider_origin!, binding.provider_id!, [binding.env_public_id!]);
+              return { outcome: 'restored' };
+            } catch (error) { return classifyFailure(error); }
+          },
           exchange: async () => {
             try {
-              // Use the just-observed snapshot and exact attached endpoint. Never attach or start a target here.
               const result = await connectProviderRuntimeFromLauncher({ kind: 'connect_provider_runtime',
                 provider_environment_id: environment.id, runtime_target_id: target.id }, {
                 target, runtimeService: status.runtime_service, isCurrent,
               });
-              return result.ok ? 'restored' : 'attention';
-            } catch (error) {
-              // A sign-out, account switch, disconnect, or target replacement
-              // may win while the exchange is in flight. Never let that stale
-              // completion overwrite the current account's sync state.
-              if (!isCurrent()) return 'attention';
-              if (error instanceof RuntimeControlError && error.code === 'PROVIDER_LINK_PERMISSION_REVOKED'
-                || error instanceof DesktopProviderRequestError && error.status === 403) return 'permission_required';
-              if (error instanceof RuntimeControlError && error.code === 'PROVIDER_LINK_BINDING_CHANGED') return 'binding_changed';
-              if (controlPlaneAuthorizationNeedsReconnect(error)) {
-                setControlPlaneSyncRecord(binding.provider_origin!, binding.provider_id!, {
-                  sync_state: 'auth_required', last_sync_attempt_at_ms: Date.now(),
-                  last_sync_error_code: 'authorization_expired', last_sync_error_message: DESKTOP_PROVIDER_RECONNECT_MESSAGE,
-                });
-                return 'sign_in_required';
-              }
-              return (error instanceof RuntimeControlError && ['PROVIDER_LINK_UNAVAILABLE', 'RUNTIME_CONTROL_TIMEOUT', 'RUNTIME_CONTROL_UNREACHABLE'].includes(error.code))
-                || (error instanceof DesktopProviderRequestError && (error.status === 429 || error.status >= 500
-                  || ['provider_timeout', 'provider_dns_failed', 'provider_connection_failed'].includes(error.code)))
-                ? 'retry' : 'attention';
-            }
+              return result.ok ? { outcome: 'restored' } : { outcome: 'attention', error_code: result.code };
+            } catch (error) { return classifyFailure(error); }
           },
         });
       } catch {
@@ -15960,7 +15972,13 @@ async function connectProviderRuntimeFromLauncher(
   }
   explicitProviderLinkTargets.add(request.runtime_target_id);
   providerLinkIntentVersions.set(request.runtime_target_id, (providerLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
-  try { return await connectProviderRuntimeOperation(request); }
+  try {
+    await providerCredentialRecovery.settled(request.runtime_target_id);
+    providerCredentialRecovery.forget(request.runtime_target_id);
+    return await connectProviderRuntimeOperation(request);
+  } catch (error) {
+    return launcherActionFailureFromProviderLinkError(error, { environmentID: request.provider_environment_id });
+  }
   finally { explicitProviderLinkTargets.delete(request.runtime_target_id); }
 }
 
@@ -16011,6 +16029,10 @@ async function connectProviderRuntimeOperation(
       'Start this runtime first, then connect it to this provider Environment.',
       providerEnvironmentFailureContext(environment),
     );
+  }
+  if (!recovery && runtimeRecord.startup.runtime_control) {
+    const observed = await getProviderLinkStatus(runtimeRecord.startup.runtime_control);
+    updateProviderRuntimeTargetStartup(runtimeTarget, { runtime_service: observed.runtime_service });
   }
   const currentBinding = runtimeServiceProviderLinkBinding(recovery?.runtimeService ?? runtimeRecord.startup.runtime_service);
   if (currentBinding.state === 'linked' && !localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
@@ -16117,19 +16139,28 @@ async function disconnectProviderRuntimeFromLauncher(
     return launcherActionFailure('provider_link_failed', 'environment', 'A Cloud connection action is already in progress.');
   }
   explicitProviderLinkTargets.add(request.runtime_target_id);
-  try { return await disconnectProviderRuntimeOperation(request); }
+  providerLinkIntentVersions.set(request.runtime_target_id, (providerLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
+  try {
+    await providerCredentialRecovery.settled(request.runtime_target_id);
+    providerCredentialRecovery.forget(request.runtime_target_id);
+    return await disconnectProviderRuntimeOperation(request);
+  } catch (error) {
+    return launcherActionFailureFromProviderLinkError(error, { environmentID: request.provider_environment_id });
+  }
   finally { explicitProviderLinkTargets.delete(request.runtime_target_id); }
 }
 
 async function disconnectProviderRuntimeOperation(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'disconnect_provider_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
-  providerLinkIntentVersions.set(request.runtime_target_id, (providerLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
-  providerCredentialRecovery.forget(request.runtime_target_id);
   const preferences = await loadDesktopPreferencesCached();
   const runtimeTarget = await resolveProviderRuntimeLinkTarget(preferences, request.runtime_target_id);
   try {
   const runtimeRecord = runtimeTarget?.record ?? null;
+  if (runtimeTarget && runtimeRecord?.startup.runtime_control) {
+    const observed = await getProviderLinkStatus(runtimeRecord.startup.runtime_control);
+    updateProviderRuntimeTargetStartup(runtimeTarget, { runtime_service: observed.runtime_service });
+  }
   const currentBinding = runtimeServiceProviderLinkBinding(runtimeRecord?.startup.runtime_service);
   const providerEnvironmentID = compact(request.provider_environment_id);
   const environment = (() => {
@@ -18905,6 +18936,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   powerMonitor.on('resume', () => {
+    providerCredentialRecovery.wake();
+    void recoverAttachedProviderCredentials().catch(() => undefined);
     desktopLanguageState().refreshSystemLocale();
     void syncVisibleControlPlanesIfNeeded({ force: true }).catch(() => {
       // Best-effort refresh after sleep/wake.

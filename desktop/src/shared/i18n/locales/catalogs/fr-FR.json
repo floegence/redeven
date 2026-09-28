@@ -2312,7 +2312,7 @@
     "desktopUpdateRequired": "Mise à jour Desktop requise",
     "invalidResponse": "Réponse invalide",
     "statusStale": "Statut obsolète",
-    "authorized": "Autorisé"
+    "authorized": "Compte connecté"
   },
   "environmentAction": {
     "open": "Ouvrir Env App",
@@ -2992,7 +2992,24 @@
     "unknown": "Connexion non vérifiée",
     "expired": "Identifiants de connexion expirés",
     "requested": "Connexion demandée pour {label}. L’état de Redeven Cloud sera mis à jour automatiquement.",
-    "permissionRevoked": "Autorisation Cloud révoquée"
+    "permissionRevoked": "Autorisation Cloud révoquée",
+    "localAvailable": "Disponible sur cet appareil",
+    "runtimeStatus": "Environnement d’exécution : {label}",
+    "waitingService": "En attente de Redeven Cloud",
+    "waitingDetail": "Redeven Cloud est temporairement indisponible. Desktop se reconnectera lorsque le service sera accessible.",
+    "restoringDetail": "Desktop rétablit l’accès à distance. Vous pouvez continuer à travailler sur cet appareil.",
+    "permissionDetail": "Votre compte n’a plus l’autorisation de connecter cet environnement d’exécution. Demandez à un administrateur de vérifier les droits d’accès.",
+    "bindingDetail": "L’association enregistrée a changé. Vérifiez l’environnement d’exécution et le compte avant de vous reconnecter.",
+    "unknownDetail": "La connexion au cloud n’a pas encore été confirmée. Vérifiez l’environnement d’exécution ou actualisez son état.",
+    "attentionDetail": "L’accès à distance nécessite votre attention. Consultez les détails ou rétablissez la connexion enregistrée.",
+    "restoreShort": "Rétablir la connexion",
+    "openLocally": "Ouvrir localement",
+    "details": "Détails de connexion",
+    "runtimeOwner": "Environnement d’exécution",
+    "lastError": "Dernière erreur",
+    "lastAttempt": "Dernière tentative",
+    "nextCheck": "Prochaine vérification",
+    "tlsDetail": "Desktop n’a pas pu vérifier le certificat du cloud. Vérifiez les paramètres de confiance de l’appareil avant de vous reconnecter."
   },
   "windowStatus": {
     "checkingService": "Vérification de l’état du service",

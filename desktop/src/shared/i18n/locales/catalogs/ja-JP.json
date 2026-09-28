@@ -2308,7 +2308,7 @@
     "desktopUpdateRequired": "Desktop 更新が必要",
     "invalidResponse": "応答が無効",
     "statusStale": "ステータスが古い",
-    "authorized": "認可済み"
+    "authorized": "ログイン済み"
   },
   "environmentAction": {
     "open": "Env App を開く",
@@ -2986,7 +2986,24 @@
     "unknown": "接続は未確認",
     "expired": "接続認証情報の期限切れ",
     "requested": "{label} の接続を要求しました。Redeven Cloud の状態は自動的に更新されます。",
-    "permissionRevoked": "Cloud 権限が取り消されました"
+    "permissionRevoked": "Cloud 権限が取り消されました",
+    "localAvailable": "このデバイスで利用可能",
+    "runtimeStatus": "ランタイム：{label}",
+    "waitingService": "Redeven Cloud の復旧を待機中",
+    "waitingDetail": "Redeven Cloud は一時的に利用できません。サービスに接続できるようになると、Desktop が自動的に再接続します。",
+    "restoringDetail": "Desktop がリモートアクセスを復旧しています。このデバイスでの作業は続けられます。",
+    "permissionDetail": "このアカウントにはランタイムを接続する権限がありません。管理者にアクセス権の確認を依頼してください。",
+    "bindingDetail": "保存された関連付けが変更されました。再接続する前にランタイムとアカウントを確認してください。",
+    "unknownDetail": "クラウド接続はまだ確認されていません。ランタイムを確認するか、状態を更新してください。",
+    "attentionDetail": "リモートアクセスへの対応が必要です。接続の詳細を確認するか、保存された接続を復旧してください。",
+    "restoreShort": "接続を復旧",
+    "openLocally": "ローカルで開く",
+    "details": "接続の詳細",
+    "runtimeOwner": "ランタイム",
+    "lastError": "最後のエラー",
+    "lastAttempt": "前回の試行",
+    "nextCheck": "次回の確認",
+    "tlsDetail": "Desktop はクラウドの証明書を検証できませんでした。再接続する前にデバイスの信頼設定を確認してください。"
   },
   "windowStatus": {
     "checkingService": "サービスの状態を確認しています",

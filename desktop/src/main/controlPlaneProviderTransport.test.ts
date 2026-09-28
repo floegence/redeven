@@ -16,6 +16,21 @@ import {
 } from './controlPlaneProviderTransport';
 
 describe('controlPlaneProviderTransport', () => {
+  it.each([
+    ['ERR_CONNECTION_REFUSED', 'provider_connection_failed'],
+    ['ERR_CONNECTION_RESET', 'provider_connection_failed'],
+    ['ERR_INTERNET_DISCONNECTED', 'provider_connection_failed'],
+    ['ERR_NETWORK_CHANGED', 'provider_connection_failed'],
+    ['ERR_NAME_NOT_RESOLVED', 'provider_dns_failed'],
+    ['ERR_CERT_AUTHORITY_INVALID', 'provider_tls_untrusted'],
+    ['ERR_TIMED_OUT', 'provider_timeout'],
+  ])('classifies Chromium %s without an Error.code field', async (code, expected) => {
+    electronState.netFetch.mockRejectedValueOnce(new Error(`net::${code}`));
+    await expect(electronDesktopProviderTransport({
+      url: 'https://provider.example.invalid/', timeout_ms: 1_000,
+    })).rejects.toMatchObject({ code: expected });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });

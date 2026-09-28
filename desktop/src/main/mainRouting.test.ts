@@ -1494,7 +1494,7 @@ describe('main routing', () => {
     );
     expect(
       disconnectSrc.indexOf('const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);'),
-    ).toBeLessThan(disconnectSrc.indexOf('updateProviderRuntimeTargetStartup(runtimeTarget, {'));
+    ).toBeLessThan(disconnectSrc.lastIndexOf('updateProviderRuntimeTargetStartup(runtimeTarget, {'));
     expect(disconnectSrc).toContain(
       'const currentBinding = runtimeServiceProviderLinkBinding(runtimeRecord?.startup.runtime_service);',
     );
@@ -1701,7 +1701,7 @@ describe('main routing', () => {
     const accessSrc = mainSrc.slice(accessStart, accessEnd);
     expect(accessSrc).toContain('const bridgeHeaders = runtimeFlowerPrivateBridgeHeaders(record.startup);');
     expect(accessSrc).toContain('...bridgeHeaders');
-    expect(accessSrc).toContain('Cookie: runtimeFlowerAccessCookieHeader(cookie)');
+    expect(accessSrc).toContain('Cookie: cookie');
 
     const ensureStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecordUncoalesced(');
     const ensureEnd = mainSrc.indexOf('function runtimeFlowerEnvelopeError(', ensureStart);

@@ -2312,7 +2312,7 @@
     "desktopUpdateRequired": "Actualización de Desktop requerida",
     "invalidResponse": "Respuesta no válida",
     "statusStale": "Estado desactualizado",
-    "authorized": "Autorizado"
+    "authorized": "Sesión iniciada"
   },
   "environmentAction": {
     "open": "Abrir Env App",
@@ -2992,7 +2992,24 @@
     "unknown": "Conexión sin verificar",
     "expired": "Credenciales caducadas",
     "requested": "Se ha solicitado la conexión de {label}. El estado de Redeven Cloud se actualizará automáticamente.",
-    "permissionRevoked": "Permiso de Cloud revocado"
+    "permissionRevoked": "Permiso de Cloud revocado",
+    "localAvailable": "Disponible en este dispositivo",
+    "runtimeStatus": "Entorno de ejecución: {label}",
+    "waitingService": "Esperando a Redeven Cloud",
+    "waitingDetail": "Redeven Cloud no está disponible temporalmente. Desktop se volverá a conectar cuando el servicio sea accesible.",
+    "restoringDetail": "Desktop está restaurando el acceso remoto. Puedes seguir trabajando en este dispositivo.",
+    "permissionDetail": "Tu cuenta ya no tiene permiso para conectar este entorno de ejecución. Pide a un administrador que revise el acceso.",
+    "bindingDetail": "La asociación guardada ha cambiado. Revisa el entorno de ejecución y la cuenta antes de volver a conectar.",
+    "unknownDetail": "La conexión a la nube aún no se ha confirmado. Comprueba el entorno de ejecución o actualiza su estado.",
+    "attentionDetail": "El acceso remoto requiere atención. Revisa los detalles de conexión o restaura la conexión guardada.",
+    "restoreShort": "Restaurar conexión",
+    "openLocally": "Abrir localmente",
+    "details": "Detalles de conexión",
+    "runtimeOwner": "Entorno de ejecución",
+    "lastError": "Último error",
+    "lastAttempt": "Último intento",
+    "nextCheck": "Próxima comprobación",
+    "tlsDetail": "Desktop no pudo verificar el certificado de la nube. Revisa la configuración de confianza del dispositivo antes de volver a conectar."
   },
   "windowStatus": {
     "checkingService": "Comprobando el estado del servicio",

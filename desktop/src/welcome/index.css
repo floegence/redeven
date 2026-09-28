@@ -4369,3 +4369,13 @@ pre,
 @media (pointer: coarse) {
   .redeven-address-table .redeven-endpoint-action { min-width: 44px; width: 44px; min-height: 44px; height: 44px; }
 }
+
+.redeven-cloud-connection-status {
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.375rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 35%, var(--card));
+}
+.redeven-cloud-connection-status p { margin: 0; }
+.redeven-cloud-connection-status button { white-space: nowrap; }

@@ -6,6 +6,8 @@ import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../inte
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton } from './App';
+import { CloudConnectionStatus } from './CloudConnectionStatus';
+import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import { DesktopTooltip } from './DesktopTooltip';
 import { ConsoleActionIconButton, EnvironmentStatusIndicator } from './environmentCardPrimitives';
 import { buildEnvironmentLibraryLayoutModel, buildProviderBackedEnvironmentActionModel, environmentControlPlaneLabel,
@@ -85,6 +87,8 @@ export function EnvironmentCardsPanel(
     allGroups: readonly EnvironmentLibraryDisplayGroup[];
     viewScope: string;
     defaultCloud?: boolean;
+    controlPlanes: readonly DesktopControlPlaneSummary[];
+    reconnectControlPlane: (source: DesktopControlPlaneSummary) => Promise<void>;
     presentation: EnvironmentOwnerPresentation;
     Facts: typeof EnvironmentCardFactsBlock;
     Actions: typeof EnvironmentSplitActionButton;
@@ -419,6 +423,23 @@ export function EnvironmentCardsPanel(
       environment={projectedEntriesByID()[environmentID]!}
       relationshipRole={projectedEntriesByID()[environmentID]!.kind === 'provider_environment' ? 'cloud' : projectedGroup(groupID).provider_entry ? 'runtime' : undefined}
       paired={!!projectedGroup(groupID).provider_entry}
+      connectionStatus={projectedGroup(groupID).provider_entry ? () => (
+        <CloudConnectionStatus runtime={projectedGroup(groupID).primary_entry}
+          cloud={projectedGroup(groupID).provider_entry!} i18n={props.i18n}
+          busy={environmentOperationState(projectedGroup(groupID).primary_entry, props.actionProgress, props.busyState).actionsDisabled}
+          onRuntimeAction={action => {
+            // Keep management on the exact Runtime owner, including its existing review.
+            const runtime = projectedGroup(groupID).primary_entry;
+            selectOwner(projectedGroup(groupID), runtime.id);
+            void props.runLocalEnvironmentAction(runtime, action, 'connect');
+          }}
+          onSignIn={() => {
+            const cloud = projectedGroup(groupID).provider_entry!;
+            const source = props.controlPlanes.find(source => source.provider.provider_origin === cloud.provider_origin
+              && source.provider.provider_id === cloud.provider_id);
+            if (source) void props.reconnectControlPlane(source);
+          }} />
+      ) : undefined}
       otherPinnedOwner={projectedGroup(groupID).member_entries.find(entry => entry.id !== environmentID && entry.pinned)}
       busyState={props.busyState}
       actionProgress={props.actionProgress}
@@ -638,6 +659,7 @@ function EnvironmentOwnerSurface(
     environment: DesktopEnvironmentEntry;
     relationshipRole?: 'runtime' | 'cloud';
     paired: boolean;
+    connectionStatus?: () => JSX.Element;
     otherPinnedOwner?: DesktopEnvironmentEntry;
     busyState: DesktopLauncherBusyState;
     actionProgress: readonly DesktopLauncherActionProgress[];
@@ -691,7 +713,8 @@ function EnvironmentOwnerSurface(
   }>,
 ) {
   const card = createMemo(() => props.presentation.card(props.environment));
-  const facts = createMemo(() => props.presentation.facts(props.environment));
+  const facts = createMemo(() => props.presentation.facts(props.environment)
+    .filter(fact => !props.connectionStatus || fact.id !== 'cloud-connection'));
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
   const ownerLabel = createMemo(() => props.paired
     ? props.i18n.t('environmentCenter.relationshipOwnerLabel', {
@@ -820,6 +843,7 @@ function EnvironmentOwnerSurface(
           </Show>
         </div>
       </CardHeader>
+      {props.connectionStatus?.()}
       <CardContent class="flex flex-col px-4 pb-3 redeven-environment-owner-facts">
         <props.Facts
           environmentID={props.environment.id} i18n={props.i18n} facts={facts()}

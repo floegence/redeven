@@ -50,7 +50,13 @@ export type DesktopProviderRuntimeLinkTarget = Readonly<{
   runtime_control_status: DesktopRuntimeControlStatus;
   runtime_service?: RuntimeServiceSnapshot;
   provider_connection_state: RuntimeServiceProviderConnectionState;
-  credential_recovery?: 'restoring' | 'waiting' | 'attention' | 'sign_in_required' | 'permission_required' | 'binding_changed';
+  credential_recovery?: 'restoring' | 'waiting' | 'waiting_for_service' | 'attention' | 'sign_in_required' | 'permission_required' | 'binding_changed';
+  credential_recovery_details?: Readonly<{
+    last_error_code?: string;
+    last_attempt_at_unix_ms: number;
+    next_retry_at_unix_ms?: number;
+    attempt_count: number;
+  }>;
   provider_link_state: RuntimeServiceProviderLinkState;
   provider_link_binding?: RuntimeServiceProviderLinkBinding;
   provider_origin?: string;
