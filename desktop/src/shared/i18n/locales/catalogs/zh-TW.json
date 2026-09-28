@@ -2973,6 +2973,12 @@
     "connectedBuild": "已連線的執行階段：{version} · {commit}"
   },
   "providerRecovery": {
+    "waitingShort": "等待恢復",
+    "restoreAction": "恢復",
+    "signInAction": "登入",
+    "connectedDetail": "此執行階段已連線至 Redeven Cloud，可供遠端存取。",
+    "tlsError": "憑證不受信任",
+    "bindingChanged": "關聯已變更",
     "restore": "恢復 Redeven Cloud 連線",
     "required": "恢復已儲存的 Redeven Cloud 連線，本機工作可繼續使用。如果權限已遭撤銷或關聯已變更，請先檢查帳號和關聯，再重新連線。",
     "needsAuthorization": "需要授權",
@@ -2988,7 +2994,6 @@
     "requested": "已要求連線至 {label}，Redeven Cloud 狀態將自動更新。",
     "permissionRevoked": "Cloud 權限已撤銷",
     "localAvailable": "本機可用",
-    "runtimeStatus": "執行階段：{label}",
     "waitingService": "等待 Redeven Cloud 恢復",
     "waitingDetail": "Redeven Cloud 暫時無法使用。服務恢復後，Desktop 將自動重新連線。",
     "restoringDetail": "Desktop 正在恢復遠端存取，本機仍可繼續使用。",

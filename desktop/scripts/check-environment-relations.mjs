@@ -128,7 +128,9 @@ try {
     await page.screenshot({ path: `${output}/${locale}-cloud.png`, animations: 'disabled', fullPage: true });
     for (const width of [390, 768]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.evaluate(() => { document.documentElement.classList.add('dark'); document.documentElement.style.fontSize = '20px'; });
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
+      await page.evaluate(() => { document.documentElement.style.fontSize = '20px'; });
       await page.screenshot({ path: `${output}/${locale}-${width}-dark-large.png`, animations: 'disabled', fullPage: true });
       await assertGridAlignment(page, `${locale}: ${width}px enlarged text`);
       const overflow = await cards.evaluateAll(elements => elements.flatMap(card => [...card.querySelectorAll('button,[role="tab"]')]

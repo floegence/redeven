@@ -3009,6 +3009,12 @@
     "connectedBuild": "Подключённая среда выполнения: {version} · {commit}"
   },
   "providerRecovery": {
+    "waitingShort": "Ожидание",
+    "restoreAction": "Восстановить",
+    "signInAction": "Войти",
+    "connectedDetail": "Эта среда выполнения подключена к Redeven Cloud. Можно использовать удалённый доступ.",
+    "tlsError": "Сертификат не доверен",
+    "bindingChanged": "Привязка изменена",
     "restore": "Восстановить соединение с Redeven Cloud",
     "required": "Восстановите сохранённое соединение с Redeven Cloud. Локальная работа остаётся доступной. Если разрешения отозваны или привязка изменилась, проверьте учётную запись и привязку перед повторным подключением.",
     "needsAuthorization": "Требуется авторизация",
@@ -3024,7 +3030,6 @@
     "requested": "Запрошено подключение для {label}. Статус Redeven Cloud обновится автоматически.",
     "permissionRevoked": "Разрешение Cloud отозвано",
     "localAvailable": "Доступно на этом устройстве",
-    "runtimeStatus": "Среда выполнения: {label}",
     "waitingService": "Ожидание Redeven Cloud",
     "waitingDetail": "Redeven Cloud временно недоступен. Desktop подключится снова, когда сервис станет доступен.",
     "restoringDetail": "Desktop восстанавливает удалённый доступ. На этом устройстве можно продолжать работу.",

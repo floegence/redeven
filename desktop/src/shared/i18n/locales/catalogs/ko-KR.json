@@ -2973,6 +2973,12 @@
     "connectedBuild": "연결된 런타임: {version} · {commit}"
   },
   "providerRecovery": {
+    "waitingShort": "대기 중",
+    "restoreAction": "복원",
+    "signInAction": "로그인",
+    "connectedDetail": "이 런타임은 Redeven Cloud에 연결되어 있으며 원격으로 접근할 수 있습니다.",
+    "tlsError": "신뢰할 수 없는 인증서",
+    "bindingChanged": "연결 관계 변경됨",
     "restore": "Redeven Cloud 연결 복구",
     "required": "저장된 Redeven Cloud 연결을 복구합니다. 로컬 작업은 계속 사용할 수 있습니다. 권한이 취소되었거나 연결 대상이 변경된 경우 계정과 연결 관계를 확인한 후 다시 연결하세요.",
     "needsAuthorization": "인증 필요",
@@ -2988,7 +2994,6 @@
     "requested": "{label}의 연결을 요청했습니다. Redeven Cloud 상태가 자동으로 업데이트됩니다.",
     "permissionRevoked": "Cloud 권한이 취소됨",
     "localAvailable": "이 기기에서 사용 가능",
-    "runtimeStatus": "런타임: {label}",
     "waitingService": "Redeven Cloud 복구 대기 중",
     "waitingDetail": "Redeven Cloud를 일시적으로 사용할 수 없습니다. 서비스에 접근할 수 있게 되면 Desktop이 자동으로 다시 연결합니다.",
     "restoringDetail": "Desktop이 원격 접근을 복구하고 있습니다. 이 기기에서는 계속 작업할 수 있습니다.",
