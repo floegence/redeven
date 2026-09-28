@@ -4568,7 +4568,7 @@ html.dark .git-content-skeleton__block {
 
 .browser-editor-setup__method-option[data-selected='true'] {
   border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 8%, var(--background));
+  background: color-mix(in srgb, var(--primary) 4%, var(--background));
   color: var(--foreground);
   transition: none;
 }

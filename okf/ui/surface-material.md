@@ -44,6 +44,10 @@ quiet fills and a clear selected perimeter or native mark. High Contrast Light
 and forced colors retain explicit selection; system colors use Highlight and
 HighlightText for compact selected faces.
 
+Browser Editor installation methods use the explicit radio marks documented in
+[Browser Editor runtime](../code/browser-editor-runtime.md), with a quiet fill.
+Their circle and checked dot carry selection contrast instead of a filled face.
+
 Files toolbars reserve the strong input boundary for filtering or active path
 editing. Read-mode breadcrumbs and ordinary actions have no input frame. The
 Files/Git rail and its selected button use shared flat fills without a second
