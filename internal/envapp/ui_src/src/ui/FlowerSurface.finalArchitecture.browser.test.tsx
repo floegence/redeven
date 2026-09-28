@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import type {
@@ -1513,11 +1513,15 @@ describe('Flower final thread cache and workspace transport', () => {
     const command = row.querySelector<HTMLElement>('.flower-activity-terminal-command')!;
     expect(command.textContent).toBe('printf READY');
     expect(row.textContent).toContain('Waiting for output');
+    // Enter the reading surface before selecting text; the composer otherwise
+    // retains its native text-control selection after a programmatic toggle.
+    await userEvent.click(command);
     const selection = window.getSelection()!;
     const range = document.createRange();
     range.selectNodeContents(command);
     selection.removeAllRanges();
     selection.addRange(range);
+    expect(selection.toString()).toBe('printf READY');
 
     stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: current(2, 'error', 'Diagnostic output') });
     await waitFor(() => row.textContent?.includes('Diagnostic output') === true);
