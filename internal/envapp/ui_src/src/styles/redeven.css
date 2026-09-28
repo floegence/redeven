@@ -4568,8 +4568,8 @@ html.dark .git-content-skeleton__block {
 
 .browser-editor-setup__method-option[data-selected='true'] {
   border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: color-mix(in srgb, var(--primary) 8%, var(--background));
+  color: var(--foreground);
   transition: none;
 }
 
@@ -4582,9 +4582,29 @@ html.dark .git-content-skeleton__block {
   opacity: 0.82;
 }
 
-.browser-editor-setup__method-option span {
+.browser-editor-setup__method-radio {
+  display: grid;
+  flex-shrink: 0;
+  width: 0.85rem;
+  height: 0.85rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+
+.browser-editor-setup__method-option[data-selected='true'] .browser-editor-setup__method-radio::after {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.browser-editor-setup__method-name {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .browser-editor-setup__data-path {
@@ -4603,8 +4623,19 @@ html.dark .git-content-skeleton__block {
 }
 
 .browser-editor-setup__actions {
-  margin-top: auto;
-  padding-top: 0.25rem;
+  flex-wrap: wrap;
+  flex-direction: row-reverse;
+  padding: 0.85rem 1.35rem;
+  border-top: 1px solid var(--browser-editor-section-divider);
+  background: color-mix(in srgb, var(--muted) 11%, transparent);
+}
+
+.browser-editor-setup__action-group {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .browser-editor-setup__progress,
@@ -4966,8 +4997,12 @@ html.dark .git-content-skeleton__block {
   }
 
   .browser-editor-setup__actions {
-    align-items: flex-start;
-    flex-direction: column;
+    padding: 0.85rem 1rem;
+  }
+
+  .browser-editor-setup__action-group,
+  .browser-editor-setup__action-group > button {
+    width: 100%;
   }
 
   .browser-editor-setup__steps[data-layout='wide'] {

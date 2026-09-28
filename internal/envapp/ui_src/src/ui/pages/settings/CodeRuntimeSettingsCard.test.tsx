@@ -42,6 +42,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Trash: (props: any) => <span class={props.class} />,
   Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
   Cloud: (props: any) => <span class={props.class} data-testid="cloud-icon" />,
+  Download: (props: any) => <span class={props.class} data-testid="download-icon" />,
   Cpu: (props: any) => <span class={props.class} data-testid="cpu-icon" />,
   RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
   X: (props: any) => <span class={props.class} data-testid="x-icon" />,
@@ -312,9 +313,9 @@ describe('CodeRuntimeSettingsCard', () => {
       }),
     });
 
-    expect(controlText(host)).toContain('Set up Browser Editor');
+    expect(controlText(host)).toContain('Download and install');
     expect(controlText(host)).not.toContain('Browser Editor setup required');
-    expect(Array.from(host.querySelectorAll('button')).filter((button) => controlText(button) === 'Set up Browser Editor')).toHaveLength(1);
+    expect(Array.from(host.querySelectorAll('button')).filter((button) => controlText(button) === 'Download and install')).toHaveLength(1);
   });
 
   it('selects the Browser Editor update method in the confirmation before preparing', () => {

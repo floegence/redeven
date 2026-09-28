@@ -2820,7 +2820,7 @@ export const enUS = defineDictionary({
     prepare: {
       description: 'Redeven Desktop will download the latest Browser Editor package, cache one copy on this computer, and send it to the connected environment.',
       setup: {
-        actionLabel: 'Set up Browser Editor',
+        actionLabel: 'Download and install',
         confirmTitle: 'Set up Browser Editor',
         runningLabel: 'Setting up Browser Editor...',
         tooltip: 'Set up the Browser Editor used by Codespaces in the connected environment.',

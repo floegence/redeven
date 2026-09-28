@@ -2702,7 +2702,7 @@
     "prepare": {
       "description": "Redeven Desktop 將下載最新的 Browser Editor 軟體包，並在本電腦上快取一份副本，並將其傳送至連接的環境。",
       "setup": {
-        "actionLabel": "設定Browser Editor",
+        "actionLabel": "下載並安裝",
         "confirmTitle": "設定Browser Editor",
         "runningLabel": "正在設定 Browser Editor...",
         "tooltip": "在連線環境中設定Codespaces所使用的Browser Editor。"
