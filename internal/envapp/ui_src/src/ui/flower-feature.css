@@ -348,6 +348,8 @@
   .ai-readiness-surface__inner { padding-top: 2rem; }
   .ai-readiness-title { font-size: 1.25rem; }
   .ai-readiness-actions { flex-direction: column; }
+  .ai-readiness-copy-label { display: none; }
+  .ai-readiness-copy { width: 2.75rem; padding-inline: 0; }
   .ai-readiness-action { width: 100%; }
   .ai-readiness-diagnostics__row {
     grid-template-columns: minmax(0, 1fr);

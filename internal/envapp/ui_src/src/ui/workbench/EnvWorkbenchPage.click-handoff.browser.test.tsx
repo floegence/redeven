@@ -297,6 +297,8 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
   redevenWorkbenchInitialCanvasWidgetTypes: [],
 }));
 
+const disposers: Array<() => void> = [];
+
 describe('EnvWorkbenchPage click handoff', () => {
   beforeEach(() => {
     layoutApiState.lastStreamArgs = null;
@@ -334,6 +336,7 @@ describe('EnvWorkbenchPage click handoff', () => {
   });
 
   afterEach(() => {
+    disposers.splice(0).forEach(dispose => dispose());
     document.body.innerHTML = '';
   });
 
@@ -343,7 +346,7 @@ describe('EnvWorkbenchPage click handoff', () => {
     host.style.height = '900px';
     document.body.appendChild(host);
 
-    render(() => <EnvWorkbenchPage />, host);
+    disposers.push(render(() => <EnvWorkbenchPage />, host));
     await flushWork();
 
     const terminalButton = host.querySelector('[data-testid="widget-terminal-button"]') as HTMLButtonElement | null;
@@ -416,7 +419,7 @@ describe('EnvWorkbenchPage click handoff', () => {
     host.style.inset = '0';
     document.body.appendChild(host);
 
-    render(() => <EnvWorkbenchPage />, host);
+    disposers.push(render(() => <EnvWorkbenchPage />, host));
     await flushWork();
 
     const filesInput = host.querySelector('[data-testid="widget-files-input"]') as HTMLInputElement | null;
@@ -441,7 +444,7 @@ describe('EnvWorkbenchPage click handoff', () => {
     host.style.inset = '0';
     document.body.appendChild(host);
 
-    render(() => <EnvWorkbenchPage />, host);
+    disposers.push(render(() => <EnvWorkbenchPage />, host));
     await flushWork();
 
     const filesInput = host.querySelector('[data-testid="widget-files-input"]') as HTMLInputElement | null;
@@ -473,7 +476,7 @@ describe('EnvWorkbenchPage click handoff', () => {
       ensureVisible: true,
     };
 
-    render(() => <EnvWorkbenchPage />, host);
+    disposers.push(render(() => <EnvWorkbenchPage />, host));
     await flushWork();
 
     const viewport = host.querySelector('.floe-infinite-canvas__viewport') as HTMLElement | null;
@@ -498,7 +501,7 @@ describe('EnvWorkbenchPage click handoff', () => {
     host.style.inset = '0';
     document.body.appendChild(host);
 
-    render(() => <EnvWorkbenchPage />, host);
+    disposers.push(render(() => <EnvWorkbenchPage />, host));
     await flushWork();
 
     const widget = host.querySelector('[data-floe-workbench-widget-id="widget-terminal-1"]') as HTMLElement | null;
@@ -510,8 +513,9 @@ describe('EnvWorkbenchPage click handoff', () => {
     expect(getComputedStyle(handle!).zIndex).toBe('40');
     expect(getComputedStyle(statusBar!).zIndex).toBe('10');
 
+    await vi.waitFor(() => expect(widget!.hasAttribute('data-workbench-widget-motion')).toBe(false));
     const bounds = handle!.getBoundingClientRect();
-    const point = { x: bounds.right - 2, y: bounds.bottom - 2 };
+    const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
     const hit = document.elementFromPoint(point.x, point.y);
     expect(hit?.closest('.workbench-widget__resize')).toBe(handle);
 
@@ -579,7 +583,7 @@ describe('EnvWorkbenchPage click handoff', () => {
     host.style.inset = '0';
     document.body.appendChild(host);
 
-    render(() => <EnvWorkbenchPage />, host);
+    disposers.push(render(() => <EnvWorkbenchPage />, host));
     await flushWork();
 
     expect(host.querySelector('.workbench-widget__resize')).toBeNull();

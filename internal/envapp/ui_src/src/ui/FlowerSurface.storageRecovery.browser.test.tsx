@@ -1,10 +1,14 @@
+import { page } from 'vitest/browser';
 import '../index.css';
 import './flower-feature.css';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { createTransportOutbox } from '../../../../flower_ui/src/transportOutbox';
 import type { FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { adapter, deferred, launchReceipt, liveBootstrap, renderSurfaceWithAdapter, thread, wait, waitFor } from './FlowerSurface.navigation.testHarness';
+
+// Keep the thread rail visible while exercising the conversation contract.
+beforeEach(() => page.viewport(1280, 900));
 
 it('preserves old outbox input after restoration and never refreshes its generation or retries it', async () => {
   const initial = thread({ thread_id: 'thread-restored', messages: [], status: 'idle' });

@@ -26,6 +26,13 @@ desktop/.containers-v4-development/
 desktop/diagnostics/
 plugins/official/containers/dist/
 
+# Env App browser-test evidence (never source fixtures)
+internal/envapp/ui_src/.cache/pdf-document-surface/
+internal/envapp/ui_src/.cache/progress-shimmer/
+internal/envapp/ui_src/.vitest-attachments/
+internal/envapp/ui_src/dist/control-harmony/
+internal/envapp/ui_src/src/**/__screenshots__/
+
 # Local agent blueprint draft (do not commit)
 .agent.md
 

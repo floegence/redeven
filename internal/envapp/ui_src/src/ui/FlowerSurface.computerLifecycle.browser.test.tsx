@@ -121,7 +121,9 @@ it('keeps blue running controls readable across themes with visible motion and s
       for (const control of [entry, ball]) {
         control.append(probe);
         for (const hovered of [false, true]) {
-          await userEvent.hover(hovered ? control : f.surface.querySelector('h2') ?? f.surface);
+          if (hovered) await userEvent.hover(control);
+          else await userEvent.unhover(control);
+          expect(control.matches(':hover')).toBe(hovered);
           const base = color('--floe-progress-text-base'), peak = color('--floe-progress-text-peak');
           expect(base[2] - base[0], preset.name).toBeGreaterThan(0.1);
           for (const ink of control === entry ? [base, peak] : [base]) for (const surface of [color('--floe-progress-surface-base'), color('--floe-progress-surface-peak')]) {

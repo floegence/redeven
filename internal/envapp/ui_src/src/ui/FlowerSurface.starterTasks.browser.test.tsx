@@ -43,8 +43,10 @@ describe('Flower starter task interaction', () => {
     for (const [index, card] of cards.entries()) {
       const task = copy.emptyState.suggestions[index];
       expect(card.textContent).toContain(task.title);
-      expect(card.textContent).toContain(task.description);
-      expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+      expect(document.getElementById(card.getAttribute('aria-describedby')!)?.textContent).toBe(task.description);
+      expect(card.closest('.flower-empty-suggestion')!.scrollWidth).toBeLessThanOrEqual(card.closest('.flower-empty-suggestion')!.clientWidth + 1);
+      expect(getComputedStyle(card).whiteSpace).toBe('nowrap');
+      expect(card.title).toBe(task.title);
       expect(getComputedStyle(card).cursor).toBe('pointer');
       expect(card.getBoundingClientRect().right).toBeLessThanOrEqual(surface.getBoundingClientRect().right + 1);
 

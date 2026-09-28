@@ -136,20 +136,37 @@ export default mergeConfig(viteConfig, defineConfig({
         },
         selectPdfText: async ({ page }, text: string) => {
           const frame = await frameForSelector(page, '.pdf-preview-pane .textLayer');
-          await frame.evaluate(() => document.getSelection()?.removeAllRanges());
-          const span = frame.locator('.pdf-preview-pane .textLayer span').filter({ hasText: text }).first();
-          await span.scrollIntoViewIfNeeded();
-          const rect = await span.boundingBox();
-          if (!rect) throw new Error('PDF text is unavailable');
-          await page.mouse.move(rect.x + 1, rect.y + rect.height / 2);
-          await page.mouse.down();
-          await page.mouse.move(rect.x + rect.width - 1, rect.y + rect.height / 2, { steps: 12 });
-          await page.mouse.up();
-          const selection = await frame.evaluate(() => document.getSelection()?.toString());
-          await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-          await page.keyboard.press(process.platform === 'darwin' ? 'Meta+c' : 'Control+c');
-          const clipboard = await frame.evaluate(() => navigator.clipboard.readText());
-          return { selection, clipboard };
+          const frameElement = await frame.frameElement();
+          const styles = await frameElement.evaluate(element => ({ frame: element.getAttribute('style'), host: element.parentElement!.getAttribute('style') }));
+          try {
+            // Vitest scales its preview iframe to fit its runner. Keep the real
+            // Workbench projection while removing that second, test-only scale.
+            await frameElement.evaluate(element => {
+              element.parentElement!.style.setProperty('transform', 'none', 'important');
+              (element as HTMLElement).style.setProperty('transform', 'none', 'important');
+            });
+            await frame.evaluate(() => document.getSelection()?.removeAllRanges());
+            const span = frame.locator('.pdf-preview-pane .textLayer span').filter({ hasText: text }).first();
+            await span.scrollIntoViewIfNeeded();
+            const rect = await span.boundingBox();
+            if (!rect) throw new Error('PDF text is unavailable');
+            await page.mouse.move(rect.x + 1, rect.y + rect.height / 2);
+            await page.mouse.down();
+            await page.mouse.move(rect.x + rect.width - 1, rect.y + rect.height / 2, { steps: 12 });
+            await page.mouse.up();
+            const selection = await frame.evaluate(() => document.getSelection()?.toString());
+            await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+            await page.keyboard.press(process.platform === 'darwin' ? 'Meta+c' : 'Control+c');
+            const clipboard = await frame.evaluate(() => navigator.clipboard.readText());
+            return { selection, clipboard };
+          } finally {
+            await frameElement.evaluate((element, previous) => {
+              for (const [target, style] of [[element, previous.frame], [element.parentElement!, previous.host]] as const) {
+                if (style === null) target.removeAttribute('style');
+                else target.setAttribute('style', style);
+              }
+            }, styles);
+          }
         },
         inspectComputerProgress: async ({ page }, theme: string) => {
           const frame = await frameForSelector(page, '.flower-computer-entry');

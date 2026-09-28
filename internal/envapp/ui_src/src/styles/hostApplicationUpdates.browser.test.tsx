@@ -33,34 +33,41 @@ async function openUpdate(width = 390) {
   document.body.append(host);
   dispose = render(() => <EnvHostApplicationsPage />, host);
   const copy = createTestI18nHelpers(state.locale);
-  await expect.poll(() => host.querySelector('.host-apps-update-notice button')).toBeTruthy();
-  const trigger = host.querySelector<HTMLButtonElement>('.host-apps-update-notice button')!;
+  const feedbackTrigger = host.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
+  await expect.poll(() => feedbackTrigger.getAttribute('aria-label')).toContain(copy.t('hostApplications.update.available'));
   expect(state.start).not.toHaveBeenCalled();
+  await userEvent.click(feedbackTrigger);
+  const updateDetails = page.getByRole('button', { name: copy.t('hostApplications.update.view'), exact: true });
+  await expect.element(updateDetails).toBeVisible();
+  const trigger = updateDetails.element() as HTMLButtonElement;
   await userEvent.click(trigger);
-  await expect.poll(() => document.querySelector('[role=dialog]')).toBeTruthy();
-  const dialog = document.querySelector<HTMLElement>('[role=dialog]')!;
+  await expect.poll(() => document.querySelector('.host-apps-dialog[role=dialog]')).toBeTruthy();
+  const dialog = document.querySelector<HTMLElement>('.host-apps-dialog[role=dialog]')!;
   await expect.poll(() => dialog.textContent).toContain(copy.t(state.missing ? 'hostApplications.prepare.hostDownload' : 'hostApplications.update.local'));
   // Evaluate final colors, not the modal's transparent entrance frame.
   await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
-  return { host, dialog, trigger, copy };
+  return { host, dialog, trigger, feedbackTrigger, copy };
 }
 
 it.each(builtInShellThemePresets)('keeps the optional update usable in $name', async preset => {
   document.documentElement.dataset.floeShellTheme = preset.name;
   document.documentElement.classList.add(preset.mode!);
-  const { dialog, trigger, copy } = await openUpdate(preset.mode === 'dark' ? 390 : 1000);
+  const { dialog, trigger, feedbackTrigger, copy } = await openUpdate(preset.mode === 'dark' ? 390 : 1000);
   expect(dialog.textContent).toContain(copy.t('hostApplications.update.stabilityFix'));
-  expect(dialog.querySelector('input[type=radio]')).toBeNull();
+  expect(dialog.querySelector('input[type=radio], [role=radio]')).toBeNull();
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   const versions = dialog.querySelector<HTMLElement>('dl')!;
   expect(versions.scrollWidth).toBeLessThanOrEqual(versions.clientWidth);
-  const update = [...dialog.querySelectorAll('button')].find(button => button.textContent === copy.t('hostApplications.update.start'))!;
+  const update = page.elementLocator(dialog).getByRole('button', { name: copy.t('hostApplications.update.start'), exact: true }).element();
   expect(getComputedStyle(update).cursor).toBe('pointer');
   expect((await axe.run(dialog, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
   if (preset.name.startsWith('porcelain-')) await page.screenshot({ element: dialog, path: `__screenshots__/components-${preset.name}.png` });
   await userEvent.keyboard('{Escape}');
-  await expect.poll(() => document.querySelector('[role=dialog]')).toBeNull();
+  await expect.poll(() => document.querySelector('.host-apps-dialog[role=dialog]')).toBeNull();
   await expect.poll(() => document.activeElement).toBe(trigger);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('[role=dialog]')).toBeNull();
+  await expect.poll(() => document.activeElement).toBe(feedbackTrigger);
 });
 
 it.each(SUPPORTED_LOCALES)('localizes update, transfer size and keyboard actions in %s', async locale => {
@@ -69,9 +76,9 @@ it.each(SUPPORTED_LOCALES)('localizes update, transfer size and keyboard actions
   expect(dialog.textContent).toContain(copy.t('hostApplications.update.title'));
   expect(dialog.textContent).toContain(new Intl.NumberFormat(locale, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(2.5));
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
-  const input = dialog.querySelector<HTMLInputElement>('input[value=host]')!;
-  expect(input.checked).toBe(true);
-  const update = [...dialog.querySelectorAll('button')].find(button => button.textContent === copy.t('hostApplications.update.start'))!;
+  const hostMethod = page.elementLocator(dialog).getByRole('radio', { name: copy.t('hostApplications.prepare.hostDownload') });
+  await expect.element(hostMethod).toBeChecked();
+  const update = page.elementLocator(dialog).getByRole('button', { name: copy.t('hostApplications.update.start'), exact: true }).element() as HTMLButtonElement;
   state.start.mockResolvedValue({ ...status, state: 'validating', operation_id: 'update', can_cancel: true });
   update.focus(); await userEvent.keyboard('{Enter}');
   expect(state.start).toHaveBeenCalledWith(expect.any(String), 'download', 0, 'a'.repeat(64));

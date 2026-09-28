@@ -167,6 +167,8 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
                 : primaryAction() === 'install' || primaryAction() === 'enable' ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                   : 'border bg-background text-foreground hover:bg-muted',
             )}
+            aria-label={commandPending() ? pendingLabel() : primaryLabel()}
+            title={commandPending() ? pendingLabel() : primaryLabel()}
             aria-busy={commandPending()}
             disabled={commandPending() || ((primaryAction() === 'review_update' || primaryAction() === 'install') && (!props.canManage || props.managementDisabled))
               || (primaryAction() === 'open' && (!props.canOpenSurfaces || !props.item.defaultLaunchTarget))
@@ -181,8 +183,8 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               : primaryAction() === 'open' ? <Play class="h-4 w-4 shrink-0" />
                 : primaryAction() === 'enable' ? <CheckCircle class="h-4 w-4 shrink-0" />
                   : <MoreHorizontal class="h-4 w-4 shrink-0" />}
-            <span data-plugin-center-card-primary-label class="min-w-0 break-words leading-4">
-              <StableText reserve={[...pluginPendingActionLabels(i18n), primaryLabel()]}>{commandPending() ? pendingLabel() : primaryLabel()}</StableText>
+            <span data-plugin-center-card-primary-label class="min-w-0 leading-4">
+              <StableText class="max-w-full [&>span]:truncate" reserve={[...pluginPendingActionLabels(i18n), primaryLabel()]}>{commandPending() ? pendingLabel() : primaryLabel()}</StableText>
             </span>
           </button>
         )}>

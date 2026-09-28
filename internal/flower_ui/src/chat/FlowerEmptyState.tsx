@@ -1,5 +1,5 @@
 import type { Component, JSX } from 'solid-js';
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createSignal, createUniqueId } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Files, FolderOpen, Grid, MonitorPointer, Sparkles } from '@floegence/floe-webapp-core/icons';
 
@@ -64,25 +64,30 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
           <For each={suggestionRows(copy())}>
             {(item) => {
               const Icon = item.icon;
+              const descriptionID = createUniqueId();
               return (
-                <button
-                  type="button"
-                  onClick={() => props.onSuggestionClick(item.prompt)}
-                  disabled={props.disabled}
+                <div
                   class={cn(
-                    'flower-empty-suggestion group flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors duration-[120ms]',
-                    'hover:bg-accent',
-                    'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-card',
+                    'flower-empty-suggestion group relative flex min-w-0 items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors duration-[120ms]',
+                    !props.disabled && 'hover:bg-accent',
+                    props.disabled && 'opacity-50',
                   )}
                 >
                   <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
                     <Icon class="h-5 w-5 text-primary" />
                   </div>
                   <div class="min-w-0 flex-1">
-                    <div class="mb-0.5 text-[length:var(--floe-type-control)] font-medium text-foreground">{item.copy.title}</div>
-                    <div class="text-xs leading-relaxed text-muted-foreground">{item.copy.description}</div>
+                    <button
+                      type="button"
+                      class="flower-empty-suggestion-action mb-0.5 block w-full min-w-0 cursor-pointer truncate text-left text-[length:var(--floe-type-control)] font-medium text-foreground disabled:cursor-not-allowed"
+                      title={item.copy.title}
+                      aria-describedby={descriptionID}
+                      disabled={props.disabled}
+                      onClick={() => props.onSuggestionClick(item.prompt)}
+                    >{item.copy.title}</button>
+                    <p id={descriptionID} class="text-xs leading-relaxed text-muted-foreground">{item.copy.description}</p>
                   </div>
-                </button>
+                </div>
               );
             }}
           </For>

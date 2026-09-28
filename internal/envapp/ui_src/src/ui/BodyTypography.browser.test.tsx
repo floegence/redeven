@@ -100,7 +100,7 @@ it('keeps the Flower computer-use switch on the control scale', async () => {
   await expectSize('.flower-settings-toggle-label');
 });
 it('keeps managed-browser readiness on the body scale', async () => {
-  await mount(() => <FlowerManagedBrowser copy={computerUseEnUS} canMutate management={{ loadBrowserInstallation: vi.fn().mockResolvedValue({ enabled: true, state: 'installed', package: { name: 'Chromium', version: '153', platform: 'darwin', architecture: 'arm64' } }) }} />);
+  await mount(() => <FlowerManagedBrowser copy={computerUseEnUS} canMutate management={{ loadBrowserInstallation: vi.fn().mockResolvedValue({ enabled: true, state: 'installed', launch: { state: 'ready' }, package: { name: 'Chromium', version: '153', platform: 'darwin', architecture: 'arm64' } }) }} />);
   await expectSize('.flower-browser-ready p');
 });
 

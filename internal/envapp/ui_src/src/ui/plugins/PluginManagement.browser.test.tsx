@@ -1157,7 +1157,7 @@ describe('plugin management browser geometry and interaction', () => {
     const label = primary.querySelector<HTMLElement>('[data-plugin-center-card-primary-label]')!;
     const actions = card.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;
     const initialHeight = primary.getBoundingClientRect().height;
-    expect(label.textContent?.trim()).toBe('查看运行时要求');
+    await expect.element(page.elementLocator(primary)).toHaveAccessibleName('查看运行时要求');
     expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(16);
     expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
     expect(primary.getBoundingClientRect().width).toBeGreaterThan(actions.getBoundingClientRect().width * 0.7);
@@ -1409,7 +1409,13 @@ describe('plugin management browser geometry and interaction', () => {
     const sourceLabels = Array.from(dialog.querySelectorAll<HTMLElement>('[data-external-plugin-source-label]'));
     expect(sourceTabs).toHaveLength(3);
     expect(sourceLabels).toHaveLength(3);
-    sourceLabels.forEach(expectNoHorizontalOverflow);
+    sourceLabels.forEach((label, index) => {
+      expect(sourceTabs[index].getAttribute('aria-label')).toBe(label.textContent);
+      expect(sourceTabs[index].title).toBe(label.textContent);
+      expect(getComputedStyle(label).whiteSpace).toBe('nowrap');
+      expect(getComputedStyle(label).textOverflow).toBe('ellipsis');
+      expect(getComputedStyle(label).overflow).toBe('hidden');
+    });
     for (let index = 1; index < sourceTabs.length; index += 1) {
       expect(sourceTabs[index - 1].getBoundingClientRect().right)
         .toBeLessThanOrEqual(sourceTabs[index].getBoundingClientRect().left + 1);

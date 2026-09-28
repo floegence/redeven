@@ -25,7 +25,7 @@ export const FlowerSetupWelcome: Component<{
         </button>
       )}>
         {(item) => (
-          <button type="button" class="flower-setup-action" data-model-source-action={item.id}
+          <button type="button" class="flower-setup-action" data-model-source-action={item.id} title={item.action.label} aria-label={item.action.label}
             onClick={() => props.onAction(item.action)}>
             <Show when={item.id === 'local_settings'} fallback={<Globe class="flower-setup-action-icon" aria-hidden="true" />}>
               <MonitorPointer class="flower-setup-action-icon" aria-hidden="true" />

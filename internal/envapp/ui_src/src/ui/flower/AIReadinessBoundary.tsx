@@ -169,6 +169,12 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
     }
   };
 
+  const copyLabel = () => copyPending()
+    ? i18n.t('aiReadiness.actions.copyingDiagnostics')
+    : copyFailed() ? i18n.t('aiReadiness.actions.copyDiagnosticsFailed')
+      : copied() ? i18n.t('aiReadiness.actions.diagnosticsCopied')
+        : i18n.t('aiReadiness.actions.copyDiagnostics');
+
   const copyDiagnostics = async (): Promise<void> => {
     if (copyPending()) return;
     setCopyPending(true);
@@ -367,6 +373,8 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
                   <button
                     type="button"
                     class={`ai-readiness-copy ${INTERACTIVE_CLASS}`}
+                    aria-label={copyLabel()}
+                    title={copyLabel()}
                     disabled={copyPending()}
                     aria-busy={copyPending() ? 'true' : undefined}
                     data-pending={copyPending() ? 'true' : undefined}
@@ -375,13 +383,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
                     <Show when={copied()} fallback={<Copy class="h-4 w-4" aria-hidden="true" />}>
                       <Check class="h-4 w-4" aria-hidden="true" />
                     </Show>
-                    <span><StableText reserve={[i18n.t('aiReadiness.actions.copyingDiagnostics'), i18n.t('aiReadiness.actions.copyDiagnosticsFailed'), i18n.t('aiReadiness.actions.diagnosticsCopied'), i18n.t('aiReadiness.actions.copyDiagnostics')]}>{copyPending()
-                      ? i18n.t('aiReadiness.actions.copyingDiagnostics')
-                      : copyFailed()
-                        ? i18n.t('aiReadiness.actions.copyDiagnosticsFailed')
-                      : copied()
-                        ? i18n.t('aiReadiness.actions.diagnosticsCopied')
-                        : i18n.t('aiReadiness.actions.copyDiagnostics')}</StableText></span>
+                    <span class="ai-readiness-copy-label"><StableText reserve={[i18n.t('aiReadiness.actions.copyingDiagnostics'), i18n.t('aiReadiness.actions.copyDiagnosticsFailed'), i18n.t('aiReadiness.actions.diagnosticsCopied'), i18n.t('aiReadiness.actions.copyDiagnostics')]}>{copyLabel()}</StableText></span>
                   </button>
                   <Show when={copied() || copyFailed()}>
                     <span class="sr-only" role="status">

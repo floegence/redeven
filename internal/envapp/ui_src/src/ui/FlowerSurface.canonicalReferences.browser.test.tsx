@@ -41,7 +41,7 @@ describe('Flower canonical reference browser presentation', () => {
           name: 'deployment-observability-and-reliability-review-notes.txt',
           size: 12_345,
           mimeType: 'text/plain',
-          url: 'data:text/plain,review',
+          url: 'https://example.test/attachments/review.txt',
         }],
         references: [
           {
@@ -85,6 +85,10 @@ describe('Flower canonical reference browser presentation', () => {
       openCanonicalReference,
     });
 
+    // At this width the real navigation is a drawer. Open it before selecting
+    // history, then keep the original narrow conversation geometry assertions.
+    await waitFor(() => Boolean(runtime.querySelector('.flower-chat-header .flower-mobile-navigation-button')));
+    await userEvent.click(runtime.querySelector<HTMLButtonElement>('.flower-chat-header .flower-mobile-navigation-button')!);
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-canonical-reference-browser"] button')));
     (runtime.querySelector('[data-thread-id="thread-canonical-reference-browser"] button') as HTMLButtonElement).click();
     const surface = runtime.querySelector('#redeven-flower-surface') as HTMLElement;
@@ -130,6 +134,9 @@ describe('Flower canonical reference browser presentation', () => {
     expect(getComputedStyle(longLabel).textOverflow).toBe('ellipsis');
 
     const fileChip = chips[1] as HTMLButtonElement;
+    // A bottom drawer has no side attribute and keeps the background inert
+    // throughout its exit. Wait for the shared modal boundary to release it.
+    await waitFor(() => !runtime.querySelector('[data-floe-dialog-overlay-root]') && !attachment.closest('[inert]'));
     attachment.focus();
     expect(document.activeElement).toBe(attachment);
 

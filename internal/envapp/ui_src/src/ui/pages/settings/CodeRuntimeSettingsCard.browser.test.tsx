@@ -106,10 +106,7 @@ describe('CodeRuntimeSettingsCard rendered update method flow', () => {
     cleanup = dispose;
     await settle();
 
-    const updateButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'Update Browser Editor');
-    expect(updateButton).toBeTruthy();
-    updateButton?.click();
+    await page.elementLocator(host).getByRole('button', { name: 'Update Browser Editor', exact: true }).click();
     await settle();
 
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
@@ -131,15 +128,12 @@ describe('CodeRuntimeSettingsCard rendered update method flow', () => {
     expect(dialog?.scrollWidth).toBeLessThanOrEqual((dialog?.clientWidth ?? 0) + 1);
     expect(dialog?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(window.innerWidth);
 
-    const confirmButton = Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
-      .find((button) => button.textContent?.trim() === 'Update Browser Editor');
-    expect(confirmButton).toBeTruthy();
-    confirmButton?.click();
+    await page.elementLocator(dialog!).getByRole('button', { name: 'Update Browser Editor', exact: true }).click();
     await settle();
 
     expect(document.querySelector('[role="dialog"]')?.getAttribute('data-floating-presence')).toBe('exiting');
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeTruthy();
-    expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent?.trim() === 'Cancel')).toHaveLength(1);
+    await expect.element(page.elementLocator(host).getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
 
     // The shared owner paints the exit before starting its 160ms disposal timer.
     await expect.poll(() => document.querySelector('[role="dialog"]'), { timeout: 500 }).toBeNull();
@@ -155,9 +149,7 @@ describe('CodeRuntimeSettingsCard rendered update method flow', () => {
     cleanup = dispose;
     await settle();
 
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'Update Browser Editor')
-      ?.click();
+    await page.elementLocator(host).getByRole('button', { name: 'Update Browser Editor', exact: true }).click();
     await settle();
 
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
