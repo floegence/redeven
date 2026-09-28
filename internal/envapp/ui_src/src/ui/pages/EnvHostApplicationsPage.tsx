@@ -250,6 +250,9 @@ export function EnvHostApplicationsPage() {
     try {
       const owner = applicationResource.identity();
       const locale = i18n.locale();
+      // Preparation changes launch capability. A session-only refresh retains
+      // the previous availability and cannot satisfy this reconciliation.
+      invalidateCatalog(owner);
       const current = await applicationResource.refresh(signal => listHostApplications(locale, signal));
       if (disposed || owner !== applicationResource.identity()) return;
       if (!ready()) return;
