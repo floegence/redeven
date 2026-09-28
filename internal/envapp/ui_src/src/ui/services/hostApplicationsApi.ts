@@ -9,6 +9,7 @@ export type HostApplicationSetup = Readonly<{
   received_bytes: number;
   expected_bytes: number;
   error_code?: string;
+  launch_diagnostic?: {code: string; stage: string; exit_code?: number};
   can_cancel: boolean;
   installed?: Readonly<{ id: string; digest: string; architecture: 'amd64' | 'arm64'; contract: string; ready: boolean }>;
   update_available?: boolean;
@@ -33,7 +34,7 @@ export type HostApplicationSession = Readonly<{
   id: string;
   application: HostApplication;
   state: 'starting' | 'running' | 'ended' | 'failed' | 'opened';
-  backend?: 'macos';
+  backend?: 'macos' | 'linux' | 'wayland';
   existing_application?: boolean;
   mode?: 'native' | 'stream';
   end_reason?: 'application_exited' | 'windows_closed' | 'sharing_stopped';
@@ -45,13 +46,19 @@ export type HostApplicationSession = Readonly<{
 export type RunningHostApplication = Readonly<{ application_id: string; instances: string[] }>;
 
 export type HostApplicationCatalog = Readonly<{
-  availability: { backend?: 'macos'; native_ready?: boolean; permissions?: {screen_recording: boolean; accessibility: boolean}; supported: boolean; ready: boolean; reason?: string; version?: string; requirements?: string[] };
+  availability: { backend?: 'macos' | 'linux' | 'wayland'; native_ready?: boolean; permissions?: {screen_recording: boolean; accessibility: boolean}; supported: boolean; ready: boolean; reason?: string; version?: string; requirements?: string[] };
   applications: HostApplication[];
   sessions: HostApplicationSession[];
   running?: RunningHostApplication[];
 }>;
 
 export type HostApplicationPresentation = Readonly<{
+  packageUnavailable?: string;
+  hostServiceUnavailable?: string;
+  graphicsUnavailable?: string;
+  planStale?: string;
+  packageUnsupported?: string;
+  clipboardUnavailable?: string;
   shellTheme?: string;
   checking?: string;
   applicationExited?: string;

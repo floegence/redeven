@@ -7,7 +7,7 @@ timestamp: 2026-09-24T00:00:00Z
 ---
 # Summary
 
-Published Floe remote-pointer owns content pointer events in Linux/Xpra and macOS
+Published Floe remote-pointer owns content pointer events in Linux native/Xpra and macOS
 viewers. Touch swipes scroll; taps click; long presses provide drag or right click.
 A gesture stays bound to one painted window instance and connection generation.
 Cancellation drops queued movement and scroll and releases only its own buttons.
@@ -35,7 +35,7 @@ The touch policy marks only remote pixel canvases. Local toolbar controls, windo
 lists and the native editable input retain their own browser behavior. Touch scrolling
 does not move the input-method anchor or open the soft keyboard. Tap/drag activation
 coordinates content focus; the toolbar Keyboard button explicitly opens the keyboard.
-Focusing the child input is internal to the Linux viewer, so the parent window's
+Focusing the child input is internal to the Xpra viewer, so the parent window's
 corresponding blur must not cancel that activation. Leaving the document does cancel.
 
 ## Scroll and lifecycle
@@ -46,6 +46,8 @@ the whole distance, and scrolling stays locked to its initial window and hit pos
 including across nested areas. Normal release flushes the final queued delta and
 stops; cancellation drops it. There is no inertia or persistent gesture setting.
 
+The Linux native adapter submits fractional CSS-pixel deltas directly; its gesture
+release callback has no remainder and never releases keyboard input.
 Xpra owns fine/discrete wheel quantization and its target-local remainder. The macOS
 binding accumulates fractions before encoding integer CoreGraphics pixel wheels;
 its release callback clears that remainder without sending keyboard release. The

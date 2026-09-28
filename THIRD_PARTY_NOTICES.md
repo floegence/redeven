@@ -6,6 +6,16 @@ Redeven itself is licensed under the MIT License; see `LICENSE`.
 
 This inventory is intentionally broad: it includes Go modules used by the runtime and JavaScript packages used to build the embedded Env App, Code App, and Desktop shell. Some JavaScript packages are build-time only, but keeping them in one auditable notice file avoids accidental omission when build output changes.
 
+## Prepared Linux Application Components
+
+Host application preparation downloads the component catalog published by
+`github.com/floegence/floe-native-apps`; these support tools are not copied into
+Redeven source. The selected package retains its own original archives, pinned
+hashes, source manifests and licenses, including libweston, Xwayland, portal
+services and native input adapters. Redeven consumes its published cursor client
+source and shared input/pointer assets through their released APIs. Original
+component identities and attribution remain upstream-owned.
+
 ## Xpra HTML5 Test Fixtures
 
 The compressed original HTML5 v21 files in `internal/hostapps/testdata/original-client` come from https://github.com/Xpra-org/xpra-html5/tree/v21/html5. They retain their original copyright notices and are licensed under MPL-2.0; the complete license is retained alongside the fixtures. These original files validate the released SDK preparation contract in tests and are not bundled into the production viewer. Synthetic ancillary fixture resources contain no third-party implementation.
@@ -1399,7 +1409,7 @@ SOFTWARE.
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/floegence/floe-native-apps | v0.12.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.12.4 | Detected from LICENSE. |
+| github.com/floegence/floe-native-apps | v0.20.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.20.0 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.18.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.18.2 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.4.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.4.1 | Floegence first-party dependency. |

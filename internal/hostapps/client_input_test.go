@@ -17,8 +17,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	nativeapps "github.com/floegence/floe-native-apps"
 )
 
 //go:embed testdata/client_pointer.py
@@ -111,7 +114,12 @@ save()
 Gtk.main()
 `
 	target := os.Getenv("REDEVEN_TEST_CLIENT_INPUT_TARGET")
-	if target != "" && !strings.HasPrefix(target, "pointer-") {
+	if target == "window-lifecycle" {
+		// The native event loop deliberately outlives its only window. Closing
+		// sharing must not be confused with application-process termination.
+		source = strings.Replace(source, "w.connect('destroy', Gtk.main_quit)", "w.connect('destroy', lambda *args: (root / 'window-closed.json').write_text(json.dumps({'pid':os.getpid(), 'closed':True})))", 1)
+	}
+	if target != "" && target != "window-lifecycle" && !strings.HasPrefix(target, "pointer-") {
 		if target != "firefox" && target != "gtk4" && target != "gtk4-entry" && target != "gnome" {
 			t.Fatal("unsupported input fixture target", target)
 		}
@@ -204,6 +212,28 @@ finally:
 	publishClientInputFixture(t, m, session, root, state, target, nil)
 	t.Logf("owned input fixture ready: pid=%d address=%s state=%s", a.record.Process.PID, a.record.Address, state)
 	waitUntil(t, func() bool { _, err := os.Stat(filepath.Join(root, "done.json")); return err == nil }, 180*time.Second)
+	if target == "window-lifecycle" {
+		var completion struct {
+			Passed bool `json:"passed"`
+		}
+		completed, err := os.ReadFile(filepath.Join(root, "done.json"))
+		if err != nil || json.Unmarshal(completed, &completion) != nil || !completion.Passed {
+			t.Fatal("browser did not confirm final-window closure")
+		}
+		var receipt struct {
+			PID    int  `json:"pid"`
+			Closed bool `json:"closed"`
+		}
+		data, err := os.ReadFile(filepath.Join(root, "window-closed.json"))
+		if err != nil || json.Unmarshal(data, &receipt) != nil || !receipt.Closed || receipt.PID <= 0 || !a.record.Process.Alive() {
+			t.Fatal("window closure did not retain its application", err)
+		}
+		if err := syscall.Kill(receipt.PID, 0); err != nil {
+			t.Fatal("windowless application event loop exited", err)
+		}
+		t.Logf("last window destroyed, browser closed, application pid=%d and helper pid=%d remain alive", receipt.PID, a.record.Process.PID)
+		return
+	}
 	if target == "gnome" {
 		var expected struct {
 			Document string `json:"document"`
@@ -330,6 +360,22 @@ func publishClientInputFixture(t *testing.T, m *Manager, session Session, root, 
 	// The fixture supplies one fixed admitted owner. Production origin and
 	// permission guards are exercised by the appserver authorization tests.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/_redeven_host_app/state" {
+			for _, current := range m.Sessions("fixture") {
+				if current.ID == session.ID {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]any{"state": current.State, "error_code": current.ErrorCode, "end_reason": current.EndReason, "password": m.Password(current.ID), "launch_diagnostic": current.LaunchDiagnostic})
+					return
+				}
+			}
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Path == "/cursor.js" && session.Backend == "wayland" {
+			w.Header().Set("Content-Type", "text/javascript")
+			_, _ = w.Write(nativeapps.CursorClientSource())
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, ClientAssetsPath) {
 			digest, resource, ok := strings.Cut(strings.TrimPrefix(r.URL.Path, ClientAssetsPath), "/")
 			assets := m.ClientAssets("fixture", digest)
@@ -344,9 +390,13 @@ func publishClientInputFixture(t *testing.T, m *Manager, session Session, root, 
 		proxy.ServeHTTP(w, r)
 	}))
 	t.Cleanup(server.Close)
-	metadata, _ := json.Marshal(map[string]any{"address": server.Listener.Addr().String(), "backend_address": a.record.Address, "password": share.password,
+	digest := ""
+	if share.viewer != nil {
+		digest = share.viewer.Assets().Digest()
+	}
+	metadata, _ := json.Marshal(map[string]any{"address": server.Listener.Addr().String(), "backend": session.Backend, "backend_address": a.record.Address, "password": share.password,
 		"pid": a.record.Process.PID, "process": a.record.Process, "state": state, "component": a.record.Component,
-		"input_version": 1, "viewer_version": 1, "assets_digest": share.viewer.Assets().Digest(), "kind": target, "retained": retained})
+		"input_version": 1, "viewer_version": 1, "assets_digest": digest, "kind": target, "retained": retained})
 	if err := os.WriteFile(filepath.Join(root, "connection.json"), metadata, 0600); err != nil {
 		t.Fatal(err)
 	}

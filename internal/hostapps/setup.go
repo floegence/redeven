@@ -32,7 +32,7 @@ func (m *Manager) setupManager() (*nativeapps.Manager, error) {
 	if m.setup != nil {
 		return m.setup, nil
 	}
-	pkg, err := nativeapps.NativePackage()
+	pkg, err := nativeapps.DesktopForPlatform(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return nil, err
 	}
@@ -123,9 +123,58 @@ func resolveManagedTools(manager *nativeapps.Manager, digest string) (hostTools,
 	return hostTools{xpra: tools.Xpra, python: tools.Python, xvfb: tools.Xvfb, dbus: tools.DBus, html: tools.HTML, managed: &tools, componentDigest: digest}, nil
 }
 
+func resolveDesktopTools(manager *nativeapps.Manager, digest string) (hostTools, error) {
+	root, err := manager.DirectoryFor(digest)
+	if err != nil {
+		return hostTools{}, err
+	}
+	tools, err := nativeapps.ResolveDesktopTools(root, runtime.GOARCH)
+	if err != nil {
+		return hostTools{}, err
+	}
+	return hostTools{python: tools.Python, desktop: &tools, componentDigest: digest}, nil
+}
+
+// Only an explicit upstream desktop-entry contract can select these resources.
+// Missing Xpra support never changes the combined default or triggers a retry.
+func (m *Manager) xpraLaunchTools(ctx context.Context, manager *nativeapps.Manager) hostTools {
+	if pkg, err := nativeapps.ForPlatform(runtime.GOOS, runtime.GOARCH); err == nil {
+		if tools, err := resolveManagedTools(manager, pkg.Digest()); err == nil {
+			return tools
+		}
+	}
+	if installed := manager.Snapshot("").Installed; installed != nil && installed.Ready && installed.Contract == "xpra-6-private-v1" {
+		if tools, err := resolveManagedTools(manager, installed.Digest); err == nil {
+			return tools
+		}
+	}
+	availability, tools := detectDependencies(ctx, runtime.GOOS, os.Environ())
+	if availability.Ready {
+		return tools
+	}
+	return hostTools{}
+}
+
+func (t hostTools) componentIdentity() string {
+	if t.componentDigest != "" {
+		return t.componentDigest
+	}
+	return "system"
+}
+
 func (m *Manager) tools(ctx context.Context) (Availability, hostTools) {
 	availability, tools := m.installedTools(ctx)
-	return clientInputTools(ctx, availability, tools)
+	if tools.desktop != nil {
+		return availability, tools
+	}
+	// Retained Xpra resources remain usable by existing instances. New default
+	// launches require the combined capability; missing preparation is not a
+	// reason to silently execute the application in another graphical backend.
+	availability.Ready = false
+	if availability.Supported {
+		availability.Reason = "missing_dependencies"
+	}
+	return availability, tools
 }
 
 // Resolve current resources independently of a retained application's backend.
@@ -133,6 +182,11 @@ func (m *Manager) installedTools(ctx context.Context) (Availability, hostTools) 
 	if runtime.GOOS == "linux" {
 		manager, err := m.setupManager()
 		if err == nil {
+			if backend, err := manager.DesktopBackend(); err == nil {
+				if tools, err := resolveDesktopTools(manager, backend.Component); err == nil {
+					return Availability{Supported: true, Ready: true, Backend: "wayland"}, tools
+				}
+			}
 			if installed := manager.Snapshot("").Installed; installed != nil && installed.Ready {
 				if tools, err := resolveManagedTools(manager, installed.Digest); err == nil {
 					return Availability{Supported: true, Ready: true}, tools
@@ -166,6 +220,9 @@ func clientInputTools(ctx context.Context, availability Availability, tools host
 	return availability, tools
 }
 func (t hostTools) environment(base []string) []string {
+	if t.desktop != nil {
+		return t.desktop.Environment(base)
+	}
 	if t.managed != nil {
 		return t.managed.Environment(base)
 	}

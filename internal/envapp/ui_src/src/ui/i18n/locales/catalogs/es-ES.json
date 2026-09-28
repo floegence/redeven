@@ -6975,7 +6975,12 @@
       "invalid": "Comprueba el nombre, la ruta del ejecutable y los argumentos.",
       "limit": "El host ha alcanzado el límite de sesiones. Finaliza una sesión para abrir otra aplicación.",
       "notFound": "Esta aplicación o sesión ya no está disponible.",
-      "unavailable": "Las aplicaciones del host no están listas. Comprueba las dependencias del host y actualiza."
+      "unavailable": "Las aplicaciones del host no están listas. Comprueba las dependencias del host y actualiza.",
+      "packageUnavailable": "El entorno de ejecución del paquete de la aplicación no está disponible. Compruebe su instalación en este host y actualice la lista.",
+      "hostServiceUnavailable": "Un servicio del host necesario para esta aplicación no está disponible. Compruebe la sesión de usuario y los servicios de paquetes del host e inténtelo de nuevo.",
+      "graphicsUnavailable": "Los componentes gráficos necesarios para esta aplicación no están disponibles. Prepare o actualice los componentes de las aplicaciones del host e inténtelo de nuevo.",
+      "planStale": "La aplicación cambió mientras se abría. Actualice la lista de aplicaciones y vuelva a abrirla.",
+      "packageUnsupported": "No se pudo verificar el paquete o el método de inicio de esta aplicación. Utilice su entrada instalada en la biblioteca de aplicaciones o compruebe la instalación del paquete."
     },
     "executable": "Ruta del ejecutable",
     "eyebrow": "EN ESTE HOST",
@@ -6994,7 +6999,7 @@
     "retry": "Reintentar",
     "running": "Aplicaciones en ejecución",
     "search": "Buscar aplicaciones…",
-    "setupDescription": "Instala Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth y los enlaces Python GIO/GTK 3 en este host y actualiza la lista. Los paquetes varían según la distribución. No se necesita un entorno de escritorio ni un monitor.",
+    "setupDescription": "Prepare los componentes gráficos en Redeven. Las aplicaciones nativas no requieren un entorno de escritorio ni un monitor. Snap y Flatpak necesitan su entorno de ejecución de paquetes y los servicios del host.",
     "setupRequirements": "Requiere atención: {requirements}",
     "setupGuide": "Guía de instalación",
     "catalogUnavailable": "No se pudo leer el catálogo de aplicaciones del host. Comprueba que el entorno de ejecución funciona en este host y actualiza la lista.",
@@ -7080,7 +7085,8 @@
     "macBundlePath": "Ruta del paquete de aplicación",
     "touchHelp": "Guía táctil",
     "touchHelpTitle": "Controles táctiles",
-    "touchHelpDescription": "Toca para hacer clic. Desliza un dedo para desplazarte. Mantén pulsado y mueve para arrastrar; suelta sin mover para hacer clic derecho. Pellizca con dos dedos para ampliar la página."
+    "touchHelpDescription": "Toca para hacer clic. Desliza un dedo para desplazarte. Mantén pulsado y mueve para arrastrar; suelta sin mover para hacer clic derecho. Pellizca con dos dedos para ampliar la página.",
+    "clipboardUnavailable": "El acceso al portapapeles no está disponible. Utilice HTTPS y permita que este sitio acceda al portapapeles; después, vuelva a copiar."
   },
   "settingsDesign": {
     "editDirectory": "Editar directorio",

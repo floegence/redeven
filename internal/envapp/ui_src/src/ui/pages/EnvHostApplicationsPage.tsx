@@ -4,7 +4,7 @@ import { hostApplicationSnapshot } from '../services/envResourceSnapshots';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useViewActivation, useResizeObserver } from '@floegence/floe-webapp-core';
 import { Check, Filter, MoreHorizontal, ExternalLink, Plus, Refresh, Search, Stop } from '@floegence/floe-webapp-core/icons';
-import { hostApplicationPresentation } from '../services/hostApplicationPresentation';
+import { hostApplicationPresentation, hostApplicationLaunchFailureCopy } from '../services/hostApplicationPresentation';
 import { renderHostApplicationLaunchDocument } from '../services/hostApplicationLaunchDocument';
 import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
@@ -121,7 +121,11 @@ export function EnvHostApplicationsPage() {
       HOST_APP_UNAVAILABLE: 'hostApplications.errors.unavailable', HOST_APP_NOT_FOUND: 'hostApplications.errors.notFound',
       HOST_APP_QUIT_REJECTED: isMac() ? 'hostApplications.macQuitRejected' : 'hostApplications.macOperationFailed', HOST_APP_INVALID: 'hostApplications.errors.invalid', HOST_APP_LIMIT: 'hostApplications.errors.limit',
     };
-    return i18n.t(e instanceof LocalApiError && keys[e.code] ? keys[e.code] : fallback);
+    return i18n.t(e instanceof LocalApiError && keys[e.code] ? keys[e.code] : e instanceof LocalApiError && e.code.startsWith('HOST_APP_') ? hostApplicationLaunchFailureCopy(e.code) : fallback);
+  };
+  const sessionError = (id: string) => {
+    const code = catalog()?.sessions.find(session => session.application.id === id && session.state === 'failed')?.error_code;
+    return i18n.t(hostApplicationLaunchFailureCopy(code ?? ''));
   };
 
   let refreshPending: Promise<void> | null = null;
@@ -516,7 +520,7 @@ export function EnvHostApplicationsPage() {
       }
       app = current;
     }
-    if (!ready()) {
+    if (!ready() && !runningApplicationIDs().has(app.id) && !runningByApp().has(app.id)) {
       if (prepared) closePending(prepared);
       setSelectedApplication(app);
       if (preparationActive()) {
@@ -683,7 +687,7 @@ export function EnvHostApplicationsPage() {
                     <Dropdown align="end" triggerAriaLabel={`${i18n.t('hostApplications.macControls')} · ${app().name}`} triggerClass="host-apps-filter-button" trigger={<MoreHorizontal class="h-4 w-4" />}
                       items={[
                         ...(runningByApp().has(appID) ? [{ id: 'stop', label: i18n.t('hostApplications.stopSharing'), disabled: !canLaunch() }] : []),
-                        ...(processesByID().has(appID) ? [{ id: 'quit', label: i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows'), disabled: !canLaunch() || !(isMac() ? catalog()?.availability.native_ready : ready()) }] : []),
+                        ...(processesByID().has(appID) ? [{ id: 'quit', label: i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows'), disabled: !canLaunch() || (isMac() && !catalog()?.availability.native_ready) }] : []),
                       ]} onSelect={id => {
                         if (id === 'stop') setEnding(runningByApp().get(appID)!);
                         if (id === 'quit') { setQuitError(''); setQuitting({ app: app(), instances: [...processesByID().get(appID)!.instances] }); }
@@ -691,7 +695,7 @@ export function EnvHostApplicationsPage() {
                   </Show>
                   <Show when={processesByID().get(appID) && quitNotice(processesByID().get(appID)!)}><p class="host-app-quit-notice" role="status">{i18n.t(isMac() ? 'hostApplications.macQuitPending' : 'hostApplications.closeWindowsPending')}</p></Show>
                 </div>
-                <Show when={appErrors()[app().id] || catalog()?.sessions.find(s => s.application.id === app().id)?.state === 'failed'}><p class="host-app-error" role="alert">{appErrors()[app().id] || i18n.t('hostApplications.errors.failed')}</p></Show>
+                <Show when={appErrors()[app().id] || catalog()?.sessions.find(s => s.application.id === app().id)?.state === 'failed'}><p class="host-app-error" role="alert">{appErrors()[app().id] || sessionError(app().id)}</p></Show>
               </div>; }}</For></div>
             </Show>
           </section></Show>

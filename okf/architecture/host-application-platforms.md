@@ -7,83 +7,69 @@ timestamp: 2026-09-23T08:00:00Z
 ---
 # Summary
 
-Redeven's host application backend supports Linux by installed capability, not by
-distribution name. The Runtime owns dependency detection and isolated session initialization.
-The [managed preparation contract](host-application-preparation.md) owns automatic
-private component acquisition and recovery; users install only their own applications.
-Missing support components offer preparation in the library.
-A desktop environment, systemd user session, and physical monitor are unnecessary.
-macOS uses a separate native backend with a logged-in graphical session; it does
-not use Xpra or Linux virtual displays. Existing
-[application permissions and lifecycle](host-applications.md) remain authoritative.
+Published Floe Native Apps owns Linux graphics, package planning and scoped host
+service adaptation. Redeven owns the authorized catalog, instance and viewer.
+New applications normally receive a private Wayland/Xwayland environment; an
+explicit upstream X11-only contract can select Xpra before execution. A launch
+never retries with another backend. Native applications need no full desktop or
+physical monitor. Snap and Flatpak additionally require their installed runtimes
+and necessary host services. Missing capabilities remain explicit failures.
 
 # Contract
 
-## Required graphical capabilities
+## Immutable launch plan
 
-The integration accepts Xpra 6.x with local X11 server and command-line client
-support, HTML5 client v20 or v21, Xvfb, xauth, dbus-run-session, dbus-daemon, and a
-Python 3 interpreter with working GIO/GTK 3 introspection. New applications also
-require the released client-input v1 capability, including xcb-imdkit, from the
-exact Xpra interpreter; the [input contract](host-application-input.md) owns this probe. Other Xpra major versions
-and HTML5 generations need explicit adapter validation before being advertised.
-The monitored application launcher also requires Linux pidfds (kernel 5.3 or
-later), child subreaping and Python support for pidfd operations.
+GIO resolves the authorized desktop entry. The published planner verifies package
+metadata, executable and package version, selects a capability and revalidates the
+plan before executing. It preserves Desktop Entry quoting/expansion and disables
+external D-Bus activation in its private launch copy. Redeven does not identify
+packages or graphics protocols by application name, parse launch shell strings,
+or implement package-specific retries. Custom executable entries use this same
+planner. A sandbox launcher requiring metadata fails clearly when metadata is
+absent; a custom wrapper is not proof that the underlying package is supported.
 
-The Runtime checks actual executable availability, Xpra's version and advertised
-local server commands, imports the GIO/GTK bindings, and validates the installed
-HTML5 version, principal assets, and referenced scripts/stylesheets, including
-distribution symlinks into shared resource directories. Broken links report a
-missing HTML5 client before a viewer opens. It obtains the resource root from `xpra
-path-info` and selects its `www` or `html5` directory, passing that exact directory
-to the upstream input-client preparation API. The session serves the resulting
-private HTML directory. A nonstandard installation must expose its assets
-under that resource root; Xpra's `XPRA_RESOURCES_DIR` override is respected. Neither
-upstream client implementations nor application metadata are maintained in Redeven.
+The combined managed component supplies a pinned libweston headless compositor,
+minimal application shell, Xwayland, private bus, portal components and commit-only
+input adapters. Both graphics protocols can occur in one instance. Window families
+include application popups and save dialogs, without exposing a full desktop or
+another application's surfaces. Software rendering provides the baseline; host
+hardware and application-specific restrictions remain authoritative.
 
-GIO need not share Xpra's interpreter. Python candidates come from absolute PATH
-directories and are tested in order, so an unrelated virtual environment without
-GIO does not hide the installed system bindings. The chosen interpreter is used
-consistently for catalog reads, custom entries, and application launch. Relative
-PATH directories are excluded. The service account must have the required
-executables on PATH; an interactive shell's environment does not imply that a
-system service inherits it.
+A retained Xpra instance keeps its original component. New X11-only plans may use
+a verified managed installation or a supported system Xpra 6.x/HTML5 v20 or v21
+stack. System detection verifies local server commands, GIO, Xvfb, authorization,
+D-Bus and actual client resources. Unknown source structures fail preparation.
+This path is never a fallback for a failed combined launch. The
+[preparation owner](host-application-preparation.md) selects complete components.
 
-Detection is a prerequisite check, not a promise that every application will work.
-The actual launch requires an owned process receipt and a responsive HTML endpoint.
-Window and first-pixel readiness remain separate; a background application is not
-a startup failure. The [Linux lifecycle owner](linux-application-lifecycle.md)
-defines monitored process lifetime, recovery and ordinary/forced close boundaries.
-Library refresh reruns detection after installation.
-Redeven does not elevate privileges, change package repositories, install system
-packages, or disable SELinux/AppArmor automatically.
+## Private graphics and host services
 
-## Headless initialization
+Each instance owns unique private display/socket, authorization, runtime and bus
+resources. Inherited desktop display, startup and input-method selection do not
+redirect its windows. Applications retain the host user's files and OS permissions;
+private graphics is not an OS sandbox. Production neither requires a VM/container
+nor changes AppArmor/SELinux, global input methods or installed system modules.
 
-Each application gets a private XDG runtime directory, X11 server, X authorization,
-D-Bus session, socket directory, and Xpra session directory. Inherited display,
-Wayland, X authority, startup notification, and desktop bus addresses cannot direct
-the new application into an unrelated graphical login. GTK and Qt select X11.
-The session does not require a running systemd user manager or `/run/user/<uid>`.
+Strict/classic Snap, Flatpak and AppImage use their actual installed launch
+mechanisms. The upstream Snap adapter forwards only the admitted application's
+validated scope operations to the real user systemd manager, including authentic
+completion signals. It never exposes the whole desktop bus or arbitrary process
+management. Flatpak instance/sandbox identity participates in process ownership.
+AppImages are not silently extracted or replaced. Native DEB/RPM applications do
+not acquire a full-desktop dependency merely because sandboxed packages need one.
 
-Xpra default, system, and user configuration directories are excluded for owned
-sessions and probes. A host configuration must not add startup applications,
-listeners, or attachment to an existing display. The host's files are unchanged;
-Redeven passes its own bounded settings and disables automatic client attachment
-and existing-display reuse. Xvfb uses an authorization file and has TCP disabled.
+Official portal components render open/save dialogs inside the private display and
+provide document authorization through the normal protocol. No invisible dialog is
+forwarded to the user's unrelated desktop. The service surface excludes audio,
+video, desktop sharing and notification forwarding. Missing runtime, host service,
+unsupported graphics or stale package plans produce distinct recovery reasons.
+Errors retain safe phase/code/exit status, never child output or credentials.
 
-The application remains native host software with the Runtime user's home,
-files, permissions, and installed toolkit libraries. Virtual display isolation is
-not a container or security sandbox. The application must support X11. Wayland-only
-programs, desktop-service dependencies, singleton profile redirection, Flatpak/Snap
-integration, hardware acceleration, and privileged dialogs require separate
-application-specific verification. Application discovery follows GIO and the
-service's XDG environment, including exported package desktop entries when present.
-
-## Validation
-
-See the [distribution validation record](../operations/host-application-validation.md)
-for tested stacks, architecture boundaries and repeatable installed-host checks.
+Applications may still enforce single-instance/profile policies or require
+unsupported hardware/services. A launch delegated outside its owned instance
+cannot adopt or close that user's existing window. No guessed replacement profile
+is created. Support claims require real package and desktop evidence, as recorded
+in the [validation owner](../operations/host-application-platform-validation.md).
 
 ## macOS initialization
 
@@ -107,7 +93,8 @@ Capability probes, not distribution names, determine Linux readiness. Missing su
 
 # Evidence
 
-- `internal/hostapps/dependencies.go` and `dependencies_test.go`: installed capability, interpreter, resource path, and version checks.
+- `internal/hostapps/linux_desktop.go` and `launch_failure.go`: published immutable plan, private session and safe failure mapping.
+- `internal/hostapps/dependencies.go` and `dependencies_test.go`: retained/system Xpra capability checks.
 - `internal/hostapps/manager.go` and `manager_test.go`: isolated environment and opt-in installed-stack verification.
 - `internal/hostapps/desktop_test.py`: actual GIO metadata, icons, executable paths and literal arguments.
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.tsx` and its tests: missing component guidance and unsupported-host presentation.

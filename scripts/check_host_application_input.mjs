@@ -2,6 +2,7 @@
 // viewer assets and prepared Xpra page. Browser composition events are simulated;
 // this verifies transport and application delivery, not a real system IME.
 import assert from 'node:assert/strict';
+import {checkNativeDesktopInput} from './host_application_native_acceptance.mjs';
 import {checkPointer} from './host_application_pointer_acceptance.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { createServer, request } from 'node:http';
@@ -22,7 +23,8 @@ const browserType = playwright[browserName];
 const [host, remoteRoot, output] = process.argv.slice(2);
 assert(host && remoteRoot?.startsWith('/tmp/') && output, 'provide SSH host, task-owned /tmp fixture directory and local evidence directory');
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
-const remote = command => host==='local' ? execFileSync('/bin/sh',['-c',command],{encoding:'utf8'}) : execFileSync('ssh', ['-x', host, command], {encoding:'utf8'});
+const sshOptions = process.env.REDEVEN_TEST_SSH_CONFIG ? ['-F', process.env.REDEVEN_TEST_SSH_CONFIG] : [];
+const remote = command => host==='local' ? execFileSync('/bin/sh',['-c',command],{encoding:'utf8'}) : execFileSync('ssh', [...sshOptions, '-x', host, command], {encoding:'utf8'});
 const metadata = JSON.parse(remote(`cat ${quote(remoteRoot + '/connection.json')}`));
 const pointerMode=metadata.kind?.startsWith('pointer-');
 if(pointerMode)assert.equal(browserName,'chromium','native browser touch driver requires Chromium');
@@ -33,7 +35,7 @@ const reservation = tcpServer();
 await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
 const tunnelPort = host==='local' ? remotePort : reservation.address().port;
 await new Promise(resolve => reservation.close(resolve));
-const tunnel = host==='local' ? null : spawn('ssh', ['-x', '-N', '-o', 'ExitOnForwardFailure=yes', '-L', `127.0.0.1:${tunnelPort}:127.0.0.1:${remotePort}`, host], {stdio:'ignore'});
+const tunnel = host==='local' ? null : spawn('ssh', [...sshOptions, '-x', '-N', '-o', 'ExitOnForwardFailure=yes', '-L', `127.0.0.1:${tunnelPort}:127.0.0.1:${remotePort}`, host], {stdio:'ignore'});
 const waitFor = async (check, description, timeout = 15000) => {
   const until = Date.now() + timeout;
   while (Date.now() < until) {
@@ -48,26 +50,33 @@ let electronChild;
 let electronDirectory;
 let browserVersion;
 let frame;
+const errors = [];
+const protocolErrors = [];
+const sockets = new Set();
 const source = path.join(repository, 'internal/codeapp/appserver/host_application_viewer');
 const asset = name => readFile(path.join(source, name), 'utf8');
 const catalogSource = await asset('catalog.generated.js');
 const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3).trim().slice(0, -1));
 const css = (await Promise.all(['appearance.generated.css', 'remote-input.generated.css', 'remote-pointer.generated.css', 'viewer.css'].map(asset))).join('\n');
-const js = (await Promise.all(['catalog.generated.js', 'viewport.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'appearance.js', 'connection.js', 'toolbar.js', metadata.backend==='macos' ? 'macos.js' : 'viewer.js'].map(asset))).join('\n');
+const js = (await Promise.all(['catalog.generated.js', 'viewport.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'appearance.js', 'connection.js', 'toolbar.js','canvas.js', metadata.backend==='wayland' ? 'linux.js' : metadata.backend==='macos' ? 'macos.js' : 'viewer.js'].map(asset))).join('\n');
 const html = (await asset('viewer.html')).replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'porcelain-light')
   .replaceAll('{{.Name}}', 'Client input acceptance').replaceAll('{{.Nonce}}', 'fixture')
-  .replace('{{.Style}}', css).replace('{{.Config}}', JSON.stringify({base:'/fixture',backend:metadata.backend,icon:'',copy:catalog.locales['en-US']})).replace('{{.Script}}', js);
+  .replace('<script nonce=', (metadata.backend==='wayland' ? '<script src="/fixture/cursor.js"></script>' : '') + '<script nonce=').replace('{{.Style}}', css).replace('{{.Config}}', JSON.stringify({base:'/fixture',backend:metadata.backend,icon:'',copy:catalog.locales['en-US']})).replace('{{.Script}}', js);
 const server = createServer((req, res) => {
+  if (req.url === '/popup') {
+    res.setHeader('Content-Type', 'text/html');res.end('<button onclick="window.open(\'/fixture/_redeven_host_app/\')">Open fixture</button>');return;
+  }
   if (req.url === '/fixture/_redeven_host_app/') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(html); return;
-  }
-  if (req.url?.endsWith('/state')) {
-    res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({state:'running', password:metadata.password})); return;
   }
   const upstream = request({hostname:'127.0.0.1',port:tunnelPort,path:req.url.replace(/^\/fixture/, ''),method:req.method,headers:{...req.headers,host:`127.0.0.1:${tunnelPort}`}}, response => {
     res.writeHead(response.statusCode, response.headers); response.pipe(res);
   });
   upstream.on('error', () => {res.writeHead(502); res.end();}); req.pipe(upstream);
+});
+server.on('connection', socket => {
+  sockets.add(socket);
+  socket.on('close', () => sockets.delete(socket));
 });
 server.on('upgrade', (req, socket, head) => {
   const upstream = request({hostname:'127.0.0.1',port:tunnelPort,path:req.url.replace(/^\/fixture/, '') || '/',headers:{...req.headers,host:`127.0.0.1:${tunnelPort}`}});
@@ -111,6 +120,7 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
   } else {
     browser = await browserType.launch({headless:true, executablePath:process.env.REDEVEN_INPUT_BROWSER_EXECUTABLE || undefined});
     page = await browser.newPage({viewport:{width:900,height:640},deviceScaleFactor:2,hasTouch:pointerMode});
+    if(browserName==='chromium')await page.context().grantPermissions(['clipboard-read','clipboard-write']);
     browserVersion = browser.version();
   }
   if(pointerMode)await page.addInitScript(()=>{
@@ -123,6 +133,7 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
           if(typeof event.data==='string'){
             const value=JSON.parse(event.data);
             if(['window','windows','error','operation_error','waiting'].includes(value.type))window.nativeStates.push(value);
+            if(['attached','state','capture_unavailable'].includes(value.event))window.nativeStates.push(value);
           }
         });
       }
@@ -130,18 +141,78 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
         if(typeof data==='string'){
           const value=JSON.parse(data);
           if(value.action==='input'&&['move','down','up','scroll'].includes(value.kind))window.pointerPackets.push(value);
+          if(value.method==='input'&&['move','button','scroll'].includes(value.operation?.kind))window.pointerPackets.push(value);
         }
         super.send(data);
       }
     };
   });
-  const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto(`http://127.0.0.1:${port}/fixture/_redeven_host_app/`);
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => {
+    window.fixtureClipboardErrors=[];window.fixtureClipboardWrites=0;window.fixturePastedText=null;
+    document.addEventListener('paste',event=>{window.fixturePastedText=event.clipboardData?.getData('text/plain');},true);
+    if (navigator.clipboard?.writeText) {
+      const write=navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText=text=>write(text).then(()=>{window.fixtureClipboardWrites++;}).catch(error=>{window.fixtureClipboardErrors.push(error.name);throw error;});
+    }
+    if (navigator.clipboard?.write) {
+      const write=navigator.clipboard.write.bind(navigator.clipboard);
+      navigator.clipboard.write=items=>write(items).then(()=>{window.fixtureClipboardWrites++;}).catch(error=>{window.fixtureClipboardErrors.push(error.name);throw error;});
+    }
+  });
+  page.on('websocket', socket => socket.on('framereceived', ({payload}) => {
+    if (typeof payload !== 'string') return;
+    try { const event=JSON.parse(payload); if (event.error) protocolErrors.push({id:event.id,error:event.error}); } catch {}
+  }));
+  const lifecycleEvents=[];
+  if(metadata.kind==='window-lifecycle') {
+    assert.notEqual(browserName,'electron','this receipt checks browser popup closure');
+    await page.context().exposeBinding('recordLifecycle',(_source,event)=>lifecycleEvents.push(event));
+    await page.context().addInitScript(()=>{
+      if(window.close.lifecycleInstrumented)return;
+      const close=window.close.bind(window);
+      window.close=()=>{void window.recordLifecycle({type:'close_call',stack:new Error().stack});close();};
+      window.close.lifecycleInstrumented=true;
+    });
+    await page.goto(`http://127.0.0.1:${port}/popup`);
+    [page]=await Promise.all([page.context().waitForEvent('page'),page.locator('button').click()]);
+    page.on('close',()=>lifecycleEvents.push({type:'page_closed'}));
+    page.on('pageerror',error=>errors.push(error.message));
+    page.on('websocket',socket=>socket.on('framereceived',({payload})=>{
+      if(typeof payload!=='string')return;
+      const event=JSON.parse(payload);
+      if(['attached','state'].includes(event.event))lifecycleEvents.push(event);
+    }));
+  }else await page.goto(`http://127.0.0.1:${port}/fixture/_redeven_host_app/`);
   await page.waitForFunction(() => document.body.dataset.state === 'active', undefined, {timeout:30000});
   frame = page.frames().find(item => item.url().includes('/fixture/index.html'));
-  if(metadata.backend!=='macos')assert(frame, 'prepared Xpra frame is missing');
+  if(metadata.backend!=='macos'&&metadata.backend!=='wayland')assert(frame, 'prepared Xpra frame is missing');
   const receipt = () => JSON.parse(remote(`cat ${quote(metadata.receipt || remoteRoot + '/receipt.json')}`));
-  if(metadata.retained){
+  if(metadata.kind==='window-lifecycle') {
+    await page.screenshot({path:path.join(output,'before-close.png')});
+    await Promise.all([page.waitForEvent('close'),page.locator('.mac-app-close').click()]);
+    const receipt=JSON.parse(remote(`cat ${quote(remoteRoot+'/window-closed.json')}`));
+    await writeFile(path.join(output,'lifecycle-events.json'),JSON.stringify(lifecycleEvents,null,2));
+    assert.equal(receipt.closed,true);remote(`kill -0 ${Number(receipt.pid)}`);
+    assert.equal(lifecycleEvents.filter(event=>event.type==='close_call').length,1);
+    assert(lifecycleEvents.some(event=>event.type==='close_call'&&event.stack.includes('dismissEnded')));
+    assert.deepEqual(errors,[]);
+    const identity={...metadata};delete identity.password;
+    await writeFile(path.join(output,'result.json'),JSON.stringify({passed:true,...identity,browserName,browser:browserVersion,receipt,events:lifecycleEvents},null,2));
+    remote(`printf %s '{"passed":true}' > ${quote(remoteRoot+'/done.json')}`);
+    console.log('PASS: actual final window destruction closes browser popup and retains native application');
+  } else if(metadata.backend==='wayland'&&!pointerMode) {
+    const result=await checkNativeDesktopInput({page,read:receipt,waitFor,output,metadata,remote,quote,remoteRoot});
+    await writeFile(path.join(output,'protocol-errors.json'),JSON.stringify(protocolErrors,null,2));
+    await writeFile(path.join(output,'clipboard-errors.json'),JSON.stringify(await page.evaluate(()=>window.fixtureClipboardErrors),null,2));
+    assert.deepEqual(protocolErrors,[],'native protocol rejected a browser operation');
+    assert(await page.locator('.mac-app-feedback').isHidden(),'native viewer displayed an unexpected error');
+    assert.deepEqual(errors,[]);
+    const identity={...metadata};delete identity.password;
+    await writeFile(path.join(output,'result.json'),JSON.stringify({passed:true,...identity,browserName,browser:browserVersion,...result,systemIME:false},null,2));
+    remote(`printf %s ${quote(JSON.stringify(result.received))} > ${quote(remoteRoot + '/done.json')}`);
+    console.log('PASS: production native viewer and transport -> actual application input receipts');
+  } else if(metadata.retained){
     assert.deepEqual(receipt(),metadata.retained,'Runtime upgrade lost unsaved text before viewer attach');
     const capabilities=await frame.evaluate(()=>floeXpraViewer.capabilities(floeXpraViewer.getClient()));
     assert.deepEqual(capabilities,{display:'logical',input:'ready',pointer:'ready'});
@@ -311,15 +382,17 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
 } catch (error) {
   await page?.screenshot({path:path.join(output,'failure.png')}).catch(() => {});
   let received=null;
-  try { received=metadata.kind === 'gnome' ? remote(`cat ${quote(remoteRoot + '/document.txt')}`) : JSON.parse(remote(`cat ${quote(metadata.receipt || remoteRoot + '/receipt.json')}`)); } catch { /* Startup may fail before the application writes a receipt. */ }
-  await writeFile(path.join(output,'failure.json'), JSON.stringify({message:error.message,
+  try { received=['gnome','package-editor'].includes(metadata.kind) ? remote(`cat ${quote(metadata.document || remoteRoot + '/document.txt')}`) : JSON.parse(remote(`cat ${quote(metadata.receipt || remoteRoot + '/receipt.json')}`)); } catch { /* Startup may fail before the application writes a receipt. */ }
+  await writeFile(path.join(output,'failure.json'), JSON.stringify({message:error.message,errors,protocolErrors,
     client:await frame?.evaluate(()=>{const c=window.floeXpraViewer?.getClient();return c?{capabilities:floeXpraViewer.capabilities(c),focused:c.focused_wid,active:document.activeElement?.tagName,inputTarget:c.floeInput.target,windows:Object.values(c.id_to_window).map(w=>({wid:w.wid,geometry:[w.x,w.y,w.w,w.h],pointerReady:!!c.floePointer.targetForWindow(w)}))}:null}).catch(()=>undefined),
-    inputError:await page?.evaluate(() => window.fixtureInputError).catch(()=>undefined),pointerPackets:await page?.evaluate(()=>window.pointerPackets).catch(()=>undefined),nativeStates:await page?.evaluate(()=>window.nativeStates).catch(()=>undefined),received},null,2));
+    inputError:await page?.evaluate(() => window.fixtureInputError).catch(()=>undefined),clipboardErrors:await page?.evaluate(()=>window.fixtureClipboardErrors).catch(()=>undefined),pointerPackets:await page?.evaluate(()=>window.pointerPackets).catch(()=>undefined),nativeStates:await page?.evaluate(()=>window.nativeStates).catch(()=>undefined),received},null,2));
   // An invalid completion receipt fails the host fixture and runs its cleanup.
   remote(`printf %s ${quote(JSON.stringify({error:error.message}))} > ${quote(remoteRoot + '/done.json')}`);
   throw error;
 } finally {
-  await browser?.close(); server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));
+  await browser?.close();
+  for (const socket of sockets) socket.destroy();
+  server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));
   tunnel?.kill('SIGTERM');
   if (electronChild && electronChild.exitCode === null && electronChild.signalCode === null) {
     if (process.platform === 'win32') execFileSync('taskkill', ['/PID',String(electronChild.pid),'/T','/F']);

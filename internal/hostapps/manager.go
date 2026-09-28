@@ -46,7 +46,6 @@ type Manager struct {
 	appsLock                    *os.File
 	appsStop                    chan struct{}
 	appsDone                    sync.WaitGroup
-	launcher                    string
 	setupMu                     sync.Mutex
 	setup                       *nativeapps.Manager
 	setupClosed                 bool
@@ -78,9 +77,6 @@ func (m *Manager) prepare() error {
 			return
 		}
 		m.prepareErr = os.WriteFile(m.helper, desktopHelper, 0o600)
-		if m.prepareErr == nil {
-			m.launcher, m.prepareErr = nativeapps.WriteApplicationLauncher(m.state)
-		}
 	})
 	return m.prepareErr
 }
@@ -112,7 +108,7 @@ func (m *Manager) Catalog(ctx context.Context, owner, locale string) (Catalog, e
 		return m.macCatalog(ctx, owner)
 	}
 	catalog, _, err := m.catalog(ctx, owner, locale)
-	if err == nil && catalog.Availability.Ready {
+	if err == nil && catalog.Availability.Supported {
 		catalog.Running, err = m.linuxRunning(ctx, owner)
 		// A removed desktop entry must not make a still-running owned instance
 		// disappear from management. Retain its admitted identity until it exits.
@@ -252,14 +248,13 @@ func infoHasWindows(info string) bool {
 func (m *Manager) finish(s *ownedSession, code string, release func()) {
 	s.finishOnce.Do(func() {
 		m.mu.Lock()
-		wasRunning := s.view.State == "running"
 		if s.view.ErrorCode == "" {
 			s.view.ErrorCode = code
 		}
 		s.view.State = "ended"
 		// A capture failure must remain visible for recovery instead of triggering
 		// the viewer's normal application-ended dismissal.
-		if s.view.ErrorCode != "" && (!wasRunning || s.native != nil || s.view.ErrorCode == "capture_failed") {
+		if s.view.ErrorCode != "" {
 			s.view.State = "failed"
 		}
 		s.stopping = true
@@ -404,6 +399,14 @@ func (m *Manager) Password(id string) string {
 }
 
 func cloneSession(s Session) Session {
+	if s.LaunchDiagnostic != nil {
+		diagnostic := *s.LaunchDiagnostic
+		if diagnostic.ExitCode != nil {
+			code := *diagnostic.ExitCode
+			diagnostic.ExitCode = &code
+		}
+		s.LaunchDiagnostic = &diagnostic
+	}
 	if s.Forward != nil {
 		f := *s.Forward
 		s.Forward = &f

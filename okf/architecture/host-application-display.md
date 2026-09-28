@@ -16,6 +16,16 @@ explicitly restrict high resolution; no application is automatically restarted.
 
 # Contract
 
+## Native Linux window families
+
+The published compositor owns Wayland/Xwayland surface geometry, native resize
+operations and window-family capture. A bounded PNG frame includes the current
+application family and its popups. The canvas uses the actual frame dimensions
+for coordinate mapping and preserves aspect ratio. The selected surface and
+generation gate pointer/key delivery after paint. The shared released cursor
+normalizer retains shape/hotspot and bounds logical size to 24 CSS pixels.
+Unsupported macOS/Xpra picture controls are absent from this adapter.
+
 ## Xpra window geometry and closure
 
 The adapter integrates the selected HTML5 v20/v21 client. It uses the published

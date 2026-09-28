@@ -24,6 +24,20 @@ func TestHostApplicationViewerPreparationFailureIsRetryable(t *testing.T) {
 	}
 }
 
+func TestHostApplicationLaunchFailurePreservesRecoveryAndSafeDiagnostic(t *testing.T) {
+	for code, want := range map[string]string{"PACKAGE_RUNTIME_UNAVAILABLE": "PACKAGE_UNAVAILABLE", "HOST_SERVICE_UNAVAILABLE": "HOST_SERVICE_UNAVAILABLE", "APPLICATION_PLAN_STALE": "PLAN_STALE", "GRAPHICAL_BACKEND_UNAVAILABLE": "GRAPHICS_UNAVAILABLE", "PACKAGE_METADATA_REQUIRED": "PACKAGE_UNSUPPORTED", "FUTURE_ERROR": "LAUNCH_FAILED"} {
+		w := httptest.NewRecorder()
+		writeHostAppError(w, fmt.Errorf("plan: %w", &nativeapps.LaunchUnavailable{Code: code, Stage: "planning"}))
+		var response struct {
+			ErrorCode  string                    `json:"error_code"`
+			Diagnostic hostapps.LaunchDiagnostic `json:"launch_diagnostic"`
+		}
+		if json.Unmarshal(w.Body.Bytes(), &response) != nil || w.Code != http.StatusServiceUnavailable || response.ErrorCode != "HOST_APP_"+want || response.Diagnostic.Code != code || response.Diagnostic.Stage != "planning" {
+			t.Fatal("launch error lost its recovery contract", w.Code, w.Body.String())
+		}
+	}
+}
+
 type hostAppsStub struct {
 	assets      *nativeapps.ClientAssets
 	owner       string
@@ -122,14 +136,14 @@ func (s *hostAppsStub) Detach(_ context.Context, owner, _ string) error {
 }
 func (s *hostAppsStub) Add(context.Context, hostapps.AddRequest) error { s.calls++; return nil }
 func (s *hostAppsStub) ForTarget(target string) (hostapps.Session, string, bool) {
-	return hostapps.Session{ID: "one", State: "running"}, "alice", target == "http://127.0.0.1:40000"
+	return hostapps.Session{ID: "one", Backend: "linux", State: "running"}, "alice", target == "http://127.0.0.1:40000"
 }
 func (s *hostAppsStub) ForForward(id string) (hostapps.Session, string, bool) {
 	owner := s.owner
 	if owner == "" {
 		owner = "alice"
 	}
-	return hostapps.Session{ID: "one", State: s.state, EndReason: "application_exited", ErrorCode: "window_unavailable"}, owner, id == "owned"
+	return hostapps.Session{ID: "one", Backend: "linux", State: s.state, EndReason: "application_exited", ErrorCode: "window_unavailable"}, owner, id == "owned"
 }
 
 func TestHostApplicationStatusSurvivesReleasedForward(t *testing.T) {
@@ -173,7 +187,7 @@ func TestHostApplicationTerminalLocalRouteRetainsItsPrefix(t *testing.T) {
 		r := WithLocalUIPortForwardRoute(httptest.NewRequest(http.MethodGet, "http://localhost/pf/owned/_redeven_host_app/"+path, nil), "owned")
 		w := httptest.NewRecorder()
 		server.handlePortForwardProxy(w, r)
-		if path == "" && !strings.Contains(w.Body.String(), `"initial":{"end_reason":"application_exited","state":"failed"}`) {
+		if path == "" && !strings.Contains(w.Body.String(), `"initial":{"end_reason":"application_exited","error_code":"window_unavailable","state":"failed"}`) {
 			t.Fatal("terminal document omitted the authoritative snapshot")
 		}
 		if w.Code != http.StatusOK || (path == "" && !strings.Contains(w.Body.String(), `"base":"/pf/owned"`)) {
@@ -247,7 +261,7 @@ func TestHostApplicationBootstrapEscapesUntrustedNamesAndCopy(t *testing.T) {
 	server := &Server{}
 	w := httptest.NewRecorder()
 	payload := `</script><script>alert(1)</script>`
-	server.serveHostApplicationBoot(w, httptest.NewRequest("GET", "/", nil), hostapps.Session{Application: hostapps.Application{Name: payload}, Presentation: hostapps.Presentation{Starting: payload, ShellTheme: payload}}, "/pf/example")
+	server.serveHostApplicationBoot(w, httptest.NewRequest("GET", "/", nil), hostapps.Session{Backend: "linux", Application: hostapps.Application{Name: payload}, Presentation: hostapps.Presentation{Starting: payload, ShellTheme: payload}}, "/pf/example")
 	if strings.Contains(w.Body.String(), payload) {
 		t.Fatal("bootstrap allows script injection")
 	}

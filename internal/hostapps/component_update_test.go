@@ -47,7 +47,7 @@ func TestInstalledComponentUpdatePreservesApplications(t *testing.T) {
 	defer forwards.Close()
 	newManager := func() *Manager {
 		m := New(state, state, forwards)
-		pkg, err := nativeapps.NativePackage()
+		pkg, err := nativeapps.DesktopForPlatform(runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +66,7 @@ func TestInstalledComponentUpdatePreservesApplications(t *testing.T) {
 	oldDigest := status.Installed.Digest
 	lookupStart := time.Now()
 	for range 50 {
-		availability, tools := m.tools(ctx)
+		availability, tools := m.installedTools(ctx)
 		if !availability.Ready || tools.componentDigest != oldDigest {
 			t.Fatal("compatible installation is unavailable before any update")
 		}
@@ -96,28 +96,60 @@ Gtk.main()
 		}
 	}()
 	launch := func(name string) (Session, *linuxApplication, time.Duration) {
-		_, tools := m.tools(ctx)
-		if err := m.Add(ctx, AddRequest{Name: name, Executable: tools.python, Arguments: quoteArgv([]string{fixture, filepath.Join(state, name+".pid")})}); err != nil {
+		_, tools := m.installedTools(ctx)
+		if err := m.Add(ctx, AddRequest{Name: name, Executable: "/usr/bin/python3", Arguments: quoteArgv([]string{fixture, filepath.Join(state, name+".pid")})}); err != nil {
 			t.Fatal(err)
 		}
 		catalog, err := m.Catalog(ctx, "owner", "en-US")
-		if err != nil || !catalog.Availability.Ready {
+		if err != nil {
 			t.Fatal(catalog.Availability, err)
 		}
 		id := ""
+		var application Application
 		for _, app := range catalog.Applications {
 			if app.Name == name {
 				id = app.ID
+				application = app
 			}
 		}
 		start := time.Now()
-		s, err := m.Launch(ctx, "owner", LaunchRequest{ApplicationID: id, Locale: "en-US", Presentation: presentation})
+		var s Session
+		if tools.desktop == nil {
+			// Seed the already-running Xpra instance that a previous Runtime
+			// would have left. New product launches require combined preparation.
+			useXpraFixture(t, m, id)
+			if err := m.ensureApplications(ctx); err != nil {
+				t.Fatal(err)
+			}
+			available, selected := clientInputTools(ctx, Availability{Ready: true}, tools)
+			if !available.Ready {
+				t.Fatal(available)
+			}
+			plan, planErr := nativeapps.PlanApplication(ctx, nativeapps.ApplicationPlanOptions{Python: tools.python, Environment: tools.environment(os.Environ()), DesktopFile: filepath.Join(m.custom, strings.TrimPrefix(id, "custom:")), Backends: []nativeapps.BackendCapability{{ID: "xpra", Component: oldDigest, Protocols: []string{"x11"}}}})
+			if planErr != nil {
+				t.Fatal(planErr)
+			}
+			old, startErr := m.startApplication("owner", application, selected, plan)
+			if startErr != nil {
+				t.Fatal(startErr)
+			}
+			m.applications[old.record.ID] = old
+		}
+		s, err = m.Launch(ctx, "owner", LaunchRequest{ApplicationID: id, Locale: "en-US", Presentation: presentation})
 		if err != nil {
 			t.Fatal(err)
 		}
 		a := m.sessions[s.ID].application
 		apps = append(apps, a)
-		waitUntil(t, func() bool { return sessionHasWindows(ctx, a.tools.xpra, applicationSocketDir(a.record.ID)) }, 15*time.Second)
+		waitUntil(t, func() bool {
+			for _, view := range m.Sessions("owner") {
+				if view.ID == s.ID {
+					return view.State == "running"
+				}
+			}
+			return false
+		}, 30*time.Second)
+		assertResponsiveWindowInventory(t, m.sessions[s.ID])
 		return s, a, time.Since(start)
 	}
 	first, old, oldTime := launch("Old components")
@@ -166,6 +198,7 @@ Gtk.main()
 	// component selected. Kernel evidence must recover r1, not the new default.
 	old.record.Version = 1
 	old.record.Component = ""
+	old.record.Backend = ""
 	if err := m.writeApplication(old); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +211,7 @@ Gtk.main()
 		t.Fatal(running, err)
 	}
 	recovered := m.applications[old.record.ID]
-	if recovered == nil || recovered.record.Version != 2 || recovered.record.Component != oldDigest || recovered.tools.componentDigest != oldDigest || recovered.record.Process != identity {
+	if recovered == nil || recovered.record.Version != 3 || recovered.record.Backend != "xpra" || recovered.record.Component != oldDigest || recovered.tools.componentDigest != oldDigest || recovered.record.Process != identity {
 		t.Fatal("legacy recovery used the new component")
 	}
 	apps[0] = recovered
@@ -187,7 +220,7 @@ Gtk.main()
 		t.Fatal("did not resume the surviving application", err)
 	}
 	_, fresh, newTime := launch("New components")
-	if fresh.record.Component != status.Installed.Digest || fresh.tools.componentDigest == oldDigest {
+	if fresh.record.Backend != "wayland" || fresh.record.Component != status.Installed.Digest || fresh.tools.componentDigest == oldDigest {
 		t.Fatal("fresh application did not use the update")
 	}
 	t.Logf("same backend PID %d survived component update and Runtime restart; old/new launch to window: %s / %s", identity.PID, oldTime, newTime)

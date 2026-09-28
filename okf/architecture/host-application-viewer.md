@@ -39,7 +39,7 @@ explicitly omit Desktop chrome and must not depend on Node globals.
 The localized bootstrap owns connection presentation. It uses the host application's
 unframed icon with an exclusive fallback, quiet progress motion, and distinct starting, connecting, disconnected,
 reconnecting, ended, and failed states. Application content appears only after a
-successful Xpra paint acknowledgement or decoded native macOS frame. Loading and
+successful Xpra paint acknowledgement or decoded native macOS or Linux frame. Loading and
 error states share stable icon and title geometry; errors stop progress motion and
 provide a separate recovery action without covering the application icon.
 Reduced-motion preferences disable motion.
@@ -62,6 +62,13 @@ removal of one child window and transport loss cannot close the viewer. Save/can
 prompts remain authoritative. A newly loaded terminal page stays readable until
 dismissed, and closing the viewer itself preserves the application. Refresh never
 launches an app.
+
+The native Linux adapter maps a nonempty-to-empty live compositor window registry
+to viewer `windowsClosed` only within the same attachment, after its first paint
+or an explicit quit request. Minimized and unfocused windows remain registered.
+An initial empty snapshot, capture-unavailable state or reconnect cannot establish
+window destruction. A same-turn replacement cancels dismissal. This closes only
+sharing; a windowless application process remains managed and can be reopened.
 
 After a stream closes, the viewer briefly shows Checking application status while
 reconciling once with the authenticated state endpoint. A six-second deadline bounds

@@ -57,7 +57,7 @@ func (c *cli) hostApplicationPackageCmd(args []string) int {
 	if !filepath.IsAbs(*output) {
 		return 2
 	}
-	pkg, err := nativeapps.ForPlatform("linux", *architecture)
+	pkg, err := nativeapps.DesktopForPlatform("linux", *architecture)
 	if err != nil {
 		fmt.Fprintln(c.stderr, err)
 		return 1

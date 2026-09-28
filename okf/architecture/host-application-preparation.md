@@ -21,26 +21,26 @@ Closing a pending viewer prevents automatic application opening.
 
 ## Component ownership and admission
 
-Redeven consumes `github.com/floegence/floe-native-apps` v0.9.0 as a published Go
+Redeven consumes `github.com/floegence/floe-native-apps` v0.20.0 as a published Go
 module, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original
 publisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, artifact specification,
 catalog, executable, or install destination. The upstream acquires original Alpine
 APK archives and Xpra HTML5 source, retaining archives in a private cache. Native
 binaries are not added to Redeven's source or supplied by a local sibling checkout.
 
-The complete toolset lives under `host-applications/native-components`, with its
-own loader, Python/GIO/GTK, Xpra/Xvfb, D-Bus and graphical resources. Private wrappers
-keep support libraries out of the application's host environment. Linux amd64 and
-arm64 share this contract on glibc and musl hosts. Valid managed components take
-priority; otherwise a complete compatible system stack remains usable. Partial
-managed components are never mixed with system support tools.
-The upstream preserves published r1/r2 identities and their compatibility contract
-independently of the recommended recipe. r1 remains usable but retains its known
-short-frame decoder defect. r2 corrects that defect before qualification; update
-copy describes the stability fix without claiming that old running apps are fixed.
-Recipe revisions are not separately hosted binary bundles: both reuse the same
-original publisher archives. Future SDK upgrades must preserve supported component
-contracts rather than equating readiness with the newest digest.
+The recommended `DesktopForPlatform` recipe supplies the combined private
+Wayland/Xwayland tools, portal services and native input adapters for Linux amd64
+and arm64. Desktop's bundled Runtime and receiving Runtime use that same catalog
+identity for incremental transfer. The upstream manifest owns original archives,
+compiled component hashes, licensing and architecture qualification. No local
+sibling source or alternate host installer participates.
+
+Retained Xpra components remain usable by their existing instances; the current
+combined recommendation does not replace a loaded backend or input module. New
+default launches require the combined capability. The library keeps existing apps
+and their controls accessible while preparation is needed for new applications.
+Explicit X11-only plans can select the separately verified Xpra capability. Partial
+managed and system installations are never merged into a synthetic toolset.
 
 The [host application contract](host-applications.md) owns restoration of the
 application's environment, private display isolation and host-owned dependencies.
@@ -74,7 +74,7 @@ space, filesystem permission, network and graphical self-check failures have
 localized recovery copy. No failure changes SELinux, AppArmor or host privileges.
 Failure or cancellation preserves installed components and running applications.
 
-With compatible components installed, the application library remains the primary
+With current combined components installed, the application library remains the primary
 surface. An optional update notice opens current/recommended versions, the stability
 fix and actual missing bytes. Inspection is user-directed; dismissing or ignoring
 the notice keeps apps usable. Complete caches use the explicit `cache` source,
@@ -133,10 +133,10 @@ Preparation does not install the user's applications or require administrator cr
 
 - `internal/hostapps/setup.go`: thin released-library adapter, state placement and complete toolset selection.
 - `internal/codeapp/appserver/host_application_setup.go` and `host_applications_test.go`: authenticated status, event and mutation routes.
-- `internal/hostapps/desktop.py`: host application environment restoration.
+- `internal/hostapps/linux_desktop.go`: upstream-owned session environment and capability selection.
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: pending-window continuation and cancellation races.
 - `desktop/src/main/hostApplicationPreparationWindows.test.ts`: exact document ownership and inert presentation.
 - `desktop/src/main/hostApplicationComponents.test.ts` and `cmd/redeven/host_application_package.go`: Desktop relay and released acquisition delegation.
-- `internal/hostapps/component_update_test.go`: authentic r1 update, old process control, migrated recovery and new-instance selection.
+- `internal/hostapps/component_update_test.go`: retained Xpra update, old process control, migrated recovery and combined new-instance selection.
 - `internal/envapp/ui_src/src/styles/hostApplicationUpdates.browser.test.tsx`: all themes/locales, narrow dialogs, keyboard use and accessibility.
 - [Upstream v0.6.0](https://github.com/floegence/floe-native-apps/releases/tag/v0.6.0): compatible identities, atomic activation, verified cache plans, incremental ZIPs and native amd64/arm64 legacy-update qualification.

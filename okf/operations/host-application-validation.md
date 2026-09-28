@@ -8,6 +8,9 @@ timestamp: 2026-09-24T19:25:00Z
 # Summary
 
 This record distinguishes installed-stack evidence from host policy certification.
+Its distribution and pointer records describe retained historical Xpra versions.
+The [desktop and package validation record](host-application-desktop-validation.md)
+owns current combined-backend, sandbox package and product integration evidence.
 The Runtime capability and isolation contract is owned by
 [host application platforms](../architecture/host-application-platforms.md).
 A passing userspace check proves the tested Xpra/GIO/runtime combination only;

@@ -119,7 +119,7 @@ func TestStopRejectsAnotherOwnerAndCleansPrivateRoute(t *testing.T) {
 	}
 }
 
-func TestFinishedSessionDistinguishesStartupFailureFromAnEndedApplication(t *testing.T) {
+func TestFinishedSessionPreservesFailuresBeforeAndAfterRunning(t *testing.T) {
 	for _, initial := range []string{"starting", "running"} {
 		t.Run(initial, func(t *testing.T) {
 			state := t.TempDir()
@@ -139,12 +139,8 @@ func TestFinishedSessionDistinguishesStartupFailureFromAnEndedApplication(t *tes
 			}
 			s := &ownedSession{view: Session{ID: "finished", State: initial, Forward: f}, password: "secret", done: make(chan struct{})}
 			m.sessions[s.view.ID] = s
-			m.finish(s, "application_exited", nil)
-			want := "failed"
-			if initial == "running" {
-				want = "ended"
-			}
-			if s.view.State != want || s.view.ErrorCode != "application_exited" || m.Password(s.view.ID) != "" {
+			m.finish(s, "launch_failed", nil)
+			if s.view.State != "failed" || s.view.ErrorCode != "launch_failed" || m.Password(s.view.ID) != "" {
 				t.Fatalf("incorrect final state or lost exit diagnostic: %+v", s.view)
 			}
 		})
@@ -218,8 +214,8 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	defer m.Close()
 	// Qualification may use a separately prepared, task-owned component state.
 	// The released SDK still verifies its catalog identity and complete tools.
-	if prepared := os.Getenv("REDEVEN_TEST_NATIVE_COMPONENT_STATE"); prepared != "" {
-		pkg, err := nativeapps.NativePackage()
+	if prepared := os.Getenv("REDEVEN_TEST_DESKTOP_COMPONENT_STATE"); prepared != "" {
+		pkg, err := nativeapps.DesktopForPlatform(runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -254,6 +250,7 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 			t.Fatal("custom terminal absent from GIO catalog")
 		}
 	}
+	useXpraFixture(t, m, appID)
 	req := LaunchRequest{ApplicationID: appID, Locale: "en-US", Presentation: Presentation{Locale: "en-US", Starting: "Starting", Failed: "Failed", Ended: "Ended", Retry: "Retry", Connecting: "Connecting", Reconnecting: "Reconnecting", Disconnected: "Disconnected", ConnectionHint: "Reconnect to continue", Reconnect: "Reconnect"}}
 	// Distribution and user Xpra configurations must not add another application
 	// or a network listener to a Redeven-owned session.
@@ -347,8 +344,42 @@ func assertResponsiveWindowInventory(t *testing.T, session *ownedSession) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	started := time.Now()
-	if !sessionHasWindows(ctx, session.tools.xpra, session.socketDir) {
+	if session.application.record.Backend == "wayland" {
+		connection, state, err := nativeapps.DialDesktop(ctx, *session.application.record.Endpoint)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer connection.Close()
+		// Sharing readiness does not imply that the application has mapped its
+		// first window. Observe the same attachment until it reports one.
+		for len(state.Windows) == 0 {
+			event, err := connection.Read(ctx)
+			if err != nil {
+				t.Fatal("native application did not expose a window", err)
+			}
+			if event.State != nil {
+				state = *event.State
+			}
+		}
+	} else if !sessionHasWindows(ctx, session.tools.xpra, session.socketDir) {
 		t.Fatal("running application window inventory did not respond within three seconds")
 	}
 	t.Logf("running application window inventory: %d ms", time.Since(started).Milliseconds())
+}
+
+// A fixture declares the published X11-only contract before the application is
+// executed. This is not a product fallback or an application-name heuristic.
+func useXpraFixture(t *testing.T, m *Manager, id string) {
+	t.Helper()
+	if !strings.HasPrefix(id, "custom:") {
+		t.Fatal("requires a task-owned desktop entry")
+	}
+	path := filepath.Join(m.custom, strings.TrimPrefix(id, "custom:"))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, []byte("\nX-Floe-Backend=xpra\n")...), 0600); err != nil {
+		t.Fatal(err)
+	}
 }

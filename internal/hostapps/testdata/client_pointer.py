@@ -81,6 +81,10 @@ else:
     content.put(drag, 20, 100)
 
     def receipt(*_):
+        geometry = window.get_window()
+        if geometry:
+            state['width'], state['height'] = geometry.get_width(), geometry.get_height()
+            state['inset'] = fixed.translate_coordinates(window, 0, 0)[1]
         for name, scroll in [('outer', outer), ('inner', inner)]:
             state[name] = [scroll.get_hadjustment().get_value(), scroll.get_vadjustment().get_value()]
         state['drag'] = drag.get_value()
@@ -104,6 +108,7 @@ else:
         for adjustment in (scroll.get_hadjustment(), scroll.get_vadjustment()):
             adjustment.connect('value-changed', receipt)
     drag.connect('value-changed', receipt)
+    window.connect('configure-event', receipt)
     window.connect('destroy', Gtk.main_quit)
     window.show_all()
     receipt()

@@ -20,6 +20,8 @@ failures never replace successful preparation with an installation failure.
 ## Acquisition and retention
 
 Desktop delegates to its bundled Runtime's `host-application-package` command.
+That command and the receiving host select the same published `DesktopForPlatform`
+combined recipe. Retained Xpra resources are not replaced by this transfer.
 The cache lives under the Desktop user-data directory at
 `native-application-components/cache/archives`. SHA-256 identifies original
 publisher bytes, independent of device identity. Different architectures can

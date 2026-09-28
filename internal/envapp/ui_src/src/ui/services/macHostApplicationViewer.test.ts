@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: Record<string, unknown>) => { window: Window & typeof globalThis };
 };
-const shared = ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
+const shared = ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js', 'canvas.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/macos.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 let dom: InstanceType<typeof JSDOM>;

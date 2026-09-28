@@ -1,17 +1,9 @@
 // Native macOS frames and input share the existing authenticated application
 // forward. A reconnect reattaches to the bound process, never relaunches it.
 (() => {
-  const previous = document.getElementById('application');
-  const canvas = document.createElement('canvas');
-  canvas.id = 'application';
-  canvas.className = 'mac-app-canvas';
-  canvas.tabIndex = 0;
-  canvas.setAttribute('aria-label', document.title);
-  previous.replaceWith(canvas);
-  const context = canvas.getContext('2d', { alpha: false });
+  const canvas = createHostApplicationCanvas();
   const retry = document.getElementById('retry');
   const native = window.redevenHostApplicationWindow;
-  document.body.classList.add('mac-app-viewer');
   const { controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, help, helpPanel, close, quit, popover, menuPanel, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit, chevron } = createHostApplicationToolbar();
   const windowEntries = new Map();
   let panelSection = null;
@@ -297,13 +289,32 @@
     }, 6000);
   };
   let keyboardVisible = false;
-  const inputController = hostApplicationInput.createRemoteInput({
-    surface: canvas, label: config.copy.input,
-    commitText(text, target) { pointerController.flush(); if (target === current) send({action:'input', kind:'text', text}); },
-    sendKey(key, target) { pointerController.flush(); if (target === current) send({action:'input', kind:'key', ...key}); },
-    release(target) { if (target === current) send({action:'release'}); },
+  let scrollRemainder;
+  const canvasInput = createHostApplicationCanvasInput({
+    canvas, target: () => current, isValid: validPointerTarget,
+    commitText(text) { send({action:'input', kind:'text', text}); },
+    sendKey(key) { send({action:'input', kind:'key', ...key}); },
+    releaseInput(target) { if (target === current) send({action:'release'}); },
     onKeyboardVisibilityChange(visible) { keyboardVisible = visible; keyboard.setAttribute('aria-pressed', String(visible)); },
+    sendPointer(command, target) {
+      if (!validPointerTarget(target)) return false;
+      const {kind, button, clicks} = command;
+      let {dx, dy} = command;
+      if (kind === 'scroll') {
+        // CoreGraphics uses integral pixel wheel packets. Fractions belong
+        // only to this target and never survive gesture cancellation.
+        if (scrollRemainder?.target !== target) scrollRemainder = {target, x:0, y:0};
+        scrollRemainder.x += dx; scrollRemainder.y += dy;
+        dx = Math.trunc(scrollRemainder.x); dy = Math.trunc(scrollRemainder.y);
+        scrollRemainder.x -= dx; scrollRemainder.y -= dy;
+        if (!dx && !dy) return true;
+      }
+      send({action:'input', kind, button, clicks, dx, dy, ...hostApplicationCanvasPoint(canvas, command)});
+    },
+    releasePointer(target) { if (scrollRemainder?.target === target) scrollRemainder = null; },
+    activate: collapseControls,
   });
+  const inputController = canvasInput.input, pointerController = canvasInput.pointer;
   const input = inputController.element;
   hostApplicationAppearance.copy(input, 'input', 'aria-label');
   keyboard.onclick = () => {
@@ -330,8 +341,6 @@
     connectedAt = 0,
     firstFrame = false,
     current,
-    pending,
-    drawing = null,
     deadline,
     resizeTimer;
   let abort;
@@ -381,8 +390,7 @@
     if (keepFocus) inputController.reset();
     else inputController.bindTarget(null);
     renderedGeneration = 0;
-    pending = null;
-    drawing = null;
+    framePlayer.invalidate();
     resetDecoder();
     if (panelSection === 'menu') collapseControls();
     menuPanel.replaceChildren();
@@ -452,43 +460,28 @@
       decoder.decode(new EncodedVideoChunk({ type: next.meta.key ? 'key' : 'delta', timestamp: next.meta.timestamp, data: next.bytes }));
     });
   }
-  async function draw() {
-    if (drawing) return;
-    const job = {};
-    drawing = job;
-    let decoding;
-    try {
-      while (pending && drawing === job) {
-        const next = pending; decoding = next; pending = null;
-        const image = next.meta.codec === 'h264' ? await decodeVideo(next)
-          : await createImageBitmap(new Blob([next.bytes], {type: next.meta.codec === 'png' ? 'image/png' : 'image/jpeg'}));
-        if (drawing === job && next.attempt === attempt && current && next.generation === current.generation && socket?.readyState === WebSocket.OPEN) {
-          const width = image.displayWidth || image.width, height = image.displayHeight || image.height;
-          if (canvas.width !== width || canvas.height !== height) { pointerController.reset(); canvas.width = width; canvas.height = height; }
-          context.drawImage(image, 0, 0);
-          renderedGeneration = current.generation;
-          inputController.bindTarget(current);
-          canvas.setAttribute('aria-busy', 'false');
-          statisticValues.resolution.textContent = `${width} × ${height}`;
-          hostApplicationAppearance.copy(statisticValues.transport, next.meta.transport === 'video' ? 'pictureVideo' : 'pictureImages');
-          paintedFrames++;
-          socket.send(JSON.stringify({ action: 'frame_ack', generation: next.generation, frame_id: next.meta.frame_id }));
-          if (!firstFrame) {
-            firstFrame = true;
-            console.debug(`Host application first frame: ${Math.round(performance.now() - connectedAt)} ms`);
-          }
-          clearTimeout(deadline); active = true; present('active');
-        }
-        image.close();
-      }
-    } catch {
-      if (drawing === job && socket && decoding?.attempt === attempt && decoding?.generation === current?.generation) {
-        if (decoding.meta.codec === 'h264' && videoSupported) {
-          videoSupported = false; resetDecoder(); configurePicture();
-        } else disconnect('failed');
-      }
-    } finally { if (drawing === job) { drawing = null; if (pending) void draw(); } }
-  }
+  const framePlayer = createHostApplicationFramePlayer({
+    canvas,
+    decode: next => next.meta.codec === 'h264' ? decodeVideo(next)
+      : createImageBitmap(new Blob([next.bytes], {type: next.meta.codec === 'png' ? 'image/png' : 'image/jpeg'})),
+    isValid: next => next && next.attempt === attempt && next.target === current && socket?.readyState === WebSocket.OPEN,
+    onResize: () => pointerController.reset(),
+    onPaint(next, width, height) {
+      renderedGeneration = current.generation;
+      inputController.bindTarget(current);
+      canvas.setAttribute('aria-busy', 'false');
+      statisticValues.resolution.textContent = `${width} × ${height}`;
+      hostApplicationAppearance.copy(statisticValues.transport, next.meta.transport === 'video' ? 'pictureVideo' : 'pictureImages');
+      paintedFrames++;
+      socket.send(JSON.stringify({action:'frame_ack', generation:next.generation, frame_id:next.meta.frame_id}));
+      if (!firstFrame) { firstFrame = true; console.debug(`Host application first frame: ${Math.round(performance.now() - connectedAt)} ms`); }
+      clearTimeout(deadline); active = true; present('active');
+    },
+    onError(next) {
+      if (next.meta.codec === 'h264' && videoSupported) { videoSupported = false; resetDecoder(); configurePicture(); }
+      else disconnect('failed');
+    },
+  });
   async function connect() {
     const mine = ++attempt;
     connectedAt = performance.now(); firstFrame = false;
@@ -536,8 +529,7 @@
             if (!['jpeg', 'png', 'h264'].includes(meta.codec)) throw Error('Unsupported frame');
             receivedBytes += packet.length;
             if (current?.window && meta.generation === current.generation) {
-              pending = { bytes: packet.subarray(4 + length), meta, attempt: mine, generation: meta.generation };
-              void draw();
+              framePlayer.receive({bytes:packet.subarray(4 + length), meta, attempt:mine, generation:meta.generation, target:current});
             }
           } catch { disconnect('failed'); }
           return;
@@ -620,73 +612,10 @@
       if (mine === attempt && !abort?.signal.aborted) disconnect('disconnected');
     }
   }
-  function point(event) {
-    const rect = canvas.getBoundingClientRect();
-    const scale = Math.min(
-      rect.width / canvas.width,
-      rect.height / canvas.height,
-    );
-    const width = canvas.width * scale,
-      height = canvas.height * scale;
-    return {
-      modifiers: [
-        event.metaKey ? 'Meta' : '',
-        event.ctrlKey ? 'Control' : '',
-        event.altKey ? 'Alt' : '',
-        event.shiftKey ? 'Shift' : '',
-      ].filter(Boolean),
-      x: Math.max(
-        0,
-        Math.min(
-          1,
-          (event.clientX - rect.left - (rect.width - width) / 2) / width,
-        ),
-      ),
-      y: Math.max(
-        0,
-        Math.min(
-          1,
-          (event.clientY - rect.top - (rect.height - height) / 2) / height,
-        ),
-      ),
-    };
-  }
-  canvas.setAttribute('data-floe-remote-pointer', '');
-  const pointerFeedback = createHostApplicationHoldFeedback(document);
   function validPointerTarget(target) {
     return target === current && Boolean(target?.window) && renderedGeneration === target.generation
       && socket?.readyState === WebSocket.OPEN && document.body.dataset.state === 'active';
   }
-  let scrollRemainder;
-  const pointerController = hostApplicationPointer.createRemotePointer({
-    surface: canvas,
-    resolveTarget: () => validPointerTarget(current) ? current : null,
-    isTargetValid: validPointerTarget,
-    sendPointer(command, target) {
-      if (!validPointerTarget(target)) return false;
-      const {kind, button, clicks} = command;
-      let {dx, dy} = command;
-      if (kind === 'scroll') {
-        // CoreGraphics pixel wheel packets require integers. Keep fractions
-        // within this target until another event crosses a pixel boundary.
-        if (scrollRemainder?.target !== target) scrollRemainder = {target, x:0, y:0};
-        scrollRemainder.x += dx; scrollRemainder.y += dy;
-        dx = Math.trunc(scrollRemainder.x); dy = Math.trunc(scrollRemainder.y);
-        scrollRemainder.x -= dx; scrollRemainder.y -= dy;
-        if (!dx && !dy) return true;
-      }
-      send({action:'input', kind, button, clicks, dx, dy, ...point(command)});
-    },
-    // The controller sends individual button ups; cancellation must not
-    // release keyboard input or retain the previous gesture's wheel fractions.
-    release(target) { if (scrollRemainder?.target === target) scrollRemainder = null; },
-    onActivate(position) {
-      collapseControls();
-      inputController.setAnchor(position.clientX, position.clientY);
-      if (position.pointerType !== 'touch' || keyboardVisible) inputController.focus();
-    },
-    onHoldChange: pointerFeedback.update,
-  });
   const stopViewport = hostApplicationViewport.observeViewport(window, viewport => {
     Object.assign(document.body.style, hostApplicationViewport.viewportStyle(viewport));
     for (const axis of ['left', 'top', 'width', 'height']) document.body.style.setProperty(`--mac-viewport-${axis}`, document.body.style[axis]);
@@ -694,8 +623,8 @@
   });
   window.addEventListener('beforeunload', () => {
     stopViewport();
-    pointerController.dispose(); pointerFeedback.dispose();
-    inputController.dispose();
+    canvasInput.dispose();
+    framePlayer.invalidate();
     attempt++;
     send({ action: 'release' });
     socket?.close();

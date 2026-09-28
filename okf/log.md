@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-09-28: Integrate private Linux desktop and package sessions
+
+- Consume released Floe Native Apps v0.20.0 for immutable launch planning, private Wayland/Xwayland graphics, sandbox services and native input scheduling.
+- Preserve verified historical Xpra instances and atomically upgrade their records; fresh launches use the combined capability without retrying another backend.
+- Share canvas/controller ownership across native Linux and macOS, and retain explicit package, service and input failure recovery.
+- Record native package input/save receipts, retained-process recovery and focused validation separately from physical-device and system-IME limits.
+
 ## 2026-09-20: Refine Flower startup and backup presentation
 
 - Give preparation and backup one branded, theme-aware waiting surface with honest progress, concise localized copy, and startup details available on demand.

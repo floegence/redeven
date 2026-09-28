@@ -6975,7 +6975,12 @@
       "invalid": "Prüfen Sie den Namen, den Programmpfad und die Argumente.",
       "limit": "Die maximale Sitzungsanzahl ist erreicht. Beenden Sie eine Sitzung, um eine weitere Anwendung zu öffnen.",
       "notFound": "Diese Anwendung oder Sitzung ist nicht mehr verfügbar.",
-      "unavailable": "Host-Anwendungen sind noch nicht bereit. Prüfen Sie die Abhängigkeiten auf dem Host und aktualisieren Sie die Liste."
+      "unavailable": "Host-Anwendungen sind noch nicht bereit. Prüfen Sie die Abhängigkeiten auf dem Host und aktualisieren Sie die Liste.",
+      "packageUnavailable": "Die Paketlaufzeit der Anwendung ist nicht verfügbar. Prüfen Sie die Installation auf diesem Host und aktualisieren Sie anschließend die Liste.",
+      "hostServiceUnavailable": "Ein benötigter Hostdienst ist nicht verfügbar. Prüfen Sie die Benutzersitzung und die Paketdienste des Hosts und versuchen Sie es erneut.",
+      "graphicsUnavailable": "Die benötigten Grafikkomponenten sind nicht verfügbar. Bereiten Sie die Komponenten für Hostanwendungen vor oder aktualisieren Sie sie und versuchen Sie es erneut.",
+      "planStale": "Die Anwendung wurde während des Öffnens geändert. Aktualisieren Sie die Anwendungsliste und öffnen Sie sie erneut.",
+      "packageUnsupported": "Das Paket oder die Startmethode dieser Anwendung konnte nicht überprüft werden. Verwenden Sie den installierten Eintrag in der Anwendungsbibliothek oder prüfen Sie die Paketinstallation."
     },
     "executable": "Programmpfad",
     "eyebrow": "AUF DIESEM HOST",
@@ -6994,7 +6999,7 @@
     "retry": "Erneut versuchen",
     "running": "Laufende Anwendungen",
     "search": "Anwendungen suchen…",
-    "setupDescription": "Installieren Sie Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth und Python-GIO/GTK-3-Bindings auf diesem Host und aktualisieren Sie die Liste. Die Pakete unterscheiden sich je nach Distribution. Eine Desktopumgebung oder ein Monitor ist nicht erforderlich.",
+    "setupDescription": "Bereiten Sie die Grafikkomponenten in Redeven vor. Native Anwendungen benötigen weder eine Desktopumgebung noch einen Monitor. Snap und Flatpak benötigen ihre Paketlaufzeit und Hostdienste.",
     "setupRequirements": "Noch erforderlich: {requirements}",
     "setupGuide": "Installationsanleitung",
     "catalogUnavailable": "Der Anwendungskatalog des Hosts konnte nicht gelesen werden. Prüfen Sie, ob die Laufzeit auf diesem Host funktioniert, und aktualisieren Sie die Ansicht.",
@@ -7080,7 +7085,8 @@
     "macBundlePath": "Pfad zum App-Paket",
     "touchHelp": "Touchhilfe",
     "touchHelpTitle": "Touchsteuerung",
-    "touchHelpDescription": "Tippen klickt. Mit einem Finger wischen scrollt. Nach langem Drücken bewegen Sie zum Ziehen; ohne Bewegung loslassen öffnet das Kontextmenü. Mit zwei Fingern zoomen Sie die Seite."
+    "touchHelpDescription": "Tippen klickt. Mit einem Finger wischen scrollt. Nach langem Drücken bewegen Sie zum Ziehen; ohne Bewegung loslassen öffnet das Kontextmenü. Mit zwei Fingern zoomen Sie die Seite.",
+    "clipboardUnavailable": "Der Zugriff auf die Zwischenablage ist nicht verfügbar. Verwenden Sie HTTPS und erlauben Sie dieser Website den Zugriff auf die Zwischenablage. Kopieren Sie dann erneut."
   },
   "settingsDesign": {
     "editDirectory": "Verzeichnis bearbeiten",

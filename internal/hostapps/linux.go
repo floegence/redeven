@@ -25,21 +25,26 @@ import (
 // record locates an owned backend; live kernel identity and Xpra's identity must
 // both match before a restarted Runtime can expose it again.
 type linuxApplicationRecord struct {
-	Version     int                        `json:"version"`
-	Component   string                     `json:"component,omitempty"`
-	ID          string                     `json:"id"`
-	Owner       string                     `json:"owner"`
-	Application Application                `json:"application"`
-	Address     string                     `json:"address"`
-	Process     nativeapps.ProcessIdentity `json:"process"`
-	StartedAt   int64                      `json:"started_at_unix_ms"`
+	Version     int                         `json:"version"`
+	Backend     string                      `json:"backend,omitempty"`
+	Endpoint    *nativeapps.DesktopEndpoint `json:"endpoint,omitempty"`
+	Component   string                      `json:"component,omitempty"`
+	ID          string                      `json:"id"`
+	Owner       string                      `json:"owner"`
+	Application Application                 `json:"application"`
+	Address     string                      `json:"address"`
+	Process     nativeapps.ProcessIdentity  `json:"process"`
+	StartedAt   int64                       `json:"started_at_unix_ms"`
 }
 type linuxApplication struct {
 	record               linuxApplicationRecord
 	tools                hostTools
 	input                nativeapps.ClientInput
+	launcher             string
 	ready, ended         bool // protected by Manager.appsMu
 	terminationRequested bool
+	desktop              desktopAttachmentOwner
+	prepared             chan struct{}
 }
 
 var applicationInstanceID = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -54,10 +59,22 @@ func (m *Manager) writeApplication(a *linuxApplication) error {
 		return err
 	}
 	dir := m.applicationDir(a.record.ID)
-	if err = os.WriteFile(filepath.Join(dir, "instance.json.tmp"), data, 0600); err != nil {
+	temporary, err := os.CreateTemp(dir, ".instance-*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(filepath.Join(dir, "instance.json.tmp"), filepath.Join(dir, "instance.json"))
+	defer os.Remove(temporary.Name())
+	if _, err = temporary.Write(data); err == nil {
+		err = temporary.Sync()
+	}
+	closeErr := temporary.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(temporary.Name(), filepath.Join(dir, "instance.json"))
 }
 
 func decodeApplicationRecord(data []byte, id string) (linuxApplicationRecord, error) {
@@ -65,12 +82,25 @@ func decodeApplicationRecord(data []byte, id string) (linuxApplicationRecord, er
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if len(data) > 1<<20 || decoder.Decode(&r) != nil || decoder.Decode(new(any)) != io.EOF ||
-		!applicationInstanceID.MatchString(id) || (r.Version != 1 && r.Version != 2) || r.ID != id || r.Owner == "" ||
+		!applicationInstanceID.MatchString(id) || (r.Version < 1 || r.Version > 3) || r.ID != id || r.Owner == "" ||
 		r.Application.ID == "" || r.Process.PID <= 0 || r.Process.Boot == "" || r.Process.Started == "" || r.StartedAt <= 0 {
 		return r, fmt.Errorf("unsupported or incomplete host application instance")
 	}
-	if (r.Version == 1 && r.Component != "") || (r.Version == 2 && r.Component != "system" && !applicationInstanceID.MatchString(r.Component)) {
+	if (r.Version == 1 && r.Component != "") || (r.Version >= 2 && r.Component != "system" && !applicationInstanceID.MatchString(r.Component)) {
 		return r, fmt.Errorf("invalid host application component identity")
+	}
+	if r.Version < 3 && (r.Backend != "" || r.Endpoint != nil) {
+		return r, fmt.Errorf("invalid legacy host application backend")
+	}
+	if r.Version == 3 && r.Backend == "wayland" {
+		if r.Address != "" || r.Component == "system" || r.Endpoint == nil || r.Endpoint.Instance != id ||
+			r.Endpoint.SocketPath != filepath.Join(applicationSocketDir(id), "control.sock") || !applicationInstanceID.MatchString(r.Endpoint.Token) {
+			return r, fmt.Errorf("invalid native host application endpoint")
+		}
+		return r, nil
+	}
+	if r.Endpoint != nil || (r.Version == 3 && r.Backend != "xpra") {
+		return r, fmt.Errorf("invalid host application backend")
 	}
 	host, port, err := net.SplitHostPort(r.Address)
 	p, portErr := strconv.Atoi(port)
@@ -129,15 +159,27 @@ func (m *Manager) ensureApplications(ctx context.Context) error {
 		if !r.Process.Alive() {
 			continue
 		}
-		legacy := r.Version == 1
+		legacy := r.Version < 3
 		tools, err := m.recoverApplicationTools(ctx, &r)
 		if err != nil {
 			return fmt.Errorf("host application component recovery: %w", err)
 		}
 		a := &linuxApplication{record: r, tools: tools}
-		identity, err := m.applicationCommand(ctx, a, "id")
-		if err != nil || !strings.Contains("\n"+string(identity), "\nsession-name="+r.ID+"\n") {
-			return fmt.Errorf("cannot verify surviving host application backend: %w", ErrUnavailable)
+		if r.Backend == "wayland" {
+			observation, err := m.desktopReceipt(a)
+			if err != nil {
+				return err
+			}
+			a.prepared = make(chan struct{})
+			if observation.Ready {
+				a.ready = true
+				close(a.prepared)
+			}
+		} else {
+			identity, err := m.applicationCommand(ctx, a, "id")
+			if err != nil || !strings.Contains("\n"+string(identity), "\nsession-name="+r.ID+"\n") {
+				return fmt.Errorf("cannot verify surviving host application backend: %w", ErrUnavailable)
+			}
 		}
 		if legacy {
 			if err := m.writeApplication(a); err != nil {
@@ -172,6 +214,12 @@ func (m *Manager) recoverApplicationTools(ctx context.Context, r *linuxApplicati
 			r.Component = installed.Digest
 		}
 		r.Version = 2
+	}
+	if r.Version == 2 {
+		r.Version, r.Backend = 3, "xpra"
+	}
+	if r.Backend == "wayland" {
+		return resolveDesktopTools(manager, r.Component)
 	}
 	if r.Component != "system" {
 		return resolveManagedTools(manager, r.Component)
@@ -236,19 +284,23 @@ func (m *Manager) launchLinux(ctx context.Context, owner string, req LaunchReque
 		if app.ID == "" {
 			return Session{}, ErrNotFound
 		}
-	} else {
-		_, tools = m.installedTools(ctx)
-	}
-	viewer, err := nativeapps.PrepareViewer(tools.html)
-	if err != nil {
-		return Session{}, fmt.Errorf("%w: %v", ErrViewerPreparation, err)
 	}
 	if application == nil {
-		application, err = m.startApplication(owner, app, tools)
+		var err error
+		application, err = m.startDesktopApplication(ctx, owner, app, tools)
 		if err != nil {
 			return Session{}, err
 		}
 		m.applications[application.record.ID] = application
+	}
+	if application.record.Backend == "wayland" {
+		return m.shareDesktopApplication(ctx, owner, application, req.Presentation)
+	}
+	// Viewer resources are selected from this surviving Xpra instance, never
+	// from a newly activated component with a different backend contract.
+	viewer, err := nativeapps.PrepareViewer(application.tools.html)
+	if err != nil {
+		return Session{}, fmt.Errorf("%w: %v", ErrViewerPreparation, err)
 	}
 	return m.shareApplication(ctx, owner, application, req.Presentation, viewer)
 }
@@ -293,13 +345,13 @@ func (m *Manager) applicationArgs(a *linuxApplication) []string {
 		"--bind=" + filepath.Join(socketDir, "control"), "--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no", "--source=", "--source-start=",
 		"--webcam=no", "--printing=no", "--file-transfer=no", "--notifications=no", "--dbus-launch=", "--session-name=" + a.record.ID,
 		"--xvfb=" + quoteArgv([]string{t.xvfb, "-screen", "0", "3840x2160x24", "-nolisten", "tcp", "-noreset", "+extension", "Composite", "-auth", "$XAUTHORITY"}),
-		"--start-child=" + quoteArgv([]string{t.python, m.helper, "launch", m.custom, a.record.Application.ID, filepath.Join(dir, "launch.json"), m.launcher})}
+		"--start-child=" + quoteArgv([]string{t.python, a.launcher, "--plan", filepath.Join(dir, "application-plan.json"), filepath.Join(dir, "launch.json")})}
 	args = append(args, nativeapps.XpraNoAudioArgs()...)
 	args = append(args, a.input.XpraArgs(os.Environ())...)
 	return append(args, nativeapps.XpraApplicationLifetimeArgs()...)
 }
 
-func (m *Manager) startApplication(owner string, app Application, tools hostTools) (*linuxApplication, error) {
+func (m *Manager) startApplication(owner string, app Application, tools hostTools, plan nativeapps.ApplicationLaunchPlan) (*linuxApplication, error) {
 	id := randomID() + randomID()
 	dir, socketDir := m.applicationDir(id), applicationSocketDir(id)
 	if err := os.Mkdir(dir, 0700); err != nil {
@@ -324,11 +376,18 @@ func (m *Manager) startApplication(owner string, app Application, tools hostTool
 	}
 	address := listener.Addr().String()
 	_ = listener.Close()
-	component := tools.componentDigest
-	if component == "" {
-		component = "system"
+	component := tools.componentIdentity()
+	if description := plan.Description(); description.Backend.ID != "xpra" || description.Backend.Component != component {
+		return nil, ErrInvalid
 	}
-	a := &linuxApplication{record: linuxApplicationRecord{Version: 2, Component: component, ID: id, Owner: owner, Application: app, Address: address, StartedAt: time.Now().UnixMilli()}, tools: tools}
+	a := &linuxApplication{record: linuxApplicationRecord{Version: 3, Backend: "xpra", Component: component, ID: id, Owner: owner, Application: app, Address: address, StartedAt: time.Now().UnixMilli()}, tools: tools}
+	if _, err := plan.Write(dir); err != nil {
+		return nil, err
+	}
+	a.launcher, err = nativeapps.WriteApplicationLauncher(dir)
+	if err != nil {
+		return nil, err
+	}
 	a.input, err = nativeapps.PrepareClientInput(filepath.Join(dir, "input"), runtime.GOARCH)
 	if err != nil {
 		return nil, err
@@ -401,37 +460,54 @@ func (m *Manager) watchApplication(a *linuxApplication, done <-chan error) {
 			case <-tick.C:
 			case <-done:
 			}
-			receipt := applicationReceipt(filepath.Join(m.applicationDir(a.record.ID), "launch.json"))
+			observation := desktopLifecycleObservation{}
+			if a.record.Backend == "wayland" {
+				// An absent or unreadable receipt leaves startup uncertain while
+				// the exact helper process is still alive. It is never an exit.
+				observation, _ = m.desktopReceipt(a)
+			} else {
+				receipt := applicationReceipt(filepath.Join(m.applicationDir(a.record.ID), "launch.json"))
+				switch receipt {
+				case "running":
+					m.appsMu.Lock()
+					observation.Ready = a.ready
+					m.appsMu.Unlock()
+					if !observation.Ready {
+						identity, err := m.applicationCommand(context.Background(), a, "id")
+						observation.Ready = err == nil && strings.Contains("\n"+string(identity), "\nsession-name="+a.record.ID+"\n")
+					}
+				case "exited":
+					observation.EndReason = "application_exited"
+				case "failed":
+					observation.ErrorCode = "launch_failed"
+				}
+			}
 			alive := a.record.Process.Alive()
-			m.appsMu.Lock()
-			ready := a.ready
-			m.appsMu.Unlock()
 			if !alive {
 				m.appsMu.Lock()
 				a.ended = true
-				m.appsMu.Unlock()
-				code, reason := "capture_failed", ""
-				m.appsMu.Lock()
-				terminated := a.terminationRequested
-				m.appsMu.Unlock()
-				if receipt == "exited" || terminated {
-					code, reason = "", "application_exited"
-				} else if receipt == "failed" {
-					code = "launch_failed"
+				if a.record.Backend == "xpra" && a.terminationRequested {
+					observation.ErrorCode, observation.EndReason = "", "application_exited"
 				}
-				if code != "" {
-					slog.Warn("host application backend ended", "instance", a.record.ID, "error_code", code)
+				m.appsMu.Unlock()
+				if observation.EndReason == "" && observation.ErrorCode == "" {
+					observation.ErrorCode = "capture_failed"
 				}
-				m.finishApplicationShares(a, code, reason)
+				m.finishApplicationShares(a, observation)
 				return
 			}
-			if !ready && receipt == "running" {
-				identity, err := m.applicationCommand(context.Background(), a, "id")
-				if err == nil && strings.Contains("\n"+string(identity), "\nsession-name="+a.record.ID+"\n") {
-					ready = true
-					m.appsMu.Lock()
-					a.ready = true
-					m.appsMu.Unlock()
+			if observation.ErrorCode != "" {
+				m.finishApplicationShares(a, observation)
+			}
+			if observation.Ready && observation.ErrorCode == "" {
+				m.appsMu.Lock()
+				becameReady := !a.ready
+				a.ready = true
+				if becameReady && a.prepared != nil {
+					close(a.prepared)
+				}
+				m.appsMu.Unlock()
+				if becameReady {
 					m.mu.Lock()
 					for _, s := range m.sessions {
 						if s.application == a && !s.stopping {
@@ -440,35 +516,26 @@ func (m *Manager) watchApplication(a *linuxApplication, done <-chan error) {
 					}
 					m.mu.Unlock()
 					tick.Reset(time.Second)
-					slog.Info("host application ready", "instance", a.record.ID, "backend", "xpra", "phase", phase, "duration_ms", time.Since(observedAt).Milliseconds())
+					slog.Info("host application ready", "instance", a.record.ID, "backend", a.record.Backend, "phase", phase, "duration_ms", time.Since(observedAt).Milliseconds())
 				}
-			}
-			if !ready && time.Since(observedAt) > 40*time.Second {
-				// Unconfirmed startup cannot spin forever or authorize killing
-				// an application whose launch receipt may have been interrupted.
-				tick.Reset(time.Second)
-				code := "launch_failed"
-				if receipt == "running" {
-					code = "capture_failed"
-				}
-				m.finishApplicationShares(a, code, "")
 			}
 		}
 	}()
 }
 
-func (m *Manager) finishApplicationShares(a *linuxApplication, code, reason string) {
+func (m *Manager) finishApplicationShares(a *linuxApplication, observation desktopLifecycleObservation) {
 	m.mu.Lock()
 	var shares []*ownedSession
 	for _, s := range m.sessions {
 		if s.application == a && !s.stopping {
-			s.view.EndReason = reason
+			s.view.EndReason = observation.EndReason
+			s.view.LaunchDiagnostic = observation.Diagnostic
 			shares = append(shares, s)
 		}
 	}
 	m.mu.Unlock()
 	for _, s := range shares {
-		m.finish(s, code, nil)
+		m.finish(s, observation.ErrorCode, nil)
 	}
 }
 
@@ -516,6 +583,9 @@ func (m *Manager) controlLinuxApplication(ctx context.Context, owner string, req
 	a := m.applications[req.Instances[0]]
 	if a == nil || a.ended || a.record.Owner != owner || a.record.Application.ID != req.ApplicationID || !a.record.Process.Alive() {
 		return ErrNotFound
+	}
+	if a.record.Backend == "wayland" {
+		return m.controlDesktopApplication(ctx, a, force)
 	}
 	if force {
 		identity, err := m.applicationCommand(ctx, a, "id")

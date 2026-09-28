@@ -152,6 +152,12 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 }
 
 func writeHostAppError(w http.ResponseWriter, err error) {
+	var unavailable *nativeapps.LaunchUnavailable
+	if errors.As(err, &unavailable) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "Host application launch is unavailable", "error_code": "HOST_APP_" + strings.ToUpper(hostapps.LaunchFailureCode(unavailable.Code)),
+			"launch_diagnostic": hostapps.LaunchDiagnostic{Code: unavailable.Code, Stage: unavailable.Stage}})
+		return
+	}
 	status, code := http.StatusInternalServerError, "HOST_APP_FAILED"
 	switch {
 	case errors.Is(err, hostapps.ErrViewerPreparation):
@@ -204,7 +210,7 @@ func (g *Server) guardHostApplicationSession(w http.ResponseWriter, r *http.Requ
 		if s.State == "running" || s.State == "starting" {
 			password = g.hostApps.Password(s.ID)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"state": s.State, "error_code": s.ErrorCode, "end_reason": s.EndReason, "password": password})
+		writeJSON(w, http.StatusOK, map[string]any{"state": s.State, "error_code": s.ErrorCode, "end_reason": s.EndReason, "password": password, "launch_diagnostic": s.LaunchDiagnostic})
 		return true
 	}
 	if path == hostApplicationBoot {
@@ -222,20 +228,28 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 	var random [18]byte
 	_, _ = rand.Read(random[:])
 	nonce := base64.RawStdEncoding.EncodeToString(random[:])
-	config, _ := json.Marshal(map[string]any{"base": base, "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend, "initial": map[string]string{"state": s.State, "end_reason": s.EndReason}})
+	config, _ := json.Marshal(map[string]any{"base": base, "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend, "initial": map[string]string{"state": s.State, "end_reason": s.EndReason, "error_code": s.ErrorCode}})
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data: blob:; connect-src 'self'; frame-src 'self'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; base-uri 'none'; frame-ancestors 'none'")
-	script := hostApplicationJS
-	if s.Backend == "macos" {
+	var script string
+	switch s.Backend {
+	case "linux":
+		script = hostApplicationJS
+	case "macos":
 		script = macHostApplicationJS
+	case "wayland":
+		script = string(nativeapps.CursorClientSource()) + "\n" + linuxHostApplicationJS
+	default:
+		http.Error(w, "unsupported host application backend", http.StatusServiceUnavailable)
+		return
 	}
 	_ = hostApplicationBootTemplate.Execute(w, struct {
 		Name, Nonce, Locale, Theme string
 		Config, Script             template.JS
 		Style                      template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationPointerJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationPointerCSS + "\n" + hostApplicationCSS)})
+	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationPointerJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + hostApplicationCanvasJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationPointerCSS + "\n" + hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html
@@ -278,6 +292,12 @@ var hostApplicationBootTemplate = template.Must(template.New("host-app").Parse(h
 
 //go:embed host_application_viewer/macos.js
 var macHostApplicationJS string
+
+//go:embed host_application_viewer/canvas.js
+var hostApplicationCanvasJS string
+
+//go:embed host_application_viewer/linux.js
+var linuxHostApplicationJS string
 
 //go:embed host_application_viewer/toolbar.js
 var hostApplicationToolbarJS string

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -88,7 +89,23 @@ func TestInstalledMacPointerViewer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	metadata, _ := json.Marshal(map[string]any{"address": address.Host, "password": m.sessions[session.ID].password, "kind": kind, "backend": "macos", "receipt": receipt, "state": root})
+	proxy := httputil.NewSingleHostReverseProxy(address)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/_redeven_host_app/state" {
+			for _, current := range m.Sessions("fixture") {
+				if current.ID == session.ID {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]any{"state": current.State, "error_code": current.ErrorCode, "end_reason": current.EndReason, "password": m.Password(current.ID)})
+					return
+				}
+			}
+			http.NotFound(w, r)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	metadata, _ := json.Marshal(map[string]any{"address": server.Listener.Addr().String(), "password": m.sessions[session.ID].password, "kind": kind, "backend": "macos", "receipt": receipt, "state": root})
 	if err := os.WriteFile(filepath.Join(root, "connection.json"), metadata, 0600); err != nil {
 		t.Fatal(err)
 	}

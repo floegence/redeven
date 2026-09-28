@@ -9,10 +9,10 @@ const root = path.resolve(import.meta.dirname, '..');
 const output = path.resolve(root, '../../codeapp/appserver/host_application_viewer');
 const require = createRequire(import.meta.url);
 const source = await build({
-  stdin: { contents: `export { enUS } from './src/ui/i18n/locales/en-US'; export { hostApplicationCopyKeys } from './src/ui/services/hostApplicationPresentation'; export { SUPPORTED_LOCALES } from './src/ui/i18n/localeMeta';`, resolveDir: root, loader: 'ts' },
+  stdin: { contents: `export { enUS } from './src/ui/i18n/locales/en-US'; export { hostApplicationCopyKeys, hostApplicationLaunchFailures } from './src/ui/services/hostApplicationPresentation'; export { SUPPORTED_LOCALES } from './src/ui/i18n/localeMeta';`, resolveDir: root, loader: 'ts' },
   bundle: true, write: false, platform: 'node', format: 'esm',
 });
-const { enUS, hostApplicationCopyKeys, SUPPORTED_LOCALES } = await import(`data:text/javascript;base64,${Buffer.from(source.outputFiles[0].text).toString('base64')}`);
+const { enUS, hostApplicationCopyKeys, hostApplicationLaunchFailures, SUPPORTED_LOCALES } = await import(`data:text/javascript;base64,${Buffer.from(source.outputFiles[0].text).toString('base64')}`);
 const keys = { ...hostApplicationCopyKeys, sessionQuit: 'hostApplications.closeAllWindows', sessionQuitTitle: 'hostApplications.closeAllWindowsTitle', sessionWaitingHint: 'hostApplications.sessionWaitingHint', sessionQuitDescription: 'hostApplications.sessionQuitDescription', sessionPictureHint: 'hostApplications.sessionPictureHint' };
 const locales = Object.fromEntries(SUPPORTED_LOCALES.map(locale => {
   const dictionary = locale === 'en-US' ? enUS : JSON.parse(readFileSync(path.join(root, `src/ui/i18n/locales/catalogs/${locale}.json`), 'utf8'));
@@ -28,7 +28,7 @@ const inputStyle = readFileSync(require.resolve('@floegence/floe-webapp-core/rem
 const input = await build({ stdin: {contents: `export {createRemoteInput} from '@floegence/floe-webapp-core/remote-input'; export const style = ${JSON.stringify(inputStyle)};`, resolveDir: root}, bundle: true, write: false, minify: true, format: 'iife', globalName: 'hostApplicationInput', platform: 'browser' });
 const pointerStyle = readFileSync(require.resolve('@floegence/floe-webapp-core/remote-pointer.css'), 'utf8');
 const pointer = await build({ stdin: {contents: `export {createRemotePointer} from '@floegence/floe-webapp-core/remote-pointer'; export const style = ${JSON.stringify(pointerStyle)};`, resolveDir: root}, bundle: true, write: false, minify: true, format: 'iife', globalName: 'hostApplicationPointer', platform: 'browser' });
-const catalog = { defaults: BUILT_IN_SHELL_THEME_DEFAULTS, themes: Object.fromEntries(builtInShellThemePresets.map(p => [p.name, p.mode])), locales };
+const catalog = { defaults: BUILT_IN_SHELL_THEME_DEFAULTS, themes: Object.fromEntries(builtInShellThemePresets.map(p => [p.name, p.mode])), locales, launchFailures: hostApplicationLaunchFailures };
 const artifacts = {
   'remote-input.generated.js': `// Generated from published Floe remote-input; run buildHostApplicationAppearance.mjs.\n${input.outputFiles[0].text}`,
   'remote-input.generated.css': `/* Generated from published Floe remote-input.css; run buildHostApplicationAppearance.mjs. */\n${inputStyle}`,
