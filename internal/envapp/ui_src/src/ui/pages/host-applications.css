@@ -47,6 +47,13 @@
 .host-apps-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:55px 24px; text-align:center; color:var(--muted-foreground); gap:12px; }
 .host-apps-empty h2 { color:var(--foreground); font-size:14px; font-weight:550; }
 .host-apps-empty p { max-width:400px; font-size:12px; line-height:1.7; }
+.host-apps-empty-host { max-width:560px; margin:24px auto; padding:32px 16px; gap:10px; }
+.host-apps-empty-host-icon { position:relative; display:grid; place-items:center; width:64px; height:64px; border:1px solid var(--border); border-radius:18px; background:var(--muted); margin-bottom:10px; }
+.host-apps-empty-host-badge { position:absolute; right:-5px; bottom:-5px; display:grid; place-items:center; width:24px; height:24px; border:3px solid var(--background); border-radius:50%; background:var(--muted); color:var(--foreground); }
+.host-apps-empty-host>button { margin:8px 0 4px; }
+.host-apps-empty-host .host-apps-preparation-details { margin-top:4px; max-width:400px; }
+.host-apps-empty-host summary { margin-inline:auto; }
+.host-apps-empty-host .host-apps-preparation-details p { text-align:start; }
 .host-app-error { color:var(--destructive); font-size:11px; line-height:1.5; margin-top:7px; }
 @container(max-width:600px) { .host-apps-content{padding:20px}.host-apps-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,224px),1fr));gap:8px}.host-app-tile{padding:12px 14px} }
 @container(max-width:380px) { .host-apps-filters,.host-apps-search,.host-apps-category{width:100%} }

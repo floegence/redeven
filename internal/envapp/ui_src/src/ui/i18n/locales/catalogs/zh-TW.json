@@ -6880,8 +6880,8 @@
       "unsupported": "此執行階段無法使用已安裝的元件版本，原有檔案已保留。請先更新執行階段再繼續。",
       "available": "元件有更新",
       "view": "查看更新",
-      "title": "更新主機應用程式元件",
-      "description": "目前的元件仍可使用，更新期間也能繼續使用應用程式。",
+      "title": "更新主機應用程式相依元件",
+      "description": "更新期間可繼續使用應用程式。",
       "start": "更新元件",
       "local": "使用本機快取更新，無需下載或上傳。",
       "installedVersion": "已安裝",
@@ -6892,7 +6892,9 @@
       "repair": "修復元件",
       "cacheChanged": "準備期間快取檔案有所變更，請重新檢查可用檔案後再試。",
       "desktopMismatch": "目前的 Desktop 無法準備所需元件，請更新 Desktop 或選擇由主機下載。",
-      "checkingSize": "下載前計算"
+      "checkingSize": "下載前計算",
+      "required": "主機應用程式相依元件需要更新",
+      "requiredDescription": "更新後即可開啟新的應用程式，執行中的應用程式不受影響。"
     },
     "linuxRunningHint": "停止共享後，應用程式會繼續執行。你可以從此清單重新連線。",
     "stopSharingDescription": "中斷此應用程式與 Redeven 的連線。應用程式視窗及尚未儲存的工作會保留。",
@@ -6961,7 +6963,9 @@
       "desktopPacking": "正在準備傳輸檔案…",
       "desktopUploading": "正在傳輸至主機…",
       "desktopCached": "使用本機快取，無需下載。",
-      "desktopBytes": "本機快取：{cached} · 需下載：{download}"
+      "desktopBytes": "本機快取：{cached} · 需下載：{download}",
+      "summary": "準備顯示與輸入元件，即可開啟主機應用程式。",
+      "details": "元件詳細資訊"
     },
     "macMenu": "應用程式選單",
     "connecting": "正在連線至應用程式…",
@@ -6976,8 +6980,8 @@
     "cancel": "取消",
     "category": "應用程式分類",
     "description": "在獨立視窗中使用主機上的應用程式。",
-    "emptyDescription": "在主機上安裝圖形應用程式，或透過執行檔路徑新增。",
-    "emptyTitle": "尚無應用程式",
+    "emptyDescription": "主機應用程式可開啟這台主機上已安裝的圖形軟體。",
+    "emptyTitle": "未找到圖形應用程式",
     "ended": "此應用程式工作階段已結束。",
     "errors": {
       "failed": "無法開啟應用程式。請檢查主機上的應用程式後重試。",
@@ -7096,7 +7100,11 @@
     "touchHelpTitle": "觸控操作",
     "touchHelpDescription": "點一下即可單擊。單指滑動可捲動。長按後移動可拖曳；長按不移動後放開可按右鍵。雙指可縮放頁面。",
     "clipboardUnavailable": "無法存取剪貼簿。請使用 HTTPS 並允許此網站存取剪貼簿，然後重新複製。",
-    "openDescription": "應用程式在此環境所在的裝置上執行，你可以從「應用程式」中再次開啟。"
+    "openDescription": "應用程式在此環境所在的裝置上執行，你可以從「應用程式」中再次開啟。",
+    "emptyDetails": "關於主機應用程式",
+    "emptyHint": "準備元件不會安裝應用程式或桌面環境。若已有圖形軟體，可透過執行檔路徑新增；安裝圖形軟體後也可重新整理清單。如需探索應用程式或準備相依元件，可在此開啟元件設定。",
+    "addExisting": "新增現有應用程式",
+    "componentSettings": "元件設定"
   },
   "settingsDesign": {
     "editDirectory": "編輯目錄",

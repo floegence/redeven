@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed host application preparation
 description: Compatible installed components, independent user-directed updates, incremental transfer and same-window first-use preparation.
 tags: [runtime, desktop, applications, linux, security]
-timestamp: 2026-09-23T08:00:00Z
+timestamp: 2026-09-28T17:30:00Z
 ---
 # Summary
 
@@ -75,11 +75,26 @@ localized recovery copy. No failure changes SELinux, AppArmor or host privileges
 Failure or cancellation preserves installed components and running applications.
 
 With current combined components installed, the application library remains the primary
-surface. An optional update notice opens current/recommended versions, the stability
-fix and actual missing bytes. Inspection is user-directed; dismissing or ignoring
-the notice keeps apps usable. Complete caches use the explicit `cache` source,
+surface. An optional update notice opens dependency settings. Required updates use
+launch availability to explain that new applications need updated dependencies;
+retained-component readiness must not label the page ready to open applications.
+The preparation card sizes to its content, with the method and primary action
+together. Version identifiers, update rationale and method explanations start
+collapsed; errors, recovery actions and active byte progress remain visible.
+Inspection is user-directed; dismissing optional updates keeps apps usable.
+Complete caches use the explicit `cache` source,
 hide download choices and produce no HTTP acquisition or Desktop transfer. Cache
 changes fail explicitly; this source cannot silently start a download.
+
+An empty Linux inventory shows that no graphical applications were found, without
+promoting dependency installation or optional updates. Component setup installs
+neither applications nor a desktop environment. Users can add installed software
+or refresh the inventory; collapsed guidance retains explicit component settings
+for discovery and manual preparation. Active preparation retains progress and
+cancellation; failed or interrupted work retains recovery actions even if the
+inventory becomes empty. Discovery failures retain their
+error state instead of claiming an empty host. Do not infer Linux support from a
+desktop login: installed graphical applications may run on a headless host.
 
 When files are missing, the page and application dialog offer host download (selected
 by default) and Desktop download-and-transfer. Desktop is disabled with an

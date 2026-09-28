@@ -6884,8 +6884,8 @@
       "unsupported": "Este ambiente de execução não pode usar a versão instalada dos componentes. Os arquivos foram preservados. Atualize o ambiente de execução antes de continuar.",
       "available": "Atualização de componentes disponível",
       "view": "Ver atualização",
-      "title": "Atualizar componentes dos aplicativos do host",
-      "description": "Os componentes instalados continuam disponíveis. Você pode usar os aplicativos durante a atualização.",
+      "title": "Atualizar dependências dos aplicativos do host",
+      "description": "Você pode continuar usando os aplicativos durante a atualização.",
       "start": "Atualizar componentes",
       "local": "Usar arquivos em cache. Não é necessário baixar nem enviar arquivos.",
       "installedVersion": "Instalados",
@@ -6896,7 +6896,9 @@
       "repair": "Reparar componentes",
       "cacheChanged": "Os arquivos em cache mudaram. Verifique os arquivos disponíveis e tente novamente.",
       "desktopMismatch": "Este Desktop não pode preparar os componentes necessários. Atualize o Desktop ou escolha o download no host.",
-      "checkingSize": "Calculado antes do download"
+      "checkingSize": "Calculado antes do download",
+      "required": "As dependências dos aplicativos do host precisam ser atualizadas",
+      "requiredDescription": "Atualize para abrir novos aplicativos. Os aplicativos em execução não são afetados."
     },
     "linuxRunningHint": "Os aplicativos continuam em execução após interromper o compartilhamento. Reconecte pela lista.",
     "stopSharingDescription": "Desconectar este aplicativo do Redeven. Suas janelas e o trabalho não salvo permanecem abertos.",
@@ -6965,7 +6967,9 @@
       "desktopPacking": "Preparando os arquivos para transferência…",
       "desktopUploading": "Transferindo para o host…",
       "desktopCached": "Usando o cache local. Não é necessário baixar.",
-      "desktopBytes": "Cache local: {cached} · Download necessário: {download}"
+      "desktopBytes": "Cache local: {cached} · Download necessário: {download}",
+      "summary": "Prepare os componentes de exibição e entrada para abrir aplicativos do host.",
+      "details": "Detalhes dos componentes"
     },
     "macMenu": "Menu do aplicativo",
     "connecting": "Conectando ao aplicativo…",
@@ -6980,8 +6984,8 @@
     "cancel": "Cancelar",
     "category": "Categoria de aplicativo",
     "description": "Os aplicativos do seu host, cada um em sua própria janela.",
-    "emptyDescription": "Instale um aplicativo gráfico neste host ou adicione um pelo caminho do executável.",
-    "emptyTitle": "Nenhum aplicativo ainda",
+    "emptyDescription": "Aplicativos do host abre softwares gráficos já instalados neste host.",
+    "emptyTitle": "Nenhum aplicativo gráfico encontrado",
     "ended": "Esta sessão do aplicativo foi encerrada.",
     "errors": {
       "failed": "Não foi possível abrir o aplicativo. Verifique o aplicativo no host e tente novamente.",
@@ -7100,7 +7104,11 @@
     "touchHelpTitle": "Controles de toque",
     "touchHelpDescription": "Toque para clicar. Deslize um dedo para rolar. Pressione e mova para arrastar; solte sem mover para clicar com o botão direito. Use dois dedos para ampliar a página.",
     "clipboardUnavailable": "O acesso à área de transferência está indisponível. Use HTTPS e permita que este site acesse a área de transferência. Depois, copie novamente.",
-    "openDescription": "Este aplicativo é executado no dispositivo que hospeda este ambiente. Você pode abri-lo novamente em Aplicativos."
+    "openDescription": "Este aplicativo é executado no dispositivo que hospeda este ambiente. Você pode abri-lo novamente em Aplicativos.",
+    "emptyDetails": "Sobre os aplicativos do host",
+    "emptyHint": "A preparação dos componentes não instala aplicativos nem um ambiente de área de trabalho. Adicione um aplicativo instalado pelo caminho do executável ou atualize a lista após instalar um software gráfico. As configurações dos componentes estão disponíveis aqui caso seja necessário detectar ou preparar aplicativos.",
+    "addExisting": "Adicionar aplicativo existente",
+    "componentSettings": "Configurações dos componentes"
   },
   "settingsDesign": {
     "editDirectory": "Editar diretório",

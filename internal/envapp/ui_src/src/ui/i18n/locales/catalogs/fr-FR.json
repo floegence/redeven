@@ -6884,8 +6884,8 @@
       "unsupported": "Cet environnement d’exécution ne peut pas utiliser la version installée des composants. Leurs fichiers ont été conservés. Mettez à jour l’environnement d’exécution avant de continuer.",
       "available": "Mise à jour des composants disponible",
       "view": "Voir la mise à jour",
-      "title": "Mettre à jour les composants des applications de l’hôte",
-      "description": "Les composants installés restent disponibles. Vous pouvez utiliser les applications pendant la mise à jour.",
+      "title": "Mettre à jour les dépendances des applications hôtes",
+      "description": "Vous pouvez continuer à utiliser les applications pendant la mise à jour.",
       "start": "Mettre à jour les composants",
       "local": "Utiliser les fichiers en cache. Aucun téléchargement ni envoi nécessaire.",
       "installedVersion": "Installés",
@@ -6896,7 +6896,9 @@
       "repair": "Réparer les composants",
       "cacheChanged": "Les fichiers en cache ont changé. Vérifiez les fichiers disponibles et réessayez.",
       "desktopMismatch": "Cette version de Desktop ne peut pas préparer les composants requis. Mettez Desktop à jour ou choisissez le téléchargement sur l’hôte.",
-      "checkingSize": "Calculé avant le téléchargement"
+      "checkingSize": "Calculé avant le téléchargement",
+      "required": "Les dépendances des applications hôtes doivent être mises à jour",
+      "requiredDescription": "Mettez à jour pour ouvrir de nouvelles applications. Les applications en cours ne sont pas affectées."
     },
     "linuxRunningHint": "Les applications continuent de fonctionner après l’arrêt du partage. Reconnectez-vous depuis cette liste.",
     "stopSharingDescription": "Déconnecter cette application de Redeven. Ses fenêtres et les travaux non enregistrés restent ouverts.",
@@ -6965,7 +6967,9 @@
       "desktopPacking": "Préparation des fichiers à transférer…",
       "desktopUploading": "Transfert vers l’hôte…",
       "desktopCached": "Utilisation du cache local. Aucun téléchargement nécessaire.",
-      "desktopBytes": "Cache local : {cached} · Téléchargement nécessaire : {download}"
+      "desktopBytes": "Cache local : {cached} · Téléchargement nécessaire : {download}",
+      "summary": "Préparez les composants d’affichage et de saisie pour ouvrir les applications hôtes.",
+      "details": "Détails des composants"
     },
     "macMenu": "Menu de l’application",
     "connecting": "Connexion à l’application…",
@@ -6980,8 +6984,8 @@
     "cancel": "Annuler",
     "category": "Catégorie d’application",
     "description": "Les applications de votre hôte, chacune dans sa propre fenêtre.",
-    "emptyDescription": "Installez une application graphique sur cet hôte ou ajoutez-la en indiquant le chemin de son exécutable.",
-    "emptyTitle": "Aucune application",
+    "emptyDescription": "Applications hôtes ouvre les logiciels graphiques déjà installés sur cet hôte.",
+    "emptyTitle": "Aucune application graphique trouvée",
     "ended": "Cette session d’application est terminée.",
     "errors": {
       "failed": "Impossible d’ouvrir l’application. Vérifiez l’application sur l’hôte, puis réessayez.",
@@ -7100,7 +7104,11 @@
     "touchHelpTitle": "Commandes tactiles",
     "touchHelpDescription": "Touchez pour cliquer. Faites glisser un doigt pour faire défiler. Maintenez puis déplacez pour faire glisser ; relâchez sans bouger pour un clic droit. Pincez avec deux doigts pour zoomer la page.",
     "clipboardUnavailable": "L’accès au presse-papiers est indisponible. Utilisez HTTPS et autorisez ce site à accéder au presse-papiers, puis copiez à nouveau.",
-    "openDescription": "Cette application s’exécute sur l’appareil qui héberge cet environnement. Vous pouvez la retrouver dans Applications."
+    "openDescription": "Cette application s’exécute sur l’appareil qui héberge cet environnement. Vous pouvez la retrouver dans Applications.",
+    "emptyDetails": "À propos des applications hôtes",
+    "emptyHint": "La préparation des composants n’installe ni applications ni environnement de bureau. Ajoutez une application installée via le chemin de son exécutable, ou actualisez la liste après avoir installé un logiciel graphique. Les paramètres des composants sont accessibles ici si la détection ou la préparation est nécessaire.",
+    "addExisting": "Ajouter une application existante",
+    "componentSettings": "Paramètres des composants"
   },
   "settingsDesign": {
     "editDirectory": "Modifier le répertoire",
