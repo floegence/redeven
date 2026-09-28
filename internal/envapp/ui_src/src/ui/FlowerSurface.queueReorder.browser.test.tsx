@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   adapter,
@@ -7,6 +8,9 @@ import {
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
+
+// Keep the thread rail visible while exercising the conversation contract.
+beforeEach(() => page.viewport(1280, 900));
 
 describe('FlowerSurface queued turn reorder', () => {
   it('commits the reversed canonical order through native drag events', async () => {

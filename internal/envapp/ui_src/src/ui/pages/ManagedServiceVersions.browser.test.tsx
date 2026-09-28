@@ -6,6 +6,7 @@ import { createDefaultWorkbenchState, type WorkbenchState, type WorkbenchWidgetD
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { I18nProvider } from '../i18n';
+import { createTestI18nHelpers } from '../i18n/locales/testDictionaries';
 import { LocalApiError } from '../services/localApi';
 import { EnvPortForwardsPage } from './EnvPortForwardsPage';
 import { RedevenWorkbenchSurface } from '../workbench/surface/RedevenWorkbenchSurface';
@@ -361,9 +362,10 @@ describe('Managed service version drawer', () => {
     expect(document.querySelector('[data-testid="managed-release-drawer-body"]')).toBeTruthy();
   });
 
-  it('supports radio keyboard selection and long translated copy', async () => {
-    candidates[0] = candidate('1.2.0', 'newer', { tag: '1.2.0-development-with-a-long-release-identifier' });
-    await mount(390, true, 'de-DE');
+  it.each([320, 390])('supports radio keyboard selection and long translated copy at %ipx', async (width) => {
+    const version = '1.2.0-development-with-a-long-release-identifier';
+    candidates[0] = candidate('1.2.0', 'newer', { tag: version });
+    await mount(width, true, 'de-DE');
     const first = document.querySelector<HTMLButtonElement>('[data-release-id="1.2.0"]')!;
     first.focus();
     await userEvent.keyboard('{ArrowDown}');
@@ -371,7 +373,18 @@ describe('Managed service version drawer', () => {
     await userEvent.keyboard('{ArrowUp}');
     await expect.poll(() => document.querySelector('[data-testid="managed-update-plan"]')).toBeTruthy();
     assertGeometry();
-    await screenshot('long-version-german-dark');
+    const label = createTestI18nHelpers('de-DE').t('webServices.managed.updateTo', { version });
+    await expect.element(submit()).toHaveAccessibleName(label);
+    expect(submit().title).toBe(label);
+    const versionText = submit().querySelector<HTMLElement>('.truncate')!;
+    expect(versionText.textContent).toBe(version);
+    expect(versionText.scrollWidth).toBeGreaterThan(versionText.clientWidth);
+    expect(getComputedStyle(versionText).textOverflow).toBe('ellipsis');
+    for (const control of document.querySelectorAll<HTMLButtonElement>('.managed-release-actions button')) {
+      expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      expect(getComputedStyle(control).whiteSpace).toBe('nowrap');
+    }
+    await screenshot(`long-version-german-dark-${width}`);
   });
   it('clears unsaved confirmations when the drawer is closed', async () => {
     notices = [notice];

@@ -90,6 +90,11 @@ column and the directory remains interactive beside it. At narrower widths,
 details replace the directory region and expose a labeled Back action. Details
 are a region inside the current page or modal, not a second modal. Identity and
 primary actions stay fixed while the detail body scrolls independently.
+Bounded primary-action labels reserve their localized pending states within the
+available width and ellipsize without moving neighboring controls. Full labels
+remain available to assistive technology and through the control title. External
+installation source tabs retain three columns with the same complete accessible
+names when their visible selection labels need ellipsis.
 
 # Boundaries
 

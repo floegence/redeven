@@ -316,6 +316,9 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => ({
 }));
 
 vi.mock('../services/localApi', () => ({
+  readApiJSONResponse: vi.fn(async (response: Response) => ({
+    data: (await response.json()).data, status: response.status, headers: response.headers,
+  })),
   prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
   fetchLocalApiJSON: mocks.fetchLocalApiJSONMock,
   fetchLocalApiJSONResponse: vi.fn(async (url: string, init?: RequestInit) => ({
@@ -494,15 +497,32 @@ async function flush(): Promise<void> {
 }
 
 async function renderPage(waitForSurface = true) {
+  const { bindSessionHTTP } = await import('../services/sessionHTTP');
   const mod = await import('./EnvAIPage');
   const host = document.createElement('div');
   const draftCoordinator = createFlowerComposerDraftCoordinator();
   document.body.appendChild(host);
-  const dispose = render(() => (
+  // Match the Shell-owned session transport. These cases drive current views
+  // through HTTP fixtures; the workspace stream stays connected until disposal.
+  const unbindSession = bindSessionHTTP({
+    fetch: async (input, init) => new Response(JSON.stringify({
+      ok: true,
+      data: await mocks.fetchLocalApiJSONMock(input instanceof Request ? input.url : String(input), init),
+    }), { headers: { 'Content-Type': 'application/json' } }),
+    events: async function* (_input, options) {
+      yield* [];
+      await new Promise<void>((resolve) => {
+        if (options?.signal?.aborted) resolve();
+        else options?.signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+    },
+  });
+  const disposeSurface = render(() => (
     <mod.EnvAIPage
       draftCoordinator={draftCoordinator}
     />
   ), host);
+  const dispose = () => { disposeSurface(); unbindSession(); };
   if (waitForSurface) {
     // Settings, handler resolution, and thread bootstrap now settle through
     // separate async boundaries. Wait for the observable model control instead

@@ -106,7 +106,7 @@ it.each([
   const permissionMenu = runtime.querySelector<HTMLElement>('.flower-permission-menu')!;
   expect(permissionMenu.getBoundingClientRect().width).toBeLessThanOrEqual(256);
   expect(getComputedStyle(permissionMenu.querySelector('.flower-permission-menu-label')!).fontSize).toBe(touch ? '12px' : '11px');
-  for (const item of permissionMenu.querySelectorAll('button')) {
+  for (const item of permissionMenu.querySelectorAll('.flower-permission-menu-entry')) {
     expect(item.getBoundingClientRect().height).toBeGreaterThanOrEqual(touch ? 44 : 28);
   }
   await userEvent.keyboard('{Escape}');

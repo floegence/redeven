@@ -214,9 +214,14 @@ describe('Flower complete interaction subtree stability', () => {
     if (mode === 'input') panel.querySelector<HTMLButtonElement>('[data-flower-input-answer-kind="custom"]')!.click();
     const input = panel.querySelector<HTMLTextAreaElement>('textarea');
     if (input) { input.value = 'Keep this answer'; input.dispatchEvent(new InputEvent('input', { bubbles: true })); }
-    const button = panel.querySelector<HTMLButtonElement>('button:not(:disabled)')!;
+    // The approval header also contains a hidden inspect placeholder. Focus
+    // the real decision control whose stability this scenario exercises.
+    const button = panel.querySelector<HTMLButtonElement>(mode === 'approval'
+      ? '.flower-composer-approval-decision:not(:disabled)'
+      : 'button:not(:disabled)')!;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     button.focus();
+    expect(document.activeElement).toBe(button);
     const nodes = [...panel.querySelectorAll('button, input, textarea')];
     const records: MutationRecord[] = []; const observer = new MutationObserver((values) => records.push(...values)); observer.observe(panel, { childList: true, subtree: true });
     await unrelatedUpdates(fixture); await waitFor(() => runtime.textContent?.includes('Unrelated stream update 299') === true);

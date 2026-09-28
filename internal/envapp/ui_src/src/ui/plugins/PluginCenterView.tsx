@@ -2286,11 +2286,14 @@ function PluginActions(props: {
           size="sm"
           class={cn('min-h-[44px] min-w-0 flex-1 justify-center px-4 text-[length:var(--floe-type-body)] sm:min-h-8', presentation().primaryAction === 'review_update' && PLUGIN_UPDATE_ACTION_CLASS)}
           loading={commandPending()}
+          title={props.commandPendingType
+            ? pluginPendingCommandLabel(props.commandPendingType, i18n, props.installOperation?.observation)
+            : primaryActionLabel(presentation().primaryAction)}
           disabled={primaryDisabled()}
           icon={primaryActionIcon(presentation().primaryAction)}
           onClick={runPrimaryAction}
         >
-          <StableText reserve={[...pluginPendingActionLabels(i18n), primaryActionLabel(presentation().primaryAction)]}>{props.commandPendingType
+          <StableText class="min-w-0 flex-1 [&>span]:truncate" reserve={[...pluginPendingActionLabels(i18n), primaryActionLabel(presentation().primaryAction)]}>{props.commandPendingType
               ? pluginPendingCommandLabel(props.commandPendingType, i18n, props.installOperation?.observation)
               : primaryActionLabel(presentation().primaryAction)}</StableText>
         </Button>

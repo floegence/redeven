@@ -68,6 +68,12 @@ scrolls welcome content while the composer remains reachable. Suggestions fill
 an editable draft and do not submit a turn. Two-card disclosure belongs only to
 actual mobile interaction.
 
+Flower starter suggestions keep their explanatory copy outside the action
+button. The button exposes its full title and associated description, while its
+hit region covers the card. Narrow layouts may ellipsize selection titles;
+explanations remain normal prose and mobile suggestion cards retain their compact
+presentation.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Maps native host identity and browser capabilities into Floe configuration.

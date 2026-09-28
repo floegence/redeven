@@ -10046,7 +10046,7 @@ button.flower-attachment-preview-trigger:disabled {
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-.flower-setup-action > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.flower-setup-action > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flower-setup-action-icon { width: 1.125rem; height: 1.125rem; flex: none; color: var(--muted-foreground); }
 .flower-setup-action-arrow { width: 1rem; height: 1rem; flex: none; color: var(--muted-foreground); }
 .flower-setup-action:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 6%, var(--card)); }
@@ -10291,11 +10291,23 @@ button.flower-attachment-preview-trigger:disabled {
   transition: background-color 120ms ease;
 }
 
-.flower-empty-suggestion:hover,
-.flower-empty-suggestion:focus-visible {
+.flower-empty-suggestion:has(button:not(:disabled):hover),
+.flower-empty-suggestion:has(button:focus-visible) {
   border: 0;
   background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated) 56%);
   box-shadow: none;
+}
+
+.flower-empty-suggestion-action::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.flower-empty-suggestion:has(button:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .flower-empty-suggestion > div:first-child {
@@ -10599,9 +10611,10 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-empty-hero, .flower-empty-hint { display: none; }
   .flower-empty-suggestions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 420px; }
   .flower-empty-suggestion { padding: 14px; flex-direction: column; align-items: flex-start; min-height: 112px; gap: 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--card); }
-  .flower-empty-suggestion > div:last-child > div:first-child { font-size: 13px; line-height: 1.5; text-wrap: balance; }
+  .flower-empty-suggestion-action { font-size: 13px; line-height: 1.5; }
   .flower-empty-suggestion > div:first-child { width: 32px; height: 32px; }
-  .flower-empty-suggestion > div:last-child > div:last-child { display: none; }
+  .flower-empty-suggestion > div:last-child { width: 100%; }
+  .flower-empty-suggestion > div:last-child > p { display: none; }
   .flower-empty-state:not([data-suggestions-expanded="true"]) .flower-empty-suggestion:nth-child(n+3) { display: none; }
   .flower-empty-expand { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px; padding-inline: 12px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; border-radius: 6px; }
   .flower-empty-expand:hover { background: var(--muted); }

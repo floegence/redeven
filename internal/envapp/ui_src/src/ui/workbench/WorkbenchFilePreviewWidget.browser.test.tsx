@@ -213,6 +213,7 @@ describe('Workbench preview header', () => {
     io.pdfBytes = new Uint8Array(await (await fetch(pdfFixtureUrl)).arrayBuffer());
     const { host, state, resize } = mount('light', scale);
     await vi.waitFor(() => expect(host.querySelector('.textLayer span')).toBeTruthy());
+    await vi.waitFor(() => expect(host.querySelector('[data-workbench-widget-motion]')).toBeNull());
     const before = { ...state().viewport };
     const english = await pdfCommands.selectPdfText('Redeven selection');
     expect(english.selection).toContain('Redeven selection test');
@@ -296,7 +297,7 @@ describe('Workbench preview header', () => {
     await pdfCommands.savePdfEvidence(request.content, fieldValue.startsWith('Saved') ? 'latin' : 'cjk');
     await inspect(Uint8Array.from(atob(request.content), char => char.charCodeAt(0)), fieldValue);
     expect(state().viewport).toEqual(canvasState);
-    await page.screenshot({ path: `workbench-pdf-edited-${fieldValue.startsWith('Saved') ? 'latin' : 'cjk'}-dark.png` });
+    await page.screenshot({ path: `__screenshots__/workbench-pdf-edited-${fieldValue.startsWith('Saved') ? 'latin' : 'cjk'}-dark.png` });
     await userEvent.fill(host.querySelector<HTMLInputElement>('input[name="full_name"]')!, 'Unsaved');
     await userEvent.click(page.getByRole('button', { name: 'Remove widget', exact: true }));
     expect(controller.closeConfirmOpen()).toBe(true);
@@ -316,7 +317,7 @@ describe('Workbench preview header', () => {
     const chinese = await pdfCommands.selectPdfText('中文合同');
     expect(chinese.selection).toContain('中文合同预览');
     expect(chinese.clipboard).toBe(chinese.selection);
-    await page.screenshot({ path: 'workbench-pdf-cjk-unembedded.png' });
+    await page.screenshot({ path: '__screenshots__/workbench-pdf-cjk-unembedded.png' });
   });
 
   it('searches the last of 300 pages while keeping only nearby pages and bounded canvases mounted', async () => {
@@ -336,7 +337,7 @@ describe('Workbench preview header', () => {
     expect(host.querySelectorAll('canvas').length).toBeLessThanOrEqual(5);
     for (const canvas of host.querySelectorAll('canvas')) expect(canvas.width * canvas.height).toBeLessThanOrEqual(6_000_000);
     await pdfCommands.recordPdfEvidence({ firstPaintMs, canvases: host.querySelectorAll('canvas').length });
-    await page.screenshot({ path: 'workbench-pdf-300-page-search.png' });
+    await page.screenshot({ path: '__screenshots__/workbench-pdf-300-page-search.png' });
   });
 
   it.each(['light', 'dark'] as const)('keeps one row and usable actions at narrow widths in %s', async (mode) => {
@@ -371,9 +372,15 @@ describe('Workbench preview header', () => {
       const title = header.querySelector<HTMLElement>('.workbench-widget__title-area')!;
       expect(title.getBoundingClientRect().right).toBeLessThanOrEqual(actions.getBoundingClientRect().left + 1);
       for (const button of actions.querySelectorAll('button')) {
+        if (!button.checkVisibility({ visibilityProperty: true })) {
+          expect(button.getAttribute('aria-hidden')).toBe('true');
+          expect(button.tabIndex).toBe(-1);
+          continue;
+        }
         const rect = button.getBoundingClientRect();
         expect(rect.right).toBeLessThanOrEqual(header.getBoundingClientRect().right);
-        expect(button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))).toBe(
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        expect(button.contains(hit)).toBe(
           true,
         );
       }
@@ -386,14 +393,14 @@ describe('Workbench preview header', () => {
         expect(menu.closest('[data-floe-surface-portal-layer]')).toBeTruthy();
         expect(menu.hasAttribute('data-floe-local-interaction-surface')).toBe(true);
         await Promise.all(menu.getAnimations().map((animation) => animation.finished));
-        await page.screenshot({ path: `workbench-preview-${mode}-narrow.png` });
+        await page.screenshot({ path: `__screenshots__/workbench-preview-${mode}-narrow.png` });
         await userEvent.click(page.getByRole('menuitem', { name: 'Ask Flower', exact: true }));
         expect(io.previewIntent).toHaveBeenLastCalledWith(expect.objectContaining({ selectionText: 'Selected preview paragraph.' }));
       }
     }
     await userEvent.click(page.getByRole('button', { name: 'Download file', exact: true }));
     expect(io.download).toHaveBeenCalledOnce();
-    await page.screenshot({ path: `workbench-preview-${mode}-wide.png` });
+    await page.screenshot({ path: `__screenshots__/workbench-preview-${mode}-wide.png` });
     expect(state().viewport).toEqual(viewport);
   });
 

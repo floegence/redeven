@@ -609,11 +609,13 @@ function SourceForm(props: {
               type="button"
               id={sourceTabID(choice.kind)}
               role="tab"
+              aria-label={choice.label}
+              title={choice.label}
               aria-selected={props.sourceKind === choice.kind}
               aria-controls="external-plugin-source-panel"
               tabIndex={props.sourceKind === choice.kind ? 0 : -1}
               class={cn(
-                'flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-1 rounded px-1 py-2 text-xs font-medium transition-[background-color,color,box-shadow] duration-150 sm:min-h-9 sm:flex-row sm:gap-1.5 sm:px-2 sm:py-0 motion-reduce:transition-none',
+                'flex min-h-[44px] min-w-0 cursor-pointer flex-col items-center justify-center gap-1 rounded px-1 py-2 text-xs font-medium transition-[background-color,color,box-shadow] duration-150 sm:min-h-9 sm:flex-row sm:gap-1.5 sm:px-2 sm:py-0 motion-reduce:transition-none',
                 props.sourceKind === choice.kind ? redevenSegmentedItemClass(true) : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
               )}
               disabled={props.pending}
@@ -621,7 +623,7 @@ function SourceForm(props: {
               onKeyDown={(event) => selectAdjacentSource(event, choice.kind)}
             >
               <choice.icon class="h-3.5 w-3.5 shrink-0" />
-              <span data-external-plugin-source-label class="max-w-full text-center leading-4">{choice.label}</span>
+              <span data-external-plugin-source-label class="min-w-0 max-w-full truncate text-center leading-4">{choice.label}</span>
             </button>
           )}
         </For>

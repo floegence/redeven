@@ -1,6 +1,9 @@
+import '../../index.css';
+
 import { createEffect, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 const protocolState = vi.hoisted(() => ({
   client: (() => null) as () => object | null,
@@ -185,7 +188,8 @@ function publishOutput(phase: 'streaming' | 'settled', revision: number) {
 }
 
 describe('TerminalPanel stock Agent unread integration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await page.viewport(1280, 900);
     const [client] = createSignal<object | null>({ id: 'client-1' });
     const [status] = createSignal('connected');
     const [viewMode, setViewMode] = createSignal<'activity' | 'workbench'>('activity');
@@ -255,14 +259,15 @@ describe('TerminalPanel stock Agent unread integration', () => {
       document.body.append(outside);
       outside.focus();
       const host = document.createElement('div');
+      host.style.width = '1000px';
       document.body.append(host);
       disposeRendered = render(() => (
         <TerminalSessionCatalogProvider>
           <CatalogProbe />
-          <div data-terminal-test-panel="activity">
+          <div data-terminal-test-panel="activity" style="height: 320px">
             <TerminalPanel variant="panel" />
           </div>
-          <div data-terminal-test-panel="workbench">
+          <div data-terminal-test-panel="workbench" style="height: 320px">
             <TerminalPanel variant="workbench" workbenchSelected />
           </div>
         </TerminalSessionCatalogProvider>
@@ -271,6 +276,9 @@ describe('TerminalPanel stock Agent unread integration', () => {
       await vi.waitFor(() => expect(rpcState.outputActivityHandler).not.toBeNull());
       await vi.waitFor(() => expect(
         host.querySelectorAll('[data-terminal-runtime-session="agent-session"]'),
+      ).toHaveLength(2));
+      await vi.waitFor(() => expect(
+        host.querySelectorAll('[data-terminal-sidebar-presentation="inline"]'),
       ).toHaveLength(2));
       expect(latestCatalog?.sessions()[0]).toMatchObject({
         executionContext: { application: { kind: 'agent_cli', identity, displayName }, revision: 3 },

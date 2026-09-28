@@ -174,7 +174,7 @@ describe('Workbench diff canvas component', () => {
     expect(window.getSelection()!.toString()).toContain('line_380');
     await page.getByRole('button', { name: 'Full Context', exact: true }).click();
     await expect.poll(() => getDiffContent.mock.calls.some(([request]) => request.mode === 'full')).toBe(true);
-    await page.screenshot({ path: `workbench-diff-${scale}.png` });
+    await page.screenshot({ path: `__screenshots__/workbench-diff-${scale}.png` });
     await page.getByRole('button', { name: 'Remove widget', exact: true }).click();
     expect(state().widgets).toHaveLength(0);
   });

@@ -195,10 +195,10 @@ it('keeps actual CAPTCHA instructions in full access mode', async () => {
 it('opens the system-browser connection guide and resumes the canonical request once without private control', async () => {
  const s = await setup('connection', 'full_access');
  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
- expect(card.textContent).toContain('Connect Chrome');
+ expect(card.textContent).toContain('Connect your browser');
  expect(card.querySelector('[data-computer-control-action="take"]')).toBeNull();
  expect(card.querySelector('[data-computer-control-action="return"]')).toBeNull();
- const button = Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect Chrome')!;
+ const button = Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect your browser')!;
  button.click();
  await waitFor(() => s.submitInput.mock.calls.length === 1);
  expect(s.saveAccess).not.toHaveBeenCalled();
@@ -210,7 +210,7 @@ it('closes the connection guide when its conversation changes during a connectio
   const check = deferred<FlowerChromeStatus>();
   s.loadExtensionStatus.mockImplementationOnce(() => check.promise);
   const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
-  Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect Chrome')!.click();
+  Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect your browser')!.click();
   await waitFor(() => s.loadExtensionStatus.mock.calls.length === 1);
   s.surface.querySelector<HTMLButtonElement>('[data-thread-id="other-conversation"] .flower-thread-card-select-button')!.click();
   await waitFor(() => s.surface.querySelector('[data-thread-id="other-conversation"]')?.getAttribute('data-flower-thread-active') === 'true');

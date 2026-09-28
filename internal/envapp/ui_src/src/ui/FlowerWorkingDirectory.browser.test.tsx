@@ -4,6 +4,7 @@ import './flower-feature.css';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adapter, flush, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
 
 // Unicode paths are intentional: truncation must preserve the exact dispatch target.
 const directory = '/Volumes/projects/客户项目/redeven-enterprise-customer-experience-platform';
@@ -21,7 +22,7 @@ async function fixture(width: number, dark = false, projected = false, presentat
     ...adapter(), getWorkingDirectoryPathContext: async () => pathContext,
     listThreads: async () => [thread({ working_dir: directory })],
     listWorkingDirectoryEntries: vi.fn(async () => []), openWorkingDirectoryInFileBrowser: openFiles,
-  }, { layout: true, presentation, companionOpen: true });
+  }, { layout: true, mobileQuery: REDEVEN_BROWSER_MOBILE_QUERY, presentation, companionOpen: true });
   surface.style.cssText = `width:${width}px;height:850px;position:relative;`;
   if (projected) {
     surface.setAttribute('data-floe-dialog-surface-host', 'true');
@@ -29,6 +30,7 @@ async function fixture(width: number, dark = false, projected = false, presentat
     surface.style.transformOrigin = 'top left';
   }
   await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-working-directory-select')?.title.includes(directory) === true);
+  expect(surface.querySelector('[data-flower-interaction-mode]')?.getAttribute('data-flower-interaction-mode')).toBe('desktop');
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   return { surface, openFiles };
 }

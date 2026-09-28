@@ -159,7 +159,7 @@ describe('Flower empty-state presentation', () => {
     const suggestionButtons = emptyState.querySelectorAll<HTMLButtonElement>('.flower-empty-suggestions button');
     expect(emptyState.dataset.flowerEmptySuggestions).toBe('visible');
     expect(suggestionButtons).toHaveLength(4);
-    expect(Array.from(suggestionButtons, (button) => button.querySelector('.font-medium')?.textContent)).toEqual([
+    expect(Array.from(suggestionButtons, (button) => button.textContent)).toEqual([
       'Explore this folder', 'Understand this computer', 'Discover available apps', 'Organize this folder',
     ]);
 
