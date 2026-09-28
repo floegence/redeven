@@ -384,8 +384,14 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     const actions = panel!.querySelector<HTMLElement>('.browser-editor-setup__actions')!;
     const install = actions.querySelector<HTMLButtonElement>('button')!;
     const selectedMethod = panel!.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')!;
-    expect(actions.getBoundingClientRect().top).toBeGreaterThanOrEqual(body!.getBoundingClientRect().bottom);
-    expect(install.getBoundingClientRect().left).toBeGreaterThan(secondary!.getBoundingClientRect().left);
+    const methods = panel!.querySelector<HTMLElement>('.browser-editor-setup__method-section')!;
+    const methodRect = methods.getBoundingClientRect();
+    const installRect = install.getBoundingClientRect();
+    expect(primary!.contains(install)).toBe(true);
+    expect(installRect.top - methodRect.bottom).toBeGreaterThanOrEqual(0);
+    expect(installRect.top - methodRect.bottom).toBeLessThanOrEqual(16);
+    expect(installRect.left).toBeCloseTo(methodRect.left, 0);
+    expect(installRect.width).toBeCloseTo(methodRect.width, 0);
     expect(getComputedStyle(install).backgroundColor).not.toBe(getComputedStyle(selectedMethod).backgroundColor);
 
     const screenshot = await page.screenshot({ save: false });

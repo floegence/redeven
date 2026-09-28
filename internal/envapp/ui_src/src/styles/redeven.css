@@ -4624,18 +4624,18 @@ html.dark .git-content-skeleton__block {
 
 .browser-editor-setup__actions {
   flex-wrap: wrap;
-  flex-direction: row-reverse;
-  padding: 0.85rem 1.35rem;
-  border-top: 1px solid var(--browser-editor-section-divider);
-  background: color-mix(in srgb, var(--muted) 11%, transparent);
 }
 
 .browser-editor-setup__action-group {
   display: flex;
+  flex: 1;
   min-width: 0;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.browser-editor-setup__install-action {
+  width: 100%;
 }
 
 .browser-editor-setup__progress,
@@ -4994,10 +4994,6 @@ html.dark .git-content-skeleton__block {
   .browser-editor-setup__primary,
   .browser-editor-setup__secondary {
     padding: 1rem;
-  }
-
-  .browser-editor-setup__actions {
-    padding: 0.85rem 1rem;
   }
 
   .browser-editor-setup__action-group,

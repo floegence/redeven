@@ -395,7 +395,7 @@ it('keeps first-load codespace failure visible with a direct retry', async () =>
   expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeDefined();
 });
 
-it.each([390, 1440])('makes the missing editor installation explicit at %s px', async width => {
+it.each([390, 900, 1440])('keeps installation confirmation next to its method choices at %s px', async width => {
   state.locale = 'zh-CN'; state.desktop = true;
   await page.viewport(width, 900);
   host.style.height = '850px';
@@ -406,12 +406,19 @@ it.each([390, 1440])('makes the missing editor installation explicit at %s px', 
   await expect.element(install).toBeVisible();
   await document.fonts.ready;
   const panel = host.querySelector<HTMLElement>('[data-testid="browser-editor-setup-activity"]')!;
-  const body = panel.querySelector<HTMLElement>('.browser-editor-setup__body')!;
+  const methods = panel.querySelector<HTMLElement>('.browser-editor-setup__method-section')!;
   const actions = panel.querySelector<HTMLElement>('.browser-editor-setup__actions')!;
   const button = actions.querySelector<HTMLButtonElement>('button')!;
-  expect(actions.getBoundingClientRect().top).toBeGreaterThanOrEqual(body.getBoundingClientRect().bottom);
+  const methodRect = methods.getBoundingClientRect();
+  const buttonRect = button.getBoundingClientRect();
+  expect(buttonRect.top - methodRect.bottom).toBeGreaterThanOrEqual(0);
+  expect(buttonRect.top - methodRect.bottom).toBeLessThanOrEqual(16);
+  expect(buttonRect.left).toBeCloseTo(methodRect.left, 0);
+  expect(buttonRect.width).toBeCloseTo(methodRect.width, 0);
+  if (width < 1024) {
+    expect(buttonRect.bottom).toBeLessThan(panel.querySelector('.browser-editor-setup__secondary')!.getBoundingClientRect().top);
+  }
   expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
   assertButtonText(button);
-  if (width === 390) expect(button.getBoundingClientRect().width).toBeCloseTo(panel.clientWidth - 32, 0);
   await page.screenshot({ element: host, path: `__screenshots__/codespaces-install-${width}.png` });
 });

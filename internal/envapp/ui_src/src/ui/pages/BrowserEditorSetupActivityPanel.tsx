@@ -331,6 +331,34 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
               onChange={(method) => props.onInstallMethodChange?.(method)}
             />
           </Show>
+
+          <Show when={showActions()}>
+            <div class="browser-editor-setup__actions">
+              <div class="browser-editor-setup__action-group">
+                <Show when={activity().can_continue && props.onContinue}>
+                  <Button size="sm" variant="default" onClick={() => props.onContinue?.()}>
+                    {activity().pending_action_label || i18n.t('codeRuntime.continueAction')}
+                  </Button>
+                </Show>
+                <Show when={canPrepare() && props.onPrepare}>
+                  <Button class="browser-editor-setup__install-action" size="md" variant="default" onClick={() => props.onPrepare?.()} disabled={props.prepareSubmitting} aria-busy={props.prepareSubmitting}>
+                    <Download class="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <StableText reserve={[props.actionLabel, props.runningLabel]}>{actionLabel()}</StableText>
+                  </Button>
+                </Show>
+                <Show when={activity().can_cancel && props.onCancel}>
+                  <Button size="sm" variant="outline" onClick={() => props.onCancel?.()} disabled={props.cancelSubmitting}>
+                    <StableText reserve={[i18n.t('codeRuntime.cancelling'), i18n.t('common.actions.cancel')]}>{props.cancelSubmitting ? i18n.t('codeRuntime.cancelling') : i18n.t('common.actions.cancel')}</StableText>
+                  </Button>
+                </Show>
+              </div>
+              <Show when={canDismiss(activity()) && props.onDismiss}>
+                <Button size="sm" variant="ghost" onClick={() => props.onDismiss?.()}>
+                  {i18n.t('codeRuntime.dismiss')}
+                </Button>
+              </Show>
+            </div>
+          </Show>
         </div>
 
         <Show when={activity().show_steps}>
@@ -422,34 +450,6 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
           </div>
         </Show>
       </div>
-
-      <Show when={showActions()}>
-        <div class="browser-editor-setup__actions">
-          <div class="browser-editor-setup__action-group">
-            <Show when={activity().can_continue && props.onContinue}>
-              <Button size="sm" variant="default" onClick={() => props.onContinue?.()}>
-                {activity().pending_action_label || i18n.t('codeRuntime.continueAction')}
-              </Button>
-            </Show>
-            <Show when={canPrepare() && props.onPrepare}>
-              <Button size="md" variant="default" onClick={() => props.onPrepare?.()} disabled={props.prepareSubmitting} aria-busy={props.prepareSubmitting}>
-                <Download class="h-4 w-4 shrink-0" aria-hidden="true" />
-                <StableText reserve={[props.actionLabel, props.runningLabel]}>{actionLabel()}</StableText>
-              </Button>
-            </Show>
-            <Show when={activity().can_cancel && props.onCancel}>
-              <Button size="sm" variant="outline" onClick={() => props.onCancel?.()} disabled={props.cancelSubmitting}>
-                <StableText reserve={[i18n.t('codeRuntime.cancelling'), i18n.t('common.actions.cancel')]}>{props.cancelSubmitting ? i18n.t('codeRuntime.cancelling') : i18n.t('common.actions.cancel')}</StableText>
-              </Button>
-            </Show>
-          </div>
-          <Show when={canDismiss(activity()) && props.onDismiss}>
-            <Button size="sm" variant="ghost" onClick={() => props.onDismiss?.()}>
-              {i18n.t('codeRuntime.dismiss')}
-            </Button>
-          </Show>
-        </div>
-      </Show>
 
       <Show when={hasTechnicalDetails()}>
         <div class="browser-editor-setup__details">
