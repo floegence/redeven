@@ -7312,6 +7312,9 @@
     }
   },
   "browserProduct": {
+    "welcomeTitle": "在工作区中浏览网页",
+    "welcomeDescription": "连接个人浏览器，或使用内置浏览器，在这里打开网站。",
+    "chooseSource": "选择浏览器",
     "profile": "浏览器配置档案",
     "defaultProfile": "默认配置档案",
     "openWindow": "在新窗口中打开",

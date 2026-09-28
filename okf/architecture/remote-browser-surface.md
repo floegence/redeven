@@ -40,6 +40,13 @@ Successful source preferences follow the [persistence contract](remote-browser-p
 A missing or invalid preference returns to selection without starting a browser.
 First use is a neutral selection state, including after the chooser is dismissed;
 only a previously remembered or selected source can be reported as unavailable.
+The neutral workspace centers one decorative compass icon without a surrounding
+frame or badge, a
+localized heading and explanation, and one explicit Choose a browser action.
+That action reopens the existing source chooser without starting a browser or
+installation. The welcome follows the host palette, fits narrow localized
+layouts and scrolls vertically when the workspace is too short. Loading,
+installation and failure recovery retain their separate actionable states.
 One browser workspace controller owns source choice, open intent, replacement,
 view release and recovery for both the page and independent windows. Surfaces
 own only their document and ports. Managed opens check current installation
@@ -162,6 +169,7 @@ website verification. Window adapters consume those released capabilities.
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/widgets/BrowserWorkspaceNotice.browser.test.tsx` - Welcome alignment, theme and locale layouts, keyboard source selection, short-window reachability and explicit recovery confirmation.
 - `redeven:internal/envapp/ui_src/src/browserDocument.test.ts` - Source selection survives retired-view progress and failure without canceling its intent.
 
 - `redeven:internal/envapp/ui_src/src/browserDocument.browser.test.tsx` - Real document handshake, native pointer dismissal through the private host port, and dialog/control theme parity in light/dark and narrow layouts.
