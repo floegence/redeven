@@ -48,7 +48,7 @@ func PrepareRemoteProfile(state, owner string, installation Installation, native
 	base, directory := state, "remote-browsers"
 	if installation.Kind == "chromium_snap" {
 		if !filepath.IsAbs(installation.PrivateRoot) {
-			return result, errors.New("Snap browser data area is unavailable")
+			return result, errors.New("browser data area for Snap is unavailable")
 		}
 		base, directory = installation.PrivateRoot, "Redeven"
 	}
@@ -85,9 +85,8 @@ func PrepareRemoteProfile(state, owner string, installation Installation, native
 	if err := hosts.Symlink(manifest, temporary); err != nil {
 		return result, err
 	}
-	defer hosts.Remove(temporary)
 	if err := hosts.Rename(temporary, nativeHost+".json"); err != nil {
-		return result, err
+		return result, errors.Join(err, hosts.Remove(temporary))
 	}
 	result.Directory = filepath.Join(base, directory, result.ID)
 	result.Arguments = []string{"--user-data-dir=" + result.Directory, "--ozone-platform=x11", "--no-first-run", "--no-default-browser-check", "chrome://extensions/"}

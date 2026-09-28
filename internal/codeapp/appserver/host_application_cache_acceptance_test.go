@@ -25,7 +25,11 @@ func TestHostApplicationCacheAcceptanceServer(t *testing.T) {
 	defer manager.Close()
 	routes := &Server{hostApps: manager, resolveSessionMeta: resolveMetaForTest("component-cache", session.Meta{UserPublicID: "cache-acceptance", CanRead: true, CanWrite: true, CanExecute: true})}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(envOriginWithChannel("component-cache"))) })
+	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write([]byte(envOriginWithChannel("component-cache"))); err != nil {
+			t.Errorf("write readiness response: %v", err)
+		}
+	})
 	mux.HandleFunc(hostApplicationsAPI+"/", func(w http.ResponseWriter, r *http.Request) { routes.handleHostApplicationsAPI(w, r) })
 	server := &http.Server{Addr: bind, Handler: mux}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
