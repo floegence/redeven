@@ -521,6 +521,7 @@ func TestInstalledLinuxRecoveryAfterRuntimeProcessExit(t *testing.T) {
 				t.Fatal(err)
 			}
 			waitUntil(t, func() bool { return !identity.Alive() }, 8*time.Second)
+			waitUntil(t, func() bool { return !attached.application.record.Process.Alive() }, 10*time.Second)
 			waitUntil(t, func() bool { items, e := m.Running(context.Background(), "alice"); return e == nil && len(items) == 0 }, 8*time.Second)
 			t.Logf("application PID %d survived Runtime exit (orderly=%v), then explicit force quit reaped its adopted process", pid, orderly)
 		})

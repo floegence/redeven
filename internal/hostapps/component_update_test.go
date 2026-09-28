@@ -91,7 +91,13 @@ Gtk.main()
 	defer func() {
 		for _, a := range apps {
 			if a.record.Process.Alive() {
-				_ = m.Terminate(ctx, "owner", QuitRequest{ApplicationID: a.record.Application.ID, Instances: []string{a.record.ID}})
+				if err := m.Terminate(ctx, "owner", QuitRequest{ApplicationID: a.record.Application.ID, Instances: []string{a.record.ID}}); err != nil {
+					t.Error("terminate owned component fixture:", err)
+					continue
+				}
+				// Keep the receipt directory alive until the helper finishes its
+				// asynchronous graphical-service cleanup after application exit.
+				waitUntil(t, func() bool { return !a.record.Process.Alive() }, 10*time.Second)
 			}
 		}
 	}()
