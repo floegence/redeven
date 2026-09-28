@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 
-// Resolve layered product surfaces before measuring the visible selected face.
-export function expectClearSelection(element: HTMLElement, context: string) {
+// Resolve layered product surfaces before measuring visible text and selection.
+function selectionColors() {
   const canvas = document.createElement('canvas').getContext('2d')!;
   const rgba = (color: string): number[] => {
     canvas.clearRect(0, 0, 1, 1);
@@ -22,8 +22,39 @@ export function expectClearSelection(element: HTMLElement, context: string) {
     const a = luminance(first), b = luminance(second);
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
   };
+  return { rgba, mix, background, contrast };
+}
+
+export function expectClearSelection(element: HTMLElement, context: string) {
+  const { rgba, mix, background, contrast } = selectionColors();
   const face = background(element);
   const label = `${context}: ${element.textContent}`;
   expect.soft(contrast(mix(rgba(getComputedStyle(element).color), face), face), `${label} text`).toBeGreaterThanOrEqual(4.5);
   expect.soft(contrast(face, background(element.parentElement)), `${label} face`).toBeGreaterThanOrEqual(3);
+}
+
+export function expectClearRadioSelection(element: HTMLElement, indicator: HTMLElement, context: string) {
+  const { rgba, mix, background, contrast } = selectionColors();
+  const face = background(element);
+  const label = `${context}: ${element.textContent}`;
+  const ring = getComputedStyle(indicator);
+  const dot = getComputedStyle(indicator, '::after');
+  expect(element.getAttribute('role')).toBe('radio');
+  expect(element.getAttribute('aria-checked')).toBe('true');
+  expect.soft(contrast(mix(rgba(getComputedStyle(element).color), face), face), `${label} text`).toBeGreaterThanOrEqual(4.5);
+  expect(indicator.getBoundingClientRect().width).toBeGreaterThan(0);
+  expect(indicator.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(ring.visibility).toBe('visible');
+  expect(Number(ring.opacity)).toBeGreaterThan(0);
+  expect(parseFloat(ring.borderTopWidth)).toBeGreaterThan(0);
+  expect(ring.borderTopStyle).toBe('solid');
+  expect.soft(contrast(mix(rgba(ring.borderTopColor), face), face), `${label} radio ring`).toBeGreaterThanOrEqual(3);
+  expect(dot.content).toBe('""');
+  expect(dot.display).not.toBe('none');
+  expect(dot.visibility).toBe('visible');
+  expect(Number(dot.opacity)).toBeGreaterThan(0);
+  expect(parseFloat(dot.width)).toBeGreaterThan(0);
+  expect(parseFloat(dot.height)).toBeGreaterThan(0);
+  const inside = background(indicator);
+  expect.soft(contrast(mix(rgba(dot.backgroundColor), inside), inside), `${label} checked mark`).toBeGreaterThanOrEqual(3);
 }

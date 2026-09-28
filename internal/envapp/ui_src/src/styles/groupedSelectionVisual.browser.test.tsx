@@ -9,12 +9,19 @@ import { afterEach, expect, it } from 'vitest';
 import { page, userEvent, commands } from 'vitest/browser';
 import { GitHistoryModeSwitch } from '../ui/widgets/GitHistoryModeSwitch';
 import { BrowserEditorInstallMethodSelector } from '../ui/pages/BrowserEditorInstallMethodSelector';
-import { expectClearSelection } from './selectionContrast.test-support';
+import { expectClearRadioSelection, expectClearSelection } from './selectionContrast.test-support';
 
 const media = commands as unknown as {
   emulateMediaPreferences: (preferences: { forcedColors: 'active' | 'none'; reducedMotion: 'reduce' | 'no-preference' }) => Promise<void>;
 };
 let dispose: (() => void) | undefined;
+function expectProductSelection(element: HTMLElement, context: string) {
+  if (element.matches('.browser-editor-setup__method-option')) {
+    expectClearRadioSelection(element, element.querySelector<HTMLElement>('.browser-editor-setup__method-radio')!, context);
+  } else {
+    expectClearSelection(element, context);
+  }
+}
 afterEach(async () => {
   await media.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
   dispose?.();
@@ -35,10 +42,11 @@ it.each(['standard', 'soft-neumorphic'])('keeps product compact selections disti
     host.style.cssText = 'background:var(--card);padding:20px;display:grid;gap:12px';
     document.body.append(host);
     const [mode, setMode] = createSignal<'files' | 'git'>('files');
+    const [installMethod, setInstallMethod] = createSignal<'desktop_transfer' | 'remote_download'>('desktop_transfer');
     dispose = render(() => <>
       <SegmentedControl value="list" onChange={() => {}} options={[{ value: 'list', label: 'List' }, { value: 'grid', label: 'Grid' }]} />
       <GitHistoryModeSwitch mode={mode()} onChange={setMode} />
-      <BrowserEditorInstallMethodSelector installMethod="desktop_transfer" desktopTransferAvailable onChange={() => {}} />
+      <BrowserEditorInstallMethodSelector installMethod={installMethod()} desktopTransferAvailable onChange={setInstallMethod} />
       <div class="redeven-surface-segmented"><button class="redeven-surface-segmented__item redeven-surface-segmented__item--active" aria-selected="true">Settings</button></div>
       <div class="redeven-surface-segmented"><button class="git-browser-segmented-tab redeven-surface-segmented__item redeven-surface-segmented__item--active" aria-selected="true">Workspace</button></div>
       <div><button class="git-browser-interactive redeven-surface-segmented__item redeven-surface-segmented__item--active" aria-pressed="true">Changes <span class="text-inherit">2</span></button></div>
@@ -51,18 +59,18 @@ it.each(['standard', 'soft-neumorphic'])('keeps product compact selections disti
     </>, host);
     const selected = [...host.querySelectorAll<HTMLElement>('button[aria-checked="true"], button[aria-selected="true"], button[aria-pressed="true"]')];
     expect(selected).toHaveLength(12);
-    for (const element of selected) expectClearSelection(element, `${preset.name}/${material}`);
+    for (const element of selected) expectProductSelection(element, `${preset.name}/${material}`);
     if (['classic-dark', 'classic-light', 'porcelain-light', 'porcelain-dark'].includes(preset.name)) {
       await media.emulateMediaPreferences({ forcedColors: 'active', reducedMotion: 'reduce' });
-      for (const element of selected) expectClearSelection(element, `${preset.name}/${material}/system colors`);
+      for (const element of selected) expectProductSelection(element, `${preset.name}/${material}/system colors`);
       await media.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'reduce' });
       // Media emulation changes the global palette; inspect its settled colors.
       await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
-      for (const element of selected) expectClearSelection(element, `${preset.name}/${material}/reduced motion`);
+      for (const element of selected) expectProductSelection(element, `${preset.name}/${material}/reduced motion`);
       await media.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
       for (const element of selected) {
         await page.elementLocator(element).hover();
-        expectClearSelection(element, `${preset.name}/${material}/hover`);
+        expectProductSelection(element, `${preset.name}/${material}/hover`);
       }
       const files = host.querySelector<HTMLElement>('[data-browser-mode-switch] button[aria-checked="true"]')!;
       const git = host.querySelector<HTMLButtonElement>('[data-browser-mode-switch] button[aria-checked="false"]')!;
@@ -74,5 +82,15 @@ it.each(['standard', 'soft-neumorphic'])('keeps product compact selections disti
       expectClearSelection(files, `${preset.name}/reverse frame`);
       expect(document.activeElement).toBe(git);
     }
+    const desktop = host.querySelector<HTMLButtonElement>('.browser-editor-setup__method-option[aria-checked="true"]')!;
+    const remote = host.querySelector<HTMLButtonElement>('.browser-editor-setup__method-option[aria-checked="false"]')!;
+    const mark = (element: HTMLElement) => getComputedStyle(element.querySelector('.browser-editor-setup__method-radio')!, '::after').content;
+    expect(mark(remote)).toBe('none');
+    desktop.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(remote);
+    expectProductSelection(remote, `${preset.name}/${material}/radio switch`);
+    expect(desktop.getAttribute('aria-checked')).toBe('false');
+    expect(mark(desktop)).toBe('none');
   }
 });
