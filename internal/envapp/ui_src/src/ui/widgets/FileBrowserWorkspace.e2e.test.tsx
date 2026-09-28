@@ -1118,9 +1118,9 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(homeBadge?.textContent?.trim()).toBe('RW');
       const computerToggle = host.querySelector('[data-filesystem-root-write-toggle="computer"]');
       const computerReadOnlyButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
-        .find((node) => node.textContent?.trim() === 'RO') as HTMLButtonElement | undefined;
+        .find((node) => node.getAttribute('aria-label') === 'Set Computer to read-only') as HTMLButtonElement | undefined;
       expect(computerToggle).toBeTruthy();
-      expect(computerToggle?.textContent?.trim()).toBe('RORW');
+      expect(Array.from(computerToggle!.querySelectorAll('button')).map((button) => button.getAttribute('aria-label'))).toEqual(['Set Computer to read-only', 'Set Computer to read/write']);
       expect(computerReadOnlyButton).toBeTruthy();
       computerReadOnlyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await flush();
@@ -1172,11 +1172,11 @@ describe('FileBrowserWorkspace interactions', () => {
       await flush();
       const computerToggle = host.querySelector('[data-filesystem-root-write-toggle="computer"]');
       const computerReadOnlyButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
-        .find((node) => node.textContent?.trim() === 'RO') as HTMLButtonElement | undefined;
+        .find((node) => node.getAttribute('aria-label') === 'Set Computer to read-only') as HTMLButtonElement | undefined;
       const computerReadWriteButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
-        .find((node) => node.textContent?.trim() === 'RW') as HTMLButtonElement | undefined;
+        .find((node) => node.getAttribute('aria-label') === 'Set Computer to read/write') as HTMLButtonElement | undefined;
       expect(computerToggle).toBeTruthy();
-      expect(computerToggle?.textContent?.trim()).toBe('RORW');
+      expect(Array.from(computerToggle!.querySelectorAll('button')).map((button) => button.getAttribute('aria-label'))).toEqual(['Set Computer to read-only', 'Set Computer to read/write']);
       expect(computerReadOnlyButton).toBeTruthy();
       expect(computerReadWriteButton).toBeTruthy();
 

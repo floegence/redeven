@@ -120,6 +120,20 @@ function isInsideNamedFunction(source, offset, functionName) {
 // directory must never be exempted merely because it currently contains one valid color source.
 export const THEME_COLOR_EXCEPTIONS = Object.freeze([
   exception(
+    'desktop/src/shared/floeStandaloneStyles.generated.ts',
+    'theme-source',
+    'The generated standalone string embeds published Floe palette sources; buildHostApplicationAppearance.mjs --check verifies its bytes against the released asset.',
+    ({ lineSource }) => {
+      const prefix = 'export const floeStandaloneStyleText = ';
+      if (!lineSource.startsWith(prefix) || !lineSource.endsWith(';')) return false;
+      try {
+        return typeof JSON.parse(lineSource.slice(prefix.length, -1)) === 'string';
+      } catch {
+        return false;
+      }
+    },
+  ),
+  exception(
     'internal/envapp/ui_src/src/ui/plugins/pluginSurfaceContext.ts',
     'plugin-protocol',
     'The cross-origin plugin context requires concrete hex fallbacks before computed Redeven theme tokens are available.',

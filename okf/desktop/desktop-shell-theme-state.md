@@ -13,7 +13,7 @@ Redeven Desktop owns the global `system | light | dark` source and the remembere
 
 ## Catalog and authority
 
-The shared Desktop contract derives admitted ids, defaults, and semantic metadata from published Floe Webapp v0.65.2's browser-neutral `/themes` entry. Its 26 presets include 12 light and 14 dark choices, with Porcelain first in each mode and the other presets retaining their published relative order. Porcelain Light uses warm ivory surfaces and dark ink. Porcelain Dark uses near-black backgrounds, charcoal surfaces, and warm white text. Its idle input edges are deliberately quiet; the shared focus border provides stronger interaction feedback. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
+The shared Desktop contract derives admitted ids, defaults, and semantic metadata from the published Floe Webapp dependency's browser-neutral `/themes` entry. Its 26 presets include 12 light and 14 dark choices, with Porcelain first in each mode and the other presets retaining their published relative order. Porcelain Light uses warm ivory surfaces and dark ink. Porcelain Dark uses near-black backgrounds, charcoal surfaces, and warm white text. Its idle input edges are deliberately quiet; the shared focus border provides stronger interaction feedback. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
 
 The selection schema remains version 1, persisted separately from the source key. Invalid versions, unknown ids, and cross-mode ids normalize independently to the upstream per-mode defaults. Valid stored selections, including Classic presets, remain unchanged.
 
@@ -49,8 +49,12 @@ The main-only semantic palette carries background, surface, muted surface, foreg
 
 All Floe dependencies resolve from public npm releases, without sibling checkouts, aliases, overlays, or runtime patches in formal validation. Renderers cannot persist a competing canonical selection, accept arbitrary colors, receive the main-only palette, or bypass snapshot validation. Welcome layering may derive from active tokens, but cannot restore fixed Classic colors that erase preset differences.
 
+The theme-color source guard permits published palette literals only inside the generated standalone stylesheet's exact string export. Generated-asset verification must reproduce those bytes from the released Floe asset. Other declarations in that file and product styling remain subject to semantic-token checks, including Welcome shadows.
+
 # Evidence
 
+- `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Exact path and declaration boundaries for published theme sources.
+- `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Generated standalone stylesheet readback against the published dependency.
 - `redeven:desktop/src/shared/desktopTheme.ts` - Published catalog admission, defaults, state keys, and snapshot contracts.
 - `redeven:desktop/src/main/desktopThemeState.ts` - Persistence, OS following, remembered selections, and window broadcasts.
 - `redeven:desktop/src/main/desktopThemeState.test.ts` - Defaults, retained choices, failed-write retry, and multi-window state.

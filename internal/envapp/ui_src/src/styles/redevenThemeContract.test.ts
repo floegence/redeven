@@ -135,7 +135,6 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]::before {');
     expect(src).toContain('inset-inline-start: 0.25rem;');
     expect(src).toContain('width: 3px;');
-    expect(src).toContain(":not([type='range']):not(.redeven-settings-search),");
     expect(src).toContain('.redeven-settings-section {');
     expect(src).toContain('border: 0;');
     expect(src).toContain('background: transparent;');
@@ -144,7 +143,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('--redeven-settings-card-bg:');
   });
 
-  it('uses neutral selection surfaces for large Flower choices without weakening focused settings selection', () => {
+  it('uses neutral Flower permission rows with a semantic selection mark', () => {
     const css = readRedevenCss();
     const flower = readFlowerSettingsSource();
 
@@ -152,7 +151,12 @@ describe('Redeven Env App surface theme contract', () => {
     expect(css).toContain('border-color: var(--redeven-settings-choice-selected-border) !important;');
     expect(css).toContain('background: var(--redeven-settings-choice-selected-bg) !important;');
     expect(css).toContain('background: var(--redeven-settings-selection-bg) !important;');
-    expect(flower.match(/redeven-settings-choice--selected-neutral/g)).toHaveLength(3);
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const compactSettings = fs.readFileSync(path.resolve(here, '../ui/pages/runtime-settings-compact.css'), 'utf8');
+    expect(flower).toContain('class="settings-permission-options mt-3" role="radiogroup"');
+    expect(flower).toContain('class="settings-permission-option" role="radio" aria-checked={permissionType() === kind}');
+    expect(compactSettings).toContain('background: var(--redeven-settings-inset-bg);');
+    expect(compactSettings).toContain(".settings-permission-option[aria-checked='true'] .settings-permission-option-mark { border: 5px solid var(--primary); }");
     expect(flower).not.toContain("&& 'redeven-settings-choice--selected'");
   });
 

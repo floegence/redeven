@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest';
+import { textWithoutHiddenCopies } from './textContent.test-support';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerThreadPinMetadata, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
@@ -27,7 +28,7 @@ async function setup() {
   const moveDown = async () => {
     row('first').querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!.click();
     await flush();
-    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((button) => button.textContent === copy.movePinnedDown)!.click();
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((button) => textWithoutHiddenCopies(button) === copy.movePinnedDown)!.click();
     await flush();
   };
   const emit = async (next: FlowerThreadSnapshot[]) => {

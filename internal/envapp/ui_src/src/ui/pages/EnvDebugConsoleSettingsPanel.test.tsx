@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
 
-vi.mock('./settings/SettingsPrimitives', () => ({
+vi.mock('./settings/SettingsPrimitives', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./settings/SettingsPrimitives')>(),
   SettingRow: (props: any) => (
     <div>
       <div>{props.title}</div>
@@ -48,7 +49,8 @@ describe('EnvDebugConsoleSettingsPanel', () => {
       />
     ), host);
 
-    expect(host.textContent).toContain('Frontend only');
+    expect(host.textContent).toContain('Disabled');
+    expect(host.textContent).toContain('Local UI state only. Does not affect runtime configuration.');
     expect(host.textContent).not.toContain('collect_ui_metrics');
     expect(host.textContent).not.toContain('Show the floating debug console in this Env App session.');
     expect(host.textContent).not.toContain('Debug Console');
