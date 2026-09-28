@@ -73,8 +73,17 @@ describe('shared Flower UI boundary', () => {
 
     for (const file of files) {
       const src = readText(file);
+      let routingSource = src;
+      if (file === files[0]) {
+        // Browser/window inventory identifies the selected computer candidate;
+        // it does not route a thread or grant a host access to Redeven targets.
+        const inventory = src.match(/export type FlowerComputerInventory = Readonly<\{[^}]*\}>;/u)?.[0];
+        expect(inventory, 'the computer inventory must retain its typed current candidate').toBeDefined();
+        expect(inventory?.match(/\bcurrent_target_id:\s*string;/gu)).toHaveLength(1);
+        routingSource = src.replace(inventory!, inventory!.replace(/\bcurrent_target_id:\s*string;/u, ''));
+      }
       for (const token of forbidden) {
-        expect(src, `${path.relative(repoRoot, file)} must not expose ${token}`).not.toContain(token);
+        expect(routingSource, `${path.relative(repoRoot, file)} must not expose routing field ${token}`).not.toContain(token);
       }
     }
   });
@@ -177,19 +186,19 @@ describe('shared Flower UI boundary', () => {
     const envShellSrc = readText(path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'EnvAppShell.tsx'));
     const launcherSrc = readText(path.join(flowerRoot, 'FlowerTurnLauncherWindow.tsx'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
-    const submitStart = appSrc.indexOf('async function submitFlowerTurnLauncher');
-    const submitEnd = appSrc.indexOf('async function openEnvironmentCenterSurface', submitStart);
-    const submitSource = appSrc.slice(submitStart, submitEnd);
-    const envSubmitStart = envShellSrc.indexOf('const submitFlowerTurnLauncher');
-    const envSubmitEnd = envShellSrc.indexOf('const RECENT_AGENT_RX_MS', envSubmitStart);
-    const envSubmitSource = envShellSrc.slice(envSubmitStart, envSubmitEnd);
+    // Match each declaration through its own closing line instead of coupling
+    // the check to a neighboring function or unrelated status constant.
+    const submitSource = appSrc.match(/^ {2}async function submitFlowerTurnLauncher\([^\n]*\{\n[\s\S]*?^ {2}\}/mu)?.[0];
+    const envSubmitSource = envShellSrc.match(/^ {2}const submitFlowerTurnLauncher = async \([^\n]*\{\n[\s\S]*?^ {2}\};/mu)?.[0];
     const errorRule = cssSrc.match(/\.flower-turn-launcher-error\s*\{[^}]+\}/u)?.[0] ?? '';
 
-    expect(submitStart).toBeGreaterThanOrEqual(0);
-    expect(submitEnd).toBeGreaterThan(submitStart);
+    expect(submitSource, 'the complete Welcome submit handler must be checked').toBeDefined();
+    expect(submitSource).toContain('await launchLocalEnvironmentFlowerTurn');
+    expect(submitSource).toContain('closeFlowerTurnLauncher();');
     expect(submitSource).not.toContain("showActionToast(getErrorMessage(error), 'error')");
-    expect(envSubmitStart).toBeGreaterThanOrEqual(0);
-    expect(envSubmitEnd).toBeGreaterThan(envSubmitStart);
+    expect(envSubmitSource, 'the complete Env App submit handler must be checked').toBeDefined();
+    expect(envSubmitSource).toContain('await adapter.launchTurn');
+    expect(envSubmitSource).toContain('handoffFlowerTurn(handoffContext, threadId);');
     expect(envSubmitSource).not.toContain('notify.error');
     expect(launcherSrc).toContain("role={launchErrorKind() === 'unknown' ? 'status' : 'alert'}");
     expect(launcherSrc).toContain("'flower-turn-launcher-error'");
