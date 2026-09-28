@@ -167,6 +167,9 @@ func proxyAttachmentRequest(t *testing.T, options Options) (int, map[string]stri
 		}
 		body = append(body, chunk...)
 	}
+	if string(body) != `{}` {
+		t.Fatalf("unexpected proxy response body: %q", body)
+	}
 	headers := map[string]string{}
 	for _, header := range response.Headers {
 		headers[strings.ToLower(header.Name)] = header.Value
