@@ -49,6 +49,14 @@ const npmLicenseOverrides = new Map([
 ]);
 
 const npmCoordinateLicenseOverrides = new Map([
+  ['cytoscape@3.34.3', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['dayjs@1.11.23', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['es-module-lexer@2.3.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['expect-type@1.4.0', { license: 'Apache-2.0', note: 'License verified from the exact registry package manifest.' }],
+  ['obug@2.2.1', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['picomatch@4.0.7', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['std-env@4.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['tinyexec@1.3.1', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@xmldom/xmldom@0.9.12', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@floegence/flowersec-node-native-darwin-arm64@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@floegence/flowersec-node-native-darwin-x64@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],

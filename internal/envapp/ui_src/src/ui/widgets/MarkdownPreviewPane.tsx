@@ -16,7 +16,7 @@ type CodeEditorOptions = NonNullable<CodeEditorProps['options']>;
 type CodeEditorRuntimeOptions = CodeEditorProps['runtimeOptions'];
 
 const PREVIEW_MONACO_INTERACTION_OPTIONS: CodeEditorOptions = {
-  hover: { enabled: false, sticky: false },
+  hover: { enabled: 'off', sticky: false },
   codeLens: false,
   inlayHints: { enabled: 'off' },
   quickSuggestions: false,

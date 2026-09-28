@@ -11,7 +11,7 @@ require (
 	github.com/floegence/floret/v7 v7.18.3
 	github.com/floegence/flowersec/flowersec-go/v5 v5.4.1
 	github.com/floegence/redeven-service-templates v0.6.0
-	github.com/floegence/redevplugin/v3 v3.0.32
+	github.com/floegence/redevplugin/v3 v3.0.33
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/mholt/archives v0.1.5
@@ -21,15 +21,15 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/shirou/gopsutil/v4 v4.25.12
 	github.com/yeka/zip v0.0.0-20231116150916-03d6312748a9
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.57.0
 	golang.org/x/mod v0.41.0
-	golang.org/x/net v0.58.0
+	golang.org/x/net v0.59.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
-	golang.org/x/term v0.45.0
-	golang.org/x/text v0.41.0
+	golang.org/x/term v0.46.0
+	golang.org/x/text v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.57.0
+	modernc.org/sqlite v1.59.0
 )
 
 require (
@@ -79,8 +79,8 @@ require (
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
-	golang.org/x/image v0.45.0 // indirect
-	modernc.org/libc v1.74.4 // indirect
+	golang.org/x/image v0.46.0 // indirect
+	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
+	modernc.org/memory v1.12.1 // indirect
 )

@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-28: Consume audited upstream security releases
+
+- Adopt published Floe Webapp v0.81.3 and the coordinated ReDevPlugin v3.0.33 Go, npm, and Rust source artifacts after public registry and release-manifest verification.
+- Keep Floret v7.18.3, Floe Native Apps v0.20.0, and FloeBrowser v0.1.25 as the reviewed published runtime dependencies.
+- Synchronize exact dependency contracts, both JavaScript lock formats, the Rust worker fixture, and license notices without changing Runtime Service compatibility epoch or introducing sibling-source wiring.
+
 ## 2026-09-28: Integrate private Linux desktop and package sessions
 
 - Consume released Floe Native Apps v0.20.0 for immutable launch planning, private Wayland/Xwayland graphics, sandbox services and native input scheduling.
