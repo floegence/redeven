@@ -16,7 +16,16 @@ const (
 
 // EnvAppRequestHeaders is shared by the issuer scope and the session server.
 func EnvAppRequestHeaders() []string {
-	return []string{"X-ReDevPlugin-CSRF", "X-ReDevPlugin-Expected-Management-Revision"}
+	return []string{
+		"X-ReDevPlugin-CSRF", "X-ReDevPlugin-Expected-Management-Revision",
+		"Upload-Staging-Scope-ID", "Upload-Staging-Capability", "Upload-Content-Length",
+		"Upload-Content-SHA256", "Upload-Display-Name-SHA256", "Idempotency-Key",
+	}
+}
+
+// EnvAppResponseHeaders carries product attachment authorization to native clients.
+func EnvAppResponseHeaders() []string {
+	return []string{"Upload-Staging-Capability"}
 }
 
 // Options is the Redeven-owned policy subset applied to Flowersec's public

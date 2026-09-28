@@ -1669,6 +1669,7 @@ func (a *Agent) registerEnvSessionProxy(handlers flowersec.StreamHandlerRegistra
 		Upstream: upstream, UpstreamOrigin: origin,
 		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
 		ExtraRequestHeaders:    runtimeproxy.EnvAppRequestHeaders(),
+		ExtraResponseHeaders:   runtimeproxy.EnvAppResponseHeaders(),
 		MaxBodyBytes:           runtimeproxy.EnvAppMaxBodyBytes,
 	})
 	if err != nil {
