@@ -34,14 +34,6 @@ function cssRule(css: string, selector: string): string {
   return css.slice(start, end + 2);
 }
 
-function cssRuleStartingWith(css: string, selector: string): string {
-  const start = css.indexOf(selector);
-  expect(start).toBeGreaterThanOrEqual(0);
-  const end = css.indexOf('\n}', start);
-  expect(end).toBeGreaterThan(start);
-  return css.slice(start, end + 2);
-}
-
 describe('Flower progress indicator', () => {
   it('uses upstream glyph-only shimmer beside a small progress symbol', () => {
     const css = flowerStyles();
@@ -158,19 +150,27 @@ describe('Flower progress indicator', () => {
     const css = flowerStyles();
     const controlRule = cssRule(css, '.flower-model-reasoning-control');
     const modelTriggerRule = cssRule(css, '.flower-model-reasoning-model-trigger');
-    const reasoningSegmentRule = cssRuleStartingWith(css, '.flower-reasoning-segment-button,');
+    const reasoningSegmentRule = cssRule(css, '\n\n.flower-reasoning-segment-button,\n.flower-reasoning-segment-static');
     const dividerRule = cssRule(css, '.flower-model-reasoning-divider');
+    const selectorTypeRule = cssRule(css, [
+      '.flower-permission-trigger,',
+      '.flower-model-reasoning-control,',
+      '.flower-reasoning-segment-button,',
+      '.flower-reasoning-segment-static',
+    ].join('\n'));
 
     expect(controlRule).toContain('display: inline-flex');
-    expect(controlRule).toContain('height: var(--floe-control-height-sm)');
+    expect(controlRule).toContain('height: 1.5rem');
     expect(controlRule).toContain('align-items: stretch');
-    expect(controlRule).toContain('font-size: var(--floe-type-supporting)');
+    expect(selectorTypeRule).toContain('.flower-model-reasoning-control,');
+    expect(selectorTypeRule).toContain('.flower-reasoning-segment-button,');
+    expect(selectorTypeRule).toContain('.flower-reasoning-segment-static');
+    expect(selectorTypeRule).toContain('font-size: 0.625rem');
     expect(controlRule).toContain('line-height: 1');
     expect(modelTriggerRule).toContain('height: 100%');
     expect(modelTriggerRule).toContain('font: inherit');
     expect(modelTriggerRule).toContain('line-height: 1');
     expect(reasoningSegmentRule).toContain('height: 100%');
-    expect(reasoningSegmentRule).toContain('font-size: var(--floe-type-supporting)');
     expect(reasoningSegmentRule).toContain('line-height: 1');
     expect(dividerRule).toContain('margin-block: 0.25rem');
     expect(css).toContain('.flower-reasoning-menu-segment');

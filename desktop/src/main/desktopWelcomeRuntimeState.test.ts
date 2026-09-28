@@ -337,6 +337,7 @@ describe('desktopWelcomeRuntimeState', () => {
             exposure: loopbackExposure,
             runtime_service: {
               runtime_version: 'v1.4.0',
+              protocol_version: 'redeven-runtime-v2',
               compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
               effective_run_mode: 'desktop',
               remote_enabled: true,

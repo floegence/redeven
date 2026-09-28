@@ -999,6 +999,10 @@ for name in .redevplugin-release-artifacts-verified.json REDEVPLUGIN_THIRD_PARTY
   printf 'evidence\n' > "$(dirname "$runtime_out")/$name"
 done
 `, { mode: 0o755 });
+  await fs.writeFile(path.join(sourceRoot, 'scripts', 'stage_computer_archive.mjs'), [
+    "import { writeFileSync } from 'node:fs';",
+    "writeFileSync(process.argv[2], 'verified-target-computer-resources:' + process.argv.slice(3).join(' '));",
+  ].join('\n'));
   const fakeGo = path.join(binDir, 'go');
   await fs.writeFile(fakeGo, `#!/usr/bin/env node
 const fs = require('node:fs');
