@@ -20,7 +20,6 @@ import (
 	"github.com/floegence/redeven/internal/desktopbridge"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
-	"golang.org/x/net/http2"
 )
 
 func TestDesktopBridgeFailsWhenRuntimeDaemonIsNotRunning(t *testing.T) {
@@ -120,8 +119,15 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 		)
 	}()
 
-	transport := &http2.Transport{}
-	client, err := transport.NewClientConn(clientConn)
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	transport := &http.Transport{
+		Protocols: protocols,
+		DialContext: func(context.Context, string, string) (net.Conn, error) {
+			return clientConn, nil
+		},
+	}
+	client, err := transport.NewClientConn(context.Background(), "http", "redeven-placement:80")
 	if err != nil {
 		t.Fatalf("NewClientConn() error = %v", err)
 	}
