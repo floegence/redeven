@@ -49,6 +49,7 @@ const npmLicenseOverrides = new Map([
 ]);
 
 const npmCoordinateLicenseOverrides = new Map([
+  ['@xmldom/xmldom@0.9.12', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@floegence/flowersec-node-native-darwin-arm64@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@floegence/flowersec-node-native-darwin-x64@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@floegence/flowersec-node-native-linux-arm64-gnu@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],

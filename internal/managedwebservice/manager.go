@@ -22,6 +22,7 @@ import (
 
 	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/logsafe"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
@@ -1504,7 +1505,7 @@ func (m *Manager) fail(service *pfregistry.ManagedService, op *pfregistry.Manage
 		message = "The managed Web Service operation failed."
 	}
 	if cause != nil && m.log != nil {
-		m.log.Error("managed Web Service operation failed", "service_id", service.ServiceID, "operation_id", op.OperationID, "action", op.Action, "error_code", code, "cause", safeManagedFailureCause(cause))
+		m.log.Error("managed Web Service operation failed", "service_id", logsafe.Text(service.ServiceID, 256), "operation_id", logsafe.Text(op.OperationID, 256), "action", logsafe.Text(op.Action, 256), "error_code", logsafe.Text(code, 256), "cause", logsafe.Text(safeManagedFailureCause(cause), 512))
 	}
 	op.State = "failed"
 	op.Stage = "failed"
@@ -1586,13 +1587,13 @@ func (m *Manager) progress(op *pfregistry.ManagedOperation, stage string, curren
 func (m *Manager) saveAndPublish(op *pfregistry.ManagedOperation) {
 	if err := m.registry.UpdateManagedOperation(context.Background(), *op); err != nil {
 		if m.log != nil {
-			m.log.Error("persist managed Web Service operation progress", "service_id", op.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(err))
+			m.log.Error("persist managed Web Service operation progress", "service_id", logsafe.Text(op.ServiceID, 256), "operation_id", logsafe.Text(op.OperationID, 256), "cause", logsafe.Text(safeManagedFailureCause(err), 512))
 		}
 		return
 	}
 	refreshed, err := m.registry.GetManagedOperation(context.Background(), op.OperationID)
 	if err != nil && m.log != nil {
-		m.log.Error("reload managed Web Service operation progress", "service_id", op.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(err))
+		m.log.Error("reload managed Web Service operation progress", "service_id", logsafe.Text(op.ServiceID, 256), "operation_id", logsafe.Text(op.OperationID, 256), "cause", logsafe.Text(safeManagedFailureCause(err), 512))
 	}
 	if refreshed != nil {
 		*op = *refreshed
@@ -1603,7 +1604,7 @@ func (m *Manager) saveAndPublish(op *pfregistry.ManagedOperation) {
 func (m *Manager) finalizeAndPublish(op *pfregistry.ManagedOperation, patch pfregistry.ManagedServicePatch) {
 	if err := m.registry.FinalizeManagedOperation(context.Background(), *op, patch); err != nil {
 		if m.log != nil {
-			m.log.Error("finalize managed Web Service operation", "service_id", op.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(err))
+			m.log.Error("finalize managed Web Service operation", "service_id", logsafe.Text(op.ServiceID, 256), "operation_id", logsafe.Text(op.OperationID, 256), "cause", logsafe.Text(safeManagedFailureCause(err), 512))
 		}
 		return
 	}

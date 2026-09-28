@@ -44,6 +44,10 @@ scheduled CodeQL run. An unchanged SHA skips the language matrix; an API lookup
 failure fails safe by scanning. This preserves daily detection for changed code
 without making hosted analysis part of the normal development gate.
 
+Every external GitHub Action is pinned to a reviewed commit, including the
+certificate-import action that receives signing secrets. Node-based Actions
+use supported Node 24 runtimes independently of the product Node 26 toolchain.
+
 The hosted source job and exact-main gate both reject non-canonical formatting
 in any tracked Go file. The exact-main check reports every affected path before
 the expensive integration stages begin, and a source-only policy test prevents
@@ -93,6 +97,17 @@ terminal live attachment fails closed rather than acting as a product fallback.
 A source-only contract test guards release, Desktop bundle, SSH source-build,
 and semantic carrier commands against reverting to `CGO_ENABLED=0` or omitting
 the native tag.
+
+Computer qualification proxies accept only the fixed provider Responses POST
+route. Request paths cannot redirect provider credentials to another origin.
+Desktop Runtime log tails inspect and read one no-follow file descriptor, so a
+path replacement cannot change the file between sizing and reading. Release
+source verification and Sparkle private-key reads also verify the opened
+no-follow descriptor rather than checking one path and reading it later.
+Temporary Flower qualification credentials are written and permissioned through
+one no-follow descriptor. Terminal carrier TLS fingerprints are accepted only
+after the server authenticates against that run's isolated device CA; an
+unrelated certificate cannot become a browser trust exception.
 
 The exact-main UI and renderer steps invoke the canonical headless browser and
 terminal carrier gates without a display server. Explicit headed runs are

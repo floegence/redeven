@@ -55,14 +55,17 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function readTLSServerSPKIHash(rawURL) {
+async function readTLSServerSPKIHash(rawURL, authorityCertificatePath) {
   const url = new URL(rawURL);
   if (url.protocol !== 'https:') throw new Error('terminal carrier Local UI must use HTTPS');
+  if (!authorityCertificatePath) throw new Error('terminal carrier requires its isolated certificate authority');
+  const ca = await readFile(authorityCertificatePath);
   return new Promise((resolve, reject) => {
     const socket = connectTLS({
       host: url.hostname,
       port: Number(url.port || 443),
-      rejectUnauthorized: false,
+      ca,
+      rejectUnauthorized: true,
     });
     const finish = (error, value) => {
       socket.destroy();
@@ -238,7 +241,7 @@ async function startRuntime(tempDir, { bind = '127.0.0.1:0' } = {}) {
     state.signal = signal;
   });
   child.once('error', (error) => { state.stderr += error.message; });
-  const runtime = { child, state, startup: null, stateRoot };
+  const runtime = { child, state, startup: null, stateRoot, authorityCertificatePath: authorityReport.certificate_path };
   try {
     runtime.startup = await waitForStartupReport(startupReportPath, state);
     return runtime;
@@ -1226,7 +1229,7 @@ async function main(options) {
   try {
     runtime = await startRuntime(tempDir);
     const entryURL = new URL('_redeven_proxy/env/', runtime.startup.local_ui_url).toString();
-    const localUIServerSPKIHash = await readTLSServerSPKIHash(runtime.startup.local_ui_url);
+    const localUIServerSPKIHash = await readTLSServerSPKIHash(runtime.startup.local_ui_url, runtime.authorityCertificatePath);
     browser = await chromium.launch({
       headless: options.headless,
       args: [

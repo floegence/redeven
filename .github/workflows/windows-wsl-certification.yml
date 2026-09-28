@@ -16,7 +16,7 @@ jobs:
       desktop_version: ${{ steps.version.outputs.desktop_version }}
     steps:
       - name: Checkout exact main
-        uses: actions/checkout@v5
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -36,12 +36,12 @@ jobs:
           echo "runtime_release_tag=v${desktop_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
 
@@ -76,7 +76,7 @@ jobs:
           cp "$bundle/desktop-bundle-manifest.json" dist/redeven_linux_amd64.manifest.json
 
       - name: Upload Linux Runtime archive
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: windows-wsl-linux-runtime
           path: |
@@ -91,7 +91,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout exact main
-        uses: actions/checkout@v5
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -106,22 +106,22 @@ jobs:
           }
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.14'
 
       - name: Download Linux Runtime archive
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: windows-wsl-linux-runtime
           path: dist/windows-wsl-runtime
@@ -200,7 +200,7 @@ jobs:
           if ($installer.Count -ne 1) { throw 'Expected exactly one internal NSIS installer.' }
 
       - name: Upload internal NSIS package
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: Redeven-Desktop-internal-windows-x64
           path: desktop/release/Redeven-Desktop-Internal-*-win-x64.exe

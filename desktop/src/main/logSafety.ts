@@ -1,7 +1,7 @@
 const DEFAULT_LOG_TEXT_RUNES = 256;
 
 export function safeLogText(value: unknown, maxRunes = DEFAULT_LOG_TEXT_RUNES): string {
-  const normalized = Array.from(String(value), (character) => {
+  const normalized = Array.from(String(value).replaceAll('\r', ' ').replaceAll('\n', ' '), (character) => {
     const codePoint = character.codePointAt(0) ?? 0;
     return codePoint >= 0x20 && character !== '\u007f' ? character : ' ';
   }).join('').trim();

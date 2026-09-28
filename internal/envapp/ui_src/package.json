@@ -84,7 +84,9 @@
     "unzipper": "^0.12.3",
     "uuid": "^14.0.0",
     "esbuild": "^0.28.1",
-    "vitefu": "^1.1.3"
+    "vitefu": "^1.1.3",
+    "baseline-browser-mapping": "^2.11.0",
+    "browserslist": "^4.28.7"
   },
   "pnpm": {
     "overrides": {
@@ -106,7 +108,9 @@
       "unzipper": "^0.12.3",
       "uuid": "^14.0.0",
       "esbuild": "^0.28.1",
-      "vitefu": "^1.1.3"
+      "vitefu": "^1.1.3",
+      "baseline-browser-mapping": "^2.11.0",
+      "browserslist": "^4.28.7"
     },
     "onlyBuiltDependencies": [
       "esbuild"
@@ -120,8 +124,8 @@
     "@types/semver": "^7.7.1",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
-    "@vitest/browser": "4.1.10",
-    "@vitest/browser-playwright": "4.1.10",
+    "@vitest/browser": "4.1.11",
+    "@vitest/browser-playwright": "4.1.11",
     "axe-core": "^4.12.1",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
@@ -137,7 +141,7 @@
     "typescript": "^5.7.2",
     "vite": "^8.0.16",
     "vite-plugin-solid": "^2.11.12",
-    "vitest": "4.1.10",
+    "vitest": "4.1.11",
     "ws": "8.21.0"
   }
 }

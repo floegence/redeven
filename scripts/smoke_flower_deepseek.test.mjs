@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -421,6 +421,21 @@ test('failure paths remove temporary config and secrets before returning', async
   await assert.rejects(readFile(path.join(root, 'config.json')), /ENOENT/u);
   await assert.rejects(readFile(path.join(root, 'secrets.json')), /ENOENT/u);
   await rm(root, { recursive: true, force: true });
+});
+
+test('temporary credentials reject symbolic links without changing their target', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'flower-smoke-symlink-'));
+  try {
+    const state = path.join(root, 'state');
+    const target = path.join(root, 'outside.json');
+    await mkdir(state);
+    await writeFile(target, 'outside state');
+    await symlink(target, path.join(state, 'config.json'));
+    await assert.rejects(withSensitiveState(state, { config: {}, secrets: {} }, async () => {}), /ELOOP/u);
+    assert.equal(await readFile(target, 'utf8'), 'outside state');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('secret leak scan reports only paths and never secret content', async () => {

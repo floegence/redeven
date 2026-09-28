@@ -23,6 +23,7 @@ import (
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/gorilla/websocket"
@@ -510,8 +511,8 @@ func (c *desktopModelSourceClient) StreamTurn(ctx context.Context, req ModelGate
 		if c.log != nil {
 			c.log.Error("desktop model source returned an invalid model result",
 				"stage", "rpc_decode",
-				"model_id", strings.TrimSpace(req.Model),
-				"error", err,
+				"model_id", logsafe.Text(req.Model, 256),
+				"error", logsafe.Error(err),
 			)
 		}
 		return ModelGatewayResult{}, wrapped
@@ -898,7 +899,7 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 			return err
 		}
 		if opts.Logger != nil {
-			opts.Logger.Warn("desktop model source connection unavailable; reconnecting", "error", err)
+			opts.Logger.Warn("desktop model source connection unavailable; reconnecting", "error", logsafe.Error(err))
 		}
 		delay := desktopModelSourceReconnectBackoff[min(attempt, len(desktopModelSourceReconnectBackoff)-1)]
 		attempt++
@@ -1159,9 +1160,9 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 		if e.log != nil {
 			e.log.Error("desktop model source provider returned an invalid model result",
 				"stage", "provider_complete",
-				"request_id", strings.TrimSpace(frame.ID),
-				"model_id", publicModelID,
-				"error", err,
+				"request_id", logsafe.Text(frame.ID, 256),
+				"model_id", logsafe.Text(publicModelID, 256),
+				"error", logsafe.Error(err),
 			)
 		}
 		return ModelGatewayResult{}, fmt.Errorf("desktop model source provider result: %w", err)

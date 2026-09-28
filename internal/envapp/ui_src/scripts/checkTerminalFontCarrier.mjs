@@ -14,8 +14,11 @@ import {
 
 const args = process.argv.slice(2);
 const option = (name, fallback = '') => args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
-const output = path.resolve(option('--output', '/tmp/redeven-terminal-font-carrier'));
-await mkdir(output, { recursive: true });
+const requestedOutput = option('--output');
+const output = requestedOutput
+  ? path.resolve(requestedOutput)
+  : await mkdtemp(path.join(os.tmpdir(), 'redeven-terminal-font-carrier-'));
+await mkdir(output, { recursive: true, mode: 0o700 });
 const canvasSelector = '[data-terminal-semantic-canvas="true"]';
 const candidates = ['JetBrains Mono', 'Iosevka', 'Source Code Pro', 'IBM Plex Mono', 'Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Ubuntu Mono', 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', 'Fira Code', 'Fira Mono', 'Hack', 'Inconsolata', 'Roboto Mono', 'Noto Sans Mono', 'Ubuntu Sans Mono'];
 const sharedFont = async (page) => page.locator('[data-terminal-panel-variant="workbench"]').last().evaluate((element) => ({
@@ -72,9 +75,9 @@ async function settings(page, panel) {
 
 async function chooseFont(page, panel, label) {
   const dialog = await settings(page, panel);
-  const button = dialog.getByRole('button', { name: new RegExp(`^${label}`) });
+  const button = dialog.getByRole('button', { name: new RegExp(`^${RegExp.escape(label)}`) });
   await button.click();
-  await dialog.getByRole('button', { name: new RegExp(`^${label}`), pressed: true }).waitFor();
+  await dialog.getByRole('button', { name: new RegExp(`^${RegExp.escape(label)}`), pressed: true }).waitFor();
   const family = await dialog.locator('pre[aria-label]').evaluate((element) => globalThis.getComputedStyle(element).fontFamily);
   await page.keyboard.press('Escape');
   return family;
@@ -116,7 +119,7 @@ if (directEntry && args.includes('--serve')) {
     const address = option('--host', '127.0.0.1');
     const port = await freePort(address);
     runtime = await startRuntime(stateDir, { bind: `${address}:${port}` });
-    const spki = await readTLSServerSPKIHash(`https://${address}:${port}`);
+    const spki = await readTLSServerSPKIHash(`https://${address}:${port}`, runtime.authorityCertificatePath);
     const config = { url: `https://${address}:${port}/_redeven_proxy/env/`, password, spki, coordinator: '', sharedFontLabel: option('--shared-font', 'JetBrains Mono') };
     browser = await chromium.launch({ headless: true, args: [`--ignore-certificate-errors-spki-list=${spki}`] });
     const host = await openClient(browser, config);
@@ -211,7 +214,7 @@ if (directEntry && args.includes('--serve')) {
         const dialog = await settings(client.page, client.panel);
         const available = [];
         for (const label of candidates) {
-          const button = dialog.getByRole('button', { name: new RegExp(`^${label}`) });
+          const button = dialog.getByRole('button', { name: new RegExp(`^${RegExp.escape(label)}`) });
           if (await button.count() && await button.isEnabled()) available.push(label);
         }
         report.fontLoads.push({ dpr, available, problems: client.problems, faces: await client.page.evaluate(() => globalThis.__terminalFontLoads), resources: await client.page.evaluate(() => globalThis.performance.getEntriesByType('resource').filter((entry) => entry.name.includes('.woff2')).map((entry) => ({ path: new URL(entry.name).pathname, duration: entry.duration, bytes: entry.decodedBodySize }))) });

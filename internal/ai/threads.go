@@ -16,6 +16,7 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -1302,7 +1303,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if readStateCleaner != nil {
 		s.startServiceWorker(func() {
 			if err := readStateCleaner.RetireFlowerThreadReadState(context.Background(), endpointID, threadID); err != nil && s.log != nil {
-				s.log.Warn("retire Flower thread read state after canonical delete", "thread_id", threadID, "error", err)
+				s.log.Warn("retire Flower thread read state after canonical delete", "thread_id", logsafe.Text(threadID, 256), "error", logsafe.Error(err))
 			}
 		})
 	}

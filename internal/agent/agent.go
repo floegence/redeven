@@ -35,6 +35,7 @@ import (
 	"github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/gitrepo"
 	"github.com/floegence/redeven/internal/gitruntime"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/monitor"
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
@@ -1086,7 +1087,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		return
 	}
 	if err := session.ValidateGrantServerNotifyRemote(&n, a.cfg.EnvironmentID); err != nil {
-		a.log.Warn("invalid remote grant_server notify", "error", err)
+		a.log.Warn("invalid remote grant_server notify", "error", logsafe.Error(err))
 		return
 	}
 
@@ -1954,7 +1955,7 @@ func originWithChannelLabel(baseOrigin string, channelID string) (string, error)
 	}
 
 	// Insert as the second label: env-xxx.ch-<enc>.<rest>.
-	out := make([]string, 0, len(labels)+1)
+	out := make([]string, 0, len(labels))
 	out = append(out, labels[0], "ch-"+enc)
 	out = append(out, labels[1:]...)
 	u.Host = strings.Join(out, ".")

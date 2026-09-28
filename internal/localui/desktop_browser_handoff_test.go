@@ -278,3 +278,26 @@ func TestDesktopBrowserHandoffStoreBoundsInMemoryState(t *testing.T) {
 		t.Fatal("oldest browser session was not evicted")
 	}
 }
+
+func TestDesktopBrowserHandoffCookieMatchesTransportSecurity(t *testing.T) {
+	for _, scheme := range []string{"http", "https"} {
+		t.Run(scheme, func(t *testing.T) {
+			s := newTestServer(t, nil)
+			s.localUIBridgeToken = "test-private-bridge-token"
+			response := mintDesktopBrowserHandoff(t, s, "127.0.0.1:24000", "demo", "/")
+			entry, err := url.Parse(response.EntryURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry.Scheme = scheme
+			result := redeemDesktopBrowserHandoff(t, s, entry.String())
+			cookies := result.Result().Cookies()
+			if result.Code != http.StatusSeeOther || len(cookies) != 1 {
+				t.Fatalf("redeem status %d with %d cookies", result.Code, len(cookies))
+			}
+			if cookies[0].Secure != (scheme == "https") {
+				t.Fatalf("Secure = %v for %s transport", cookies[0].Secure, scheme)
+			}
+		})
+	}
+}

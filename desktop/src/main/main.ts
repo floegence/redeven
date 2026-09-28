@@ -9838,7 +9838,7 @@ async function autoStartLocalRuntimeOnDesktopLaunch(loadedPreferences?: DesktopP
       diagnostic.text,
     ]);
     const reinstallRequired = structuredFailure?.code === 'reinstall_required';
-    console.warn(`[redeven:desktop-startup] Local runtime auto-start failed: ${message}`);
+    console.warn(`[redeven:desktop-startup] Local runtime auto-start failed: ${safeLogText(message, 512)}`);
     const preferences = await loadDesktopPreferencesCached().catch(() => null);
     if (reinstallRequired && preferences) {
       await markReinstallTargetRequired(preferences.local_environment.id, {

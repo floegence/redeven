@@ -1,6 +1,6 @@
 import { constants as fsConstants, existsSync, realpathSync } from 'node:fs';
 import {
-  access, chmod, mkdir, readFile, readdir, rm, stat, writeFile,
+  mkdir, open, readFile, readdir, rm, stat, writeFile,
 } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -158,10 +158,24 @@ export async function scanSecretLeaks(roots, secret) {
   const needle = Buffer.from(secret);
   const leaks = [];
   for (const file of files) {
-    const content = await readFile(file);
-    if (content.includes(needle)) leaks.push(file);
+    const content = await readRegularSmokeFile(file);
+    if (content?.includes(needle)) leaks.push(file);
   }
   return leaks.sort();
+}
+
+async function readRegularSmokeFile(file) {
+  let handle;
+  try {
+    handle = await open(file, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    if (!(await handle.stat()).isFile()) return null;
+    return await handle.readFile();
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ELOOP') return null;
+    throw error;
+  } finally {
+    await handle?.close();
+  }
 }
 
 function commandOutput(command, args, options = {}) {
@@ -191,8 +205,8 @@ async function scanWorktreeDiffForSecret(worktree, secret) {
     .split('\0').filter(Boolean);
   for (const relative of untracked) {
     const file = path.join(worktree, relative);
-    const fileStat = await stat(file).catch(() => null);
-    if (fileStat?.isFile() && (await readFile(file)).includes(needle)) leaks.push(file);
+    const content = await readRegularSmokeFile(file);
+    if (content?.includes(needle)) leaks.push(file);
   }
   return leaks;
 }
@@ -210,14 +224,24 @@ async function removeSensitiveFiles(root) {
   ]);
 }
 
+async function writePrivateJSON(file, value) {
+  const handle = await open(file, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_NOFOLLOW, 0o600);
+  try {
+    if (!(await handle.stat()).isFile()) throw new Error('temporary credentials require a regular file');
+    await handle.chmod(0o600);
+    await handle.truncate(0);
+    await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`);
+  } finally {
+    await handle.close();
+  }
+}
+
 export async function withSensitiveState(root, payload, operation) {
   await mkdir(root, { recursive: true, mode: 0o700 });
   const configFile = path.join(root, 'config.json');
   const secretsFile = path.join(root, 'secrets.json');
-  await writeFile(configFile, `${JSON.stringify(payload.config, null, 2)}\n`, { mode: 0o600 });
-  await writeFile(secretsFile, `${JSON.stringify(payload.secrets, null, 2)}\n`, { mode: 0o600 });
-  await chmod(configFile, 0o600);
-  await chmod(secretsFile, 0o600);
+  await writePrivateJSON(configFile, payload.config);
+  await writePrivateJSON(secretsFile, payload.secrets);
   try {
     return await operation({ configFile, secretsFile });
   } finally {
@@ -228,8 +252,6 @@ export async function withSensitiveState(root, payload, operation) {
 export async function prepareIsolatedProviderState(sourceRoot, runtimeStateRoot, metadataFile) {
   const sourceConfigFile = path.join(sourceRoot, 'config.json');
   const sourceSecretsFile = path.join(sourceRoot, 'secrets.json');
-  await access(sourceConfigFile, fsConstants.R_OK);
-  await access(sourceSecretsFile, fsConstants.R_OK);
   const sourceConfig = JSON.parse(await readFile(sourceConfigFile, 'utf8'));
   const sourceSecrets = JSON.parse(await readFile(sourceSecretsFile, 'utf8'));
   const selected = findDeepSeekProvider(sourceConfig, sourceSecrets);
@@ -248,10 +270,8 @@ export async function prepareIsolatedProviderState(sourceRoot, runtimeStateRoot,
   await mkdir(runtimeStateRoot, { recursive: true, mode: 0o700 });
   const configFile = path.join(runtimeStateRoot, 'config.json');
   const secretsFile = path.join(runtimeStateRoot, 'secrets.json');
-  await writeFile(configFile, `${JSON.stringify(targetConfig, null, 2)}\n`, { mode: 0o600 });
-  await writeFile(secretsFile, `${JSON.stringify(targetSecrets, null, 2)}\n`, { mode: 0o600 });
-  await chmod(configFile, 0o600);
-  await chmod(secretsFile, 0o600);
+  await writePrivateJSON(configFile, targetConfig);
+  await writePrivateJSON(secretsFile, targetSecrets);
   await writeFile(metadataFile, `${JSON.stringify({
     schema_version: 1,
     model: SMOKE_MODEL,

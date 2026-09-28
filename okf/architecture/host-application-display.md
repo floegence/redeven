@@ -105,6 +105,8 @@ The [certificate contract](../security/local-ui-certificates.md) owns identity a
 trust; the viewer never creates certificates, installs trust, changes the saved
 protocol, restarts a Runtime, or silently downgrades TLS.
 
+# Boundaries
+
 The [viewer resource contract](host-application-viewer-resources.md) owns current
 snapshots, cache authorization and independent viewer/backend upgrades. Viewer
 preparation failures permit retry. Unsupported input preserves pictures and local

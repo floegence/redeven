@@ -59,6 +59,8 @@ readiness marker is committed only after exact policy loading succeeds. Failures
 remove this transaction's staging and preserve prior versions. Runtime independently
 checks the installed version and policy before accepting the ready phase.
 
+# Boundaries
+
 The operation retains personal browser processes, browser profiles, login state,
 bookmarks and saved tab recovery records. System preparation changes only the
 verified built-in browser version and its narrowly matched policy.

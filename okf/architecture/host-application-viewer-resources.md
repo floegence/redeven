@@ -17,7 +17,9 @@ hot-swapped. The [application contract](host-applications.md) owns authorization
 normal/forced termination, and the [input contract](host-application-input.md) owns
 safe input delivery.
 
-# Native frames and Xpra snapshots
+# Contract
+
+## Native frames and Xpra snapshots
 
 New combined Linux sessions use the Runtime canvas viewer and the released
 native frame/input/cursor protocol. They do not prepare or load an Xpra document.
@@ -49,7 +51,7 @@ terminating the application. Shared routes, credentials and upgraded sockets are
 revoked when the share ends. The snapshot becomes ineligible for resource lookup;
 other active shares and the application remain independent.
 
-# Capability and recovery boundary
+## Capability and recovery boundary
 
 One SDK result determines which operations are available:
 
@@ -67,7 +69,9 @@ workarea/DPI configuration; old backends do not gain this capability by loading 
 new client. Restarting Redeven processes refreshes runtime/viewer code. It cannot
 replace a graphical service or a module already loaded inside an application.
 
-# Resource authorization and caching
+# Boundaries
+
+## Resource authorization and caching
 
 The SDK digest covers actual prepared resource names and bytes, including input
 adapters and transformed worker URLs. Only

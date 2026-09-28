@@ -132,6 +132,8 @@ uses the existing checkpoint and input-authority invalidation path. Ordinary
 content and style edits remain incremental. Redeven consumes this released
 behavior without an alternate renderer or site-specific DOM rewrite.
 
+# Boundaries
+
 ## Scriptless replay and website admission
 
 The source-page replay remains scriptless. Only the trusted browser chrome

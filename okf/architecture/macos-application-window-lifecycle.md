@@ -76,6 +76,8 @@ reload, status reconciliation, access failures and physical viewer closure.
 The [lifecycle validation matrix](../operations/host-application-lifecycle.md)
 separates automated recovery evidence from OS/application compatibility limits.
 
+# Boundaries
+
 Runtime shutdown releases capture, route and input ownership but preserves native
 applications and unsaved data. A new Runtime lists them from the OS, but sharing
 requires another explicit open action.

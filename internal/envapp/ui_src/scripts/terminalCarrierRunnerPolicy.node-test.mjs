@@ -24,7 +24,7 @@ test('keeps the supported terminal carriers explicit in the exact-main pre-push 
   assert.match(carrierSource, /installReDevPluginRuntimeFixture\(tempDir\)/u);
   assert.match(carrierSource, /'local-authority', 'device-ca', 'generate', '--state-root', stateRoot/u);
   assert.match(carrierSource, /'--local-ui-protocol', 'https'/u);
-  assert.match(carrierSource, /const localUIServerSPKIHash = await readTLSServerSPKIHash\(runtime\.startup\.local_ui_url\)/u);
+  assert.match(carrierSource, /const localUIServerSPKIHash = await readTLSServerSPKIHash\(runtime\.startup\.local_ui_url, runtime\.authorityCertificatePath\)/u);
   assert.match(carrierSource, /--ignore-certificate-errors-spki-list=\$\{localUIServerSPKIHash\}/u);
   assert.doesNotMatch(carrierSource, /ignoreHTTPSErrors/u);
   assert.match(carrierSource, /getByRole\('button', \{ name: 'Terminal', exact: true \}\)/u);

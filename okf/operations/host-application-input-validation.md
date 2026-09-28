@@ -92,6 +92,8 @@ Elapsed time alone cannot end a live application awaiting its first window; the
 installed timeout regression observes the old 40-second boundary without ending
 sharing or the process.
 
+# Boundaries
+
 ## macOS and physical-device boundary
 
 The native Mac helper remains the platform authority. Shared canvas extraction

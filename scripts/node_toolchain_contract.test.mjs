@@ -81,7 +81,7 @@ test("canonical and localized READMEs publish the exact Node 26 badge and prereq
   const localeManifest = JSON.parse(source("assets/readme/locales.json"));
   for (const { file } of localeManifest.locales) {
     const readme = source(file);
-    assert.match(readme, /img\.shields\.io\/badge\/Node\.js-26\.7\.0-339933/);
+    assert.match(readme, /https:\/\/img\.shields\.io\/badge\/Node\.js-26\.7\.0-339933/);
     assert.match(readme, /Node\.js `26\.7\.0`/);
     assert.doesNotMatch(readme, /Node\.js-24-|Node\.js `24`/);
   }
