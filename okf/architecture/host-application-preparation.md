@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed host application preparation
 description: Compatible installed components, independent user-directed updates, incremental transfer and same-window first-use preparation.
 tags: [runtime, desktop, applications, linux, security]
-timestamp: 2026-09-28T17:30:00Z
+timestamp: 2026-09-28T18:06:59Z
 ---
 # Summary
 
@@ -78,9 +78,14 @@ With current combined components installed, the application library remains the 
 surface. An optional update notice opens dependency settings. Required updates use
 launch availability to explain that new applications need updated dependencies;
 retained-component readiness must not label the page ready to open applications.
-The preparation card sizes to its content, with the method and primary action
-together. Version identifiers, update rationale and method explanations start
-collapsed; errors, recovery actions and active byte progress remain visible.
+The preparation card keeps the method and primary action together. A bounded
+feedback region contains changing headings, recovery text and byte progress, so
+operation changes do not move the actions or following applications. Long feedback
+remains scrollable. The progress track uses the existing action spacing instead
+of adding a row. Version identifiers, update rationale and method explanations
+start collapsed; offline guidance remains readable during work, while upload is
+disabled unless the current operation accepts it. Errors, recovery actions and
+active byte progress remain visible.
 Inspection is user-directed; dismissing optional updates keeps apps usable.
 Complete caches use the explicit `cache` source,
 hide download choices and produce no HTTP acquisition or Desktop transfer. Cache

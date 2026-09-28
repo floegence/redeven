@@ -1,6 +1,6 @@
 .host-apps-preparation { width:100%; max-width:560px; padding:20px; margin-bottom:24px; border-radius:12px; }
 .host-apps-preparation-content { display:flex; flex-direction:column; gap:16px; min-width:0; }
-.host-apps-preparation-copy { display:flex; flex-direction:column; gap:6px; }
+.host-apps-preparation-copy { display:flex; flex-direction:column; gap:6px; font-size:var(--floe-type-body); line-height:1.65; }
 .host-apps-preparation-heading { display:flex; align-items:center; gap:10px; margin-bottom:2px; }
 .host-apps-preparation-icon { display:grid; place-items:center; flex-shrink:0; width:36px; height:36px; border-radius:10px; background:var(--muted); color:var(--foreground); }
 .host-apps-preparation-dialog { padding:0; margin:0; max-width:none; }
@@ -22,10 +22,11 @@
 .host-apps-preparation h2 { font-size: 15px; font-weight: 600; letter-spacing: -.02em; margin: 0; }
 .host-apps-preparation p { font-size: var(--floe-type-body); line-height: 1.65; color: var(--muted-foreground); margin: 0; max-width: 68ch; }
 .host-apps-preparation .host-apps-preparation-target { color: var(--foreground); }
-.host-apps-preparation-track { height: 2px; background: var(--border); overflow: hidden; margin-top: 16px; }
+.host-apps-preparation-progress { position:absolute; inset-inline:0; top:-8px; height:2px; pointer-events:none; }
+.host-apps-preparation-track { height: 2px; background: var(--border); overflow: hidden; }
 .host-apps-preparation-track span { display: block; height: 100%; background: var(--primary); transition: width .2s ease; }
 .host-apps-preparation-track.indeterminate span { animation: host-app-preparation-progress 1.5s ease-in-out infinite; }
-.host-apps-preparation-footer { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.host-apps-preparation-footer { position:relative; display: flex; align-items: center; gap: 12px; margin-top: 16px; min-height:28px; }
 .host-apps-preparation-size { color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
 .host-apps-preparation-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .host-apps-preparation-details { margin-top: 0; font-size: 12px; color: var(--muted-foreground); }

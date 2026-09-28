@@ -1,4 +1,4 @@
-import { StableText, Button, RadioList } from '@floegence/floe-webapp-core/ui';
+import { StatusRegion, StableText, Button, RadioList } from '@floegence/floe-webapp-core/ui';
 import { ChevronRight, Download, FolderOpen, Info, MonitorPointer, Package, Upload } from '@floegence/floe-webapp-core/icons';
 import './host-application-preparation.css';
 import type { HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
@@ -88,18 +88,18 @@ export function HostApplicationSetupPanel(props: {
   const canChoose = () => !props.submitting && (!active() || receiving());
   const canStart = () => props.allowed && !props.submitting && !props.checkingPlan && !unsupported()
     && (local() || (props.downloadMethod === 'desktop' ? props.canRelay : !receiving()));
+  const canUpload = () => props.allowed && !props.submitting && !unsupported() && (!active() || Boolean(receiving()));
   let fileInput: HTMLInputElement | undefined;
   return <section class={`host-apps-preparation ${props.inDialog ? '' : redevenSurfaceRoleClass('panel')}`} classList={{ "host-apps-preparation-dialog": props.inDialog }} aria-label={i18n.t(installed() ? 'hostApplications.update.title' : 'hostApplications.prepare.title')}>
     <div class="host-apps-preparation-content">
-    <div class="host-apps-preparation-copy">
+    <StatusRegion lines={5} tabIndex={0} class="host-apps-preparation-copy">
       <Show when={!props.inDialog || (props.applicationName && updateNeeded()) || active() || attention()}><div class="host-apps-preparation-heading"><Show when={!props.inDialog}><span class="host-apps-preparation-icon" aria-hidden="true"><Package class="w-5 h-5" /></span></Show><h2 aria-live="polite">{i18n.t(heading())}</h2></div></Show>
-      <Show when={attention()} fallback={<p>{i18n.t(installed()?.ready ? props.requiresUpdate ? 'hostApplications.update.requiredDescription' : 'hostApplications.update.description' : 'hostApplications.prepare.summary')}</p>}>
+      <Show when={attention()} fallback={<p>{hostApplicationDesktopDetail(props.desktopProgress, i18n) ?? i18n.t(installed()?.ready ? props.requiresUpdate ? 'hostApplications.update.requiredDescription' : 'hostApplications.update.description' : 'hostApplications.prepare.summary')}</p>}>
         <p role="status">{i18n.t(props.disconnected ? 'hostApplications.prepare.connectionHint' : props.setup?.installation_error_code ? hostApplicationSetupError(props.setup.installation_error_code) : hostApplicationSetupError(props.setup?.error_code))}</p>
         <Show when={installed()?.ready && props.setup?.state === 'failed'}><p>{i18n.t('hostApplications.update.failedRetained')}</p></Show>
       </Show>
-      <Show when={hostApplicationDesktopDetail(props.desktopProgress, i18n)}>{detail => <p aria-live="polite">{detail()}</p>}</Show>
       <Show when={props.applicationName}><p class="host-apps-preparation-target">{i18n.t('hostApplications.prepare.openAfter', { name: props.applicationName ?? '' })}</p></Show>
-    </div>
+    </StatusRegion>
     <Show when={!unsupported() && !local()}>
       <div class="host-apps-preparation-method">
         <div class="host-apps-preparation-method-heading"><span>{i18n.t('hostApplications.prepare.downloadMethod')}</span><Show when={props.plan}><span class="host-apps-preparation-size" title={i18n.t('hostApplications.prepare.missingComponents')}>{new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format((props.plan?.missing_bytes ?? 0) / 1000000)}</span></Show></div>
@@ -122,20 +122,20 @@ export function HostApplicationSetupPanel(props: {
       </dl></Show>
       <Show when={!unsupported() && !local()}><p>{i18n.t('hostApplications.prepare.hostDownloadHint')}</p><p>{i18n.t('hostApplications.prepare.desktopDownloadHint')}</p></Show>
     </details>
-    <Show when={!unsupported() && (!active() || (props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting))}><details class="host-apps-preparation-details">
+    <Show when={!unsupported()}><details class="host-apps-preparation-details">
       <summary><FolderOpen class="w-3.5 h-3.5" aria-hidden="true" /><span>{i18n.t('hostApplications.prepare.offline')}</span><ChevronRight class="host-apps-details-chevron w-3 h-3" aria-hidden="true" /></summary>
       <p>{i18n.t('hostApplications.prepare.offlineHint')}</p>
-      <input ref={fileInput} type="file" accept=".zip" hidden onChange={event => { const file = event.currentTarget.files?.[0]; if (file) props.onUpload(file); event.currentTarget.value = ''; }} />
-      <Button variant="outline" size="sm" disabled={!props.allowed || props.submitting} onClick={() => fileInput?.click()}><Upload class="w-3.5 h-3.5" aria-hidden="true" />{i18n.t('hostApplications.prepare.choosePackage')}</Button>
+      <input ref={fileInput} type="file" accept=".zip" hidden disabled={!canUpload()} onChange={event => { const file = event.currentTarget.files?.[0]; if (file && canUpload()) props.onUpload(file); event.currentTarget.value = ''; }} />
+      <Button variant="outline" size="sm" disabled={!canUpload()} onClick={() => fileInput?.click()}><Upload class="w-3.5 h-3.5" aria-hidden="true" />{i18n.t('hostApplications.prepare.choosePackage')}</Button>
     </details></Show>
     </div>
     </div>
+    <div class="host-apps-preparation-footer">
     <Show when={active()}><div class="host-apps-preparation-progress">
       <div class={`host-apps-preparation-track ${progress() === undefined ? 'indeterminate' : ''}`} role="progressbar" aria-label={i18n.t(hostApplicationSetupHeading(props.setup, props.desktopProgress))} aria-valuenow={progress() === undefined ? undefined : Math.round(progress()! * 100)} aria-valuemin={0} aria-valuemax={100}>
         <span style={{ width: progress() === undefined ? '35%' : `${progress()! * 100}%` }} />
       </div>
     </div></Show>
-    <div class="host-apps-preparation-footer">
       <div class="host-apps-preparation-actions">
         <Show when={props.disconnected} fallback={
           <Show when={active()} fallback={
