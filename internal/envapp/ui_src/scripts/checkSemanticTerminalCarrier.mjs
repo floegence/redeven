@@ -320,27 +320,27 @@ async function terminalInput(scope, waitForInteractive = true) {
   const canvas = scope.locator(`${semanticCanvasSelector}:visible`).last();
   await canvas.waitFor({ state: 'visible', timeout: 15_000 });
   const runtime = canvas.locator('xpath=ancestor::*[@data-terminal-runtime-session][1]');
-  if (waitForInteractive) {
-    await runtime.waitFor({ state: 'attached', timeout: 15_000 });
-    await runtime.evaluate(async (element) => {
-      const deadline = Date.now() + 15_000;
-      while (Date.now() < deadline) {
-        if (element.getAttribute('aria-busy') === 'false'
-          && Number(element.getAttribute('data-terminal-presentation-sequence')) > 0) return;
-        await new Promise((resolve) => setTimeout(resolve, 25));
+  await runtime.evaluate(async (element, { selector, waitForInteractive }) => {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      const input = element.querySelector(selector);
+      if (input && (!waitForInteractive || (element.getAttribute('aria-busy') === 'false'
+        && Number(element.getAttribute('data-terminal-presentation-sequence')) > 0))) {
+        input.focus({ preventScroll: true });
+        return;
       }
-      throw new Error(`semantic terminal did not become interactive: ${JSON.stringify({
-        aria_busy: element.getAttribute('aria-busy'),
-        sequence: element.getAttribute('data-terminal-presentation-sequence'),
-        geometry_sequence: element.getAttribute('data-terminal-geometry-sequence'),
-        renderer: element.getAttribute('data-terminal-renderer'),
-        error: element.querySelector('[data-terminal-semantic-error="true"]')?.textContent ?? '',
-      })}`);
-    });
-  }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`semantic terminal did not become interactive: ${JSON.stringify({
+      aria_busy: element.getAttribute('aria-busy'),
+      sequence: element.getAttribute('data-terminal-presentation-sequence'),
+      geometry_sequence: element.getAttribute('data-terminal-geometry-sequence'),
+      renderer: element.getAttribute('data-terminal-renderer'),
+      input_present: Boolean(element.querySelector(selector)),
+      error: element.querySelector('[data-terminal-semantic-error="true"]')?.textContent ?? '',
+    })}`);
+  }, { selector: semanticInputSelector, waitForInteractive });
   const input = runtime.locator(semanticInputSelector);
-  await input.waitFor({ state: 'attached', timeout: 15_000 });
-  await input.evaluate((element) => element.focus({ preventScroll: true }));
   return { input, runtime, canvas };
 }
 
@@ -454,6 +454,25 @@ async function runtimeTrace(runtime) {
   });
 }
 
+async function waitForRuntimeObservation(runtime) {
+  await runtime.evaluate((element) => new Promise((resolve) => {
+    let frame;
+    let timer;
+    const finish = () => {
+      observer.disconnect();
+      globalThis.cancelAnimationFrame(frame);
+      globalThis.clearTimeout(timer);
+      resolve();
+    };
+    const observer = new globalThis.MutationObserver(finish);
+    observer.observe(element, { attributes: true, subtree: true });
+    frame = globalThis.requestAnimationFrame(finish);
+    // Background documents may pause animation frames. Preserve bounded
+    // observation there while visible views wake on their actual commit.
+    timer = globalThis.setTimeout(finish, 25);
+  }));
+}
+
 async function waitForTrace(runtime, predicate, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   let last = null;
@@ -477,7 +496,7 @@ async function waitForTrace(runtime, predicate, timeoutMs = 15_000) {
     } catch (error) {
       last = { error: error instanceof Error ? error.message : String(error) };
     }
-    await delay(25);
+    await waitForRuntimeObservation(runtime);
   }
   throw new Error(`semantic terminal trace did not converge: ${JSON.stringify({ last, transitions })}`);
 }
@@ -487,16 +506,14 @@ async function waitForViewsToConverge(page, sessionID, minimumSequence = 1, time
   const deadline = Date.now() + timeoutMs;
   let last = [];
   while (Date.now() < deadline) {
-    const count = await runtimes.count();
-    last = [];
-    for (let index = 0; index < count; index += 1) {
-      const runtime = runtimes.nth(index);
-      const sequence = Number(await runtime.getAttribute('data-terminal-presentation-sequence'));
-      const epoch = Number(await runtime.getAttribute('data-terminal-content-epoch'));
-      const cols = Number(await runtime.getAttribute('data-terminal-frame-cols'));
-      const rows = Number(await runtime.getAttribute('data-terminal-frame-rows'));
-      last.push({ sequence, epoch, cols, rows });
-    }
+    // Read all views in one browser task so the comparison cannot mix
+    // attributes from different Presentation commits.
+    last = await runtimes.evaluateAll((elements) => elements.map((element) => ({
+      sequence: Number(element.getAttribute('data-terminal-presentation-sequence')),
+      epoch: Number(element.getAttribute('data-terminal-content-epoch')),
+      cols: Number(element.getAttribute('data-terminal-frame-cols')),
+      rows: Number(element.getAttribute('data-terminal-frame-rows')),
+    })));
     if (last.length >= 2
       && last.every((trace) => trace.sequence >= minimumSequence)
       && last.every((trace) => trace.sequence === last[0].sequence)

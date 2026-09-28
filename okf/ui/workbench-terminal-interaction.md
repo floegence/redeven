@@ -56,6 +56,12 @@ A user-initiated terminal creation owns one panel-level loading curtain from opt
 
 The exact-main performance gate measures twenty semantic Presentation paints, input dispatches, and resize settlements in Chromium. The real product carrier separately measures twenty same-session multi-view activations and twenty `top` resizes, with each resize capped at 150 ms. It also verifies clear, history projection, refresh, controller transfer, one semantic canvas, canonical frame geometry, DPR backing, nontransparent paint, and zero page, console, request, or response errors.
 
+Carrier convergence reads every view in one browser task to avoid mixing
+attributes from different Presentation commits. Runtime observation wakes on
+state mutations or animation frames, with a bounded timer for background
+documents. The measured activation still includes surface selection, controller
+and geometry readiness, and complete cross-view convergence.
+
 # Boundaries
 
 Redeven may adapt Flowersec streams, product permissions, local-path capability, responsive placement, notifications, and Desktop URL/file actions. It must not recreate terminal parsing, key encoding, history ownership, attachment arbitration, canonical geometry, semantic frame encoding, cursor state, graphics state, or renderer internals. Local sibling dependencies, raw-byte fallbacks, hidden renderers, automatic reattach on ordinary resize, error swallowing, and sequence rollback are prohibited.

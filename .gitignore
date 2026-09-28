@@ -31,6 +31,7 @@ internal/envapp/ui_src/.cache/pdf-document-surface/
 internal/envapp/ui_src/.cache/progress-shimmer/
 internal/envapp/ui_src/.vitest-attachments/
 internal/envapp/ui_src/dist/control-harmony/
+internal/envapp/ui_src/dist/settings-design/
 internal/envapp/ui_src/src/**/__screenshots__/
 
 # Local agent blueprint draft (do not commit)
