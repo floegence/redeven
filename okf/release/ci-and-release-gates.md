@@ -394,7 +394,8 @@ Desktop conditionals.
 
 Browser tests store generated screenshots in `src/**/__screenshots__/`, runtime
 attachments in `.vitest-attachments/`, and named PDF/progress evidence under
-`.cache/`. These generated paths and the explicit control-harmony output are
+`.cache/`. These generated paths and the explicit control-harmony and
+settings-design outputs are
 ignored; source fixtures remain tracked. Workbench PDF drag tests remove only
 the Vitest runner's outer preview scaling while preserving the product canvas
 projection, then restore the runner styles after the interaction.
