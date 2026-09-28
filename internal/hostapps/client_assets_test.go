@@ -94,7 +94,9 @@ func TestApplicationShareServesMatchingCurrentDocumentWithoutReadingLegacyTree(t
 	var calls atomic.Int32
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		io.WriteString(w, "obsolete application document or asset")
+		if _, err := io.WriteString(w, "obsolete application document or asset"); err != nil {
+			t.Errorf("write legacy application response: %v", err)
+		}
 	}))
 	defer backend.Close()
 	proxy, address, err := newApplicationProxy(backend.URL, viewer)
