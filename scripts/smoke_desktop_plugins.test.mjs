@@ -382,8 +382,8 @@ test('the Activity Plugin Panel is an eagerly mounted core control', async () =>
   assert.doesNotMatch(shellSource, /const PluginPanel = lazy/u);
   assert.match(shellSource, /type PluginPanelState = Readonly<\{[\s\S]*?open: boolean;[\s\S]*?placement: 'activity' \| 'workbench';[\s\S]*?trigger: HTMLButtonElement \| null;/u);
   assert.match(shellSource, /createSignal<PluginPanelState>/u);
-  assert.match(shellSource, /<PluginPanel[\s\S]*?open=\{pluginsPanelOpen\(\)\}/u);
-  assert.match(shellSource, /<EnvContext\.Provider[\s\S]*?>\s*<PluginPanel[\s\S]*?<TerminalSessionCatalogProvider>/u);
+  assert.match(shellSource, /const renderPluginPanel = \(\) => \(\s*<PluginPanel[\s\S]*?open=\{pluginsPanelOpen\(\)\}/u);
+  assert.match(shellSource, /<EnvContext\.Provider[\s\S]*?>\s*\{renderPluginPanel\(\)\}[\s\S]*?<TerminalSessionCatalogProvider>/u);
   assert.doesNotMatch(shellSource, /requestPluginPanelState|activePluginPanelManager|activePluginsActivityBinding/u);
   assert.doesNotMatch(shellSource, /data-plugin-inventory-debug/u);
   assert.match(panelSource, /import \{ Portal \} from 'solid-js\/web'/u);
