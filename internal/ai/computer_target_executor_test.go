@@ -45,6 +45,26 @@ done
 	return executor
 }
 
+func TestPlaywrightTargetReadinessRejectsProfileTraversal(t *testing.T) {
+	for _, targetID := range []string{"../outside", ".", "..", `other\profile`, " "} {
+		t.Run(targetID, func(t *testing.T) {
+			executor := newPlaywrightProtocolFixture(t)
+			root := t.TempDir()
+			executor.ProfileDir = filepath.Join(root, "profiles")
+			if err := executor.EnsureTargetReady(t.Context(), targetID); err == nil {
+				t.Error("readiness accepted an invalid target identity")
+			}
+			entries, err := os.ReadDir(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 || len(executor.clients) != 0 {
+				t.Fatal("invalid target readiness created profile state or a helper")
+			}
+		})
+	}
+}
+
 func TestPlaywrightTargetExecutorInterruptedSessionIsReaped(t *testing.T) {
 	for _, cause := range []string{"cancel", "timeout"} {
 		t.Run(cause, func(t *testing.T) {

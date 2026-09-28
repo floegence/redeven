@@ -150,12 +150,6 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 		return TargetToolResult{}, errors.New("browser target helper is unavailable")
 	}
 	targetID := strings.TrimSpace(call.TargetID)
-	if targetID == "" {
-		return TargetToolResult{}, errors.New("target_id is required")
-	}
-	if strings.ContainsAny(targetID, `/\\`) || targetID == "." || targetID == ".." {
-		return TargetToolResult{}, errors.New("invalid target_id")
-	}
 	args := map[string]any{}
 	if len(call.Arguments) > 0 && string(call.Arguments) != "null" {
 		if err := json.Unmarshal(call.Arguments, &args); err != nil {
@@ -255,6 +249,12 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 }
 
 func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID string) (*playwrightTargetClient, error) {
+	if strings.TrimSpace(targetID) == "" {
+		return nil, errors.New("target_id is required")
+	}
+	if strings.ContainsAny(targetID, `/\\`) || targetID == "." || targetID == ".." {
+		return nil, errors.New("invalid target_id")
+	}
 	if client := e.clients[targetID]; client != nil {
 		if client.host != nil {
 			if err := client.host.call(ctx, "source.ready", map[string]string{"target": targetID}, nil); err != nil {
