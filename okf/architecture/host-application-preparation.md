@@ -111,6 +111,9 @@ process leases and separate cache/download/transfer presentation.
 ## Window and permission interaction
 
 Selecting an unavailable application presents preparation for that actual app.
+When preparation completes, invalidate the previous launch-capability snapshot
+before refreshing the catalog. An in-flight session-only refresh must not reuse
+the old unavailable state or prevent the pending window from opening once.
 The confirming click reserves its physical Desktop window or browser popup before
 acquisition. The inert view shows the original icon, concise stage copy, real
 progress and reduced-motion support. Successful qualification refreshes metadata

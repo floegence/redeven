@@ -259,6 +259,26 @@ it('reserves one physical window and continues there after verified preparation'
  expect(state.launch).toHaveBeenCalledTimes(1);
  expect(state.open.mock.calls[0].at(-1)).toBe('preparation-window');
 });
+it('revalidates launch readiness when preparation completes during a session-only refresh', async () => {
+ let poll!: () => void;
+ vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+ const interval = window.setInterval.bind(window);
+ vi.spyOn(window, 'setInterval').mockImplementation((callback, timeout) => {
+  if (timeout === 8000) poll = callback as () => void;
+  return interval(callback, timeout) as unknown as ReturnType<typeof globalThis.setInterval>;
+ });
+ requireSetup(); await selectAndPrepare();
+ let resolveSessions!: (value: unknown[]) => void;
+ state.sessions.mockReturnValueOnce(new Promise(resolve => { resolveSessions = resolve; }));
+ poll(); await settle();
+ expect(resolveSessions).toBeTypeOf('function');
+ state.catalog.mockResolvedValue({ availability: { backend: 'wayland', supported: true, ready: true }, applications: [app], sessions: [] });
+ state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 });
+ resolveSessions([]); await settle();
+ expect(state.launch).toHaveBeenCalledTimes(1);
+ expect(controlText(host)).not.toContain('Prepare host applications');
+ expect(state.open.mock.calls[0].at(-1)).toBe('preparation-window');
+});
 it('does not launch after the reserved window is closed during preparation', async () => {
  requireSetup(); await selectAndPrepare();
  state.preparation.mockResolvedValue({ ok: false });
