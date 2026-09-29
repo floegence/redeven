@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
-import { Download, Layers, Plus, Refresh, Search } from '@floegence/floe-webapp-core/icons';
+import { Download, Plus, Refresh, Search, Wand } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Select, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog, Dialog } from '@floegence/floe-webapp-core/ui';
 import { SettingsSection, FieldLabel } from './primitives';
@@ -164,7 +164,7 @@ export function SkillsSection() {
         <div class="flower-extension-section-body">
           <Show when={!skillsCatalog() && skillsError()}><Button size="sm" variant="outline" disabled={!ctx.canInteract() || catalogBusy()} onClick={() => void refreshSkillsCatalog()}>{i18n.t('common.actions.retry')}</Button></Show>
           <Show when={skillsCatalog()?.skills.length === 0}>
-            <div class="flower-extension-empty"><span class="flower-extension-empty-icon"><Layers class="h-6 w-6" /></span><h3>{i18n.t('skillEmpty')}</h3><p>{i18n.t('skillEmptyHint')}</p></div>
+            <div class="flower-extension-empty"><span class="flower-extension-empty-icon"><Wand class="h-6 w-6" aria-hidden="true" /></span><h3>{i18n.t('skillEmpty')}</h3><p>{i18n.t('skillEmptyHint')}</p></div>
           </Show>
           <Show when={skillsCatalog()?.skills.length !== 0}>
           <div class="flower-extension-toolbar">

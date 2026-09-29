@@ -144,6 +144,9 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     MoreHorizontal: Icon,
     Link: actual.Link,
     Layers: actual.Layers,
+    Wand: actual.Wand,
+    Workflow: actual.Workflow,
+    Zap: actual.Zap,
     MonitorPointer: actual.MonitorPointer,
     Paperclip: Icon,
     Pencil: Icon,
@@ -160,7 +163,6 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     Trash: Icon,
     X: Icon,
     XCircle: Icon,
-    Zap: Icon,
   };
 });
 

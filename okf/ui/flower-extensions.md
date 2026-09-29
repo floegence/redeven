@@ -23,6 +23,10 @@ hidden panels are inert. Thread selection and New chat return to conversation
 without reconnecting the workspace transport. The shared Floe components own
 inputs, dialogs, focus treatment, and floating placement. Dialog guidance lives
 in the body, and actions reflow as whole controls at narrow widths.
+The navigation glyph identifies Flower capabilities; Skills uses a wand for
+reusable AI instructions and MCP uses a workflow graph for external tool
+connections. These three glyphs remain distinct, and each tab's empty state
+repeats its own glyph. Icon-only controls retain their accessible names.
 
 The catalog uses a compact divided list. A desktop row keeps its name and
 single-line description beside aligned metadata, browse/edit, an action menu,

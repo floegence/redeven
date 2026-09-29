@@ -79,6 +79,14 @@ describe('FlowerSurface navigation', () => {
     entry.click();
     await waitFor(() => Boolean(runtime.querySelector('[data-testid="flower-extensions"]')));
     expect(entry.getAttribute('aria-current')).toBe('page');
+    const iconDrawing = (element: Element | null) => element?.querySelector('svg')?.innerHTML;
+    const navigationIcons = [
+      iconDrawing(entry),
+      iconDrawing(runtime.querySelector('[role="tab"][id$="-skills-tab"]')),
+      iconDrawing(runtime.querySelector('[role="tab"][id$="-mcp-tab"]')),
+    ];
+    expect(navigationIcons.every(Boolean)).toBe(true);
+    expect(new Set(navigationIcons).size).toBe(3);
     const mcpTab = runtime.querySelector<HTMLButtonElement>('[role="tab"][id$="-mcp-tab"]')!;
     mcpTab.click();
     await waitFor(() => request.mock.calls.some(([, path]) => path.endsWith('/mcp')));
