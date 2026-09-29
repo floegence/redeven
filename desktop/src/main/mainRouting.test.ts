@@ -985,7 +985,7 @@ describe('main routing', () => {
     expect(openSSHSrc).toContain('return bridgeOpenResult;');
     expect(openSSHSrc).not.toContain('sshRuntimeReadyByKey');
     expect(openSSHSrc).not.toContain('probeManagedSSHRuntimeStatus');
-    expect(mainSrc).toContain('if (!sessionRecord.env_app_ready) {');
+    expect(mainSrc).toContain('if (!sessionRecord.env_app_ready ||');
     expect(mainSrc).not.toContain('desktop_model_source_settled');
     expect(mainSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
     expect(mainSrc).toContain("'environment_open_timing'");
@@ -1914,7 +1914,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain('details.resourceType');
     expect(mainSrc).toMatch(/\{\s*channel: 'http_status',\s*label: 'HTTP status',\s*text: String\(details\.statusCode\),?\s*\}/u);
     expect(mainSrc).toContain('const entryURL = transport.entryURL;');
-    expect(mainSrc).toContain('const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics');
+    expect(mainSrc).toContain(
+      'const rootWindow = options.reuseSessionWindow?.root_window ?? createSessionRootWindow(target.session_key, entryURL, diagnostics, {',
+    );
     expect(mainSrc).toContain(
       'const safeAllowedBaseURL = stripSensitiveURLPayload(transport.allowedBaseURL) || transport.allowedBaseURL;',
     );
@@ -1928,7 +1930,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('startup: rendererSafeStartupReport(session.startup)');
     expect(mainSrc).toContain("url.search = '';");
     expect(mainSrc).toContain("url.hash = '';");
-    expect(mainSrc).toContain('void rootWindow.browserWindow.loadURL(entryURL);');
+    expect(mainSrc).toContain('void rootWindow.browserWindow.loadURL(entryURL).catch(');
   });
 
   it('saves Local Environment settings without exposing deletion or extra local records', () => {
