@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.13.7",
-    "previous_release": "v0.13.6",
+    "release_version": "v0.13.8",
+    "previous_release": "v0.13.7",
     "reviewed_at": "2026-09-29",
     "review_id": "release-candidate-release-workflow-v1",
     "summary": "Retain Runtime Service protocol and compatibility epoch 34 while restricting Desktop artifact upload to the exact release inventory.",

@@ -56,10 +56,10 @@ addon="$app_bundle/Contents/Resources/native/redeven_sparkle.node"
 
 expected_machine=$arch
 if [[ "$arch" == "x64" ]]; then expected_machine=x86_64; fi
-file "$addon" | rg -q "${expected_machine}"
+file "$addon" | grep -F "${expected_machine}" >/dev/null
 lipo -verify_arch "$expected_machine" "$framework/Versions/Current/Sparkle"
-otool -L "$addon" | rg -q '@rpath/Sparkle\.framework/Versions/B/Sparkle'
-otool -l "$addon" | rg -q '@loader_path/\.\./\.\./Frameworks'
+otool -L "$addon" | grep -F '@rpath/Sparkle.framework/Versions/B/Sparkle' >/dev/null
+otool -l "$addon" | grep -F '@loader_path/../../Frameworks' >/dev/null
 
 plist_value() {
   plutil -extract "$1" raw -o - "$info_plist"
@@ -80,14 +80,14 @@ codesign --verify --deep --strict --verbose=2 "$app_bundle"
 codesign --verify --strict --verbose=2 "$dmg"
 for signed_path in "$app_bundle" "$framework" "$addon" "$dmg"; do
   signature_info=$(codesign -dv --verbose=4 "$signed_path" 2>&1)
-  team_id=$(sed -n 's/^TeamIdentifier=//p' <<<"$signature_info" | head -n 1)
+  team_id=$(sed -n 's/^TeamIdentifier=//p' <<<"$signature_info")
   [[ "$team_id" == "$expected_team_id" ]] || {
     echo "Desktop package Team ID does not match the protected release configuration." >&2
     exit 1
   }
 done
 app_signature_info=$(codesign -dv --verbose=4 "$app_bundle" 2>&1)
-rg -q 'flags=.*runtime' <<<"$app_signature_info"
+grep -E 'flags=.*runtime' <<<"$app_signature_info" >/dev/null
 
 xcrun stapler validate "$app_bundle"
 xcrun stapler validate "$dmg"
