@@ -42,6 +42,14 @@ async function waitFor<T>(read: () => T | null | undefined, timeoutMs = 2_000): 
   throw new Error('Timed out waiting for browser state');
 }
 
+function waitForVisibleTooltip(): Promise<HTMLElement> {
+  return waitFor(() => {
+    const tooltip = document.body.querySelector<HTMLElement>('[role="tooltip"]');
+    // The tooltip mounts hidden until its animation-frame position is ready.
+    return tooltip && getComputedStyle(tooltip).visibility === 'visible' ? tooltip : null;
+  });
+}
+
 function applyTheme(name: 'classic-light' | 'classic-dark'): void {
   const dark = name === 'classic-dark';
   document.documentElement.classList.toggle('dark', dark);
@@ -104,7 +112,7 @@ describe('Environment Runtime tooltip browser presentation', () => {
       expect(trigger.textContent).not.toContain('env_local');
       trigger.focus();
       await userEvent.keyboard('{Enter}');
-      const tooltip = await waitFor(() => document.body.querySelector<HTMLElement>('[role="tooltip"]'));
+      const tooltip = await waitForVisibleTooltip();
       expect(tooltip.textContent).toContain('env_local');
       expect(tooltip.textContent).toContain('Local');
       await userEvent.hover(document.body);
@@ -123,7 +131,7 @@ describe('Environment Runtime tooltip browser presentation', () => {
     try {
       const trigger = runtime.host.querySelector<HTMLElement>('[data-environment-runtime-trigger]')!;
       await userEvent.hover(trigger);
-      const tooltip = await waitFor(() => document.body.querySelector<HTMLElement>('[role="tooltip"]'));
+      const tooltip = await waitForVisibleTooltip();
       const triggerRect = trigger.getBoundingClientRect();
       const tooltipRect = tooltip.getBoundingClientRect();
       const activityBarRect = runtime.activityBar.getBoundingClientRect();
@@ -154,7 +162,7 @@ describe('Environment Runtime tooltip browser presentation', () => {
     try {
       const trigger = runtime.host.querySelector<HTMLElement>('[data-environment-runtime-trigger]')!;
       await userEvent.hover(trigger);
-      const tooltip = await waitFor(() => document.body.querySelector<HTMLElement>('[role="tooltip"]'));
+      const tooltip = await waitForVisibleTooltip();
       const tooltipRect = tooltip.getBoundingClientRect();
       const activityBarRect = runtime.activityBar.getBoundingClientRect();
       const name = tooltip.querySelector<HTMLElement>('.environment-runtime-tooltip-name')!;
