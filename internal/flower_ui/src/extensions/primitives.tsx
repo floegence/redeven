@@ -19,7 +19,7 @@ export function SettingsPill(props: { tone?: string; children: string }) {
   return <span class="flower-extension-status" data-tone={props.tone} title={props.children}><span>{props.children}</span></span>;
 }
 export function SettingsList(props: { children: JSX.Element }) { return <div class="flower-extension-list">{props.children}</div>; }
-export function SettingRow(props: { title: string; description: string; metadata: JSX.Element; control: JSX.Element; children: JSX.Element }) {
+export function SettingRow(props: { title: string; description: string; icon: JSX.Element; metadata: JSX.Element; control: JSX.Element; children: JSX.Element }) {
   const { i18n } = useFlowerExtensions();
   const [expanded, setExpanded] = createSignal(false);
   const id = createUniqueId();
@@ -28,7 +28,7 @@ export function SettingRow(props: { title: string; description: string; metadata
       <Button class="flower-extension-disclosure" size="icon" variant="ghost" icon={ChevronRight}
         aria-label={i18n.t('details', { name: props.title })} title={i18n.t('details', { name: props.title })}
         aria-expanded={expanded()} aria-controls={id} onClick={() => setExpanded(value => !value)} />
-      <div class="flower-extension-identity"><h3 title={props.title}>{props.title}</h3><p title={props.description}>{props.description}</p></div>
+      <div class="flower-extension-identity">{props.icon}<div class="flower-extension-identity-copy"><h3 title={props.title}>{props.title}</h3><p title={props.description}>{props.description}</p></div></div>
       <div class="flower-extension-meta">{props.metadata}</div>
       <div class="flower-extension-row-control">{props.control}</div>
     </div>

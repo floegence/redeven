@@ -42,6 +42,7 @@ type MCPServerInput struct {
 
 type mcpServerRecord struct {
 	MCPServerInput
+	Icons     []ExtensionIcon `json:"icons,omitempty"`
 	Tools     []mcpToolRecord `json:"tools"`
 	CheckedAt int64           `json:"checked_at"`
 }
@@ -51,6 +52,7 @@ type mcpToolRecord struct {
 	Schema      json.RawMessage `json:"schema"`
 }
 type MCPServerView struct {
+	Icons      []ExtensionIcon `json:"icons,omitempty"`
 	ID         string          `json:"id"`
 	Revision   int64           `json:"revision"`
 	Name       string          `json:"name"`
@@ -96,21 +98,55 @@ func openMCPManager(stateDir string) (*mcpManager, error) {
 	if len(data) > 4<<20 {
 		return nil, errors.New("MCP configuration exceeds size limit")
 	}
+	var version struct {
+		SchemaVersion int `json:"schema_version"`
+	}
+	if json.Unmarshal(data, &version) != nil || (version.SchemaVersion != 1 && version.SchemaVersion != 2) {
+		return nil, errors.New("unsupported MCP configuration; original file preserved")
+	}
 	var store mcpStore
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&store); err != nil {
+	var decodeErr error
+	if version.SchemaVersion == 1 {
+		// Keep the exact v1 shape frozen: presentation fields belong only to v2.
+		var legacy struct {
+			SchemaVersion int   `json:"schema_version"`
+			Revision      int64 `json:"revision"`
+			Servers       []struct {
+				MCPServerInput
+				Tools     []mcpToolRecord `json:"tools"`
+				CheckedAt int64           `json:"checked_at"`
+			} `json:"servers"`
+		}
+		decodeErr = decoder.Decode(&legacy)
+		store.SchemaVersion, store.Revision = legacy.SchemaVersion, legacy.Revision
+		if legacy.Servers != nil {
+			store.Servers = make([]mcpServerRecord, 0, len(legacy.Servers))
+			for _, entry := range legacy.Servers {
+				store.Servers = append(store.Servers, mcpServerRecord{MCPServerInput: entry.MCPServerInput, Tools: entry.Tools, CheckedAt: entry.CheckedAt})
+			}
+		}
+	} else {
+		decodeErr = decoder.Decode(&store)
+	}
+	if decodeErr != nil {
 		return nil, errors.New("invalid MCP configuration; original file preserved")
 	}
-	if decoder.Decode(&struct{}{}) != io.EOF || store.SchemaVersion != 1 || store.Revision < 1 || store.Servers == nil || len(store.Servers) > 32 {
+	if decoder.Decode(&struct{}{}) != io.EOF || store.Revision < 1 || store.Servers == nil || len(store.Servers) > 32 {
 		return nil, errors.New("unsupported MCP configuration; original file preserved")
 	}
 	seen := map[string]bool{}
 	for _, entry := range store.Servers {
-		if err := validateMCPServer(entry.MCPServerInput); err != nil || entry.Revision < 1 || entry.Revision > store.Revision || entry.CheckedAt < 0 || entry.Tools == nil || seen[entry.ID] || validateMCPTools(entry.Tools) != nil {
+		if err := validateMCPServer(entry.MCPServerInput); err != nil || entry.Revision < 1 || entry.Revision > store.Revision || entry.CheckedAt < 0 || entry.Tools == nil || seen[entry.ID] || validateMCPTools(entry.Tools) != nil || !validMCPCatalogIcons(entry.Icons) {
 			return nil, errors.New("invalid MCP configuration; original file preserved")
 		}
 		seen[entry.ID] = true
+	}
+	if store.SchemaVersion == 1 {
+		if err := m.persistRevision(store.Servers, store.Revision); err != nil {
+			return nil, fmt.Errorf("upgrade MCP configuration: %w", err)
+		}
 	}
 	m.servers = store.Servers
 	m.revision = store.Revision
@@ -190,7 +226,7 @@ func (m *mcpManager) List() MCPCatalog {
 			env = append(env, key)
 		}
 		sort.Strings(env)
-		out.Servers = append(out.Servers, MCPServerView{ID: entry.ID, Revision: entry.Revision, Name: entry.Name, Transport: entry.Transport, URL: entry.URL, Command: entry.Command, Args: append([]string{}, entry.Args...), HeaderKeys: headers, EnvKeys: env, Enabled: entry.Enabled, Tools: append([]mcpToolRecord{}, entry.Tools...), CheckedAt: entry.CheckedAt})
+		out.Servers = append(out.Servers, MCPServerView{ID: entry.ID, Revision: entry.Revision, Name: entry.Name, Transport: entry.Transport, URL: entry.URL, Command: entry.Command, Args: append([]string{}, entry.Args...), HeaderKeys: headers, EnvKeys: env, Enabled: entry.Enabled, Tools: append([]mcpToolRecord{}, entry.Tools...), CheckedAt: entry.CheckedAt, Icons: append([]ExtensionIcon(nil), entry.Icons...)})
 	}
 	return out
 }
@@ -268,9 +304,13 @@ func (m *mcpManager) Save(ctx context.Context, input MCPServerInput) (MCPCatalog
 		if err := validateMCPTools(next.Tools); err != nil {
 			return MCPCatalog{}, err
 		}
+		if initialized := session.InitializeResult(); initialized != nil && initialized.ServerInfo != nil {
+			next.Icons = mcpCatalogIcons(probeCtx, input, initialized.ServerInfo.Icons)
+		}
 		next.CheckedAt = time.Now().UnixMilli()
 	} else if previous != nil && sameMCPConnection(input, previous.MCPServerInput) {
 		next.Tools = previous.Tools
+		next.Icons = previous.Icons
 		next.CheckedAt = previous.CheckedAt
 	}
 	m.mu.Lock()
@@ -356,7 +396,11 @@ func (m *mcpManager) Delete(id string, revision int64) error {
 }
 
 func (m *mcpManager) persist(entries []mcpServerRecord) error {
-	data, err := json.MarshalIndent(mcpStore{SchemaVersion: 1, Revision: m.revision + 1, Servers: entries}, "", "  ")
+	return m.persistRevision(entries, m.revision+1)
+}
+
+func (m *mcpManager) persistRevision(entries []mcpServerRecord, revision int64) error {
+	data, err := json.MarshalIndent(mcpStore{SchemaVersion: 2, Revision: revision, Servers: entries}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -386,7 +430,7 @@ func (m *mcpManager) persist(entries []mcpServerRecord) error {
 		return err
 	}
 	m.servers = entries
-	m.revision++
+	m.revision = revision
 	return nil
 }
 

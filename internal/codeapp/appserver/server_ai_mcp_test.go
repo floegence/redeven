@@ -1,6 +1,8 @@
 package appserver
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestMCPManagementRoutes(t *testing.T) {
@@ -71,5 +74,18 @@ func TestMCPManagementRoutes(t *testing.T) {
 	response = request(admin, http.MethodDelete, base, `{"id":"workspace","revision":1}`, envOriginWithChannel(channel))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"servers":[]`) {
 		t.Fatalf("delete = %d: %s", response.Code, response.Body)
+	}
+	icon := "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12"/></svg>`))
+	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "icons", Version: "1", Icons: []mcp.Icon{{Source: icon}}}, nil)
+	upstream := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, &mcp.StreamableHTTPOptions{Stateless: true}))
+	defer upstream.Close()
+	payload, _ := json.Marshal(ai.MCPServerInput{ID: "icons", Name: "Icon server", Transport: "http", URL: upstream.URL, Enabled: true})
+	response = request(admin, http.MethodPut, base, string(payload), envOriginWithChannel(channel))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), icon) {
+		t.Fatalf("save omitted discovered icon: %d: %s", response.Code, response.Body)
+	}
+	response = request(reader, http.MethodGet, base, "", envOriginWithChannel(channel))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), icon) {
+		t.Fatalf("reader catalog omitted discovered icon: %d: %s", response.Code, response.Body)
 	}
 }

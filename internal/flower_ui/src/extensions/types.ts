@@ -1,3 +1,5 @@
+export type ExtensionIconSource = Readonly<{ src: string; theme?: 'light' | 'dark' }>;
+
 export type SkillCatalogNotice = Readonly<{
   name?: string;
   path?: string;
@@ -7,6 +9,7 @@ export type SkillCatalogNotice = Readonly<{
 
 export type SkillCatalogEntry = Readonly<{
   id: string;
+  icons?: readonly ExtensionIconSource[];
   name: string;
   description: string;
   path: string;
@@ -142,6 +145,7 @@ export type MCPServerInput = MCPServerIdentity & Readonly<{
   headers?: Record<string, string>; env?: Record<string, string>;
 }>;
 export type MCPServer = Readonly<{
+  icons?: readonly ExtensionIconSource[];
   id: string; revision: number; name: string; transport: 'stdio' | 'http';
   url?: string; command?: string; args?: string[];
   header_keys: string[]; env_keys: string[]; enabled: boolean;

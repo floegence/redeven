@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -15,6 +17,105 @@ import (
 	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// A literal fixture freezes the supported pre-icon configuration shape.
+const mcpV1Configuration = `{"schema_version":1,"revision":7,"servers":[{"id":"private","revision":5,"name":"Private tools","transport":"http","url":"https://example.com/mcp","headers":{"Authorization":"private-token"},"enabled":true,"tools":[{"name":"lookup","description":"Look up an item","schema":{"type":"object"}}],"checked_at":1780000000000},{"id":"local","revision":7,"name":"Local tools","transport":"stdio","command":"fixture","args":["--tools"],"env":{"KEY":"private-env"},"enabled":false,"tools":[],"checked_at":0}]}`
+
+func TestMCPIconSchemaUpgradePreservesConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ai", "mcp.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(mcpV1Configuration), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var original mcpStore
+	if err := json.Unmarshal([]byte(mcpV1Configuration), &original); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := openMCPManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manager.revision != original.Revision || !reflect.DeepEqual(manager.servers, original.Servers) {
+		t.Fatal("migration changed revisions, secrets, enablement, tools, or timestamps")
+	}
+	tool := original.Servers[0].Tools[0]
+	if manager.Tools()[0].Name != mcpToolName(original.Servers[0], tool) {
+		t.Fatal("migration changed tool identity")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var upgraded mcpStore
+	if json.Unmarshal(data, &upgraded) != nil || upgraded.SchemaVersion != 2 {
+		t.Fatal("migration did not persist schema version 2")
+	}
+	if _, err := openMCPManager(dir); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(path)
+	if !bytes.Equal(after, data) {
+		t.Fatal("opening current configuration rewrote the file")
+	}
+	info, _ := os.Stat(path)
+	if info.Mode().Perm() != 0600 {
+		t.Fatal("migration did not retain private file permissions")
+	}
+}
+
+func TestMCPIconSchemaRejectsDriftReadOnly(t *testing.T) {
+	for _, fixture := range []string{
+		strings.Replace(mcpV1Configuration, `"tools":[]`, `"tools":[],"icons":[]`, 1),
+		strings.Replace(mcpV1Configuration, `"checked_at":0`, `"checked_at":-1`, 1),
+		strings.Replace(mcpV1Configuration, `"schema_version":1`, `"schema_version":3`, 1),
+		strings.Replace(strings.Replace(mcpV1Configuration, `"schema_version":1`, `"schema_version":2`, 1), `"tools":[]`, `"tools":[],"icons":[{"src":"https://example.com/icon.svg"}]`, 1),
+	} {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "ai", "mcp.json")
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(fixture), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := openMCPManager(dir); err == nil {
+			t.Fatal("drifted, unsafe, or future configuration accepted")
+		}
+		after, _ := os.ReadFile(path)
+		if string(after) != fixture {
+			t.Fatal("rejected configuration was modified")
+		}
+	}
+}
+
+func TestMCPIconSchemaUpgradeWriteFailurePreservesOriginal(t *testing.T) {
+	if os.Geteuid() <= 0 {
+		t.Skip("requires an unprivileged POSIX user for a real filesystem write denial")
+	}
+	dir := t.TempDir()
+	parent := filepath.Join(dir, "ai")
+	path := filepath.Join(parent, "mcp.json")
+	if err := os.Mkdir(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(mcpV1Configuration), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(parent, 0500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(parent, 0700)
+	if manager, err := openMCPManager(dir); err == nil || manager != nil {
+		t.Fatal("failed migration started the manager")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != mcpV1Configuration {
+		t.Fatal("failed migration changed the original file")
+	}
+}
 
 func TestMCPDisableDuringConnectionPreventsDispatch(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "fixture", Version: "1"}, nil)

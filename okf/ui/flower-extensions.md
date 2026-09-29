@@ -38,6 +38,28 @@ explain their next action, loading has a status, and failures remain actionable.
 Both carriers resolve explicit copy for every shipped locale, including plural
 counts and locale-aware check timestamps.
 
+# Entry icons
+
+Every skill and MCP row reserves a 32px icon beside its name without increasing
+row height. A supplied icon takes precedence; unavailable, unsupported, or broken
+images fall back to a name-derived monogram with a deterministic identity color.
+Filtering, sorting, and reloads do not randomize that identity. Supplied theme
+variants follow the product's resolved light/dark theme; an unthemed image works
+in either mode. A variant for the opposite theme is not substituted blindly.
+Icons are decorative, retain the adjacent accessible name, and never become
+interactive targets or inline untrusted SVG markup.
+
+Installed skills may declare `interface.icon_small` and `interface.icon_large`
+in `agents/openai.yaml`. Paths are relative to the skill root; a valid small icon
+is preferred, then the large icon. Reads remain inside an OS-enforced skill root,
+including symlink resolution. Metadata is limited to 32 KiB and image bytes to
+64 KiB. PNG, JPEG, GIF, and SVG are supported; raster dimensions are bounded to
+2048px per axis. Invalid metadata does not prevent skill discovery or activation.
+System skills without packaged artwork receive the same generated identity.
+Catalog DTOs carry self-contained image data; model-facing skill metadata does
+not carry images. MCP discovery and persistence follow
+[the runtime icon contract](../ai/mcp-runtime.md#presentation-icons).
+
 # Skills
 
 Catalog and source metadata load once the connection is usable. Search and
@@ -84,8 +106,12 @@ dependency matching, and execution authorization.
 - `internal/flower_ui/src/extensions/FlowerExtensionsSurface.tsx` and
   `internal/flower_ui/src/extensions/extensions.css` own retained tabs and layout.
 - `internal/flower_ui/host/extensionsAdapter.ts` maps typed management actions.
+- `internal/flower_ui/src/extensions/ExtensionIcon.tsx` owns supplied-image
+  selection, reactive themes, load-error fallback, and stable monograms.
+- `internal/ai/extension_icons_test.go` checks package metadata, containment,
+  bounded image normalization, and exclusion from model-facing metadata.
 - `internal/envapp/ui_src/src/ui/flower/FlowerExtensions.browser.test.tsx` checks
-  light/dark, narrow layouts, large-library density, disclosure, action menus,
+  light/dark icons and fallback, narrow layouts, large-library density, disclosure, action menus,
   keyboard tabs, dialogs, and reader permissions.
 - `internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` checks draft
   continuity and New chat navigation.
