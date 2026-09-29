@@ -142,13 +142,15 @@ test('checks every semantic frame boundary before visual sampling', () => {
   assert.match(carrierSource, /waitForViewsToConverge/u);
 });
 
-test('collects every semantic multi-view sample before enforcing the aggregate p95 limit', () => {
+test('measures semantic multi-view interaction in Chromium before enforcing the aggregate p95 limit', () => {
   assert.match(carrierSource, /const multiViewSamples = \[\];/u);
   assert.match(carrierSource, /carrierProgress\.multiViewSamples\.push\(sample\)/u);
   assert.match(
     carrierSource,
-    /const activityRuntime = await activateSession\(activity, sessionID\);[\s\S]*?const started = performance\.now\(\);[\s\S]*?const workbenchRuntime = await activateSession\(workbench, sessionID\);/u,
+    /const activityRuntime = await activateSession\(activity, sessionID\);[\s\S]*?const onClick = \(\) => \{\s*const started = performance\.now\(\);[\s\S]*?tab\.addEventListener\('click', onClick,[\s\S]*?const workbenchRuntime = await activateSession\(workbench, sessionID\);/u,
   );
+  assert.match(carrierSource, /const interactiveMs = browserProbe\.interactive_ms;/u);
+  assert.match(carrierSource, /driver_elapsed_ms: driverElapsedMs/u);
   assert.match(
     carrierSource,
     /sendTerminalCommand\(page, `printf ok > \$\{shellQuote\(markerPath\)\}`, workbenchRuntime\)/u,

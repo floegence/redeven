@@ -1161,11 +1161,84 @@ async function runMultiViewSample({ context, entryURL, sessionID, tempDir, sampl
     const activity = await selectSurface(page, 'panel');
     const activityRuntime = await activateSession(activity, sessionID);
     const sourceTrace = await runtimeTrace(activityRuntime);
-    const started = performance.now();
+    // Measure the product transition in Chromium; Playwright round trips are
+    // observed separately because they vary with host scheduling.
+    await page.getByRole('tab', { name: 'Workbench', exact: true }).evaluate((tab, id) => {
+      globalThis.__redevenTerminalMultiViewProbe = new Promise((resolve) => {
+        let observer;
+        let finished = false;
+        const finish = (result) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timeout);
+          observer?.disconnect();
+          tab.removeEventListener('click', onClick, true);
+          resolve(result);
+        };
+        const onClick = () => {
+          const started = performance.now();
+          const numeric = (view, name) => Number(view.getAttribute(name));
+          const check = () => {
+            const views = [...document.querySelectorAll(`[data-terminal-runtime-session="${id}"]`)];
+            const workbench = views.find((view) => view.closest('[data-terminal-panel-variant="workbench"]'));
+            if (views.length !== 2 || !workbench || workbench.getAttribute('data-terminal-is-controller') !== 'true') return;
+            const canvas = workbench.querySelector('[data-terminal-semantic-canvas="true"]');
+            const host = canvas?.parentElement;
+            const cellWidth = Number(canvas?.dataset.terminalCellWidth);
+            const cellHeight = Number(canvas?.dataset.terminalCellHeight);
+            if (!host || !cellWidth || !cellHeight) return;
+            const cols = Math.max(2, Math.min(500, Math.floor(host.clientWidth / cellWidth)));
+            const rows = Math.max(1, Math.min(200, Math.floor(host.clientHeight / cellHeight)));
+            if (numeric(workbench, 'data-terminal-geometry-cols') !== cols
+              || numeric(workbench, 'data-terminal-geometry-rows') !== rows
+              || numeric(workbench, 'data-terminal-frame-cols') !== cols
+              || numeric(workbench, 'data-terminal-frame-rows') !== rows) return;
+            const snapshot = (view) => [
+              'data-terminal-presentation-sequence',
+              'data-terminal-content-epoch',
+              'data-terminal-frame-cols',
+              'data-terminal-frame-rows',
+            ].map((name) => view.getAttribute(name)).join(':');
+            if (snapshot(views[0]) !== snapshot(views[1])
+              || numeric(workbench, 'data-terminal-presentation-sequence') <= 0) return;
+            finish({ interactive_ms: performance.now() - started });
+          };
+          observer = new MutationObserver(check);
+          observer.observe(document.body, {
+            subtree: true,
+            attributes: true,
+            attributeFilter: [
+              'data-terminal-is-controller',
+              'data-terminal-geometry-cols',
+              'data-terminal-geometry-rows',
+              'data-terminal-frame-cols',
+              'data-terminal-frame-rows',
+              'data-terminal-presentation-sequence',
+              'data-terminal-content-epoch',
+            ],
+          });
+          check();
+        };
+        const timeout = setTimeout(() => finish({ error: 'browser-native terminal switch did not converge' }), 15_000);
+        tab.addEventListener('click', onClick, { capture: true, once: true });
+      });
+    }, sessionID);
+    const driverStarted = performance.now();
     const workbench = await selectSurface(page, 'workbench');
     const workbenchRuntime = await activateSession(workbench, sessionID);
     const converged = await waitForViewsToConverge(page, sessionID);
-    const interactiveMs = performance.now() - started;
+    const driverElapsedMs = performance.now() - driverStarted;
+    const browserProbe = await page.evaluate(async () => {
+      const probe = globalThis.__redevenTerminalMultiViewProbe;
+      delete globalThis.__redevenTerminalMultiViewProbe;
+      if (!probe) throw new Error('browser-native terminal switch was not observed');
+      return probe;
+    });
+    if (browserProbe.error) throw new Error(browserProbe.error);
+    const interactiveMs = browserProbe.interactive_ms;
+    if (!Number.isFinite(interactiveMs) || interactiveMs < 0) {
+      throw new Error('browser-native terminal switch returned an invalid duration');
+    }
     const markerName = terminalCarrierSampleMarkerName('semantic-multi-view-input', sampleIndex);
     const markerPath = path.join(tempDir, markerName);
     const beforeSequence = converged[0].sequence;
@@ -1177,6 +1250,7 @@ async function runMultiViewSample({ context, entryURL, sessionID, tempDir, sampl
       status: 'passed',
       sample_index: sampleIndex,
       interactive_ms: interactiveMs,
+      driver_elapsed_ms: driverElapsedMs,
       source_sequence: sourceTrace.sequence,
       input_marker: markerName,
       before_sequence: beforeSequence,
