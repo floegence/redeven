@@ -309,8 +309,14 @@ notarization, Sparkle Ed25519, and expected Team ID secrets without committing
 their values. Packaged Desktop builds inject only a credential-free HTTPS feed
 URL and the Sparkle public key. macOS packages are checked for the Sparkle
 framework, native bridge, architecture, hardened runtime, notarization, and
-stapling. Linux packages publish matching `latest-linux.yml` metadata for each
-architecture.
+stapling. Electron Builder signs and notarizes the App, then signs the final
+DMG. The hosted Desktop job submits that exact disk image to Apple, requires an
+`Accepted` result within its bounded wait, and staples and validates its ticket
+before installer receipts or Sparkle metadata are generated. Verification binds
+the App, framework, bridge, and DMG to the expected Team ID, validates both
+stapled tickets, and uses `syspolicy_check distribution` on the native macOS
+release runner for the App's Gatekeeper assessment. Linux packages publish
+matching `latest-linux.yml` metadata for each architecture.
 
 Stable tags run a macOS Sparkle job that generates two appcasts with no delta
 packages, signs the appcasts and release notes, verifies their enclosure and

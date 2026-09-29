@@ -373,6 +373,32 @@ jobs:
           APPLE_API_ISSUER="${apple_api_issuer}" \
           npm run package -- ${{ matrix.builder_args }}
 
+      - name: Notarize macOS disk image
+        if: matrix.goos == 'darwin'
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          arch=x64
+          if [[ "${{ matrix.goarch }}" == arm64 ]]; then arch=arm64; fi
+          dmg="desktop/release/Redeven-Desktop-${version}-mac-${arch}.dmg"
+          result="${RUNNER_TEMP}/redeven-dmg-notarization.json"
+          codesign --verify --strict --verbose=2 "$dmg"
+          xcrun notarytool submit "$dmg" \
+            --key "$REDEVEN_DESKTOP_MAC_NOTARY_KEY_PATH" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait --timeout 20m --output-format json > "$result"
+          if [[ "$(jq -r '.status' "$result")" != Accepted ]]; then
+            cat "$result" >&2
+            echo "Apple did not accept the Desktop disk image notarization." >&2
+            exit 1
+          fi
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+
       - name: Install Linux installer inspection tools
         if: matrix.goos == 'linux'
         run: |

@@ -227,6 +227,9 @@ export default {
     icon: path.join(buildResourcesDir, 'icon.icns'),
     extendInfo: macUpdaterInfo,
   },
+  dmg: {
+    sign: true,
+  },
   linux: {
     category: 'Development',
     maintainer: 'Floegence',
