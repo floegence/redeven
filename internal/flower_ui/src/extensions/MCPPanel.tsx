@@ -1,8 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
 import { Button, ConfirmDialog, Dialog, Input, Select, Switch } from '@floegence/floe-webapp-core/ui';
-import { Globe, Link, Pencil, Plus, Refresh, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Link, Pencil, Plus, Refresh, Search, Trash } from '@floegence/floe-webapp-core/icons';
 import { useFlowerExtensions } from './context';
-import { SettingsPill, SettingsSection } from './primitives';
+import { SettingsPill, SettingsSection, SettingsList, SettingRow, RowMenu } from './primitives';
 import type { MCPCatalog, MCPServer } from './types';
 
 type Draft = { id: string; revision: number; name: string; transport: 'http' | 'stdio'; url: string; command: string; arguments: string; credentials: string };
@@ -64,19 +64,26 @@ export function MCPPanel() {
     catch (error) { setDeleteError(failure(error)); } finally { setBusy(''); }
   }
   return <>
-    <SettingsSection title={t('mcp')} description={t('mcpHint')} actions={<><Button size="icon" variant="ghost" icon={Refresh} aria-label={t('skillsSettings.reload')} title={t('skillsSettings.reload')} loading={busy() === 'load'} disabled={!ctx.canInteract() || Boolean(busy())} onClick={() => void reload()} /><Button size="sm" icon={Plus} disabled={!canManage()} onClick={() => open(null)}>{t('add')}</Button></>}>
+    <SettingsSection title={t('mcp')} actions={<><Button size="icon" variant="ghost" icon={Refresh} aria-label={t('skillsSettings.reload')} title={t('skillsSettings.reload')} loading={busy() === 'load'} disabled={!ctx.canInteract() || Boolean(busy())} onClick={() => void reload()} /><Button size="sm" icon={Plus} disabled={!canManage()} onClick={() => open(null)}>{t('add')}</Button></>}>
       <Show when={error()}><div class="flower-extension-error" role="alert">{error()}<Button size="sm" variant="outline" disabled={Boolean(busy())} onClick={() => void reload()}>{t('common.actions.retry')}</Button></div></Show>
       <Show when={notice()}><p class="flower-extension-notice" role="status">{notice()}</p></Show>
       <Show when={!catalog() && busy()}><p role="status" class="flower-extension-empty">{t('loading')}</p></Show>
       <Show when={catalog()?.servers.length} fallback={<Show when={catalog()}><div class="flower-extension-empty"><span class="flower-extension-empty-icon"><Link class="h-6 w-6" /></span><h3>{t('emptyMcp')}</h3><p>{t('emptyMcpHint')}</p><Button size="sm" variant="outline" icon={Plus} disabled={!canManage()} onClick={() => open(null)}>{t('add')}</Button></div></Show>}>
         <div class="flower-extension-toolbar"><label class="flower-extension-search"><Search class="h-4 w-4" /><Input type="search" aria-label={t('search')} placeholder={t('search')} value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label><Select aria-label={t('skillsSettings.enabled')} value={enabledOnly() ? 'enabled' : 'all'} onChange={value => setEnabledOnly(value === 'enabled')} options={[{ value: 'all', label: t('all') }, { value: 'enabled', label: t('enabledOnly') }]} /></div>
-        <div class="flower-extension-list"><For each={filtered()}>{server => <article class="flower-extension-row" data-mcp-server={server.id}>
-          <div class="flower-extension-row-main"><span class="flower-extension-icon"><Show when={server.transport === 'http'} fallback={<Terminal class="h-4 w-4" />}><Globe class="h-4 w-4" /></Show></span><div class="flower-extension-identity"><h3>{server.name}</h3><p class="flower-extension-endpoint">{server.transport === 'http' ? server.url : server.command}</p></div><Switch checked={server.enabled} aria-label={`${server.name}: ${t('enabled')}`} disabled={!canManage()} onChange={enabled => void mutate(server, 'toggle', enabled)} /></div>
-          <div class="flower-extension-row-body"><div class="flower-extension-meta"><SettingsPill tone={server.enabled ? 'success' : 'default'}>{t(server.enabled ? 'enabled' : 'disabled')}</SettingsPill><span>{t(server.transport === 'http' ? 'remote' : 'local')}</span><span>{ctx.i18n.tn('tools', server.tools.length)}</span></div>
-            <div class="flower-extension-row-footer"><span class="flower-extension-updated">{server.checked_at ? t('checked', { time: ctx.i18n.dateTime(server.checked_at) }) : ''}</span><div class="flower-extension-actions"><Button size="sm" variant="ghost" icon={Refresh} disabled={!canManage() || !server.enabled} loading={busy() === server.id} onClick={() => void mutate(server, 'check')}>{t('check')}</Button><Button size="icon" variant="ghost" icon={Pencil} aria-label={`${t('edit')}: ${server.name}`} title={t('edit')} disabled={!canManage()} onClick={() => open(server)} /><Button size="icon" variant="ghost" icon={Trash} aria-label={`${t('common.actions.delete')}: ${server.name}`} title={t('common.actions.delete')} disabled={!canManage()} onClick={() => { setDeleteError(''); setDeleting(server); }} /></div></div>
-            <Show when={server.tools.length}><details class="flower-extension-details"><summary>{ctx.i18n.tn('tools', server.tools.length)}</summary><div class="flower-extension-tools"><For each={server.tools}>{tool => <div><code>{tool.name}</code><p>{tool.description}</p></div>}</For></div></details></Show>
-          </div>
-        </article>}</For></div>
+        <SettingsList><For each={filtered()}>{server => <SettingRow title={server.name} description={server.transport === 'http' ? server.url ?? '' : server.command ?? ''}
+          metadata={<><span class="flower-extension-source">{t(server.transport === 'http' ? 'remote' : 'local')}<span class="flower-extension-tool-count">{ctx.i18n.tn('tools', server.tools.length)}</span></span><SettingsPill tone={server.enabled ? 'success' : 'default'}>{t(server.enabled ? 'enabled' : 'disabled')}</SettingsPill></>}
+          control={<>
+            <Button size="icon" variant="ghost" icon={Pencil} aria-label={`${t('edit')}: ${server.name}`} title={t('edit')} disabled={!canManage()} onClick={() => open(server)} />
+            <RowMenu name={server.name} busy={busy() === server.id} items={[
+              { id: 'check', label: t('check'), icon: () => <Refresh class="h-4 w-4" />, disabled: !canManage() || !server.enabled },
+              { id: 'delete', label: t('common.actions.delete'), icon: () => <Trash class="h-4 w-4" />, tone: 'danger', disabled: !canManage() },
+            ]} onSelect={id => { if (id === 'check') void mutate(server, 'check'); else if (id === 'delete') { setDeleteError(''); setDeleting(server); } }} />
+            <Switch checked={server.enabled} aria-label={`${server.name}: ${t('enabled')}`} disabled={!canManage()} onChange={enabled => void mutate(server, 'toggle', enabled)} />
+          </>}>
+          <Show when={busy() === server.id}><p role="status">{t('loading')}</p></Show>
+          <Show when={server.checked_at}><p class="flower-extension-updated">{t('checked', { time: ctx.i18n.dateTime(server.checked_at) })}</p></Show>
+          <Show when={server.tools.length}><div class="flower-extension-tools"><For each={server.tools}>{tool => <div><code>{tool.name}</code><p>{tool.description}</p></div>}</For></div></Show>
+        </SettingRow>}</For></SettingsList>
         <Show when={!filtered().length}><div class="flower-extension-empty"><h3>{t('noResults')}</h3><Button variant="ghost" onClick={() => { setQuery(''); setEnabledOnly(false); }}>{t('clear')}</Button></div></Show>
       </Show>
     </SettingsSection>

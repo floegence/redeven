@@ -1,7 +1,7 @@
-import { Layers } from '@floegence/floe-webapp-core/icons';
+import { Folder, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
 import { For, Show } from 'solid-js';
 import { Button, Switch } from '@floegence/floe-webapp-core/ui';
-import { SettingsPill, SettingsList, SettingRow } from './primitives';
+import { SettingsPill, SettingsList, SettingRow, RowMenu } from './primitives';
 import { useFlowerExtensions, type ExtensionI18n as I18nHelpers } from './context';
 import type { SkillCatalogEntry, SkillSourceItem } from './types';
 
@@ -42,28 +42,30 @@ export function SkillsCatalogList(props: {
       <For each={props.skills}>{(item) => {
         const source = () => props.sources[String(item.path ?? '').trim()];
         return (
-          <SettingRow icon={Layers} title={item.name} description={item.description || i18n.t('skillsSettings.noDescription')}
-            control={<Switch checked={!!item.enabled} onChange={(value) => props.onToggle(item, value)}
-              disabled={!props.canInteract || !props.canAdmin || !!props.toggleSaving[item.path]}
-              aria-label={`${item.name}: ${i18n.t('skillsSettings.enabled')}`} />}>
-            <div class="flower-extension-meta">
-              <span>{skillScopeLabel(item.scope, i18n)}</span><Show when={source() && !(item.scope === 'system' && source()?.source_type === 'system_bundle')}><span aria-hidden="true">·</span><span>{skillSourceLabel(source()?.source_type ?? '', i18n)}</span></Show>
+          <SettingRow title={item.name} description={item.description || i18n.t('skillsSettings.noDescription')}
+            metadata={<>
+              <span class="flower-extension-source" title={skillScopeLabel(item.scope, i18n)}>{skillScopeLabel(item.scope, i18n)}</span>
+              <div class="flower-extension-statuses">
               <Show when={item.effective}><SettingsPill tone="success">{i18n.t('skillsSettings.status.effective')}</SettingsPill></Show>
               <Show when={!item.enabled}><SettingsPill>{i18n.t('skillsSettings.status.disabled')}</SettingsPill></Show>
               <Show when={item.dependency_state === 'degraded'}><SettingsPill tone="warning">{i18n.t('skillsSettings.status.dependencyDegraded')}</SettingsPill></Show>
               <Show when={item.shadowed_by}><SettingsPill tone="warning">{i18n.t('skillsSettings.status.shadowed')}</SettingsPill></Show>
-            </div>
-            <div class="flower-extension-actions mt-3">
-              <Button size="sm" variant="outline" onClick={() => props.onBrowse(item)} disabled={!props.canInteract}>{i18n.t('skillsSettings.browse')}</Button>
-              <Show when={source()?.source_type === 'github_import'}><Button size="sm" variant="ghost" onClick={() => props.onReinstall(item)} loading={!!props.reinstalling[item.path]} disabled={!props.canInteract || !props.canAdmin}>{i18n.t('skillsSettings.reinstall')}</Button></Show>
-              <Show when={item.scope === 'user' || item.scope === 'user_agents'}><Button size="sm" variant="ghost" onClick={() => props.onDelete(item)} disabled={!props.canInteract || !props.canAdmin || !!props.toggleSaving[item.path] || !!props.reinstalling[item.path]}>{i18n.t('common.actions.delete')}</Button></Show>
-            </div>
-            <details class="flower-extension-details">
-              <summary>{i18n.t('settings.connection.technicalInformation')}</summary>
+              </div>
+            </>}
+            control={<>
+              <Button size="icon" variant="ghost" icon={Folder} aria-label={`${i18n.t('skillsSettings.browse')}: ${item.name}`} title={i18n.t('skillsSettings.browse')} onClick={() => props.onBrowse(item)} disabled={!props.canInteract} />
+              <RowMenu name={item.name} busy={!!props.reinstalling[item.path] || !!props.toggleSaving[item.path]} items={[
+                ...(source()?.source_type === 'github_import' ? [{ id: 'reinstall', label: i18n.t('skillsSettings.reinstall'), icon: () => <Refresh class="h-4 w-4" />, disabled: !props.canInteract || !props.canAdmin || !!props.reinstalling[item.path] }] : []),
+                ...(item.scope === 'user' || item.scope === 'user_agents' ? [{ id: 'delete', label: i18n.t('common.actions.delete'), tone: 'danger' as const, icon: () => <Trash class="h-4 w-4" />, disabled: !props.canInteract || !props.canAdmin || !!props.toggleSaving[item.path] || !!props.reinstalling[item.path] }] : []),
+              ]} onSelect={id => { if (id === 'reinstall') props.onReinstall(item); else if (id === 'delete') props.onDelete(item); }} />
+              <Switch checked={!!item.enabled} onChange={(value) => props.onToggle(item, value)}
+                disabled={!props.canInteract || !props.canAdmin || !!props.toggleSaving[item.path]}
+                aria-label={`${item.name}: ${i18n.t('skillsSettings.enabled')}`} />
+            </>}>
+            <Show when={source()}><p class="flower-extension-detail-source">{skillSourceLabel(source()?.source_type ?? '', i18n)}</p></Show>
             <code class="mt-2 block break-all text-[11px] text-muted-foreground">{item.path}</code>
             <Show when={source()?.source_id}><code class="mt-1 block break-all text-[11px] text-muted-foreground">{source()?.source_id}</code></Show>
             <Show when={item.shadowed_by}><p class="mt-2 break-all text-xs text-warning">{i18n.t('skillsSettings.shadowedBy', { path: item.shadowed_by ?? '' })}</p></Show>
-            </details>
           </SettingRow>
         );
       }}</For>

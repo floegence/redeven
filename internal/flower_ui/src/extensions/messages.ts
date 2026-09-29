@@ -46,7 +46,9 @@ export const extensionMessages = {
     "saveHint": "Saving an enabled server connects and discovers its tools. Local commands run on this environment’s host. Tool calls follow the conversation’s permission setting.",
     "advanced": "Advanced",
     "headers": "HTTP headers (JSON)",
-    "environment": "Environment variables (JSON)"
+    "environment": "Environment variables (JSON)",
+    "details": "Details: {name}",
+    "actions": "More actions: {name}"
   },
   "zh-CN": {
     "title": "Skills·MCP",
@@ -92,7 +94,9 @@ export const extensionMessages = {
     "saveHint": "保存已启用的服务器时，会连接并获取工具列表。本地命令在此环境的主机上运行。工具调用遵循对话的权限设置。",
     "advanced": "高级选项",
     "headers": "HTTP 请求头（JSON）",
-    "environment": "环境变量（JSON）"
+    "environment": "环境变量（JSON）",
+    "details": "{name}：详情",
+    "actions": "{name}：更多操作"
   },
   "zh-TW": {
     "title": "Skills·MCP",
@@ -138,7 +142,9 @@ export const extensionMessages = {
     "saveHint": "儲存已啟用的伺服器時，會連線並取得工具清單。本機指令在此環境的主機上執行。工具呼叫遵循對話的權限設定。",
     "advanced": "進階選項",
     "headers": "HTTP 標頭（JSON）",
-    "environment": "環境變數（JSON）"
+    "environment": "環境變數（JSON）",
+    "details": "{name}：詳細資訊",
+    "actions": "{name}：更多操作"
   },
   "de-DE": {
     "title": "Skills·MCP",
@@ -187,7 +193,9 @@ export const extensionMessages = {
     "saveHint": "Beim Speichern eines aktivierten Servers werden die Verbindung und seine Werkzeuge geprüft. Lokale Befehle laufen auf dem Host dieser Umgebung. Werkzeugaufrufe folgen den Berechtigungseinstellungen des Chats.",
     "advanced": "Erweitert",
     "headers": "HTTP-Header (JSON)",
-    "environment": "Umgebungsvariablen (JSON)"
+    "environment": "Umgebungsvariablen (JSON)",
+    "details": "Details: {name}",
+    "actions": "Weitere Aktionen: {name}"
   },
   "es-ES": {
     "title": "Skills·MCP",
@@ -237,7 +245,9 @@ export const extensionMessages = {
     "saveHint": "Al guardar un servidor habilitado, se establece la conexión y se consultan sus herramientas. Los comandos locales se ejecutan en el equipo de este entorno. Las llamadas a herramientas siguen los permisos de la conversación.",
     "advanced": "Avanzado",
     "headers": "Cabeceras HTTP (JSON)",
-    "environment": "Variables de entorno (JSON)"
+    "environment": "Variables de entorno (JSON)",
+    "details": "Detalles: {name}",
+    "actions": "Más acciones: {name}"
   },
   "fr-FR": {
     "title": "Skills·MCP",
@@ -287,7 +297,9 @@ export const extensionMessages = {
     "saveHint": "L’enregistrement d’un serveur activé établit la connexion et récupère ses outils. Les commandes locales s’exécutent sur l’hôte de cet environnement. Les appels aux outils respectent les autorisations de la conversation.",
     "advanced": "Options avancées",
     "headers": "En-têtes HTTP (JSON)",
-    "environment": "Variables d’environnement (JSON)"
+    "environment": "Variables d’environnement (JSON)",
+    "details": "Détails : {name}",
+    "actions": "Autres actions : {name}"
   },
   "ja-JP": {
     "title": "Skills·MCP",
@@ -333,7 +345,9 @@ export const extensionMessages = {
     "saveHint": "有効なサーバーを保存すると接続し、ツール一覧を取得します。ローカルコマンドはこの環境のホストで実行されます。ツールの呼び出しには会話の権限設定が適用されます。",
     "advanced": "詳細設定",
     "headers": "HTTP ヘッダー（JSON）",
-    "environment": "環境変数（JSON）"
+    "environment": "環境変数（JSON）",
+    "details": "{name} の詳細",
+    "actions": "{name} のその他の操作"
   },
   "ko-KR": {
     "title": "Skills·MCP",
@@ -379,7 +393,9 @@ export const extensionMessages = {
     "saveHint": "활성화된 서버를 저장하면 연결하여 도구 목록을 가져옵니다. 로컬 명령은 이 환경의 호스트에서 실행됩니다. 도구 호출에는 대화의 권한 설정이 적용됩니다.",
     "advanced": "고급 설정",
     "headers": "HTTP 헤더(JSON)",
-    "environment": "환경 변수(JSON)"
+    "environment": "환경 변수(JSON)",
+    "details": "{name} 세부 정보",
+    "actions": "{name} 추가 작업"
   },
   "pt-BR": {
     "title": "Skills·MCP",
@@ -429,7 +445,9 @@ export const extensionMessages = {
     "saveHint": "Ao salvar um servidor ativado, a conexão é estabelecida e suas ferramentas são consultadas. Comandos locais são executados no host deste ambiente. As chamadas de ferramentas seguem as permissões da conversa.",
     "advanced": "Avançado",
     "headers": "Cabeçalhos HTTP (JSON)",
-    "environment": "Variáveis de ambiente (JSON)"
+    "environment": "Variáveis de ambiente (JSON)",
+    "details": "Detalhes: {name}",
+    "actions": "Mais ações: {name}"
   },
   "ru-RU": {
     "title": "Skills·MCP",
@@ -480,6 +498,8 @@ export const extensionMessages = {
     "saveHint": "При сохранении включённого сервера устанавливается соединение и загружается список инструментов. Локальные команды выполняются на хосте этой среды. Вызовы инструментов подчиняются разрешениям беседы.",
     "advanced": "Дополнительно",
     "headers": "Заголовки HTTP (JSON)",
-    "environment": "Переменные окружения (JSON)"
+    "environment": "Переменные окружения (JSON)",
+    "details": "Подробности: {name}",
+    "actions": "Другие действия: {name}"
   }
 } as const;
