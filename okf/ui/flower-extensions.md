@@ -24,9 +24,16 @@ without reconnecting the workspace transport. The shared Floe components own
 inputs, dialogs, focus treatment, and floating placement. Dialog guidance lives
 in the body, and actions reflow as whole controls at narrow widths.
 
-The catalog uses quiet themed cards with an identity, concise description,
-enablement, and status. Common actions remain visible. Technical paths and tool
-lists start collapsed. Search is local to the visible catalog. Empty libraries
+The catalog uses a compact divided list. A desktop row keeps its name and
+single-line description beside aligned metadata, browse/edit, an action menu,
+and the enable switch. Default rows fit at least nine complete entries in an
+850px-tall view at 960px and 1280px widths. Long names and descriptions truncate
+visually while preserving their full text in titles and an accessible disclosure.
+Technical paths, source detail, complete descriptions, and MCP tools expand
+inside their own row. Reinstall, connection checks, and deletion use a labeled
+keyboard-accessible action menu; confirmation and authorization remain unchanged.
+Search/filter controls stay available while scrolling long lists. Narrow layouts
+move metadata below the identity, and coarse pointers retain 44px action targets. Search is local to the visible catalog. Empty libraries
 explain their next action, loading has a status, and failures remain actionable.
 Both carriers resolve explicit copy for every shipped locale, including plural
 counts and locale-aware check timestamps.
@@ -78,7 +85,8 @@ dependency matching, and execution authorization.
   `internal/flower_ui/src/extensions/extensions.css` own retained tabs and layout.
 - `internal/flower_ui/host/extensionsAdapter.ts` maps typed management actions.
 - `internal/envapp/ui_src/src/ui/flower/FlowerExtensions.browser.test.tsx` checks
-  light/dark, narrow layouts, keyboard tabs, dialogs, and reader permissions.
+  light/dark, narrow layouts, large-library density, disclosure, action menus,
+  keyboard tabs, dialogs, and reader permissions.
 - `internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` checks draft
   continuity and New chat navigation.
 - `internal/envapp/ui_src/src/ui/pages/settings/sections/SkillsSection.test.tsx`

@@ -15,10 +15,11 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
   Button: (props: any) => (
-    <button type="button" disabled={props.disabled} onClick={props.onClick}>
+    <button type="button" disabled={props.disabled} onClick={props.onClick} aria-label={props['aria-label']}>
       {props.children}
     </button>
   ),
+  Dropdown: (props: any) => <div>{props.items.map((item: any) => <button disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.label}</button>)}</div>,
   Switch: (props: any) => (
     <label>
       <input
@@ -107,7 +108,7 @@ describe('SkillsCatalogList', () => {
     secondToggle.dispatchEvent(new Event('change', { bubbles: true }));
 
     const buttons = Array.from(host.querySelectorAll('button'));
-    const browseButtons = buttons.filter((candidate) => candidate.textContent?.trim() === 'Browse');
+    const browseButtons = buttons.filter((candidate) => candidate.getAttribute('aria-label')?.startsWith('Browse:'));
     const reinstallButton = buttons.find((candidate) => candidate.textContent?.trim() === 'Reinstall');
     const deleteButtons = buttons.filter((candidate) => candidate.textContent?.trim() === 'Delete');
 
@@ -115,6 +116,8 @@ describe('SkillsCatalogList', () => {
     reinstallButton?.click();
     deleteButtons[1]?.click();
 
+    (host.querySelector('button[aria-label="Details: skill-installer"]') as HTMLButtonElement).click();
+    (host.querySelector('button[aria-label="Details: local-helper"]') as HTMLButtonElement).click();
     expect(host.textContent).toContain('GitHub import');
     expect(host.textContent).toContain('User (.redeven)');
     expect(host.textContent).toContain('User (.agents)');

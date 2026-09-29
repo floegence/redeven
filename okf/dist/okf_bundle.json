@@ -25407,15 +25407,15 @@
         "title": "Flower Skills and MCP",
         "type": "UI Contract"
       },
-      "body_length": 4616,
+      "body_length": 5281,
       "summary": "Shared Flower UI owns the Skills and MCP management page. Env App and Desktop\nsupply the same typed, authenticated management adapter. The `Skills·MCP` entry\nsits immediately below New chat in the conversation rail; runtime settings have\nno separate Skills destination. Opening management preserves the unsent chat\ndraft, and each tab retains its filters while the surface remains mounted.\nReaders can inspect skills and server catalogs but cannot mutate administrator\nconfiguration. Failed operations keep their input and offer an explicit retry.",
       "sections": [
         {
           "id": "navigation-and-presentation",
           "title": "Navigation and presentation",
           "level": 1,
-          "body": "The page has one identity header, a return-to-chat action, and two accessible\nSkills/MCP tabs with arrow, Home, and End navigation. MCP loads on first visit;\nhidden panels are inert. Thread selection and New chat return to conversation\nwithout reconnecting the workspace transport. The shared Floe components own\ninputs, dialogs, focus treatment, and floating placement. Dialog guidance lives\nin the body, and actions reflow as whole controls at narrow widths.\n\nThe catalog uses quiet themed cards with an identity, concise description,\nenablement, and status. Common actions remain visible. Technical paths and tool\nlists start collapsed. Search is local to the visible catalog. Empty libraries\nexplain their next action, loading has a status, and failures remain actionable.\nBoth carriers resolve explicit copy for every shipped locale, including plural\ncounts and locale-aware check timestamps.",
-          "char_count": 897
+          "body": "The page has one identity header, a return-to-chat action, and two accessible\nSkills/MCP tabs with arrow, Home, and End navigation. MCP loads on first visit;\nhidden panels are inert. Thread selection and New chat return to conversation\nwithout reconnecting the workspace transport. The shared Floe components own\ninputs, dialogs, focus treatment, and floating placement. Dialog guidance lives\nin the body, and actions reflow as whole controls at narrow widths.\n\nThe catalog uses a compact divided list. A desktop row keeps its name and\nsingle-line description beside aligned metadata, browse/edit, an action menu,\nand the enable switch. Default rows fit at least nine complete entries in an\n850px-tall view at 960px and 1280px widths. Long names and descriptions truncate\nvisually while preserving their full text in titles and an accessible disclosure.\nTechnical paths, source detail, complete descriptions, and MCP tools expand\ninside their own row. Reinstall, connection checks, and deletion use a labeled\nkeyboard-accessible action menu; confirmation and authorization remain unchanged.\nSearch/filter controls stay available while scrolling long lists. Narrow layouts\nmove metadata below the identity, and coarse pointers retain 44px action targets. Search is local to the visible catalog. Empty libraries\nexplain their next action, loading has a status, and failures remain actionable.\nBoth carriers resolve explicit copy for every shipped locale, including plural\ncounts and locale-aware check timestamps.",
+          "char_count": 1511
         },
         {
           "id": "skills",
@@ -30309,5 +30309,5 @@
       ]
     }
   ],
-  "source_sha256": "d100d98a159549429a35c6f505a370f06a29da158be5f5daf0cff9bc14d442cc"
+  "source_sha256": "d61ea561cc53fad861a545d983a59ab4b24270a0df8bcf889c75a1e3d39c3899"
 }

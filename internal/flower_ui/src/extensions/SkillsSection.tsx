@@ -150,10 +150,7 @@ export function SkillsSection() {
   return (
     <>
       <SettingsSection
-        variant="section"
-        icon={Layers}
         title={i18n.t('skillsSettings.title')}
-        description={i18n.t('skillsHint')}
         badge={skillsReloading() || skillsLoading() ? i18n.t('skillsSettings.loading') : i18n.tn('skillsSettings.skillCount', skillsCatalog()?.skills?.length ?? 0)}
         error={!skillsCatalog() ? skillsError() : null}
         feedback={skillsCatalog() && skillsError() ? [{ id: 'catalog', severity: 'error', summary: skillsError()!, actions: <Button size="sm" variant="outline" disabled={!ctx.canInteract() || catalogBusy()} onClick={() => void refreshSkillsCatalog()}>{i18n.t('common.actions.retry')}</Button> }] : []}
@@ -164,23 +161,19 @@ export function SkillsSection() {
           </>
         }
       >
-        <div class="space-y-4">
+        <div class="flower-extension-section-body">
           <Show when={!skillsCatalog() && skillsError()}><Button size="sm" variant="outline" disabled={!ctx.canInteract() || catalogBusy()} onClick={() => void refreshSkillsCatalog()}>{i18n.t('common.actions.retry')}</Button></Show>
           <Show when={skillsCatalog()?.skills.length === 0}>
             <div class="flower-extension-empty"><span class="flower-extension-empty-icon"><Layers class="h-6 w-6" /></span><h3>{i18n.t('skillEmpty')}</h3><p>{i18n.t('skillEmptyHint')}</p></div>
           </Show>
           <Show when={skillsCatalog()?.skills.length !== 0}>
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div class="flex-1 min-w-0">
-              <FieldLabel>{i18n.t('skillsSettings.searchLabel')}</FieldLabel>
-              <div class="relative">
-                <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <div class="flower-extension-toolbar">
+            <div class="flower-extension-search">
+                <Search class="h-3.5 w-3.5" />
                 <Input value={skillQuery()} onInput={(e) => setSkillQuery(e.currentTarget.value)}
-                  aria-label={i18n.t('skillsSettings.searchLabel')} placeholder={i18n.t('skillsSettings.searchPlaceholder')} size="sm" class="w-full pl-8" disabled={!ctx.canInteract()} />
-              </div>
+                  aria-label={i18n.t('skillsSettings.searchLabel')} placeholder={i18n.t('skillsSettings.searchPlaceholder')} size="sm" class="w-full" disabled={!ctx.canInteract()} />
             </div>
-            <div class="w-full sm:w-44 flex-shrink-0">
-              <FieldLabel>{i18n.t('skillsSettings.scopeLabel')}</FieldLabel>
+            <div class="flower-extension-filter">
               <Select aria-label={i18n.t('skillsSettings.scopeLabel')} value={skillScopeFilter()} onChange={(v) => { if (v === 'all' || v === 'user' || v === 'user_agents' || v === 'system') setSkillScopeFilter(v); }}
                 disabled={!ctx.canInteract()}
                 options={[{ value: 'all', label: i18n.t('skillsSettings.scopeAll') }, { value: 'system', label: i18n.t('skillsSettings.source.systemBundle') }, { value: 'user', label: i18n.t('skillsSettings.scopeUserRedeven') }, { value: 'user_agents', label: i18n.t('skillsSettings.scopeUserAgents') }]}
