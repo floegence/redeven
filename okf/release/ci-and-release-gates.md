@@ -110,6 +110,12 @@ installs the pinned Cosign action before that operation. Desktop packaging must
 verify the release-profile runtime signature on its own clean runner; an earlier
 build job's installed tools do not carry across jobs. A source-only workflow
 contract guards this prerequisite for build, Desktop, and release collection.
+Each native Desktop job also enables Corepack and installs the frozen Env App
+UI dependency lock before packaging. Computer-resource staging resolves its
+JavaScript helpers from that package root, including Playwright and QuickJS;
+the Runtime job's installed dependencies do not carry into the Desktop runner.
+This prerequisite stages helper packages only and does not install browser
+binaries or run browser tests in the release workflow.
 Desktop bundle staging captures its exact cleanup path before installing the
 exit trap, so both system Bash 3.2 and newer Linux Bash preserve the original
 failure status and remove only that invocation's temporary staging directory.
@@ -264,13 +270,28 @@ evidence profile, and signature. Linux and Darwin runtime archives contain
 exactly the Redeven binary, runtime, six evidence files, license, and product
 notices.
 
-Desktop assembly validates Redeven and Gateway archive names, exact flat
-inventories, Go targets, and the target-specific runtime policy before replacing
-`.bundle/<target>`. Linux and Darwin Electron packages include the complete
+Desktop assembly validates the Redeven archive name, exact flat inventory, Go
+target, and target-specific runtime policy before replacing `.bundle/<target>`.
+Gateway remains a separate distribution and is rejected in Desktop installers.
+Linux and Darwin Electron packages include the complete
 runtime evidence beside `redeven`; macOS packaging excludes the already
 Developer-ID-signed nested runtime from a second signing pass so its evidence
-remains exact. Native builders inspect final DEB, RPM, or read-only DMG bytes and
-write v2 receipts. Linux package parsers use
+remains exact. The Electron Builder signing exclusion is a regular expression
+anchored to that exact executable path, not a filesystem glob. The Redeven
+binary, computer helper, Sparkle framework, and native bridge remain eligible
+for signing. Computer resources are copied as the complete staged tree after
+Electron assembly; dependency filters must not prune their nested packages or
+licenses. The Desktop startup validator checks this tree before signing. The
+macOS signing callback refreshes only signer-visited Runtime and Computer file
+descriptors immediately before the enclosing app resource seal is signed, then
+runs the same startup validator again before notarization. Independently
+attested ReDevPlugin bytes and evidence may never change during this step.
+
+Native builders inspect final DEB, RPM, or read-only DMG bytes and write v2
+receipts. The DEB parser accepts POSIX ustar and GNU regular/directory headers,
+bounded GNU long names, and a metadata-only root directory. RPM packaging
+disables optional build-id symlink indexes rather than admitting links into the
+closed payload. Linux package parsers use
 bounded no-follow snapshots and reject non-canonical paths, duplicate entries,
 links, devices, privileged modes, sparse/PAX metadata, malformed trailers,
 trailing data, and oversized payloads. Every native receipt binds the runtime
@@ -464,6 +485,7 @@ not become a fallback, shim, or local artifact path.
 - `redeven:scripts/build_desktop_bundled_runtime.sh:1` - Stages the formal runtime into Desktop bundles.
 - `redeven:scripts/check_desktop_redevplugin_package.sh:1` - Verifies final native installer contents and writes target-bound receipts.
 - `redeven:scripts/extract_desktop_runtime.py:1` - Parses Linux package payload streams and extracts only the closed runtime inventory.
+- `redeven:desktop/scripts/sign-packaged-runtime.mjs:1` - Binds signed resource bytes before the app seal and validates the complete packaged Runtime.
 - `redeven:scripts/collect_release_artifacts.mjs:1` - Enforces the exact downstream release artifact inventory.
 - `redeven:scripts/install.sh:1` - Verifies exact release identity and atomically activates the complete versioned runtime suite.
 - `redeven:.github/workflows/release.yml:1` - Makes least-privilege four-target runtime and installer proof mandatory.

@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { signPackagedRuntime, validatePackagedRuntime } from './scripts/sign-packaged-runtime.mjs';
 
 const desktopVersion = String(process.env.REDEVEN_DESKTOP_VERSION ?? '').trim() || '0.1.0';
 const desktopUpdateBaseURL = String(process.env.REDEVEN_DESKTOP_UPDATE_BASE_URL ?? '').trim().replace(/\/+$/u, '');
@@ -165,6 +166,12 @@ export default {
       ? path.join(context.appOutDir, 'Redeven Desktop.app', 'Contents', 'Resources')
       : path.join(context.appOutDir, 'resources');
     if (goos !== 'windows') {
+      // These resources already have a closed manifest. Electron Builder's
+      // dependency filters must not prune their nested node_modules or licenses.
+      fs.cpSync(computerResources, path.join(resourcesDir, 'bin', 'computer'), {
+        recursive: true, errorOnExist: true, force: false,
+      });
+      await validatePackagedRuntime(path.join(resourcesDir, 'bin'));
       execFileSync(
         path.join(repoRoot, 'scripts', 'check_redevplugin_consumption_gate.sh'),
         ['--scan-root', path.join(resourcesDir, 'bin'), '--runtime-target', `${goos}/${goarch}`],
@@ -196,7 +203,6 @@ export default {
       from: path.join(desktopDir, '.bundle', 'windows-ssh', 'redeven-ssh-askpass.exe'),
       to: 'native/redeven-ssh-askpass.exe',
     }] : []),
-    ...(resolveTargetGoos() === 'windows' ? [] : [{ from: computerResources, to: 'bin/computer' }]),
     {
       from: path.join(repoRoot, 'LICENSE'),
       to: 'licenses/LICENSE',
@@ -223,7 +229,8 @@ export default {
     target: ['dmg'],
     forceCodeSigning: true,
     identity: macIdentity || undefined,
-    signIgnore: ['**/Contents/Resources/bin/redevplugin-runtime'],
+    sign: signPackagedRuntime,
+    signIgnore: ['/Contents/Resources/bin/redevplugin-runtime$'],
     icon: path.join(buildResourcesDir, 'icon.icns'),
     extendInfo: macUpdaterInfo,
   },
@@ -259,6 +266,8 @@ export default {
   },
   rpm: {
     packageName: 'redeven-desktop',
+    // Preserve the closed payload: RPM's optional build-id index adds symlinks.
+    fpm: ['--rpm-rpmbuild-define', '_build_id_links none'],
   },
   ...(resolveTargetGoos() === 'linux' && resolvedUpdateBaseURL
     ? { publish: [{ provider: 'generic', url: resolvedUpdateBaseURL, channel: 'latest' }] }
