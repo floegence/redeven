@@ -22,7 +22,7 @@ mkdir -p "$root/Frameworks/Sparkle.framework/Versions/Current" "$root/Resources/
 touch "$root/Info.plist" "$root/Resources/native/redeven_sparkle.node"
 fi`);
   tool('file','printf "Mach-O 64-bit %s\\n" "$FIXTURE_MACHINE"');
-  tool('lipo','test "$1" = -verify_arch && test "$2" = "$FIXTURE_MACHINE"');
+  tool('lipo','case "$1" in */Sparkle) ;; *) exit 1 ;; esac; test "$2" = -verify_arch && test "$3" = "$FIXTURE_MACHINE"');
   tool('otool',`if [ "$1" = -L ]; then
 printf '%s\\n' '@rpath/Sparkle.framework/Versions/B/Sparkle'
 else

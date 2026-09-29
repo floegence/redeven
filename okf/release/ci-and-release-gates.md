@@ -295,7 +295,10 @@ macOS package verification uses the operating system's text tools alongside
 Apple's native inspection and policy tools; it does not require ripgrep on a
 hosted runner. Pipeline readers consume complete command output under
 `pipefail`, while signature, Team ID, hardened-runtime, updater-key, stapling,
-and distribution-policy failures continue to reject the package.
+and distribution-policy failures continue to reject the package. Sparkle
+architecture verification passes the final framework binary before Apple's
+`-verify_arch` option so the hosted `lipo` invocation matches the native tool
+contract on both macOS targets.
 The DEB parser accepts POSIX ustar and GNU regular/directory headers,
 bounded GNU long names, and a metadata-only root directory. RPM packaging
 disables optional build-id symlink indexes rather than admitting links into the
