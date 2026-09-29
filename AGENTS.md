@@ -64,12 +64,12 @@ Goals:
   shape, and focused build or package smoke checks. It must not run full UI,
   browser, Flower, Desktop, Computer, Docker, simulator, stress, or performance
   suites.
-- Full regression suites belong to parallel CI or scheduled qualification.
-  Cross-platform packaging, signing, notarization, installer/update readback,
-  Docker/private-desktop qualification, native host checks, and terminal
-  performance run only for a release candidate or an explicit qualification
-  workflow. Each suite has one owning workflow; do not repeat it in another
-  gate.
+- Full regression suites belong to local or dedicated qualification runs, never
+  ordinary GitHub push or pull-request CI. Cross-platform packaging, signing,
+  notarization, installer/update readback, Docker/private-desktop qualification,
+  native host checks, and terminal performance run only for a release candidate
+  or an explicitly requested qualification workflow. Each suite has one owning
+  workflow; do not repeat it in another gate.
 - CodeQL is an asynchronous security-discovery lane, not an ordinary push or
   pull-request gate. The checked-in workflow runs daily and by manual dispatch;
   scheduled runs skip the language matrix when `main` has not changed since the
