@@ -473,7 +473,7 @@ jobs:
             desktop/release/*.deb
             desktop/release/*.rpm
             desktop/release/*.dmg
-            desktop/release/*.yml
+            desktop/release/latest-linux*.yml
             desktop/release/*.redevplugin-verification.json
           if-no-files-found: error
 

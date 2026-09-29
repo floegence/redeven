@@ -288,7 +288,10 @@ runs the same startup validator again before notarization. Independently
 attested ReDevPlugin bytes and evidence may never change during this step.
 
 Native builders inspect final DEB, RPM, or read-only DMG bytes and write v2
-receipts. The DEB parser accepts POSIX ustar and GNU regular/directory headers,
+receipts. Desktop artifact upload selects installers, verification receipts,
+and `latest-linux*.yml` feeds explicitly; builder diagnostics and unrelated
+macOS YAML feeds must not enter the collector's closed inventory.
+The DEB parser accepts POSIX ustar and GNU regular/directory headers,
 bounded GNU long names, and a metadata-only root directory. RPM packaging
 disables optional build-id symlink indexes rather than admitting links into the
 closed payload. Linux package parsers use

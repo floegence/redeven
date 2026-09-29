@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { globSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +18,31 @@ const uiGate = readFileSync(new URL("./check_ui_tests.sh", import.meta.url), "ut
 const flowerGate = readFileSync(new URL("./check_flower_ui.sh", import.meta.url), "utf8");
 const jobsSource = workflow.slice(workflow.indexOf("\njobs:\n") + "\njobs:\n".length);
 const releaseJobsSource = releaseWorkflow.slice(releaseWorkflow.indexOf("\njobs:\n") + "\njobs:\n".length);
+
+test('Desktop artifact upload includes only installers, receipts, and Linux feeds', () => {
+  const block = releaseWorkflow.match(/- name: Upload desktop package artifact[\s\S]*?(?=\n      - name:)/u)?.[0];
+  assert.ok(block, 'Desktop upload step is required');
+  const patterns = [...block.matchAll(/^            (desktop\/release\/\S+)$/gmu)].map(match => match[1]);
+  const root = mkdtempSync(join(tmpdir(), 'redeven-desktop-upload-'));
+  try {
+    const directory = join(root, 'desktop/release');
+    mkdirSync(directory, { recursive: true });
+    const installers = [
+      'Redeven-Desktop-0.13.7-linux-x64.deb', 'Redeven-Desktop-0.13.7-linux-x64.rpm',
+      'Redeven-Desktop-0.13.7-linux-arm64.deb', 'Redeven-Desktop-0.13.7-linux-arm64.rpm',
+      'Redeven-Desktop-0.13.7-mac-x64.dmg', 'Redeven-Desktop-0.13.7-mac-arm64.dmg',
+    ];
+    const expected = [...installers, ...installers.map(name => `${name}.redevplugin-verification.json`),
+      'latest-linux.yml', 'latest-linux-arm64.yml'].sort();
+    for (const name of [...expected, 'builder-debug.yml', 'builder-effective-config.yaml', 'latest-mac.yml',
+      'Redeven-Desktop-0.13.7-mac-arm64.dmg.blockmap']) writeFileSync(join(directory, name), 'fixture');
+    const uploaded = [...new Set(patterns.flatMap(pattern => globSync(pattern, { cwd: root })))]
+      .map(name => name.slice('desktop/release/'.length)).sort();
+    assert.deepEqual(uploaded, expected);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 const allowedQuickGateCommands = new Set([
   "#!/usr/bin/env bash",
