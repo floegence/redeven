@@ -211,9 +211,12 @@ test("release workflow validates exact main and contains no test gate", () => {
     [...releaseJobsSource.matchAll(/^    timeout-minutes: [0-9]+$/gm)].length,
   );
   const desktopInstallOffset = releaseWorkflow.indexOf("run: npm ci --no-audit --no-fund");
+  const envAppInstallOffset = releaseWorkflow.indexOf("run: pnpm install --frozen-lockfile");
   const desktopPackageOffset = releaseWorkflow.indexOf("npm run package --");
   assert.ok(desktopInstallOffset > 0, "release must install Desktop build dependencies");
+  assert.ok(envAppInstallOffset > desktopInstallOffset, "release must install Env App UI dependencies after Desktop dependencies");
   assert.ok(desktopPackageOffset > desktopInstallOffset, "release must install Desktop dependencies before packaging");
+  assert.ok(desktopPackageOffset > envAppInstallOffset, "release must install Env App UI dependencies before packaging");
 
   for (const forbidden of [
     "renderer-e2e",

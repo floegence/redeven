@@ -267,6 +267,9 @@ jobs:
         with:
           node-version-file: .node-version
 
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -278,6 +281,10 @@ jobs:
       - name: Install Desktop dependencies
         working-directory: desktop
         run: npm ci --no-audit --no-fund
+
+      - name: Install Env App UI dependencies
+        working-directory: internal/envapp/ui_src
+        run: pnpm install --frozen-lockfile
 
       - name: Download matching runtime package
         env:
