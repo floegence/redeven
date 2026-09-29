@@ -98,6 +98,13 @@ A source-only contract test guards release, Desktop bundle, SSH source-build,
 and semantic carrier commands against reverting to `CGO_ENABLED=0` or omitting
 the native tag.
 
+Release runtime commands must also execute under the macOS runner's system
+Bash 3.2 with strict error handling. The build step starts with its required
+arguments and appends Linux-only relink options, so Darwin never expands an
+empty array under `set -u`. The native build contract test executes the actual
+workflow step through `/bin/bash` with a recording builder for all four targets,
+checking exact arguments without compiling packages or accessing credentials.
+
 Computer qualification proxies accept only the fixed provider Responses POST
 route. Request paths cannot redirect provider credentials to another origin.
 Desktop Runtime log tails inspect and read one no-follow file descriptor, so a

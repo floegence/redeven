@@ -123,15 +123,15 @@ jobs:
 
           mkdir -p dist
           for binary in redeven redeven-gateway; do
-            relink_args=()
+            build_args=(
+              --goos "$GOOS" --goarch "$GOARCH"
+              --output "dist/$binary" --command "./cmd/$binary"
+              --version "$VERSION" --commit "$COMMIT" --build-time "$BUILD_TIME"
+            )
             if [[ "$GOOS" == linux ]]; then
-              relink_args=(--relink-dir "$PWD/dist/runtime-relink/$binary")
+              build_args+=(--relink-dir "$PWD/dist/runtime-relink/$binary")
             fi
-            ./scripts/build_runtime_binary.sh \
-              --goos "$GOOS" --goarch "$GOARCH" \
-              --output "dist/$binary" --command "./cmd/$binary" \
-              --version "$VERSION" --commit "$COMMIT" --build-time "$BUILD_TIME" \
-              "${relink_args[@]}"
+            ./scripts/build_runtime_binary.sh "${build_args[@]}"
           done
 
       - name: Verify Linux runtime portability
