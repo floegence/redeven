@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "Preparando el reinicio",
+    "restarting": "Reiniciando el tiempo de ejecución",
+    "restoring": "Restaurando tu espacio de trabajo",
+    "failed": "No se pudo reconectar el espacio de trabajo",
+    "detail": "Se conservan tu espacio de trabajo y los borradores sin enviar.",
+    "reopen": "Volver a abrir el entorno",
+    "connectionCenter": "Centro de conexiones"
+  },
   "accessFlow": {
     "overviewHelp": "Elige una tarea. Los ajustes relacionados se completan en el mismo proceso.",
     "backOverview": "Volver al resumen",

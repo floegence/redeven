@@ -107,6 +107,19 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     expect(ipcRendererSend).toHaveBeenCalledTimes(2);
   });
 
+  it('binds readiness to the document generation captured before navigation', async () => {
+    let generation = 'first';
+    ipcRendererSendSync.mockImplementation((channel: string) => channel === 'redeven-desktop:session-context-get'
+      ? { document_generation: generation, local_environment_id: 'local', renderer_storage_scope_id: 'local', target_route: 'local_host' }
+      : null);
+    const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
+    bootstrapDesktopSessionContextBridge();
+    generation = 'second';
+    exposedBridge().notifyAppReady({ state: 'runtime_connected' });
+    expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:session-app-ready',
+      expect.objectContaining({ document_generation: 'first', state: 'runtime_connected' }));
+  });
+
   it('drops malformed document transport provenance', async () => {
     ipcRendererSendSync.mockReturnValue({
       local_environment_id: 'local',

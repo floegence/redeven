@@ -129,7 +129,6 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
   return (
     <section
       class="floe-window-status z-20"
-      data-backdrop={props.snapshot.state === 'failed' ? undefined : 'workspace'}
       data-testid="connection-recovery-view"
       data-recovery-state={props.snapshot.state}
     >

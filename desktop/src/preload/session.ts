@@ -1,4 +1,5 @@
 import { bootstrapDesktopResourceCacheBridge } from './desktopResourceCache';
+import { bootstrapSessionRestartBridge } from './sessionRestart';
 import { bootstrapDesktopTemplateSources } from './desktopTemplateSources';
 /// <reference lib="dom" />
 
@@ -19,6 +20,7 @@ bootstrapDesktopCodeWorkspaceBridge();
 bootstrapDesktopEmbeddedDragHostBridge();
 bootstrapDesktopLanguageBridge();
 bootstrapDesktopSessionContextBridge();
+bootstrapSessionRestartBridge();
 bootstrapDesktopShellBridge();
 bootstrapDesktopStateStorageBridge();
 bootstrapDesktopThemeBridge();

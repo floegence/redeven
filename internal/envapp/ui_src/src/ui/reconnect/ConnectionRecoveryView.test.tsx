@@ -63,6 +63,18 @@ afterEach(() => {
 });
 
 describe('ConnectionRecoveryView', () => {
+  it('fully covers a retained page during recoverable interruptions', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <I18nProvider><ConnectionRecoveryView
+      environmentName="Local Environment"
+      snapshot={{ ...failedSnapshot(), state: 'recovering', phase: 'protocol_connect', desktop_transport: undefined }}
+      onRetry={async () => undefined} onStop={async () => undefined}
+    /></I18nProvider>, host);
+    try {
+      expect(host.querySelector('[data-testid="connection-recovery-view"]')?.getAttribute('data-backdrop')).toBeNull();
+    } finally { dispose(); }
+  });
   it('counts down, respects server minimums, and keeps stop available during connection work', async () => {
     vi.useFakeTimers();
     const host = document.createElement('div');

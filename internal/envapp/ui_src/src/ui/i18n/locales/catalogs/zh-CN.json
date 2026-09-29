@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "正在准备重启",
+    "restarting": "正在重启运行时",
+    "restoring": "正在恢复工作区",
+    "failed": "工作区无法重新连接",
+    "detail": "工作区和未发送的草稿已保留。",
+    "reopen": "重新打开环境",
+    "connectionCenter": "连接中心"
+  },
   "pageAssetRecovery": {
     "updated": "Redeven 已更新",
     "failed": "部分应用内容加载失败",

@@ -1,3 +1,6 @@
+import { RuntimeSessionHandoff, runtimeSessionMatchesTarget } from './runtimeSessionHandoff';
+import { sessionRestartDocumentURL, SESSION_RESTART_REOPEN_URL, SESSION_RESTART_CENTER_URL } from './sessionRestartDocument';
+import { SESSION_RESTART_INIT, SESSION_RESTART_REGISTER, SESSION_RESTART_PREPARE, SESSION_RESTART_CANCEL, SESSION_RESTART_SUBMIT, SESSION_RESTART_READ, SESSION_RESTART_RESTORED } from '../shared/sessionRestartIPC';
 import { localAccessCookieFromHeaders } from './localAccessCookie';
 import { DESKTOP_MODEL_SOURCE_RETRY_CHANNEL } from '../shared/desktopSessionContextIPC';
 import { EnvironmentSettingsConnections } from './environmentSettingsConnections';
@@ -806,6 +809,10 @@ type DesktopUtilityWindowState = Readonly<{
 }>;
 
 type DesktopSessionRecord = {
+  document_generation: string;
+  runtime_target_key?: string;
+  restart_capable: boolean;
+  restart_handoff?: RuntimeSessionHandoff;
   bridge_lease?: RuntimePlacementBridgeLease;
   session_key: DesktopSessionKey;
   target: DesktopSessionTarget;
@@ -1005,6 +1012,18 @@ const utilityWindowState = new Map<DesktopUtilityWindowKind, DesktopUtilityWindo
 const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();
 const UTILITY_WINDOW_KINDS = ['launcher'] as const;
 const sessionsByKey = new Map<DesktopSessionKey, DesktopSessionRecord>();
+type RuntimeRestartWindow = {
+  previous: DesktopSessionRecord;
+  handoff: RuntimeSessionHandoff;
+  targetKey: string;
+  environmentID: string;
+  hostAccess: DesktopRuntimeHostAccess;
+  placement: DesktopRuntimePlacement;
+  operationKey: string;
+  statusURL: string;
+  detached: boolean;
+};
+const runtimeRestartWindows = new Map<number, RuntimeRestartWindow>();
 const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();
 type DesktopWebServiceBrowserController = Readonly<{
   windowRecord: DesktopTrackedWindow;
@@ -1579,7 +1598,7 @@ async function handleRuntimePlacementBridgeSettlement(
         recovery_generation: sessionRecord.transport_recovery_snapshot.generation,
         recovery_attempt_count: sessionRecord.transport_recovery_snapshot.attempt_count,
       });
-    } else if (sessionRecord && !sessionRecord.closing) {
+    } else if (sessionRecord && !sessionRecord.closing && sessionRecord.transport_recovery_session === record.session) {
       await finalizeSessionClosure(sessionRecord.session_key).catch(() => undefined);
     }
   }
@@ -7737,6 +7756,7 @@ function liveGatewayEnvironmentSessions(gatewayID: string, gatewayEnvID: string)
 type RuntimeLifecycleWindowOperation = 'start' | 'stop' | 'restart' | 'update';
 
 type RuntimeLifecycleSessionScope = Readonly<
+  | { kind: 'runtime_target'; target_key: string }
   | { kind: 'session_key'; session_key: DesktopSessionKey }
   | { kind: 'session_target'; target: DesktopSessionTarget }
   | { kind: 'gateway_environment'; gateway_id: string; gateway_env_id: string }
@@ -7776,6 +7796,7 @@ function runtimeLifecycleIdentityKeysForTarget(target: DesktopSessionTarget): re
 
 function runtimeLifecycleIdentityKeysForScope(scope: RuntimeLifecycleSessionScope): readonly string[] {
   switch (scope.kind) {
+    case 'runtime_target': return [runtimeLifecycleIdentityKey(['runtime_target', scope.target_key])];
     case 'session_key':
       return [runtimeLifecycleIdentityKey(['session', scope.session_key])];
     case 'session_target':
@@ -7810,6 +7831,7 @@ function runtimeLifecycleSessionMatchesScope(
   scope: RuntimeLifecycleSessionScope,
 ): boolean {
   switch (scope.kind) {
+    case 'runtime_target': return runtimeSessionMatchesTarget(sessionRecord, scope.target_key);
     case 'session_key':
       return sessionRecord.session_key === scope.session_key;
     case 'session_target':
@@ -7834,6 +7856,7 @@ function runtimeLifecycleScopeMatchesLauncherOpen(
   const targetID = compact(snapshot.open_progress.target_id);
   const environmentID = compact(snapshot.environment_id ?? snapshot.open_progress.environment_id);
   switch (scope.kind) {
+    case 'runtime_target': return runtimeLifecycleCoordinator.operationOwner(snapshot.operation_key)?.target_key === scope.target_key;
     case 'session_key':
       return targetID === scope.session_key
         || compact(snapshot.subject_id) === scope.session_key
@@ -7894,6 +7917,12 @@ async function closeEnvironmentSessionsForRuntimeLifecycle(input: Readonly<{
 }>): Promise<void> {
   markRuntimeLifecycleAccepted(input.scope);
   cancelLauncherOpensForRuntimeLifecycle(input.scope, input.preserved_open_operation_key);
+  for (const pending of runtimeRestartWindows.values()) {
+    if (!runtimeLifecycleSessionMatchesScope(pending.previous, input.scope)) continue;
+    pending.handoff.dispose();
+    runtimeRestartWindows.delete(pending.previous.root_window.webContentsID);
+    liveTrackedBrowserWindow(pending.previous.root_window)?.destroy();
+  }
   const closeMatchingSessions = async (): Promise<void> => {
     const sessionKeys = [...sessionsByKey.values()]
       .filter((sessionRecord) => !sessionRecord.closing && runtimeLifecycleSessionMatchesScope(sessionRecord, input.scope))
@@ -7907,6 +7936,166 @@ async function closeEnvironmentSessionsForRuntimeLifecycle(input: Readonly<{
   await closeMatchingSessions();
   await Promise.resolve();
   await closeMatchingSessions();
+}
+
+function currentRuntimeRestartWindow(pending: RuntimeRestartWindow): boolean {
+  return runtimeRestartWindows.get(pending.previous.root_window.webContentsID) === pending
+    && !!liveTrackedBrowserWindow(pending.previous.root_window);
+}
+
+async function showRuntimeRestartStatus(
+  pending: RuntimeRestartWindow,
+  stage: 'restarting' | 'restoring' | 'failed',
+): Promise<void> {
+  if (!currentRuntimeRestartWindow(pending)) return;
+  const win = pending.previous.root_window.browserWindow;
+  pending.statusURL = sessionRestartDocumentURL({
+    label: pending.previous.target.label, stage,
+    locale: desktopLanguageState().getSnapshot().resolved_locale,
+    theme: desktopThemeState().getSnapshot(),
+  });
+  await win.loadURL(pending.statusURL);
+}
+
+async function prepareRuntimeRestartWindows(input: Readonly<{
+  targetKey: string;
+  environmentID: string;
+  hostAccess: DesktopRuntimeHostAccess;
+  placement: DesktopRuntimePlacement;
+  operationKey: string;
+  signal: AbortSignal;
+}>): Promise<void> {
+  const scope = { kind: 'runtime_target', target_key: input.targetKey } as const;
+  const records = [...sessionsByKey.values()].filter(record => !record.closing && runtimeSessionMatchesTarget(record, input.targetKey));
+  // Unsupported pages must fail before either navigation or Runtime mutation.
+  if (records.some(record => !record.restart_capable)) {
+    throw new Error('An open Env App cannot preserve its workspace for restart. Let it finish loading or close it before restarting.');
+  }
+  const prepared: RuntimeRestartWindow[] = [];
+  try {
+    for (const record of records) {
+      const pending: RuntimeRestartWindow = {
+        previous: record, handoff: new RuntimeSessionHandoff(record.document_generation),
+        targetKey: input.targetKey, environmentID: input.environmentID, hostAccess: input.hostAccess,
+        placement: input.placement, operationKey: input.operationKey, statusURL: '', detached: false,
+      };
+      runtimeRestartWindows.set(record.root_window.webContentsID, pending);
+      prepared.push(pending);
+      await pending.handoff.prepare(() => record.root_window.browserWindow.webContents.send(SESSION_RESTART_PREPARE, pending.handoff.ticket), input.signal);
+    }
+    input.signal.throwIfAborted();
+  } catch (error) {
+    for (const pending of prepared) {
+      if (currentRuntimeRestartWindow(pending)) {
+        pending.previous.root_window.browserWindow.webContents.send(SESSION_RESTART_CANCEL, pending.handoff.ticket);
+        runtimeRestartWindows.delete(pending.previous.root_window.webContentsID);
+      }
+      pending.handoff.dispose();
+    }
+    throw error;
+  }
+  markRuntimeLifecycleAccepted(scope);
+  cancelLauncherOpensForRuntimeLifecycle(scope, input.operationKey);
+  for (const pending of runtimeRestartWindows.values()) {
+    if (pending.targetKey !== input.targetKey) continue;
+    pending.operationKey = input.operationKey;
+    // Navigation retires the old document and its reconnect scheduler. Session
+    // disposal then releases all authority before the Runtime can be stopped.
+    pending.detached = true;
+    await showRuntimeRestartStatus(pending, 'restarting');
+    await finalizeSessionClosure(pending.previous.session_key, {
+      expectedSession: pending.previous, preserveRoot: true, reason: 'runtime_restart',
+    });
+  }
+}
+
+async function restoreRuntimeRestartWindow(pending: RuntimeRestartWindow, signal: AbortSignal): Promise<void> {
+  if (!currentRuntimeRestartWindow(pending)) return;
+  let lease: RuntimePlacementBridgeLease | undefined;
+  let opened: DesktopSessionRecord | undefined;
+  const assertCurrent = (): void => {
+    signal.throwIfAborted();
+    if (!currentRuntimeRestartWindow(pending)) throw new Error('The Env App window was closed during restart.');
+  };
+  try {
+    assertCurrent();
+    await showRuntimeRestartStatus(pending, 'restoring');
+    const preferences = await loadDesktopPreferencesCached();
+    const localEnvironment = findLocalEnvironmentByID(preferences, pending.environmentID);
+    const savedTarget = preferences.saved_runtime_targets.find(target => target.id === pending.environmentID);
+    if (!localEnvironment && !savedTarget) throw new Error('The registered Runtime target is no longer available.');
+    const hostAccess = localEnvironment ? { kind: 'local_host' as const } : savedTarget!.host_access;
+    const placement = localEnvironment ? localHostRuntimeLifecyclePlacement(localEnvironment) : savedTarget!.placement;
+    if (runtimeLifecycleTargetKey(hostAccess, placement) !== pending.targetKey) throw new Error('The registered Runtime target changed during restart.');
+    let startup: StartupReport;
+    let runtimeHandle: DesktopSessionRuntimeHandle;
+    if (hostAccess.kind === 'local_host' && placement.kind === 'host_process') {
+      const environment = findLocalEnvironmentByID(preferences, pending.environmentID);
+      if (!environment) throw new Error('The Local Environment is no longer registered.');
+      const record = await attachLocalEnvironmentRuntime(environment);
+      if (!record || !runtimeServiceIsOpenable(record.startup.runtime_service)) throw new Error('The Runtime is not ready. Start it from Connection Center, then reopen this environment.');
+      startup = record.startup;
+      runtimeHandle = record.runtime_handle;
+    } else {
+      const targetID = desktopRuntimeTargetID(hostAccess, placement, pending.environmentID);
+      const ready = savedRuntimePlacementReadyRecord(targetID, pending.environmentID, pending.previous.target.label, hostAccess, placement);
+      if (!ready) throw new Error('The Runtime has no verified ready record. Refresh its status in Connection Center.');
+      lease = await acquireRuntimePlacementBridgeForReadyRecord(ready, pending.operationKey, signal);
+      const readiness = await probeLocalRuntimeBridgeStartup(lease.record.startup, {
+        timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS, signal, shellCacheScope: targetID,
+      });
+      if (!readiness.ok || !runtimeServiceIsOpenable(readiness.value.runtime_service)) throw new Error('Desktop could not verify the restarted Runtime connection.');
+      assertRuntimePlacementProcessIdentity(ready, readiness.value);
+      await prepareDesktopModels(lease);
+      startup = { ...lease.record.startup, ...readiness.value,
+        local_ui_url: lease.record.startup.local_ui_url, local_ui_urls: lease.record.startup.local_ui_urls,
+        runtime_control: lease.record.startup.runtime_control };
+      runtimeHandle = lease.record.runtime_handle;
+    }
+    assertCurrent();
+    opened = await createSessionRecord(pending.previous.target, startup, {
+      runtimeTargetKey: pending.targetKey, runtimeHandle, attached: true,
+      transportRecovery: lease?.record.session, reuseSessionWindow: pending.previous,
+      restartHandoff: pending.handoff,
+    });
+    if (lease) {
+      lease.attachSession(opened.session_key);
+      opened.bridge_lease = lease;
+    }
+    const cancel = () => { void failOpeningSession(opened!, 'Desktop canceled workspace restoration.'); };
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
+    try { await waitForSessionInitialLoad(opened); }
+    finally { signal.removeEventListener('abort', cancel); }
+  } catch (error) {
+    if (opened) await finalizeSessionClosure(opened.session_key, { expectedSession: opened, preserveRoot: true });
+    await lease?.release();
+    if (!currentRuntimeRestartWindow(pending)) return;
+    await showRuntimeRestartStatus(pending, 'failed');
+    throw error;
+  }
+}
+
+function assertRuntimePlacementProcessIdentity(ready: RuntimePlacementReadyRecord, startup: StartupReport): void {
+  if (!ready.runtime_pid || !ready.runtime_started_at_unix_ms
+    || ready.runtime_pid !== startup.pid || ready.runtime_started_at_unix_ms !== startup.started_at_unix_ms) {
+    throw new Error('The Runtime process changed after Desktop verified it. Refresh its status before reopening.');
+  }
+}
+
+async function reopenRuntimeRestartWindow(pending: RuntimeRestartWindow): Promise<void> {
+  if (!currentRuntimeRestartWindow(pending)) return;
+  try {
+    await runtimeLifecycleCoordinator.runOpen({
+      target_key: pending.targetKey, operation_key: `${pending.previous.session_key}:restore`,
+      fingerprint: runtimeLifecycleFingerprint({ operation: 'restore', ticket: pending.handoff.ticket }),
+      execute: signal => restoreRuntimeRestartWindow(pending, signal),
+    });
+  } catch (error) {
+    // Admission failures leave the existing status document in place. The
+    // admitted restore path already presents its own recoverable failure.
+    console.warn('[redeven:desktop-session] workspace restore failed', error instanceof Error ? error.message : String(error));
+  }
 }
 
 async function handoffSessionToRuntimeLifecycle(input: Readonly<{
@@ -9129,6 +9318,14 @@ function resolveSessionInitialLoadSuccess(
     return;
   }
   sessionRecord.lifecycle = 'open';
+  if (sessionRecord.restart_handoff) {
+    const pending = runtimeRestartWindows.get(sessionRecord.root_window.webContentsID);
+    if (pending?.handoff === sessionRecord.restart_handoff) {
+      pending.handoff.dispose();
+      runtimeRestartWindows.delete(sessionRecord.root_window.webContentsID);
+    }
+    sessionRecord.restart_handoff = undefined;
+  }
   const resolve = sessionRecord.resolve_initial_load;
   sessionRecord.resolve_initial_load = null;
   sessionRecord.reject_initial_load = null;
@@ -9142,7 +9339,7 @@ function resolveSessionInitialLoadSuccess(
 }
 
 function resolveSessionInitialLoadWhenReady(sessionRecord: DesktopSessionRecord): void {
-  if (!sessionRecord.env_app_ready) {
+  if (!sessionRecord.env_app_ready || (sessionRecord.restart_handoff && !sessionRecord.restart_handoff.ready(sessionRecord.document_generation))) {
     return;
   }
   resolveSessionInitialLoadSuccess(sessionRecord, {
@@ -9177,16 +9374,14 @@ function normalizeDesktopSessionAppReadyPayload(value: unknown): DesktopSessionA
   const compactTimings = Object.fromEntries(Object.entries(timings).filter(([, timing]) => timing !== undefined));
   return {
     state,
+    document_generation: compact((value as Partial<DesktopSessionAppReadyPayload>).document_generation),
     ...(Object.keys(compactTimings).length > 0 ? { timings: compactTimings } : {}),
   };
 }
 
 function desktopSessionContextSnapshot(sessionRecord: DesktopSessionRecord | null): DesktopSessionContextSnapshot | null {
-  return desktopSessionContextSnapshotFromTarget(
-    sessionRecord?.target ?? null,
-    sessionRecord?.startup.exposure,
-    sessionRecord?.transport.kind,
-  );
+  const snapshot = desktopSessionContextSnapshotFromTarget(sessionRecord?.target ?? null, sessionRecord?.startup.exposure, sessionRecord?.transport.kind);
+  return snapshot && sessionRecord ? { ...snapshot, document_generation: sessionRecord.document_generation } : null;
 }
 
 function sendSessionTransportRecoverySnapshot(sessionRecord: DesktopSessionRecord): void {
@@ -9270,7 +9465,9 @@ async function failOpeningSession(
   sessionRecord.resolve_initial_load = null;
   sessionRecord.reject_initial_load = null;
   reject?.(error);
-  await finalizeSessionClosure(sessionRecord.session_key);
+  const pending = runtimeRestartWindows.get(sessionRecord.root_window.webContentsID);
+  await finalizeSessionClosure(sessionRecord.session_key, { preserveRoot: Boolean(pending), expectedSession: sessionRecord });
+  if (pending) await showRuntimeRestartStatus(pending, 'failed');
 }
 
 async function waitForSessionInitialLoad(
@@ -9344,7 +9541,7 @@ function createSessionRootWindow(
     }>) => void;
   }>,
 ): DesktopTrackedWindow {
-  return createBrowserWindow({
+  const rootWindow = createBrowserWindow({
     targetURL,
     stateKey: sessionWindowStateKey(sessionKey),
     role: 'session_root',
@@ -9363,6 +9560,17 @@ function createSessionRootWindow(
       }
     },
     onWillNavigate: (nextURL, event) => {
+      const pending = runtimeRestartWindows.get(rootWindow.webContentsID);
+      if (pending && (nextURL === pending.statusURL
+        || nextURL === sessionRecordForWebContentsID(rootWindow.webContentsID)?.entry_url)) return;
+      if (pending && rootWindow.browserWindow.webContents.getURL() === pending.statusURL) {
+        event.preventDefault();
+        if (nextURL === SESSION_RESTART_REOPEN_URL) void reopenRuntimeRestartWindow(pending);
+        else if (nextURL === SESSION_RESTART_CENTER_URL) void openDesktopWelcomeWindow({
+          entryReason: 'switch_environment', selectedEnvironmentID: pending.environmentID, stealAppFocus: true,
+        });
+        return;
+      }
       if (isAllowedSessionNavigation(sessionKey, nextURL)) {
         return;
       }
@@ -9370,6 +9578,7 @@ function createSessionRootWindow(
       openExternal(nextURL);
     },
   });
+  return rootWindow;
 }
 
 function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, startup: StartupReport): string {
@@ -9425,20 +9634,25 @@ async function createSessionRecord(
     runtimeLifecycleGenerationIdentityKeys?: readonly string[];
     runtimeLifecycleGenerationSnapshot?: string;
     transportRecovery?: RuntimePlacementBridgeSession | null;
+    runtimeTargetKey?: string;
+    reuseSessionWindow?: DesktopSessionRecord;
+    restartHandoff?: RuntimeSessionHandoff;
   }> = {},
 ): Promise<DesktopSessionRecord> {
+  const identityKeys = options.runtimeLifecycleGenerationIdentityKeys ?? [
+    ...runtimeLifecycleIdentityKeysForTarget(target),
+    ...(options.runtimeTargetKey ? [runtimeLifecycleIdentityKey(['runtime_target', options.runtimeTargetKey])] : []),
+  ];
+  const expectedGeneration = options.runtimeLifecycleGenerationSnapshot ?? runtimeLifecycleGenerationSnapshot(identityKeys);
   const assertRuntimeLifecycleGenerationUnchanged = (): void => {
-    const currentGeneration = runtimeLifecycleGenerationSnapshot(
-      options.runtimeLifecycleGenerationIdentityKeys ?? runtimeLifecycleIdentityKeysForTarget(target),
-    );
+    const currentGeneration = runtimeLifecycleGenerationSnapshot(identityKeys);
     if (
-      options.runtimeLifecycleGenerationSnapshot !== undefined
-      && currentGeneration !== options.runtimeLifecycleGenerationSnapshot
+      currentGeneration !== expectedGeneration
     ) {
       console.warn('[redeven:desktop-session] session open canceled by lifecycle generation', {
         session_key: target.session_key,
         target: target.label,
-        expected_generation: options.runtimeLifecycleGenerationSnapshot,
+        expected_generation: expectedGeneration,
         current_generation: currentGeneration,
       });
       throw new Error('Desktop canceled this Environment Open because Runtime maintenance started.');
@@ -9465,9 +9679,13 @@ async function createSessionRecord(
     }
     throw error;
   }
+  if (options.reuseSessionWindow && (!liveTrackedBrowserWindow(options.reuseSessionWindow.root_window)
+    || options.reuseSessionWindow.session_partition !== transport.partition)) {
+    throw new Error('The retained Env App window cannot accept this session.');
+  }
   await prepareDesktopSessionTransport(transport);
   assertRuntimeLifecycleGenerationUnchanged();
-  const diagnostics = new DesktopDiagnosticsRecorder();
+  const diagnostics = options.reuseSessionWindow?.diagnostics ?? new DesktopDiagnosticsRecorder();
   await diagnostics.configureRuntime(startup, transport.allowedBaseURL, {
     stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup),
   });
@@ -9479,7 +9697,7 @@ async function createSessionRecord(
   const initialLoad = createInitialLoadDeferred();
   let sessionRecord!: DesktopSessionRecord;
   assertRuntimeLifecycleGenerationUnchanged();
-  const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics, {
+  const rootWindow = options.reuseSessionWindow?.root_window ?? createSessionRootWindow(target.session_key, entryURL, diagnostics, {
     stealAppFocus: options.stealAppFocus,
     sessionPartition,
     // A password-protected external target must expose its unlock gate before
@@ -9488,16 +9706,18 @@ async function createSessionRecord(
     presentOnReadyToShow: startup.password_required === true,
     deferInitialLoad: true,
     onDidFinishLoad: () => {
-      sessionRecord.document_loaded_at_unix_ms = Date.now();
-      void sessionRecord.diagnostics.recordLifecycle(
+      const current = sessionRecordForWebContentsID(sessionRecord.root_window.webContentsID);
+      if (!current || current.closing || current.root_window.browserWindow.webContents.getURL() !== current.entry_url) return;
+      current.document_loaded_at_unix_ms = Date.now();
+      void current.diagnostics.recordLifecycle(
         'session_document_loaded',
         'Session document finished loading; waiting for Env App readiness.',
       );
     },
     onDidFailLoad: (details) => {
-      if (!details.isMainFrame) {
-        return;
-      }
+      const current = sessionRecordForWebContentsID(sessionRecord.root_window.webContentsID);
+      if (!details.isMainFrame || !current || current.closing || details.validatedURL !== current.entry_url) return;
+      const { transport, target } = current;
       console.warn('[redeven:desktop-session] session document failed to load', {
         session_key: target.session_key,
         target: target.label,
@@ -9507,7 +9727,7 @@ async function createSessionRecord(
       });
       if (transport.proxyPolicy === 'direct') {
         void failOpeningSession(
-          sessionRecord,
+          current,
           localDesktopTransportFailure(target.label, details.errorDescription, [
             {
               channel: 'transport',
@@ -9525,12 +9745,16 @@ async function createSessionRecord(
         return;
       }
       void failOpeningSession(
-        sessionRecord,
+        current,
         sessionOpenFailureMessage(stripSensitiveURLPayload(details.validatedURL) || safeEntryURL, details.errorDescription),
       );
     },
   });
   sessionRecord = {
+    document_generation: crypto.randomUUID(),
+    runtime_target_key: options.runtimeTargetKey,
+    restart_capable: false,
+    restart_handoff: options.restartHandoff,
     session_key: target.session_key,
     target,
     startup,
@@ -9563,19 +9787,28 @@ async function createSessionRecord(
     closing: false,
   };
 
+  options.restartHandoff?.bind(sessionRecord.document_generation);
+  if (!liveTrackedBrowserWindow(rootWindow)) throw new Error('The Env App window was closed.');
   sessionsByKey.set(target.session_key, sessionRecord);
   sessionKeyByWebContentsID.set(rootWindow.webContentsID, target.session_key);
-  void rootWindow.browserWindow.loadURL(entryURL);
+  void rootWindow.browserWindow.loadURL(entryURL).catch(error => failOpeningSession(sessionRecord, error));
   if (options.transportRecovery) {
     attachSessionTransportRecovery(sessionRecord, options.transportRecovery);
   }
-  rootWindow.browserWindow.on('focus', () => {
-    lastFocusedSessionKey = target.session_key;
-  });
-  rootWindow.browserWindow.on('closed', () => {
-    sessionKeyByWebContentsID.delete(rootWindow.webContentsID);
-    void finalizeSessionClosure(target.session_key);
-  });
+  if (!options.reuseSessionWindow) {
+    rootWindow.browserWindow.on('focus', () => {
+      const current = sessionRecordForWebContentsID(rootWindow.webContentsID);
+      if (current) lastFocusedSessionKey = current.session_key;
+    });
+    rootWindow.browserWindow.on('closed', () => {
+      const current = sessionRecordForWebContentsID(rootWindow.webContentsID);
+      const pending = runtimeRestartWindows.get(rootWindow.webContentsID);
+      pending?.handoff.dispose();
+      runtimeRestartWindows.delete(rootWindow.webContentsID);
+      sessionKeyByWebContentsID.delete(rootWindow.webContentsID);
+      if (current) void finalizeSessionClosure(current.session_key, { expectedSession: current });
+    });
+  }
 
   recordWindowLifecycle(
     diagnostics,
@@ -9617,18 +9850,15 @@ async function finalizeSessionClosure(
   sessionKey: DesktopSessionKey,
   options: Readonly<{
     closeWindows?: boolean;
+    preserveRoot?: boolean;
+    expectedSession?: DesktopSessionRecord;
     reason?: 'runtime_start' | 'runtime_stop' | 'runtime_restart' | 'runtime_update';
   }> = {},
 ): Promise<void> {
-  const existingTask = sessionCloseTasks.get(sessionKey);
-  if (existingTask) {
-    return existingTask;
-  }
-
   const sessionRecord = sessionsByKey.get(sessionKey);
-  if (!sessionRecord) {
-    return;
-  }
+  if (!sessionRecord || (options.expectedSession && options.expectedSession !== sessionRecord)) return;
+  const existingTask = sessionCloseTasks.get(sessionKey);
+  if (existingTask) return existingTask;
 
   const task = (async () => {
     const wasOpening = sessionRecord.lifecycle === 'opening';
@@ -9677,7 +9907,7 @@ async function finalizeSessionClosure(
     sessionRecord.web_service_loopback_gateways.clear();
 
     const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
-    if (options.closeWindows !== false && rootWindow) {
+    if (options.closeWindows !== false && !options.preserveRoot && rootWindow) {
       rootWindow.destroy();
     }
 
@@ -13532,6 +13762,7 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
       detail: 'Desktop is opening the local Env App window.',
     });
     sessionRecord = await createSessionRecord(target, runtimeRecord.startup, {
+      runtimeTargetKey: localHostRuntimeLifecycleTargetKey(environment),
       runtimeHandle: runtimeRecord.runtime_handle,
       attached: runtimeRecord.runtime_handle.launch_mode === 'attached',
       stealAppFocus: options.stealAppFocus !== false,
@@ -15032,6 +15263,7 @@ async function openRuntimePlacementBridgeFromLauncher(
             ? buildWSLDesktopTarget(record.session.host_access, targetID, record.label)
             : target;
       sessionRecord = await createSessionRecord(openTarget, record.startup, {
+        runtimeTargetKey: runtimeLifecycleTargetKey(record.session.host_access, record.session.placement),
         runtimeHandle: record.runtime_handle,
         stealAppFocus: true,
         openStartedAtUnixMS,
@@ -15221,6 +15453,8 @@ async function executeDirectManagedEnvironmentLifecycle(
 ): Promise<DesktopLauncherActionResult> {
   const targetID = desktopRuntimeTargetID(input.host_access, input.placement, input.environment_id);
   const lifecycleSignal = input.lifecycle_signal;
+  const lifecycleTargetKey = runtimeLifecycleTargetKey(input.host_access, input.placement);
+  let sessionsReleased = false;
   const existingOperation = launcherOperations.get(input.operation_key);
   if (!existingOperation) {
     throw new Error('Runtime lifecycle operation was not created before execution.');
@@ -15293,22 +15527,31 @@ async function executeDirectManagedEnvironmentLifecycle(
         (operation) => manageEnvironmentCertificate({ environment_id: input.environment_id, operation }, undefined, access?.local_ui_bind));
     }
     const closeOwnedSessions = async (): Promise<void> => {
-      if (input.operation === 'start') {
-        return;
+      if (input.operation === 'start' || sessionsReleased) return;
+      if (input.operation === 'restart') {
+        await prepareRuntimeRestartWindows({
+          targetKey: lifecycleTargetKey, environmentID: input.environment_id,
+          hostAccess: input.host_access, placement: input.placement,
+          operationKey: input.operation_key, signal: lifecycleSignal,
+        });
+      } else {
+        await closeEnvironmentSessionsForRuntimeLifecycle({
+          operation: input.operation,
+          scope: { kind: 'runtime_target', target_key: lifecycleTargetKey },
+          ...(input.operation_owner === 'open' ? { preserved_open_operation_key: input.operation_key } : {}),
+        });
       }
-      await closeEnvironmentSessionsForRuntimeLifecycle({
-        operation: input.operation,
-        scope: {
-          kind: 'session_key',
-          session_key:
-            input.host_access.kind === 'local_host' && input.placement.kind === 'host_process'
-              ? buildManagedLocalRuntimeDesktopTarget(input.environment_id, input.label).session_key
-              : desktopSessionKeyFromRuntimeTargetID(targetID),
-        },
-        ...(input.operation_owner === 'open' ? { preserved_open_operation_key: input.operation_key } : {}),
-      });
-      await clearRuntimePlacementTargetRecords(targetID).catch(() => undefined);
+      sessionsReleased = true;
+      await clearRuntimePlacementTargetRecords(targetID);
     };
+    if (input.operation === 'restart') {
+      const stillRegistered = input.host_access.kind === 'local_host' && input.placement.kind === 'host_process'
+        ? !!findLocalEnvironmentByID(preferences, input.environment_id)
+        : preferences.saved_runtime_targets.some(target => target.id === input.environment_id
+          && runtimeLifecycleTargetKey(target.host_access, target.placement) === lifecycleTargetKey);
+      if (!stillRegistered) throw new Error('The registered Runtime target changed before restart.');
+      await closeOwnedSessions();
+    }
 
     if (input.host_access.kind === 'local_host' && input.placement.kind === 'host_process') {
       const environment = findLocalEnvironmentByID(preferences, input.environment_id);
@@ -15650,6 +15893,13 @@ async function executeDirectManagedEnvironmentLifecycle(
         signal: lifecycleSignal,
       });
     }
+    if (input.operation === 'restart') {
+      const restored = await Promise.allSettled([...runtimeRestartWindows.values()]
+        .filter(pending => pending.targetKey === lifecycleTargetKey && pending.operationKey === input.operation_key)
+        .map(pending => restoreRuntimeRestartWindow(pending, lifecycleSignal)));
+      const failed = restored.find(result => result.status === 'rejected');
+      if (failed?.status === 'rejected') throw failed.reason;
+    }
     await refreshWelcomeRuntimeHealthForEnvironment(input.environment_id, {
       force: true,
     }).catch(() => undefined);
@@ -15705,6 +15955,11 @@ async function executeDirectManagedEnvironmentLifecycle(
             : 'started_environment_runtime',
     );
   } catch (error) {
+    for (const pending of runtimeRestartWindows.values()) {
+      if (pending.targetKey !== lifecycleTargetKey || pending.operationKey !== input.operation_key || !pending.detached) continue;
+      await finalizeSessionClosure(pending.previous.session_key, { preserveRoot: true });
+      await showRuntimeRestartStatus(pending, 'failed');
+    }
     const failure = desktopFailureFromError(error, {
       code: 'operation_failed',
       title: 'Environment Runtime Action Failed',
@@ -17754,6 +18009,11 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   }
   await runtimeLifecycleCoordinator.waitForAll();
   await browserPackages.close();
+  for (const pending of runtimeRestartWindows.values()) {
+    pending.handoff.dispose();
+    liveTrackedBrowserWindow(pending.previous.root_window)?.destroy();
+  }
+  runtimeRestartWindows.clear();
   const sessionClosePromises = [...sessionsByKey.keys()].map((sessionKey) => finalizeSessionClosure(sessionKey));
   sshRuntimeMaintenanceByKey.clear();
   runtimePlacementMaintenanceByTargetID.clear();
@@ -18150,6 +18410,43 @@ if (!app.requestSingleInstanceLock()) {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
     event.returnValue = desktopSessionContextSnapshot(sessionRecord);
   });
+  const currentRestartDocument = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent, generation: unknown): DesktopSessionRecord | null => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    return record && !record.closing && record.root_window.webContentsID === event.sender.id
+      && event.senderFrame === event.sender.mainFrame && event.senderFrame.url === record.entry_url
+      && generation === record.document_generation ? record : null;
+  };
+  ipcMain.on(SESSION_RESTART_INIT, (event) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    event.returnValue = record && !record.closing && record.root_window.webContentsID === event.sender.id
+      && event.senderFrame === event.sender.mainFrame && event.senderFrame.url === record.entry_url
+      ? record.document_generation : null;
+  });
+  ipcMain.on(SESSION_RESTART_REGISTER, (event, generation: unknown) => {
+    const record = currentRestartDocument(event, generation);
+    if (record?.runtime_target_key) record.restart_capable = true;
+  });
+  ipcMain.handle(SESSION_RESTART_SUBMIT, (event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return false;
+    const { generation, ticket, state } = payload as Record<string, unknown>;
+    const record = currentRestartDocument(event, generation);
+    const pending = record && runtimeRestartWindows.get(record.root_window.webContentsID);
+    return !!pending && pending.previous === record && pending.handoff.submit(record.document_generation, String(ticket), state);
+  });
+  ipcMain.handle(SESSION_RESTART_READ, (event, generation: unknown) => {
+    const record = currentRestartDocument(event, generation);
+    const pending = record && runtimeRestartWindows.get(record.root_window.webContentsID);
+    return record && pending ? pending.handoff.read(record.document_generation) : null;
+  });
+  ipcMain.handle(SESSION_RESTART_RESTORED, (event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return false;
+    const { generation, ticket } = payload as Record<string, unknown>;
+    const record = currentRestartDocument(event, generation);
+    const pending = record && runtimeRestartWindows.get(record.root_window.webContentsID);
+    if (!record || !pending || !pending.handoff.restored(record.document_generation, String(ticket))) return false;
+    resolveSessionInitialLoadWhenReady(record);
+    return true;
+  });
   ipcMain.on(DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL, (event) => {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
     event.returnValue = sessionRecord?.transport_recovery_snapshot ?? null;
@@ -18160,9 +18457,9 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
-    if (!sessionRecord) {
-      return;
-    }
+    if (!sessionRecord || event.senderFrame !== event.sender.mainFrame
+      || sessionRecord.root_window.webContentsID !== event.sender.id
+      || readyPayload.document_generation !== sessionRecord.document_generation) return;
     markSessionAppReady(sessionRecord, readyPayload);
   });
   ipcMain.handle(DESKTOP_SESSION_TRANSPORT_RECOVERY_STOP_CHANNEL, (event) => {

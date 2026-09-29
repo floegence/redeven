@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "Preparando el reinicio",
+    "restarting": "Reiniciando el tiempo de ejecución",
+    "restoring": "Restaurando tu espacio de trabajo",
+    "failed": "No se pudo reconectar el espacio de trabajo",
+    "detail": "Se conservan tu espacio de trabajo y los borradores sin enviar.",
+    "reopen": "Volver a abrir el entorno",
+    "connectionCenter": "Centro de conexiones"
+  },
   "pageAssetRecovery": {
     "updated": "Redeven se ha actualizado",
     "failed": "No se pudo cargar parte del contenido de la aplicación",
