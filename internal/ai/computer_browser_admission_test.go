@@ -13,10 +13,6 @@ import (
 )
 
 // This diagnostic calls the real resolver and holds only its external source
-// retirement reply. It writes no product state and starts no user browser.
-func TestWorkspaceSourceAdmissionCancellationIsIndependent(t *testing.T) {
-	testWorkspaceSourceAdmissionIsolation(t, false)
-}
 
 func TestExtensionAdmissionSerializesOneNativeOwnerAndCancelsOnlyWaiter(t *testing.T) {
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), nil, t.TempDir())
@@ -62,115 +58,6 @@ func TestExtensionAdmissionSerializesOneNativeOwnerAndCancelsOnlyWaiter(t *testi
 	defer runtime.mu.RUnlock()
 	if len(runtime.extensionAdmissions) != 0 {
 		t.Fatal("admission entries were not retired")
-	}
-}
-
-func TestWorkspaceSourceAdmissionHealthyTargetIsIndependent(t *testing.T) {
-	testWorkspaceSourceAdmissionIsolation(t, true)
-}
-
-func testWorkspaceSourceAdmissionIsolation(t *testing.T, healthy bool) {
-	t.Helper()
-	entered := make(chan struct{})
-	tabs := []ComputerBrowserTab{
-		{ID: "7", NativeTargetID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", URL: "https://fixture-a.test/", Title: "A"},
-		{ID: "8", NativeTargetID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", URL: "https://fixture-b.test/", Title: "B"},
-	}
-	host, _ := browserHostFixture(t, func(w http.ResponseWriter, request *http.Request) {
-		var command struct {
-			ID, Method string
-			Params     json.RawMessage
-		}
-		if err := json.NewDecoder(request.Body).Decode(&command); err != nil {
-			t.Error(err)
-			return
-		}
-		var result any = true
-		switch command.Method {
-		case "source.ready":
-		case "source.inventory":
-			result = tabs
-		case "source.remove":
-			var params struct {
-				Target string `json:"target"`
-			}
-			_ = json.Unmarshal(command.Params, &params)
-			if params.Target == "blocked" {
-				close(entered)
-			}
-			<-request.Context().Done()
-			return
-		default:
-			t.Errorf("unexpected method: %s", command.Method)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": command.ID, "result": result})
-	})
-	runtime := NewComputerUseRuntime(NewTargetRegistry(), nil, t.TempDir())
-	hub, client, peer := extensionFixture(t)
-	runtime.browserHost, runtime.extension = host, hub
-	workspace := &browserWorkspace{extension: client, native: map[string]ComputerBrowserTab{"blocked": tabs[0], "healthy": tabs[1]}}
-	runtime.browserWorkspaces = map[string]*browserWorkspace{"fixture": workspace}
-	runtime.browserViews = map[string]*browserView{"fixture": {ctx: t.Context(), targets: []string{"blocked", "healthy"}, workspace: workspace}}
-	binding := "11111111-1111-1111-1111-111111111111"
-	if healthy {
-		runtime.executors = make(map[string]TargetToolExecutor)
-		runtime.executors["healthy"] = &extensionTargetExecutor{client: client, tabID: tabs[1].ID, nativeTargetID: tabs[1].NativeTargetID, targetID: "healthy", sourceHost: host, pipe: &extensionSourcePipe{ctx: t.Context(), binding: binding}}
-	}
-	go func() {
-		for {
-			raw, err := browserbridge.ReadMessage(peer, 1<<20)
-			if err != nil {
-				return
-			}
-			var request struct{ ID, Command string }
-			if json.Unmarshal(raw, &request) != nil {
-				return
-			}
-			var result any = tabs
-			if request.Command == "bind" && healthy {
-				result = map[string]any{"tab_id": tabs[1].ID, "native_target_id": tabs[1].NativeTargetID, "title": tabs[1].Title, "binding": binding, "created": false}
-			} else if request.Command != "inventory" {
-				t.Errorf("unexpected native command: %s", request.Command)
-				return
-			}
-			if browserbridge.WriteMessage(peer, map[string]any{"id": request.ID, "result": result}, 1<<20) != nil {
-				return
-			}
-		}
-	}()
-	firstContext, cancelFirst := context.WithCancel(t.Context())
-	defer cancelFirst()
-	firstDone := make(chan error, 1)
-	go func() { _, err := runtime.resolveWorkspaceSource(firstContext, "blocked"); firstDone <- err }()
-	select {
-	case <-entered:
-	case err := <-firstDone:
-		t.Fatalf("failed before source wait: %v", err)
-	case <-time.After(3 * time.Second):
-		t.Fatal("first source never entered wait")
-	}
-	secondContext, cancelSecond := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancelSecond()
-	secondDone := make(chan error, 1)
-	started := time.Now()
-	go func() { _, err := runtime.resolveWorkspaceSource(secondContext, "healthy"); secondDone <- err }()
-	select {
-	case err := <-secondDone:
-		if healthy && err != nil || !healthy && !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("second error: %v", err)
-		}
-		t.Logf("Independent target (healthy=%v) completed after %s", healthy, time.Since(started))
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("unrelated source admission ignored its deadline")
-	}
-	cancelFirst()
-	select {
-	case err := <-firstDone:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("first error: %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("first source did not cancel")
 	}
 }
 

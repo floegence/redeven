@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/browserinstall"
-	"github.com/floegence/redeven/internal/browserstore"
 )
 
 // ComputerUseRuntime owns the adapters and the only target readiness path.
@@ -22,11 +21,7 @@ type ComputerUseRuntime struct {
 	browserRecovery        *browserRecovery     // protected by connectMu
 	browserInstallation    *browserinstall.Manager
 	browserInstallationErr error
-	browserStore           *browserstore.Store
-	browserStoreErr        error
-	browserHost            *browserSourceHost           // protected by connectMu
-	browserViews           map[string]*browserView      // protected by mu
-	browserWorkspaces      map[string]*browserWorkspace // protected by connectMu
+	browserHost            *browserSourceHost // protected by connectMu
 	candidates             map[string]computerCandidate
 	managedProfiles        map[string]*managedBrowserProfile
 	extension              *computerExtensionHub
@@ -462,11 +457,6 @@ func (r *ComputerUseRuntime) Close() error {
 	defer r.connectMu.Unlock()
 	r.mu.Lock()
 	r.closed = true
-	var browserViews []*browserView
-	for _, view := range r.browserViews {
-		view.cancel()
-		browserViews = append(browserViews, view)
-	}
 	var browserLeases []*browserTargetLease
 	for _, control := range r.controls {
 		control.mu.Lock()
@@ -480,12 +470,8 @@ func (r *ComputerUseRuntime) Close() error {
 		sampler.cancel()
 	}
 	r.mu.Unlock()
-	for _, view := range browserViews {
-		failures = append(failures, view.close())
-	}
 	if r.extension != nil {
-		// The native directory worker observes closed before touching workspace state.
-		// Let it acquire the directory lock and finish before joining it.
+		// The native read loop observes closed before it can admit another source.
 		r.connectMu.Unlock()
 		r.extension.close()
 		r.connectMu.Lock()
@@ -515,8 +501,5 @@ func (r *ComputerUseRuntime) Close() error {
 		profile.close()
 	}
 	clear(r.managedProfiles)
-	if r.browserStore != nil {
-		failures = append(failures, r.browserStore.Close())
-	}
 	return errors.Join(failures...)
 }

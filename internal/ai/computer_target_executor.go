@@ -138,11 +138,7 @@ func (e *PlaywrightTargetExecutor) setBrowserPrivacy(ctx context.Context, target
 	if e.sourceHost == nil {
 		return nil
 	}
-	var owner any
-	if private {
-		owner = ""
-	}
-	return e.sourceHost.call(ctx, "view.privacy", map[string]any{"target": target, "view": owner}, nil)
+	return e.sourceHost.call(ctx, "source.privacy", map[string]any{"target": target, "private": private}, nil)
 }
 
 func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call TargetToolCall, userControl bool) (TargetToolResult, error) {

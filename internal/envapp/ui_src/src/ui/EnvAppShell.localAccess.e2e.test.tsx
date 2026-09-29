@@ -3499,7 +3499,6 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(activityItemsState.items.map((item) => item.id)).toEqual([
         'plugins',
         'terminal',
-        'browser',
         'monitor',
         'files',
         'codespaces',
@@ -4183,7 +4182,6 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => activityItemsState.items.some((item) => item.id === 'ai'));
       expect(activityItemsState.items.map((item) => item.id)).toEqual([
         'terminal',
-        'browser',
         'monitor',
         'files',
         'codespaces',

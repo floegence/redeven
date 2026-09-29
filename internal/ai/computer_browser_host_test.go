@@ -126,9 +126,8 @@ func TestBrowserHostPackagedIPCOutlivesStartingRequest(t *testing.T) {
 func TestBrowserHostRejectsIncompatibleAndFailedHandshakeWithoutSecrets(t *testing.T) {
 	for _, handshake := range []string{
 		`{"type":"ready","protocol_version":6}`,
-		`{"type":"ready","protocol_version":1,"browser_protocol_version":23,"media_wire_version":1}`,
-		`{"type":"ready","protocol_version":1,"browser_protocol_version":26,"media_wire_version":2}`,
-		`{"type":"ready","protocol_version":1,"browser_protocol_version":26,"media_wire_version":1,"error":"Authorization: private-secret"}`,
+		`{"type":"unexpected","protocol_version":1}`,
+		`{"type":"ready","protocol_version":1,"error":"Authorization: private-secret"}`,
 		`{"error":"data:image/png;base64,private-secret"}`,
 	} {
 		t.Run(handshake, func(t *testing.T) {

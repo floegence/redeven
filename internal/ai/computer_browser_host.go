@@ -18,14 +18,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/floegence/redeven/internal/browserstore"
 )
 
 const (
-	browserHostProtocolVersion       = 1
-	browserProjectionProtocolVersion = 26
-	browserMediaWireVersion          = 1
+	browserHostProtocolVersion = 1
 )
 
 // Explicit startup CDP configuration follows the same source owner as pages
@@ -75,7 +71,7 @@ func (r *ComputerUseRuntime) browserSourceHostLocked(ctx context.Context) (*brow
 		return nil, err
 	}
 	generation := r.browserServiceSnapshot().Generation
-	host, err := startBrowserSourceHost(ctx, resources.NodeBinary, filepath.Join(filepath.Dir(resources.HelperPath), "redevenBrowserHost.mjs"), browserHostHandlers{Directory: r.browserDirectoryCommand, Event: func(event browserHostEvent) { r.browserSourceGenerationEvent(generation, event) }})
+	host, err := startBrowserSourceHost(ctx, resources.NodeBinary, filepath.Join(filepath.Dir(resources.HelperPath), "redevenBrowserHost.mjs"), browserHostHandlers{Event: func(event browserHostEvent) { r.browserSourceGenerationEvent(generation, event) }})
 	if err != nil {
 		r.browserHostStopped(generation)
 		return nil, err
@@ -89,21 +85,14 @@ func (r *ComputerUseRuntime) browserSourceHostLocked(ctx context.Context) (*brow
 }
 
 type browserHostEvent struct {
-	Binding    string            `json:"binding,omitempty"`
-	Type       string            `json:"type"`
-	ID         string            `json:"id,omitempty"`
-	View       string            `json:"view,omitempty"`
-	Reason     string            `json:"reason,omitempty"`
-	Target     string            `json:"target,omitempty"`
-	TabID      string            `json:"tab_id,omitempty"`
-	Foreground bool              `json:"foreground,omitempty"`
-	Action     json.RawMessage   `json:"action,omitempty"`
-	Tab        *browserstore.Tab `json:"tab,omitempty"`
+	Binding string `json:"binding,omitempty"`
+	Type    string `json:"type"`
+	Target  string `json:"target,omitempty"`
+	TabID   string `json:"tab_id,omitempty"`
 }
 
 type browserHostHandlers struct {
-	Directory func(context.Context, browserHostEvent) (string, error)
-	Event     func(browserHostEvent)
+	Event func(browserHostEvent)
 }
 
 // The Runtime owns one source host. HTTP over its private Unix socket separates
@@ -118,7 +107,6 @@ type browserSourceHost struct {
 	directory string
 	done      chan struct{}
 	sequence  atomic.Uint64
-	writeMu   sync.Mutex
 	closeOnce sync.Once
 	handlers  browserHostHandlers
 }
@@ -179,11 +167,9 @@ func startBrowserSourceHost(ctx context.Context, node, helper string, handlers b
 			var response struct {
 				Type    string `json:"type"`
 				Version int    `json:"protocol_version"`
-				Browser int    `json:"browser_protocol_version"`
-				Media   int    `json:"media_wire_version"`
 				Error   string `json:"error"`
 			}
-			if json.Unmarshal(line, &response) != nil || response.Type != "ready" || response.Version != browserHostProtocolVersion || response.Browser != browserProjectionProtocolVersion || response.Media != browserMediaWireVersion || response.Error != "" {
+			if json.Unmarshal(line, &response) != nil || response.Type != "ready" || response.Version != browserHostProtocolVersion || response.Error != "" {
 				err = errors.New("browser host protocol mismatch")
 			}
 		}
@@ -220,50 +206,13 @@ func (host *browserSourceHost) events(reader *bufio.Reader) {
 			return
 		}
 		switch event.Type {
-		case "directory_request":
-			if event.ID == "" || len(event.ID) > 128 || len(event.View) > 128 {
-				return
-			}
-			go host.directoryReply(event)
-		case "source_closed", "source_fault", "view_fault", "source_changed", "source_popup", "view_selected":
+		case "source_closed", "source_fault", "source_popup":
 			if host.handlers.Event != nil {
 				host.handlers.Event(event)
 			}
 		default:
 			return
 		}
-	}
-}
-
-func (host *browserSourceHost) directoryReply(event browserHostEvent) {
-	started := time.Now()
-	var action browserDirectoryAction
-	_ = json.Unmarshal(event.Action, &action)
-	ctx, cancel := context.WithCancel(host.ctx)
-	if action.Kind != "close" {
-		cancel()
-		ctx, cancel = context.WithTimeout(host.ctx, 25*time.Second)
-	}
-	defer cancel()
-	ctx = context.WithValue(ctx, browserTraceRequestKey{}, event.ID)
-	var target string
-	err := errors.New("browser directory is unavailable")
-	if host.handlers.Directory != nil {
-		target, err = host.handlers.Directory(ctx, event)
-	}
-	browserTraceStage(ctx, "directory_"+action.Kind, action.Target, started, err)
-	response := map[string]any{"type": "directory_reply", "id": event.ID}
-	if err != nil {
-		response["error"] = "browser_directory_failed"
-	} else if target != "" {
-		response["target"] = target
-	}
-	body, _ := json.Marshal(response)
-	host.writeMu.Lock()
-	_, writeErr := host.stdin.Write(append(body, '\n'))
-	host.writeMu.Unlock()
-	if writeErr != nil {
-		_ = host.Close()
 	}
 }
 

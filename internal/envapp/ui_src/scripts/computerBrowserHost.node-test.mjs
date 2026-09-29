@@ -1,4 +1,3 @@
-/* global document */
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,7 +8,7 @@ import test from 'node:test';
 import { chromium } from 'playwright';
 import { createComputerBrowserHost } from './computerBrowserHost.mjs';
 
-test('the Runtime host shares one connection and source, isolates a pending navigation, and fences AI against user control', { timeout: 30000 }, async t => {
+test('the Runtime host shares one connection, isolates pending navigation, and fences private Flower control', { timeout: 30000 }, async t => {
   let navigationStarted, finishNavigation;
   const started = new Promise(resolve => { navigationStarted = resolve; });
   const server = http.createServer((request, response) => {
@@ -38,7 +37,7 @@ test('the Runtime host shares one connection and source, isolates a pending navi
   const connect = chromium.connectOverCDP.bind(chromium);
   let connections = 0;
   chromium.connectOverCDP = (...args) => { connections++; return connect(...args); };
-  const host = await createComputerBrowserHost({ resourceURL: (id, target) => `?browser_resource=${id}&browser_target=${target}` });
+  const host = await createComputerBrowserHost({});
   t.after(async () => {
     chromium.connectOverCDP = connect;
     finishNavigation?.();
@@ -48,7 +47,7 @@ test('the Runtime host shares one connection and source, isolates a pending navi
     await rm(directory, { recursive: true, force: true });
   });
   await Promise.all([host.admit(descriptors[0]), host.admit(descriptors[0]), host.admit(descriptors[1])]);
-  assert.equal(connections, 1, 'AI and user sources reuse the Runtime browser connection');
+  assert.equal(connections, 1, 'Flower sources reuse the Runtime browser connection');
   await assert.rejects(host.admit({ ...descriptors[0], id: 'alias' }), /BROWSER_SOURCE_ALREADY_ADMITTED/u);
   await assert.rejects(host.admit({ ...descriptors[2], id: 'source-0' }), /BROWSER_SOURCE_IDENTITY_CHANGED/u);
   await assert.rejects(host.admit({ ...descriptors[0], id: 'endpoint-alias', endpoint: endpoint.replace('127.0.0.1', 'localhost') }), /BROWSER_SOURCE_ALREADY_ADMITTED/u);
@@ -66,25 +65,17 @@ test('the Runtime host shares one connection and source, isolates a pending navi
   assert.equal(await pages[1].getByRole('textbox', { name: 'Name' }).inputValue(), '', 'Cancellation before dispatch cannot run the later input');
   assert.equal((await tool('source-1', 'computer.screenshot', {}, { return_control: true })).error, undefined);
 
-  host.order(['source-0', 'source-1'], []);
-  const messages = [];
-  await host.views.open('view', ['source-0', 'source-1', 'source-2'], message => messages.push(message), { initialTab: 'source-0', media: false });
-  assert.deepEqual(host.views.state('view').tabs.map(tab => tab.id), ['source-0', 'source-1'], 'An unadmitted personal tab is absent even if a caller invents its ID');
-  await pages[1].evaluate(() => { document.title = 'Renamed background source'; });
-  for (let attempt = 0; attempt < 200 && host.views.state('view').tabs.find(tab => tab.id === 'source-1')?.title !== 'Renamed background source'; attempt++) await new Promise(resolve => setTimeout(resolve, 25));
-  assert.equal(host.views.state('view').tabs.find(tab => tab.id === 'source-1')?.title, 'Renamed background source', 'An unselected source publishes its native title without starting projection');
-  assert.equal(await host.views.acquire('view', 'source-0', 'user-lease'), true);
+  host.privacy('source-0', true);
   assert.equal((await tool('source-0', 'computer.observe')).error, 'TARGET_IN_USE');
   assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
-  await host.views.release('view', 'user-lease');
+  host.privacy('source-0', false);
   const returned = await tool('source-0', 'computer.screenshot', {}, { return_control: true });
   assert.equal(returned.error, undefined);
   assert.equal(returned.safety.safe_to_send_to_model, true);
   await host.remove('source-0');
-  assert.deepEqual(host.views.state('view').tabs.map(tab => tab.id), ['source-1']);
   assert.equal(pages[0].isClosed(), false, 'Removing an observation source never closes the personal page');
   assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
-  await host.views.privacy('source-1', '');
+  host.privacy('source-1', true);
   const aliasedEndpoint = endpoint.replace('127.0.0.1', 'localhost');
   const aliasInventory = await host.publicInventory(aliasedEndpoint, [{ id: descriptors[1].tab, title: 'Private title', url: origin }]);
   assert.equal(aliasInventory[0].private, true, 'A second endpoint for the same native browser cannot reveal private target metadata');
@@ -93,33 +84,16 @@ test('the Runtime host shares one connection and source, isolates a pending navi
   const extensionInventory = await host.publicInventory('extension:fixture', [{ id: '7', native_target_id: descriptors[1].tab, title: 'Private title', url: origin }]);
   assert.equal(extensionInventory[0].private, true, 'Extension inventory shares the native CDP privacy identity');
   assert.equal(extensionInventory[0].title, '');
-  assert.equal(host.views.state('view').tabs.length, 0, 'Flower private input hides the page from product observers');
   assert.equal((await tool('source-1', 'computer.observe')).error, 'TARGET_IN_USE');
   assert.ok((await tool('source-1', 'computer.screenshot', {}, { user_control: true })).screenshot);
   assert.equal((await tool('source-1', 'computer.screenshot', {}, { return_control: true })).safety.safe_to_send_to_model, true);
-  assert.equal(host.views.state('view').tabs.length, 0, 'Only Runtime may release privacy after validating handback');
-  await host.views.privacy('source-1', null);
-  assert.deepEqual(host.views.state('view').tabs.map(tab => tab.id), ['source-1']);
-  await host.views.closeView('view');
+  assert.equal((await tool('source-1', 'computer.observe')).error, 'TARGET_IN_USE', 'Only Runtime may release privacy after validating handback');
+  host.privacy('source-1', false);
+  assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
   const directoryOwner = await context.browser().newBrowserCDPSession();
   const { targetId } = await directoryOwner.send('Target.createTarget', { url: 'about:blank', background: true });
   const { targetInfo } = await directoryOwner.send('Target.getTargetInfo', { targetId });
   await host.admit({ id: 'created-later', endpoint, tab: targetId, context: targetInfo.browserContextId || 'default' });
   assert.equal((await tool('created-later', 'computer.observe')).error, undefined, 'A Runtime-created tab can be admitted after the shared connection has started');
   await directoryOwner.detach();
-});
-
-test('workspace grant publication does not wait for initial lazy projection', async () => {
-  let rejectResolve;
-  const resolving = new Promise((_, reject) => { rejectResolve = reject; });
-  const host = await createComputerBrowserHost({ directoryCommand: () => resolving });
-  host.profileDirectory('workspace', [{ id: 'pending', native: 'a'.repeat(32), url: 'about:blank' }]);
-  const opening = host.views.open('view', ['pending'], () => {}, { initialTab: 'pending', editable: true });
-  try {
-    await host.views.grants('view', []);
-  } finally {
-    rejectResolve(new Error('Fixture source unavailable'));
-    await opening;
-    await host.close();
-  }
 });

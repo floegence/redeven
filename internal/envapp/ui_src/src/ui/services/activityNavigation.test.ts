@@ -27,6 +27,22 @@ describe('Activity navigation record', () => {
     localStorage.setItem('redeven_envapp_active_tab', 'connection-menu');
     expect(createActivityNavigation({ envID: 'b' }).initial).toEqual({ kind: 'builtin', page: 'terminal' });
   });
+  it('drops retired browser navigation and layout state', () => {
+    const namespace = resolveEnvAppStorageBinding({ envID: 'host', desktopStateStorageAvailable: false }).namespace;
+    const first = createActivityNavigation({ envID: 'host' });
+    localStorage.setItem(first.key, JSON.stringify({ version: 1, target: { kind: 'builtin', page: 'browser' }, recentBuiltins: ['browser', 'files'] }));
+    localStorage.setItem(`${namespace}-layout`, JSON.stringify({ sidebar: { activeTab: 'browser', collapsed: true } }));
+    localStorage.setItem('redeven_envapp_active_tab', 'browser');
+    const restored = createActivityNavigation({ envID: 'host' });
+    expect(restored.initial).toEqual({ kind: 'builtin', page: 'terminal' });
+    expect(restored.record().recentBuiltins).toEqual(['terminal']);
+    expect(JSON.parse(localStorage.getItem(restored.key)!).target.page).toBe('terminal');
+    expect(JSON.parse(localStorage.getItem(`${namespace}-layout`)!).sidebar).toEqual({ activeTab: 'terminal', collapsed: true });
+    expect(localStorage.getItem('redeven_envapp_active_tab')).toBeNull();
+    localStorage.setItem(restored.key, JSON.stringify({ version: 1, target: { kind: 'builtin', page: 'files' }, recentBuiltins: ['files', 'browser'] }));
+    expect(createActivityNavigation({ envID: 'host' }).record().recentBuiltins).toEqual(['files']);
+    expect(JSON.parse(localStorage.getItem(restored.key)!).recentBuiltins).toEqual(['files']);
+  });
   it('keeps recent builtins unique and selects the latest available fallback', () => {
     const nav = createActivityNavigation();
     for (const page of ['ports', 'settings', 'files', 'ports'] as const) nav.commit({ kind: 'builtin', page });

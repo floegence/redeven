@@ -52,7 +52,7 @@ export function stageComputerResources(destination, platform = process.platform,
     copy(path.join(downloadRoot, prefix, 'LICENSE'), 'NODE_LICENSE');
     if (nativeTarget && execFileSync(path.join(destination, 'node'), ['--version'], { encoding: 'utf8' }).trim() !== `v${expectedNode}`) throw new Error('Bundled Node version mismatch.');
   } finally { rmSync(downloadRoot, { recursive: true, force: true }); }
-  for (const file of ['redevenComputerHost.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'redevenBrowserHost.mjs', 'computerBrowserHost.mjs', 'computerManagedDownloads.mjs', 'computerBrowserLineage.mjs', 'computerExtensionTransport.mjs', 'computerBrowserSource.mjs', 'computerBrowserViews.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'redevenComputerScript.mjs']) {
+  for (const file of ['redevenComputerHost.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'redevenBrowserHost.mjs', 'computerBrowserHost.mjs', 'computerManagedDownloads.mjs', 'computerBrowserLineage.mjs', 'computerExtensionTransport.mjs', 'computerBrowserSource.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'redevenComputerScript.mjs']) {
     copy(path.join(repo, 'internal/envapp/ui_src/scripts', file), file);
   }
   const copiedPackages = new Map();

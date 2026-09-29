@@ -8,16 +8,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
-- [Remote browser surface](architecture/remote-browser-surface.md) - Mount shared browser windows with source selection, theme and authenticated window lifetimes.
-- [Remote browser window isolation](architecture/remote-browser-window-isolation.md) — Verify independent-document admission, static asset grants and Desktop parent/child teardown.
-- [Remote browser presentation](architecture/remote-browser-presentation.md) - Present stable tab geometry and admit input only through current source authority.
-- [Remote browser source ownership](architecture/remote-browser-sources.md) - Admit native pages once and preserve directory, control and popup privacy boundaries.
-- [Live personal browser workspace](architecture/remote-browser-profile-workspace.md) — Open a complete native tab directory, resolve pages on selection, and recover display without replaying browser effects.
-- [Separate remote browser preparation](architecture/remote-browser-remote-profile.md) - Prepare a persistent browser application while preserving personal data and the existing application lifecycle.
-- [Remote browser persistence](architecture/remote-browser-persistence.md) - Restore managed pages and save browser library state without persisting authority.
-- [Remote browser service recovery](architecture/remote-browser-recovery.md) - Rebuild a failed browser service without reviving old grants or losing saved managed tabs.
-- [Remote browser transport and media](architecture/remote-browser-media.md) - Carry source DOM and element media through bounded authenticated lanes.
-- [Remote browser files](architecture/remote-browser-files.md) - Transfer authorized source uploads and original downloads without refetching requests or scanning personal files.
+- [Flower browser source ownership](architecture/flower-browser-sources.md) - Admit browser targets once, preserve private ancestry and fence source loss without product projection.
+- [Flower browser Linux preparation](architecture/flower-browser-linux-preparation.md) - Prepare a separate persistent browser application while preserving personal data and the existing application lifecycle.
 - [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.
 - [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.
 - [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.

@@ -52,9 +52,8 @@ Closing a tab helper leaves its profile and sibling tabs alive. Runtime shutdown
 closes tab helpers before their profile owners.
 
 The managed/CDP target helper borrows its root and child debugger transports
-from the released FloeBrowser source adapter. Semantic inspection and DOM
-projection can consume that same source without a second attachment or frame
-owner. Disposing a projection preserves the source and AI connection. Removing
+from the released FloeBrowser source adapter. Semantic inspection uses that
+single source without a second debugger attachment. Removing
 a child frame retires its semantic listeners, context ownership and references;
 late completion from that retired frame cannot invalidate a healthy parent.
 The extension applies the same semantic-session retirement to its own debugger
@@ -194,7 +193,7 @@ public and installed-code comparison; no forced reload or CSP rewriting is used.
 - `redeven:browser-extension/background.mjs` - exact-tab debugger binding and connection lifetime.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserController.mjs` - shared action, privacy and result path.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.mjs` - one managed/CDP source and shared debugger lifecycle.
-- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - projection disposal and repeated cross-process frame retirement.
+- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - source disposal and repeated cross-process frame retirement.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowser.node-test.mjs` - real frames, input, downloads and navigation.
 - `redeven:internal/envapp/ui_src/scripts/computerNavigation.node-test.mjs` - network failures, acknowledged timeouts, page recovery and lost acknowledgement.
 - `redeven:internal/ai/computer_errors.go` - single browser failure classifier and safe navigation facts.

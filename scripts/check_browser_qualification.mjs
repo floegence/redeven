@@ -78,13 +78,13 @@ async function main() {
     console.log(`[browser] ${name}: ${count} tests passed, zero skipped`);
   }
   await run('runtime', 'go', ['test', './internal/ai', '-run', '^TestBrowser|^TestExtension|^TestChrome|^TestManagedBrowser|^TestComputer(BrowserInstallation|MissingBrowser|FullAccessManagedBrowser|AutonomousManaged|AutonomousProductionToolLoop|NavigationFailureContinuesProductionTurn)', '-count=1', '-json'], root, env,
-    body => verifyGoTests(body, ['TestExtensionWorkspaceNativeDirectorySurvivesProjectionLossAndLastClose', 'TestExtensionExistingProjectionStillValidatesExplicitFlowerSelection', 'TestBrowserRecoveryRebuildsOnceAndPreservesSavedTabs', 'TestBrowserRecoveryDoesNotReviveFlowerInitialTarget', 'TestBrowserDirectoryBeforeUnloadKeepsOtherWorkspaceCommandsUsable', 'TestBrowserLastSourceLossRetiresViewAuthority', 'TestBrowserExplicitLastTabClosePreservesViewWithReplacement', 'TestBrowserInputSaturationDoesNotRetireHealthyView', 'TestManagedBrowserRequestCancellationPreservesProcessAndResponseOrder', 'TestManagedBrowserForegroundPopupSelectsOnlyItsInputOwner', 'TestComputerNavigationFailureContinuesProductionTurn', 'TestComputerBrowserInstallationUsesCanonicalInputAndValidatesContinuation', 'TestChromeMissingResourcesHaveActionableDiagnostics', 'TestChromeDesktopPrerequisitesDoNotConfuseInstallationAndSession', 'TestChromeLaunchRetainsEarlyAndLateExitFailure']));
-  await run('storage-installation', 'go', ['test', './internal/browserinstall', './internal/browserstore', './internal/browserbridge', '-count=1', '-json'], root, env,
+    body => verifyGoTests(body, ['TestExtensionExistingSourceStillValidatesExplicitFlowerSelection', 'TestBrowserRecoveryPreservesUnresolvedExternalPrivacy', 'TestManagedBrowserConfigurationLeavesRetiredProductDatabaseUntouched', 'TestManagedBrowserRequestCancellationPreservesProcessAndResponseOrder', 'TestComputerNavigationFailureContinuesProductionTurn', 'TestComputerBrowserInstallationUsesCanonicalInputAndValidatesContinuation', 'TestChromeMissingResourcesHaveActionableDiagnostics', 'TestChromeDesktopPrerequisitesDoNotConfuseInstallationAndSession', 'TestChromeLaunchRetainsEarlyAndLateExitFailure']));
+  await run('storage-installation', 'go', ['test', './internal/browserinstall', './internal/browserbridge', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestRemoteBrowserRegistrationFollowsRuntimeReplacement', 'TestRemoteBrowserProfileRejectsWritablePlacement']));
   await run('remote-profile-ownership', 'go', ['test', './internal/hostapps', '-run', '^TestRemoteBrowser', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestRemoteBrowserCatalogRequiresItsPreparingOwner']));
-  await run('api', 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowser(WorkspaceFailure|ViewAPI|Library)|^TestRemoteBrowser', '-count=1', '-json'], root, env,
-    body => verifyGoTests(body, ['TestBrowserWorkspaceFailureActionsAndRecoveryAuthorization', 'TestRemoteBrowserPreparationRejectsMissingAuthorityAndClientPaths']));
+  await run('api', 'go', ['test', './internal/codeapp/appserver', '-run', '^TestFlowerBrowser|^TestRemovedBrowser', '-count=1', '-json'], root, env,
+    body => verifyGoTests(body, ['TestFlowerBrowserPreparationRejectsMissingAuthorityAndClientPaths', 'TestRemovedBrowserProductRoutesReturnNotFound']));
   const bridgeBinary = path.join(staging, 'redeven');
   const bridgeBuild = spawnSync('go', ['build', '-o', bridgeBinary, './cmd/redeven'], { cwd: root, env, encoding: 'utf8' });
   await writeFile(path.join(evidence, 'native-bridge-build.log'), bridgeBuild.stdout + bridgeBuild.stderr);
@@ -93,20 +93,14 @@ async function main() {
   await run('chrome-extension', process.execPath, ['--test', '--test-reporter=tap', 'scripts/computerExtensionDirectory.node-test.mjs', 'scripts/computerExtensionLifecycle.node-test.mjs', 'scripts/computerExtensionPopup.node-test.mjs', 'scripts/computerExtension.node-test.mjs'], ui, env, verifyNodeTests);
   await run('native-messaging', process.execPath, ['--test', '--test-reporter=tap', 'scripts/computerNativeMessaging.node-test.mjs'], ui, { ...env, REDEVEN_BROWSER_BRIDGE_BINARY: bridgeBinary }, verifyNodeTests);
   for (const [name, args] of [
-    ['ui-unit', ['src/browserDocument.test.ts', 'src/ui/services/browserWorkspaceController.test.ts', 'src/ui/services/browserSourcePort.test.ts', 'src/ui/services/remoteBrowserPreparation.test.ts', 'src/ui/pages/EnvHostApplicationsPage.test.tsx', 'src/ui/services/browserWindow.test.ts', 'src/ui/services/browserWorkspaceWindows.test.ts', 'src/ui/widgets/FloeBrowserSurface.test.tsx', 'src/ui/pages/EnvBrowserPage.test.tsx']],
-    ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/browserDocument.browser.test.tsx', 'src/ui/widgets/BrowserSourceDialog.browser.test.tsx', 'src/ui/FlowerManagedBrowser.browser.test.tsx', 'src/ui/FlowerComputerConnections.browser.test.tsx']],
+    ['ui-unit', ['src/ui/services/remoteBrowserPreparation.test.ts', 'src/ui/pages/EnvHostApplicationsPage.test.tsx']],
+    ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/ui/FlowerManagedBrowser.browser.test.tsx', 'src/ui/FlowerComputerConnections.browser.test.tsx']],
   ]) {
     const report = path.join(evidence, `${name}.json`);
     await run(name, 'pnpm', ['exec', 'vitest', 'run', ...args, '--reporter=json', `--outputFile=${report}`], ui, env, async () => verifyBrowserTests(await readFile(report, 'utf8')));
   }
-  for (const [source, client] of [['managed', 'chrome'], ['managed', 'electron'], ['extension', 'chrome'], ['extension', 'electron']]) {
-    await run(`projection-${source}-${client}`, 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowserProjectionUsesOneFlowersecSession$', '-count=1', '-json'], root,
-      { ...env, REDEVEN_BROWSER_SOURCE: source, REDEVEN_BROWSER_CLIENT: client, REDEVEN_BROWSER_DEBUG_EVIDENCE: path.join(evidence, `projection-${source}-${client}.json`) },
-      body => verifyGoTests(body, ['TestBrowserProjectionUsesOneFlowersecSession']));
-  }
   const desktopReport = path.join(evidence, 'desktop-windows.json');
-  await run('desktop-windows', 'pnpm', ['exec', 'vitest', 'run', 'src/main/browserProjectionWindows.test.ts',
-    'src/main/windowLifecycleContract.test.ts', 'src/main/windowRecord.test.ts', 'src/main/windowSpec.test.ts',
+  await run('desktop-windows', 'pnpm', ['exec', 'vitest', 'run', 'src/main/windowLifecycleContract.test.ts', 'src/main/windowRecord.test.ts', 'src/main/windowSpec.test.ts',
     '--reporter=json', `--outputFile=${desktopReport}`], path.join(root, 'desktop'), env,
     async () => verifyBrowserTests(await readFile(desktopReport, 'utf8')));
   const git = args => spawnSync('git', args, { cwd: root, encoding: 'utf8' }).stdout.trim();

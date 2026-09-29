@@ -13,10 +13,9 @@ The guide is bounded UI observation, not a second execution lifecycle. Users con
 
 # Contract
 
-The browser connection guide opens from canonical conversation assistance or the
-Remote Browser source selector. Runtime-discovered installation IDs select macOS
+The browser connection guide opens from canonical conversation assistance. Runtime-discovered installation IDs select macOS
 Google Chrome or Linux Google Chrome, native Chromium and Snap Chromium. The
-[source contract](../architecture/remote-browser-sources.md) owns installation
+[source contract](../architecture/flower-browser-sources.md) owns installation
 discovery and the single connection hub. Runtime compatibility epoch 34 requires
 installation-scoped preparation/open requests and structured launch readiness;
 older upgradeable Runtime epochs must update before this Desktop uses the guide.

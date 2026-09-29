@@ -4,7 +4,7 @@ import type { JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ActivityBarBrowserIcon, ActivityBarPortsIcon, ActivityBarSettingsIcon, ActivityBarSwitchIcon } from './ActivityBarDockIcons';
+import { ActivityBarPortsIcon, ActivityBarSettingsIcon, ActivityBarSwitchIcon } from './ActivityBarDockIcons';
 
 function renderIcon(Icon: (props: { class?: string }) => JSX.Element): SVGSVGElement {
   const host = document.createElement('div');
@@ -49,20 +49,4 @@ describe('Activity Bar bottom icons', () => {
     expect(icon.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('uses a theme-inheriting navigation compass for FloeBrowser', () => {
-    const icon = renderIcon(ActivityBarBrowserIcon);
-
-    expect(icon.getAttribute('data-activity-bar-icon')).toBe('floebrowser');
-    expect(icon.querySelector('rect')).toBeNull();
-    expect(icon.querySelectorAll('circle')).toHaveLength(1);
-    expect(icon.querySelector('path[stroke-linejoin="round"]')).not.toBeNull();
-    expect(icon.querySelector('line')).toBeNull();
-    expect(icon.getAttribute('aria-hidden')).toBe('true');
-    expect(icon.querySelector('title, [tabindex]')).toBeNull();
-    for (const shape of icon.querySelectorAll('[fill], [stroke]')) {
-      for (const attribute of ['fill', 'stroke']) {
-        if (shape.hasAttribute(attribute)) expect(shape.getAttribute(attribute)).toBe('currentColor');
-      }
-    }
-  });
 });
