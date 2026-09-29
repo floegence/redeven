@@ -68,6 +68,8 @@ type ComputerBrowserTab struct {
 	Availability          string   `json:"availability,omitempty"`
 	Pinned                bool     `json:"pinned,omitempty"`
 	Loading               bool     `json:"loading,omitempty"`
+	Discarded             bool     `json:"discarded,omitempty"`
+	Frozen                bool     `json:"frozen,omitempty"`
 	WindowID              int      `json:"window_id,omitempty"`
 	Index                 int      `json:"index,omitempty"`
 	NativeTargetID        string   `json:"native_target_id,omitempty"`

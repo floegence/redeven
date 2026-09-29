@@ -106,7 +106,7 @@ The connection status snapshot and structured diagnostics serve both product
 carriers. `extension/status` contains live profiles and per-installation
 availability, preparation and diagnostics. Preparation failure in one
 installation does not hide other connected sources. Native Messaging
-uses protocol 7. The first connection remains consent-gated even when the URL
+uses protocol 9. The first connection remains consent-gated even when the URL
 supplies configuration.
 No database, Floret API, tool-selection rule or authorization policy changes.
 
@@ -115,9 +115,8 @@ connected profiles. A valid extension hello with an incompatible protocol record
 `extension_update_required` and returns a rejection before admitting a profile.
 The extension popup shows progress while connecting. An incompatible handshake
 replaces the connection form with one Update extension action, opening the exact
-extension in Chrome settings. Extension 1.0.4 retains the existing key and
-protocol 7; loading the current Runtime folder replaces older protocol 6 code
-without clearing user profiles. The shared guide observes that same snapshot and opens the update workflow,
+extension in Chrome settings. Extension 1.0.5 retains the existing key and uses protocol 9; loading the current
+Runtime folder replaces incompatible older code without clearing user profiles. The shared guide observes that same snapshot and opens the update workflow,
 even when an older extension cannot explain its rejection. It never continues a
 conversation from an installation acknowledgement. Successful handshake or
 explicit setup clears the diagnostic; no failure or pending connection is stored.

@@ -10,7 +10,13 @@ import (
 // cannot reintroduce a private popup through a second workspace or AI discovery.
 // The caller holds connectMu, keeping the source owner stable during the query.
 func (r *ComputerUseRuntime) browserInventoryPrivacy(ctx context.Context, endpoint string, tabs []ComputerBrowserTab) ([]ComputerBrowserTab, error) {
-	if r.browserHost == nil {
+	return r.browserInventoryPrivacyAtHost(ctx, r.browserHost, endpoint, tabs)
+}
+
+// A captured helper identity is immutable. Its lifetime cancels in-flight I/O;
+// callers performing admission revalidate that identity before publication.
+func (r *ComputerUseRuntime) browserInventoryPrivacyAtHost(ctx context.Context, host *browserSourceHost, endpoint string, tabs []ComputerBrowserTab) ([]ComputerBrowserTab, error) {
+	if host == nil {
 		return tabs, nil
 	}
 	// A Chrome profile can also be reachable through CDP. Refresh the native
@@ -33,7 +39,7 @@ func (r *ComputerUseRuntime) browserInventoryPrivacy(ctx context.Context, endpoi
 			if err != nil {
 				return nil, err
 			}
-			if err := r.browserHost.call(ctx, "source.inventory", map[string]any{"endpoint": "extension:" + client.profile.LibraryID, "tabs": inventory}, nil); err != nil {
+			if err := host.call(ctx, "source.inventory", map[string]any{"endpoint": "extension:" + client.profile.LibraryID, "tabs": inventory}, nil); err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return nil, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}
 				}
@@ -42,7 +48,7 @@ func (r *ComputerUseRuntime) browserInventoryPrivacy(ctx context.Context, endpoi
 		}
 	}
 	var filtered []ComputerBrowserTab
-	if err := r.browserHost.call(ctx, "source.inventory", map[string]any{"endpoint": endpoint, "tabs": tabs}, &filtered); err != nil {
+	if err := host.call(ctx, "source.inventory", map[string]any{"endpoint": endpoint, "tabs": tabs}, &filtered); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}
 		}

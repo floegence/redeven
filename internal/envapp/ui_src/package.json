@@ -37,7 +37,7 @@
     "@floegence/floe-webapp-boot": "0.81.3",
     "@floegence/floe-webapp-core": "0.81.3",
     "@floegence/floe-webapp-protocol": "0.81.3",
-    "@floegence/floebrowser": "0.1.26",
+    "@floegence/floebrowser": "0.1.27",
     "@floegence/floeterm-terminal-web": "0.19.2",
     "@floegence/flowersec-core": "5.4.1",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",

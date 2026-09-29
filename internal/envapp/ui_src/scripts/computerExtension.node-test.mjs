@@ -122,7 +122,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     });
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
-    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 8 }));
+    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 9 }));
     let sequence = 0;
     const nativeCall = async (command, args = {}) => {
       const id = String(++sequence);
@@ -356,7 +356,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
         await chrome.alarms.create('redeven-native-reconnect', { when: Date.now() });
       });
       await worker.evaluate(() => fixtureWait('hello'));
-      await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 8 }));
+      await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 9 }));
       await popup.locator('#disconnect').waitFor({ state: 'visible' });
       await popup.locator('#repair').waitFor({ state: 'hidden' });
       await popup.locator('#connect-button').waitFor({ state: 'hidden' });

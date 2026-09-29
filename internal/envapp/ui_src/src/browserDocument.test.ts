@@ -86,6 +86,7 @@ it('prepares idle control before presentation and never reacquires from live or 
   window.dispatchEvent(new MessageEvent('message', { source: owner as unknown as Window, origin: location.origin, data: configuration, ports: ports.map(channel => channel.port2) as unknown as MessagePort[] }));
   await vi.waitFor(() => expect(mountBrowser).toHaveBeenCalledOnce());
   const options = vi.mocked(mountBrowser).mock.calls[0]![1];
+  expect(options.onTrace).toBeTypeOf('function');
   options.onTabs!({ active: 'first', tabs: [] });
   options.onStatus!('live');
   await vi.waitFor(() => expect(events.some(event => event.type === 'status')).toBe(true));

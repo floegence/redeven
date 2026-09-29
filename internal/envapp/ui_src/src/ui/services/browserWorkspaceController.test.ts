@@ -9,7 +9,7 @@ let unbind: (() => void) | undefined;
 let controller: BrowserWorkspaceController | undefined;
 afterEach(() => { controller?.close(); unbind?.(); controller = undefined; });
 const selection = { request: { managed_profile_id: 'browser-main' }, label: 'Default' };
-const view = (id: string) => ({ id, workspace_id: 'workspace', generation: 'fixture-generation', profile_id: 'browser-main', initial_target: 'tab', protocol_version: 25, media_wire_version: 1 });
+const view = (id: string) => ({ id, workspace_id: 'workspace', generation: 'fixture-generation', profile_id: 'browser-main', initial_target: 'tab', protocol_version: 26, media_wire_version: 1 });
 async function fixture(installed = true) {
   const request = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) => Response.json({ ok: true, data: view('browser-view-first') }));
   unbind = await bindTestSessionHTTP(request);

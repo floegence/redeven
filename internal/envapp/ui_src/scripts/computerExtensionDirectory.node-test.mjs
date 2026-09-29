@@ -34,10 +34,11 @@ async function fixture(t, options = {}) {
   };
   t.after(async () => { globalThis.chrome = previous; await rm(directory, { recursive: true, force: true }); });
   const source = (await readFile(new URL('../../../../browser-extension/background.mjs', import.meta.url), 'utf8'))
+    .replace("'./tabLifecycle.mjs'", JSON.stringify(new URL('../../../../browser-extension/tabLifecycle.mjs', import.meta.url).href))
     .replace("'./computerBrowserLineage.mjs'", JSON.stringify(new URL('./computerBrowserLineage.mjs', import.meta.url).href));
   const module = path.join(directory, 'background.mjs'); await writeFile(module, source); await import(pathToFileURL(module).href);
   const connected = new Promise(resolve => chrome.runtime.onMessage.emit({ command: 'connect', nativeHost: 'dev.floegence.redeven.r123456789abcdef0', profileName: 'Fixture' }, { id: 'fixture', url: chrome.runtime.getURL('popup.html') }, resolve));
-  await flush(); port.onMessage.emit({ type: 'ready', protocol_version: 8 }); await connected;
+  await flush(); port.onMessage.emit({ type: 'ready', protocol_version: 9 }); await connected;
   return { tabs, chrome, port, attaches: () => attaches, async call(command, args) {
     const id = String(++sequence); port.onMessage.emit({ id, command, arguments: args });
     for (let i = 0; i < 30 && !port.replies.some(reply => reply.id === id); i++) await flush();
@@ -89,4 +90,64 @@ test('native removal during the initial snapshot settles on the current director
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0].tabs.map(tab => tab.id), ['8']);
   assert.equal(f.port.replies.some(reply => reply.type === 'tabs_unavailable'), false);
+});
+
+test('failed binding finalization retires only the debugger acquired by that request', async t => {
+  const f = await fixture(t);
+  let attached = 0, detached = 0;
+  f.chrome.debugger.attach = async () => { attached++; };
+  f.chrome.debugger.detach = async () => { detached++; };
+  f.chrome.debugger.getTargets = async () => { throw new Error('Native identity unavailable'); };
+  await assert.rejects(f.call('bind', { tab_id: '7', tab_url: 'https://example.test/', tab_title: 'Existing' }));
+  assert.equal(attached, 1);
+  assert.equal(detached, 1, 'A newly acquired debugger must not survive failed identity finalization');
+  await assert.rejects(f.call('status', { tab_id: '7' }));
+});
+
+test('cancelling a reused binding cannot detach its existing source owner', async t => {
+  const f = await fixture(t);
+  let attached = 0, detached = 0;
+  f.chrome.debugger.attach = async () => { attached++; };
+  f.chrome.debugger.detach = async () => { detached++; };
+  const args = { tab_id: '7', tab_url: 'https://example.test/', tab_title: 'Existing' };
+  const binding = await f.call('bind', args);
+  assert.equal(binding.created, true);
+  const targets = f.chrome.debugger.getTargets;
+  let release;
+  f.chrome.debugger.getTargets = () => new Promise(resolve => { release = () => resolve(targets()); });
+  f.port.onMessage.emit({ id: 'reuse', command: 'bind', arguments: args });
+  await flush();
+  f.port.onMessage.emit({ type: 'cancel', id: 'reuse' });
+  release(); await flush(); await flush();
+  assert.equal(attached, 1);
+  assert.equal(detached, 0, 'Cancellation owns no permission to retire a reused generation');
+  f.chrome.debugger.getTargets = targets;
+  const reused = await f.call('bind', args);
+  assert.equal(reused.binding, binding.binding);
+  assert.equal(reused.created, false);
+});
+
+test('background input prepares virtual focus without activating the physical tab', async t => {
+  const f = await fixture(t);
+  const commands = [];
+  f.chrome.debugger.attach = async () => {};
+  f.chrome.debugger.sendCommand = async (target, method, params) => {
+    commands.push({ target, method, params });
+    return {};
+  };
+  const binding = await f.call('bind', { tab_id: '7', tab_url: 'https://example.test/', tab_title: 'Existing' });
+  await f.call('cdp', { tab_id: '7', binding: binding.binding, method: 'Input.dispatchMouseEvent', params: { type: 'mouseMoved', x: 10, y: 10 } });
+  assert.deepEqual(commands, [
+    { target: { tabId: 7 }, method: 'Emulation.setFocusEmulationEnabled', params: { enabled: true } },
+    { target: { tabId: 7 }, method: 'Input.dispatchMouseEvent', params: { type: 'mouseMoved', x: 10, y: 10 } },
+  ]);
+  assert.equal(f.tabs.get(7).active, true);
+  commands.length = 0;
+  f.chrome.debugger.sendCommand = async (target, method, params) => {
+    commands.push({ target, method, params });
+    if (method === 'Emulation.setFocusEmulationEnabled') throw new Error('focus unavailable');
+    return {};
+  };
+  await assert.rejects(f.call('cdp', { tab_id: '7', binding: binding.binding, method: 'Input.dispatchKeyEvent', params: { type: 'keyDown', key: 'a' } }));
+  assert.deepEqual(commands.map(command => command.method), ['Emulation.setFocusEmulationEnabled']);
 });

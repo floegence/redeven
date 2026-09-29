@@ -24,7 +24,7 @@ import (
 
 const (
 	browserHostProtocolVersion       = 1
-	browserProjectionProtocolVersion = 25
+	browserProjectionProtocolVersion = 26
 	browserMediaWireVersion          = 1
 )
 
@@ -236,6 +236,7 @@ func (host *browserSourceHost) events(reader *bufio.Reader) {
 }
 
 func (host *browserSourceHost) directoryReply(event browserHostEvent) {
+	started := time.Now()
 	var action browserDirectoryAction
 	_ = json.Unmarshal(event.Action, &action)
 	ctx, cancel := context.WithCancel(host.ctx)
@@ -244,11 +245,13 @@ func (host *browserSourceHost) directoryReply(event browserHostEvent) {
 		ctx, cancel = context.WithTimeout(host.ctx, 25*time.Second)
 	}
 	defer cancel()
+	ctx = context.WithValue(ctx, browserTraceRequestKey{}, event.ID)
 	var target string
 	err := errors.New("browser directory is unavailable")
 	if host.handlers.Directory != nil {
 		target, err = host.handlers.Directory(ctx, event)
 	}
+	browserTraceStage(ctx, "directory_"+action.Kind, action.Target, started, err)
 	response := map[string]any{"type": "directory_reply", "id": event.ID}
 	if err != nil {
 		response["error"] = "browser_directory_failed"

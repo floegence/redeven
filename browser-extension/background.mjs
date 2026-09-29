@@ -1,4 +1,5 @@
 import { createBrowserLineage } from './computerBrowserLineage.mjs';
+import { restoreDiscardedTab } from './tabLifecycle.mjs';
 const bindings = new Map();
 let native;
 let profile;
@@ -116,7 +117,7 @@ async function inventory() {
     if (ancestors.length > 128) throw new Error('browser directory depth limit');
     const url = tab.url || tab.pendingUrl || 'about:blank';
     return { id: String(tab.id), native_target_id: nativeTarget, opener_native_target_ids: ancestors.map(id => nativeTargets.get(id)).filter(Boolean), profile_id: profile.id,
-      title: (tab.title || '').slice(0, 512), url, pinned: !!tab.pinned, loading: tab.status === 'loading', window_id: tab.windowId, index: tab.index,
+      title: (tab.title || '').slice(0, 512), url, pinned: !!tab.pinned, loading: tab.status === 'loading', discarded: !!tab.discarded, frozen: !!tab.frozen, window_id: tab.windowId, index: tab.index,
       ...(!/^(https?:\/\/|about:blank$)/u.test(url) ? { availability: 'unsupported' } : {}),
       ...(ancestors.length ? { opener_tab_id: ancestors[0], opener_tab_ids: ancestors } : {}),
     };
@@ -174,7 +175,7 @@ async function disconnect() {
   const port = native; native = undefined; ready = false;
   watchingTabs = false; directoryRevision = 0; directoryTabs = []; directoryWork = undefined; directoryDirty = false; directorySnapshotPending = false;
   const retired = pending; pending = new Map();
-  for (const task of retired.values()) task.cancelled = true;
+  for (const task of retired.values()) { task.cancelled = true; task.abort.abort(); }
   for (const tabId of bindings.keys()) {
     await chrome.debugger.detach({ tabId }).catch(() => {});
   }
@@ -184,7 +185,7 @@ async function disconnect() {
   await Promise.allSettled([...retired.values()].map(task => task.finished));
   notifyConnectionChanged();
 }
-async function attach(tabId, selection) {
+async function attach(tabId, selection, signal) {
   if (lineageUnavailable) throw new Error('browser directory unavailable');
   if (!Number.isSafeInteger(tabId) || tabId < 0) throw new Error('invalid tab');
   const tab = await chrome.tabs.get(tabId);
@@ -193,16 +194,30 @@ async function attach(tabId, selection) {
     if (selection && (current.url !== selection.tab_url || (current.title || '').slice(0, 512) !== selection.tab_title || current.pendingUrl && current.pendingUrl !== selection.tab_url)) throw new Error('refresh tab selection');
   };
   validateSelection(tab);
+  await restoreDiscardedTab(chrome, tab, signal);
+  signal.throwIfAborted();
+  let created = false;
+  let binding;
   if (!bindings.has(tabId)) {
     await chrome.debugger.attach({ tabId }, '1.3');
+    created = true;
     bindings.set(tabId, { id: crypto.randomUUID(), children: new Set(), streams: new Set() });
-    try { validateSelection(await chrome.tabs.get(tabId)); }
-    catch (error) { bindings.delete(tabId); await chrome.debugger.detach({ tabId }).catch(() => {}); throw error; }
   }
-  await rememberNativeTargets();
-  popupLineage.observe('profile', String(tabId));
-  popupLineage.bind('profile', String(tabId), String(tabId));
-  return { tab_id: String(tabId), title: tab.title || tab.url || '', native_target_id: nativeTargets.get(String(tabId)), binding: bindings.get(tabId).id };
+  binding = bindings.get(tabId);
+  try {
+    signal.throwIfAborted();
+    if (tab.frozen) await chrome.debugger.sendCommand({ tabId }, 'Page.setWebLifecycleState', { state: 'active' });
+    validateSelection(await chrome.tabs.get(tabId));
+    await rememberNativeTargets();
+    signal.throwIfAborted();
+    if (bindings.get(tabId) !== binding) throw new Error('browser binding changed');
+    popupLineage.observe('profile', String(tabId));
+    popupLineage.bind('profile', String(tabId), String(tabId));
+    return { created, tab_id: String(tabId), title: tab.title || tab.url || '', native_target_id: nativeTargets.get(String(tabId)), binding: binding.id };
+  } catch (error) {
+    if (created && bindings.get(tabId) === binding) await unbind(tabId);
+    throw error;
+  }
 }
 function retireCredits(binding) {
   sourceReceipts.delete(binding);
@@ -250,8 +265,8 @@ async function execute(message, task) {
     case 'bind': {
       await nativeTab(args);
       if (!args.native_target_id && (typeof args.tab_url !== 'string' || !args.tab_url || typeof args.tab_title !== 'string')) throw new Error('select a current tab');
-      const result = await attach(Number(args.tab_id), args.tab_url ? args : undefined);
-      if (task.cancelled) { await unbind(Number(result.tab_id)); throw new Error('cancelled'); }
+      const result = await attach(Number(args.tab_id), args.tab_url ? args : undefined, task.abort.signal);
+      if (task.cancelled) { if (result.created && bindings.get(Number(result.tab_id))?.id === result.binding) await unbind(Number(result.tab_id)); throw new Error('cancelled'); }
       return result;
     }
     case 'new_tab': {
@@ -280,6 +295,12 @@ async function execute(message, task) {
       if (['Network.getAllCookies', 'Network.setCookie', 'Network.setCookies', 'Network.clearBrowserCookies', 'Network.clearBrowserCache', 'Page.setDownloadBehavior'].includes(method)) throw new Error('profile command unavailable');
       if (method.startsWith('IO.') && method !== 'IO.resolveBlob' && (!['IO.read', 'IO.close'].includes(method) || !binding.streams.has(params.handle))) throw new Error('stream unavailable');
       task.binding = binding;
+      // Background tabs need virtual CDP focus for timely input. This does not
+      // activate the physical tab, and debugger detach releases the override.
+      if (method.startsWith('Input.')) {
+        await chrome.debugger.sendCommand({ tabId: Number(args.tab_id) }, 'Emulation.setFocusEmulationEnabled', { enabled: true });
+        if (bindings.get(Number(args.tab_id)) !== binding || task.cancelled) throw new Error('tab unavailable');
+      }
       const result = await chrome.debugger.sendCommand({ tabId: Number(args.tab_id), ...(args.session ? { sessionId: args.session } : {}) }, method, params);
       if (bindings.get(Number(args.tab_id)) !== binding || task.cancelled) throw new Error('tab unavailable');
       const stream = method === 'IO.resolveBlob' && /^[a-f0-9-]{36}$/iu.test(result.uuid || '') ? `blob:${result.uuid}` : method === 'Fetch.takeResponseBodyAsStream' ? result.stream : undefined;
@@ -328,10 +349,10 @@ async function connect(name, label, remember = false) {
     if (!ready && message.type === 'connection_error' && message.code === 'extension_update_required') {
       rejected(failure(message.code)); return;
     }
-    if (!ready && message.type === 'ready' && message.protocol_version !== 8) {
+    if (!ready && message.type === 'ready' && message.protocol_version !== 9) {
       rejected(failure('extension_update_required')); return;
     }
-    if (message.type === 'ready' && message.protocol_version === 8 && !ready) { ready = true; accepted(); return; }
+    if (message.type === 'ready' && message.protocol_version === 9 && !ready) { ready = true; accepted(); return; }
     if (ready && message.type === 'cdp_ack') {
       const receipt = receipts.get(message.sequence);
       if (receipt) {
@@ -344,11 +365,11 @@ async function connect(name, label, remember = false) {
     if (!ready || typeof message.id !== 'string' || !message.id || message.id.length > 64) { void disconnectPort(); return; }
     if (message.type === 'cancel') {
       const task = requests.get(message.id);
-      if (task) task.cancelled = true;
+      if (task) { task.cancelled = true; task.abort.abort(); }
       return;
     }
     if (requests.has(message.id) || requests.size >= 64) { void disconnectPort(); return; }
-    const task = { cancelled: false }; requests.set(message.id, task);
+    const task = { cancelled: false, abort: new AbortController() }; requests.set(message.id, task);
     task.finished = (async () => {
       let response;
       try { response = { id: message.id, result: await execute(message, task) }; }
@@ -363,7 +384,7 @@ async function connect(name, label, remember = false) {
       }
     })();
   });
-  port.postMessage({ type: 'hello', protocol_version: 8, profile_id: profile.id, profile_name: profile.name });
+  port.postMessage({ type: 'hello', protocol_version: 9, profile_id: profile.id, profile_name: profile.name });
   try {
     await handshake;
     if (remember) await chrome.storage.local.set({ autoConnect: true });
