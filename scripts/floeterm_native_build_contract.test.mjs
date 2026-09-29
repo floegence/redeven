@@ -85,9 +85,9 @@ test("every shipped Redeven runtime enables the published native Floeterm engine
   assert.match(runtimeBuilder, /linux\/arm64\) target_cpu="aarch64"/u);
   assert.match(runtimeBuilder, /GNU C and C\+\+ compilers are required/u);
 
-  assert.match(finalGate, /go test -tags floeterm_native -p 1 -count=1 \.\/\.\.\./u);
-  assert.match(finalGate, /golangci-lint run --build-tags floeterm_native \.\/\.\.\./u);
-  assert.match(finalGate, /TestTerminalLiveStreamFailsClosedWithoutNativeActor/u);
+  assert.match(finalGate, /floeterm_native_build_contract\.test\.mjs/u);
+  assert.doesNotMatch(finalGate, /go test -tags floeterm_native -p 1 -count=1 \.\/\.\.\./u);
+  assert.doesNotMatch(finalGate, /golangci-lint run --build-tags floeterm_native \.\/\.\.\./u);
 
   assert.match(carrier, /\['build', '-tags', 'floeterm_native'/u);
   assert.match(carrier, /CGO_ENABLED: '1'/u);

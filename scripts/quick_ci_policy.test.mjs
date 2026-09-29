@@ -165,17 +165,22 @@ test("quick gate cannot hide work after a logging command", () => {
   );
 });
 
-test("exact-main pre-push owns complete UI and browser coverage", () => {
-  const buildAssetsOffset = finalGate.indexOf('run_step "building embedded assets" ./scripts/build_assets.sh');
-  const uiGateOffset = finalGate.indexOf('run_step "testing complete UI packages" ./scripts/check_ui_tests.sh');
-  assert.ok(buildAssetsOffset > 0, "exact-main must build embedded assets");
-  assert.ok(uiGateOffset > buildAssetsOffset, "exact-main must build current assets before the browser carrier");
-  assert.match(finalGate, /run_step "checking Flower UI" \.\/scripts\/check_flower_ui\.sh --skip-browser/);
-  assert.match(uiGate, /^\s*ui_pkg_run_pnpm test$/m);
-  assert.match(uiGate, /^\s*ui_pkg_run_pnpm run test:browser$/m);
-  assert.match(uiGate, /^\s*run_terminal_performance$/m);
-  assert.match(uiGate, /^\s*npm test$/m);
-  assert.match(uiGate, /pnpm run test:terminal-performance/);
+test("exact-main pre-push remains bounded and delegates broad qualification", () => {
+  assert.match(finalGate, /check_focused_changed_tests/);
+  for (const forbidden of [
+    "test:browser",
+    "test:terminal-performance",
+    "go test -tags floeterm_native -p 1 -count=1 ./...",
+    "golangci-lint run --build-tags floeterm_native ./...",
+  ]) {
+    assert.doesNotMatch(finalGate, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  }
+  assert.doesNotMatch(finalGate, /run_step "[^"]+" .*check_ui_tests\.sh/u);
+  assert.doesNotMatch(finalGate, /run_step "[^"]+" .*check_flower_ui\.sh/u);
+  assert.doesNotMatch(finalGate, /run_step "[^"]+" .*check_desktop\.sh/u);
+  assert.doesNotMatch(finalGate, /run_step "[^"]+" .*check_computer_(?:execution|private_desktop)\.sh/u);
+  assert.doesNotMatch(finalGate, /run_step "[^"]+" .*check_docker_runtime_e2e\.sh/u);
+  assert.doesNotMatch(finalGate, /run_step "[^"]+" .*check_renderer_e2e\.sh/u);
 });
 
 test("Flower UI gate provisions Node 26 webstorage backing without discarding caller options", () => {

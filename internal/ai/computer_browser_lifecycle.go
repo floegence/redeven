@@ -8,10 +8,6 @@ import (
 
 // Source events retire execution authority, never native directory identity.
 // The helper event reader preserves order and binding generations fence late events.
-func (r *ComputerUseRuntime) browserSourceEvent(event browserHostEvent) {
-	r.browserSourceGenerationEvent(r.browserServiceSnapshot().Generation, event)
-}
-
 func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, event browserHostEvent) {
 	r.connectMu.Lock()
 	defer r.connectMu.Unlock()

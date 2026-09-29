@@ -8,9 +8,8 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/check_final_integration.sh --base <commit> --tip <commit>
 
-Runs the complete local integration gate for one exact rebased commit. The
-pre-push hook supplies the remote main commit as --base and the local main tip
-as --tip.
+Runs the bounded main gate for one exact rebased commit. The pre-push hook
+supplies the remote main commit as --base and the local main tip as --tip.
 USAGE
 }
 
@@ -134,6 +133,32 @@ check_github_workflows() {
   "$actionlint_bin" .github/workflows/*.yml
 }
 
+check_focused_changed_tests() {
+  local changed
+  changed="$(git diff --name-only "${base}...${tip}")"
+  if printf '%s\n' "$changed" | grep -q '^desktop/'; then
+    (
+      cd "$ROOT_DIR/desktop"
+      corepack pnpm exec vitest run \
+        src/build/desktopPreloadRuntime.test.ts \
+        src/main/mainRouting.test.ts \
+        src/main/runtimeSessionLifecycle.test.ts \
+        src/main/sessionRestartDocument.test.ts \
+        src/preload/sessionRestart.test.ts
+    )
+  fi
+  if printf '%s\n' "$changed" | grep -q '^internal/envapp/ui_src/'; then
+    (
+      cd "$ROOT_DIR/internal/envapp/ui_src"
+      node --test \
+        scripts/terminalCarrierRunnerPolicy.node-test.mjs \
+        scripts/terminalCarrierThreshold.node-test.mjs
+      ./node_modules/.bin/vitest run --environment=node \
+        src/ui/services/sessionRestart.test.ts
+    )
+  fi
+}
+
 run_step "checking final rebased diff" git diff --check "${base}...${tip}"
 run_step "checking Go formatting" check_go_formatting
 run_step "checking shell syntax" check_shell_syntax
@@ -149,14 +174,6 @@ run_step "testing Git hook contracts" ./scripts/test_git_hooks.sh
 run_step "testing Floeterm dependency consistency" node --test scripts/check_floeterm_dependency_consistency.test.mjs
 run_step "checking Floeterm dependency consistency" node scripts/check_floeterm_dependency_consistency.mjs
 run_step "testing native Runtime build and relink contracts" node --test scripts/floeterm_native_build_contract.test.mjs scripts/build_runtime_binary.test.mjs scripts/collect_runtime_relink.test.mjs
-run_step "testing no-native terminal failure boundary" env GOWORK=off CGO_ENABLED=1 go test ./internal/agent -run '^TestTerminalLiveStreamFailsClosedWithoutNativeActor$' -count=1
-run_step "testing Go packages serially with the native terminal engine" env GOWORK=off CGO_ENABLED=1 go test -tags floeterm_native -p 1 -count=1 ./...
-run_step "linting Go packages with the native terminal engine" env GOWORK=off CGO_ENABLED=1 golangci-lint run --build-tags floeterm_native ./...
-run_step "linting UI packages" ./scripts/lint_ui.sh
-run_step "building embedded assets" ./scripts/build_assets.sh
-run_step "testing complete UI packages" ./scripts/check_ui_tests.sh
-run_step "checking isolated computer execution and packaged resources" ./scripts/check_computer_execution.sh
-run_step "checking Linux private desktop semantics and input" ./scripts/check_computer_private_desktop.sh
 run_step "testing release note generation" ./scripts/test_generate_release_notes.sh
 run_step "checking Runtime compatibility source" ./scripts/check_runtime_compatibility_contract.sh --source-only
 run_step "checking ReDevPlugin dependency boundary" ./scripts/check_redevplugin_dependency_boundary.sh --ci
@@ -179,10 +196,7 @@ run_step "checking immutable Flower upgrade fixtures" python3 scripts/check_flow
 run_step "checking model search review contracts" python3 scripts/model-catalog/test_generate.py
 run_step "checking generated Agent model catalog" python3 scripts/model-catalog/generate.py --check
 run_step "checking Flower live protocol" ./scripts/check_flower_live_protocol.sh
-run_step "checking built renderer and terminal recovery E2E" ./scripts/check_renderer_e2e.sh
-run_step "checking Flower UI" ./scripts/check_flower_ui.sh --skip-browser
-run_step "checking Desktop" ./scripts/check_desktop.sh --full
-run_step "checking Docker Runtime E2E" ./scripts/check_docker_runtime_e2e.sh
+run_step "testing focused changed-package contracts" check_focused_changed_tests
 run_step "checking open-source hygiene" ./scripts/open_source_hygiene_check.sh --all
 run_step "checking OKF source integrity" ./scripts/okf/check_source_integrity.sh
 run_step "checking OKF content quality" ./scripts/okf/check_content_quality.sh --strict

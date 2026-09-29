@@ -3,9 +3,7 @@ package ai
 import (
 	"context"
 	"crypto/rand"
-	"log/slog"
 	"sync"
-	"time"
 )
 
 type browserTraceRequestKey struct{}
@@ -15,14 +13,6 @@ func browserTraceRequest(ctx context.Context) string {
 		return id
 	}
 	return rand.Text()
-}
-
-func browserTraceStage(ctx context.Context, stage, target string, started time.Time, err error) {
-	outcome := "completed"
-	if err != nil {
-		outcome = "failed"
-	}
-	slog.Debug("browser source trace", "stage", stage, "target_id", target, "request", browserTraceRequest(ctx), "phase", outcome, "duration_ms", time.Since(started).Milliseconds())
 }
 
 // Directory callers may have short request lifetimes. Waiting for the shared
