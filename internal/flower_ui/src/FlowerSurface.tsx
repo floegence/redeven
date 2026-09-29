@@ -23,7 +23,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, type InputHistoryEntry } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -11939,7 +11939,7 @@ webSearch: model.web_search,
           <Show when={props.adapter.extensions}>
             <button type="button" class="flower-sidebar-extensions-button" aria-current={sidePanel() === 'extensions' ? 'page' : undefined}
               onClick={() => { setExtensionsOpened(true); setSidePanel('extensions'); setThreadNavigationOpen(false); }}>
-              <Link class="h-4 w-4 shrink-0" aria-hidden="true" /><span>{copy().extensions.t('title')}</span><ChevronRight class="h-3.5 w-3.5" aria-hidden="true" />
+              <Zap class="h-4 w-4 shrink-0" aria-hidden="true" /><span>{copy().extensions.t('title')}</span><ChevronRight class="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </Show>
         </div>

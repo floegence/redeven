@@ -227,8 +227,14 @@ it('keeps management read-only while allowing browsing and tab navigation', asyn
 it('offers clear first-use actions for an empty library', async () => {
   await mount(390, false, 'en-US', true);
   await expect.element(page.getByRole('heading', { name: 'Build your skill library', exact: true })).toBeVisible();
+  const skillsDrawing = host.querySelector('[role="tab"][id$="-skills-tab"] svg')?.innerHTML;
+  expect(skillsDrawing).toBeTruthy();
+  expect(host.querySelector('.flower-extension-empty-icon svg')?.innerHTML).toBe(skillsDrawing);
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   await expect.element(page.getByRole('heading', { name: 'Connect your first MCP server', exact: true })).toBeVisible();
+  const mcpDrawing = host.querySelector('[role="tab"][id$="-mcp-tab"] svg')?.innerHTML;
+  expect(mcpDrawing).toBeTruthy();
+  expect(host.querySelector('[role="tabpanel"]:not([hidden]) .flower-extension-empty-icon svg')?.innerHTML).toBe(mcpDrawing);
   await page.screenshot({ path: '../../../dist/flower-extensions/empty-mobile.png' });
 });
 

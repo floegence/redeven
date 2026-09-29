@@ -25420,15 +25420,15 @@
         "title": "Flower Skills and MCP",
         "type": "UI Contract"
       },
-      "body_length": 6989,
+      "body_length": 7287,
       "summary": "Shared Flower UI owns the Skills and MCP management page. Env App and Desktop\nsupply the same typed, authenticated management adapter. The `Skills·MCP` entry\nsits immediately below New chat in the conversation rail; runtime settings have\nno separate Skills destination. Opening management preserves the unsent chat\ndraft, and each tab retains its filters while the surface remains mounted.\nReaders can inspect skills and server catalogs but cannot mutate administrator\nconfiguration. Failed operations keep their input and offer an explicit retry.",
       "sections": [
         {
           "id": "navigation-and-presentation",
           "title": "Navigation and presentation",
           "level": 1,
-          "body": "The page has one identity header, a return-to-chat action, and two accessible\nSkills/MCP tabs with arrow, Home, and End navigation. MCP loads on first visit;\nhidden panels are inert. Thread selection and New chat return to conversation\nwithout reconnecting the workspace transport. The shared Floe components own\ninputs, dialogs, focus treatment, and floating placement. Dialog guidance lives\nin the body, and actions reflow as whole controls at narrow widths.\n\nThe catalog uses a compact divided list. A desktop row keeps its name and\nsingle-line description beside aligned metadata, browse/edit, an action menu,\nand the enable switch. Default rows fit at least nine complete entries in an\n850px-tall view at 960px and 1280px widths. Long names and descriptions truncate\nvisually while preserving their full text in titles and an accessible disclosure.\nTechnical paths, source detail, complete descriptions, and MCP tools expand\ninside their own row. Reinstall, connection checks, and deletion use a labeled\nkeyboard-accessible action menu; confirmation and authorization remain unchanged.\nSearch/filter controls stay available while scrolling long lists. Narrow layouts\nmove metadata below the identity, and coarse pointers retain 44px action targets. Search is local to the visible catalog. Empty libraries\nexplain their next action, loading has a status, and failures remain actionable.\nBoth carriers resolve explicit copy for every shipped locale, including plural\ncounts and locale-aware check timestamps.",
-          "char_count": 1511
+          "body": "The page has one identity header, a return-to-chat action, and two accessible\nSkills/MCP tabs with arrow, Home, and End navigation. MCP loads on first visit;\nhidden panels are inert. Thread selection and New chat return to conversation\nwithout reconnecting the workspace transport. The shared Floe components own\ninputs, dialogs, focus treatment, and floating placement. Dialog guidance lives\nin the body, and actions reflow as whole controls at narrow widths.\nThe navigation glyph identifies Flower capabilities; Skills uses a wand for\nreusable AI instructions and MCP uses a workflow graph for external tool\nconnections. These three glyphs remain distinct, and each tab's empty state\nrepeats its own glyph. Icon-only controls retain their accessible names.\n\nThe catalog uses a compact divided list. A desktop row keeps its name and\nsingle-line description beside aligned metadata, browse/edit, an action menu,\nand the enable switch. Default rows fit at least nine complete entries in an\n850px-tall view at 960px and 1280px widths. Long names and descriptions truncate\nvisually while preserving their full text in titles and an accessible disclosure.\nTechnical paths, source detail, complete descriptions, and MCP tools expand\ninside their own row. Reinstall, connection checks, and deletion use a labeled\nkeyboard-accessible action menu; confirmation and authorization remain unchanged.\nSearch/filter controls stay available while scrolling long lists. Narrow layouts\nmove metadata below the identity, and coarse pointers retain 44px action targets. Search is local to the visible catalog. Empty libraries\nexplain their next action, loading has a status, and failures remain actionable.\nBoth carriers resolve explicit copy for every shipped locale, including plural\ncounts and locale-aware check timestamps.",
+          "char_count": 1809
         },
         {
           "id": "entry-icons",
@@ -30341,5 +30341,5 @@
       ]
     }
   ],
-  "source_sha256": "e32d4a58e0b9b187f482197ad081b7e835d0943b82c021bc5240bf447053a354"
+  "source_sha256": "0c7643fb7d1adf0a043c78db4dd02f6d63eefa4a9aaa32cf4a008c031fc18422"
 }

@@ -1,6 +1,6 @@
 import { For, Show, createSignal, createUniqueId } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { ChevronLeft, Layers, Link } from '@floegence/floe-webapp-core/icons';
+import { ChevronLeft, Wand, Workflow } from '@floegence/floe-webapp-core/icons';
 import { FlowerExtensionsContext, type ExtensionI18n } from './context';
 import { SkillsSection } from './SkillsSection';
 import { MCPPanel } from './MCPPanel';
@@ -20,7 +20,7 @@ export function FlowerExtensionsSurface(props: { adapter: FlowerExtensionsAdapte
         <div class="flower-extensions-tabs" role="tablist" aria-label={props.i18n.t('title')}>
           <For each={['skills', 'mcp'] as const}>{value => <button type="button" role="tab" id={`${id}-${value}-tab`} aria-controls={`${id}-${value}-panel`} aria-selected={tab() === value} tabIndex={tab() === value ? 0 : -1}
             onClick={() => select(value)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 'skills' : event.key === 'End' ? 'mcp' : value === 'skills' ? 'mcp' : 'skills'; select(next); document.getElementById(`${id}-${next}-tab`)?.focus(); } }}>
-            <Show when={value === 'skills'} fallback={<Link class="h-4 w-4" />}><Layers class="h-4 w-4" /></Show><span>{props.i18n.t(value)}</span>
+            <Show when={value === 'skills'} fallback={<Workflow class="h-4 w-4" aria-hidden="true" />}><Wand class="h-4 w-4" aria-hidden="true" /></Show><span>{props.i18n.t(value)}</span>
           </button>}</For>
         </div>
       </header>
