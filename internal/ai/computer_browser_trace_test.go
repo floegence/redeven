@@ -30,7 +30,7 @@ func (b *browserTraceLogBuffer) Write(value []byte) (int, error) {
 func (b *browserTraceLogBuffer) text() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.Buffer.String()
+	return b.String()
 }
 
 func TestExtensionSourceTraceCorrelatesCommandsWithoutPageContent(t *testing.T) {
