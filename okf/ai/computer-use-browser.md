@@ -92,9 +92,11 @@ written by the closing Runtime.
 
 New work creates an inactive tab in the chosen profile. Page commands do not
 activate a window, select a foreground tab, use the system clipboard or move
-the OS mouse. Top-level CDP focus emulation makes the background page ready for
-keyboard interaction without selecting its tab; private control and disconnect
-release that override. Existing extension tabs must still match the selected
+the OS mouse. Before forwarding viewer input, the extension enables top-level
+CDP focus emulation so background pointer and keyboard commands complete without
+selecting the physical tab. The semantic controller can release that override
+during private control, and its next authorized input re-enables it; debugger
+detach releases it at source teardown. Existing extension tabs must still match the selected
 inventory URL and title both before and after attachment. Changed selections
 fail and require a refreshed inventory; attachment never reloads the page.
 Incidental keyboard or pointer activity does not pause automation. Flower Stop,

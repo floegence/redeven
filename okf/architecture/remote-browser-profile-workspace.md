@@ -32,7 +32,7 @@ state. Existing private sessions and native opener ancestry remain governed by
 cannot bypass those barriers. Native directories and viewing grants are bounded
 to 128 tabs, while the existing source-owner limits remain separate.
 
-Metadata contains identity, URL, title, native order, pin, loading and availability.
+Metadata contains identity, URL, title, native order, pin, loading, discarded/frozen state and availability.
 FloeBrowser's released SourceDirectory resolves a page only when needed for
 projection. Listing or changing metadata never starts a debugger or gives Flower
 control. Simultaneous selection reuses the same source connection; obsolete
@@ -61,6 +61,25 @@ uncertainty; it never repeats the effect. A close decision on an admitted source
 uses its existing beforeunload and target-input gate. Unprojected tabs close by
 verified native identity without attaching a debugger.
 
+## Independent source admission and dormant pages
+
+Runtime captures workspace, profile and helper identity under its cancellable
+metadata lock, then performs source I/O outside that global boundary. Admission
+and retirement are serialized per persistent profile and native tab. A waiting
+caller's cancellation cannot revoke that target's current owner or delay another
+target. Publication revalidates the helper, profile connection and Runtime
+lifetime. Failed work releases only its newly acquired binding or exact source
+pipe; reused ownership remains intact.
+
+For an explicitly selected tab that Chrome reports as discarded, the extension
+issues one native reload before debugger attachment and requires that tab's new,
+active top-level document to finish DOMContentLoaded. Other frames and targets
+cannot satisfy it. Ordinary pages are never reloaded for admission. Cancellation,
+closure, navigation failure or the bounded restoration deadline ends the attempt
+without retrying the reload. A frozen page resumes through its own lifecycle API.
+Neither path activates the physical tab or focuses the browser window. Native
+replacement events remain authoritative for tab identity.
+
 # Boundaries
 
 ## Failure and reconnect
@@ -74,12 +93,20 @@ snapshot and issues fresh view grants. It cannot restore old input tokens or
 Flower bindings.
 
 Native detach and source carrier failures expose only fixed failure stage/reason,
-opaque target and binding generation. They do not log page content, credentials
+opaque target and binding generation. Debug traces additionally correlate request,
+CDP method, child-frame flag and per-stage duration, including directory waits,
+source retirement, native binding and source admission. They do not log page content, credentials
 or input. Late close, metadata and fault events from a retired binding cannot
 modify its replacement. Exact-generation native detach must finish before a
 replacement source can reuse that native page.
 
 # Evidence
+
+- `redeven:internal/ai/computer_browser_admission.go` — Cancellable metadata and per-native-target admission ownership.
+- `redeven:internal/ai/computer_browser_admission_test.go` — Independent admission, canceled caller isolation and cleanup restricted to newly created bindings.
+- `redeven:internal/ai/computer_browser_trace_test.go` — Correlated root/child command outcomes and durations without source parameters, results or raw errors.
+- `redeven:browser-extension/tabLifecycle.mjs` — One-shot discarded restoration and exact root-document readiness.
+- `redeven:internal/envapp/ui_src/scripts/computerExtensionTabLifecycle.node-test.mjs` — No ordinary reload, cancellation, failure and root identity.
 
 - `redeven:browser-extension/background.mjs` — Native directory stream and identity-checked mutations.
 - `redeven:internal/ai/computer_browser_profile_workspace.go` — Visibility, lazy resolution, mutation reconciliation and reconnect.
@@ -89,4 +116,4 @@ replacement source can reuse that native page.
 - `redeven:internal/ai/computer_extension_test.go` — Explicit Flower selection remains validated when reusing a product projection.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceController.test.ts` — Selected-tab retention across carrier and Session loss.
 - `redeven:internal/envapp/ui_src/scripts/checkBrowserProjection.mjs` — Desktop/Native Messaging verification of multiple native windows, explicit reconnect, empty directories and injected projection loss without duplicate native effects.
-- [FloeBrowser v0.1.26: test/session-directory.test.ts](https://github.com/floegence/floebrowser/blob/v0.1.26/test/session-directory.test.ts) — Lazy directory failure and grant-refresh independence.
+- [FloeBrowser v0.1.27: test/session-directory.test.ts](https://github.com/floegence/floebrowser/blob/v0.1.27/test/session-directory.test.ts) — Lazy directory failure and grant-refresh independence.

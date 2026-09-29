@@ -20,28 +20,34 @@ import (
 // lifecycle pipe. Native messages carry one current binding generation; neither
 // a renderer nor a model receives this debugger transport.
 type extensionSourcePipe struct {
-	client       *computerExtensionClient
-	conn         net.Conn
-	binding, tab string
-	ctx          context.Context
-	cancel       context.CancelFunc
-	queue        chan json.RawMessage
-	bytes        atomic.Int64
-	slots        chan struct{}
-	once         sync.Once
-	retired      chan struct{}
-	retireError  error
+	client          *computerExtensionClient
+	conn            net.Conn
+	binding, tab    string
+	target, request string
+	ctx             context.Context
+	cancel          context.CancelFunc
+	queue           chan json.RawMessage
+	bytes           atomic.Int64
+	slots           chan struct{}
+	once            sync.Once
+	retired         chan struct{}
+	retireError     error
 }
 
-func (host *browserSourceHost) attachExtension(ctx context.Context, client *computerExtensionClient, target, tab, binding string) (*extensionSourcePipe, error) {
+func (host *browserSourceHost) attachExtension(ctx context.Context, client *computerExtensionClient, target, tab, binding string) (_ *extensionSourcePipe, resultErr error) {
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", filepath.Join(host.directory, "host.sock"))
 	if err != nil {
 		return nil, err
 	}
 	success := false
+	stopCancellation := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer func() {
+		stopCancellation()
 		if !success {
 			_ = conn.Close()
+			if err := ctx.Err(); err != nil {
+				resultErr = err
+			}
 		}
 	}()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
@@ -61,9 +67,15 @@ func (host *browserSourceHost) attachExtension(ctx context.Context, client *comp
 	if response.StatusCode != http.StatusOK {
 		return nil, errors.New("extension source unavailable")
 	}
+	// The caller owns only admission. Once the handshake succeeds, cancellation
+	// must no longer close a carrier shared by other viewers of this source.
+	stopCancellation()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	_ = conn.SetDeadline(time.Time{})
 	lifetime, cancel := context.WithCancel(host.ctx)
-	pipe := &extensionSourcePipe{client: client, conn: conn, binding: binding, tab: tab, ctx: lifetime, cancel: cancel, queue: make(chan json.RawMessage, 128), slots: make(chan struct{}, 32)}
+	pipe := &extensionSourcePipe{client: client, conn: conn, binding: binding, tab: tab, target: target, request: browserTraceRequest(ctx), ctx: lifetime, cancel: cancel, queue: make(chan json.RawMessage, 128), slots: make(chan struct{}, 32)}
 	client.mu.Lock()
 	if client.sources == nil {
 		client.sources = make(map[string]*extensionSourcePipe)
@@ -152,11 +164,19 @@ func (pipe *extensionSourcePipe) read(reader *bufio.Reader) {
 		}
 		go func() {
 			defer func() { <-pipe.slots }()
+			started := time.Now()
+			fields := []any{"stage", "cdp_method", "target_id", pipe.target, "binding", pipe.binding, "request", pipe.request, "command", message.ID, "method", message.Method, "child_frame", message.Session != ""}
+			slog.Debug("browser source trace", append(fields, "phase", "started")...)
 			result, err := pipe.client.call(pipe.ctx, "cdp", map[string]any{"binding": pipe.binding, "tab_id": pipe.tab, "session": message.Session, "method": message.Method, "params": message.Params})
 			var reply map[string]any
 			if err == nil {
 				err = json.Unmarshal(result, &reply)
 			}
+			outcome := "completed"
+			if err != nil || reply["error"] != nil {
+				outcome = "failed"
+			}
+			slog.Debug("browser source trace", append(fields, "phase", outcome, "duration_ms", time.Since(started).Milliseconds())...)
 			if reply == nil {
 				reply = make(map[string]any)
 			}

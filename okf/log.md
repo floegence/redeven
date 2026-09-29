@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-29: Improve personal browser responsiveness with FloeBrowser v0.1.27
+
+- Consume the published FloeBrowser v0.1.27 archive and npm package with matching bytes, integrity and provenance. Projection protocol advances to 26; media wire remains at 1.
+- Keep selection and independent target actions responsive during source admission, preserve source ownership on cancellation, restore discarded tabs once and report content-free stage timing from source to usable paint.
+- Qualify the task-owned Desktop and Chrome together before calling end-to-end latency complete.
+
 ## 2026-09-29: Adopt the published FloeBrowser profile workspace release
 
 - Upgrade Redeven to the published FloeBrowser v0.1.26 package, which carries browser protocol 25 while keeping media wire version 1.

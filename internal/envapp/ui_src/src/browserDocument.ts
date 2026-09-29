@@ -1,5 +1,6 @@
 import { applyBrowserDocumentTheme, applyBrowserChromeTheme } from './ui/services/browserDocumentTheme';
 import { browserFailureCode, type BrowserFailureCode } from './ui/services/browserFailure';
+import { markBrowserTrace } from './browserPerformanceTrace';
 import type { FlowerBrowserInstallationSnapshot } from '../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { BrowserSourceService } from './ui/services/browserSourceContract';
 import { mountBrowser, projectionPortConnection, type AddressSuggestion, type BrowserMenu } from '@floegence/floebrowser/viewer';
@@ -155,6 +156,7 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
       return file('resource', target, id, signal);
     },
     messages: configuration.messages,
+    onTrace: markBrowserTrace,
     mediaAssets: { decoderURL, audioWorkletURL },
     connect: () => {
       if (mounted) notify({ type: 'reconnect' });

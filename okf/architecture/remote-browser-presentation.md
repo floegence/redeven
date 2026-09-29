@@ -3,12 +3,12 @@ type: Architecture Contract
 title: Remote browser presentation
 description: Present stable tab geometry and continuous input through current source authority.
 tags: [architecture, browser, ui, security]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 # Summary
 
 - Authority: released FloeBrowser owns document readiness, geometry and input fencing; the environment owner admits control through its private Runtime token.
-- Outcome: a first tab visit presents its settled geometry, with inert painted continuity during preparation; transient hit-target changes preserve subsequent scrolling without rebuilding the document.
+- Outcome: a first tab visit presents its settled geometry, with a matching inert preview or explicit loading state during preparation; transient hit-target changes preserve subsequent scrolling without rebuilding the document.
 - Invariants: host completion alone grants no input; source grants and responsive sizing precede presentation; cached documents never accept input.
 - Failure boundary: changed targets, revoked control and disconnected views cancel obsolete preparation; uncertain source input is never replayed. Websites retain their own admission decisions.
 
@@ -51,9 +51,34 @@ interrupting warning. Subsequent input uses the current projected target.
 An invalid view epoch or a missing DOM sequence still requires snapshot recovery;
 authorization failures and uncertain source effects remain visible. Redeven must
 not suppress generic failures or add another input/recovery loop around the SDK.
-Source hosts and view descriptors require projection protocol 25 and media wire
+Source hosts and view descriptors require projection protocol 26 and media wire
 version 1. The document adapter validates against the published SDK constants;
 older or newer protocol versions fail before a view can receive input.
+
+## Independent tab intent
+
+Selection highlights and dispatches immediately. Its acknowledgement confirms
+accepted intent; projection readiness arrives separately. Slow source resolution
+or an older authorization result cannot delay another authorized selection or
+replace newer intent. Native mutations retain receive order without awaiting
+projection. Origin-bound mutations retain their post-authorization selection
+check; explicit select, retry and close validate their own target and grants.
+Navigation submitted after New tab waits for that tab's readiness. Newer intent
+cancels only unsent dependent navigation, preserving an edited address draft.
+Unknown effects are never repeated and late failures complete only their request.
+
+The document exposes bounded `redeven:browser:*` performance marks from the
+published `onTrace` callback. Their same-document monotonic times cover intent,
+dispatch, acknowledgement, selection, first snapshot, control and usable paint.
+Opaque target/generation and action kind identify work; URLs, DOM, text and command
+arguments are excluded. The latest mark per stage is retained; an explicitly
+attached PerformanceObserver may collect samples for diagnosis. A source or
+command acknowledgement is not end-to-end paint evidence.
+
+Redeven's trusted browser document installs the trace callback directly and
+retains only its latest mark per stage. The mark detail contains opaque target,
+generation, request and action identifiers with optional duration; it excludes
+page content, URLs and raw source results.
 
 ## Continuous pointer gestures
 
@@ -89,7 +114,7 @@ user resize after initialization.
 
 The viewer keeps at most three complete inert tab documents for immediate visual
 feedback. The selected preview remains painted while its replacement prepares
-offscreen, and swaps only after styles, selection acknowledgement, idle-control
+offscreen, and swaps only after styles, current-target idle-control
 admission and responsive source sizing settle. The document requests idle control
 through the released viewer's cancellable `onPrepareView` hook once per selection,
 never from a live-status or tab-list notification. Control revocation invalidates
@@ -98,9 +123,9 @@ response and the matching source grant must both arrive before controller sizing
 the view in observation mode. Selection changes and disconnect cancel preparation,
 and late results cannot present an old target. This prevents first-visit centering,
 alignment and size changes after the new document becomes visible. An uncached
-selection keeps the outgoing painted document inert until its replacement is ready,
+selection hides the outgoing document and displays loading for the selected target,
 including first visits, cache eviction and cached layouts from a different window
-size. Cached presentation grants no input: only fresh source selection,
+size. A selected tab must never display another target's document. Cached presentation grants no input: only fresh source selection,
 control admission and a complete current document enable page interaction.
 Background URL changes, removed directory grants and disconnect evict caches.
 Only browsers with state-preserving DOM moves retain iframe documents; other
@@ -152,9 +177,14 @@ is input evidence, not proof that a third-party verification challenge passes.
 
 # Evidence
 
+- [FloeBrowser v0.1.27: test/browser-responsiveness.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.27/test/browser-responsiveness.e2e.ts) — Immediate dispatch, late replies, retry deduplication and target-correct previews.
+- [FloeBrowser v0.1.27: test/selection-admission.test.ts](https://github.com/floegence/floebrowser/blob/v0.1.27/test/selection-admission.test.ts) — Independent authorization, source admission and ordered native effects.
+
 - [FloeBrowser v0.1.25: test/edit-shortcuts.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.25/test/edit-shortcuts.e2e.ts) — Native select-all, Unicode replacement and source cancellation across three viewer engines.
 - [FloeBrowser v0.1.25: test/media-reattach.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.25/test/media-reattach.e2e.ts) — Retained pictures across hidden document preparation without additional source frames.
 - `redeven:internal/envapp/ui_src/src/browserDocument.ts` - Cancellable preparation before display, with status and tab callbacks limited to notifications.
+- `redeven:internal/envapp/ui_src/src/browserPerformanceTrace.ts` - Bounded content-free document timing marks from the published viewer callback.
+- `redeven:internal/envapp/ui_src/src/browserPerformanceTrace.test.ts` - Same-clock mark retention, identity and privacy guard.
 - `redeven:internal/envapp/ui_src/src/browserDocument.test.ts` - Idle admission ordering, absence of live-status reacquisition and cancellation of obsolete requests.
 - [FloeBrowser v0.1.14: test/input-focus.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/input-focus.e2e.ts) — Repeated source focus and native caret continuity.
 - [FloeBrowser v0.1.14: test/navigation-input.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/navigation-input.e2e.ts) — Input fencing through navigation admission and completion.
@@ -164,8 +194,8 @@ is input evidence, not proof that a third-party verification challenge passes.
 - `redeven:internal/envapp/ui_src/scripts/computerManagedSandbox.node-test.mjs` - Real managed launcher and source host preserve sandbox isolation and new-tab initialization geometry.
 - [FloeBrowser v0.1.20: test/popup-viewport.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.20/test/popup-viewport.e2e.ts) — Initial popup dimensions and visible source/projected click markers at desktop and narrow sizes, with opener zoom and borrowed-window isolation.
 - [FloeBrowser v0.1.18: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/src/viewer/replay-pages.ts) — Bounded inert document retention.
-- [FloeBrowser v0.1.18: test/tab-sizing.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/test/tab-sizing.e2e.ts) — Per-frame source and viewer geometry across admission, cancellation, visibility and window-size changes.
-- [FloeBrowser v0.1.18: test/tab-continuity.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/test/tab-continuity.e2e.ts) — Per-frame cold, warm, evicted and renamed tab continuity across three engines and both input roles.
+- [FloeBrowser v0.1.27: test/tab-sizing.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.27/test/tab-sizing.e2e.ts) — Per-frame source and viewer geometry across admission, cancellation, visibility and window-size changes.
+- [FloeBrowser v0.1.27: test/tab-continuity.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.27/test/tab-continuity.e2e.ts) — Per-frame cold, warm, evicted and renamed tab continuity across three engines and both input roles.
 - [FloeBrowser v0.1.16: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
 - [FloeBrowser v0.1.22: test/object-fallback.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.22/test/object-fallback.e2e.ts) — Ordinary object HTML, source input, CSS fidelity, dynamic embedding changes and script/network isolation across three viewer engines.
 - `redeven:internal/envapp/ui_src/scripts/checkBrowserProjection.mjs` - Object fallback layout, real clicks and Unicode input through the product's Chrome and Desktop Flowersec carriers.

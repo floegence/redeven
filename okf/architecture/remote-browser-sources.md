@@ -54,8 +54,10 @@ failures per installation so one unavailable browser cannot block others. No
 browser database is copied, and no second process shares an active personal profile.
 
 
-Native Messaging protocol 8 carries one ordered native directory stream and
-separately bound debugger commands/events. Connecting a profile or discovering
+Native Messaging protocol 9 carries one ordered native directory stream and
+separately bound debugger commands/events. Binding replies distinguish a newly
+acquired debugger from a reused owner so cancellation can retire only its own
+generation. Connecting a profile or discovering
 its tabs does not attach a debugger. Explicit Flower target selection validates
 URL/title; a product workspace resolves its already-authorized stable native
 identity on demand. Incognito pages cannot enter either path. Internal pages
@@ -71,7 +73,10 @@ and privacy owners before releasing a paused child. User browsing, Flower
 execution and private handback pass through the existing target gate.
 
 A private Unix socket per admitted extension source separates debugger traffic
-from the helper's small lifecycle pipe. Framed input is limited to 24 MiB,
+from the helper's small lifecycle pipe. The admitting caller can cancel a pending
+socket handshake immediately; after the handshake the source host owns the
+carrier lifetime, so a finished caller cannot disconnect other viewers.
+Framed input is limited to 24 MiB,
 outbound native-host commands to less than 1 MiB, and pending helper commands to
 32 per source. Native delivery has a 32 MiB / 512-message per-source budget and
 a shared 64 MiB / 1,024-message budget for unacknowledged traffic. Excess traffic
@@ -131,9 +136,10 @@ Discovery is not source admission. Source loss or overflow retires affected bind
 - `redeven:internal/browserbridge/installations.go` - Fixed discovery and opaque installation identity.
 - `redeven:internal/ai/computer_extension_registration.go` - One hub with installation-specific registration and verified Snap bridge placement.
 - `redeven:internal/ai/computer_extension_source.go` - Bounded private source carrier and native binding lifetime.
+- `redeven:internal/ai/computer_extension_source_test.go` - Cancelable admission and shared carrier survival after its admitting caller finishes.
 - `redeven:browser-extension/background.mjs` - Selected-tab debugger boundary and consumption credits.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.mjs` - Shared semantic/projection ownership across CDP and extension sources.
 - `redeven:internal/ai/computer_browser_privacy.go` - Native identity and opener ancestry privacy.
 - `redeven:internal/ai/computer_browser_lifecycle.go` - Projection retirement and native identity preservation.
 - `redeven:internal/ai/computer_browser_workspace_test.go` - Directory, private descendants and source isolation.
-- [FloeBrowser v0.1.26: src/host/session.ts](https://github.com/floegence/floebrowser/blob/v0.1.26/src/host/session.ts) — Directory observation and controller lifecycle.
+- [FloeBrowser v0.1.27: src/host/session.ts](https://github.com/floegence/floebrowser/blob/v0.1.27/src/host/session.ts) — Directory observation and controller lifecycle.

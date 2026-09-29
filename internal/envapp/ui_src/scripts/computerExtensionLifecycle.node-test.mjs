@@ -30,7 +30,8 @@ test('reconnection drains old requests before binding and reusing native request
   const connect = () => ui({ command: 'connect', nativeHost: 'dev.floegence.redeven.r123456789abcdef0', profileName: 'Fixture' });
   try {
     const source = (await readFile(new URL('../../../../browser-extension/background.mjs', import.meta.url), 'utf8'))
-      .replace("'./computerBrowserLineage.mjs'", JSON.stringify(new URL('./computerBrowserLineage.mjs', import.meta.url).href));
+      .replace("'./tabLifecycle.mjs'", JSON.stringify(new URL('../../../../browser-extension/tabLifecycle.mjs', import.meta.url).href))
+    .replace("'./computerBrowserLineage.mjs'", JSON.stringify(new URL('./computerBrowserLineage.mjs', import.meta.url).href));
     const module = path.join(directory, 'background.mjs'); await writeFile(module, source);
     await import(pathToFileURL(module).href);
     for (const url of ['https://example.test/popup.html', chrome.runtime.getURL('popup.html') + '?host=anything', chrome.runtime.getURL('other.html')]) {
@@ -38,7 +39,7 @@ test('reconnection drains old requests before binding and reusing native request
     }
     const first = connect(); await flush();
     assert.equal(ports.length, 1);
-    ports[0].onMessage.emit({ type: 'ready', protocol_version: 8 });
+    ports[0].onMessage.emit({ type: 'ready', protocol_version: 9 });
     assert.equal((await first).connected, true);
     ports[0].onMessage.emit({ id: '1', command: 'inventory' }); await flush();
     const next = connect(); await flush();
@@ -46,7 +47,7 @@ test('reconnection drains old requests before binding and reusing native request
     assert.equal(ports.length, 1, 'a new connection must wait for the retired request cleanup');
     releaseInventory([]); await flush(); await flush();
     assert.equal(ports.length, 2);
-    ports[1].onMessage.emit({ type: 'ready', protocol_version: 8 });
+    ports[1].onMessage.emit({ type: 'ready', protocol_version: 9 });
     assert.equal((await next).connected, true);
     ports[1].onMessage.emit({ id: '1', command: 'inventory' }); await flush();
     releaseInventory([{ id: 7, title: 'Selected', url: 'https://example.test' }]); await flush();
@@ -64,7 +65,7 @@ test('reconnection drains old requests before binding and reusing native request
     ports.at(-1).onMessage.emit({ type: 'connection_error', code: 'extension_update_required' });
     assert.equal((await incompatible).error, 'extension_update_required');
     const recovered = connect(); await flush(); await flush();
-    ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 8 });
+    ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 9 });
     assert.equal((await recovered).connected, true);
     assert.equal((await ui({ command: 'status' })).error, '');
     await ui({ command: 'disconnect' });
@@ -79,6 +80,7 @@ test('a confirmed profile reconnects after disconnect and worker restart, while 
   let saved = {}, generation = 0, chrome;
   const alarms = new Map(), ports = [];
   const source = (await readFile(new URL('../../../../browser-extension/background.mjs', import.meta.url), 'utf8'))
+    .replace("'./tabLifecycle.mjs'", JSON.stringify(new URL('../../../../browser-extension/tabLifecycle.mjs', import.meta.url).href))
     .replace("'./computerBrowserLineage.mjs'", JSON.stringify(new URL('./computerBrowserLineage.mjs', import.meta.url).href));
   const module = path.join(directory, 'background.mjs'); await writeFile(module, source);
   const startWorker = async () => {
@@ -98,7 +100,7 @@ test('a confirmed profile reconnects after disconnect and worker restart, while 
     await flush(); await flush();
   };
   const ui = command => new Promise(resolve => chrome.runtime.onMessage.emit(command, { id: 'fixture', url: chrome.runtime.getURL('popup.html') }, resolve));
-  const ready = async () => { await flush(); await flush(); ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 8 }); await flush(); await flush(); };
+  const ready = async () => { await flush(); await flush(); ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 9 }); await flush(); await flush(); };
   try {
     await startWorker();
     assert.equal(ports.length, 0, 'installation alone must not connect');

@@ -30,7 +30,8 @@ type ComputerUseRuntime struct {
 	candidates             map[string]computerCandidate
 	managedProfiles        map[string]*managedBrowserProfile
 	extension              *computerExtensionHub
-	connectMu              sync.Mutex
+	connectMu              browserConnectMutex
+	extensionAdmissions    map[string]*extensionAdmissionGate // protected by mu
 	closed                 bool
 	mu                     sync.RWMutex
 	registry               *TargetRegistry
@@ -57,6 +58,9 @@ func (r *ComputerUseRuntime) connectBrowser(ctx context.Context, connection Comp
 	if r == nil || r.registry == nil {
 		return TargetDescriptor{}, errors.New("computer use runtime is unavailable")
 	}
+	if connection.ExtensionProfileID != "" {
+		return r.connectExtensionBrowser(ctx, connection, targetID)
+	}
 	r.connectMu.Lock()
 	defer r.connectMu.Unlock()
 	r.mu.RLock()
@@ -72,9 +76,6 @@ func (r *ComputerUseRuntime) connectBrowser(ctx context.Context, connection Comp
 	}
 	if connection.ManagedProfileID != "" {
 		return r.connectManagedBrowserLocked(ctx, connection, targetID)
-	}
-	if connection.ExtensionProfileID != "" {
-		return r.connectExtensionBrowser(ctx, connection, targetID)
 	}
 	return r.connectCDPBrowserLocked(ctx, connection, targetID)
 }

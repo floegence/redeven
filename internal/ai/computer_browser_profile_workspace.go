@@ -165,8 +165,12 @@ func (client *computerExtensionClient) directoryUpdates() {
 }
 
 func (r *ComputerUseRuntime) resolveWorkspaceSource(ctx context.Context, target string) (string, error) {
-	r.connectMu.Lock()
-	defer r.connectMu.Unlock()
+	started := time.Now()
+	err := r.connectMu.LockContext(ctx)
+	browserTraceStage(ctx, "directory_wait", target, started, err)
+	if err != nil {
+		return "", err
+	}
 	r.mu.RLock()
 	var workspace *browserWorkspace
 	for _, view := range r.browserViews {
@@ -177,13 +181,16 @@ func (r *ComputerUseRuntime) resolveWorkspaceSource(ctx context.Context, target 
 	}
 	r.mu.RUnlock()
 	if workspace == nil {
+		r.connectMu.Unlock()
 		return "", errBrowserViewUnavailable
 	}
 	tab, ok := workspace.native[target]
+	profileID := workspace.extension.profile.ID
+	r.connectMu.Unlock()
 	if !ok || tab.Availability != "" {
 		return "", errBrowserViewUnavailable
 	}
-	_, err := r.connectExtensionBrowser(ctx, ComputerBrowserConnection{ExtensionProfileID: workspace.extension.profile.ID, TabID: tab.ID, nativeTargetID: tab.NativeTargetID}, target)
+	_, err = r.connectExtensionBrowser(ctx, ComputerBrowserConnection{ExtensionProfileID: profileID, TabID: tab.ID, nativeTargetID: tab.NativeTargetID}, target)
 	if err != nil {
 		return "", err
 	}
