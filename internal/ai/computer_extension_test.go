@@ -139,16 +139,17 @@ func TestExtensionExistingProjectionStillValidatesExplicitFlowerSelection(t *tes
 			}
 			_ = json.Unmarshal(raw, &command)
 			response := map[string]any{"id": command.ID}
-			if command.Command == "inventory" {
+			switch command.Command {
+			case "inventory":
 				response["result"] = []ComputerBrowserTab{tab}
-			} else if command.Command == "bind" {
+			case "bind":
 				validations.Add(1)
 				if command.Arguments["tab_url"] != tab.URL || command.Arguments["tab_title"] != tab.Title {
 					response["error"] = "refresh tab selection"
 				} else {
 					response["result"] = map[string]string{"tab_id": tab.ID, "native_target_id": tab.NativeTargetID, "title": tab.Title, "binding": binding}
 				}
-			} else {
+			default:
 				response["error"] = "unexpected command"
 			}
 			if browserbridge.WriteMessage(peer, response, 1<<20) != nil {

@@ -107,7 +107,11 @@ func TestMCPIconSchemaUpgradeWriteFailurePreservesOriginal(t *testing.T) {
 	if err := os.Chmod(parent, 0500); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(parent, 0700)
+	t.Cleanup(func() {
+		if err := os.Chmod(parent, 0700); err != nil {
+			t.Errorf("restore MCP configuration directory permissions: %v", err)
+		}
+	})
 	if manager, err := openMCPManager(dir); err == nil || manager != nil {
 		t.Fatal("failed migration started the manager")
 	}
