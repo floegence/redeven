@@ -1,5 +1,5 @@
 import '../../index.css';
-import { FloeProvider } from '@floegence/floe-webapp-core';
+import { FloeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
@@ -11,6 +11,10 @@ import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 
 let host: HTMLDivElement;
 let dispose: (() => void) | undefined;
+let theme: ReturnType<typeof useTheme>;
+function ThemeObserver() { theme = useTheme(); return null; }
+const suppliedSkillIcon = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#25675f"/><path d="m12 11-5 5 5 5m8-10 5 5-5 5" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+const suppliedMCPIcon = (dark: boolean) => 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="${dark ? '#c8e5fa' : '#244d79'}"/><path d="m10 10 12 12m0-12L10 22" stroke="${dark ? '#244d79' : '#c8e5fa'}" stroke-width="2"/><g fill="${dark ? '#244d79' : '#c8e5fa'}"><circle cx="9" cy="9" r="3"/><circle cx="23" cy="9" r="3"/><circle cx="9" cy="23" r="3"/><circle cx="23" cy="23" r="3"/></g></svg>`);
 const skills: SkillCatalogEntry[] = [
   { id: 'review', name: 'code-review', description: 'Review changes with a focus on correctness, clear architecture, and maintainability.', path: '/Users/alex/.redeven/skills/code-review/SKILL.md', scope: 'user', enabled: true, effective: true },
   { id: 'routing', name: 'environment-routing', description: 'Choose the right environment for remote diagnostics and project work.', path: '/runtime/skills/environment-routing/SKILL.md', scope: 'system', enabled: true, effective: true },
@@ -44,11 +48,13 @@ function fixture(empty = false, count = 0) {
   };
   return { adapter, setAdmin, saveMCP, deleteMCP };
 }
-async function mount(width = 1280, dark = false, locale = 'en-US', empty = false, count = 0) {
+async function mount(width = 1280, dark = false, locale = 'en-US', empty = false, count = 0, setup?: (adapter: FlowerExtensionsAdapter) => void) {
   await page.viewport(width, 850);
   localStorage.removeItem('extensions-test-theme');
   const state = fixture(empty, count); host = document.createElement('div'); host.style.height = '830px'; document.body.append(host);
-  dispose = render(() => <FloeProvider config={{ theme: { storageKey: 'extensions-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><FlowerExtensionsSurface adapter={state.adapter} i18n={extensionI18n(locale)} onBack={vi.fn()} /></FloeProvider>, host);
+  setup?.(state.adapter);
+  dispose = render(() => <FloeProvider config={{ theme: { storageKey: 'extensions-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><ThemeObserver /><FlowerExtensionsSurface adapter={state.adapter} i18n={extensionI18n(locale)} onBack={vi.fn()} /></FloeProvider>, host);
+  theme.setTheme(dark ? 'dark' : 'light');
   await expect.poll(() => document.documentElement.classList.contains('dark')).toBe(dark);
   await expect.poll(() => state.adapter.listSkills).toHaveBeenCalled();
   return state;
@@ -66,6 +72,69 @@ function noOverflow() {
   }
 }
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
+
+it('gives every entry a compact, stable identity icon across filtering and tabs', async () => {
+  await mount();
+  await expect.element(page.getByRole('heading', { name: 'code-review', exact: true })).toBeVisible();
+  const first = host.querySelector<HTMLElement>('.flower-extension-icon');
+  expect(first).not.toBeNull();
+  expect(first).toHaveAttribute('aria-hidden', 'true');
+  expect(first!.textContent).toBe('CR');
+  const identity = first!.outerHTML;
+  expect(first!.getBoundingClientRect().width).toBe(32);
+  expect(host.querySelectorAll('.flower-extension-icon')).toHaveLength(skills.length);
+  await page.getByRole('textbox', { name: 'Search', exact: true }).fill('technical');
+  await page.getByRole('textbox', { name: 'Search', exact: true }).fill('');
+  expect(host.querySelector('.flower-extension-icon')!.outerHTML).toBe(identity);
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'Workspace tools', exact: true })).toBeVisible();
+  const icons = host.querySelectorAll('[role="tabpanel"]:not([hidden]) .flower-extension-icon');
+  expect(icons).toHaveLength(2);
+  expect(icons[0].textContent).toBe('WT');
+  expect(icons[1].textContent).toBe('LW');
+});
+
+it.each([false, true])('uses supplied skill and MCP icons and reacts to theme changes (dark=%s)', async dark => {
+  await mount(1280, dark, 'en-US', false, 0, adapter => {
+    vi.mocked(adapter.listSkills).mockResolvedValue({ catalog_version: 1, skills: [{ ...skills[0], icons: [{ src: suppliedSkillIcon }] }, ...skills.slice(1)] });
+    vi.mocked(adapter.listMCP).mockResolvedValue({ servers: [{ ...server, icons: [{ src: suppliedMCPIcon(false), theme: 'light' }, { src: suppliedMCPIcon(true), theme: 'dark' }] }] });
+  });
+  const skillImage = () => host.querySelector<HTMLImageElement>('.flower-extension-icon img');
+  await expect.poll(() => skillImage()?.naturalWidth).toBeGreaterThan(0);
+  expect(skillImage()).toHaveAttribute('src', suppliedSkillIcon);
+  expect(skillImage()).toHaveAttribute('alt', '');
+  expect(host.querySelector('.flower-extension-icon svg')).toBeNull();
+  await page.screenshot({ path: `../../../dist/flower-extension-icons/skills-${dark ? 'dark' : 'light'}.png` });
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  const serverImage = () => host.querySelector<HTMLImageElement>('[role="tabpanel"]:not([hidden]) .flower-extension-icon img');
+  await expect.poll(() => serverImage()?.naturalWidth).toBeGreaterThan(0);
+  expect(serverImage()).toHaveAttribute('src', suppliedMCPIcon(dark));
+  await page.screenshot({ path: `../../../dist/flower-extension-icons/mcp-${dark ? 'dark' : 'light'}.png` });
+  theme.setTheme(dark ? 'light' : 'dark');
+  await expect.poll(() => serverImage()?.getAttribute('src')).toBe(suppliedMCPIcon(!dark));
+  await expect.poll(() => serverImage()?.naturalWidth).toBeGreaterThan(0);
+  noOverflow();
+});
+
+it('falls back on unavailable, malformed, or mismatched icons without hiding an entry', async () => {
+  await mount(390, false, 'en-US', false, 0, adapter => {
+    vi.mocked(adapter.listSkills).mockResolvedValue({ catalog_version: 1, skills: [
+      { ...skills[0], icons: [{ src: 'data:image/png;base64,aW52YWxpZA==' }] },
+      { ...skills[1], icons: [{ src: 'https://example.com/track.svg' }] },
+      { ...skills[2], icons: [{ src: suppliedMCPIcon(true), theme: 'dark' }] },
+    ] });
+    vi.mocked(adapter.listMCP).mockResolvedValue({ servers: [{ ...server, icons: [{ src: 'data:image/png;base64,aW52YWxpZA==', theme: 'light' }, { src: suppliedSkillIcon }] }] });
+  });
+  await expect.element(page.getByRole('heading', { name: 'code-review', exact: true })).toBeVisible();
+  await expect.poll(() => host.querySelectorAll('.flower-extension-icon img').length).toBe(0);
+  expect([...host.querySelectorAll('.flower-extension-icon')].map(icon => icon.textContent)).toEqual(['CR', 'ER', 'TW']);
+  noOverflow();
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  const image = () => host.querySelector<HTMLImageElement>('[role="tabpanel"]:not([hidden]) .flower-extension-icon img');
+  await expect.poll(() => image()?.naturalWidth).toBeGreaterThan(0);
+  expect(image()).toHaveAttribute('src', suppliedSkillIcon);
+  expect(host.querySelector('[role="tabpanel"]:not([hidden]) .flower-extension-row')!.getBoundingClientRect().height).toBeLessThanOrEqual(112);
+});
 
 it.each([[1280, false, 'en-US'], [1280, true, 'en-US'], [390, false, 'zh-CN'], [390, true, 'de-DE']] as const)('renders both tabs without overflow at %ipx (dark=%s, locale=%s)', async (width, dark, locale) => {
   await mount(width, dark, locale);

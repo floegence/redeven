@@ -3,6 +3,7 @@ import { Button, ConfirmDialog, Dialog, Input, Select, Switch } from '@floegence
 import { Link, Pencil, Plus, Refresh, Search, Trash } from '@floegence/floe-webapp-core/icons';
 import { useFlowerExtensions } from './context';
 import { SettingsPill, SettingsSection, SettingsList, SettingRow, RowMenu } from './primitives';
+import { ExtensionIcon } from './ExtensionIcon';
 import type { MCPCatalog, MCPServer } from './types';
 
 type Draft = { id: string; revision: number; name: string; transport: 'http' | 'stdio'; url: string; command: string; arguments: string; credentials: string };
@@ -71,6 +72,7 @@ export function MCPPanel() {
       <Show when={catalog()?.servers.length} fallback={<Show when={catalog()}><div class="flower-extension-empty"><span class="flower-extension-empty-icon"><Link class="h-6 w-6" /></span><h3>{t('emptyMcp')}</h3><p>{t('emptyMcpHint')}</p><Button size="sm" variant="outline" icon={Plus} disabled={!canManage()} onClick={() => open(null)}>{t('add')}</Button></div></Show>}>
         <div class="flower-extension-toolbar"><label class="flower-extension-search"><Search class="h-4 w-4" /><Input type="search" aria-label={t('search')} placeholder={t('search')} value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label><Select aria-label={t('skillsSettings.enabled')} value={enabledOnly() ? 'enabled' : 'all'} onChange={value => setEnabledOnly(value === 'enabled')} options={[{ value: 'all', label: t('all') }, { value: 'enabled', label: t('enabledOnly') }]} /></div>
         <SettingsList><For each={filtered()}>{server => <SettingRow title={server.name} description={server.transport === 'http' ? server.url ?? '' : server.command ?? ''}
+          icon={<ExtensionIcon identity={`mcp:${server.id}`} name={server.name} icons={server.icons} />}
           metadata={<><span class="flower-extension-source">{t(server.transport === 'http' ? 'remote' : 'local')}<span class="flower-extension-tool-count">{ctx.i18n.tn('tools', server.tools.length)}</span></span><SettingsPill tone={server.enabled ? 'success' : 'default'}>{t(server.enabled ? 'enabled' : 'disabled')}</SettingsPill></>}
           control={<>
             <Button size="icon" variant="ghost" icon={Pencil} aria-label={`${t('edit')}: ${server.name}`} title={t('edit')} disabled={!canManage()} onClick={() => open(server)} />

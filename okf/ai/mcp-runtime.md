@@ -18,12 +18,19 @@ without changing the original bytes.
 
 # Configuration and protocol
 
-Configuration lives at `<stateDir>/ai/mcp.json`, with schema version 1, one
+Configuration lives at `<stateDir>/ai/mcp.json`, with schema version 2, one
 monotonic configuration revision, and server revisions for optimistic edits.
 Revisions are not reused when an ID is deleted and recreated. Writes validate
 first, use a private 0600 temporary file, sync it, and atomically rename it.
 Persistence failure leaves the in-memory catalog unchanged. Unsupported schema,
 unknown fields, invalid tools, and oversized state are rejected at startup.
+
+Version 1 upgrades automatically and atomically before the manager starts.
+Migration validates the historical shape, preserves connection settings,
+credentials, enablement, tool schemas, timestamps, and every revision, and adds
+only the optional presentation-icon contract. Failed validation or persistence
+leaves the original bytes intact and stops startup. Reopening current state
+never rewrites it; future versions fail closed.
 
 The authenticated `/api/ai/mcp` route under `/_redeven_proxy` supports GET for
 readers and PUT/DELETE for administrators. `/api/ai/mcp/check` accepts an explicit
@@ -47,6 +54,28 @@ Lists and ordinary startup never connect to servers. Explicit discovery has a
 15-second deadline; tool calls have a one-minute bound. Each operation owns
 and closes one SDK session. Catalog limits are 32 servers, 128 tools per server,
 32 KiB per schema, and 4 MiB total persisted configuration.
+
+# Presentation icons
+
+Save and explicit Check read `serverInfo.icons` from the existing SDK initialize
+result. No startup connection, polling, or separate protocol session is added.
+Icon discovery is optional presentation: invalid or unavailable images do not
+invalidate otherwise successful tool discovery. The catalog and private
+configuration retain normalized, self-contained image data and optional light
+or dark variants. Connection-preserving disabled edits retain icons; changed
+connection settings clear stale discovery. Images never affect tool identity.
+
+The first eight declarations are considered, with at most one valid icon per
+theme (light, dark, or unthemed) and 64 KiB of total decoded image bytes per
+server. PNG, JPEG, GIF, and SVG share the bounded validation used by skill
+catalogs. Image documents remain isolated from page markup.
+
+Inline base64 data URIs work for both transports. HTTP servers may additionally
+serve icons at their configured origin. The fetch uses a separate two-second
+budget, bounded reads, no redirects, no cookie jar, and no MCP authorization
+headers. It cannot fetch arbitrary local files or expand to another network
+origin. Stdio servers supply inline images. Rejected sources receive the
+generated identity described in [the shared UI contract](../ui/flower-extensions.md#entry-icons).
 
 # Execution and dependencies
 
@@ -87,7 +116,10 @@ indicator; it does not promise current network reachability or bypass approval.
 - `internal/ai/run_tool_surface.go`, `internal/ai/floret_tools.go`, and
   `internal/ai/run.go` join MCP to existing authorization and effect execution.
 - `internal/ai/mcp_manager_test.go` verifies HTTP/stdio, private credentials,
-  persistence, stale edits, schema rejection, and dependencies.
+  persistence, stale edits, v1-to-v2 migration and rollback, schema rejection,
+  and dependencies.
+- `internal/ai/extension_icons_test.go` verifies bounded icon discovery,
+  credential isolation, theme metadata, restart persistence, and tool identity.
 - `internal/ai/mcp_runtime_integration_test.go` executes real protocol sessions
   through the typed thread runtime and verifies the terminal no-retry boundary.
 - `internal/codeapp/appserver/server_ai_mcp_test.go` verifies route authorization,

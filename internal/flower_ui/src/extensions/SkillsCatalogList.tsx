@@ -4,6 +4,7 @@ import { Button, Switch } from '@floegence/floe-webapp-core/ui';
 import { SettingsPill, SettingsList, SettingRow, RowMenu } from './primitives';
 import { useFlowerExtensions, type ExtensionI18n as I18nHelpers } from './context';
 import type { SkillCatalogEntry, SkillSourceItem } from './types';
+import { ExtensionIcon } from './ExtensionIcon';
 
 function skillScopeLabel(scope: string, i18n: I18nHelpers): string {
   const value = String(scope ?? '').trim().toLowerCase();
@@ -43,6 +44,7 @@ export function SkillsCatalogList(props: {
         const source = () => props.sources[String(item.path ?? '').trim()];
         return (
           <SettingRow title={item.name} description={item.description || i18n.t('skillsSettings.noDescription')}
+            icon={<ExtensionIcon identity={`skill:${item.id}`} name={item.name} icons={item.icons} />}
             metadata={<>
               <span class="flower-extension-source" title={skillScopeLabel(item.scope, i18n)}>{skillScopeLabel(item.scope, i18n)}</span>
               <div class="flower-extension-statuses">

@@ -3,6 +3,7 @@ package appserver
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -38,6 +39,15 @@ description: test skill
 # appserver skill`
 	if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
 		t.Fatalf("write skill file: %v", err)
+	}
+	icon := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12"/></svg>`
+	if err := os.Mkdir(filepath.Join(skillDir, "agents"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{"icon.svg": icon, "agents/openai.yaml": "interface:\n  icon_small: ./icon.svg\n"} {
+		if err := os.WriteFile(filepath.Join(skillDir, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -104,6 +114,9 @@ description: test skill
 		skills, _ := data["skills"].([]any)
 		if len(skills) == 0 {
 			t.Fatalf("expected non-empty skills catalog")
+		}
+		if !strings.Contains(rr.Body.String(), "data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte(icon))) {
+			t.Fatal("catalog route omitted the package icon")
 		}
 	}
 

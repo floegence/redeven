@@ -56,6 +56,7 @@ type SkillCatalog struct {
 
 type SkillCatalogEntry struct {
 	ID                      string               `json:"id"`
+	Icons                   []ExtensionIcon      `json:"icons,omitempty"`
 	Name                    string               `json:"name"`
 	Description             string               `json:"description"`
 	Path                    string               `json:"path"`
@@ -450,6 +451,7 @@ func (m *skillManager) discoverLocked() {
 			}
 			entries = append(entries, SkillCatalogEntry{
 				ID:                      skillID(item.Scope, item.Path),
+				Icons:                   skillCatalogIcons(item.Path),
 				Name:                    item.Name,
 				Description:             item.Description,
 				Path:                    item.Path,
@@ -847,6 +849,7 @@ func (m *skillManager) catalogLocked() SkillCatalog {
 	entries := make([]SkillCatalogEntry, 0, len(m.catalogEntries))
 	for _, item := range m.catalogEntries {
 		cloned := item
+		cloned.Icons = append([]ExtensionIcon(nil), item.Icons...)
 		cloned.PermissionHints = append([]string(nil), item.PermissionHints...)
 		cloned.Dependencies = append([]SkillMCPDependency(nil), item.Dependencies...)
 		cloned.DependencyState = "ok"

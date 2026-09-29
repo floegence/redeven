@@ -515,7 +515,7 @@
     },
     {
       "path": "internal/ai/mcp_manager.go",
-      "sha256": "017a9fb9d39f7db84dd52a3700fe31897ed5c96f3d56853a62c88cd931c9f56e",
+      "sha256": "eec45d87f658df9d11147092d0b22c7d54acdd4251ad73deda0820b1c4c09fc4",
       "sink_kinds": [
         "file",
         "json_file"
@@ -524,7 +524,7 @@
       "owner": "redeven Flower",
       "authority": "product_configuration",
       "data_classes": [
-        "administrator MCP configuration, write-only credentials, and discovered tool schemas"
+        "administrator MCP configuration, write-only credentials, discovered tool schemas, and bounded presentation icons"
       ],
       "tables": [
         "the"
@@ -536,12 +536,12 @@
       "dtos": [
         "a",
         "b",
-        "mcpStore{SchemaVersion: 1, Revision: m.revision + 1, Servers: entries}",
+        "mcpStore{SchemaVersion: 2, Revision: revision, Servers: entries}",
         "result",
         "struct {\n\tServer\tMCPServerInput\n\tTool\tmcpToolRecord\n}{server.MCPServerInput, tool}",
         "tool.InputSchema"
       ],
-      "review_note": "Persists versioned MCP configuration and discovery metadata only. Private-file writes preserve prior state on failure. SDK sessions are transient; Floret owns canonical thread lifecycle and effects."
+      "review_note": "Persists MCP configuration and bounded discovery metadata only. Atomic v1-to-v2 migration preserves credentials, revisions, tool identity, and original bytes on failure. Icons are catalog presentation, never model or execution authority; Floret retains canonical thread lifecycle and effects."
     },
     {
       "path": "internal/ai/run.go",
@@ -606,7 +606,7 @@
     },
     {
       "path": "internal/ai/skill_manager.go",
-      "sha256": "82a92f4c2dd70a1bca7bce80b4865dbc87a18ddd3d1e37fc9eea49415b202f2d",
+      "sha256": "e2f342bbb046be6a0b4e199c363c642c35ea881ab040b18435802fb664d3472a",
       "sink_kinds": [
         "file",
         "json_file"

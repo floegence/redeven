@@ -1706,7 +1706,7 @@
               "permissions"
             ],
             "summary": "Redeven owns administrator-managed MCP configuration and a thin product adapter\nover the released official Model Context Protocol Go SDK. The SDK owns stdio\nand Streamable HTTP protocol sessions. Floret owns invocation identity,\napproval, one-shot effect authorization, history, and recovery through the\n[typed thread runtime](floret-thread-runtime.md). MCP must not introduce another\nexecution queue, lifecycle projection, or retry authority. A lost call outcome\nis terminal and cannot be replayed. Invalid persisted configuration fails closed\nwithout changing the original bytes.",
-            "section_count": 2
+            "section_count": 3
           }
         ]
       },
@@ -1741,7 +1741,7 @@
               "ui"
             ],
             "summary": "Shared Flower UI owns the Skills and MCP management page. Env App and Desktop\nsupply the same typed, authenticated management adapter. The `Skills·MCP` entry\nsits immediately below New chat in the conversation rail; runtime settings have\nno separate Skills destination. Opening management preserves the unsent chat\ndraft, and each tab retains its filters while the surface remains mounted.\nReaders can inspect skills and server catalogs but cannot mutate administrator\nconfiguration. Failed operations keep their input and offer an explicit retry.",
-            "section_count": 3
+            "section_count": 4
           },
           {
             "concept_id": "ui.ui-presentation-transactions",
@@ -8012,15 +8012,22 @@
         "title": "Flower MCP runtime",
         "type": "Runtime Contract"
       },
-      "body_length": 5258,
+      "body_length": 7216,
       "summary": "Redeven owns administrator-managed MCP configuration and a thin product adapter\nover the released official Model Context Protocol Go SDK. The SDK owns stdio\nand Streamable HTTP protocol sessions. Floret owns invocation identity,\napproval, one-shot effect authorization, history, and recovery through the\n[typed thread runtime](floret-thread-runtime.md). MCP must not introduce another\nexecution queue, lifecycle projection, or retry authority. A lost call outcome\nis terminal and cannot be replayed. Invalid persisted configuration fails closed\nwithout changing the original bytes.",
       "sections": [
         {
           "id": "configuration-and-protocol",
           "title": "Configuration and protocol",
           "level": 1,
-          "body": "Configuration lives at `\u003cstateDir\u003e/ai/mcp.json`, with schema version 1, one\nmonotonic configuration revision, and server revisions for optimistic edits.\nRevisions are not reused when an ID is deleted and recreated. Writes validate\nfirst, use a private 0600 temporary file, sync it, and atomically rename it.\nPersistence failure leaves the in-memory catalog unchanged. Unsupported schema,\nunknown fields, invalid tools, and oversized state are rejected at startup.\n\nThe authenticated `/api/ai/mcp` route under `/_redeven_proxy` supports GET for\nreaders and PUT/DELETE for administrators. `/api/ai/mcp/check` accepts an explicit\nadministrator POST. Request decoding is strict and bounded. Mutation requires\nthe current server revision; stale forms cannot overwrite concurrent changes.\nConnection or discovery failure leaves the previous configuration intact.\nDisabling does not connect and remains possible when a server is unavailable.\n\nSupported transports are Streamable HTTP and a directly invoked executable\nusing stdio. Remote endpoints require HTTPS; HTTP is limited to loopback.\nEndpoint user info, query credentials, fragments, and redirects are rejected.\nHeaders cannot override protocol framing. Local executables receive selected\nhost environment basics plus configured variables, not all parent credentials.\nNo shell command interpolation or automatic package installation is added.\nConnecting to an enabled server may start its configured executable.\n\nHeader/environment values are write-only through management APIs. Catalogs\nexpose key names only; omitted maps preserve values and explicit empty maps\nclear them. Transport changes do not carry credentials between transports.\nLists and ordinary startup never connect to servers. Explicit discovery has a\n15-second deadline; tool calls have a one-minute bound. Each operation owns\nand closes one SDK session. Catalog limits are 32 servers, 128 tools per server,\n32 KiB per schema, and 4 MiB total persisted configuration.",
-          "char_count": 1984
+          "body": "Configuration lives at `\u003cstateDir\u003e/ai/mcp.json`, with schema version 2, one\nmonotonic configuration revision, and server revisions for optimistic edits.\nRevisions are not reused when an ID is deleted and recreated. Writes validate\nfirst, use a private 0600 temporary file, sync it, and atomically rename it.\nPersistence failure leaves the in-memory catalog unchanged. Unsupported schema,\nunknown fields, invalid tools, and oversized state are rejected at startup.\n\nVersion 1 upgrades automatically and atomically before the manager starts.\nMigration validates the historical shape, preserves connection settings,\ncredentials, enablement, tool schemas, timestamps, and every revision, and adds\nonly the optional presentation-icon contract. Failed validation or persistence\nleaves the original bytes intact and stops startup. Reopening current state\nnever rewrites it; future versions fail closed.\n\nThe authenticated `/api/ai/mcp` route under `/_redeven_proxy` supports GET for\nreaders and PUT/DELETE for administrators. `/api/ai/mcp/check` accepts an explicit\nadministrator POST. Request decoding is strict and bounded. Mutation requires\nthe current server revision; stale forms cannot overwrite concurrent changes.\nConnection or discovery failure leaves the previous configuration intact.\nDisabling does not connect and remains possible when a server is unavailable.\n\nSupported transports are Streamable HTTP and a directly invoked executable\nusing stdio. Remote endpoints require HTTPS; HTTP is limited to loopback.\nEndpoint user info, query credentials, fragments, and redirects are rejected.\nHeaders cannot override protocol framing. Local executables receive selected\nhost environment basics plus configured variables, not all parent credentials.\nNo shell command interpolation or automatic package installation is added.\nConnecting to an enabled server may start its configured executable.\n\nHeader/environment values are write-only through management APIs. Catalogs\nexpose key names only; omitted maps preserve values and explicit empty maps\nclear them. Transport changes do not carry credentials between transports.\nLists and ordinary startup never connect to servers. Explicit discovery has a\n15-second deadline; tool calls have a one-minute bound. Each operation owns\nand closes one SDK session. Catalog limits are 32 servers, 128 tools per server,\n32 KiB per schema, and 4 MiB total persisted configuration.",
+          "char_count": 2416
+        },
+        {
+          "id": "presentation-icons",
+          "title": "Presentation icons",
+          "level": 1,
+          "body": "Save and explicit Check read `serverInfo.icons` from the existing SDK initialize\nresult. No startup connection, polling, or separate protocol session is added.\nIcon discovery is optional presentation: invalid or unavailable images do not\ninvalidate otherwise successful tool discovery. The catalog and private\nconfiguration retain normalized, self-contained image data and optional light\nor dark variants. Connection-preserving disabled edits retain icons; changed\nconnection settings clear stale discovery. Images never affect tool identity.\n\nThe first eight declarations are considered, with at most one valid icon per\ntheme (light, dark, or unthemed) and 64 KiB of total decoded image bytes per\nserver. PNG, JPEG, GIF, and SVG share the bounded validation used by skill\ncatalogs. Image documents remain isolated from page markup.\n\nInline base64 data URIs work for both transports. HTTP servers may additionally\nserve icons at their configured origin. The fetch uses a separate two-second\nbudget, bounded reads, no redirects, no cookie jar, and no MCP authorization\nheaders. It cannot fetch arbitrary local files or expand to another network\norigin. Stdio servers supply inline images. Rejected sources receive the\ngenerated identity described in [the shared UI contract](../ui/flower-extensions.md#entry-icons).",
+          "char_count": 1314
         },
         {
           "id": "execution-and-dependencies",
@@ -8037,6 +8044,12 @@
           "path": "ai/floret-thread-runtime.md",
           "concept_id": "ai.floret-thread-runtime",
           "title": "Floret thread runtime integration"
+        },
+        {
+          "label": "the shared UI contract",
+          "path": "ui/flower-extensions.md",
+          "concept_id": "ui.flower-extensions",
+          "title": "Flower Skills and MCP"
         }
       ],
       "backlinks": [
@@ -25407,7 +25420,7 @@
         "title": "Flower Skills and MCP",
         "type": "UI Contract"
       },
-      "body_length": 5281,
+      "body_length": 6989,
       "summary": "Shared Flower UI owns the Skills and MCP management page. Env App and Desktop\nsupply the same typed, authenticated management adapter. The `Skills·MCP` entry\nsits immediately below New chat in the conversation rail; runtime settings have\nno separate Skills destination. Opening management preserves the unsent chat\ndraft, and each tab retains its filters while the surface remains mounted.\nReaders can inspect skills and server catalogs but cannot mutate administrator\nconfiguration. Failed operations keep their input and offer an explicit retry.",
       "sections": [
         {
@@ -25416,6 +25429,13 @@
           "level": 1,
           "body": "The page has one identity header, a return-to-chat action, and two accessible\nSkills/MCP tabs with arrow, Home, and End navigation. MCP loads on first visit;\nhidden panels are inert. Thread selection and New chat return to conversation\nwithout reconnecting the workspace transport. The shared Floe components own\ninputs, dialogs, focus treatment, and floating placement. Dialog guidance lives\nin the body, and actions reflow as whole controls at narrow widths.\n\nThe catalog uses a compact divided list. A desktop row keeps its name and\nsingle-line description beside aligned metadata, browse/edit, an action menu,\nand the enable switch. Default rows fit at least nine complete entries in an\n850px-tall view at 960px and 1280px widths. Long names and descriptions truncate\nvisually while preserving their full text in titles and an accessible disclosure.\nTechnical paths, source detail, complete descriptions, and MCP tools expand\ninside their own row. Reinstall, connection checks, and deletion use a labeled\nkeyboard-accessible action menu; confirmation and authorization remain unchanged.\nSearch/filter controls stay available while scrolling long lists. Narrow layouts\nmove metadata below the identity, and coarse pointers retain 44px action targets. Search is local to the visible catalog. Empty libraries\nexplain their next action, loading has a status, and failures remain actionable.\nBoth carriers resolve explicit copy for every shipped locale, including plural\ncounts and locale-aware check timestamps.",
           "char_count": 1511
+        },
+        {
+          "id": "entry-icons",
+          "title": "Entry icons",
+          "level": 1,
+          "body": "Every skill and MCP row reserves a 32px icon beside its name without increasing\nrow height. A supplied icon takes precedence; unavailable, unsupported, or broken\nimages fall back to a name-derived monogram with a deterministic identity color.\nFiltering, sorting, and reloads do not randomize that identity. Supplied theme\nvariants follow the product's resolved light/dark theme; an unthemed image works\nin either mode. A variant for the opposite theme is not substituted blindly.\nIcons are decorative, retain the adjacent accessible name, and never become\ninteractive targets or inline untrusted SVG markup.\n\nInstalled skills may declare `interface.icon_small` and `interface.icon_large`\nin `agents/openai.yaml`. Paths are relative to the skill root; a valid small icon\nis preferred, then the large icon. Reads remain inside an OS-enforced skill root,\nincluding symlink resolution. Metadata is limited to 32 KiB and image bytes to\n64 KiB. PNG, JPEG, GIF, and SVG are supported; raster dimensions are bounded to\n2048px per axis. Invalid metadata does not prevent skill discovery or activation.\nSystem skills without packaged artwork receive the same generated identity.\nCatalog DTOs carry self-contained image data; model-facing skill metadata does\nnot carry images. MCP discovery and persistence follow\n[the runtime icon contract](../ai/mcp-runtime.md#presentation-icons).",
+          "char_count": 1372
         },
         {
           "id": "skills",
@@ -25439,9 +25459,21 @@
           "path": "ai/mcp-runtime.md",
           "concept_id": "ai.mcp-runtime",
           "title": "Flower MCP runtime"
+        },
+        {
+          "label": "the runtime icon contract",
+          "path": "ai/mcp-runtime.md",
+          "concept_id": "ai.mcp-runtime",
+          "title": "Flower MCP runtime"
         }
       ],
       "backlinks": [
+        {
+          "label": "Flower MCP runtime",
+          "path": "ai/mcp-runtime.md",
+          "concept_id": "ai.mcp-runtime",
+          "title": "Flower MCP runtime"
+        },
         {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
@@ -30309,5 +30341,5 @@
       ]
     }
   ],
-  "source_sha256": "d61ea561cc53fad861a545d983a59ab4b24270a0df8bcf889c75a1e3d39c3899"
+  "source_sha256": "e32d4a58e0b9b187f482197ad081b7e835d0943b82c021bc5240bf447053a354"
 }

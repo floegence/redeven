@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { FlowerExtensionsContext, extensionI18n } from '../../../../../../flower_ui/src/extensions/context';
 import { flowerExtensionsAdapter } from '../../../../../../flower_ui/host/extensionsAdapter';
+import { FloeProvider } from '@floegence/floe-webapp-core';
 
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillsCatalogList } from '../../../../../../flower_ui/src/extensions/SkillsCatalogList';
+import { extensionMonogram } from '../../../../../../flower_ui/src/extensions/ExtensionIcon';
 
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
@@ -39,6 +41,9 @@ afterEach(() => {
 });
 
 describe('SkillsCatalogList', () => {
+  it.each([['code-review', 'CR'], ['workspaceTools', 'WT'], ['git', 'GI'], ['代码审查', '代码'], ['écriture technique', 'ÉT'], ['  ', '·']])('derives readable icon initials for %s', (name, expected) => {
+    expect(extensionMonogram(name)).toBe(expected);
+  });
   it('renders source metadata and routes skill actions', () => {
     const onToggle = vi.fn();
     const onBrowse = vi.fn();
@@ -74,7 +79,7 @@ describe('SkillsCatalogList', () => {
 
     render(
       () => (
-        <FlowerExtensionsContext.Provider value={{ ...flowerExtensionsAdapter(vi.fn(), { canInteract: () => true, canAdmin: () => true }), i18n: extensionI18n() }}><SkillsCatalogList
+        <FloeProvider><FlowerExtensionsContext.Provider value={{ ...flowerExtensionsAdapter(vi.fn(), { canInteract: () => true, canAdmin: () => true }), i18n: extensionI18n() }}><SkillsCatalogList
           skills={skills}
           sources={{
             '/skills/skill-installer': {
@@ -97,7 +102,7 @@ describe('SkillsCatalogList', () => {
           onBrowse={onBrowse}
           onReinstall={onReinstall}
           onDelete={onDelete}
-        /></FlowerExtensionsContext.Provider>
+        /></FlowerExtensionsContext.Provider></FloeProvider>
       ),
       host,
     );
