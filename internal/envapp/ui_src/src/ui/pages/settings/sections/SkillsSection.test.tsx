@@ -1,18 +1,19 @@
 // @vitest-environment jsdom
+import { FlowerExtensionsContext, extensionI18n } from '../../../../../../../flower_ui/src/extensions/context';
+import { flowerExtensionsAdapter } from '../../../../../../../flower_ui/host/extensionsAdapter';
 import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ api: vi.fn(), canAdmin: true, canInteract: (): boolean => true }));
-vi.mock('../../../services/localApi', () => ({ fetchLocalApiJSON: state.api }));
-vi.mock('../EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.canInteract(), canAdmin: () => state.canAdmin }) }));
-vi.mock('../SkillsCatalogList', () => ({ SkillsCatalogList: (props: any) => <div>{props.skills.map((entry: any) => <div>{entry.name}<button disabled={!props.canAdmin} onClick={() => props.onDelete(entry)}>Delete</button><button disabled={!props.canAdmin} onClick={() => props.onToggle(entry, false)}>Disable</button></div>)}</div> }));
-vi.mock('../../../primitives/EnvAppModal', () => ({
+vi.mock('../../../../../../../flower_ui/src/extensions/SkillsCatalogList', () => ({ SkillsCatalogList: (props: any) => <div>{props.skills.map((entry: any) => <div>{entry.name}<button disabled={!props.canAdmin} onClick={() => props.onDelete(entry)}>Delete</button><button disabled={!props.canAdmin} onClick={() => props.onToggle(entry, false)}>Disable</button></div>)}</div> }));
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Dialog: (props: any) => <Show when={props.open}><div role="dialog"><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
   ConfirmDialog: (props: any) => <Show when={props.open}><div role="dialog"><h2>{props.title}</h2>{props.children}<button disabled={props.loading || props.disabled} onClick={props.onConfirm}>{props.confirmText}</button></div></Show>,
 }));
-import { SkillsSection } from './SkillsSection';
+import { SkillsSection } from '../../../../../../../flower_ui/src/extensions/SkillsSection';
 let dispose: (() => void) | undefined;
-function mount() { const host = document.createElement('div'); document.body.append(host); dispose = render(() => <SkillsSection />, host); return host; }
+function mount() { const host = document.createElement('div'); document.body.append(host); dispose = render(() => <FlowerExtensionsContext.Provider value={{ ...flowerExtensionsAdapter((method, path, body) => state.api(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), { canInteract: () => state.canInteract(), canAdmin: () => state.canAdmin }), i18n: extensionI18n() }}><SkillsSection /></FlowerExtensionsContext.Provider>, host); return host; }
 function click(host: HTMLElement, text: string) { const button = [...host.querySelectorAll('button')].find((item) => (item.getAttribute('aria-label') ?? item.textContent?.trim()) === text); expect(button, text).toBeTruthy(); button!.click(); }
 const skill = { id: 'one', name: 'example', description: 'Example skill', path: '/skills/example/SKILL.md', scope: 'user', enabled: true, effective: true };
 beforeEach(() => { state.canAdmin = true; state.canInteract = () => true; state.api.mockReset().mockImplementation(async (path: string) => path.endsWith('/sources') ? { items: [] } : { skills: [skill], catalog_version: 1 }); });

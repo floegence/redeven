@@ -130,6 +130,7 @@ type skillManager struct {
 	githubRawBaseURL  string
 	githubRepoBaseURL string
 	httpClient        *http.Client
+	mcpManager        *mcpManager
 }
 
 var skillNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
@@ -848,6 +849,13 @@ func (m *skillManager) catalogLocked() SkillCatalog {
 		cloned := item
 		cloned.PermissionHints = append([]string(nil), item.PermissionHints...)
 		cloned.Dependencies = append([]SkillMCPDependency(nil), item.Dependencies...)
+		cloned.DependencyState = "ok"
+		for _, dependency := range cloned.Dependencies {
+			if !m.mcpManager.HasDependency(dependency) {
+				cloned.DependencyState = "degraded"
+				break
+			}
+		}
 		entries = append(entries, cloned)
 	}
 	conflicts := make([]SkillCatalogNotice, 0, len(m.catalogConflict))

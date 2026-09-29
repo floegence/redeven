@@ -4123,6 +4123,18 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"web_search_provider_api_key_set": set}})
 		return
 
+	case r.URL.Path == "/_redeven_proxy/api/ai/mcp" || r.URL.Path == "/_redeven_proxy/api/ai/mcp/check":
+		permission := requiredPermissionAdmin
+		if r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/mcp" {
+			permission = requiredPermissionRead
+		}
+		meta, ok := g.requirePermission(w, r, permission)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		g.handleMCPManagement(w, r, aiSvc, meta)
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/skills":
 		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 		if !ok {

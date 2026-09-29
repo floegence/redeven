@@ -2,7 +2,7 @@
 type: UI Contract
 title: Runtime settings
 description: Navigate and edit runtime configuration through consistent, responsive settings surfaces while preserving API and permission ownership.
-tags: [ui, runtime, settings, skills]
+tags: [ui, runtime, settings]
 timestamp: 2026-09-27T17:29:30Z
 ---
 # Summary
@@ -20,8 +20,8 @@ to the shared maintenance controller after explicit user confirmation.
 
 ## Navigation and visual hierarchy
 
-The ten destinations are Config File, Connection, Runtime Status, Shell &
-Workspace, Codespaces & Tooling, Logging, Permission Policy, Flower, Skills, and
+The nine destinations are Config File, Connection, Runtime Status, Shell &
+Workspace, Codespaces & Tooling, Logging, Permission Policy, Flower, and
 Debug Console. Desktop navigation groups and filters these destinations. Overview
 contains Connection and Runtime Status; Runtime Environment contains Shell &
 Workspace and Codespaces & Tooling; Diagnostics contains Config File, Logging,
@@ -62,7 +62,7 @@ with 44px targets for coarse pointers. Success changes the glyph or reserved
 label without moving the adjacent value. Primary copy steps in manual connection
 setup keep their workflow emphasis; this treatment applies to auxiliary actions.
 
-Technical disclosures for connection, runtime status, providers, skills and
+Technical disclosures for connection, runtime status, providers and
 installation paths use at least 8px horizontal padding and 32px target height,
 increasing to 44px for coarse pointers. The full padded summary activates the
 native disclosure; neutral hover and visible keyboard focus identify its bounds
@@ -127,37 +127,13 @@ Health, diagnostic and backup actions follow the same right-column arrangement;
 expanding diagnostics or reviewing restore retains the existing permission and
 confirmation boundaries.
 
-## Skills operations
+## Flower extension placement
 
-Skills load their catalog and source metadata on first entry once the runtime
-connection is usable, through
-`/_redeven_proxy/api/ai/skills`. Search and scope filtering affect only the visible
-catalog. Each row retains enablement, effective/shadowed/degraded status, source,
-path, browsing, reinstall, and delete actions. Catalog refresh and mutations are
-serialized within the page so an older refresh cannot replace a mutation result.
-Paths, source IDs and maintenance actions live in a closed details disclosure;
-enablement, effective state and errors remain visible in the catalog row.
-
-GitHub installation requires validation of the current form. Changing any input
-invalidates that validation. Create and import failures keep the form open;
-delete and overwrite reinstall require confirmation. A source-metadata refresh
-failure is reported separately from an already successful mutation. The runtime
-continues to enforce permissions and filesystem boundaries for every request.
-
-Skill browsing uses the existing tree and file endpoints, renders file content
-as text, and exposes encoding and truncation. Failed reads can retry the same
-request. Closing the dialog or selecting another skill invalidates pending reads
-so stale content cannot replace the new selection.
-
-The runtime resolves browsing against the current catalog. A bundled
-`system:<name>/SKILL.md` entry is a virtual identifier: its root lists the single
-`SKILL.md` document and its preview reads the same embedded content used by the
-skill manager. It must never be interpreted as a host filesystem path. Unknown
-catalog entries and missing bundled children fail explicitly; relative path
-validation, encoding, size limits, and truncation apply to both bundled and
-filesystem skills. Local and GitHub-installed skills retain filesystem and
-symlink containment checks. Browsing requires read permission, not administrator
-permission, and does not install or materialize bundled files on disk.
+Skills and MCP belong to Flower. Open their shared management page from the
+`Skills·MCP` entry below New chat in Flower's conversation rail. Runtime settings
+retain model providers, permissions, health, and storage. The
+[Flower extensions contract](flower-extensions.md) owns catalog operations,
+browsing, and extension management interactions.
 
 # Boundaries
 
@@ -175,17 +151,9 @@ Read access cannot edit administrator fields. All writes use existing authentica
   owns the shared brand definitions.
 - `internal/envapp/ui_src/src/ui/pages/settings/EnvSettingsPageContext.tsx`
   delegates settings writes and runtime maintenance.
-- `internal/envapp/ui_src/src/ui/pages/settings/sections/SkillsSection.tsx` and
-  `internal/envapp/ui_src/src/ui/pages/settings/SkillFilesDialog.tsx` own skill UI
-  requests; `internal/codeapp/appserver/server.go` owns the API boundary.
-- `internal/ai/skill_manager_remote.go` resolves browse sources and enforces
-  file boundaries; `internal/ai/skill_manager_browse_test.go` and
-  `internal/codeapp/appserver/server_ai_skills_test.go` verify embedded previews,
-  filesystem containment, and read permission.
 - `internal/envapp/ui_src/src/ui/pages/RuntimeSettingsDesign.browser.test.tsx`
   checks page geometry, retained drafts, navigation, dialogs, and API adapters.
-- `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.test.tsx` and
-  `internal/envapp/ui_src/src/ui/pages/settings/sections/SkillsSection.test.tsx`
-  cover confirmation, target validation, failure, and read-only behavior.
+- `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.test.tsx`
+  covers confirmation, target validation, failure, and read-only behavior.
 - `internal/envapp/ui_src/src/styles/settingsThemeHierarchyVisual.browser.test.tsx`
   checks the settings hierarchy across the shipped theme palette.

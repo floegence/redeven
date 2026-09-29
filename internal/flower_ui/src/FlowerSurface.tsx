@@ -246,9 +246,10 @@ import {
 const FlowerInputChoices = lazy(() => import('./FlowerInputChoices'));
 const SubagentDetailWindow = lazy(() => import('./SubagentDetailWindow').then((module) => ({ default: module.SubagentDetailWindow })));
 const FlowerSettingsSurface = lazy(() => import('./settings/FlowerSettingsSurface').then((module) => ({ default: module.FlowerSettingsSurface })));
+const FlowerExtensionsSurface = lazy(() => import('./extensions/FlowerExtensionsSurface').then((module) => ({ default: module.FlowerExtensionsSurface })));
 const FlowerComputerStage = lazy(() => import('./FlowerComputerStage').then((module) => ({ default: module.FlowerComputerStage })));
 
-type FlowerSurfacePanel = 'chat' | 'settings';
+type FlowerSurfacePanel = 'chat' | 'settings' | 'extensions';
 type UnavailableFlowerModelSourceStatus = Exclude<FlowerModelSourceStatus, { state: 'ready' }>;
 type FlowerModelSourceRecoveryActionID = 'local_settings' | 'remote_settings' | 'runtime_settings' | 'connection_center';
 type FlowerInputDraft = Readonly<{
@@ -829,6 +830,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
   const [settingsOpened, setSettingsOpened] = createSignal(false);
+  const [extensionsOpened, setExtensionsOpened] = createSignal(false);
   let consumedSettingsFocusRequest = 0;
   const [contextSnapshotPreview, setContextSnapshotPreview] = createSignal<FlowerChatContextSnapshotPreview | null>(null);
   const [attachmentPreview, setAttachmentPreview] = createSignal<FlowerAttachmentPreviewSource | null>(null);
@@ -11934,10 +11936,16 @@ webSearch: model.web_search,
             <Plus class="h-4 w-4 shrink-0" />
             <span class="flower-new-chat-label">{copy().chat.newChat}</span>
           </button>
+          <Show when={props.adapter.extensions}>
+            <button type="button" class="flower-sidebar-extensions-button" aria-current={sidePanel() === 'extensions' ? 'page' : undefined}
+              onClick={() => { setExtensionsOpened(true); setSidePanel('extensions'); setThreadNavigationOpen(false); }}>
+              <Link class="h-4 w-4 shrink-0" aria-hidden="true" /><span>{copy().extensions.t('title')}</span><ChevronRight class="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </Show>
         </div>
         <FlowerThreadList
           items={sidebarListItems()}
-          activeThreadID={selectedThreadID()}
+          activeThreadID={sidePanel() === 'chat' ? selectedThreadID() : ''}
           query={historyFilter()}
           refreshing={threadsRefreshing()}
           loading={threadListState() === 'loading'}
@@ -12184,6 +12192,11 @@ webSearch: model.web_search,
       <section class="flower-component-main" inert={threadDrawerPresent()}
         aria-hidden={threadDrawerPresent() ? 'true' : undefined}>
         <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
+        <div class={cn('h-full min-h-0', sidePanel() !== 'extensions' && 'hidden')} aria-hidden={sidePanel() !== 'extensions'} inert={sidePanel() !== 'extensions'}>
+          <Show when={extensionsOpened() && props.adapter.extensions}>{adapter => <Suspense fallback={<div class="p-6" role="status">{copy().extensions.t('loading')}</div>}>
+            <FlowerExtensionsSurface adapter={adapter()} i18n={copy().extensions} onBack={returnToChat} />
+          </Suspense>}</Show>
+        </div>
         <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
           <Show when={settingsOpened()}>
             <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>

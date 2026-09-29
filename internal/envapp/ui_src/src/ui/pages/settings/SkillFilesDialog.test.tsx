@@ -1,20 +1,21 @@
 // @vitest-environment jsdom
+import { FlowerExtensionsContext, extensionI18n } from '../../../../../../flower_ui/src/extensions/context';
+import { flowerExtensionsAdapter } from '../../../../../../flower_ui/host/extensionsAdapter';
 import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { SkillCatalogEntry } from './types';
+import type { SkillCatalogEntry } from '../../../../../../flower_ui/src/extensions/types';
 
 const api = vi.hoisted(() => vi.fn());
-vi.mock('../../services/localApi', () => ({ fetchLocalApiJSON: api }));
-vi.mock('../../primitives/EnvAppModal', () => ({ Dialog: (props: any) => <Show when={props.open}><div role="dialog">{props.children}{props.footer}</div></Show> }));
-import { SkillFilesDialog } from './SkillFilesDialog';
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({ ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(), Dialog: (props: any) => <Show when={props.open}><div role="dialog">{props.children}{props.footer}</div></Show> }));
+import { SkillFilesDialog } from '../../../../../../flower_ui/src/extensions/SkillFilesDialog';
 
 let dispose: (() => void) | undefined;
 const skill = (name: string): SkillCatalogEntry => ({ id: name, name, description: '', path: `/skills/${name}`, scope: 'user', enabled: true, effective: true });
 function mount() {
   const host = document.createElement('div'); document.body.append(host);
   const [entry, setEntry] = createSignal<SkillCatalogEntry | null>(skill('first'));
-  dispose = render(() => <SkillFilesDialog entry={entry()} canInteract onClose={() => setEntry(null)} />, host);
+  dispose = render(() => <FlowerExtensionsContext.Provider value={{ ...flowerExtensionsAdapter((method, path, body) => api(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), { canInteract: () => true, canAdmin: () => true }), i18n: extensionI18n() }}><SkillFilesDialog entry={entry()} canInteract onClose={() => setEntry(null)} /></FlowerExtensionsContext.Provider>, host);
   return { host, setEntry };
 }
 function button(host: HTMLElement, label: string) {

@@ -143,6 +143,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     ShieldCheck: actual.ShieldCheck,
     MoreHorizontal: Icon,
     Link: actual.Link,
+    Layers: actual.Layers,
     MonitorPointer: actual.MonitorPointer,
     Paperclip: Icon,
     Pencil: Icon,

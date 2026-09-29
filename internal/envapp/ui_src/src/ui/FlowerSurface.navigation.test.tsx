@@ -8,6 +8,7 @@ import type {
   FlowerRouterDecision,
   FlowerSettingsSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { flowerExtensionsAdapter } from '../../../../flower_ui/host/extensionsAdapter';
 import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
 import {
   adapter,
@@ -64,6 +65,35 @@ function attachTranscriptScrollMetrics(transcript: HTMLElement, metrics: {
 }
 
 describe('FlowerSurface navigation', () => {
+  it('opens Skills·MCP below new chat and preserves the conversation draft and tab', async () => {
+    const request = vi.fn(async (_method: string, path: string) => path.endsWith('/sources') ? { items: [] } : path.endsWith('/mcp') ? { servers: [] } : { skills: [], catalog_version: 1 });
+    const extensions = flowerExtensionsAdapter(request as Parameters<typeof flowerExtensionsAdapter>[0], { canInteract: () => true, canAdmin: () => true });
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), extensions });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'Keep this unsent thought';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const entry = runtime.querySelector<HTMLButtonElement>('.flower-sidebar-extensions-button')!;
+    expect(entry.textContent).toBe('Skills·MCP');
+    expect(entry.previousElementSibling?.textContent).toContain('New chat');
+    entry.click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-testid="flower-extensions"]')));
+    expect(entry.getAttribute('aria-current')).toBe('page');
+    const mcpTab = runtime.querySelector<HTMLButtonElement>('[role="tab"][id$="-mcp-tab"]')!;
+    mcpTab.click();
+    await waitFor(() => request.mock.calls.some(([, path]) => path.endsWith('/mcp')));
+    runtime.querySelector<HTMLButtonElement>('[data-testid="flower-extensions"] [aria-label="Back to chat"]')!.click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    expect(runtime.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('Keep this unsent thought');
+    entry.click();
+    expect(mcpTab.getAttribute('aria-selected')).toBe('true');
+    expect(request.mock.calls.filter(([, path]) => path.endsWith('/mcp'))).toHaveLength(1);
+    const newChat = entry.previousElementSibling as HTMLButtonElement;
+    newChat.click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    expect(entry.getAttribute('aria-current')).toBeNull();
+  });
+
   it('issues one cold detail request for one selected summary revision', async () => {
     const summary = thread({
       thread_id: 'thread-single-cold-load',

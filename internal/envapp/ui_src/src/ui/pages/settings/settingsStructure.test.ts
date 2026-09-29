@@ -36,7 +36,7 @@ describe('settingsStructure', () => {
     expect(SETTINGS_NAV_ITEMS.map((item) => item.id)).toEqual(SETTINGS_SECTIONS.map((item) => item.id));
     expect(SETTINGS_GROUPS.find((group) => group.id === 'overview')?.sections).toEqual(['connection', 'agent']);
     expect(SETTINGS_GROUPS.find((group) => group.id === 'runtime_configuration')?.sections).toEqual(['runtime', 'codespaces']);
-    expect(SETTINGS_GROUPS.find((group) => group.id === 'ai_extensions')?.sections).toEqual(['ai', 'skills']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'ai_extensions')?.sections).toEqual(['ai']);
     expect(SETTINGS_GROUPS.find((group) => group.id === 'diagnostics')?.sections).toEqual(['config', 'logging', 'debug_console']);
   });
 
@@ -47,7 +47,6 @@ describe('settingsStructure', () => {
     expect(settingsGroupForSection('logging').id).toBe('diagnostics');
     expect(settingsGroupForSection('permission_policy').id).toBe('security');
     expect(settingsGroupForSection('ai').id).toBe('ai_extensions');
-    expect(settingsGroupForSection('skills').id).toBe('ai_extensions');
     expect(settingsGroupForSection('debug_console').id).toBe('diagnostics');
   });
 });

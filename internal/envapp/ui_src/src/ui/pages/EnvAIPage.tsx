@@ -98,6 +98,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       const state = readinessController.snapshot().state;
       return state === 'ready' || state === 'degraded';
     },
+    canManageExtensions: () => Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner),
     canMutate: Boolean(
       env.env()?.permissions?.can_read
       && env.env()?.permissions?.can_write

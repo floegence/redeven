@@ -1,3 +1,4 @@
+import { extensionI18n, type ExtensionI18n } from './extensions/context';
 import { markdownMediaEnUS, type FlowerMarkdownMediaCopy } from './chat/markdown/mediaCopy';
 import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
 import { computerUseEnUS, type FlowerComputerCopy } from './computerUseCopy';
@@ -286,6 +287,7 @@ export type FlowerSubagentsCopy = Readonly<{
 }>;
 
 export type FlowerSurfaceCopy = Readonly<{
+  extensions: ExtensionI18n;
   computer: FlowerComputerCopy;
   reasoningControl: ReasoningControlCopy;
   filesystemPicker: FilesystemPickerCopy;
@@ -597,6 +599,7 @@ export type FlowerSurfaceCopy = Readonly<{
 }>;
 
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
+  extensions: extensionI18n(),
   computer: computerUseEnUS,
   reasoningControl: reasoningControlEnUS,
   filesystemPicker: { ...filesystemPickerEnUS, selectedCount: (count) => filesystemPickerEnUS.selectedCount.replace('{count}', String(count)) },

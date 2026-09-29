@@ -122,6 +122,7 @@ export type FlowerRuntimeTransport = Readonly<{
 }>;
 
 export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
+  extensions?: FlowerSurfaceAdapter['extensions'];
   runtime: FlowerSurfaceRuntimeDescriptor;
   canMutate?: boolean;
   transport: FlowerRuntimeTransport;
@@ -441,6 +442,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.inputComputerControl ? { inputComputerControl: options.inputComputerControl } : {}),
     ...(options.setComputerViewer ? { setComputerViewer: options.setComputerViewer } : {}),
     ...(options.computerManagement ? { computerManagement: options.computerManagement } : {}),
+    ...(options.extensions ? { extensions: options.extensions } : {}),
     resolveStorageGeneration: options.resolveStorageGeneration,
     launchTurn: options.launchTurn,
     retryThread: async (threadID) => {

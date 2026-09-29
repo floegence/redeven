@@ -10685,3 +10685,8 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-attachment-feedback { display: block; height: 2lh; overflow: auto; font-size: 11px; line-height: 16px; }
 
 .flower-message-image, .flower-message-file[data-image-fallback] { aspect-ratio: 16 / 9; }
+
+.flower-sidebar-actions { flex-wrap: wrap; }
+.flower-sidebar-extensions-button { flex: 0 0 100%; width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; min-height: 34px; border-radius: 7px; font-size: 12px; color: var(--flower-thread-rail-muted); cursor: pointer; text-align: left; }
+.flower-sidebar-extensions-button > svg:last-child { margin-left: auto; opacity: .55; }
+.flower-sidebar-extensions-button:hover, .flower-sidebar-extensions-button[aria-current='page'] { color: var(--flower-thread-rail-foreground); background: var(--flower-thread-rail-accent); }

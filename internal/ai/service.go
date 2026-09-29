@@ -173,6 +173,7 @@ type Service struct {
 
 	capabilityResolver *contextadapter.Resolver
 	skillManager       *skillManager
+	mcpManager         *mcpManager
 	terminalProcesses  *terminalProcessManager
 
 	flowerReadStateCleaner   FlowerReadStateCleaner
@@ -312,6 +313,10 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		}
 	}
 	agentHomeDir = scope.HomePathAbs()
+	mcpManager, err := openMCPManager(opts.StateDir)
+	if err != nil {
+		return nil, err
+	}
 
 	logger := opts.Logger
 	if logger == nil {
@@ -435,10 +440,12 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		orphanCanonicalRootIDs:          make(map[string]struct{}),
 		capabilityResolver:              capabilityResolver,
 		skillManager:                    newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
+		mcpManager:                      mcpManager,
 		flowerReadStateCleaner:          opts.FlowerReadStateCleaner,
 		lifecycleCtx:                    lifecycleCtx,
 		lifecycleCancel:                 lifecycleCancel,
 	}
+	svc.skillManager.mcpManager = mcpManager
 	if computer, ok := opts.TargetToolExecutor.(*ComputerUseRuntime); ok {
 		computer.mu.Lock()
 		computer.bindings = ts
@@ -1493,7 +1500,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		UserPublicID: strings.TrimSpace(metaRef.UserPublicID), UploadsDir: uploadsDir,
 		ProductCapabilities: productCapabilities,
 		FloretThreadRuntime: s.threadRuntime,
-		PersistOpTimeout:    persistTO, SkillManager: s.skillManager,
+		PersistOpTimeout:    persistTO, SkillManager: s.skillManager, MCPManager: s.mcpManager,
 		ToolAllowlist: append([]string(nil), req.Options.ToolAllowlist...), NoUserInteraction: req.Options.NoUserInteraction,
 		ToolTargetPolicy: toolTargetPolicy, CanonicalReferenceAuthority: referenceAuthority,
 		TargetToolExecutor: targetToolExecutor,

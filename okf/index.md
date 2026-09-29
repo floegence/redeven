@@ -129,9 +129,11 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Native Desktop CodeSpace access](desktop/codespace-native-access.md) - Open a bound editor through a persistent protected loopback origin over the selected environment transport.
 - [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.
 
+- [Flower MCP runtime](ai/mcp-runtime.md) - Configure MCP servers and execute tools with authenticated configuration, Floret approval, and terminal unknown outcomes.
 ## UI
 
-- [Runtime settings](ui/runtime-settings.md) - Navigate all runtime settings with retained drafts, responsive controls, confirmed maintenance, and real Skills operations.
+- [Runtime settings](ui/runtime-settings.md) - Navigate runtime configuration with retained drafts, responsive controls, and confirmed maintenance.
+- [Flower Skills and MCP](ui/flower-extensions.md) - Manage instructions and external tools in the conversation rail’s shared two-tab page.
 
 - [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.
 - [Env App floating layer order](ui/env-app-floating-layer-order.md) - Order movable windows, Flower, plugin surfaces, blocking modals, and command UI through one product contract.
