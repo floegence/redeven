@@ -114,13 +114,20 @@ async function createSourceOwner(source, disposeSource, captureDownloads) {
     controller,
     async setUserBrowsing(active) {
       if (disposed) throw new Error('TARGET_CONNECTION_REQUIRED');
-      if (controller.page.userBrowsing === active) return;
       // Called only by the trusted Runtime after draining the target gate.
       // Closing a viewer does not turn background source traffic into AI work.
-      controller.page.userBrowsing = active;
-      controller.cancel();
-      await controller.page.releaseInput();
-      await controller.page.releasePage();
+      if (controller.page.userBrowsing !== active) {
+        controller.page.userBrowsing = active;
+        controller.cancel();
+        await controller.page.releaseInput();
+        await controller.page.releasePage();
+      }
+      if (active && transport.tabId !== undefined && !controller.page.focusedSessions.has(transport)) {
+        // Prepare background input before granting viewer control. The shared
+        // focus owner releases this override before private computer input.
+        await transport.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+        controller.page.focusedSessions.add(transport);
+      }
     },
     dispose() {
       if (disposal) return disposal;

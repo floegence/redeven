@@ -127,7 +127,7 @@ test('cancelling a reused binding cannot detach its existing source owner', asyn
   assert.equal(reused.created, false);
 });
 
-test('background input prepares virtual focus without activating the physical tab', async t => {
+test('native input does not override the current focus owner or activate the physical tab', async t => {
   const f = await fixture(t);
   const commands = [];
   f.chrome.debugger.attach = async () => {};
@@ -136,18 +136,11 @@ test('background input prepares virtual focus without activating the physical ta
     return {};
   };
   const binding = await f.call('bind', { tab_id: '7', tab_url: 'https://example.test/', tab_title: 'Existing' });
+  await f.call('cdp', { tab_id: '7', binding: binding.binding, method: 'Emulation.setFocusEmulationEnabled', params: { enabled: false } });
   await f.call('cdp', { tab_id: '7', binding: binding.binding, method: 'Input.dispatchMouseEvent', params: { type: 'mouseMoved', x: 10, y: 10 } });
   assert.deepEqual(commands, [
-    { target: { tabId: 7 }, method: 'Emulation.setFocusEmulationEnabled', params: { enabled: true } },
+    { target: { tabId: 7 }, method: 'Emulation.setFocusEmulationEnabled', params: { enabled: false } },
     { target: { tabId: 7 }, method: 'Input.dispatchMouseEvent', params: { type: 'mouseMoved', x: 10, y: 10 } },
   ]);
   assert.equal(f.tabs.get(7).active, true);
-  commands.length = 0;
-  f.chrome.debugger.sendCommand = async (target, method, params) => {
-    commands.push({ target, method, params });
-    if (method === 'Emulation.setFocusEmulationEnabled') throw new Error('focus unavailable');
-    return {};
-  };
-  await assert.rejects(f.call('cdp', { tab_id: '7', binding: binding.binding, method: 'Input.dispatchKeyEvent', params: { type: 'keyDown', key: 'a' } }));
-  assert.deepEqual(commands.map(command => command.method), ['Emulation.setFocusEmulationEnabled']);
 });

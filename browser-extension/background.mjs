@@ -295,12 +295,6 @@ async function execute(message, task) {
       if (['Network.getAllCookies', 'Network.setCookie', 'Network.setCookies', 'Network.clearBrowserCookies', 'Network.clearBrowserCache', 'Page.setDownloadBehavior'].includes(method)) throw new Error('profile command unavailable');
       if (method.startsWith('IO.') && method !== 'IO.resolveBlob' && (!['IO.read', 'IO.close'].includes(method) || !binding.streams.has(params.handle))) throw new Error('stream unavailable');
       task.binding = binding;
-      // Background tabs need virtual CDP focus for timely input. This does not
-      // activate the physical tab, and debugger detach releases the override.
-      if (method.startsWith('Input.')) {
-        await chrome.debugger.sendCommand({ tabId: Number(args.tab_id) }, 'Emulation.setFocusEmulationEnabled', { enabled: true });
-        if (bindings.get(Number(args.tab_id)) !== binding || task.cancelled) throw new Error('tab unavailable');
-      }
       const result = await chrome.debugger.sendCommand({ tabId: Number(args.tab_id), ...(args.session ? { sessionId: args.session } : {}) }, method, params);
       if (bindings.get(Number(args.tab_id)) !== binding || task.cancelled) throw new Error('tab unavailable');
       const stream = method === 'IO.resolveBlob' && /^[a-f0-9-]{36}$/iu.test(result.uuid || '') ? `blob:${result.uuid}` : method === 'Fetch.takeResponseBodyAsStream' ? result.stream : undefined;
