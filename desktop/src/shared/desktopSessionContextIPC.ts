@@ -39,6 +39,7 @@ export type DesktopSessionTransportRecoverySnapshot = Readonly<{
 }>;
 
 export type DesktopSessionContextSnapshot = Readonly<{
+  document_generation?: string;
   local_environment_id: string;
   renderer_storage_scope_id: string;
   target_kind?: 'local_environment' | 'wsl_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
@@ -55,6 +56,7 @@ export type DesktopSessionContextSnapshot = Readonly<{
 export type DesktopSessionAppReadyState = 'access_gate_interactive' | 'runtime_connected';
 
 export type DesktopSessionAppReadyPayload = Readonly<{
+  document_generation?: string;
   state: DesktopSessionAppReadyState;
   timings?: Readonly<{
     bootstrap_ms?: number;

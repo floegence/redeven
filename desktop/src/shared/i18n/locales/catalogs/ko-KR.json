@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "다시 시작 준비 중",
+    "restarting": "런타임 다시 시작 중",
+    "restoring": "작업 공간 복원 중",
+    "failed": "작업 공간에 다시 연결할 수 없습니다",
+    "detail": "작업 공간과 보내지 않은 초안은 보존되었습니다.",
+    "reopen": "환경 다시 열기",
+    "connectionCenter": "연결 센터"
+  },
   "accessFlow": {
     "overviewHelp": "작업을 선택하면 관련 설정을 한 흐름에서 안내합니다.",
     "backOverview": "개요로 돌아가기",

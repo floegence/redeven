@@ -77,6 +77,9 @@ export type FlowerComposerDraftSession = Readonly<{
 }>;
 
 export type FlowerComposerDraftCoordinator = Readonly<{
+  exportForRestart: () => readonly FlowerComposerRestartDraft[];
+  restoreAfterRestart: (drafts: readonly FlowerComposerRestartDraft[]) => void;
+  resumeAfterCanceledRestart: () => void;
   open: (scopeID: string) => FlowerComposerDraftSession;
   read: (scopeID: string) => FlowerComposerDraftSnapshot;
   attachmentController: (
@@ -94,6 +97,12 @@ export type FlowerComposerDraftCoordinator = Readonly<{
   dispose: () => void;
 }>;
 
+export type FlowerComposerRestartDraft = Readonly<{
+  scope_id: string;
+  value: FlowerComposerDraftValue;
+  files: readonly Readonly<{ local_id: string; file: File }>[];
+}>;
+
 export type FlowerComposerDraftCoordinatorOptions = Readonly<{
   now?: () => number;
 }>;
@@ -104,6 +113,7 @@ type DraftCell = {
 };
 
 type ScopeHandle = {
+  restartFiles?: readonly Readonly<{ local_id: string; file: File }>[];
   cell: DraftCell;
   stagingScope: FlowerAttachmentStagingScope | null;
   stagingScopeOperation: StagingScopeOperation | null;
@@ -222,11 +232,61 @@ export function createFlowerComposerDraftCoordinator(
   };
 
   return {
+    exportForRestart: () => {
+      assertActive();
+      const drafts: FlowerComposerRestartDraft[] = [];
+      for (const [scopeID, handle] of states) {
+        handle.attachmentController?.setSuspended(true);
+        const files = handle.attachmentController?.localFiles() ?? handle.restartFiles ?? [];
+        const value = handle.cell.snapshot.value;
+        if (value.attachments.some(attachment => attachment.staged && !files.some(file => file.local_id === attachment.local_id))) {
+          throw new Error('An attachment must be available locally before restarting the Runtime.');
+        }
+        // Copy user intent explicitly. Staging capabilities, model capability
+        // revisions and previously prepared submissions belong to the old session.
+        drafts.push({ scope_id: scopeID, files, value: {
+          text: value.text, mode: 'ordinary',
+          references: value.references.map(reference => ({ ...reference })),
+          attachments: value.attachments.map(attachment => ({
+            local_id: attachment.local_id, source: attachment.source,
+            name: attachment.name, mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
+            upload_request_id: `flower_attachment_request_${crypto.randomUUID()}`,
+            attempt_state: files.some(file => file.local_id === attachment.local_id) ? 'queued' : 'reselect_required',
+          })),
+          model_id: value.model_id, permission_type_override: value.permission_type_override,
+          reasoning_selection: value.reasoning_selection, working_dir: value.working_dir,
+          input_drafts: value.input_drafts && Object.fromEntries(Object.entries(value.input_drafts)
+            .map(([id, answer]) => [id, { ...answer }])),
+          active_input_question_id: value.active_input_question_id,
+        } });
+      }
+      return drafts;
+    },
+    restoreAfterRestart: (drafts) => {
+      assertActive();
+      if (states.size > 0) throw new Error('Restore drafts before mounting Flower surfaces.');
+      for (const draft of drafts) {
+        const handle = stateFor(draft.scope_id);
+        handle.restartFiles = draft.files;
+        replace(handle.cell, draft.value);
+      }
+    },
+    resumeAfterCanceledRestart: () => {
+      for (const handle of states.values()) handle.attachmentController?.setSuspended(false);
+    },
     open,
     read: (scopeID) => stateFor(scopeID).cell.snapshot,
     attachmentController: (scopeID, create) => {
       const handle = stateFor(scopeID);
       handle.attachmentController ??= create();
+      if (handle.restartFiles) {
+        handle.attachmentController.hydrateDraft(handle.cell.snapshot.value.attachments.map(item => ({
+          local_id: item.local_id, request_id: item.upload_request_id, source: item.source,
+          name: item.name, mime_type: item.mime_type, size_bytes: item.size_bytes,
+        })));
+        handle.attachmentController.restoreLocalFiles(handle.restartFiles);
+        handle.restartFiles = undefined;
+      }
       const stagingScope = activeStagingScope(handle);
       if (handle.attachmentController.snapshot().staging_scope !== stagingScope) {
         handle.attachmentController.setStagingScope(stagingScope);
@@ -285,6 +345,7 @@ export function createFlowerComposerDraftCoordinator(
       if (target.stagingScopeOperation) target.stagingScopeOperation.owner = target;
       target.releaseStagingScope = from.releaseStagingScope;
       target.attachmentController = from.attachmentController;
+      target.restartFiles = from.restartFiles;
       target.cell.snapshot = {
         ...sourceSnapshot,
         scope_id: toScopeID,
@@ -295,6 +356,7 @@ export function createFlowerComposerDraftCoordinator(
       from.stagingScopeOperation = null;
       from.releaseStagingScope = null;
       from.attachmentController = null;
+      from.restartFiles = undefined;
       from.cell.snapshot = {
         scope_id: fromScopeID,
         revision: sourceSnapshot.revision + 1,

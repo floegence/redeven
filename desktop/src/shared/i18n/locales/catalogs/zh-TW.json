@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "正在準備重新啟動",
+    "restarting": "正在重新啟動執行階段",
+    "restoring": "正在還原工作區",
+    "failed": "工作區無法重新連線",
+    "detail": "工作區和未傳送的草稿已保留。",
+    "reopen": "重新開啟環境",
+    "connectionCenter": "連線中心"
+  },
   "accessFlow": {
     "overviewHelp": "選擇要完成的操作，相關設定會在同一流程中引導完成。",
     "backOverview": "返回總覽",

@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "Preparando reinicialização",
+    "restarting": "Reiniciando o ambiente de execução",
+    "restoring": "Restaurando seu espaço de trabalho",
+    "failed": "Não foi possível reconectar seu espaço de trabalho",
+    "detail": "Seu espaço de trabalho e os rascunhos não enviados foram preservados.",
+    "reopen": "Reabrir ambiente",
+    "connectionCenter": "Central de conexões"
+  },
   "accessFlow": {
     "overviewHelp": "Escolha uma tarefa. As configurações relacionadas são guiadas no mesmo fluxo.",
     "backOverview": "Voltar à visão geral",

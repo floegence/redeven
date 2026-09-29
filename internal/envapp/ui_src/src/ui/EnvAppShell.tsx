@@ -86,6 +86,7 @@ import type {
   FlowerTurnLauncherSubmitInput,
 } from '../../../../flower_ui/src';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
+import { captureSessionRestartState, desktopSessionRestartBridge, restoreSessionRestartState, type RestartWorkspace } from './services/sessionRestart';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerWorkingDirectoryNavigation } from './flower/workingDirectoryNavigation';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
@@ -578,6 +579,34 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const notify = useNotification();
   const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();
   onCleanup(() => flowerDraftCoordinator.dispose());
+  const restartBridge = desktopSessionRestartBridge();
+  const [restartPreparing, setRestartPreparing] = createSignal(false);
+  const [restartRestorePending, setRestartRestorePending] = createSignal(Boolean(restartBridge));
+  const [restartRestoreFailed, setRestartRestoreFailed] = createSignal(false);
+  let restartWorkspace: RestartWorkspace | null = null;
+  const restartRestore = restartBridge ? restartBridge.read().then(async restored => {
+    if (restored) {
+      restartWorkspace = restoreSessionRestartState(flowerDraftCoordinator, restored.state);
+      if (!await restartBridge.restored(restored.ticket)) throw new Error('The restart state belongs to an expired Env App session.');
+    }
+    setRestartRestorePending(false);
+  }).catch(() => { setRestartRestoreFailed(true); }) : Promise.resolve();
+  onMount(() => {
+    if (!restartBridge) return;
+    onCleanup(restartBridge.register(async () => {
+      setRestartPreparing(true);
+      try {
+        return await captureSessionRestartState(flowerDraftCoordinator, { viewMode: viewMode(), activityID: layout.sidebarActiveTab() });
+      } catch (error) {
+        flowerDraftCoordinator.resumeAfterCanceledRestart();
+        setRestartPreparing(false);
+        throw error;
+      }
+    }, () => {
+      flowerDraftCoordinator.resumeAfterCanceledRestart();
+      setRestartPreparing(false);
+    }));
+  });
   const pluginConfirmationQueue = createPluginConfirmationQueue();
   const [pluginSessionRetired, setPluginSessionRetired] = createSignal(false);
   // Direct plugin APIs are usable only after the exact channel handshake
@@ -3634,6 +3663,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   onMount(() => {
     layout.setSidebarCollapsed(true);
     void (async () => {
+      await restartRestore;
+      if (restartRestoreFailed()) return;
       const rt = await getLocalRuntime();
       let localStatus: LocalAccessStatus | null = null;
       let remoteStatus: EnvAppAccessStatus = { password_required: false, unlocked: true };
@@ -3683,6 +3714,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         requestWorkbenchOverviewEntry();
       }
       setPersistReady(true);
+
+      if (restartWorkspace) {
+        setViewMode(restartWorkspace.viewMode);
+        layout.setSidebarActiveTab(restartWorkspace.activityID);
+      }
 
       if (accessLocked() || reconnectController.snapshot().state === 'paused') {
         setManualError(null);
@@ -5321,7 +5357,21 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
                   components={activityPluginContributions()}
                   onError={reportPluginSurfaceRetirementError}
                 />
-                {renderMainShell()}
+                <Show when={!restartRestorePending()} fallback={(
+                  <section class="floe-window-status"><div class="floe-window-status__content" role="status">
+                    <h1 class="floe-window-status__title">{i18n.t(restartRestoreFailed() ? 'sessionRestart.failed' : 'sessionRestart.restoring')}</h1>
+                  </div></section>
+                )}>
+                  <div class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
+                    {renderMainShell()}
+                  </div>
+                </Show>
+                <Show when={restartPreparing()}>
+                  <section class="floe-window-status z-[5000]" data-testid="session-restart-preparing"><div class="floe-window-status__content" role="status">
+                    <h1 class="floe-window-status__title">{i18n.t('sessionRestart.preparing')}</h1>
+                    <p class="floe-window-status__description">{i18n.t('sessionRestart.detail')}</p>
+                  </div></section>
+                </Show>
                   <Show when={viewMode() !== 'workbench' && activityGitDiff()}>
                     <GitDiffDialog
                       open

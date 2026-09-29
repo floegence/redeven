@@ -36,6 +36,8 @@ declare global {
 }
 
 export function bootstrapDesktopSessionContextBridge(): void {
+  const initialContext = ipcRenderer.sendSync(DESKTOP_SESSION_CONTEXT_GET_CHANNEL) as Partial<DesktopSessionContextSnapshot> | null;
+  const documentGeneration = typeof initialContext?.document_generation === 'string' ? initialContext.document_generation : '';
   const recoveryListeners = new Set<(snapshot: DesktopSessionTransportRecoverySnapshot) => void>();
   let currentRecoverySnapshot = normalizeDesktopSessionTransportRecoverySnapshot(
     ipcRenderer.sendSync(DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL),
@@ -148,6 +150,7 @@ export function bootstrapDesktopSessionContextBridge(): void {
           }))
         : {};
       ipcRenderer.send(DESKTOP_SESSION_APP_READY_CHANNEL, {
+        ...(documentGeneration ? { document_generation: documentGeneration } : {}),
         state,
         ...(Object.keys(timings).length > 0 ? { timings } : {}),
       });

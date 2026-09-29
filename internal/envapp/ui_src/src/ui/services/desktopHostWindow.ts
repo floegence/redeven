@@ -4,6 +4,7 @@ export type DesktopBridgeName =
   | 'redevenDesktopEmbeddedDragRegions'
   | 'redevenDesktopCodeWorkspace'
   | 'redevenDesktopSessionContext'
+  | 'redevenDesktopSessionRestart'
   | 'redevenDesktopStateStorage'
   | 'redevenDesktopResourceCache'
   | 'redevenDesktopWindowChrome';
@@ -16,6 +17,7 @@ const DESKTOP_BRIDGE_NAMES: readonly DesktopBridgeName[] = [
   'redevenDesktopEmbeddedDragRegions',
   'redevenDesktopCodeWorkspace',
   'redevenDesktopSessionContext',
+  'redevenDesktopSessionRestart',
   'redevenDesktopStateStorage',
   'redevenDesktopResourceCache',
   'redevenDesktopWindowChrome',

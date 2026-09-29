@@ -7,13 +7,15 @@ timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
-Floe owns the shared whole-window layout, static artwork, retry geometry and progress shimmer. Redeven maps real connection, access and Desktop states to those published primitives. Glass is permitted only on a fixed host-window layer above a retained, inert workspace. Access gates and standalone documents use an opaque neutral theme background. Floating windows, Workbench widgets and draggable content never receive this material. Failure retains the existing recovery owner and explicit actions; appearance never grants access or starts another recovery loop.
+Floe owns the shared whole-window layout, static artwork, retry geometry and progress shimmer. Redeven maps real connection, access and Desktop states to those published primitives. Recovery and access gates use an opaque neutral theme background even when the underlying workspace remains mounted and inert; no second disconnect notice may show through. Floating windows, Workbench widgets and draggable content never receive this material. Failure retains the existing recovery owner and explicit actions; appearance never grants access or starts another recovery loop.
 
 # Contract
 
 ## Placement and state ownership
 
 Environment recovery mounts outside the Workbench canvas and its transformed widgets. The underlying workspace remains inert while covered. The access gate exposes no protected workspace pixels and keeps password focus, autocomplete, validation, retry throttling, language selection and session recovery under EnvAppShell ownership. Its view is a product adapter with explicit access-state inputs; it does not acquire credentials or reconnect transports.
+
+Desktop Restart presents a scriptless local status document while the old Runtime is unavailable. A failed restore offers Reopen environment and Connection Center; the first action retries only the current window's session establishment and accepts navigation only from the exact current status document. The document never receives Runtime credentials or user draft contents.
 
 Desktop CodeSpace loading and failure are local scriptless documents. Env App remains responsible for starting the editor and prompting for an ephemeral password. A failure directs the user back to Codespaces for a complete retry; the status document cannot bypass that flow or gain privileged preload access. Native window lifecycle and route ownership remain defined by [Native Desktop CodeSpace access](../desktop/codespace-native-access.md).
 
@@ -31,7 +33,7 @@ Generic loading curtains, dialogs and local Workbench error boundaries retain th
 
 # Boundaries
 
-Glass is limited to the fixed host-window layer over a retained inert workspace. Standalone documents and access gates stay opaque; draggable surfaces do not inherit this material. Appearance neither grants authority nor introduces another recovery owner.
+Whole-window recovery, standalone documents, and access gates stay opaque; draggable surfaces do not inherit this material. Appearance neither grants authority nor introduces another recovery owner.
 
 # Evidence
 
@@ -39,6 +41,7 @@ Glass is limited to the fixed host-window layer over a retained inert workspace.
 - `redeven:internal/envapp/ui_src/src/ui/EnvironmentAccessGate.tsx` — Product access-state presentation.
 - `redeven:internal/envapp/ui_src/src/ui/EnvironmentAccessGate.browser.test.tsx` — Locale, geometry, opaque backdrop and keyboard form acceptance.
 - `redeven:desktop/src/main/windowStatusDocument.ts` — Published assets and selected theme adapter.
+- `redeven:desktop/src/main/sessionRestartDocument.ts` — Scriptless local Restart status and explicit recovery actions.
 - `redeven:desktop/src/main/webServiceUnavailableDocument.ts` — Scriptless availability and retry presentation.
 - `redeven:desktop/src/main/codespaceLoadingDocument.ts` — Scriptless editor loading and failure presentation.
 - `redeven:desktop/scripts/check-window-status-electron.mjs` — Isolated native Electron document and actual retry acceptance, included in the full Desktop check.

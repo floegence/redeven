@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "Préparation du redémarrage",
+    "restarting": "Redémarrage de l’environnement d’exécution",
+    "restoring": "Restauration de votre espace de travail",
+    "failed": "Impossible de reconnecter votre espace de travail",
+    "detail": "Votre espace de travail et vos brouillons non envoyés sont conservés.",
+    "reopen": "Rouvrir l’environnement",
+    "connectionCenter": "Centre de connexion"
+  },
   "pageAssetRecovery": {
     "updated": "Redeven a été mis à jour",
     "failed": "Certains contenus de l’application n’ont pas pu être chargés",

@@ -20,6 +20,8 @@ The inline threshold is exactly 50,000 Unicode code points. Exactly 50,000 stays
 
 Long-text source keeps original whitespace and newline bytes. Until Send is accepted, the item offers Restore to editor. Restore reads the exact owner-and-staging-scope-bound text with the connection-held capability, verifies its digest, inserts it at the current selection, and removes the staging membership. Ordinary remove updates the local scope and releases that membership; abandoned late upload completion uses the same idempotent staged cleanup path. A subsequent Send may stage the current complete editor value again. Names are presentation only and include a timestamp plus collision ordinal.
 
+For a Desktop-initiated Runtime Restart, the Env App's existing draft coordinator temporarily suspends uploads and exports only unsent user-authored text, references, explicit choices, and locally available attachment bytes. Desktop holds the bounded transfer in memory for the retained window. The fresh session restores each draft before Flower surfaces mount, assigns new upload request ids, and stages local files against the new capability; it never reuses old staged locators, capability revisions, credentials, prepared submissions, or in-flight commands. An attachment without locally available bytes makes preparation fail before the old Runtime is stopped. A canceled preparation resumes the original upload controller. No automatic Send occurs during restoration.
+
 ## Connection-local editing
 
 Activity and Workbench use one Env App shell-owned in-memory coordinator; Desktop uses one App-owned coordinator per connection. A Flower surface never creates a module singleton. The coordinator starts empty, is not hydrated by the host, and is disposed with the connection. All placements that open the same thread or new-thread scope synchronously observe one cell, including across page switches and retained-surface remounts. Different scopes and different connections are isolated. There is no server draft, lease, holder, expected revision, takeover, conflict state, store-unavailable state, polling, or persistence retry. Picker activation happens in the originating click task, while captured files, focus, and text selection apply only to the same connection-local scope.
@@ -50,6 +52,7 @@ A surface never persists file bytes or editable state, creates its own global co
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Composer events, long-text conversion, admission, and canonical timeline projection are integrated in one surface.
 - `redeven:internal/ai/flower_current_projection.go` - One detail, live, and command-response boundary redacts opaque references and adds scoped preview URLs.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Env App owns the shared Flower draft coordinator above Activity and Workbench placement.
+- `redeven:internal/envapp/ui_src/src/ui/services/sessionRestart.ts` - Versioned Env App restart capture and restoration of local draft bytes.
 - `redeven:desktop/src/welcome/App.tsx` - Desktop owns one draft coordinator for its Flower surfaces.
 - `redeven:desktop/src/main/runtimeFlowerAttachmentOperationLifecycle.ts` - Desktop operation lifecycle serializes chunk writes for one upload.
 - `redeven:desktop/src/main/runtimeFlowerHTTP.ts` - HTTP 423 invalidates only the challenged runtime access cache entry.

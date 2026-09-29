@@ -6,6 +6,15 @@ import { enUSActivityChrome } from './activityChrome';
 import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
+  sessionRestart: {
+    preparing: 'Preparing to restart',
+    restarting: 'Restarting Runtime',
+    restoring: 'Restoring your workspace',
+    failed: 'Your workspace could not reconnect',
+    detail: 'Your workspace and unsent drafts are preserved.',
+    reopen: 'Reopen environment',
+    connectionCenter: 'Connection Center',
+  },
   hostApplications: {
     "componentSettings": "Component settings",
     "addExisting": "Add existing application",

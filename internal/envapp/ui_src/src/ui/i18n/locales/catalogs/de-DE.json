@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "Neustart wird vorbereitet",
+    "restarting": "Laufzeit wird neu gestartet",
+    "restoring": "Arbeitsbereich wird wiederhergestellt",
+    "failed": "Der Arbeitsbereich konnte nicht erneut verbunden werden",
+    "detail": "Arbeitsbereich und ungesendete Entwürfe bleiben erhalten.",
+    "reopen": "Umgebung erneut öffnen",
+    "connectionCenter": "Verbindungscenter"
+  },
   "pageAssetRecovery": {
     "updated": "Redeven wurde aktualisiert",
     "failed": "Einige App-Inhalte konnten nicht geladen werden",

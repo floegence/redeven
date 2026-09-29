@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "再起動を準備しています",
+    "restarting": "ランタイムを再起動しています",
+    "restoring": "ワークスペースを復元しています",
+    "failed": "ワークスペースに再接続できませんでした",
+    "detail": "ワークスペースと未送信の下書きは保持されています。",
+    "reopen": "環境を開き直す",
+    "connectionCenter": "接続センター"
+  },
   "pageAssetRecovery": {
     "updated": "Redeven が更新されました",
     "failed": "アプリの一部のコンテンツを読み込めませんでした",

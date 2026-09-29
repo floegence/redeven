@@ -1,4 +1,13 @@
 {
+  "sessionRestart": {
+    "preparing": "Preparando reinicialização",
+    "restarting": "Reiniciando o ambiente de execução",
+    "restoring": "Restaurando seu espaço de trabalho",
+    "failed": "Não foi possível reconectar seu espaço de trabalho",
+    "detail": "Seu espaço de trabalho e os rascunhos não enviados foram preservados.",
+    "reopen": "Reabrir ambiente",
+    "connectionCenter": "Central de conexões"
+  },
   "pageAssetRecovery": {
     "updated": "O Redeven foi atualizado",
     "failed": "Não foi possível carregar parte do conteúdo do aplicativo",

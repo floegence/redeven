@@ -195,6 +195,12 @@ describe('ConnectionRecoveryView rendered layout', () => {
       const heading = host.querySelector<HTMLElement>('h1');
       const progress = host.querySelector<HTMLElement>('[role="progressbar"]');
       expect(view).not.toBeNull();
+      expect(view!.hasAttribute('data-backdrop')).toBe(false);
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = getComputedStyle(view!).backgroundColor;
+      context.fillRect(0, 0, 1, 1);
+      expect(context.getImageData(0, 0, 1, 1).data[3]).toBe(255);
       expect(heading).not.toBeNull();
       expect(progress).toBeNull();
       expect(host.querySelector<HTMLDetailsElement>('details')?.open).toBe(false);

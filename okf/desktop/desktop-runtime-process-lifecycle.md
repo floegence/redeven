@@ -19,6 +19,8 @@ Coordinator ownership is acquired atomically before the Launcher registry projec
 
 Open is a lifecycle owner and never waits behind Start, Restart, or Update. If Open itself determines that Runtime must start or update, that recovery executes inside the accepted Open task with the same Open operation key and timeline. Product actions such as “update and open” begin this one parent Open operation rather than creating sequential or competing Update and Open operations. Auto Start uses the same coordinator before the Local Environment becomes interactive.
 
+Desktop-initiated Restart also owns restoration of every open Env App window for its normalized Runtime target. It captures unsent user state before stopping the process, retires old transport authority, verifies the new Runtime, then initializes a new session in the original window before completing the same Restart operation. A failed restore retains a local status document and its in-memory handoff; Reopen environment admits only a new session Open against the already running Runtime. It never repeats the Restart or joins an old transport-recovery loop. Closing the window discards that handoff. Stop, Update, and Reinstall retain their destructive window behavior.
+
 Every direct command receives the coordinator cancellation signal and a bounded command deadline. A lifecycle operation also has an overall deadline; timeout releases the in-process owner after preserving the failure and retry state.
 
 ## Direct execution
@@ -69,6 +71,8 @@ Runtime manages business services and owns proxy sessions. Desktop/Runtime shutd
 - `redeven:desktop/src/main/launcherOperations.ts:1` - Accepted-operation projection, terminal states, and action-specific cancellation presentation.
 - `redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1` - Ordered direct lifecycle steps by intent and placement.
 - `redeven:desktop/src/main/main.ts:1` - Local, SSH, and container action routing into the coordinator.
+- `redeven:desktop/src/main/runtimeSessionHandoff.ts:1` - One source-to-destination user-state transfer with document-generation fencing.
+- `redeven:desktop/src/main/runtimeSessionLifecycle.test.ts:1` - Physical-target matching and handoff rejection coverage.
 - `redeven:desktop/src/welcome/launcherBusyState.ts:1` - One derived Environment operation state for Welcome controls and progress.
 - `redeven:desktop/src/main/runtimePackageCache.ts:1` - One verified Runtime archive and extraction of its `redeven` process tool.
 - `redeven:desktop/src/main/runtimeProcess.ts:1` - Local Runtime inventory and exact stop operations.

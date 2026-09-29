@@ -98,6 +98,15 @@ export const enUS = {
     editorUnavailableDetail: "The editor could not open. Return to Codespaces and try again.",
     technicalDetails: "Technical details",
   },
+  sessionRestart: {
+    preparing: 'Preparing to restart',
+    restarting: 'Restarting Runtime',
+    restoring: 'Restoring your workspace',
+    failed: 'Your workspace could not reconnect',
+    detail: 'Your workspace and unsent drafts are preserved.',
+    reopen: 'Reopen environment',
+    connectionCenter: 'Connection Center',
+  },
   providerRecovery: {
     waitingShort: "Waiting",
     restoreAction: "Restore",
