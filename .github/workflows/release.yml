@@ -272,6 +272,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@874852de93c66509b01dc7cd80f7a5385182d017
+
       - name: Install Desktop dependencies
         working-directory: desktop
         run: npm ci --no-audit --no-fund

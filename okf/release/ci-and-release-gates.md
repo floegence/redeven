@@ -105,6 +105,15 @@ empty array under `set -u`. The native build contract test executes the actual
 workflow step through `/bin/bash` with a recording builder for all four targets,
 checking exact arguments without compiling packages or accessing credentials.
 
+Every hosted job that creates or consumes signed ReDevPlugin runtime artifacts
+installs the pinned Cosign action before that operation. Desktop packaging must
+verify the release-profile runtime signature on its own clean runner; an earlier
+build job's installed tools do not carry across jobs. A source-only workflow
+contract guards this prerequisite for build, Desktop, and release collection.
+Desktop bundle staging captures its exact cleanup path before installing the
+exit trap, so both system Bash 3.2 and newer Linux Bash preserve the original
+failure status and remove only that invocation's temporary staging directory.
+
 Computer qualification proxies accept only the fixed provider Responses POST
 route. Request paths cannot redirect provider credentials to another origin.
 Desktop Runtime log tails inspect and read one no-follow file descriptor, so a
