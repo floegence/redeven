@@ -56,12 +56,20 @@ Goals:
 - Do not create a pull request merely to trigger CI; by default, fast-forward the ready feature into `main`, push `main`, and verify the `main` Actions run.
 - Ordinary GitHub push and pull-request CI must stay short and source-only. It
   may check formatting, syntax, committed generated artifacts, localization,
-  and repository boundaries, but it must not install browsers, build product
-  packages, or run integration, renderer, terminal, Desktop, Docker, stress, or
-  performance suites. Those complex checks belong to the exact-main pre-push
-  gate in `scripts/check_final_integration.sh`. Tag release workflows retain
-  only the build, signing, attestation, registry readback, and publication work
-  that requires the release ref or hosted platform runners.
+  repository boundaries, and focused tests for changed packages. It must not
+  install browsers, build product packages, or run broad integration, renderer,
+  Desktop, Docker, stress, or performance suites.
+- The exact-main pre-push gate must remain bounded. It verifies the exact tip,
+  generated artifacts, compatibility and dependency contracts, release-manifest
+  shape, and focused build or package smoke checks. It must not run full UI,
+  browser, Flower, Desktop, Computer, Docker, simulator, stress, or performance
+  suites.
+- Full regression suites belong to parallel CI or scheduled qualification.
+  Cross-platform packaging, signing, notarization, installer/update readback,
+  Docker/private-desktop qualification, native host checks, and terminal
+  performance run only for a release candidate or an explicit qualification
+  workflow. Each suite has one owning workflow; do not repeat it in another
+  gate.
 - CodeQL is an asynchronous security-discovery lane, not an ordinary push or
   pull-request gate. The checked-in workflow runs daily and by manual dispatch;
   scheduled runs skip the language matrix when `main` has not changed since the
@@ -180,19 +188,18 @@ Use staged validation so full gates run only on the final rebased tip:
   or subsystem checks to detect nearby regressions.
 - Expand validation only when the failure reveals a shared-contract or
   cross-module risk that justifies broader coverage.
-- Do not rerun the full repository or product integration gate after each
-  individual fix. The full gate runs once for the final, frozen, rebased main
-  tip through the required pre-push workflow.
+- Do not rerun broad regression or qualification suites after each fix. Run the
+  smallest affected test first, then the owning CI or release workflow once for
+  its final frozen commit.
 - Once implementation, required reviews, localization work, and generated
   artifacts are complete, fetch `origin`, rebase onto the latest `origin/main`,
   inspect `git diff origin/main...HEAD`, and run the affected focused checks.
-- Do not run the full integration gate from routine feature commits. After the
-  rebased feature is fast-forwarded into local `main`, `git push origin main`
-  invokes `.githooks/pre-push`, which validates the authoritative remote base
-  and runs `./scripts/check_final_integration.sh` once for the exact main tip
-  being pushed.
+- After the rebased feature is fast-forwarded into local `main`,
+  `git push origin main` invokes `.githooks/pre-push`, which validates the
+  authoritative remote base and runs the bounded main gate once for the exact
+  tip being pushed.
 - The pre-push hook rejects a stale or non-fast-forward main update before it
-  starts the full gate. Return to the feature worktree, rebase onto the new
+  starts the bounded gate. Return to the feature worktree, rebase onto the new
   `origin/main`, review the new diff, and rerun affected focused checks before
   attempting integration again.
 - If a rebase has conflicts or upstream changes overlap the feature behavior,
@@ -209,8 +216,9 @@ git fetch origin
 git pull --ff-only
 
 # The pre-push hook verifies that this main update is still a fast-forward of
-# the authoritative remote main tip, then runs the full integration gate for
-# the exact local main commit being pushed.
+# the authoritative remote main tip, then runs the bounded main gate for the
+# exact local main commit being pushed. Release qualification runs from the
+# release candidate workflow.
 
 # If local main is already ahead of origin/main, publish the full local main tip first.
 # Do not keep older local main commits unpublished while only pushing the new feature result.
@@ -242,7 +250,8 @@ Additional rules:
 - Do not drop, overwrite, or silently weaken current or historical functionality unless the user explicitly approves that product decision.
 - If two branches introduce incompatible behavior, surface the product or architecture tradeoff instead of choosing one side silently.
 - After resolving conflicts, run focused checks for the affected behavior. The
-  full repository gate remains owned by the final main pre-push event.
+  bounded main gate runs at final integration; broad qualification remains
+  owned by CI or the release candidate workflow.
 - If a feature branch has already been pushed and someone depends on it, switch to a conservative coordination flow instead of freely rewriting history.
 
 Recommended Git configuration:
