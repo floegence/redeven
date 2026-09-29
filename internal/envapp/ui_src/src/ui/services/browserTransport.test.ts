@@ -42,6 +42,14 @@ const command: ClientMessage = { type: 'command', id: 1, tab: 'target', epoch: '
 const packet = () => encodeMediaFrame({ version: 1, target: 'target', view: 'media-view', stream: 'video', node: 1, track: 'video', codec: 'vp8', timestamp_us: 0, duration_us: 33333, keyframe: true, width: 16, height: 16, bytes: 3 }, new Uint8Array([1, 2, 3]));
 
 describe('browser carrier', () => {
+  it('reports transport loss without claiming that the native page closed', async () => {
+    const state = fixture();
+    await vi.waitFor(() => expect(state.openStream).toHaveBeenCalledTimes(3));
+    state.dom.push(null);
+    await vi.waitFor(() => expect(state.closed).toHaveBeenCalledOnce());
+    expect(state.closed).toHaveBeenCalledWith(undefined, false);
+  });
+
   it('accepts admission frames split across Flowersec chunks', async () => {
     const state = fixture([encoder.encode('{"ok'), encoder.encode('":true}\n')]);
 

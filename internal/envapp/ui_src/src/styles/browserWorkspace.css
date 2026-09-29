@@ -47,20 +47,24 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: clamp(1rem, 4vw, 3rem);
+  display: flex;
+  flex-direction: column;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
   background: var(--background);
   color: var(--foreground);
 }
 .redeven-browser-notice-content {
-  width: min(100%, 42rem);
-  margin: clamp(1rem, 8vh, 5rem) auto;
+  width: min(100%, 30rem);
+  margin: auto;
+  align-items: center;
+  text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: .875rem;
 }
-.redeven-browser-notice-content > h2 { font-size: 1.15rem; font-weight: 600; line-height: 1.5; }
-.redeven-browser-notice-content > p { color: var(--muted-foreground); line-height: 1.6; }
-.redeven-browser-notice-actions { display: flex; gap: .75rem; flex-wrap: wrap; }
+.redeven-browser-notice-content > h2 { font-size: 1.0625rem; font-weight: 600; line-height: 1.5; }
+.redeven-browser-notice-content > p { max-width: 27rem; font-size: .875rem; color: var(--muted-foreground); line-height: 1.6; }
+.redeven-browser-notice-actions { display: flex; justify-content: center; gap: .75rem; flex-wrap: wrap; }
 
 .redeven-browser-notice.is-selecting {
   display: flex;
@@ -109,3 +113,6 @@
   width: 11rem;
   max-width: 100%;
 }
+
+.redeven-browser-status-icon { display: grid; place-items: center; width: 3.25rem; height: 3.25rem; margin-bottom: .25rem; border-radius: 1rem; background: var(--muted); color: var(--muted-foreground); }
+.redeven-browser-notice-actions button { white-space: nowrap; }

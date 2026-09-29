@@ -32,7 +32,7 @@ it('keeps the view stable when shell settings refresh without a presentation cha
   const session = {} as Session;
   let sequence = 0;
   const request = vi.fn(async (path: RequestInfo | URL, init?: RequestInit) => Response.json({ ok: true, data: String(path).endsWith('/preference') ? (init?.method === 'POST' ? null : { preference: { profile_id: 'browser-main' }, managed_profile_id: 'browser-main' }) : init?.method === 'DELETE' ? null : {
-    id: `browser-view-${++sequence}`, generation: 'generation', profile_id: 'browser-main', initial_target: 'confirmed-tab', protocol_version: 24, media_wire_version: 1,
+    workspace_id: 'workspace', id: `browser-view-${++sequence}`, generation: 'generation', profile_id: 'browser-main', initial_target: 'confirmed-tab', protocol_version: 25, media_wire_version: 1,
   } }));
   unbind = await bindTestSessionHTTP(request);
   const root = document.createElement('div'); document.body.append(root);
@@ -50,7 +50,7 @@ it('keeps the view stable when shell settings refresh without a presentation cha
   await vi.waitFor(() => expect(sequence).toBe(2));
   expect(request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference')).map(([path, init]) => [String(path), JSON.parse(String(init?.body))])).toEqual([
     ['/_redeven_proxy/api/browser/workspace', { managed_profile_id: 'browser-main' }],
-    ['/_redeven_proxy/api/browser/views', { targets: ['confirmed-tab'] }],
+    ['/_redeven_proxy/api/browser/workspace', { workspace_id: 'workspace', initial_target: 'confirmed-tab' }],
   ]);
 });
 

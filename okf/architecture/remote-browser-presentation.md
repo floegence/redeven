@@ -51,7 +51,7 @@ interrupting warning. Subsequent input uses the current projected target.
 An invalid view epoch or a missing DOM sequence still requires snapshot recovery;
 authorization failures and uncertain source effects remain visible. Redeven must
 not suppress generic failures or add another input/recovery loop around the SDK.
-Source hosts and view descriptors require projection protocol 24 and media wire
+Source hosts and view descriptors require projection protocol 25 and media wire
 version 1. The document adapter validates against the published SDK constants;
 older or newer protocol versions fail before a view can receive input.
 

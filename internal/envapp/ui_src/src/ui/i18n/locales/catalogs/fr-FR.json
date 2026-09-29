@@ -7324,13 +7324,21 @@
       "loading": "Chargement des pages enregistrées…",
       "empty": "Aucune page enregistrée ne correspond.",
       "failed": "Impossible de mettre à jour les pages enregistrées. Réessayez."
+    },
+    "projection": {
+      "failed": "Impossible d’afficher cet onglet",
+      "recovery": "Reconnectez l’affichage de cet onglet. La page restera ouverte dans le navigateur source.",
+      "retry": "Réessayer l’affichage",
+      "unsupported": "Cette page ne peut pas être affichée ici",
+      "unsupportedDescription": "Les pages internes restent accessibles dans le navigateur source. Sélectionnez un autre onglet ou ouvrez un site web.",
+      "empty": "Aucun onglet ouvert",
+      "emptyDescription": "Créez un onglet pour commencer à naviguer dans cet espace de travail."
     }
   },
   "browserProduct": {
     "welcomeTitle": "Naviguez dans votre espace de travail",
     "welcomeDescription": "Connectez votre navigateur personnel ou utilisez le navigateur intégré pour ouvrir des sites ici.",
     "chooseSource": "Choisir un navigateur",
-    "profile": "Profil du navigateur",
     "defaultProfile": "Profil par défaut",
     "openWindow": "Ouvrir dans une nouvelle fenêtre",
     "windowUnavailable": "Impossible d’ouvrir la fenêtre du navigateur. Réessayez.",
@@ -7341,25 +7349,25 @@
     "chromeSource": "Navigateur personnel",
     "profileName": "Nom du nouveau profil",
     "createProfile": "Créer un profil",
-    "searchPages": "Rechercher des pages",
     "noPages": "Aucune page trouvée. Ouvrez une page dans le navigateur source, puis actualisez la liste.",
     "openSelection": "Ouvrir la sélection",
-    "selectionHint": "Ouvrir une page ici ne change pas la page sélectionnée par Flower.",
-    "chromeConfirmHint": "Confirmez la connexion dans le navigateur, puis sélectionnez la page à ouvrir ici.",
+    "selectionHint": "Ouvrez tous les onglets ordinaires de ce profil. La page sélectionnée dans Flower et le focus du navigateur restent inchangés.",
+    "chromeConfirmHint": "Confirmez la connexion dans votre navigateur, puis ouvrez son profil ici.",
     "installTitle": "Configurer le navigateur de l’environnement",
     "installOpen": "Installer et ouvrir",
     "recoverTitle": "Le service du navigateur est arrêté",
     "recover": "Rétablir le navigateur",
     "recoveryDescription": "Le navigateur de l’environnement sera redémarré et les onglets enregistrés seront restaurés. Les formulaires non envoyés et le contenu non enregistré des pages peuvent être perdus. Les autres services de l’environnement continueront de fonctionner.",
-    "sourceUnavailable": "Cette page n’est plus disponible. Sélectionnez une source de navigateur.",
+    "sourceUnavailable": "Ce navigateur est actuellement indisponible. Reconnectez-le ou choisissez un autre navigateur.",
     "disconnected": "La connexion au navigateur a été interrompue.",
     "openFailed": "Impossible d’ouvrir le navigateur. Réessayez ou choisissez une autre source.",
     "openTimeout": "Le navigateur n’a pas répondu à temps.",
     "recoveryBlocked": "Terminez la session privée dans le navigateur source avant de rétablir le service.",
     "outcomeUnknown": "L’action a peut-être déjà abouti. Sélectionnez la source pour vérifier son état actuel.",
-    "retry": "Réessayer",
     "moreActions": "Autres actions du navigateur",
     "recommended": "Recommandé",
-    "previouslyUsed": "Utilisé précédemment"
+    "previouslyUsed": "Utilisé précédemment",
+    "connectionTitle": "Connexion au navigateur interrompue",
+    "reconnectBrowser": "Reconnecter le navigateur"
   }
 }

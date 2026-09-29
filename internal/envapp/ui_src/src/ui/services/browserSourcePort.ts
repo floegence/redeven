@@ -14,9 +14,6 @@ export function browserSourcePort(service: BrowserSourceService, select: (select
       case 'source.createProfile':
         if (bounded(operation.name, 120)) return service.createProfile(operation.name, signal);
         break;
-      case 'source.tabs':
-        if (bounded(operation.profile, 256)) return service.tabs(operation.profile, signal);
-        break;
       case 'source.discover':
         if (bounded(operation.endpoint, 8192)) return service.discover(operation.endpoint, signal);
         break;
@@ -52,13 +49,12 @@ export function browserSourcePort(service: BrowserSourceService, select: (select
         if (!selection || !bounded(selection.label, 8192) || !request || typeof request !== 'object') break;
         // Runtime validates source identity/authorization; do not forward extra
         // fields from the child into the environment's product request.
-        if ('source_target' in request && bounded(request.source_target, 256)) return void await select({ label: selection.label, request: { source_target: request.source_target } }, signal);
+        if ('workspace_id' in request && bounded(request.workspace_id, 256) && (request.initial_target === undefined || request.initial_target === '' || bounded(request.initial_target, 256))) return void await select({ label: selection.label, request: { workspace_id: request.workspace_id, initial_target: request.initial_target } }, signal);
         if ('managed_profile_id' in request && bounded(request.managed_profile_id, 256)) return void await select({ label: selection.label, request: { managed_profile_id: request.managed_profile_id } }, signal);
         if ('connection' in request && request.connection && typeof request.connection === 'object') {
           const connection = request.connection;
-          if ('extension_profile_id' in connection && bounded(connection.extension_profile_id, 256)) {
-            if ('new_tab' in connection && connection.new_tab === true) return void await select({ label: selection.label, request: { connection: { extension_profile_id: connection.extension_profile_id, new_tab: true } } }, signal);
-            if ('tab_id' in connection && bounded(connection.tab_id, 256) && bounded(connection.tab_url, 8192) && typeof connection.tab_title === 'string' && connection.tab_title.length <= 512) return void await select({ label: selection.label, request: { connection: { extension_profile_id: connection.extension_profile_id, tab_id: connection.tab_id, tab_url: connection.tab_url, tab_title: connection.tab_title } } }, signal);
+          if ('extension_profile_id' in connection && bounded(connection.extension_profile_id, 64) && !['tab_id', 'tab_url', 'tab_title', 'new_tab', 'cdp_url', 'profile_id', 'managed_profile_id'].some(key => key in connection)) {
+            return void await select({ label: selection.label, request: { connection: { extension_profile_id: connection.extension_profile_id } } }, signal);
           }
           if ('cdp_url' in connection && bounded(connection.cdp_url, 8192) && bounded(connection.profile_id, 256) && bounded(connection.tab_id, 256) && bounded(connection.tab_url, 8192) && typeof connection.tab_title === 'string' && connection.tab_title.length <= 512) return void await select({ label: selection.label, request: { connection: { cdp_url: connection.cdp_url, profile_id: connection.profile_id, tab_id: connection.tab_id, tab_url: connection.tab_url, tab_title: connection.tab_title } } }, signal);
         }

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -98,6 +99,70 @@ func TestExtensionConnectionScopesRepliesAndRemovesDisconnectedProfile(t *testin
 	hub.mu.Unlock()
 	if count != 0 {
 		t.Fatalf("profiles retained: %d", count)
+	}
+}
+
+func TestExtensionExistingProjectionStillValidatesExplicitFlowerSelection(t *testing.T) {
+	tab := ComputerBrowserTab{ID: "7", NativeTargetID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", URL: "https://example.test/current", Title: "Current"}
+	host, _ := browserHostFixture(t, func(w http.ResponseWriter, request *http.Request) {
+		var command struct{ ID, Method string }
+		_ = json.NewDecoder(request.Body).Decode(&command)
+		var result any = true
+		if command.Method == "source.inventory" {
+			result = []ComputerBrowserTab{tab}
+		} else if command.Method != "source.ready" {
+			t.Error("existing projection was recreated", command.Method)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": command.ID, "result": result})
+	})
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), nil, t.TempDir())
+	hub, client, peer := extensionFixture(t)
+	runtime.extension, runtime.browserHost = hub, host
+	runtime.executors = make(map[string]TargetToolExecutor)
+	id := extensionNativeTargetID(client, tab.NativeTargetID)
+	binding := "11111111-1111-1111-1111-111111111111"
+	executor := &extensionTargetExecutor{client: client, tabID: tab.ID, nativeTargetID: tab.NativeTargetID, targetID: id, sourceHost: host, pipe: &extensionSourcePipe{ctx: t.Context(), binding: binding}}
+	runtime.executors[id] = executor
+	if err := runtime.registry.Register(TargetDescriptor{ID: id, Kind: "browser.connected", State: "ready", Ready: true}); err != nil {
+		t.Fatal(err)
+	}
+	var validations atomic.Int32
+	go func() {
+		for {
+			raw, err := browserbridge.ReadMessage(peer, 1<<20)
+			if err != nil {
+				return
+			}
+			var command struct {
+				ID, Command string
+				Arguments   map[string]string
+			}
+			_ = json.Unmarshal(raw, &command)
+			response := map[string]any{"id": command.ID}
+			if command.Command == "inventory" {
+				response["result"] = []ComputerBrowserTab{tab}
+			} else if command.Command == "bind" {
+				validations.Add(1)
+				if command.Arguments["tab_url"] != tab.URL || command.Arguments["tab_title"] != tab.Title {
+					response["error"] = "refresh tab selection"
+				} else {
+					response["result"] = map[string]string{"tab_id": tab.ID, "native_target_id": tab.NativeTargetID, "title": tab.Title, "binding": binding}
+				}
+			} else {
+				response["error"] = "unexpected command"
+			}
+			if browserbridge.WriteMessage(peer, response, 1<<20) != nil {
+				return
+			}
+		}
+	}()
+	connection := ComputerBrowserConnection{ExtensionProfileID: client.profile.ID, TabID: tab.ID, TabURL: tab.URL, TabTitle: "Earlier title"}
+	if _, err := runtime.ConnectBrowser(t.Context(), connection); err == nil {
+		t.Fatal("an existing product projection bypassed explicit Flower selection validation")
+	}
+	connection.TabTitle = tab.Title
+	if target, err := runtime.ConnectBrowser(t.Context(), connection); err != nil || target.ID != id || runtime.executors[id] != executor || validations.Load() != 2 {
+		t.Fatal("a current explicit selection did not reuse the single validated owner", target, err, validations.Load())
 	}
 }
 func TestExtensionLostEffectIsTerminalAndNeverReplayed(t *testing.T) {
@@ -287,7 +352,9 @@ func TestExtensionUnavailableEventRetiresExactTabBeforeNextReply(t *testing.T) {
 			t.Fatal(err)
 		}
 		runtime.mu.Lock()
-		runtime.executors[id] = &extensionTargetExecutor{client: client, tabID: id}
+		pipe := &extensionSourcePipe{binding: "12345678-1234-1234-1234-123456789012"}
+		pipe.once.Do(func() {})
+		runtime.executors[id] = &extensionTargetExecutor{client: client, tabID: id, pipe: pipe}
 		runtime.mu.Unlock()
 	}
 	result := make(chan error, 1)
@@ -300,7 +367,7 @@ func TestExtensionUnavailableEventRetiresExactTabBeforeNextReply(t *testing.T) {
 			err = json.Unmarshal(raw, &request)
 		}
 		if err == nil {
-			err = browserbridge.WriteMessage(peer, map[string]any{"type": "target_unavailable", "tab_id": "7"}, 1<<20)
+			err = browserbridge.WriteMessage(peer, map[string]any{"type": "target_unavailable", "tab_id": "7", "binding": "12345678-1234-1234-1234-123456789012", "reason": "debugger_detached"}, 1<<20)
 		}
 		if err == nil {
 			err = browserbridge.WriteMessage(peer, map[string]any{"id": request.ID, "result": []any{}}, 1<<20)
@@ -368,8 +435,11 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 				return
 			}
 			var request struct {
-				ID      string `json:"id"`
-				Command string `json:"command"`
+				ID        string `json:"id"`
+				Command   string `json:"command"`
+				Arguments struct {
+					TabID string `json:"tab_id"`
+				} `json:"arguments"`
 			}
 			if json.Unmarshal(raw, &request) != nil {
 				return
@@ -377,7 +447,11 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 			result := map[string]any{}
 			if request.Command == "new_tab" {
 				created++
-				result = map[string]any{"tab_id": fmt.Sprint(created), "title": "Task", "binding": fmt.Sprintf("12345678-1234-1234-1234-%012d", created)}
+				result = map[string]any{"tab_id": fmt.Sprint(created), "title": "Task", "native_target_id": fmt.Sprintf("%032d", created)}
+			}
+			if request.Command == "bind" {
+				tab, _ := strconv.Atoi(request.Arguments.TabID)
+				result = map[string]any{"tab_id": request.Arguments.TabID, "title": "Task", "native_target_id": fmt.Sprintf("%032d", tab), "binding": fmt.Sprintf("12345678-1234-1234-1234-%012d", tab)}
 			}
 			if err := browserbridge.WriteMessage(peer, map[string]any{"id": request.ID, "result": result}, 1<<20); err != nil {
 				return
@@ -493,5 +567,53 @@ func TestExtensionRejectsOldObservationProtocol(t *testing.T) {
 				t.Fatal("old peer changed connected profile inventory")
 			}
 		})
+	}
+}
+
+func TestExtensionLateBindingRetirementPreservesReconnectedSource(t *testing.T) {
+	registry := NewTargetRegistry()
+	client := &computerExtensionClient{}
+	pipe := &extensionSourcePipe{binding: "current"}
+	current := &extensionTargetExecutor{client: client, tabID: "7", pipe: pipe}
+	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"stable": current}, t.TempDir())
+	if err := registry.Register(TargetDescriptor{ID: "stable", Kind: "browser.connected"}); err != nil {
+		t.Fatal(err)
+	}
+	runtime.retireExtensionBinding(client, "7", "old")
+	if runtime.executors["stable"] != current {
+		t.Fatal("late binding retirement removed the current source")
+	}
+}
+
+func TestExtensionCloseWaitsForNativeBindingRetirement(t *testing.T) {
+	_, client, peer := extensionFixture(t)
+	local, remote := net.Pipe()
+	defer remote.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	pipe := &extensionSourcePipe{client: client, conn: local, ctx: ctx, cancel: cancel, tab: "7", binding: "12345678-1234-1234-1234-123456789012"}
+	executor := &extensionTargetExecutor{client: client, pipe: pipe}
+	finished := make(chan error, 1)
+	go func() { finished <- executor.Close() }()
+	raw, err := browserbridge.ReadMessage(peer, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var request struct{ ID, Command string }
+	if err := json.Unmarshal(raw, &request); err != nil {
+		t.Fatal(err)
+	}
+	if request.Command != "unbind" {
+		t.Fatal("source did not retire its native binding")
+	}
+	select {
+	case <-finished:
+		t.Fatal("source close returned before its native binding retired")
+	default:
+	}
+	if err := browserbridge.WriteMessage(peer, map[string]any{"id": request.ID, "result": map[string]any{}}, 1<<20); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-finished; err != nil {
+		t.Fatal(err)
 	}
 }

@@ -4619,9 +4619,52 @@ export const enUS = defineDictionary({
       "loading": "Loading saved pages…",
       "empty": "No saved pages match.",
       "failed": "Saved pages could not be updated. Try again."
+    },
+    "projection": {
+      "failed": "This tab couldn’t be displayed",
+      "recovery": "Reconnect the display to this tab. Your page will stay open in the source browser.",
+      "retry": "Retry display",
+      "unsupported": "This page can’t be displayed here",
+      "unsupportedDescription": "Browser internal pages remain available in your source browser. Select another tab or open a website.",
+      "empty": "No open tabs",
+      "emptyDescription": "Create a tab to start browsing in this workspace."
     }
   },
-  browserProduct: {"welcomeTitle": "Browse in your workspace", "welcomeDescription": "Connect your personal browser or use the built-in browser to open websites here.", "chooseSource": "Choose a browser", "moreActions": "More browser actions", "profile": "Browser profile", "defaultProfile": "Default profile", "openWindow": "Open in new window", "windowUnavailable": "Unable to open the browser window. Try again.", "windowBlocked": "Allow pop-ups for Redeven and try again.", "sources": "Browser sources", "sourceHint": "Choose where your websites run.", "managedSource": "Built-in browser", "chromeSource": "Personal browser", "profileName": "New profile name", "createProfile": "Create profile", "searchPages": "Search pages", "noPages": "No pages found. Open a page in the source browser, then refresh.", "openSelection": "Open selection", "selectionHint": "Opening a page here does not change Flower’s selected page.", "chromeConfirmHint": "Confirm Connect in your browser, then select the page to open here.", "installTitle": "Set up the environment browser", "installOpen": "Install and open", "recoverTitle": "Browser service stopped", "recover": "Recover browser", "recoveryDescription": "This restarts the environment browser and restores saved tabs. Unsubmitted forms and unsaved page content may be lost. Other environment services keep running.", "sourceUnavailable": "This page is no longer available. Select a browser source.", "disconnected": "The browser connection was interrupted.", "openFailed": "The browser could not be opened. Try again or choose another source.", "openTimeout": "The browser did not respond in time.", "recoveryBlocked": "Finish the private session in the source browser before recovering.", "outcomeUnknown": "The action may have completed. Select the source to check its current state.", "retry": "Try again", "recommended": "Recommended", "previouslyUsed": "Previously used"},
+  browserProduct: {
+    "welcomeTitle": "Browse in your workspace",
+    "welcomeDescription": "Connect your personal browser or use the built-in browser to open websites here.",
+    "chooseSource": "Choose a browser",
+    "moreActions": "More browser actions",
+    "defaultProfile": "Default profile",
+    "openWindow": "Open in new window",
+    "windowUnavailable": "Unable to open the browser window. Try again.",
+    "windowBlocked": "Allow pop-ups for Redeven and try again.",
+    "sources": "Browser sources",
+    "sourceHint": "Choose where your websites run.",
+    "managedSource": "Built-in browser",
+    "chromeSource": "Personal browser",
+    "profileName": "New profile name",
+    "createProfile": "Create profile",
+    "noPages": "No pages found. Open a page in the source browser, then refresh.",
+    "openSelection": "Open selection",
+    "selectionHint": "Open all regular tabs in this profile. Flower’s selected page and your browser focus stay unchanged.",
+    "chromeConfirmHint": "Confirm Connect in your browser, then open its profile here.",
+    "installTitle": "Set up the environment browser",
+    "installOpen": "Install and open",
+    "recoverTitle": "Browser service stopped",
+    "recover": "Recover browser",
+    "recoveryDescription": "This restarts the environment browser and restores saved tabs. Unsubmitted forms and unsaved page content may be lost. Other environment services keep running.",
+    "sourceUnavailable": "This browser is currently unavailable. Reconnect it or choose another browser.",
+    "disconnected": "The browser connection was interrupted.",
+    "openFailed": "The browser could not be opened. Try again or choose another source.",
+    "openTimeout": "The browser did not respond in time.",
+    "recoveryBlocked": "Finish the private session in the source browser before recovering.",
+    "outcomeUnknown": "The action may have completed. Select the source to check its current state.",
+    "recommended": "Recommended",
+    "previouslyUsed": "Previously used",
+    "connectionTitle": "Browser connection interrupted",
+    "reconnectBrowser": "Reconnect browser"
+  },
 } as const);
 
 export type EnvAppTranslationShape = DeepWidenMessages<typeof enUS>;

@@ -47,11 +47,11 @@ const host = await createComputerBrowserHost({
   // Each browser document has its own Runtime-issued view path. Query-relative
   // resources preserve that path for images, stylesheets and nested CSS URLs.
   resourceURL: (id, target) => `?browser_target=${encodeURIComponent(target)}&browser_resource=${encodeURIComponent(id)}`,
-  onSourceClosed: target => { snapshots.delete(`source:${target}`); emit({ type: 'source_closed', target }); },
-  onSourceFault: target => emit({ type: 'source_fault', target }),
+  onSourceClosed: (target, binding) => { snapshots.delete(`source:${target}`); emit({ type: 'source_closed', target, binding }); },
+  onSourceFault: (target, binding) => emit({ type: 'source_fault', target, binding }),
   onSourcePopup: (target, tab_id, foreground) => emit({ type: 'source_popup', target, tab_id, foreground }),
-  onSourceChanged: (target, tab) => {
-    if (Buffer.byteLength(tab.url) <= 8192) snapshot(`source:${target}`, { type: 'source_changed', target, tab });
+  onSourceChanged: (target, tab, binding) => {
+    if (Buffer.byteLength(tab.url) <= 8192) snapshot(`source:${target}`, { type: 'source_changed', target, tab, binding });
   },
   onSelection: (view, target) => snapshot(`view:${view}`, { type: 'view_selected', view, target }),
   directoryCommand(view, action) {
@@ -156,11 +156,12 @@ function writeDOM(stream, message) {
 }
 
 async function command(method, params) {
-  if (method?.startsWith('view.') && method !== 'view.close') await streams.get(params.view)?.ready;
+  if (method?.startsWith('view.') && !['view.close', 'view.grants'].includes(method)) await streams.get(params.view)?.ready;
   switch (method) {
     case 'source.admit': return host.admit(params);
     case 'source.ready': return host.ready(params.target);
     case 'source.remove': return host.remove(params.target);
+    case 'source.directory': return host.profileDirectory(params.workspace, params.tabs);
     case 'source.order': return host.order(params.targets, params.pinned);
     case 'source.inventory': return host.publicInventory(params.endpoint, params.tabs);
     case 'source.describe': return host.describe(params.targets);

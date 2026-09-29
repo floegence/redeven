@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser source ownership
 description: Admit native pages once and preserve directory, control and popup privacy boundaries.
 tags: [architecture, browser, privacy]
-timestamp: 2026-09-27T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 # Summary
 
@@ -31,7 +31,7 @@ or challenge token is relayed through a second HTTP client.
 
 The personal browser is the recommended explicitly selected path for interactive
 browsing. Its profile and login remain in the original browser. The source dialog
-never silently changes sources or grants access to another tab. Managed and personal source
+opens the selected personal profile through the [live workspace contract](remote-browser-profile-workspace.md); it never grants Flower input authority. Managed and personal source
 capabilities remain distinct. A successful fixture or one public-site visit
 does not imply universal CAPTCHA compatibility.
 
@@ -54,12 +54,15 @@ failures per installation so one unavailable browser cannot block others. No
 browser database is copied, and no second process shares an active personal profile.
 
 
-Native Messaging protocol 7 carries debugger commands and events for an opaque,
-current tab binding. Connecting a profile, listing tabs and creating a popup do
-not admit another source. Selection validates the current tab URL/title and
-rejects incognito and unsupported pages. The extension permits only the bound
-root and its known iframe sessions, rejects browser-wide target discovery and
-attachment, and restricts IO to download streams returned for that binding.
+Native Messaging protocol 8 carries one ordered native directory stream and
+separately bound debugger commands/events. Connecting a profile or discovering
+its tabs does not attach a debugger. Explicit Flower target selection validates
+URL/title; a product workspace resolves its already-authorized stable native
+identity on demand. Incognito pages cannot enter either path. Internal pages
+remain directory entries with an explicit unsupported projection state. The
+extension permits only the bound root and its known iframe sessions, rejects
+browser-wide debugger attachment, and restricts IO to download streams returned
+for that binding.
 
 The Runtime's existing Node source host owns the semantic controller and the
 FloeBrowser CDP source adapter together. The extension no longer executes an
@@ -91,7 +94,7 @@ starts projection or executes website-provided JavaScript.
 
 ## Directory lifetime
 
-The Runtime registers an observation and its initial grants under the directory lock before accepting directory updates for that view. The stream body does not hold this lock. Source closure removes the Runtime target, executor and observation grants while retaining independent sources and the base browser installation configuration. A close decision reserves only its target input gate; it must not hold the directory lock while a person answers `beforeunload`. An exact pending directory decision is separate from page input authority.
+Runtime reserves observation registration under the directory lock, releases it while the helper opens the view, then reconciles the latest grants before returning its carrier. Lazy source resolution can acquire the same lock without deadlocking registration. Grant publication drains revoked access but never waits for new page resolution. Projection closure removes execution authority; a personal workspace retains native metadata until Chrome confirms tab removal. Direct source grants retain their existing retirement behavior. A close decision reserves only its target input gate; it must not hold the directory lock while a person answers `beforeunload`. An exact pending directory decision is separate from page input authority.
 
 Closing a view ends its carriers and input authority, not its source browser. Changing selection releases the previous input owner. Hidden navigation may continue in the source, but explicit input retirement drains the controller and its held input before a new controller is admitted.
 
@@ -102,7 +105,7 @@ windows and Flower bindings retain their selections. The released source adapter
 reports left-click and ordinary keyboard/script popups as foreground, while a
 middle-click creates a background tab. Runtime applies that intent only after
 admission, using the same directory and selection APIs as explicit tab changes.
-External popups remain subject to explicit external selection. Managed popup visibility inherits
+Personal profile popups join the native directory without projection or input authority; CDP popups still require explicit external selection. Managed popup visibility inherits
 the source owner’s native opener ancestry: private descendants stay visible only
 to the private owner, including when an ancestor closes. The same source-owned
 privacy predicate redacts managed, CDP and extension inventory before another
@@ -114,13 +117,10 @@ closed intermediate pages. CDP discovery refreshes these facts before publishing
 its inventory. The graph is bounded to 1,024 native nodes and 128 directory
 observers; overflow fails closed without dropping privacy facts. Explicit private handback releases descendant visibility.
 
-An external workspace shares only pages that the user explicitly selected or
-created in its source profile. It reuses the same directory operations for live
-tab creation, ordering, pins and close decisions. Another window joins those
-existing grants without discovering or admitting ambient native tabs. Closing
-the final granted tab creates one explicitly scoped blank replacement. External
-directory order and selection remain Runtime-only, and closed-page restoration
-is disabled at both the component and Runtime boundaries.
+The [live personal workspace](remote-browser-profile-workspace.md) owns profile
+inventory, lazy projection and native mutations. Advanced CDP workspaces retain
+explicit page admission. External closed-page restoration stays disabled at both
+the component and Runtime boundaries; no personal page is recreated from a saved URL.
 
 # Boundaries
 
@@ -134,6 +134,6 @@ Discovery is not source admission. Source loss or overflow retires affected bind
 - `redeven:browser-extension/background.mjs` - Selected-tab debugger boundary and consumption credits.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.mjs` - Shared semantic/projection ownership across CDP and extension sources.
 - `redeven:internal/ai/computer_browser_privacy.go` - Native identity and opener ancestry privacy.
-- `redeven:internal/ai/computer_browser_lifecycle.go` - Source identity and grant retirement.
+- `redeven:internal/ai/computer_browser_lifecycle.go` - Projection retirement and native identity preservation.
 - `redeven:internal/ai/computer_browser_workspace_test.go` - Directory, private descendants and source isolation.
-- [FloeBrowser v0.1.12: src/host/session.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/host/session.ts) — Directory observation and controller lifecycle.
+- [FloeBrowser v0.1.26: src/host/session.ts](https://github.com/floegence/floebrowser/blob/v0.1.26/src/host/session.ts) — Directory observation and controller lifecycle.

@@ -483,7 +483,11 @@ func (r *ComputerUseRuntime) Close() error {
 		failures = append(failures, view.close())
 	}
 	if r.extension != nil {
+		// The native directory worker observes closed before touching workspace state.
+		// Let it acquire the directory lock and finish before joining it.
+		r.connectMu.Unlock()
 		r.extension.close()
+		r.connectMu.Lock()
 	}
 	r.liveWG.Wait()
 	r.releaseScripts(func(computerScriptKey) bool { return true })

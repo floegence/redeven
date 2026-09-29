@@ -9,6 +9,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { FloeBrowserSurface } from '../src/ui/widgets/FloeBrowserSurface';
 import { createBrowserWorkspaceController } from '../src/ui/services/browserWorkspaceController';
+import type { BrowserWorkspaceRequest } from '../src/ui/services/browserWindowProtocol';
 import { browserSourceService } from '../src/ui/services/browserSourceManagement';
 import { createBrowserWorkspaceWindows } from '../src/ui/services/browserWorkspaceWindows';
 
@@ -16,7 +17,7 @@ import { createBrowserWorkspaceWindows } from '../src/ui/services/browserWorkspa
 // exactly one Session and one proxy runtime; browser documents only get ports.
 declare global {
   interface Window {
-    startBrowserFixture(configuration: { artifact: string; target: string; managed?: boolean; connection: { cdp_url: string; profile_id: string; tab_id: string } }): Promise<void>;
+    startBrowserFixture(configuration: { artifact: string; target: string; managed?: boolean; connection: Extract<BrowserWorkspaceRequest, { connection: unknown }>['connection'] }): Promise<void>;
     closeBrowserFixture(): Promise<void>;
     leaveBrowserPage(): void;
     setBrowserFixturePrivate(privateMode: boolean): Promise<void>;

@@ -8,13 +8,13 @@ import type { BrowserMessages, AddressSuggestion } from '@floegence/floebrowser/
 import type { BrowserState, FileChooserState, TabState } from '@floegence/floebrowser/protocol';
 
 export type BrowserWorkspaceRequest =
-  | { source_target: string }
+  | { workspace_id: string; initial_target?: string }
   | { managed_profile_id: string }
   | { connection: { cdp_url: string; profile_id: string; tab_id: string; tab_title?: string; tab_url?: string } }
-  | { connection: { extension_profile_id: string; tab_id: string; tab_title: string; tab_url: string } }
-  | { connection: { extension_profile_id: string; new_tab: true } };
+  | { connection: { extension_profile_id: string } };
 
 export type BrowserViewDescriptor = Readonly<{
+  workspace_id?: string;
   generation: string;
   id: string;
   protocol_version: number;

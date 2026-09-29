@@ -7320,13 +7320,21 @@
       "loading": "저장된 페이지를 불러오는 중…",
       "empty": "일치하는 저장된 페이지가 없습니다.",
       "failed": "저장된 페이지를 업데이트하지 못했습니다. 다시 시도하세요."
+    },
+    "projection": {
+      "failed": "이 탭을 표시하지 못했습니다",
+      "recovery": "이 탭을 표시하도록 다시 연결합니다. 원본 브라우저의 페이지는 열린 상태로 유지됩니다.",
+      "retry": "표시 다시 시도",
+      "unsupported": "이 페이지는 여기에서 표시할 수 없습니다",
+      "unsupportedDescription": "브라우저 내부 페이지는 원본 브라우저에서 사용할 수 있습니다. 다른 탭을 선택하거나 웹사이트를 여세요.",
+      "empty": "열린 탭이 없습니다",
+      "emptyDescription": "새 탭을 만들어 이 작업 공간에서 탐색을 시작하세요."
     }
   },
   "browserProduct": {
     "welcomeTitle": "작업 공간에서 웹 탐색",
     "welcomeDescription": "개인 브라우저를 연결하거나 내장 브라우저를 사용해 여기에서 웹사이트를 여세요.",
     "chooseSource": "브라우저 선택",
-    "profile": "브라우저 프로필",
     "defaultProfile": "기본 프로필",
     "openWindow": "새 창에서 열기",
     "windowUnavailable": "브라우저 창을 열 수 없습니다. 다시 시도하세요.",
@@ -7337,25 +7345,25 @@
     "chromeSource": "개인 브라우저",
     "profileName": "새 프로필 이름",
     "createProfile": "프로필 만들기",
-    "searchPages": "페이지 검색",
     "noPages": "페이지가 없습니다. 원본 브라우저에서 페이지를 연 다음 새로 고침하세요.",
     "openSelection": "선택 항목 열기",
-    "selectionHint": "여기서 페이지를 열어도 Flower가 선택한 페이지는 변경되지 않습니다.",
-    "chromeConfirmHint": "브라우저에서 연결을 확인한 다음 여기서 열 페이지를 선택하세요.",
+    "selectionHint": "이 프로필의 일반 탭을 모두 엽니다. Flower에서 선택한 페이지와 브라우저 포커스는 그대로 유지됩니다.",
+    "chromeConfirmHint": "브라우저에서 연결을 확인한 다음 여기에서 프로필을 여세요.",
     "installTitle": "환경 브라우저 설정",
     "installOpen": "설치 후 열기",
     "recoverTitle": "브라우저 서비스가 중지되었습니다",
     "recover": "브라우저 복구",
     "recoveryDescription": "환경 브라우저를 다시 시작하고 저장된 탭을 복원합니다. 제출하지 않은 양식과 페이지에서 저장하지 않은 내용은 사라질 수 있습니다. 환경의 다른 서비스는 계속 실행됩니다.",
-    "sourceUnavailable": "이 페이지를 더 이상 사용할 수 없습니다. 브라우저 소스를 선택하세요.",
+    "sourceUnavailable": "현재 이 브라우저를 사용할 수 없습니다. 다시 연결하거나 다른 브라우저를 선택하세요.",
     "disconnected": "브라우저 연결이 끊어졌습니다.",
     "openFailed": "브라우저를 열지 못했습니다. 다시 시도하거나 다른 소스를 선택하세요.",
     "openTimeout": "브라우저가 제시간에 응답하지 않았습니다.",
     "recoveryBlocked": "소스 브라우저에서 비공개 세션을 종료한 후 복구하세요.",
     "outcomeUnknown": "작업이 이미 완료되었을 수 있습니다. 소스를 선택하여 현재 상태를 확인하세요.",
-    "retry": "다시 시도",
     "moreActions": "브라우저 추가 작업",
     "recommended": "추천",
-    "previouslyUsed": "이전에 사용"
+    "previouslyUsed": "이전에 사용",
+    "connectionTitle": "브라우저 연결이 끊어졌습니다",
+    "reconnectBrowser": "브라우저 다시 연결"
   }
 }

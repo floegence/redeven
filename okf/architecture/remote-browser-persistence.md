@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser persistence
 description: Restore managed pages and save browser library state without persisting authority.
 tags: [architecture, browser, persistence]
-timestamp: 2026-09-27T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 # Summary
 
@@ -36,10 +36,12 @@ unchanged and fail closed.
 Only an owner/channel-bound, successfully opened view can save a preference.
 The stored value contains a stable profile and, for personal browsers, installation
 identity. It contains no view token, tab grant or debugging endpoint. Managed
-profiles can reopen through normal installation and launch checks. External
-preferences resume only an already admitted live workspace; extension reconnection
-rotates authority while preserving library identity and requires fresh explicit
-page selection. Remembering a browser never authorizes all its tabs.
+profiles can reopen through normal installation and launch checks. CDP preferences resume only an already admitted live workspace. Personal
+preferences identify a currently connected profile or its live workspace;
+opening it acquires fresh directory visibility through the
+[live workspace contract](remote-browser-profile-workspace.md). Extension
+reconnection rotates view/binding authority while preserving library identity.
+Remembering a browser never grants page input or Flower control.
 
 ## Library and restoration
 

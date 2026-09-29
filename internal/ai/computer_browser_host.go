@@ -24,7 +24,7 @@ import (
 
 const (
 	browserHostProtocolVersion       = 1
-	browserProjectionProtocolVersion = 24
+	browserProjectionProtocolVersion = 25
 	browserMediaWireVersion          = 1
 )
 
@@ -89,6 +89,7 @@ func (r *ComputerUseRuntime) browserSourceHostLocked(ctx context.Context) (*brow
 }
 
 type browserHostEvent struct {
+	Binding    string            `json:"binding,omitempty"`
 	Type       string            `json:"type"`
 	ID         string            `json:"id,omitempty"`
 	View       string            `json:"view,omitempty"`
@@ -220,7 +221,7 @@ func (host *browserSourceHost) events(reader *bufio.Reader) {
 		}
 		switch event.Type {
 		case "directory_request":
-			if event.ID == "" || event.View == "" || len(event.ID) > 128 || len(event.View) > 128 {
+			if event.ID == "" || len(event.ID) > 128 || len(event.View) > 128 {
 				return
 			}
 			go host.directoryReply(event)

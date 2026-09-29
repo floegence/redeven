@@ -33,7 +33,7 @@ func (r *ComputerUseRuntime) browserInventoryPrivacy(ctx context.Context, endpoi
 			if err != nil {
 				return nil, err
 			}
-			if err := r.browserHost.call(ctx, "source.inventory", map[string]any{"endpoint": "extension:" + client.profile.ID, "tabs": inventory}, nil); err != nil {
+			if err := r.browserHost.call(ctx, "source.inventory", map[string]any{"endpoint": "extension:" + client.profile.LibraryID, "tabs": inventory}, nil); err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return nil, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}
 				}

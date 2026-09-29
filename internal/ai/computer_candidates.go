@@ -113,8 +113,8 @@ func (r *ComputerUseRuntime) extensionTabs(ctx context.Context, profileID string
 	}
 	r.connectMu.Lock()
 	defer r.connectMu.Unlock()
-	tabs, err = r.browserInventoryPrivacy(ctx, "extension:"+profileID, tabs)
-	return slices.DeleteFunc(tabs, func(tab ComputerBrowserTab) bool { return tab.Private }), err
+	tabs, err = r.browserInventoryPrivacy(ctx, "extension:"+client.profile.LibraryID, tabs)
+	return slices.DeleteFunc(tabs, func(tab ComputerBrowserTab) bool { return tab.Private || tab.Availability != "" }), err
 }
 
 func (r *ComputerUseRuntime) computerTargetState(target TargetDescriptor, threadID string) string {
@@ -217,7 +217,7 @@ func (r *ComputerUseRuntime) candidateBrowserTabs(ctx context.Context, connectio
 			return nil, err
 		}
 		tabs, err = r.browserInventoryPrivacy(ctx, profile.endpoint, tabs)
-		return slices.DeleteFunc(tabs, func(tab ComputerBrowserTab) bool { return tab.Private }), err
+		return slices.DeleteFunc(tabs, func(tab ComputerBrowserTab) bool { return tab.Private || tab.Availability != "" }), err
 	}
 	tabs, err := r.BrowserTabs(ctx, connection.CDPURL)
 	result := []ComputerBrowserTab{}

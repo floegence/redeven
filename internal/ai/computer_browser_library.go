@@ -52,6 +52,12 @@ func (r *ComputerUseRuntime) prepareBrowserViewLibrary(ctx context.Context, meta
 	if r.browserStore == nil {
 		return "", nil
 	}
+	if request.workspace != nil {
+		return request.workspace.profile, nil
+	}
+	if len(request.Targets) == 0 {
+		return "", errBrowserViewUnavailable
+	}
 	if request.ProfileID != "" {
 		return request.ProfileID, nil
 	}

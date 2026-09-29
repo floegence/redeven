@@ -1,4 +1,4 @@
-/* global chrome, window, getComputedStyle */
+/* global chrome, window, document, getComputedStyle */
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile, mkdir, readdir, copyFile, symlink } from 'node:fs/promises';
@@ -34,7 +34,7 @@ const tls = await createBuiltDistTLS();
 let source, managedBrowser, client, website, publicServer, diagnosticPage;
 const managedSource = process.env.REDEVEN_BROWSER_SOURCE === 'managed';
 const extensionSource = process.env.REDEVEN_BROWSER_SOURCE === 'extension';
-let extension, resources, testingManifest, cleanupWork;
+let extension, extensionPopupURL, resources, testingManifest, cleanupWork;
 const cleanup = () => cleanupWork ??= (async () => {
   input.close();
   await Promise.allSettled([client?.close(), managedBrowser ? managedBrowser.close() : source?.close()]);
@@ -51,7 +51,11 @@ try {
     for (const name of await readdir('scripts')) if (/^(computer|redeven).*\.mjs$/u.test(name) && !name.endsWith('.node-test.mjs')) await copyFile(path.join('scripts', name), path.join(resources, name));
     await symlink(path.resolve('node_modules'), path.join(resources, 'node_modules'));
     extension = path.join(resources, 'extension'); stageBrowserExtension(extension);
-
+    // Chrome does not emit onDetach when its owning extension calls detach.
+    // Inject loss at the real native event boundary in this disposable copy;
+    // the shipped extension has no test command or alternate recovery path.
+    const background = path.join(extension, 'background.mjs');
+    await writeFile(background, await readFile(background, 'utf8') + '\nglobalThis.fixtureDetachProjection = async tabId => { await chrome.debugger.detach({ tabId }); targetUnavailable(tabId, "debugger_detached"); };\n');
   }
   let requestedDownloads = 0;
   const fileContent = Buffer.from('Flowersec browser file fixture\n'.repeat(8192));
@@ -89,12 +93,19 @@ try {
   });
   website.listen(0, '127.0.0.1'); await once(website, 'listening');
   const sourceOrigin = `http://127.0.0.1:${website.address().port}`;
-  let page, port, targetInfo;
+  let page, port, targetInfo, extensionWorker, nativeSelection;
+  const ambientPages = [];
   if (!managedSource) {
   const executablePath = process.env.REDEVEN_BROWSER_TEST_EXECUTABLE;
   assert(executablePath && path.isAbsolute(executablePath), 'Source browser qualification requires an explicit verified executable');
   source = await chromium.launchPersistentContext(directory, { headless: true, executablePath, chromiumSandbox: true, ignoreDefaultArgs: extensionSource ? ['--disable-extensions'] : [], args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', ...(extensionSource ? [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] : [])] });
   page = source.pages()[0]; await page.goto(sourceOrigin);
+  if (extensionSource) {
+    for (const name of ['ambient-first', 'ambient-second']) {
+      const ambient = await source.newPage(); await ambient.goto(sourceOrigin + '/' + name);
+      await ambient.evaluate(name => { document.title = name; }, name); ambientPages.push(ambient);
+    }
+  }
   const probe = await source.newCDPSession(page);
   ({ targetInfo } = await probe.send('Target.getTargetInfo')); await probe.detach();
   port = (await readFile(path.join(directory, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
@@ -144,13 +155,21 @@ try {
       await writeFile(testingManifest, manifest, { flag: 'wx', mode: 0o600 });
     }
     const popup = await source.newPage();
-    await popup.goto(`chrome-extension://${configuration.extensionID}/popup.html#${configuration.nativeHost}`);
+    extensionPopupURL = `chrome-extension://${configuration.extensionID}/popup.html#${configuration.nativeHost}`;
+    await popup.goto(extensionPopupURL);
     await popup.locator('summary').click();
     await popup.locator('#profile').fill('Projection fixture');
     await popup.locator('#connect-button').click();
     try { await popup.locator('#disconnect').waitFor({ state: 'visible', timeout: 10000 }); }
     catch (error) { console.error('Extension connection:', await popup.locator('#status').textContent(), await popup.evaluate(() => chrome.runtime.sendMessage({ command: 'status' }))); throw error; }
     await popup.close();
+    extensionWorker = source.serviceWorkers().find(worker => worker.url().endsWith('/background.mjs'));
+    await extensionWorker.evaluate(async url => {
+      const tab = (await chrome.tabs.query({})).find(tab => tab.url === url);
+      await chrome.windows.create({ tabId: tab.id, focused: false });
+    }, sourceOrigin + '/ambient-second');
+    nativeSelection = await extensionWorker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => ({ tab: tab.id, window: tab.windowId })));
+    assert.equal(nativeSelection.length, 2, 'The personal directory spans two native windows');
     process.stdout.write(JSON.stringify({ connected: true, sourceURL: sourceOrigin, sourceTitle: await page.title() }) + '\n');
     configuration = await settings;
   }
@@ -198,6 +217,37 @@ try {
   const document = viewer.frameLocator('#browser-document');
   const replay = document.frameLocator('iframe');
   await replay.locator('#counter').waitFor({ state: 'visible', timeout: 20000 });
+  if (extensionSource) {
+    assert.equal(await document.getByRole('tab').count(), 3, 'Opening a personal profile includes every existing ordinary tab');
+    assert.deepEqual(await extensionWorker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => ({ tab: tab.id, window: tab.windowId }))), nativeSelection, 'Projection does not activate a native tab');
+    await ambientPages[0].evaluate(() => { document.title = 'Native title update'; });
+    await document.getByRole('tab', { name: 'Native title update', exact: true }).waitFor();
+    await document.getByRole('tab', { name: 'Native title update', exact: true }).click();
+    await replay.locator('#counter').waitFor({ state: 'visible' });
+    await document.getByRole('tab', { name: 'ambient-second', exact: true }).click();
+    await document.getByRole('tab', { name: 'Shared source fixture', exact: true }).click();
+    await viewer.waitForFunction(() => {
+      const doc = document.querySelector('#browser-document')?.contentDocument;
+      const viewport = doc?.querySelector('.floe-viewport');
+      return viewport && !viewport.parentElement.classList.contains('switching') && !doc.querySelector('[role=combobox]').readOnly;
+    });
+    await replay.locator('#counter').waitFor({ state: 'visible' });
+    assert.deepEqual(await extensionWorker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => ({ tab: tab.id, window: tab.windowId }))), nativeSelection, 'Selecting projected tabs preserves Chrome selection');
+    const nativeTitle = document.getByRole('tab', { name: 'Native title update', exact: true });
+    await nativeTitle.click({ button: 'right' });
+    await document.getByRole('menuitem', { name: 'Pin tab', exact: true }).click();
+    await document.locator('.tab.pinned').waitFor();
+    assert.equal(await extensionWorker.evaluate(async url => (await chrome.tabs.query({})).find(tab => tab.url === url).pinned, sourceOrigin + '/ambient-first'), true, 'Pinning commits to the native browser');
+    await nativeTitle.click({ button: 'right' });
+    await document.getByRole('menuitem', { name: 'Unpin tab', exact: true }).click();
+    await document.locator('.tab.pinned').waitFor({ state: 'detached' });
+    await nativeTitle.press('Alt+Shift+Home');
+    await viewer.waitForFunction(() => document.querySelector('#browser-document').contentDocument.querySelector('[role=tab]').textContent === 'Native title update');
+    assert.equal(await extensionWorker.evaluate(async url => (await chrome.tabs.query({})).find(tab => tab.url === url).index, sourceOrigin + '/ambient-first'), 0, 'Keyboard reordering commits to the native browser');
+    await Promise.all(ambientPages.map(ambient => ambient.close()));
+    await document.getByRole('tab', { name: 'ambient-second', exact: true }).waitFor({ state: 'detached' });
+    assert.equal(await document.getByRole('tab').count(), 1, 'Native closes immediately update the directory');
+  }
   await replay.locator('#picture').evaluate(image => image.decode());
   assert.equal(await replay.locator('#picture').evaluate(image => image.naturalWidth), 44);
   assert.equal(await replay.locator('#counter').evaluate(button => getComputedStyle(button).color), 'rgb(13, 87, 143)');
@@ -330,7 +380,7 @@ try {
   if (extensionSource) {
     await popup.getByRole('dialog').getByRole('button', { name: 'Back', exact: true }).click();
     await popup.getByRole('button', { name: 'Personal browser', exact: true }).click();
-    await popup.getByRole('radio', { name: /New background tab/ }).waitFor();
+    await popup.getByRole('radio', { name: /Projection fixture/ }).waitFor();
     assert.equal(await popup.getByRole('radio', { name: /Popup popup/ }).count(), 0, 'Private native descendants stay outside source selection after their direct opener closes');
     assert.equal(await popup.getByRole('radio', { name: /Shared source fixture/ }).count(), 0, 'The private root is absent from another window inventory');
   }
@@ -441,12 +491,36 @@ try {
   const createdPage = await createdPagePromise;
   await popup.waitForFunction(() => document.querySelectorAll('[role=tab]').length === 2, undefined, { timeout: 10000 });
   await popup.waitForFunction(() => document.querySelector('[role=combobox]').value === '', undefined, { timeout: 10000 });
-  assert.equal(await popup.getByRole('tab').count(), 2, 'Only the selected source and the explicitly created page are granted');
+  assert.equal(await popup.getByRole('tab').count(), 2, 'The existing profile page and the confirmed new native page are visible');
   await popup.waitForFunction(() => !document.querySelector('.floe-viewport').parentElement.classList.contains('switching') && !document.querySelector('[role=combobox]').readOnly);
+  if (extensionSource && process.env.REDEVEN_BROWSER_TEST_BAIDU === '1') {
+    await address.fill('baidu.com'); await address.press('Enter');
+    await createdPage.waitForURL(url => url.hostname === 'www.baidu.com' || url.hostname === 'baidu.com');
+    const search = popupReplay.locator('textarea:visible, input[name=wd]:visible').first();
+    await search.waitFor({ state: 'visible', timeout: 20000 });
+    await search.click(); await popup.keyboard.insertText('redeven');
+    await createdPage.waitForFunction(() => [...document.querySelectorAll('textarea, input[name=wd]')].some(field => field.value === 'redeven'));
+    if (process.env.REDEVEN_BROWSER_DEBUG_EVIDENCE) await popup.screenshot({ path: process.env.REDEVEN_BROWSER_DEBUG_EVIDENCE.replace(/\.json$/u, '-baidu.png') });
+    process.stdout.write('PASS: new blank tab -> baidu.com projects the native page and accepts source input\n');
+  }
   await address.fill(sourceOrigin + '/created-tab'); await address.press('Enter');
   await createdPage.waitForURL(sourceOrigin + '/created-tab');
   await popup.waitForFunction(() => !document.querySelector('.floe-viewport').parentElement.classList.contains('switching'));
   await popupReplay.locator('#counter').waitFor({ state: 'visible' });
+  if (extensionSource) {
+    const nativeCount = source.pages().length;
+    await extensionWorker.evaluate(async url => {
+      const tab = (await chrome.tabs.query({})).find(tab => tab.url === url);
+      await globalThis.fixtureDetachProjection(tab.id);
+    }, sourceOrigin + '/created-tab');
+    await popup.getByRole('button', { name: 'Retry display', exact: true }).waitFor();
+    assert.equal(await popup.getByRole('tab').count(), 2, 'Projection failure preserves browser chrome and native tab identity');
+    assert.equal(createdPage.isClosed(), false);
+    await popup.getByRole('button', { name: 'Retry display', exact: true }).click();
+    await popupReplay.locator('#counter').waitFor({ state: 'visible' });
+    assert.equal(source.pages().length, nativeCount, 'Display retry cannot create another native tab');
+    assert.equal(createdPage.url(), sourceOrigin + '/created-tab', 'Display retry cannot replay navigation');
+  }
   await popup.getByRole('tab', { selected: true }).press('Control+w');
   await popup.waitForFunction(() => document.querySelectorAll('[role=tab]').length === 1);
   await popupReplay.locator('#counter').waitFor({ state: 'visible' });
@@ -479,8 +553,8 @@ try {
     await popup.waitForFunction(() => document.querySelectorAll('[role=tab]').length === 1);
   }
 
-  // Native external popups remain ungranted until explicitly chosen in the
-  // shared source dialog. A stale selection keeps the current view intact.
+  // Personal popups join the native profile directory without changing this
+  // window's selection. Advanced CDP still requires explicit page admission.
   const nativePopupPromise = page.waitForEvent('popup', { timeout: 5000 });
   await popupReplay.locator('#popup-link').click();
   const nativePopup = await nativePopupPromise;
@@ -488,6 +562,11 @@ try {
   if (managedSource) {
     await popup.getByRole('tab', { name: 'Popup popup', exact: true, selected: true }).waitFor();
     assert.equal(await popup.getByRole('tab').count(), 2, 'A managed popup joins its opened profile directory');
+  } else if (extensionSource) {
+    await popup.getByRole('tab', { name: 'Popup popup', exact: true }).waitFor();
+    assert.equal(await popup.getByRole('tab').count(), 2, 'Native popups join the already authorized personal profile');
+    assert.equal(await address.inputValue(), sourceOrigin + '/zoom-restored', 'Native creation preserves the window selection');
+    await popup.getByRole('tab', { name: 'Popup popup', exact: true }).click();
   } else {
   const findSources = async () => {
     await popup.getByRole('button', { name: 'More browser actions', exact: true }).click();
@@ -528,8 +607,35 @@ try {
   if (process.env.REDEVEN_BROWSER_SITES_EVIDENCE) await runBrowserProjectionSites({ popup, source: nativePopup, evidence: process.env.REDEVEN_BROWSER_SITES_EVIDENCE });
   if (process.env.REDEVEN_BROWSER_SYNC_EVIDENCE) await runBrowserProjectionMediaSync({ popup, source: nativePopup, evidence: process.env.REDEVEN_BROWSER_SYNC_EVIDENCE });
   if (process.env.REDEVEN_BROWSER_DEBUG_EVIDENCE) await popup.screenshot({ path: process.env.REDEVEN_BROWSER_DEBUG_EVIDENCE.replace(/\.json$/u, '.png') });
+  let retainedSource = page;
+  if (extensionSource) {
+    const control = await source.newPage();
+    await control.goto(extensionPopupURL);
+    await control.locator('#disconnect').click();
+    await popup.getByRole('button', { name: 'Reconnect browser', exact: true }).waitFor();
+    assert.equal(nativePopup.isClosed(), false, 'Losing the profile connection never closes a native page');
+    await control.locator('#connect-button').click();
+    await control.locator('#disconnect').waitFor();
+    await popup.getByRole('button', { name: 'Reconnect browser', exact: true }).click();
+    await popup.waitForFunction(url => document.querySelector('[role=combobox]')?.value === url && !document.querySelector('.floe-viewport')?.parentElement.classList.contains('switching'), nativePopup.url());
+    await popupReplay.locator('#counter').waitFor({ state: 'visible' });
+    assert.equal(await popup.getByRole('tab').count(), 2, 'Reconnecting restores the existing native workspace');
+    for (const remaining of [1, 0]) {
+      await popup.getByRole('tab', { selected: true }).press('Control+w');
+      await popup.waitForFunction(count => document.querySelectorAll('[role=tab]').length === count, remaining);
+    }
+    await popup.getByText('No open tabs', { exact: true }).waitFor();
+    assert.equal((await extensionWorker.evaluate(() => chrome.tabs.query({}))).filter(tab => !tab.url.startsWith('chrome-extension:')).length, 0, 'Closing the last tab never creates an implicit blank page');
+    [retainedSource] = await Promise.all([source.waitForEvent('page'), popup.getByRole('button', { name: 'New tab', exact: true }).first().click()]);
+    await popup.getByRole('tab').waitFor();
+    await address.fill(sourceOrigin + '/after-empty'); await address.press('Enter');
+    await retainedSource.waitForURL(sourceOrigin + '/after-empty');
+    await popupReplay.locator('#counter').waitFor({ state: 'visible' });
+    await control.close();
+    process.stdout.write('PASS: explicit profile reconnect retains selected identity; last close stays empty and explicit creation restores projection\n');
+  }
   await popup.close();
-  assert.equal(page.isClosed(), false, 'closing an observation does not close its source page');
+  assert.equal(retainedSource.isClosed(), false, 'closing an observation does not close its source page');
   assert.deepEqual(forbiddenRequests, [], 'projection never requests the source website directly');
   assert.deepEqual(directProxyRequests, [], 'all Runtime HTTP and resource requests use Flowersec');
   await viewer.evaluate(() => window.closeBrowserFixture());

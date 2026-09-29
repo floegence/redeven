@@ -17,7 +17,7 @@ test('reconnection drains old requests before binding and reusing native request
   const chrome = globalThis.chrome = {
     webNavigation: { onCreatedNavigationTarget: event() },
     debugger: { onEvent: event(), onDetach: event(), detach: async () => {}, getTargets: async () => [{ type: 'page', tabId: 7, id: 'a'.repeat(32) }] },
-    tabs: { onRemoved: event(), query: () => new Promise(resolve => { releaseInventory = resolve; }) },
+    tabs: { onCreated: event(), onUpdated: event(), onMoved: event(), onAttached: event(), onDetached: event(), onReplaced: event(), onRemoved: event(), query: () => new Promise(resolve => { releaseInventory = resolve; }) },
     storage: { local: { get: async () => saved, set: async value => { saved = { ...saved, ...value }; } } },
     alarms: { onAlarm: event(), get: async name => alarms.get(name), create: async (name, value) => { alarms.set(name, value); }, clear: async name => alarms.delete(name) },
     runtime: { id: 'fixture', onMessage: messages, onStartup: event(), sendMessage: async () => {}, getURL: name => `chrome-extension://fixture/${name}`, connectNative: () => {
@@ -38,7 +38,7 @@ test('reconnection drains old requests before binding and reusing native request
     }
     const first = connect(); await flush();
     assert.equal(ports.length, 1);
-    ports[0].onMessage.emit({ type: 'ready', protocol_version: 7 });
+    ports[0].onMessage.emit({ type: 'ready', protocol_version: 8 });
     assert.equal((await first).connected, true);
     ports[0].onMessage.emit({ id: '1', command: 'inventory' }); await flush();
     const next = connect(); await flush();
@@ -46,7 +46,7 @@ test('reconnection drains old requests before binding and reusing native request
     assert.equal(ports.length, 1, 'a new connection must wait for the retired request cleanup');
     releaseInventory([]); await flush(); await flush();
     assert.equal(ports.length, 2);
-    ports[1].onMessage.emit({ type: 'ready', protocol_version: 7 });
+    ports[1].onMessage.emit({ type: 'ready', protocol_version: 8 });
     assert.equal((await next).connected, true);
     ports[1].onMessage.emit({ id: '1', command: 'inventory' }); await flush();
     releaseInventory([{ id: 7, title: 'Selected', url: 'https://example.test' }]); await flush();
@@ -64,7 +64,7 @@ test('reconnection drains old requests before binding and reusing native request
     ports.at(-1).onMessage.emit({ type: 'connection_error', code: 'extension_update_required' });
     assert.equal((await incompatible).error, 'extension_update_required');
     const recovered = connect(); await flush(); await flush();
-    ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 7 });
+    ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 8 });
     assert.equal((await recovered).connected, true);
     assert.equal((await ui({ command: 'status' })).error, '');
     await ui({ command: 'disconnect' });
@@ -85,7 +85,7 @@ test('a confirmed profile reconnects after disconnect and worker restart, while 
     chrome = globalThis.chrome = {
       webNavigation: { onCreatedNavigationTarget: event() },
       debugger: { onEvent: event(), onDetach: event(), detach: async () => assert.fail('reconnection must not bind a tab') },
-      tabs: { onRemoved: event(), query: async () => assert.fail('reconnection must not inspect tabs') },
+      tabs: { onCreated: event(), onUpdated: event(), onMoved: event(), onAttached: event(), onDetached: event(), onReplaced: event(), onRemoved: event(), query: async () => assert.fail('reconnection must not inspect tabs') },
       storage: { local: { get: async () => structuredClone(saved), set: async value => { saved = { ...saved, ...structuredClone(value) }; } } },
       alarms: { onAlarm: event(), get: async name => alarms.get(name), create: async (name, value) => { alarms.set(name, value); }, clear: async name => alarms.delete(name) },
       runtime: { id: 'fixture', onMessage: event(), onStartup: event(), sendMessage: async () => {}, getURL: name => `chrome-extension://fixture/${name}`, connectNative: name => {
@@ -98,7 +98,7 @@ test('a confirmed profile reconnects after disconnect and worker restart, while 
     await flush(); await flush();
   };
   const ui = command => new Promise(resolve => chrome.runtime.onMessage.emit(command, { id: 'fixture', url: chrome.runtime.getURL('popup.html') }, resolve));
-  const ready = async () => { await flush(); await flush(); ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 7 }); await flush(); await flush(); };
+  const ready = async () => { await flush(); await flush(); ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 8 }); await flush(); await flush(); };
   try {
     await startWorker();
     assert.equal(ports.length, 0, 'installation alone must not connect');

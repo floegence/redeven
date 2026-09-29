@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -28,6 +29,8 @@ type extensionSourcePipe struct {
 	bytes        atomic.Int64
 	slots        chan struct{}
 	once         sync.Once
+	retired      chan struct{}
+	retireError  error
 }
 
 func (host *browserSourceHost) attachExtension(ctx context.Context, client *computerExtensionClient, target, tab, binding string) (*extensionSourcePipe, error) {
@@ -85,7 +88,7 @@ func (pipe *extensionSourcePipe) enqueue(raw json.RawMessage) bool {
 	size := int64(len(raw))
 	if pipe.bytes.Add(size) > 64<<20 {
 		pipe.bytes.Add(-size)
-		pipe.close()
+		pipe.retire("source_queue_limit")
 		return false
 	}
 	select {
@@ -93,7 +96,7 @@ func (pipe *extensionSourcePipe) enqueue(raw json.RawMessage) bool {
 		return true
 	default:
 		pipe.bytes.Add(-size)
-		pipe.close()
+		pipe.retire("source_queue_limit")
 		return false
 	}
 }
@@ -108,6 +111,7 @@ func (pipe *extensionSourcePipe) write() {
 			err := browserbridge.WriteMessage(pipe.conn, raw, browserbridge.MaxMessageBytes)
 			pipe.bytes.Add(-int64(len(raw)))
 			if err != nil {
+				pipe.retire("source_write_failed")
 				return
 			}
 		}
@@ -118,6 +122,7 @@ func (pipe *extensionSourcePipe) read(reader *bufio.Reader) {
 	for {
 		raw, err := browserbridge.ReadMessage(reader, 1<<20)
 		if err != nil {
+			pipe.retire("source_read_ended")
 			return
 		}
 		var message struct {
@@ -142,6 +147,7 @@ func (pipe *extensionSourcePipe) read(reader *bufio.Reader) {
 		select {
 		case pipe.slots <- struct{}{}:
 		default:
+			pipe.retire("source_command_limit")
 			return
 		}
 		go func() {
@@ -163,19 +169,26 @@ func (pipe *extensionSourcePipe) read(reader *bufio.Reader) {
 		}()
 	}
 }
-func (pipe *extensionSourcePipe) close() {
+func (pipe *extensionSourcePipe) close() { pipe.retire("") }
+
+func (pipe *extensionSourcePipe) retire(reason string) {
 	if pipe == nil {
 		return
 	}
 	pipe.once.Do(func() {
+		pipe.retired = make(chan struct{})
+		if reason != "" {
+			slog.Warn("browser source transport retired", "stage", "extension_carrier", "binding", pipe.binding, "reason", reason)
+		}
 		pipe.cancel()
 		_ = pipe.conn.Close()
 		// Detach only this exact generation. A reconnect must not inherit authority,
 		// and a late cleanup cannot unbind a later explicit selection of the tab.
 		go func() {
+			defer close(pipe.retired)
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			_, _ = pipe.client.call(ctx, "unbind", map[string]string{"tab_id": pipe.tab, "binding": pipe.binding})
+			_, pipe.retireError = pipe.client.call(ctx, "unbind", map[string]string{"tab_id": pipe.tab, "binding": pipe.binding})
 			pipe.client.mu.Lock()
 			if pipe.client.sources[pipe.binding] == pipe {
 				delete(pipe.client.sources, pipe.binding)
@@ -183,4 +196,25 @@ func (pipe *extensionSourcePipe) close() {
 			pipe.client.mu.Unlock()
 		}()
 	})
+}
+
+func (pipe *extensionSourcePipe) drain(ctx context.Context) error {
+	if pipe == nil {
+		return nil
+	}
+	pipe.close()
+	if pipe.retired == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-pipe.retired:
+		select {
+		case <-pipe.client.done:
+			return nil
+		default:
+		}
+		return pipe.retireError
+	}
 }

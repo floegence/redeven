@@ -26,7 +26,7 @@ function mount(locale: RedevenLocale = 'en-US', initial: BrowserWorkspaceState =
   const messages = browserSourceMessages(i18n);
   const service: BrowserSourceService = {
     management: {}, preference: vi.fn(), profiles: vi.fn(), createProfile: vi.fn(),
-    status: vi.fn(), tabs: vi.fn(), discover: vi.fn(),
+    status: vi.fn(), discover: vi.fn(),
   };
   const chooseSource = vi.fn(), retry = vi.fn(async () => undefined), recover = vi.fn(async () => undefined);
   const [state, setState] = createSignal(initial);
@@ -119,4 +119,30 @@ it('retains explicit recovery confirmation and restores neutral selection after 
   setState({ phase: 'selecting' });
   expect(host.querySelector('.redeven-browser-welcome-art')).not.toBeNull();
   expect(host.querySelectorAll('.redeven-browser-notice-actions button')).toHaveLength(1);
+});
+
+for (const locale of SUPPORTED_LOCALES) it(`keeps disconnected recovery clear and usable in narrow ${locale}`, async () => {
+  await page.viewport(320, 640);
+  const { host, messages, retry } = mount(locale, { phase: 'failed', failure: 'BROWSER_DISCONNECTED' });
+  const notice = host.querySelector<HTMLElement>('.redeven-browser-notice')!;
+  expect(notice.scrollWidth).toBeLessThanOrEqual(notice.clientWidth);
+  expect(notice.scrollHeight).toBeLessThanOrEqual(notice.clientHeight);
+  expect(host.querySelector('h2')?.textContent).toBe(messages.product.connectionTitle);
+  expect(host.querySelector('p')?.textContent).toBe(messages.product.disconnected);
+  expect(host.querySelectorAll('button')).toHaveLength(2);
+  expectSingleLineButtonLabels(host);
+  await page.getByRole('button', { name: messages.product.reconnectBrowser, exact: true }).click();
+  expect(retry).toHaveBeenCalledOnce();
+});
+
+for (const [dark, width] of [[false, 1200], [true, 1200], [false, 320]] as const) it(`presents a compact recovery panel in ${dark ? 'dark' : 'light'} at ${width}px`, async () => {
+  await page.viewport(width, 800);
+  document.documentElement.classList.toggle('dark', dark);
+  const { host } = mount('zh-CN', { phase: 'failed', failure: 'BROWSER_SOURCE_UNAVAILABLE' });
+  const bounds = host.querySelector<HTMLElement>('.redeven-browser-notice-content')!.getBoundingClientRect();
+  expect(Math.abs(bounds.x + bounds.width / 2 - width / 2)).toBeLessThan(2);
+  expect(Math.abs(bounds.y + bounds.height / 2 - 400)).toBeLessThan(2);
+  if (import.meta.env.VITE_REDEVEN_BROWSER_WELCOME_SCREENSHOTS === '1') {
+    await page.screenshot({ element: host, path: `__screenshots__/browser-recovery-zh-CN-${dark ? 'dark' : 'light'}-${width}.png` });
+  }
 });

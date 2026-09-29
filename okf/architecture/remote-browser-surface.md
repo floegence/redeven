@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser surface
 description: Mount shared browser windows with source selection, theme and authenticated window lifetimes.
 tags: [architecture, browser, ui]
-timestamp: 2026-09-27T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 # Summary
 
@@ -28,7 +28,7 @@ Source admission, popup privacy and directory retirement belong to [browser sour
 
 The Browser page first offers two source cards: the personal browser is recommended
 and the built-in browser remains independent. It does not force a managed profile.
-The chooser reveals connection setup, page selection and profile administration
+The chooser reveals connection setup, personal profile selection and managed profile administration
 only after the corresponding source is chosen. Profile creation is disclosed on
 request; advanced debugging endpoints occupy a secondary step. Each step shows
 only its applicable actions, with one concise body description and local errors.
@@ -65,13 +65,12 @@ plain labels and callbacks to the released FloeBrowser menu; they do not copy it
 chrome or menu implementation.
 Its source dialog edits a draft and applies it only on Open; profile creation,
 personal-browser setup and browser installation reuse the same operations as Flower.
-Independent windows reuse the admitted source identity, so reopening a window
+Independent windows reuse the workspace identity and current selected tab, so reopening a window
 never repeats a new-tab operation or rebinds an outdated URL selection. They mount
 the same source chooser through named product-port operations. Installation uses
 the environment's existing coordinator, including Desktop package transfer;
 the child receives no generic fetch, IPC, installation-chunk or Session API.
-A failed replacement leaves the current window and source usable. External
-popups remain outside its grants until the user explicitly selects that page.
+A failed replacement leaves the current window and source usable. Personal popups follow the [live profile directory](remote-browser-profile-workspace.md); advanced CDP popups still require explicit selection.
 
 Each controller keeps one current open intent. Late results can only release
 their own view; they cannot replace a newer choice. A Session interruption
@@ -86,7 +85,7 @@ asynchronous, so the previous host can remain mounted briefly after its view
 has been released; its late events have no authority over the replacement.
 Reconnection uses a confirmed source, never an earlier new-tab operation. Theme
 configuration refreshes with unchanged effective values do not reopen a view.
-Actual locale or palette changes acquire a new view of the selected target;
+Actual locale or palette changes acquire a new view of the same workspace and selected tab;
 callbacks from the retired document cannot change current presentation.
 The trusted document captures real pointer input from browser chrome, recovery
 controls and the released engine's input surface above its inert replay iframe.
@@ -117,26 +116,18 @@ Loading never takes the place of actionable installation or recovery content.
 
 Structured error codes select installation, enablement, source selection,
 reconnection or explicit [service recovery](remote-browser-recovery.md).
+Single-page display failures stay inside FloeBrowser's content area and retain
+the tab bar and healthy pages. Profile disconnects use a compact centered status
+icon, concise title, separate explanation and one primary reconnect action with
+secondary source selection. Neither carrier errors nor projection errors imply
+that the native page closed. The same recovery layout applies to inline and
+independent windows, all shipped locales, keyboard use, narrow sizes and both themes.
 The source chooser preserves its draft and displays replacement errors locally.
 Its installation step has no redundant disabled Open action. Installation and
 continuation follow the shared [installation contract](../ai/computer-use-browser-installation.md).
 
-The trusted document is a static shell without a view identity or source data.
-Its URL carries only a fresh instance nonce, also checked against the exact
-opener or parent before handing over ports. A source replacement changes the
-query as well as the nonce, so the browser loads a new document instead of doing
-a fragment-only navigation with retired ports. Desktop reserves that exact URL
-once and gives the child no preload or generic bridge.
-Parent destruction or navigation retires reservations and static-document grants
-before closing child windows. Cleanup detaches from the captured WebContents
-event emitter without reading an already destroyed BrowserWindow; repeated
-teardown and previously closed children remain harmless.
-Desktop presents the independent window at creation. Its visible shell owns
-loading and recovery; a paint event must not gate the user's window visibility.
-For a Desktop private Local UI bridge, the main process lends authentication
-headers only to that child's reserved static document and same-origin Env App
-assets. The child is not registered as an environment or IPC owner; API paths,
-other origins, other document instances and non-GET requests receive no grant.
+Independent-document admission, Desktop static-asset grants and parent/child
+teardown follow [browser window isolation](remote-browser-window-isolation.md).
 
 # Boundaries
 
@@ -181,7 +172,6 @@ website verification. Window adapters consume those released capabilities.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceController.ts` - Single view intent and release owner.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvBrowserPage.test.tsx` - Effective presentation changes without repeated source opens.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceWindows.test.ts` - Retained window shells and independent cleanup.
-- `redeven:desktop/src/main/browserProjectionWindows.test.ts` - Exact static-document loading without environment API authority and idempotent cleanup after parent destruction.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.ts` - Environment-owned window, source replacement and private control admission.
 
 - [FloeBrowser v0.1.13: test/browser-menu.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.13/test/browser-menu.e2e.ts) — Address-row actions, activation, focus, narrow bounds and late completion.

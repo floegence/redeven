@@ -9,7 +9,7 @@ let unbind: (() => void) | undefined;
 let controller: BrowserWorkspaceController | undefined;
 afterEach(() => { controller?.close(); unbind?.(); controller = undefined; });
 const selection = { request: { managed_profile_id: 'browser-main' }, label: 'Default' };
-const view = (id: string) => ({ id, generation: 'fixture-generation', profile_id: 'browser-main', initial_target: 'tab', protocol_version: 24, media_wire_version: 1 });
+const view = (id: string) => ({ id, workspace_id: 'workspace', generation: 'fixture-generation', profile_id: 'browser-main', initial_target: 'tab', protocol_version: 25, media_wire_version: 1 });
 async function fixture(installed = true) {
   const request = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) => Response.json({ ok: true, data: view('browser-view-first') }));
   unbind = await bindTestSessionHTTP(request);
@@ -31,7 +31,7 @@ it('keeps the existing page when a replacement source cannot be opened', async (
   const { controller, request } = await fixture();
   await controller.open(selection);
   request.mockResolvedValueOnce(Response.json({ ok: false, error_code: 'BROWSER_SOURCE_UNAVAILABLE' }, { status: 409 }));
-  await expect(controller.open({ request: { source_target: 'missing' }, label: 'Missing' })).rejects.toThrow();
+  await expect(controller.open({ request: { workspace_id: 'missing' }, label: 'Missing' })).rejects.toThrow();
   expect(controller.snapshot().view?.id).toBe('browser-view-first');
   expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(0);
 });
@@ -50,15 +50,15 @@ it('retires a superseded late view without replacing or deleting the current vie
   expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([path]) => String(path))).toEqual(['/_redeven_proxy/api/browser/views/browser-view-late']);
 });
 
-it('rebuilds presentation from the admitted target without opening another workspace', async () => {
+it('reopens the same workspace with this window’s selected native tab', async () => {
   const { controller, request } = await fixture();
   await controller.open(selection);
   controller.selectTarget('second-tab');
-  expect(controller.currentRequest()).toEqual({ source_target: 'second-tab' });
+  expect(controller.currentRequest()).toEqual({ workspace_id: 'workspace', initial_target: 'second-tab' });
   request.mockResolvedValueOnce(Response.json({ ok: true, data: view('browser-view-next') }));
   await controller.reconnect();
-  expect(String(request.mock.calls[2]![0])).toBe('/_redeven_proxy/api/browser/views');
-  expect(JSON.parse(String(request.mock.calls[2]![1]?.body))).toEqual({ targets: ['second-tab'] });
+  expect(String(request.mock.calls[2]![0])).toBe('/_redeven_proxy/api/browser/workspace');
+  expect(JSON.parse(String(request.mock.calls[2]![1]?.body))).toEqual({ workspace_id: 'workspace', initial_target: 'second-tab' });
   controller.close(); controller.close();
   expect(() => controller.currentRequest()).toThrow('BROWSER_SOURCE_UNAVAILABLE');
   expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(2);
@@ -82,12 +82,29 @@ it('does not let a late fault inspection overwrite a replacement Session', async
   expect(controller.snapshot()).toMatchObject({ phase: 'live', view: { id: 'browser-view-next' } });
 });
 
-it('requires a new explicit choice after an uncertain new-tab outcome', async () => {
+it.each(['carrier', 'session'])('retains the latest selected tab after a %s disconnect', async (cause) => {
+  const { controller, request } = await fixture();
+  await controller.open(selection);
+  controller.selectTarget('latest-native-tab');
+  request.mockImplementation(async (path) => Response.json({ ok: true, data: String(path).endsWith('/environment')
+    ? { browser_service: { state: 'ready', generation: 'fixture-generation' } } : view('browser-view-reconnected') }));
+  if (cause === 'carrier') await controller.fail();
+  else { controller.setSession(undefined); controller.setSession({} as Session); }
+  await controller.reconnect();
+  const opens = request.mock.calls.filter(([path]) => String(path).endsWith('/workspace'));
+  expect(JSON.parse(String(opens.at(-1)?.[1]?.body))).toEqual({ workspace_id: 'workspace', initial_target: 'latest-native-tab' });
+});
+
+it('retries opening a personal profile without creating or navigating a native tab', async () => {
   const { controller, request } = await fixture();
   request.mockResolvedValueOnce(Response.json({ ok: false, error_code: 'BROWSER_OUTCOME_UNKNOWN' }, { status: 409 }));
-  await expect(controller.open({ label: 'Personal', request: { connection: { extension_profile_id: 'personal', new_tab: true } } })).rejects.toThrow();
-  await expect(controller.reconnect()).rejects.toMatchObject({ code: 'BROWSER_OUTCOME_UNKNOWN' });
-  expect(request.mock.calls.filter(([path]) => String(path).endsWith('/workspace'))).toHaveLength(1);
+  await expect(controller.open({ label: 'Personal', request: { connection: { extension_profile_id: 'personal' } } })).rejects.toThrow();
+  await controller.reconnect();
+  const opens = request.mock.calls.filter(([path]) => String(path).endsWith('/workspace'));
+  expect(opens).toHaveLength(2);
+  expect(opens.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+    { connection: { extension_profile_id: 'personal' } }, { connection: { extension_profile_id: 'personal' } },
+  ]);
 });
 
 it('restores the preceding notice when the user cancels the current selection', async () => {

@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-09-29: Adopt the published FloeBrowser profile workspace release
+
+- Upgrade Redeven to the published FloeBrowser v0.1.26 package, which carries browser protocol 25 while keeping media wire version 1.
+- Verify the npm package is byte-identical to the qualified GitHub release archive, refresh both JavaScript lockfiles and third-party license notices, and retain the profile workspace recovery evidence.
+
 ## 2026-09-28: Consume audited upstream security releases
 
 - Adopt published Floe Webapp v0.81.3 and the coordinated ReDevPlugin v3.0.33 Go, npm, and Rust source artifacts after public registry and release-manifest verification.

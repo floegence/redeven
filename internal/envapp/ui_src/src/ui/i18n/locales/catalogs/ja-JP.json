@@ -7320,13 +7320,21 @@
       "loading": "保存済みのページを読み込み中…",
       "empty": "一致する保存済みのページはありません。",
       "failed": "保存済みのページを更新できませんでした。もう一度お試しください。"
+    },
+    "projection": {
+      "failed": "このタブを表示できませんでした",
+      "recovery": "このタブの表示に再接続します。元のブラウザーではページが開いたままになります。",
+      "retry": "表示を再試行",
+      "unsupported": "このページはここでは表示できません",
+      "unsupportedDescription": "ブラウザーの内部ページは元のブラウザーで利用できます。別のタブを選択するか、ウェブサイトを開いてください。",
+      "empty": "開いているタブはありません",
+      "emptyDescription": "タブを作成して、このワークスペースでブラウジングを始めましょう。"
     }
   },
   "browserProduct": {
     "welcomeTitle": "ワークスペースでウェブを閲覧",
     "welcomeDescription": "個人用ブラウザーに接続するか、内蔵ブラウザーを使って、ここでウェブサイトを開けます。",
     "chooseSource": "ブラウザーを選択",
-    "profile": "ブラウザープロファイル",
     "defaultProfile": "既定のプロファイル",
     "openWindow": "新しいウィンドウで開く",
     "windowUnavailable": "ブラウザーウィンドウを開けませんでした。もう一度お試しください。",
@@ -7337,25 +7345,25 @@
     "chromeSource": "個人用ブラウザー",
     "profileName": "新しいプロファイル名",
     "createProfile": "プロファイルを作成",
-    "searchPages": "ページを検索",
     "noPages": "ページが見つかりません。接続先のブラウザーでページを開いてから更新してください。",
     "openSelection": "選択した項目を開く",
-    "selectionHint": "ここでページを開いても、Flower が選択しているページは変わりません。",
-    "chromeConfirmHint": "ブラウザー で接続を確認してから、ここで開くページを選択してください。",
+    "selectionHint": "このプロファイルの通常のタブをすべて開きます。Flower で選択中のページとブラウザーのフォーカスは変わりません。",
+    "chromeConfirmHint": "ブラウザーで接続を確認してから、ここでプロファイルを開いてください。",
     "installTitle": "環境のブラウザーを設定",
     "installOpen": "インストールして開く",
     "recoverTitle": "ブラウザーサービスが停止しました",
     "recover": "ブラウザーを復旧",
     "recoveryDescription": "環境のブラウザーを再起動し、保存済みのタブを復元します。未送信のフォームやページ内の未保存の内容は失われる場合があります。環境の他のサービスは引き続き動作します。",
-    "sourceUnavailable": "このページは利用できなくなりました。ブラウザーの接続元を選択してください。",
+    "sourceUnavailable": "このブラウザーは現在利用できません。再接続するか、別のブラウザーを選択してください。",
     "disconnected": "ブラウザーの接続が切断されました。",
     "openFailed": "ブラウザーを開けませんでした。再試行するか、別の接続元を選択してください。",
     "openTimeout": "ブラウザーが時間内に応答しませんでした。",
     "recoveryBlocked": "接続元のブラウザーでプライベートセッションを終了してから復旧してください。",
     "outcomeUnknown": "操作は完了している可能性があります。接続元を選択して現在の状態を確認してください。",
-    "retry": "再試行",
     "moreActions": "ブラウザーのその他の操作",
     "recommended": "おすすめ",
-    "previouslyUsed": "前回使用"
+    "previouslyUsed": "前回使用",
+    "connectionTitle": "ブラウザーの接続が中断されました",
+    "reconnectBrowser": "ブラウザーに再接続"
   }
 }
