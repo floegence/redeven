@@ -105,12 +105,56 @@ test('browser views need exact Runtime control tokens and cannot extend a grant 
   assert.equal(await pages.get('one').locator('input').inputValue(), 'authorized');
   await views.receive('view', 'lease-one', command(3, 'one', { kind: 'tab_select', tab: 'two' }));
   assert.equal(views.state('view').active, 'two');
+  // Selection acknowledges intent before the new source finishes observing.
+  const deadline = Date.now() + 5000;
+  while (!messages.some(message => message.type === 'control' && message.target === 'two') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(messages.findLast(message => message.type === 'control' && message.target === 'two')?.active, false);
   await assert.rejects(views.receive('view', 'lease-one', command(4, 'two', { kind: 'text', text: 'wrong source' })), /BROWSER_CONTROL_REVOKED/u);
   await views.release('view', 'lease-one');
   await views.closeView('view');
   assert.equal(pages.get('one').isClosed(), false);
   assert.equal(pages.get('two').isClosed(), false);
+});
+
+test('viewer acquisition prepares background focus and handback releases it before private input', { timeout: 20000 }, async t => {
+  const { views, sources, pages } = await fixture(t);
+  const transport = sources.get('one').source.transport;
+  const original = transport.send.bind(transport);
+  const focus = [];
+  transport.tabId = 'fixture-extension-tab';
+  transport.send = async (method, params) => {
+    if (method === 'Emulation.setFocusEmulationEnabled') { focus.push(params.enabled); return {}; }
+    return original(method, params);
+  };
+  const messages = [];
+  try {
+    await views.open('viewer', ['one'], message => messages.push(message), { initialTab: 'one', media: false });
+    const epoch = await snapshot(messages);
+    const command = id => ({ type: 'command', id, tab: 'one', epoch, action: { kind: 'text', text: 'x' } });
+    await assert.rejects(views.receive('viewer', 'forged', command(1)), /BROWSER_CONTROL_REVOKED/u);
+    assert.deepEqual(focus, []);
+    assert.equal(await views.acquire('viewer', 'one', 'lease'), true);
+    await pages.get('one').locator('input').focus();
+    await views.receive('viewer', 'lease', command(2));
+    assert.deepEqual(focus, [true]);
+    assert.equal(await pages.get('one').locator('input').inputValue(), 'x');
+    await views.release('viewer', 'lease');
+    await views.privacy('one', '');
+    await sources.get('one').setUserBrowsing(false);
+    await assert.rejects(views.receive('viewer', 'lease', command(3)), /BROWSER_CONTROL_REVOKED/u);
+    assert.deepEqual(focus, [true, false], 'private input cannot inherit a viewer focus override');
+    await views.privacy('one', null);
+    transport.send = async (method, params) => {
+      if (method === 'Emulation.setFocusEmulationEnabled') throw new Error('focus unavailable');
+      return original(method, params);
+    };
+    await assert.rejects(views.acquire('viewer', 'one', 'failed-lease'), /focus unavailable/u);
+    await assert.rejects(views.receive('viewer', 'failed-lease', command(4)), /BROWSER_CONTROL_REVOKED/u);
+    assert.equal(await pages.get('one').locator('input').inputValue(), 'x');
+  } finally {
+    transport.send = original;
+    delete transport.tabId;
+  }
 });
 
 test('private browser control removes other views before input and returns only their explicit source grants', { timeout: 20000 }, async t => {
