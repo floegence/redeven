@@ -104,12 +104,12 @@ it.each([false, true])('uses supplied skill and MCP icons and reacts to theme ch
   expect(skillImage()).toHaveAttribute('src', suppliedSkillIcon);
   expect(skillImage()).toHaveAttribute('alt', '');
   expect(host.querySelector('.flower-extension-icon svg')).toBeNull();
-  await page.screenshot({ path: `../../../dist/flower-extension-icons/skills-${dark ? 'dark' : 'light'}.png` });
+  await page.screenshot({ path: `__screenshots__/flower-extension-icons/skills-${dark ? 'dark' : 'light'}.png` });
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   const serverImage = () => host.querySelector<HTMLImageElement>('[role="tabpanel"]:not([hidden]) .flower-extension-icon img');
   await expect.poll(() => serverImage()?.naturalWidth).toBeGreaterThan(0);
   expect(serverImage()).toHaveAttribute('src', suppliedMCPIcon(dark));
-  await page.screenshot({ path: `../../../dist/flower-extension-icons/mcp-${dark ? 'dark' : 'light'}.png` });
+  await page.screenshot({ path: `__screenshots__/flower-extension-icons/mcp-${dark ? 'dark' : 'light'}.png` });
   theme.setTheme(dark ? 'light' : 'dark');
   await expect.poll(() => serverImage()?.getAttribute('src')).toBe(suppliedMCPIcon(!dark));
   await expect.poll(() => serverImage()?.naturalWidth).toBeGreaterThan(0);
@@ -142,11 +142,11 @@ it.each([[1280, false, 'en-US'], [1280, true, 'en-US'], [390, false, 'zh-CN'], [
   noOverflow();
   expect(host.querySelector('.flower-extension-disclosure')).toHaveAttribute('aria-expanded', 'false');
   expect(host.querySelectorAll('.flower-extension-row')[1].textContent).not.toContain(extensionI18n(locale).t('common.actions.delete'));
-  await page.screenshot({ path: `../../../dist/flower-extensions/skills-${width}-${dark ? 'dark' : 'light'}-${locale}.png` });
+  await page.screenshot({ path: `__screenshots__/flower-extensions/skills-${width}-${dark ? 'dark' : 'light'}-${locale}.png` });
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   await expect.element(page.getByRole('heading', { name: 'Workspace tools', exact: true })).toBeVisible();
   noOverflow();
-  await page.screenshot({ path: `../../../dist/flower-extensions/mcp-${width}-${dark ? 'dark' : 'light'}-${locale}.png` });
+  await page.screenshot({ path: `__screenshots__/flower-extensions/mcp-${width}-${dark ? 'dark' : 'light'}-${locale}.png` });
 });
 
 it('retains filters across keyboard tab changes and keeps row actions keyboard accessible', async () => {
@@ -180,7 +180,7 @@ it('creates and checks a server, preserves failed edits, and confirms removal', 
   const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
   expectSingleInputFocus(input);
   await expect.poll(() => getComputedStyle(document.querySelector('[role="dialog"]')!).opacity).toBe('1');
-  await page.screenshot({ path: '../../../dist/flower-extensions/add-server-mobile.png' });
+  await page.screenshot({ path: '__screenshots__/flower-extensions/add-server-mobile.png' });
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect.element(page.getByRole('heading', { name: 'Project tools', exact: true })).toBeVisible();
   expect(state.saveMCP).toHaveBeenCalledWith(expect.objectContaining({ id: 'project-tools', transport: 'http', enabled: true }));
@@ -235,7 +235,7 @@ it('offers clear first-use actions for an empty library', async () => {
   const mcpDrawing = host.querySelector('[role="tab"][id$="-mcp-tab"] svg')?.innerHTML;
   expect(mcpDrawing).toBeTruthy();
   expect(host.querySelector('[role="tabpanel"]:not([hidden]) .flower-extension-empty-icon svg')?.innerHTML).toBe(mcpDrawing);
-  await page.screenshot({ path: '../../../dist/flower-extensions/empty-mobile.png' });
+  await page.screenshot({ path: '__screenshots__/flower-extensions/empty-mobile.png' });
 });
 
 
@@ -250,7 +250,7 @@ it.each([1280, 960])('shows at least nine complete entries at %ipx for large lib
     expect(visible.length).toBeGreaterThanOrEqual(9);
     expect(rows[0].getBoundingClientRect().height).toBeLessThanOrEqual(72);
     noOverflow();
-    await page.screenshot({ path: `../../../dist/flower-extensions/dense-${tab}-${width}.png` });
+    await page.screenshot({ path: `__screenshots__/flower-extensions/dense-${tab}-${width}.png` });
   }
 });
 
@@ -299,6 +299,6 @@ it.each([320, 390])('keeps compact rows usable with touch input at %ipx', async 
     await expect.poll(() => toolbar.getBoundingClientRect().top).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().top);
     await expect.poll(() => toolbar.getBoundingClientRect().bottom).toBeLessThan(scroller.getBoundingClientRect().top + 110);
     scroller.scrollTop = 0;
-    await page.screenshot({ path: `../../../dist/flower-extensions/dense-touch-${width}.png` });
+    await page.screenshot({ path: `__screenshots__/flower-extensions/dense-touch-${width}.png` });
   } finally { await touch.emulateTouchInput(false); }
 });

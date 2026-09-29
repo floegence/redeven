@@ -16,6 +16,7 @@ import { enUS } from './ui/i18n/locales';
 import type { BrowserDocumentConfiguration } from './ui/services/browserWindowProtocol';
 
 let cleanup: (() => void) | undefined;
+const sourceChoiceSelector = '.redeven-browser-notice-actions button[aria-describedby]';
 afterEach(async () => { cleanup?.(); cleanup = undefined; document.documentElement.classList.remove('dark'); document.documentElement.removeAttribute('data-floe-surface-style'); await page.viewport(1280, 850); });
 
 function mountDocument(failed = false, onInteraction?: () => void) {
@@ -62,8 +63,8 @@ for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[
   const theme = captureBrowserDocumentTheme();
   const { frame } = mountDocument(failed);
   if (failed) {
-    await vi.waitFor(() => expect(frame.contentDocument?.querySelector('.redeven-browser-notice-actions button')).toBeTruthy());
-    frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-notice-actions button')!.click();
+    await vi.waitFor(() => expect(frame.contentDocument?.querySelector(sourceChoiceSelector)).toBeTruthy());
+    frame.contentDocument!.querySelector<HTMLButtonElement>(sourceChoiceSelector)!.click();
   } else {
     await vi.waitFor(() => expect(frame.contentDocument?.querySelector('[data-floe-ui="more"]')).toBeTruthy());
     const chrome = frame.contentDocument!.querySelector<HTMLElement>('.floe-browser')!;
@@ -114,17 +115,18 @@ for (const failed of [false, true]) it(`reports real pointer interaction from th
   const [open, setOpen] = createSignal(true);
   const { frame, events } = mountDocument(failed, () => setOpen(false));
   const anchor = document.createElement('button');
-  anchor.style.cssText = 'position:fixed;bottom:12px;left:400px;width:360px;height:28px';
+  // Keep the outside-click target uncovered by the companion's reading surface.
+  anchor.style.cssText = 'position:fixed;bottom:12px;right:12px;width:280px;height:28px';
   anchor.textContent = 'Flower'; document.body.append(anchor);
   const mount = document.createElement('div'); document.body.append(mount);
   const dispose = render(() => <BottomBarCompanion retained visible open={open()} anchor={anchor} mount={mount}
-    id="browser-interaction-companion" label="Flower" expandedWidth={544} onDismiss={() => setOpen(false)}>
+    id="browser-interaction-companion" label="Flower" expandedWidth={320} onDismiss={() => setOpen(false)}>
     <div style={{ height: '260px' }}><textarea aria-label="Flower draft">Preserved draft</textarea></div>
   </BottomBarCompanion>, mount);
   onTestFinished(() => { dispose(); mount.remove(); anchor.remove(); });
   await vi.waitFor(() => expect(document.querySelector('#browser-interaction-companion')?.getAttribute('data-companion-phase')).toBe('expanded'));
   const draft = mount.querySelector('textarea')!;
-  const selector = failed ? '.redeven-browser-notice-actions button' : '[data-floe-ui="more"]';
+  const selector = failed ? sourceChoiceSelector : '[data-floe-ui="more"]';
   await vi.waitFor(() => expect(frame.contentDocument?.querySelector(selector)).toBeTruthy());
   const doc = frame.contentDocument!;
   const button = doc.querySelector<HTMLButtonElement>(selector)!;
