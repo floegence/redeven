@@ -112,6 +112,7 @@ for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[
 });
 
 for (const failed of [false, true]) it(`reports real pointer interaction from the ${failed ? 'recovery' : 'browser'} document without consuming its action`, async () => {
+  await page.viewport(1280, 850);
   const [open, setOpen] = createSignal(true);
   const { frame, events } = mountDocument(failed, () => setOpen(false));
   const anchor = document.createElement('button');
