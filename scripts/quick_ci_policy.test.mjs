@@ -232,6 +232,21 @@ test("release workflow keeps Desktop update credentials in the protected environ
   }
 });
 
+test("each release job that consumes signed runtime artifacts installs cosign first", () => {
+  for (const [job, consumer] of [
+    ['build', 'Build signed ReDevPlugin runtime and package archives'],
+    ['desktop', 'Build desktop package'],
+    ['release', 'Validate ReDevPlugin consumption gate'],
+  ]) {
+    const jobSource = releaseJobsSource.split(/(?=^  [a-z][a-z0-9-]*:$)/mu)
+      .find((source) => source.startsWith(`  ${job}:\n`));
+    assert.ok(jobSource, `missing release job: ${job}`);
+    const installOffset = jobSource.indexOf('uses: sigstore/cosign-installer@');
+    const consumeOffset = jobSource.indexOf(`- name: ${consumer}`);
+    assert.ok(installOffset >= 0 && installOffset < consumeOffset, `${job} must install cosign before ${consumer}`);
+  }
+});
+
 test("release workflow signs and preserves exact Darwin ReDevPlugin runtime bytes", () => {
   assert.match(releaseWorkflow, /apple-actions\/import-codesign-certs@[a-f0-9]{40} # v7/u);
   assert.match(releaseWorkflow, /REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY: \$\{\{ secrets\.REDEVEN_DESKTOP_MAC_IDENTITY \}\}/u);

@@ -424,7 +424,8 @@ main() {
   staging_parent=$(mktemp -d "$bundle_parent/.${goos}-${goarch}.stage.XXXXXX")
   working_bundle="$staging_parent/bundle"
   working_bundle_path="$working_bundle/$binary_name"
-  trap 'rm -rf "$staging_parent"' EXIT
+  # Capture the owned path before Bash unwinds function-local variables on error.
+  trap "$(printf 'rm -rf -- %q' "$staging_parent")" EXIT
 
   if [ "$goos" = "windows" ]; then
     if [ -z "$tarball_path" ]; then
