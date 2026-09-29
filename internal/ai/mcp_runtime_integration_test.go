@@ -26,7 +26,10 @@ func TestMCPRuntimeExecutionAndUnknownOutcome(t *testing.T) {
 			server := mcp.NewServer(&mcp.Implementation{Name: "runtime-fixture", Version: "1"}, nil)
 			mcp.AddTool(server, &mcp.Tool{Name: "lookup", Description: "Look up a record by its target ID"}, func(_ context.Context, _ *mcp.CallToolRequest, input struct {
 				TargetID string `json:"target_id"`
-			}) (*mcp.CallToolResult, any, error) { calls.Add(1); return &mcp.CallToolResult{IsError: outcome == "tool_error", Content: []mcp.Content{&mcp.TextContent{Text: "fixture:" + input.TargetID}}}, nil, nil })
+			}) (*mcp.CallToolResult, any, error) {
+				calls.Add(1)
+				return &mcp.CallToolResult{IsError: outcome == "tool_error", Content: []mcp.Content{&mcp.TextContent{Text: "fixture:" + input.TargetID}}}, nil, nil
+			})
 			handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true})
 			mcpHTTP := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				raw, _ := io.ReadAll(req.Body)
