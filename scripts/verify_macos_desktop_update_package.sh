@@ -57,7 +57,7 @@ addon="$app_bundle/Contents/Resources/native/redeven_sparkle.node"
 expected_machine=$arch
 if [[ "$arch" == "x64" ]]; then expected_machine=x86_64; fi
 file "$addon" | grep -F "${expected_machine}" >/dev/null
-lipo -verify_arch "$expected_machine" "$framework/Versions/Current/Sparkle"
+lipo "$framework/Versions/Current/Sparkle" -verify_arch "$expected_machine"
 otool -L "$addon" | grep -F '@rpath/Sparkle.framework/Versions/B/Sparkle' >/dev/null
 otool -l "$addon" | grep -F '@loader_path/../../Frameworks' >/dev/null
 
