@@ -7,8 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/godbus/dbus/v5"
 )
 
 func TestPrivateDesktopEnvironmentDropsOtherSessionAddresses(t *testing.T) {
@@ -26,6 +29,97 @@ func TestATSPISocketCannotEscapePrivateDesktop(t *testing.T) {
 	}
 	if err := validatePrivateATSPISocket("unix:path=/tmp/owned/a11y/socket,guid=123", "/tmp/owned"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestATSPIWaitDuringObjectReplacement(t *testing.T) {
+	if os.Getenv("REDEVEN_XVFB_INTEGRATION") != "1" {
+		t.Skip("set REDEVEN_XVFB_INTEGRATION=1 in the Linux qualification image")
+	}
+	e := NewXvfbTargetExecutor(t.TempDir())
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := e.EnsureTargetReady(ctx, "xvfb-main"); err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	c := e.atspi
+	bus := c.connection.Names()[0]
+	root := atspiObject{bus, "/fixture/root"}
+	transient := atspiObject{bus, "/fixture/transient"}
+	ready := atspiObject{bus, "/fixture/ready"}
+	c.root = root
+	for _, phase := range []string{"tree", "selected_state"} {
+		for _, state := range []string{"visible", "enabled", "hidden", "bus_failure"} {
+			t.Run(phase+"/"+state, func(t *testing.T) {
+				var replaced atomic.Bool
+				var reads atomic.Int32
+				for _, object := range []atspiObject{root, transient, ready} {
+					role, name := "panel", ""
+					if object == ready {
+						role, name = "button", "Ready"
+					}
+					methods := map[string]interface{}{
+						"GetRoleName":   func() (string, *dbus.Error) { return role, nil },
+						"GetInterfaces": func() ([]string, *dbus.Error) { return nil, nil },
+						"GetChildren": func() ([]atspiObject, *dbus.Error) {
+							if object != root {
+								return nil, nil
+							}
+							if phase == "tree" && !replaced.Load() {
+								return []atspiObject{transient, ready}, nil
+							}
+							return []atspiObject{ready}, nil
+						},
+						"GetState": func() ([]uint32, *dbus.Error) {
+							invalidate := phase == "tree" && object == transient
+							if phase == "selected_state" && object == ready {
+								invalidate = reads.Add(1) == 2
+							}
+							if invalidate && replaced.CompareAndSwap(false, true) {
+								if state == "bus_failure" {
+									return nil, dbus.NewError("org.freedesktop.DBus.Error.Failed", []interface{}{"fixture bus failure"})
+								}
+								if err := c.connection.Emit(root.Path, "org.a11y.atspi.Event.Object.ChildrenChanged", "remove"); err != nil {
+									return nil, dbus.MakeFailedError(err)
+								}
+								return nil, dbus.NewError("org.freedesktop.DBus.Error.UnknownObject", []interface{}{"fixture object was replaced"})
+							}
+							return []uint32{1<<8 | 1<<25 | 1<<30, 0}, nil
+						},
+					}
+					if err := c.connection.ExportMethodTable(methods, object.Path, atspiAccessible); err != nil {
+						t.Fatal(err)
+					}
+					if err := c.connection.ExportMethodTable(map[string]interface{}{
+						"Get": func(string, string) (dbus.Variant, *dbus.Error) { return dbus.MakeVariant(name), nil },
+					}, object.Path, "org.freedesktop.DBus.Properties"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				requested := state
+				if state == "bus_failure" {
+					requested = "visible"
+				}
+				result, err := c.wait(ctx, map[string]any{"role": "button", "name": "Ready"}, map[string]any{"state": requested, "timeout_ms": float64(300)})
+				if state == "bus_failure" {
+					if failure, ok := err.(dbus.Error); !ok || failure.Name != "org.freedesktop.DBus.Error.Failed" {
+						t.Fatalf("bus failure was not preserved: result=%+v, err=%v", result, err)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := state
+				if state == "hidden" {
+					want = "timeout"
+				}
+				if !replaced.Load() || result["state"] != want {
+					t.Fatalf("replacement=%v, result=%+v; want %s", replaced.Load(), result, want)
+				}
+			})
+		}
 	}
 }
 

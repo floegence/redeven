@@ -70,7 +70,11 @@ never discovers or attaches to another logged-in user's session.
 
 AT-SPI reads bounded semantic trees and dispatches supported actions and editable
 text through the selected process. Defunct or destroyed objects fail as stale.
-AT-SPI events wake waits. Password semantics block normal observation. X11 input
+AT-SPI events wake waits. If an object disappears while a condition wait reads
+the tree or selected control, that read cannot establish visibility or absence.
+The wait continues on accessibility events within its original deadline; other
+bus errors still fail, and mutating actions are never replayed.
+Password semantics block normal observation. X11 input
 and image capture remain available for controls without accessibility, within
 the same isolated target. Focus/pointer preparation counts as dispatched effects;
 lost acknowledgements do not trigger replay.
