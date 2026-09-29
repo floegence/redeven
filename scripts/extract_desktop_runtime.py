@@ -30,7 +30,6 @@ MAX_TRAILING_PADDING_BYTES = 1024 * 1024
 TAR_BLOCK_BYTES = 512
 RUNTIME_BASENAMES = (
     "redeven",
-    "redeven-gateway",
     "redevplugin-runtime",
     ".redevplugin-release-artifacts-verified.json",
     "REDEVPLUGIN_THIRD_PARTY_NOTICES.md",
@@ -41,7 +40,7 @@ RUNTIME_BASENAMES = (
 )
 RUNTIME_ROOT = "opt/Redeven Desktop/resources/bin"
 ELECTRON_SANDBOX_PATH = "opt/Redeven Desktop/chrome-sandbox"
-EXECUTABLE_RUNTIME_BASENAMES = {"redeven", "redeven-gateway", "redevplugin-runtime"}
+EXECUTABLE_RUNTIME_BASENAMES = {"redeven", "redevplugin-runtime"}
 
 
 class RuntimePayloadExtractor:
@@ -64,7 +63,14 @@ class RuntimePayloadExtractor:
     ) -> tuple[str, str | None]:
         if self.entry_count >= MAX_ENTRIES:
             raise ArchiveValidationError(f"package payload contains more than {MAX_ENTRIES} entries")
-        canonical = normalized_member_path(name, directory=stat.S_ISDIR(mode)).as_posix()
+        # FPM emits a metadata-only root directory. It is never materialized.
+        if name in {".", "./"} and not stat.S_ISDIR(mode):
+            raise ArchiveValidationError("package payload root must be a directory")
+        canonical = "." if name in {".", "./"} and stat.S_ISDIR(mode) else normalized_member_path(
+            name, directory=stat.S_ISDIR(mode),
+        ).as_posix()
+        if canonical == f"{RUNTIME_ROOT}/redeven-gateway":
+            raise ArchiveValidationError("Desktop installer must not contain Redeven Gateway")
         if canonical in self.entry_kinds:
             raise ArchiveValidationError(f"duplicate package payload path: {canonical}")
         parts = canonical.split("/")
@@ -105,7 +111,10 @@ class RuntimePayloadExtractor:
                 raise ArchiveValidationError(
                     f"package payload expands beyond {MAX_EXPANDED_BYTES} bytes"
                 )
-        elif not stat.S_ISDIR(mode):
+        elif stat.S_ISDIR(mode):
+            if size != 0:
+                raise ArchiveValidationError(f"package payload directory has a payload: {canonical}")
+        else:
             raise ArchiveValidationError(
                 f"package payload entry must be a regular file or directory: {canonical}"
             )
@@ -159,9 +168,13 @@ class RuntimePayloadExtractor:
 
 def extract_tar_payload(source, extractor: RuntimePayloadExtractor) -> None:
     zero_blocks = 0
+    header_count = 0
+    long_name: str | None = None
     while True:
         header = read_exact(source, TAR_BLOCK_BYTES)
         if header == bytes(TAR_BLOCK_BYTES):
+            if long_name is not None:
+                raise ArchiveValidationError("package tar has an orphan GNU long name")
             zero_blocks += 1
             if zero_blocks == 2:
                 trailing_size = discard_zero_tail(source, MAX_TRAILING_PADDING_BYTES, "tar")
@@ -171,10 +184,35 @@ def extract_tar_payload(source, extractor: RuntimePayloadExtractor) -> None:
             continue
         if zero_blocks:
             raise ArchiveValidationError("package tar has a non-zero header after its end marker")
+        header_count += 1
+        if header_count > MAX_ENTRIES:
+            raise ArchiveValidationError("package tar contains too many headers")
         validate_tar_header_checksum(header)
-        if header[257:263] != b"ustar\0" or header[263:265] != b"00":
-            raise ArchiveValidationError("package tar header is not canonical POSIX ustar")
+        gnu_format = header[257:265] == b"ustar  \0"
+        if not gnu_format and header[257:265] != b"ustar\0" + b"00":
+            raise ArchiveValidationError("package tar header is not POSIX ustar or GNU tar")
+        # These bytes hold sparse/extended fields in GNU tar, not a path prefix.
+        if gnu_format and any(header[345:]):
+            raise ArchiveValidationError("package GNU tar uses unsupported extended fields")
         type_flag = header[156:157]
+        size = parse_tar_octal(header[124:136], "size")
+        if type_flag == b"L":
+            if (
+                not gnu_format
+                or long_name is not None
+                or header[:100].rstrip(b"\0") != b"././@LongLink"
+            ):
+                raise ArchiveValidationError("package tar has invalid GNU long name metadata")
+            if not 1 < size <= MAX_NAME_BYTES + 1:
+                raise ArchiveValidationError("GNU long name length is outside the closed limit")
+            raw_name = read_exact(source, size)
+            if not raw_name.endswith(b"\0") or b"\0" in raw_name[:-1]:
+                raise ArchiveValidationError("GNU long name is not canonical NUL-terminated text")
+            long_name = parse_tar_text(raw_name, "GNU long name")
+            discard_exact(source, (-size) % TAR_BLOCK_BYTES)
+            continue
+        if long_name is not None and not gnu_format:
+            raise ArchiveValidationError("GNU long name must precede a GNU entry")
         if type_flag in {b"\0", b"0"}:
             file_type = stat.S_IFREG
             nlink = 1
@@ -185,13 +223,13 @@ def extract_tar_payload(source, extractor: RuntimePayloadExtractor) -> None:
             raise ArchiveValidationError(
                 f"package tar uses unsupported entry type {type_flag!r}"
             )
-        name = tar_member_name(header)
+        name = long_name if long_name is not None else tar_member_name(header, gnu_format=gnu_format)
+        long_name = None
         if parse_tar_text(header[157:257], "link name"):
             raise ArchiveValidationError(f"package tar entry has an unexpected link name: {name}")
         permissions = parse_tar_octal(header[100:108], "mode")
         uid = parse_tar_octal(header[108:116], "uid")
         gid = parse_tar_octal(header[116:124], "gid")
-        size = parse_tar_octal(header[124:136], "size")
         if file_type == stat.S_IFDIR and size != 0:
             raise ArchiveValidationError(f"package tar directory has a payload: {name}")
         _, output_name = extractor.inspect(
@@ -220,9 +258,9 @@ def validate_tar_header_checksum(header: bytes) -> None:
         raise ArchiveValidationError("package tar header checksum mismatch")
 
 
-def tar_member_name(header: bytes) -> str:
+def tar_member_name(header: bytes, *, gnu_format: bool = False) -> str:
     name = parse_tar_text(header[0:100], "name")
-    prefix = parse_tar_text(header[345:500], "prefix")
+    prefix = "" if gnu_format else parse_tar_text(header[345:500], "prefix")
     combined = f"{prefix}/{name}" if prefix else name
     if not combined or len(combined.encode("utf-8")) > MAX_NAME_BYTES:
         raise ArchiveValidationError("tar entry name length is outside the closed limit")
@@ -299,12 +337,12 @@ def extract_cpio_payload(source, extractor: RuntimePayloadExtractor) -> None:
                 or checksum != 0
             ):
                 raise ArchiveValidationError("CPIO trailer fields are not canonical")
+            # rpm2cpio can end directly after the four-byte-aligned trailer;
+            # standalone cpio writers may pad that same stream to 512 bytes.
             trailer_padding = (-source.count) % TAR_BLOCK_BYTES
-            padding = read_exact(source, trailer_padding)
-            if any(padding):
-                raise ArchiveValidationError("CPIO trailer padding is not zero")
-            if source.read(1):
-                raise ArchiveValidationError("CPIO payload contains trailing data")
+            padding_size = discard_zero_tail(source, trailer_padding, "CPIO")
+            if padding_size not in {0, trailer_padding}:
+                raise ArchiveValidationError("CPIO trailer padding is not block-aligned")
             return
         _, output_name = extractor.inspect(name, mode, size, nlink, uid, gid)
         member_source = CPIOMemberReader(source, size, with_crc=magic == b"070702")
@@ -460,7 +498,16 @@ def tar_archive(entries: list[dict[str, object]], *, archive_format: int = tarfi
 def run_self_test() -> None:
     with tempfile.TemporaryDirectory(prefix="redeven-desktop-runtime-extract-") as root_value:
         root = Path(root_value)
-        entries = [(f"{RUNTIME_ROOT}/{name}", name.encode("utf-8")) for name in RUNTIME_BASENAMES]
+        # Match the Desktop assembly contract independently of the extractor's
+        # allowlist. Gateway is a separate distribution, never a Desktop input.
+        desktop_files = (
+            "redeven", "redevplugin-runtime",
+            ".redevplugin-release-artifacts-verified.json",
+            "REDEVPLUGIN_THIRD_PARTY_NOTICES.md", "REDEVPLUGIN_RUNTIME.spdx.json",
+            "redevplugin-runtime.provenance.json", "redevplugin-runtime.sig",
+            "redevplugin-runtime.pem",
+        )
+        entries = [(f"{RUNTIME_ROOT}/{name}", name.encode("utf-8")) for name in desktop_files]
         tar_entries = [
             {
                 "name": name,
@@ -492,6 +539,9 @@ def run_self_test() -> None:
             else:
                 extract_cpio_payload(io.BytesIO(payload), extractor)
             extractor.finish()
+            for name, data in entries:
+                if (staging / Path(name).name).read_bytes() != data:
+                    raise AssertionError(f"desktop package extractor changed runtime bytes: {name}")
 
         def reject(payload_format: str, payload: bytes, label: str) -> None:
             nonlocal scenario
@@ -513,6 +563,39 @@ def run_self_test() -> None:
         valid_cpio = cpio_archive(cpio_entries)
         validate("tar", valid_tar)
         validate("cpio", valid_cpio)
+        unpadded_cpio = b"".join(cpio_entries) + cpio_entry("TRAILER!!!", b"", 0, 0)
+        validate("cpio", unpadded_cpio)
+        reject("cpio", unpadded_cpio + b"\0", "partial CPIO trailer padding")
+        reject("cpio", valid_cpio + bytes(TAR_BLOCK_BYTES), "excess CPIO trailer padding")
+        validate("tar", tar_archive(tar_entries, archive_format=tarfile.GNU_FORMAT))
+        validate("tar", tar_archive(
+            [{"name": "./", "type": tarfile.DIRTYPE, "mode": 0o755}] + tar_entries,
+            archive_format=tarfile.GNU_FORMAT,
+        ))
+        reject("tar", tar_archive(tar_entries + [{"name": ".", "data": b"root file"}]), "a regular root entry")
+        long_path = "opt/Redeven Desktop/resources/bin/computer/" + "nested/" * 20 + "asset.js"
+        validate("tar", tar_archive(
+            tar_entries + [{"name": long_path, "data": b"asset"}],
+            archive_format=tarfile.GNU_FORMAT,
+        ))
+        reject("tar", tar_archive(tar_entries + [{
+            "name": f"{RUNTIME_ROOT}/redeven-gateway", "data": b"gateway",
+        }]), "Gateway in Desktop")
+        reject("cpio", cpio_archive(cpio_entries + [cpio_entry(
+            f"{RUNTIME_ROOT}/redeven-gateway", b"gateway", stat.S_IFREG | 0o755, 100,
+        )]), "Gateway in Desktop CPIO")
+        reject("tar", tar_archive(
+            tar_entries + [{"name": long_path + "/../../escape", "data": b"x"}],
+            archive_format=tarfile.GNU_FORMAT,
+        ), "GNU longname traversal")
+        reject("tar", tar_archive(
+            tar_entries + [{"name": long_path, "data": b"x"}, {"name": long_path, "data": b"y"}],
+            archive_format=tarfile.GNU_FORMAT,
+        ), "duplicate GNU longname")
+        long_tar = tar_archive([{"name": long_path, "data": b"asset"}], archive_format=tarfile.GNU_FORMAT)
+        long_header_bytes = TAR_BLOCK_BYTES * 2
+        reject("tar", long_tar[:long_header_bytes] + bytes(TAR_BLOCK_BYTES * 2), "orphan GNU longname")
+        reject("tar", long_tar[:long_header_bytes] + long_tar, "chained GNU longnames")
 
         reject("tar", valid_tar + b"non-zero-tail", "non-zero tar trailing data")
         reject("cpio", valid_cpio + b"non-zero-tail", "non-zero CPIO trailing data")

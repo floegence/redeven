@@ -264,7 +264,22 @@ test("release workflow signs and preserves exact Darwin ReDevPlugin runtime byte
   assert.match(releaseWorkflow, /REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY: \$\{\{ secrets\.REDEVEN_DESKTOP_MAC_IDENTITY \}\}/u);
   assert.match(redevpluginRuntimeStage, /codesign --force --options runtime --timestamp --sign "\$codesign_identity" "\$runtime"/u);
   assert.match(redevpluginRuntimeStage, /verify-runtime-executable "\$runtime" "\$target"/u);
-  assert.match(desktopBuilderConfig, /signIgnore: \['\*\*\/Contents\/Resources\/bin\/redevplugin-runtime'\]/u);
+  const signIgnoreSource = desktopBuilderConfig.match(/signIgnore:\s*\['([^']+)'\]/u)?.[1];
+  assert.ok(signIgnoreSource, 'macOS signing must preserve the already signed runtime');
+  const signIgnore = new RegExp(signIgnoreSource);
+  const app = '/tmp/release/mac-arm64/Redeven Desktop.app/Contents';
+  assert.ok(signIgnore.test(`${app}/Resources/bin/redevplugin-runtime`));
+  for (const relativePath of [
+    'Resources/bin/redeven',
+    'Resources/bin/redevplugin-runtime-extra',
+    'Resources/bin/redevplugin-runtime/child',
+    'Resources/bin/computer/node',
+    'Resources/native/redeven_sparkle.node',
+    'Frameworks/Sparkle.framework/Versions/B/Sparkle',
+    'MacOS/Redeven Desktop',
+  ]) {
+    assert.equal(signIgnore.test(`${app}/${relativePath}`), false, `${relativePath} must still be signed`);
+  }
 });
 
 test("macOS release signs and notarizes the final disk image before package verification", () => {
