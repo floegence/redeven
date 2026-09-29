@@ -452,19 +452,23 @@ func (c *atspiClient) wait(ctx context.Context, selector, args map[string]any) (
 	defer cancel()
 	for {
 		entry, err := c.resolve(ctx, selector)
-		if err != nil && err.Error() != "ELEMENT_NOT_FOUND" && err.Error() != "STALE_REFERENCE" {
+		invalidated := atspiWaitInvalidated(err)
+		if err != nil && err.Error() != "ELEMENT_NOT_FOUND" && !invalidated {
 			return nil, err
 		}
 		found, enabled := err == nil, false
 		if found {
 			states, err := c.state(ctx, entry.object)
-			if err != nil {
+			invalidated = atspiWaitInvalidated(err)
+			if err != nil && !invalidated {
 				return nil, err
 			}
 			found = states["showing"]
 			enabled = states["enabled"]
 		}
-		if (state == "hidden" && !found) || (state == "visible" && found) || (state == "enabled" && found && enabled) {
+		// A removed object invalidates this read, not the wait condition. Only
+		// a complete observation can establish that the selected control is hidden.
+		if !invalidated && ((state == "hidden" && !found) || (state == "visible" && found) || (state == "enabled" && found && enabled)) {
 			return map[string]any{"state": state}, nil
 		}
 		select {
@@ -476,4 +480,12 @@ func (c *atspiClient) wait(ctx context.Context, selector, args map[string]any) (
 		case <-c.changes:
 		}
 	}
+}
+
+func atspiWaitInvalidated(err error) bool {
+	if err == nil {
+		return false
+	}
+	var busError dbus.Error
+	return err.Error() == "STALE_REFERENCE" || (errors.As(err, &busError) && busError.Name == "org.freedesktop.DBus.Error.UnknownObject")
 }
