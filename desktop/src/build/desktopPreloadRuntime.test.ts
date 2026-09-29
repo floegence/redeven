@@ -441,6 +441,17 @@ ipcMain.on('redeven-desktop:window-chrome-get-snapshot', (event) => {
   };
 });
 
+// Session preload surfaces probe these channels during bridge bootstrap. The
+// isolated runtime only verifies bridge exposure, so return the safe empty
+// snapshots used before a real Desktop session has been registered.
+ipcMain.on('redeven-desktop:session-transport-recovery-get', (event) => {
+  event.returnValue = null;
+});
+
+ipcMain.on('redeven-desktop:session-restart-init', (event) => {
+  event.returnValue = null;
+});
+
 ipcMain.on('redeven-desktop:session-context-get', (event) => {
   event.returnValue = {
     local_environment_id: 'local',
