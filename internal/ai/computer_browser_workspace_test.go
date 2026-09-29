@@ -818,6 +818,11 @@ func TestManagedBrowserForegroundPopupSelectsOnlyItsInputOwner(t *testing.T) {
 	if peerTabs["active"] != peer.InitialTarget {
 		t.Fatal("foreground popup changed the independent observing window")
 	}
+	// Directory selection precedes projection readiness. Match the viewer's
+	// preparation boundary before requesting input on the newly admitted page.
+	first.wait(func(message map[string]any) bool {
+		return message["type"] == "projection" && message["target"] == popup && message["status"] == "ready"
+	})
 	if _, err := runtime.AcquireBrowserViewControl(ctx, meta, view.ID, popup, false, false); err != nil {
 		t.Fatal("admitted popup cannot be controlled", err)
 	}
