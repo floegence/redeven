@@ -1179,7 +1179,7 @@ async function runMultiViewSample({ context, entryURL, sessionID, tempDir, sampl
           const started = performance.now();
           const numeric = (view, name) => Number(view.getAttribute(name));
           const check = () => {
-            const views = [...document.querySelectorAll(`[data-terminal-runtime-session="${id}"]`)];
+            const views = [...globalThis.document.querySelectorAll(`[data-terminal-runtime-session="${id}"]`)];
             const workbench = views.find((view) => view.closest('[data-terminal-panel-variant="workbench"]'));
             if (views.length !== 2 || !workbench || workbench.getAttribute('data-terminal-is-controller') !== 'true') return;
             const canvas = workbench.querySelector('[data-terminal-semantic-canvas="true"]');
@@ -1203,8 +1203,8 @@ async function runMultiViewSample({ context, entryURL, sessionID, tempDir, sampl
               || numeric(workbench, 'data-terminal-presentation-sequence') <= 0) return;
             finish({ interactive_ms: performance.now() - started });
           };
-          observer = new MutationObserver(check);
-          observer.observe(document.body, {
+          observer = new globalThis.MutationObserver(check);
+          observer.observe(globalThis.document.body, {
             subtree: true,
             attributes: true,
             attributeFilter: [
