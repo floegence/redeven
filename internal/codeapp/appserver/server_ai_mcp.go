@@ -16,7 +16,14 @@ func (g *Server) handleMCPManagement(w http.ResponseWriter, r *http.Request, ser
 	if r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/mcp" {
 		catalog, err = service.ListMCPServers()
 	} else {
-		if !((r.Method == http.MethodPut || r.Method == http.MethodDelete) && r.URL.Path == "/_redeven_proxy/api/ai/mcp" || r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/mcp/check") {
+		allowed := false
+		switch r.Method {
+		case http.MethodPut, http.MethodDelete:
+			allowed = r.URL.Path == "/_redeven_proxy/api/ai/mcp"
+		case http.MethodPost:
+			allowed = r.URL.Path == "/_redeven_proxy/api/ai/mcp/check"
+		}
+		if !allowed {
 			writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
 			return
 		}

@@ -160,7 +160,8 @@ func validateMCPServer(input MCPServerInput) error {
 	if len(input.URL) > 8192 || len(input.Command) > 8192 {
 		return errors.New("MCP endpoint or executable exceeds the field limit")
 	}
-	if input.Transport == "http" {
+	switch input.Transport {
+	case "http":
 		u, err := url.Parse(input.URL)
 		if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || (u.Scheme != "http" && u.Scheme != "https") || input.Command != "" || len(input.Args) > 0 || len(input.Env) > 0 {
 			return errors.New("provide an HTTP endpoint without credentials, query, or command fields")
@@ -168,11 +169,11 @@ func validateMCPServer(input MCPServerInput) error {
 		if u.Scheme == "http" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
 			return errors.New("remote MCP endpoints require HTTPS")
 		}
-	} else if input.Transport == "stdio" {
+	case "stdio":
 		if strings.TrimSpace(input.Command) == "" || strings.ContainsAny(input.Command, "\x00\r\n") || input.URL != "" || len(input.Headers) > 0 {
 			return errors.New("provide a local executable without HTTP fields")
 		}
-	} else {
+	default:
 		return errors.New("unsupported MCP transport")
 	}
 	if len(input.Args) > 64 || len(input.Headers) > 32 || len(input.Env) > 64 {
