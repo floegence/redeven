@@ -7324,13 +7324,21 @@
       "loading": "Cargando páginas guardadas…",
       "empty": "No hay páginas guardadas que coincidan.",
       "failed": "No se pudieron actualizar las páginas guardadas. Inténtelo de nuevo."
+    },
+    "projection": {
+      "failed": "No se pudo mostrar esta pestaña",
+      "recovery": "Vuelve a conectar la visualización de esta pestaña. La página seguirá abierta en el navegador de origen.",
+      "retry": "Reintentar visualización",
+      "unsupported": "Esta página no se puede mostrar aquí",
+      "unsupportedDescription": "Las páginas internas siguen disponibles en el navegador de origen. Selecciona otra pestaña o abre un sitio web.",
+      "empty": "No hay pestañas abiertas",
+      "emptyDescription": "Crea una pestaña para empezar a navegar en este espacio de trabajo."
     }
   },
   "browserProduct": {
     "welcomeTitle": "Navega en tu espacio de trabajo",
     "welcomeDescription": "Conecta tu navegador personal o usa el navegador integrado para abrir sitios web aquí.",
     "chooseSource": "Elegir un navegador",
-    "profile": "Perfil del navegador",
     "defaultProfile": "Perfil predeterminado",
     "openWindow": "Abrir en una ventana nueva",
     "windowUnavailable": "No se pudo abrir la ventana del navegador. Inténtalo de nuevo.",
@@ -7341,25 +7349,25 @@
     "chromeSource": "Navegador personal",
     "profileName": "Nombre del nuevo perfil",
     "createProfile": "Crear perfil",
-    "searchPages": "Buscar páginas",
     "noPages": "No se encontraron páginas. Abra una página en el navegador de origen y actualice la lista.",
     "openSelection": "Abrir selección",
-    "selectionHint": "Abrir una página aquí no cambia la página seleccionada por Flower.",
-    "chromeConfirmHint": "Confirme la conexión en el navegador y seleccione la página que desea abrir aquí.",
+    "selectionHint": "Abre todas las pestañas normales de este perfil. La página seleccionada en Flower y el foco del navegador no cambian.",
+    "chromeConfirmHint": "Confirma la conexión en tu navegador y después abre su perfil aquí.",
     "installTitle": "Configurar el navegador del entorno",
     "installOpen": "Instalar y abrir",
     "recoverTitle": "El servicio del navegador se ha detenido",
     "recover": "Restablecer el navegador",
     "recoveryDescription": "Se reiniciará el navegador del entorno y se restaurarán las pestañas guardadas. Los formularios no enviados y el contenido de las páginas que no se haya guardado pueden perderse. Los demás servicios del entorno seguirán funcionando.",
-    "sourceUnavailable": "Esta página ya no está disponible. Selecciona una fuente del navegador.",
+    "sourceUnavailable": "Este navegador no está disponible ahora. Vuelve a conectarlo o elige otro navegador.",
     "disconnected": "Se ha interrumpido la conexión con el navegador.",
     "openFailed": "No se ha podido abrir el navegador. Inténtalo de nuevo o elige otra fuente.",
     "openTimeout": "El navegador no ha respondido a tiempo.",
     "recoveryBlocked": "Finaliza la sesión privada en el navegador de origen antes de restablecer el servicio.",
     "outcomeUnknown": "Es posible que la acción ya se haya completado. Selecciona la fuente para comprobar su estado actual.",
-    "retry": "Reintentar",
     "moreActions": "Más acciones del navegador",
     "recommended": "Recomendado",
-    "previouslyUsed": "Usado anteriormente"
+    "previouslyUsed": "Usado anteriormente",
+    "connectionTitle": "Conexión con el navegador interrumpida",
+    "reconnectBrowser": "Reconectar navegador"
   }
 }

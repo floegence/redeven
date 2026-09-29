@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"crypto/rand"
 	"slices"
 
 	"github.com/floegence/redeven/internal/browserstore"
@@ -9,15 +10,83 @@ import (
 )
 
 type BrowserWorkspaceRequest struct {
+	WorkspaceID      string                     `json:"workspace_id,omitempty"`
+	InitialTarget    string                     `json:"initial_target,omitempty"`
 	ManagedProfileID string                     `json:"managed_profile_id,omitempty"`
 	Connection       *ComputerBrowserConnection `json:"connection,omitempty"`
 }
 
 // A browser workspace grants product observation of an explicitly opened
-// managed profile or selected external page. It never changes a Flower binding.
+// browser profile or explicit CDP page. It never changes a Flower binding.
 func (r *ComputerUseRuntime) OpenBrowserWorkspace(ctx context.Context, meta *session.Meta, request BrowserWorkspaceRequest) (BrowserViewDescriptor, error) {
-	if requireRWX(meta) != nil || browserLibraryOwner(meta) == "" || (request.ManagedProfileID == "") == (request.Connection == nil) {
+	if requireRWX(meta) != nil || browserLibraryOwner(meta) == "" {
 		return BrowserViewDescriptor{}, errBrowserViewUnavailable
+	}
+	if request.WorkspaceID != "" {
+		if request.Connection != nil || request.ManagedProfileID != "" {
+			return BrowserViewDescriptor{}, errBrowserViewUnavailable
+		}
+		r.connectMu.Lock()
+		defer r.connectMu.Unlock()
+		for _, workspace := range r.browserWorkspaces {
+			if workspace.id != request.WorkspaceID || workspace.owner != browserLibraryOwner(meta) {
+				continue
+			}
+			if workspace.extension != nil {
+				select {
+				case <-workspace.extension.done:
+					var current *computerExtensionClient
+					if r.extension != nil {
+						r.extension.mu.Lock()
+						for _, client := range r.extension.profiles {
+							if client.profile.LibraryID == workspace.profile {
+								current = client
+								break
+							}
+						}
+						r.extension.mu.Unlock()
+					}
+					if current == nil {
+						return BrowserViewDescriptor{}, errBrowserViewUnavailable
+					}
+					workspace.extension = current
+					workspace.connection = &ComputerBrowserConnection{ExtensionProfileID: current.profile.ID}
+					if _, err := current.call(ctx, "watch_tabs", nil); err != nil {
+						return BrowserViewDescriptor{}, err
+					}
+				default:
+				}
+				if err := r.refreshExtensionWorkspace(ctx, workspace); err != nil {
+					return BrowserViewDescriptor{}, err
+				}
+			}
+			initial := request.InitialTarget
+			if !slices.Contains(workspace.targets, initial) {
+				initial = workspace.selected
+			}
+			if !slices.Contains(workspace.targets, initial) {
+				initial = ""
+				if len(workspace.targets) > 0 {
+					initial = workspace.targets[0]
+				}
+			}
+			profile := ""
+			if workspace.connection == nil {
+				profile = workspace.profile
+			}
+			return r.openBrowserViewLocked(ctx, meta, BrowserViewRequest{Targets: slices.Clone(workspace.targets), InitialTarget: initial, ProfileID: profile, workspace: workspace})
+		}
+		return BrowserViewDescriptor{}, errBrowserViewUnavailable
+	}
+	if (request.ManagedProfileID == "") == (request.Connection == nil) {
+		return BrowserViewDescriptor{}, errBrowserViewUnavailable
+	}
+	if request.Connection != nil && request.Connection.ExtensionProfileID != "" {
+		c := request.Connection
+		if len(c.ExtensionProfileID) > 64 || c.ManagedProfileID != "" || c.NewTab || c.TabID != "" || c.TabURL != "" || c.TabTitle != "" || c.CDPURL != "" || c.ProfileID != "" {
+			return BrowserViewDescriptor{}, errBrowserViewUnavailable
+		}
+		return r.openExtensionWorkspace(ctx, meta, request.Connection.ExtensionProfileID)
 	}
 	if request.Connection != nil {
 		if request.Connection.ManagedProfileID != "" {
@@ -45,7 +114,7 @@ func (r *ComputerUseRuntime) OpenBrowserWorkspace(ctx context.Context, meta *ses
 		connection := *request.Connection
 		connection.NewTab, connection.TabID, connection.TabURL, connection.TabTitle = false, "", "", ""
 		if workspace == nil {
-			workspace = &browserWorkspace{owner: owner, profile: profile, connection: &connection, pinned: make(map[string]bool), tabs: make(map[string]browserstore.Tab)}
+			workspace = &browserWorkspace{id: "browser-workspace-" + rand.Text(), owner: owner, profile: profile, connection: &connection, pinned: make(map[string]bool), tabs: make(map[string]browserstore.Tab)}
 			r.browserWorkspaces[key] = workspace
 		}
 		workspace.connection = &connection
@@ -110,7 +179,7 @@ func (r *ComputerUseRuntime) OpenBrowserWorkspace(ctx context.Context, meta *ses
 	}
 	workspace := host.browserWorkspaces[key]
 	if workspace == nil {
-		workspace = &browserWorkspace{owner: owner, profile: profile.ID, pinned: make(map[string]bool), tabs: make(map[string]browserstore.Tab)}
+		workspace = &browserWorkspace{id: "browser-workspace-" + rand.Text(), owner: owner, profile: profile.ID, pinned: make(map[string]bool), tabs: make(map[string]browserstore.Tab)}
 		host.browserWorkspaces[key] = workspace
 	}
 	var targets []string

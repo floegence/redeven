@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Source events retire product identities, never reconnect a browser or grant
-// its replacement. The helper's event reader preserves their source order.
+// Source events retire projection authority, never native directory identity.
+// The helper event reader preserves order and binding generations fence late events.
 func (r *ComputerUseRuntime) browserSourceEvent(event browserHostEvent) {
 	r.browserSourceGenerationEvent(r.browserServiceSnapshot().Generation, event)
 }
@@ -27,6 +27,11 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	r.mu.RUnlock()
 	if closed {
 		return
+	}
+	if event.Binding != "" {
+		if current, ok := executor.(*extensionTargetExecutor); ok && current.pipe.binding != event.Binding {
+			return
+		}
 	}
 	if event.Type == "view_fault" {
 		if view != nil {
@@ -54,7 +59,7 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 		return
 	}
 	// Native disconnection revokes execution before the helper observes EOF.
-	// Its subsequent close must still retire directory and observation grants.
+	// Its subsequent close retires direct grants; native workspaces retain metadata.
 	if executor == nil && event.Type != "source_closed" {
 		return
 	}
@@ -107,6 +112,9 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	r.mu.Unlock()
 	r.releaseScripts(func(key computerScriptKey) bool { return key.target == event.Target })
 	for _, workspace := range r.browserWorkspaces {
+		if workspace.extension != nil {
+			continue
+		}
 		// Unexpected source loss alone must not progressively overwrite the
 		// recovery checkpoint during a browser-wide shutdown. An explicit tab
 		// close commits its resulting directory in browserDirectoryCommand.
@@ -117,6 +125,9 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	// Grant removal also covers explicitly connected pages without a managed
 	// workspace. Healthy sources and independent view selections remain alive.
 	for _, candidate := range affected {
+		if candidate.workspace != nil && candidate.workspace.extension != nil {
+			continue
+		}
 		candidate.mu.Lock()
 		candidate.targets = slices.DeleteFunc(candidate.targets, func(id string) bool { return id == event.Target })
 		targets, observing := slices.Clone(candidate.targets), candidate.observing
@@ -141,7 +152,7 @@ func (view *browserView) retireIfEmpty() bool {
 	view.mu.Lock()
 	empty := len(view.targets) == 0
 	view.mu.Unlock()
-	if !empty || view.workspace != nil && view.workspace.pendingCloses > 0 {
+	if !empty || view.workspace != nil && (view.workspace.extension != nil || view.workspace.pendingCloses > 0) {
 		return false
 	}
 	_ = view.close()

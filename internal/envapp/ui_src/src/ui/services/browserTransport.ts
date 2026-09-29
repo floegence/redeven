@@ -56,7 +56,7 @@ export type BrowserCarrierOptions = Readonly<{
   session: Session;
   view: string;
   controlToken: (message: ClientMessage) => string;
-  onClose: (reason?: DisconnectReason) => void;
+  onClose: (reason: DisconnectReason | undefined, expected: boolean) => void;
   download?: ProjectionConnection['download'];
   upload?: ProjectionConnection['upload'];
 }>;
@@ -85,12 +85,12 @@ export function createBrowserCarrier(options: BrowserCarrierOptions): Projection
     await stream.close().catch(() => undefined);
   };
 
-  const end = (failure?: DisconnectReason): void => {
+  const end = (failure?: DisconnectReason, expected = false): void => {
     if (closed) return;
     closed = true; reason = failure;
     rejectInput(new Error('Browser carrier closed'));
     for (const stream of streams) void retire(stream);
-    options.onClose(failure);
+    options.onClose(failure, expected);
     for (const listener of disconnected) listener(failure);
     messages.clear(); frames.clear(); disconnected.clear();
   };
@@ -145,13 +145,13 @@ export function createBrowserCarrier(options: BrowserCarrierOptions): Projection
   // generation. All three read loops then run independently.
   void (async () => {
     const dom = await open(redevenV1StreamKinds.browser.dom);
-    void readMessages(dom.reader, maxDOMMessage).catch(() => end('source_unavailable'));
+    void readMessages(dom.reader, maxDOMMessage).catch(() => end());
     const control = await open(redevenV1StreamKinds.browser.input);
     input = control.stream; resolveInput(input);
-    void readMessages(control.reader, 4096).catch(() => end('source_unavailable'));
+    void readMessages(control.reader, 4096).catch(() => end());
     // Media loss ends only this carrier lane; source and control remain usable.
     void readMedia().catch(() => undefined);
-  })().catch(() => end('source_unavailable'));
+  })().catch(() => end());
 
   return {
     ...(options.download ? { download: options.download } : {}),
@@ -159,12 +159,12 @@ export function createBrowserCarrier(options: BrowserCarrierOptions): Projection
     send(message) {
       if (closed) return;
       const body = encoder.encode(`${JSON.stringify({ token: options.controlToken(message), message })}\n`);
-      if (body.byteLength > 70 * 1024 || pendingCommands >= 64 || pendingBytes + body.byteLength > 256 * 1024) { end('source_unavailable'); return; }
+      if (body.byteLength > 70 * 1024 || pendingCommands >= 64 || pendingBytes + body.byteLength > 256 * 1024) { end(); return; }
       pendingCommands++; pendingBytes += body.byteLength;
       writing = writing.then(async () => {
         const stream = input ?? await inputReady;
         if (!closed) await writeBrowserBytes(stream, body);
-      }).catch(() => end('source_unavailable')).finally(() => { pendingCommands--; pendingBytes -= body.byteLength; });
+      }).catch(() => end()).finally(() => { pendingCommands--; pendingBytes -= body.byteLength; });
     },
     subscribe(listener) { if (!closed) messages.add(listener); return () => messages.delete(listener); },
     subscribeMedia(listener) { if (!closed) frames.add(listener); return () => frames.delete(listener); },
@@ -172,7 +172,7 @@ export function createBrowserCarrier(options: BrowserCarrierOptions): Projection
       if (closed) listener(reason); else disconnected.add(listener);
       return () => disconnected.delete(listener);
     },
-    close() { end(); },
+    close() { end(undefined, true); },
   };
 }
 

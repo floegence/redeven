@@ -60,15 +60,18 @@ type computerExtensionHub struct {
 	wait          sync.WaitGroup
 }
 type computerExtensionClient struct {
-	hub      *computerExtensionHub
-	conn     net.Conn
-	profile  ComputerExtensionProfile
-	mu       sync.Mutex
-	sequence uint64
-	done     chan struct{}
-	writeMu  sync.Mutex
-	pending  map[string]chan json.RawMessage
-	sources  map[string]*extensionSourcePipe
+	hub               *computerExtensionHub
+	conn              net.Conn
+	profile           ComputerExtensionProfile
+	mu                sync.Mutex
+	sequence          uint64
+	done              chan struct{}
+	writeMu           sync.Mutex
+	pending           map[string]chan json.RawMessage
+	sources           map[string]*extensionSourcePipe
+	directoryRevision uint64
+	directoryTabs     []ComputerBrowserTab
+	directoryChanged  chan struct{}
 }
 
 // Initial setup is an explicit local user command. Later Runtime starts restore
@@ -253,7 +256,7 @@ func (h *computerExtensionHub) admit(conn net.Conn, installationID string) {
 		return
 	}
 	libraryDigest := sha256.Sum256([]byte(installationID + "\x00" + hello.ProfileID))
-	client := &computerExtensionClient{hub: h, conn: conn, profile: ComputerExtensionProfile{ID: hex.EncodeToString(token), Name: hello.Name, InstallationID: installationID, LibraryID: "chrome-" + hex.EncodeToString(libraryDigest[:])}, done: make(chan struct{}), pending: make(map[string]chan json.RawMessage)}
+	client := &computerExtensionClient{hub: h, conn: conn, profile: ComputerExtensionProfile{ID: hex.EncodeToString(token), Name: hello.Name, InstallationID: installationID, LibraryID: "chrome-" + hex.EncodeToString(libraryDigest[:])}, done: make(chan struct{}), pending: make(map[string]chan json.RawMessage), directoryChanged: make(chan struct{}, 1)}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed || len(h.profiles) >= 16 {
@@ -268,7 +271,8 @@ func (h *computerExtensionHub) admit(conn net.Conn, installationID string) {
 		registration.diagnostic = nil
 	}
 	admitted = true
-	h.wait.Add(1)
+	h.wait.Add(2)
+	go client.directoryUpdates()
 	go client.read()
 }
 func (c *computerExtensionClient) read() {
@@ -303,8 +307,23 @@ func (c *computerExtensionClient) read() {
 			TabID    string `json:"tab_id"`
 			Binding  string `json:"binding"`
 			Sequence uint64 `json:"sequence"`
+			Reason   string `json:"reason"`
 		}
 		if json.Unmarshal(raw, &envelope) != nil {
+			return
+		}
+		if envelope.Type == "tabs_changed" && envelope.ID == "" {
+			if !c.applyDirectory(raw) {
+				return
+			}
+			select {
+			case c.directoryChanged <- struct{}{}:
+			default:
+			}
+			continue
+		}
+		if envelope.Type == "tabs_unavailable" && envelope.ID == "" {
+			slog.Warn("browser native directory unavailable", "stage", "native_directory", "profile_id", c.profile.ID)
 			return
 		}
 		if envelope.Type == "cdp_event" && envelope.ID == "" {
@@ -317,11 +336,12 @@ func (c *computerExtensionClient) read() {
 			continue
 		}
 		if envelope.Type == "target_unavailable" && envelope.ID == "" {
-			if _, err := strconv.ParseUint(envelope.TabID, 10, 32); err != nil {
+			if _, err := strconv.ParseUint(envelope.TabID, 10, 32); err != nil || len(envelope.Binding) != 36 {
 				return
 			}
 			if c.hub.owner != nil {
-				c.hub.owner.retireExtensionTargets(c, envelope.TabID)
+				c.hub.owner.retireExtensionBinding(c, envelope.TabID, envelope.Binding)
+				slog.Info("browser source binding retired", "stage", "native_detach", "binding", envelope.Binding, "reason", browserDetachReason(envelope.Reason))
 			}
 			continue
 		}
@@ -340,14 +360,25 @@ func (c *computerExtensionClient) read() {
 }
 
 func (r *ComputerUseRuntime) retireExtensionTargets(client *computerExtensionClient, tabID string) {
+	r.retireExtensionBinding(client, tabID, "")
+}
+
+func (r *ComputerUseRuntime) retireExtensionBinding(client *computerExtensionClient, tabID, binding string) {
 	retired := make(map[string]bool)
 	var pipes []*extensionSourcePipe
 	r.mu.Lock()
 	for id, executor := range r.executors {
-		if extension, ok := executor.(*extensionTargetExecutor); ok && extension.client == client && (tabID == "" || extension.tabID == tabID) {
+		if extension, ok := executor.(*extensionTargetExecutor); ok && extension.client == client && (tabID == "" || extension.tabID == tabID) && (binding == "" || extension.pipe != nil && extension.pipe.binding == binding) {
 			retired[id] = true
 			pipes = append(pipes, extension.pipe)
 			delete(r.executors, id)
+			if control := r.controls[id]; control != nil {
+				control.mu.Lock()
+				if control.browser != nil {
+					control.browser.revoke()
+				}
+				control.mu.Unlock()
+			}
 			delete(r.controls, id)
 			r.registry.remove(id)
 			if sampler := r.liveFrames[id]; sampler != nil {
@@ -571,57 +602,111 @@ func (client *computerExtensionClient) tabs(ctx context.Context) ([]ComputerBrow
 	return tabs, nil
 }
 
-func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connection ComputerBrowserConnection, targetID string) (TargetDescriptor, error) {
+func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connection ComputerBrowserConnection, targetID string) (_ TargetDescriptor, resultErr error) {
+	stage, generation := "profile_lookup", ""
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		reason := "failed"
+		if errors.Is(resultErr, context.Canceled) {
+			reason = "cancelled"
+		} else if errors.Is(resultErr, context.DeadlineExceeded) {
+			reason = "timed_out"
+		}
+		slog.Warn("browser source connection failed", "stage", stage, "reason", reason, "target_id", targetID, "binding", generation)
+	}()
 	client, err := r.extensionClient(connection.ExtensionProfileID)
 	if err != nil {
 		return TargetDescriptor{}, err
 	}
 	if !connection.NewTab {
+		stage = "native_inventory"
 		tabs, err := client.tabs(ctx)
 		if err != nil {
 			return TargetDescriptor{}, err
 		}
-		tabs, err = r.browserInventoryPrivacy(ctx, "extension:"+client.profile.ID, tabs)
+		stage = "inventory_privacy"
+		tabs, err = r.browserInventoryPrivacy(ctx, "extension:"+client.profile.LibraryID, tabs)
 		if err != nil {
 			return TargetDescriptor{}, err
 		}
 		for _, tab := range tabs {
-			if tab.ID == connection.TabID && tab.Private {
+			if tab.ID != connection.TabID {
+				continue
+			}
+			if tab.Private || connection.nativeTargetID != "" && connection.nativeTargetID != tab.NativeTargetID {
 				return TargetDescriptor{}, errBrowserViewUnavailable
 			}
+			connection.nativeTargetID = tab.NativeTargetID
 		}
 	}
-	command := "bind"
 	if connection.NewTab {
-		command = "new_tab"
-	} else if connection.TabID == "" {
-		return TargetDescriptor{}, errors.New("select a browser tab")
-	}
-	raw, err := client.call(ctx, command, map[string]any{"tab_id": connection.TabID, "tab_title": connection.TabTitle, "tab_url": connection.TabURL})
-	if err != nil {
-		if connection.NewTab {
+		stage = "native_create"
+		raw, err := client.call(ctx, "new_tab", nil)
+		if err != nil {
 			return TargetDescriptor{}, errBrowserOutcomeUnknown
 		}
+		var created struct {
+			TabID  string `json:"tab_id"`
+			Native string `json:"native_target_id"`
+		}
+		if json.Unmarshal(raw, &created) != nil || created.TabID == "" || created.Native == "" {
+			return TargetDescriptor{}, errBrowserOutcomeUnknown
+		}
+		connection.TabID, connection.nativeTargetID = created.TabID, created.Native
+	}
+	if connection.TabID == "" {
+		return TargetDescriptor{}, errors.New("select a browser tab")
+	}
+	if targetID == "" && connection.nativeTargetID != "" {
+		targetID = r.extensionWorkspaceTargetID(client, connection.nativeTargetID)
+	}
+	r.mu.RLock()
+	previousSource, _ := r.executors[targetID].(*extensionTargetExecutor)
+	r.mu.RUnlock()
+	stage = "source_retirement"
+	if previousSource != nil {
+		if previousSource.client != client || previousSource.tabID != connection.TabID {
+			return TargetDescriptor{}, errors.New("browser source identity changed")
+		}
+		if previousSource.pipe.ctx.Err() != nil || previousSource.sourceHost.call(ctx, "source.ready", map[string]string{"target": targetID}, nil) != nil {
+			if err := previousSource.Close(); err != nil {
+				return TargetDescriptor{}, err
+			}
+			r.retireExtensionBinding(client, previousSource.tabID, previousSource.pipe.binding)
+		}
+	} else if r.browserHost != nil && targetID != "" {
+		// Complete the prior helper owner's disposal before the same stable
+		// identity can acquire a fresh native binding and source socket.
+		if err := r.browserHost.call(ctx, "source.remove", map[string]string{"target": targetID}, nil); err != nil {
+			return TargetDescriptor{}, err
+		}
+	}
+	// Reuse still passes through Chrome's current-selection validation. An
+	// existing product projection cannot authorize a stale Flower candidate.
+	stage = "native_bind"
+	raw, err := client.call(ctx, "bind", map[string]any{"tab_id": connection.TabID, "tab_title": connection.TabTitle, "tab_url": connection.TabURL, "native_target_id": connection.nativeTargetID})
+	if err != nil {
 		return TargetDescriptor{}, err
 	}
 	var binding struct {
 		TabID   string `json:"tab_id"`
 		Title   string `json:"title"`
 		Binding string `json:"binding"`
+		Native  string `json:"native_target_id"`
 	}
-	if json.Unmarshal(raw, &binding) != nil || binding.TabID == "" || len(binding.Binding) != 36 {
-		if connection.NewTab {
-			return TargetDescriptor{}, errBrowserOutcomeUnknown
-		}
+	if json.Unmarshal(raw, &binding) != nil || binding.TabID == "" || len(binding.Binding) != 36 || len(binding.Native) != 32 {
 		return TargetDescriptor{}, errors.New("invalid browser binding")
 	}
+	generation = binding.Binding
+	stage = "binding_identity"
+	stable := r.extensionWorkspaceTargetID(client, binding.Native)
 	if targetID == "" {
-		targetID = r.extensionTabTargetID(client.profile.ID, binding.TabID)
+		targetID = stable
 	}
-	if targetID == "" {
-		// A later explicit binding of the same native tab cannot inherit old
-		// observation grants or be removed by its delayed close notification.
-		targetID = "chrome-" + client.profile.ID + "-" + binding.Binding
+	if targetID != stable && !connection.NewTab {
+		return TargetDescriptor{}, errors.New("browser source identity changed")
 	}
 	r.mu.RLock()
 	previous, exists := r.executors[targetID].(*extensionTargetExecutor)
@@ -634,19 +719,22 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 		return TargetDescriptor{}, errors.New("browser source identity changed")
 	}
 	if !exists {
+		stage = "source_host"
 		host, err := r.browserSourceHostLocked(ctx)
 		if err != nil {
 			return TargetDescriptor{}, err
 		}
+		stage = "source_carrier"
 		pipe, err := host.attachExtension(ctx, client, targetID, binding.TabID, binding.Binding)
 		if err != nil {
 			return TargetDescriptor{}, err
 		}
-		if err = host.call(ctx, "source.admit", map[string]any{"id": targetID, "extension": targetID, "extensionProfile": client.profile.ID, "tab": binding.TabID}, nil); err != nil {
+		stage = "source_admission"
+		if err = host.call(ctx, "source.admit", map[string]any{"id": targetID, "extension": targetID, "extensionProfile": client.profile.LibraryID, "binding": binding.Binding, "tab": binding.TabID}, nil); err != nil {
 			pipe.close()
 			return TargetDescriptor{}, err
 		}
-		previous = &extensionTargetExecutor{client: client, tabID: binding.TabID, targetID: targetID, sourceHost: host, pipe: pipe}
+		previous = &extensionTargetExecutor{client: client, tabID: binding.TabID, targetID: targetID, nativeTargetID: binding.Native, sourceHost: host, pipe: pipe}
 	}
 	target := TargetDescriptor{ID: targetID, Kind: "browser.connected", DisplayName: client.profile.Name + " — " + binding.Title, Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true}
 	r.mu.Lock()
@@ -660,10 +748,10 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 }
 
 type extensionTargetExecutor struct {
-	client          *computerExtensionClient
-	tabID, targetID string
-	sourceHost      *browserSourceHost
-	pipe            *extensionSourcePipe
+	client                          *computerExtensionClient
+	tabID, targetID, nativeTargetID string
+	sourceHost                      *browserSourceHost
+	pipe                            *extensionSourcePipe
 }
 
 func (e *extensionTargetExecutor) setBrowserPrivacy(ctx context.Context, target string, private bool) error {
@@ -765,15 +853,13 @@ func (e *extensionTargetExecutor) EnsureTargetReady(ctx context.Context, target 
 	return nil
 }
 func (e *extensionTargetExecutor) Close() error {
-	if e.sourceHost == nil {
-		e.pipe.close()
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := e.sourceHost.call(ctx, "source.remove", map[string]string{"target": e.targetID}, nil)
-	e.pipe.close()
-	return err
+	var err error
+	if e.sourceHost != nil {
+		err = e.sourceHost.call(ctx, "source.remove", map[string]string{"target": e.targetID}, nil)
+	}
+	return errors.Join(err, e.pipe.drain(ctx))
 }
 
 // Browser source setup and inventory do not require an AI provider or service.
@@ -794,4 +880,12 @@ func (r *ComputerUseRuntime) BrowserExtensionTabs(ctx context.Context, meta *ses
 		return nil, err
 	}
 	return r.extensionTabs(ctx, profile)
+}
+
+func browserDetachReason(reason string) string {
+	switch reason {
+	case "source_disconnected", "target_closed", "tab_closed", "canceled_by_user", "replaced_with_devtools", "debugger_detached", "native_backpressure":
+		return reason
+	}
+	return "source_disconnected"
 }

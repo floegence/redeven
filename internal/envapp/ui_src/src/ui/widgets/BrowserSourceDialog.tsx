@@ -1,6 +1,6 @@
 import '../../styles/browserSources.css';
 import { For, Show, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
-import { Button, Dialog, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { ChevronRight, Globe, Plus, Refresh, Settings } from '@floegence/floe-webapp-core/icons';
 import { FlowerChromeConnection } from '../../../../../flower_ui/src/FlowerChromeConnection';
 import { FlowerManagedBrowser } from '../../../../../flower_ui/src/FlowerManagedBrowser';
@@ -12,7 +12,6 @@ import { ActivityBarBrowserIcon } from '../icons/ActivityBarDockIcons';
 import { browserFailureCode } from '../services/browserFailure';
 import { browserFailureMessage } from './BrowserWorkspaceNotice';
 import type { BrowserWorkspaceRequest } from '../services/browserWindowProtocol';
-
 
 /** Selection drafts never change the active source or Flower's target. */
 export function BrowserSourceDialog(props: {
@@ -31,38 +30,22 @@ export function BrowserSourceDialog(props: {
   const [preference, setPreference] = createSignal<BrowserSourcePreference['preference']>(null);
   const preferredInstallation = () => chrome()?.installations.find(item => item.id === preference()?.installation_id && item.installed)
     ?? chrome()?.installations.find(item => item.connected) ?? chrome()?.installations.find(item => item.installed);
-  const [chromeProfile, setChromeProfile] = createSignal('');
-  const [chromeTabs, setChromeTabs] = createSignal<Tab[]>([]);
   const [cdpTabs, setCDPTabs] = createSignal<Tab[]>([]);
   const [endpoint, setEndpoint] = createSignal('');
   const [discoveredEndpoint, setDiscoveredEndpoint] = createSignal('');
   const [profileName, setProfileName] = createSignal('');
   const [creatingProfile, setCreatingProfile] = createSignal(false);
-  const [search, setSearch] = createSignal('');
   const [draft, setDraft] = createSignal(props.current);
   const [busy, setBusy] = createSignal(false);
-  const [readingTabs, setReadingTabs] = createSignal(false);
   const [error, setError] = createSignal('');
   const [profileError, setProfileError] = createSignal(false);
   const [chromeError, setChromeError] = createSignal(false);
   const [continueAfterInstall, setContinueAfterInstall] = createSignal(false);
   const lifetime = new AbortController();
-  let tabRead: AbortController | undefined;
   let selectionAttempt: AbortController | undefined;
-  onCleanup(() => { lifetime.abort(); tabRead?.abort(); selectionAttempt?.abort(); });
+  onCleanup(() => { lifetime.abort(); selectionAttempt?.abort(); });
   const profileLabel = (profile: { id: string; name: string }) => profile.id === 'browser-main' ? props.messages.product.defaultProfile : profile.name;
   const selected = (request: BrowserWorkspaceRequest) => JSON.stringify(draft()?.request) === JSON.stringify(request);
-  const matches = (tab: Tab) => `${tab.title} ${tab.url}`.toLocaleLowerCase().includes(search().trim().toLocaleLowerCase());
-  const readTabs = async (profile: string) => {
-    tabRead?.abort(); const read = new AbortController(); tabRead = read;
-    setChromeProfile(profile); setChromeTabs([]); setReadingTabs(Boolean(profile));
-    if (!profile) return;
-    try {
-      const tabs = await props.service.tabs(profile, AbortSignal.any([lifetime.signal, read.signal]));
-      if (!read.signal.aborted && !lifetime.signal.aborted) setChromeTabs(tabs);
-    } catch { if (!read.signal.aborted && !lifetime.signal.aborted) setError(copy().loadFailed); }
-    finally { if (!read.signal.aborted && !lifetime.signal.aborted) setReadingTabs(false); }
-  };
   const refresh = async () => {
     setBusy(true); setError('');
     try {
@@ -73,9 +56,6 @@ export function BrowserSourceDialog(props: {
       if (saved.status === 'fulfilled') setPreference(saved.value.preference);
       if (status.status === 'fulfilled') {
         setChrome(status.value);
-        const chosen = status.value.profiles.find(profile => profile.id === chromeProfile())?.id
-          ?? status.value.profiles.find(profile => profile.library_id === preference()?.profile_id)?.id ?? status.value.profiles[0]?.id ?? '';
-        await readTabs(chosen);
       }
     } catch { if (!lifetime.signal.aborted) setError(copy().loadFailed); }
     finally { if (!lifetime.signal.aborted) setBusy(false); }
@@ -140,14 +120,14 @@ export function BrowserSourceDialog(props: {
     if (!request) return false;
     if (page() === 'managed') return 'managed_profile_id' in request;
     if (!('connection' in request) || !request.connection) return false;
-    if (page() === 'personal') return 'extension_profile_id' in request.connection && request.connection.extension_profile_id === chromeProfile();
+    if (page() === 'personal') return 'extension_profile_id' in request.connection;
     return page() === 'advanced' && 'cdp_url' in request.connection && request.connection.cdp_url === discoveredEndpoint();
   };
   const choosingPage = () => ['personal', 'managed', 'advanced'].includes(page());
   const title = () => ({ sources: props.messages.product.sources, personal: props.messages.product.chromeSource,
     managed: props.messages.product.managedSource, installation: props.messages.product.installTitle,
     chrome: copy().setupChrome, advanced: copy().advanced })[page()];
-  const description = () => ({ sources: props.messages.product.sourceHint, personal: copy().chromeOnlineHint,
+  const description = () => ({ sources: props.messages.product.sourceHint, personal: props.messages.product.selectionHint,
     managed: copy().profileHint, installation: undefined, chrome: undefined, advanced: copy().advancedHint })[page()];
   return <Dialog open onOpenChange={open => { if (!open) props.onClose(); }} title={title()} closeLabel={copy().close}
     bodyDescription={description()} class="redeven-browser-sources-dialog" footer={<div class="flex w-full flex-wrap items-center justify-between gap-3">
@@ -164,7 +144,7 @@ export function BrowserSourceDialog(props: {
           <span class="redeven-browser-source-card-icon" aria-hidden="true"><Globe class="size-5" /></span>
           <div class="redeven-browser-source-card-content">
             <div class="redeven-browser-source-card-title"><button type="button" class="redeven-browser-source-card-action" title={props.messages.product.chromeSource} aria-describedby={`${descriptionID}-personal`} disabled={busy()} onClick={() => changePage(chrome()?.profiles.length ? 'personal' : 'chrome')}>{props.messages.product.chromeSource}</button><span class="redeven-browser-source-badge">{preference()?.installation_id ? props.messages.product.previouslyUsed : props.messages.product.recommended}</span></div>
-            <p id={`${descriptionID}-personal`} class="redeven-browser-source-card-description">{copy().chromeOnlineHint}</p>
+            <p id={`${descriptionID}-personal`} class="redeven-browser-source-card-description">{props.messages.product.selectionHint}</p>
             <Show when={preferredInstallation()}><span class="redeven-browser-source-card-status"><span classList={{ 'is-connected': preferredInstallation()?.connected }} />{preferredInstallation()!.name}</span></Show>
             <Show when={chromeError()}><span class="text-xs text-destructive">{copy().loadFailed}</span></Show>
           </div><ChevronRight class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -182,20 +162,14 @@ export function BrowserSourceDialog(props: {
     </Show>
     <Show when={page() === 'personal'}>
       <div class="redeven-browser-source-heading">
-        <Select class="min-w-0 flex-1" value={chromeProfile()} onChange={value => { if (value) void readTabs(value); }} aria-label={props.messages.product.profile}
-          options={(chrome()?.profiles ?? []).map(profile => ({ value: profile.id, label: profile.name }))} />
         <Button size="sm" variant="ghost" onClick={() => changePage('chrome')}><Plus class="size-3.5" />{copy().setupChrome}</Button>
         <Button size="sm" variant="ghost" aria-label={copy().refresh} disabled={busy()} onClick={() => void refresh()}><Refresh class="size-3.5" /></Button>
       </div>
       <Show when={chromeError()}><p role="alert" class="text-xs text-destructive">{copy().loadFailed}</p></Show>
       <Show when={chrome()?.profiles.length} fallback={<p class="py-4 text-[length:var(--floe-type-body)] text-muted-foreground">{copy().chromeOffline}</p>}>
-        <input data-floe-control="input" class="redeven-browser-source-input" aria-label={props.messages.product.searchPages} placeholder={props.messages.product.searchPages} value={search()} onInput={event => setSearch(event.currentTarget.value)} />
-        <div class="redeven-browser-source-list" aria-busy={readingTabs()}>
-          <Option request={{ connection: { extension_profile_id: chromeProfile(), new_tab: true } }} label={copy().newTab} detail={chrome()?.profiles.find(profile => profile.id === chromeProfile())?.name ?? ''} />
-          <For each={chromeTabs().filter(matches)}>{tab => <Option request={{ connection: { extension_profile_id: chromeProfile(), tab_id: tab.id, tab_url: tab.url, tab_title: tab.title } }} label={tab.title || tab.url} detail={tab.url} />}</For>
-          <Show when={readingTabs()}><p role="status" class="p-3 text-[length:var(--floe-type-body)]">{copy().checking}</p></Show>
+        <div class="redeven-browser-source-list">
+          <For each={chrome()?.profiles ?? []}>{profile => <Option request={{ connection: { extension_profile_id: profile.id } }} label={profile.name} detail={props.messages.product.chromeSource} />}</For>
         </div>
-        <p class="mt-3 text-xs leading-relaxed text-muted-foreground">{props.messages.product.selectionHint}</p>
       </Show>
     </Show>
     <Show when={page() === 'managed'}>

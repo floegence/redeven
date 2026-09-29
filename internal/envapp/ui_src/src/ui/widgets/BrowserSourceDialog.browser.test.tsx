@@ -33,7 +33,6 @@ async function mount(locale: RedevenLocale = 'en-US', installed = true) {
       return profiles;
     }
     if (path.endsWith('/extension/status')) return { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'personal', name: 'My Chrome' }], platform: 'darwin', hostname: 'Workstation', prepared: true };
-    if (path.includes('/extension/tabs?')) return [{ id: '7', profile_id: 'personal', title: 'Issue draft', url: 'https://example.test/issues/draft' }];
     if (path.endsWith('/connections/cdp')) return [{ id: 'remote', profile_id: 'default', title: 'CDP project', url: 'https://project.test/' }];
     throw new Error('Unexpected fixture request');
   });
@@ -46,16 +45,17 @@ async function mount(locale: RedevenLocale = 'en-US', installed = true) {
   await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.redeven-browser-source-card-action')?.disabled).toBe(false));
   return { select, close };
 }
-it('keeps source selection as a draft until Open and preserves exact personal tab identity', async () => {
+it('opens the personal profile as one draft without selecting or creating a native tab', async () => {
   const { select } = await mount();
   await page.getByRole('button', { name: 'Personal browser', exact: true }).click();
-  await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Issue draft'));
-  const personal = [...document.querySelectorAll('label')].find(label => label.textContent?.includes('Issue draft'))!;
+  await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('My Chrome'));
+  const personal = [...document.querySelectorAll('label')].find(label => label.textContent?.includes('My Chrome'))!;
   personal.click();
   expect(select).not.toHaveBeenCalled();
   expect(api.request.mock.calls.some(([path]) => String(path).includes('/workspace'))).toBe(false);
   button('Open selection').click();
-  expect(select).toHaveBeenCalledWith({ label: 'Issue draft', request: { connection: { extension_profile_id: 'personal', tab_id: '7', tab_url: 'https://example.test/issues/draft', tab_title: 'Issue draft' } } }, expect.any(AbortSignal));
+  expect(api.request.mock.calls.some(([path]) => String(path).includes('/extension/tabs'))).toBe(false);
+  expect(select).toHaveBeenCalledWith({ label: 'My Chrome', request: { connection: { extension_profile_id: 'personal' } } }, expect.any(AbortSignal));
 });
 it('creates and selects an isolated profile without replacing the active page', async () => {
   const { select } = await mount();

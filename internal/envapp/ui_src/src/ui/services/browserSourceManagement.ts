@@ -33,7 +33,6 @@ export function browserSourceService(environment: string, revealApplication?: (a
     profiles: signal => api('profiles', signal),
     createProfile: (name, signal) => api('profiles', signal, { name }),
     status: signal => api('extension/status', signal),
-    tabs: (profile, signal) => api(`extension/tabs?profile_id=${encodeURIComponent(profile)}`, signal),
     discover: (endpoint, signal) => api('connections/cdp', signal, { endpoint }),
   };
 }

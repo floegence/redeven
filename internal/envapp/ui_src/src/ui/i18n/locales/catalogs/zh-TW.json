@@ -7320,13 +7320,21 @@
       "loading": "正在載入已儲存的頁面…",
       "empty": "沒有符合的已儲存頁面。",
       "failed": "無法更新已儲存的頁面，請重試。"
+    },
+    "projection": {
+      "failed": "暫時無法顯示此分頁",
+      "recovery": "重新連線以顯示此分頁。頁面會保留在來源瀏覽器中。",
+      "retry": "重試顯示",
+      "unsupported": "無法在此顯示此頁面",
+      "unsupportedDescription": "瀏覽器內部頁面仍可在來源瀏覽器中使用。請選擇其他分頁或開啟網站。",
+      "empty": "沒有開啟的分頁",
+      "emptyDescription": "新增分頁，開始在此工作區中瀏覽。"
     }
   },
   "browserProduct": {
     "welcomeTitle": "在工作區中瀏覽網頁",
     "welcomeDescription": "連接個人瀏覽器，或使用內建瀏覽器，在這裡開啟網站。",
     "chooseSource": "選擇瀏覽器",
-    "profile": "瀏覽器設定檔",
     "defaultProfile": "預設設定檔",
     "openWindow": "在新視窗中開啟",
     "windowUnavailable": "無法開啟瀏覽器視窗，請重試。",
@@ -7337,25 +7345,25 @@
     "chromeSource": "個人瀏覽器",
     "profileName": "新設定檔名稱",
     "createProfile": "建立設定檔",
-    "searchPages": "搜尋頁面",
     "noPages": "找不到頁面。請先在來源瀏覽器中開啟頁面，再重新整理。",
     "openSelection": "開啟所選項目",
-    "selectionHint": "在此開啟頁面不會變更 Flower 目前選取的頁面。",
-    "chromeConfirmHint": "在 瀏覽器 中確認連線，然後選取要在此開啟的頁面。",
+    "selectionHint": "開啟此設定檔中的所有一般分頁，不變更 Flower 目前選取的頁面或本機瀏覽器焦點。",
+    "chromeConfirmHint": "在瀏覽器中確認連線，然後在此開啟該設定檔。",
     "installTitle": "設定環境瀏覽器",
     "installOpen": "安裝並開啟",
     "recoverTitle": "瀏覽器服務已停止",
     "recover": "復原瀏覽器",
     "recoveryDescription": "將重新啟動環境瀏覽器並還原已儲存的分頁。尚未送出的表單及頁面中未儲存的內容可能遺失，其他環境服務將繼續執行。",
-    "sourceUnavailable": "此頁面已無法使用，請重新選擇瀏覽器來源。",
+    "sourceUnavailable": "此瀏覽器目前無法使用，請重新連線或選擇其他瀏覽器。",
     "disconnected": "瀏覽器連線已中斷。",
     "openFailed": "無法開啟瀏覽器，請重試或選擇其他來源。",
     "openTimeout": "瀏覽器未及時回應。",
     "recoveryBlocked": "請先在來源瀏覽器中結束私密工作階段，再復原瀏覽器服務。",
     "outcomeUnknown": "操作可能已完成，請選擇來源查看目前狀態。",
-    "retry": "重試",
     "moreActions": "更多瀏覽器操作",
     "recommended": "推薦",
-    "previouslyUsed": "上次使用"
+    "previouslyUsed": "上次使用",
+    "connectionTitle": "瀏覽器連線已中斷",
+    "reconnectBrowser": "重新連線瀏覽器"
   }
 }

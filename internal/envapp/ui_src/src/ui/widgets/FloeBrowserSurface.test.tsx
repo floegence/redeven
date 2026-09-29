@@ -23,7 +23,7 @@ describe('FloeBrowserSurface', () => {
     const container = document.createElement('div'); document.body.append(container);
     const session = {} as Session;
     dispose = render(() => <FloeBrowserSurface sources={sources} onOpenWindow={async () => undefined} session={session}
-      view={{ generation: 'fixture-generation', id: 'browser-view-fixture', protocol_version: 24, media_wire_version: 1, initial_target: 'source' }}
+      view={{ generation: 'fixture-generation', id: 'browser-view-fixture', protocol_version: 25, media_wire_version: 1, initial_target: 'source' }}
       title="Remote Browser" locale="en-US" messages={englishMessages}
       copy={{ unavailable: 'Source unavailable', connecting: 'Connecting' }} onReconnect={() => undefined} />, container);
     await vi.waitFor(() => expect(state.open).toHaveBeenCalledTimes(1));
@@ -42,7 +42,7 @@ describe('FloeBrowserSurface', () => {
   });
   it('ignores callbacks from a document retired by presentation refresh', async () => {
     const container = document.createElement('div'); document.body.append(container);
-    const descriptor = { generation: 'generation', id: 'browser-view-first', protocol_version: 24, media_wire_version: 1, initial_target: 'source' };
+    const descriptor = { generation: 'generation', id: 'browser-view-first', protocol_version: 25, media_wire_version: 1, initial_target: 'source' };
     const [view, setView] = createSignal(descriptor);
     const failure = vi.fn(), reconnect = vi.fn(), tabs = vi.fn(), interaction = vi.fn();
     dispose = render(() => <FloeBrowserSurface sources={sources} onOpenWindow={async () => undefined} session={{} as Session} view={view()} title="Remote Browser" locale="en-US" messages={englishMessages}
@@ -64,7 +64,7 @@ describe('FloeBrowserSurface', () => {
     expect(interaction).toHaveBeenCalledOnce();
   });
   it('keeps the current document alive while its source-selection request is pending', async () => {
-    const descriptor = (id: string) => ({ generation: 'generation', id, profile_id: id === 'browser-view-first' ? 'browser-main' : 'profile-next', protocol_version: 24, media_wire_version: 1, initial_target: id + '-tab' });
+    const descriptor = (id: string) => ({ workspace_id: 'workspace', generation: 'generation', id, profile_id: id === 'browser-view-first' ? 'browser-main' : 'profile-next', protocol_version: 25, media_wire_version: 1, initial_target: id + '-tab' });
     const request = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) => Response.json({ ok: true, data: descriptor('browser-view-first') }));
     const unbind = await bindTestSessionHTTP(request);
     const service = { management: { loadBrowserInstallation: async () => ({ enabled: true, state: 'installed' }) } } as unknown as BrowserSourceService;

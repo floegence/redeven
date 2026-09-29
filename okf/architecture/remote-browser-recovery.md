@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Remote browser service recovery
 description: Rebuild a failed browser service explicitly while fencing old authority and preserving saved managed tabs.
 tags: [architecture, browser, recovery]
-timestamp: 2026-09-24T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 # Summary
 
@@ -45,7 +45,7 @@ that snapshot with an empty directory. Reopening a managed profile restores
 eligible saved tabs using new target identities under the
 [persistence contract](remote-browser-persistence.md). Unsaved page content and
 unsubmitted forms can be lost; the confirmation dialog states this impact.
-External pages require a fresh valid selection and are never recreated from
+External sources require fresh directory/page authorization and are never recreated from
 saved URLs. [The surface controller](remote-browser-surface.md) owns the user
 action and continuation.
 
@@ -63,11 +63,13 @@ publish a new fault. Discovery marks failed managed profiles
 `connection_required` and offers no default ready candidate until recovery;
 losing a single tab leaves the healthy profile available for a new selection.
 
-Unexpected loss of a view's last granted source retires that view and its input
-authority. The window stays open with the source-selection recovery action;
-an empty directory must not appear as indefinite loading. An explicit tab-close
-transaction retains its view until its replacement tab is ready, or retires the
-empty view if replacement fails. Other views with healthy sources remain live.
+Personal workspace projection loss follows the
+[live workspace failure boundary](remote-browser-profile-workspace.md): native
+tab identity and browser chrome survive per-page display failure, and the final
+native close leaves an empty usable directory. A profile carrier loss instead
+retires its view authority and offers explicit reconnect. Managed and direct
+source grants retain their existing last-source retirement; managed explicit
+close retains its view until a blank replacement is ready. Healthy sources stay live.
 
 Source retirement retains the semantic navigation guard until the debugger
 detaches. Removing its paused-request listener while interception is still

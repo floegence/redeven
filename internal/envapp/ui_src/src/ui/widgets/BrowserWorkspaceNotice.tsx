@@ -15,7 +15,7 @@ export function browserFailureMessage(code: BrowserFailureCode | undefined, mess
     case 'BROWSER_DEPENDENCIES_MISSING': return messages.computer.browserDependenciesMissing;
     case 'BROWSER_INSTALL_REQUIRED': return copy.installTitle;
     case 'BROWSER_DISABLED': return messages.computer.browserDisabledHint;
-    case 'BROWSER_SERVICE_FAILED': return copy.recoverTitle;
+    case 'BROWSER_SERVICE_FAILED': return copy.recoveryDescription;
     case 'BROWSER_RECOVERY_BLOCKED': return copy.recoveryBlocked;
     case 'BROWSER_SOURCE_UNAVAILABLE': return copy.sourceUnavailable;
     case 'BROWSER_OPEN_TIMEOUT': return copy.openTimeout;
@@ -41,7 +41,7 @@ export function BrowserWorkspaceNotice(props: {
   const descriptionID = createUniqueId();
   const selecting = () => props.state.phase === 'selecting';
   const setup = () => ['BROWSER_INSTALL_REQUIRED', 'BROWSER_DISABLED', 'BROWSER_SANDBOX_UNAVAILABLE'].includes(props.state.failure ?? '');
-  const canRetry = () => props.state.phase !== 'selecting' && !['BROWSER_DEPENDENCIES_MISSING', 'BROWSER_SOURCE_UNAVAILABLE', 'BROWSER_OUTCOME_UNKNOWN', 'BROWSER_RECOVERY_BLOCKED'].includes(props.state.failure ?? '');
+  const canRetry = () => props.state.phase !== 'selecting' && !['BROWSER_DEPENDENCIES_MISSING', 'BROWSER_OUTCOME_UNKNOWN', 'BROWSER_RECOVERY_BLOCKED'].includes(props.state.failure ?? '');
   const run = async (action: () => Promise<void>) => {
     if (busy()) return;
     setBusy(true);
@@ -56,14 +56,16 @@ export function BrowserWorkspaceNotice(props: {
             <ActivityBarBrowserIcon size="4rem" />
           </div>
         </Show>
-        <h2>{selecting() ? props.messages.product.welcomeTitle : browserFailureMessage(props.state.failure, props.messages)}</h2>
+        <Show when={!selecting()}><span class="redeven-browser-status-icon" aria-hidden="true"><ActivityBarBrowserIcon size="1.75rem" /></span></Show>
+        <h2>{selecting() ? props.messages.product.welcomeTitle : setup() || props.state.failure === 'BROWSER_DEPENDENCIES_MISSING' ? props.messages.product.installTitle : props.state.failure === 'BROWSER_SERVICE_FAILED' ? props.messages.product.recoverTitle : props.messages.product.connectionTitle}</h2>
+        <Show when={!selecting()}><p id={descriptionID}>{browserFailureMessage(props.state.failure, props.messages)}</p></Show>
         <Show when={selecting()}><p id={descriptionID} class="redeven-browser-welcome-description">{props.messages.product.welcomeDescription}</p></Show>
         <Show when={setup()} fallback={<div class="redeven-browser-notice-actions">
-          <Show when={props.state.failure === 'BROWSER_SERVICE_FAILED'} fallback={<Show when={canRetry()}><Button disabled={busy() || !props.connected} onClick={() => void run(props.retry)}>{props.messages.product.retry}</Button></Show>}>
+          <Show when={props.state.failure === 'BROWSER_SERVICE_FAILED'} fallback={<Show when={canRetry()}><Button disabled={busy() || !props.connected} onClick={() => void run(props.retry)}>{props.messages.product.reconnectBrowser}</Button></Show>}>
             <Button disabled={busy() || !props.connected} onClick={() => setConfirming(true)}>{props.messages.product.recover}</Button>
           </Show>
           <Button variant={selecting() ? 'primary' : 'outline'} disabled={busy()} onClick={props.chooseSource}
-            aria-describedby={selecting() ? descriptionID : undefined}>
+            aria-describedby={descriptionID}>
             {selecting() ? props.messages.product.chooseSource : props.messages.product.sources}
             <Show when={selecting()}><ChevronRight class="size-4" aria-hidden="true" /></Show>
           </Button>

@@ -57,6 +57,8 @@ export async function createComputerBrowserHost(options) {
   const sources = new Map();
   const nativeSources = new Map();
   const pending = new Map();
+  const retirements = new Map();
+  const profileDirectories = new Map();
   const popupProbes = new Set();
   const listeners = new Set();
   const directories = new Map();
@@ -99,10 +101,10 @@ export async function createComputerBrowserHost(options) {
           source.title = tab.title;
           publish();
         }
-        if (sources.get(source.id) === source && !views.isPrivate(source.id) && !(source.restorationURL && tab.url === 'about:blank')) options.onSourceChanged?.(source.id, tab);
+        if (sources.get(source.id) === source && !views.isPrivate(source.id) && !(source.restorationURL && tab.url === 'about:blank')) options.onSourceChanged?.(source.id, tab, source.descriptor.binding);
       }
     })().catch(() => {
-      if (sources.get(source.id) === source) options.onSourceFault?.(source.id);
+      if (sources.get(source.id) === source) options.onSourceFault?.(source.id, source.descriptor.binding);
     }).finally(() => { source.metadataWork = undefined; });
   };
   const directoryCommand = async action => {
@@ -111,10 +113,24 @@ export async function createComputerBrowserHost(options) {
     // Go authorizes the specific view and target, commits directory changes and
     // refreshes its grants before resolving. A missing response never replays it.
     const target = await options.directoryCommand(view, action);
-    return target ? requireSource(target).owner.source : undefined;
+    return target || undefined;
   };
   views = await createComputerBrowserViews({
-    list: () => [...sources.values()].map(source => ({ page: source.owner.source, title: source.title, pinned: source.pinned })),
+    list: () => {
+      const entries = new Map();
+      for (const tabs of profileDirectories.values()) for (const { id, url, title, pinned, loading, availability } of tabs) entries.set(id, { id, url, title, pinned, loading, availability });
+      for (const source of sources.values()) if (!entries.has(source.id)) entries.set(source.id, { id: source.id, url: source.owner.source.url(), title: source.title, pinned: source.pinned });
+      return [...entries.values()];
+    },
+    downloads: id => sources.get(id)?.owner.source.downloads() ?? [],
+    resolve: async id => {
+      const source = sources.get(id);
+      if (source && !source.owner.source.isClosed() && !source.owner.controller.page.invalid) return source.owner.source;
+      if (source) await retire(source);
+      await retirements.get(id);
+      await options.directoryCommand('', { kind: 'resolve', target: id });
+      return requireSource(id).owner.source;
+    },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     create: () => directoryCommand({ kind: 'create' }),
     close: id => directoryCommand({ kind: 'close', target: id }),
@@ -167,12 +183,17 @@ export async function createComputerBrowserHost(options) {
     source.owner.source.off('domcontentloaded', source.onMetadata);
     source.owner.source.off('load', source.onMetadata);
     source.owner.source.off('titlechanged', source.onMetadata);
+    source.owner.source.off('downloadschanged', publish);
     publish();
-    options.onSourceClosed?.(source.id);
-    source.retiring = source.owner.dispose().then(() => { nativeSources.delete(source.key); });
+    options.onSourceClosed?.(source.id, source.descriptor.binding);
+    source.retiring = source.owner.dispose().finally(() => {
+      if (nativeSources.get(source.key) === source.id) nativeSources.delete(source.key);
+      if (retirements.get(source.id) === source.retiring) retirements.delete(source.id);
+    });
+    retirements.set(source.id, source.retiring);
     // Explicit callers receive the drain error. The callback carries only the
     // target identity, never a raw debugger exception or private page content.
-    void source.retiring.catch(() => options.onSourceFault?.(source.id));
+    void source.retiring.catch(() => options.onSourceFault?.(source.id, source.descriptor.binding));
     return source.retiring;
   };
   const attach = async descriptor => {
@@ -256,6 +277,7 @@ export async function createComputerBrowserHost(options) {
       owner.source.on('domcontentloaded', source.onMetadata);
       owner.source.on('load', source.onMetadata);
       owner.source.on('titlechanged', source.onMetadata);
+      owner.source.on('downloadschanged', publish);
       sources.set(id, source);
       changed(source);
       publish();
@@ -317,7 +339,7 @@ export async function createComputerBrowserHost(options) {
     },
     async remove(id) {
       const source = sources.get(id);
-      if (!source) return;
+      if (!source) return retirements.get(id);
       source.owner.controller.cancel();
       await retire(source);
     },
@@ -363,6 +385,17 @@ export async function createComputerBrowserHost(options) {
       // contract; directory admission never waits for a website to respond.
       void source.owner.source.navigate(url).catch(() => {});
     },
+    profileDirectory(workspace, tabs) {
+      if (typeof workspace !== 'string' || !workspace || !Array.isArray(tabs) || tabs.length > 128 || new Set(tabs.map(tab => tab.id)).size !== tabs.length) throw new Error('BROWSER_DIRECTORY_CHANGED');
+      for (const tab of tabs) {
+        if (!tab.id || typeof tab.url !== 'string' || !['', undefined, 'unsupported'].includes(tab.availability)) throw new Error('BROWSER_DIRECTORY_CHANGED');
+        const native = nativeIdentity(tab.native);
+        lineage.observe(nativeScope, native);
+        lineage.bind(nativeScope, native, tab.id);
+      }
+      profileDirectories.set(workspace, tabs.map(tab => ({ ...tab })));
+      publish();
+    },
     order(ids, pinned) {
       if (new Set(ids).size !== ids.length || ids.some(id => !sources.has(id)) || pinned.some(id => !ids.includes(id))) throw new Error('BROWSER_DIRECTORY_CHANGED');
       const remaining = [...sources.keys()].filter(id => !ids.includes(id));
@@ -378,7 +411,7 @@ export async function createComputerBrowserHost(options) {
       const draining = [...sources.values()].map(source => retire(source));
       const results = await Promise.allSettled(draining);
       await Promise.allSettled([...connections.values()].map(async work => (await work).close()));
-      connections.clear(); nativeDirectories.clear();
+      connections.clear(); nativeDirectories.clear(); profileDirectories.clear();
       lineage.close();
       const failure = [...viewResults, ...results].find(result => result.status === 'rejected');
       if (failure) throw failure.reason;

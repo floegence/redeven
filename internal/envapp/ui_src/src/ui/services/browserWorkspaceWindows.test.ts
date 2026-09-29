@@ -23,7 +23,7 @@ afterEach(() => { windows?.close(); windows = undefined; release?.(); hosts.leng
 it('creates browser views through the active Session even when local HTTP has a different identity', async () => {
   const local = vi.fn(() => Promise.reject(new Error('Synthetic local-ui identity')));
   vi.stubGlobal('fetch', local);
-  const view = { generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 24, media_wire_version: 1 };
+  const view = { workspace_id: 'workspace', generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 25, media_wire_version: 1 };
   const session = vi.fn(async () => Response.json({ ok: true, data: view }));
   release = await bindTestSessionHTTP(session);
   await expect(openBrowserWorkspace({ managed_profile_id: 'browser-main' }, new AbortController().signal)).resolves.toEqual(view);
@@ -32,7 +32,7 @@ it('creates browser views through the active Session even when local HTTP has a 
 });
 
 it('replaces the document itself when selecting another source in the same window', () => {
-  const view = { generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 24, media_wire_version: 1 };
+  const view = { workspace_id: 'workspace', generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 25, media_wire_version: 1 };
   const first = new URL(browserDocumentURL(view, crypto.randomUUID()), location.origin);
   const next = new URL(browserDocumentURL(view, crypto.randomUUID()), location.origin);
   first.hash = ''; next.hash = '';
@@ -42,18 +42,18 @@ it('replaces the document itself when selecting another source in the same windo
 
 it.each([
   { protocol_version: 23 },
-  { protocol_version: 25 },
+  { protocol_version: 26 },
   { media_wire_version: 2 },
   { id: 'browser-view-../other' },
 ])('rejects incompatible browser documents before opening a view: %j', (invalid) => {
-  const view = { generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 24, media_wire_version: 1 };
+  const view = { workspace_id: 'workspace', generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 25, media_wire_version: 1 };
   expect(() => browserDocumentURL({ ...view, ...invalid }, 'fixture')).toThrow('Browser version or identity unavailable');
 });
 
 async function setupWindows() {
   let sequence = 0;
   const request = vi.fn(async (path: RequestInfo | URL, init?: RequestInit) => Response.json({ ok: true, data: String(path).endsWith('/preference') || init?.method === 'DELETE' ? null : {
-    generation: 'generation', id: `browser-view-${++sequence}`, profile_id: 'browser-main', initial_target: 'selected-tab', protocol_version: 24, media_wire_version: 1,
+    workspace_id: 'workspace', generation: 'generation', id: `browser-view-${++sequence}`, profile_id: 'browser-main', initial_target: 'selected-tab', protocol_version: 25, media_wire_version: 1,
   } }));
   release = await bindTestSessionHTTP(request);
   const children: { close: ReturnType<typeof vi.fn>; location: { replace: ReturnType<typeof vi.fn> }; document: { title: string; body: { textContent: string } } }[] = [];
@@ -87,7 +87,7 @@ it('keeps the current document when source replacement fails and ignores retired
   const { windows, children, request } = await setupWindows();
   const original = hosts[0]!;
   request.mockResolvedValueOnce(Response.json({ ok: false, error_code: 'BROWSER_SOURCE_UNAVAILABLE' }, { status: 409 }));
-  await expect(original.options.sources!.select({ label: 'Missing', request: { source_target: 'missing' } }, new AbortController().signal)).rejects.toThrow();
+  await expect(original.options.sources!.select({ label: 'Missing', request: { workspace_id: 'missing' } }, new AbortController().signal)).rejects.toThrow();
   expect(children[0]!.location.replace).toHaveBeenCalledOnce();
   original.options.onTabs?.({ active: 'current-tab', tabs: [] });
   windows.refreshPresentation();
@@ -97,7 +97,7 @@ it('keeps the current document when source replacement fails and ignores retired
   expect(children[0]!.close).not.toHaveBeenCalled();
   expect(hosts[1]!.suspend).not.toHaveBeenCalled();
   const posts = request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference'));
-  expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['current-tab'] });
+  expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ workspace_id: 'workspace', initial_target: 'current-tab' });
 });
 
 it('opens another window from the confirmed current source without replaying a source operation', async () => {
@@ -107,7 +107,7 @@ it('opens another window from the confirmed current source without replaying a s
   await hosts[0]!.options.onOpenWindow?.();
   expect(children).toHaveLength(2);
   const posts = request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference'));
-  expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['latest-tab'] });
+  expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ workspace_id: 'workspace', initial_target: 'latest-tab' });
 });
 
 it('ignores retired view events while Desktop admits the replacement document', async () => {
@@ -131,5 +131,5 @@ it('ignores retired view events while Desktop admits the replacement document', 
   expect(original.suspend).not.toHaveBeenCalled();
   await hosts[1]!.options.onOpenWindow?.();
   const posts = request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference'));
-  expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['selected-tab'] });
+  expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ workspace_id: 'workspace', initial_target: 'selected-tab' });
 });

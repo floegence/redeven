@@ -108,3 +108,18 @@ test('the Runtime host shares one connection and source, isolates a pending navi
   assert.equal((await tool('created-later', 'computer.observe')).error, undefined, 'A Runtime-created tab can be admitted after the shared connection has started');
   await directoryOwner.detach();
 });
+
+test('workspace grant publication does not wait for initial lazy projection', async () => {
+  let rejectResolve;
+  const resolving = new Promise((_, reject) => { rejectResolve = reject; });
+  const host = await createComputerBrowserHost({ directoryCommand: () => resolving });
+  host.profileDirectory('workspace', [{ id: 'pending', native: 'a'.repeat(32), url: 'about:blank' }]);
+  const opening = host.views.open('view', ['pending'], () => {}, { initialTab: 'pending', editable: true });
+  try {
+    await host.views.grants('view', []);
+  } finally {
+    rejectResolve(new Error('Fixture source unavailable'));
+    await opening;
+    await host.close();
+  }
+});

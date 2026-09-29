@@ -1611,7 +1611,7 @@ SOFTWARE.
 | @floegence/floe-webapp-boot | 0.81.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.81.3 |  |
 | @floegence/floe-webapp-core | 0.81.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.81.3 |  |
 | @floegence/floe-webapp-protocol | 0.81.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.81.3 |  |
-| @floegence/floebrowser | 0.1.25 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.25 |  |
+| @floegence/floebrowser | 0.1.26 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.26 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.2 |  |
 | @floegence/flowersec-core | 5.4.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.4.1 |  |
@@ -2562,7 +2562,7 @@ SOFTWARE.
 | yargs | 17.7.2 | MIT | Desktop shell | https://www.npmjs.com/package/yargs/v/17.7.2 |  |
 | yocto-queue | 0.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/yocto-queue/v/0.1.0 |  |
 | zip-stream | 4.1.1 | MIT | Env App UI | https://www.npmjs.com/package/zip-stream/v/4.1.1 |  |
-| zod | 4.1.12 | MIT | Env App UI | https://www.npmjs.com/package/zod/v/4.1.12 |  |
+| zod | 4.6.5 | MIT | Env App UI | https://www.npmjs.com/package/zod/v/4.6.5 |  |
 | zwitch | 2.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/zwitch/v/2.0.4 |  |
 
 ## Bundled Agent CLI Brand Assets
@@ -4455,7 +4455,7 @@ Flower's headless Chromium browser is installed separately, only after user conf
 
 ## FloeBrowser Projection and Media Collector
 
-Redeven bundles the published `@floegence/floebrowser@0.1.25` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified `dist/THIRD_PARTY_LICENSES.txt`, which is also retained in the computer-helper resource bundle.
+Redeven bundles the published `@floegence/floebrowser@0.1.26` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified `dist/THIRD_PARTY_LICENSES.txt`, which is also retained in the computer-helper resource bundle.
 
 ````text
 # Third-party notices
@@ -4879,7 +4879,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 
-zod@4.1.12 — MIT
+zod@4.6.5 — MIT
 
 
 MIT License
@@ -5437,7 +5437,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
-github.com/pion/datachannel@v1.6.2
+github.com/pion/datachannel@v1.6.3
 
 
 MIT License
@@ -5452,7 +5452,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/dtls/v3@v3.1.8
+github.com/pion/dtls/v3@v3.1.9
 
 
 MIT License
@@ -5467,7 +5467,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/ice/v4@v4.4.2
+github.com/pion/ice/v4@v4.4.4
 
 
 MIT License
@@ -5482,7 +5482,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/interceptor@v0.1.48
+github.com/pion/interceptor@v0.1.49
 
 
 MIT License
@@ -5512,7 +5512,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/mdns/v2@v2.2.0
+github.com/pion/mdns/v2@v2.2.1
 
 
 MIT License
@@ -5566,7 +5566,7 @@ SOFTWARE.
 
 
 
-github.com/pion/rtcp@v1.2.17
+github.com/pion/rtcp@v1.2.18
 
 
 MIT License
@@ -5596,7 +5596,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/sctp@v1.11.1
+github.com/pion/sctp@v1.11.3
 
 
 MIT License
@@ -5611,7 +5611,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/sdp/v3@v3.0.19
+github.com/pion/sdp/v3@v3.0.20
 
 
 MIT License
@@ -5626,7 +5626,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/srtp/v3@v3.0.13
+github.com/pion/srtp/v3@v3.1.0
 
 
 MIT License
@@ -5641,7 +5641,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/stun/v4@v4.0.0
+github.com/pion/stun/v4@v4.0.1
 
 
 MIT License
@@ -5656,7 +5656,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/transport/v4@v4.1.0
+github.com/pion/transport/v5@v5.1.1
 
 
 MIT License
@@ -5671,7 +5671,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/turn/v5@v5.1.0
+github.com/pion/turn/v5@v5.1.2
 
 
 MIT License
@@ -5686,7 +5686,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/webrtc/v4@v4.2.20
+github.com/pion/webrtc/v4@v4.2.22
 
 
 MIT License

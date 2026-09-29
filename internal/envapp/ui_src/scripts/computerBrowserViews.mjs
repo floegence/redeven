@@ -34,10 +34,10 @@ export async function createComputerBrowserViews(directory, options) {
     for (const [target, id] of audioOwners) if (!canHear(views.get(id), target)) audioOwners.delete(target);
     const work = audioQueue.then(async () => {
       await refresh();
-      for (const { page } of directory.list()) {
-        if (audioOwners.has(page.id)) continue;
-        const owner = [...views.values()].find(view => canHear(view, page.id));
-        if (owner) audioOwners.set(page.id, owner.id);
+      for (const { id } of directory.list()) {
+        if (audioOwners.has(id)) continue;
+        const owner = [...views.values()].find(view => canHear(view, id));
+        if (owner) audioOwners.set(id, owner.id);
       }
       await refresh();
     });
@@ -82,7 +82,7 @@ export async function createComputerBrowserViews(directory, options) {
       const view = requireView(id);
       view.targets = new Set(targets);
       if (view.control && !permits(view, view.control.target)) view.control = undefined;
-      return Promise.all([view.connection.refreshGrants(), reconcileAudio()]);
+      return Promise.all([view.connection?.refreshGrants(), reconcileAudio()]);
     },
     select(id, target) {
       const view = requireView(id);

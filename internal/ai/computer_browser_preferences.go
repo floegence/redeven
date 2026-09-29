@@ -11,9 +11,10 @@ import (
 // Preference contains only stable identity. Resume is an observation of an
 // existing, still-authorized workspace, never a stored command or tab grant.
 type BrowserSourcePreference struct {
-	Preference       *browserstore.Preference `json:"preference"`
-	ManagedProfileID string                   `json:"managed_profile_id,omitempty"`
-	SourceTarget     string                   `json:"source_target,omitempty"`
+	Preference         *browserstore.Preference `json:"preference"`
+	ManagedProfileID   string                   `json:"managed_profile_id,omitempty"`
+	WorkspaceID        string                   `json:"workspace_id,omitempty"`
+	ExtensionProfileID string                   `json:"extension_profile_id,omitempty"`
 }
 
 func (r *ComputerUseRuntime) BrowserPreference(ctx context.Context, meta *session.Meta) (BrowserSourcePreference, error) {
@@ -47,21 +48,24 @@ func (r *ComputerUseRuntime) BrowserPreference(ctx context.Context, meta *sessio
 			return result, nil
 		}
 	}
-	// External reconnection must not attach a remembered tab, even if its numeric
-	// browser ID was reused. Only the current workspace's admitted target can resume.
-	host.mu.RLock()
-	defer host.mu.RUnlock()
-	workspace := host.browserWorkspaces[owner+"/"+preference.ProfileID]
-	if workspace == nil || workspace.selected == "" || host.browserService.State != "ready" {
-		return result, nil
-	}
-	target := workspace.selected
-	if source, ok := host.executors[target].(*extensionTargetExecutor); ok && source.client.profile.InstallationID == preference.InstallationID && source.client.profile.LibraryID == preference.ProfileID {
+	// A saved profile identifies a workspace, never a temporary projection.
+	if workspace := host.browserWorkspaces[owner+"/"+preference.ProfileID]; workspace != nil && workspace.extension != nil {
 		select {
-		case <-source.client.done:
+		case <-workspace.extension.done:
 		default:
-			result.SourceTarget = target
+			result.WorkspaceID = workspace.id
+			result.ExtensionProfileID = workspace.extension.profile.ID
 		}
+	}
+	if result.ExtensionProfileID == "" && host.extension != nil {
+		host.extension.mu.Lock()
+		for _, client := range host.extension.profiles {
+			if client.profile.LibraryID == preference.ProfileID && client.profile.InstallationID == preference.InstallationID {
+				result.ExtensionProfileID = client.profile.ID
+				break
+			}
+		}
+		host.extension.mu.Unlock()
 	}
 	return result, nil
 }
@@ -83,6 +87,9 @@ func (r *ComputerUseRuntime) SaveBrowserPreference(ctx context.Context, meta *se
 		return err
 	}
 	preference := browserstore.Preference{ProfileID: view.libraryProfile}
+	if view.workspace != nil && view.workspace.extension != nil {
+		preference.InstallationID = view.workspace.extension.profile.InstallationID
+	}
 	host.mu.RLock()
 	source := host.executors[view.initial]
 	if external, ok := source.(*extensionTargetExecutor); ok {

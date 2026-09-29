@@ -26,11 +26,11 @@ it('subscribes to the environment installer and disposes the existing subscripti
   bridge.close(); bridge.close();
   expect(dispose).toHaveBeenCalledTimes(2);
 });
-it('preserves the explicit personal page identity and strips unrelated request fields', async () => {
+it('preserves the personal profile selection and strips unrelated request fields', async () => {
   const select = vi.fn();
   const bridge = browserSourcePort({ management: {} } as BrowserSourceService, select, vi.fn());
-  await bridge.execute({ method: 'source.select', selection: { label: 'Personal page', request: { connection: { extension_profile_id: 'personal', tab_id: '7', tab_url: 'https://example.test/', tab_title: 'Draft', injected: 'not forwarded' } } } } as BrowserSourceOperation, new AbortController().signal);
-  expect(select).toHaveBeenCalledWith({ label: 'Personal page', request: { connection: { extension_profile_id: 'personal', tab_id: '7', tab_url: 'https://example.test/', tab_title: 'Draft' } } }, expect.any(AbortSignal));
+  await bridge.execute({ method: 'source.select', selection: { label: 'Personal profile', request: { connection: { extension_profile_id: 'personal', injected: 'not forwarded' } } } } as BrowserSourceOperation, new AbortController().signal);
+  expect(select).toHaveBeenCalledWith({ label: 'Personal profile', request: { connection: { extension_profile_id: 'personal' } } }, expect.any(AbortSignal));
 });
 
 it('rejects renderer executable paths and requires a discovered installation identity', async () => {

@@ -29,7 +29,7 @@ function postPayload(port, message, binding) {
     // Native ports have no backpressure API. Retire only the source producing
     // excess traffic; other admitted tabs retain their current native carrier.
     const entry = [...bindings].find(([, value]) => value.id === binding);
-    if (entry) { targetUnavailable(entry[0]); void chrome.debugger.detach({ tabId: entry[0] }).catch(() => {}); }
+    if (entry) { targetUnavailable(entry[0], 'native_backpressure'); void chrome.debugger.detach({ tabId: entry[0] }).catch(() => {}); }
     return false;
   }
   const sequence = ++receiptSequence;
@@ -48,14 +48,14 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
   if (method === 'Target.detachedFromTarget') binding.children.delete(params.sessionId);
   postPayload(native, { type: 'cdp_event', binding: binding.id, tab_id: String(source.tabId), session: source.sessionId || '', method, params }, binding.id);
 });
-function targetUnavailable(tabId) {
+function targetUnavailable(tabId, reason = 'source_disconnected') {
   const binding = bindings.get(tabId);
   if (!binding) return;
   retireCredits(binding.id);
   bindings.delete(tabId);
-  if (native && ready) native.postMessage({ type: 'target_unavailable', tab_id: String(tabId) });
+  if (native && ready) native.postMessage({ type: 'target_unavailable', tab_id: String(tabId), binding: binding.id, reason });
 }
-chrome.debugger.onDetach.addListener(source => targetUnavailable(source.tabId));
+chrome.debugger.onDetach.addListener((source, reason) => targetUnavailable(source.tabId, ['target_closed', 'canceled_by_user', 'replaced_with_devtools'].includes(reason) ? reason : 'debugger_detached'));
 const popupLineage = createBrowserLineage(() => true);
 let lineageUnavailable = false;
 const nativeTargets = new Map(), closedNativeTabs = new Set();
@@ -82,14 +82,97 @@ chrome.webNavigation.onCreatedNavigationTarget.addListener(details => {
   catch { lineageUnavailable = true; }
 });
 chrome.tabs.onRemoved.addListener(tabId => {
-  targetUnavailable(tabId);
+  targetUnavailable(tabId, 'tab_closed');
   popupLineage.remove('profile', String(tabId));
   if (nativeTargets.has(String(tabId))) closedNativeTabs.add(String(tabId));
   for (const tab of closedNativeTabs) if (!popupLineage.contains('profile', tab)) { nativeTargets.delete(tab); closedNativeTabs.delete(tab); }
 });
 
+// Chrome owns tab identity and order. One snapshot and ordered native deltas
+// feed explicitly opened workspaces; no timer discovers or reconnects pages.
+let watchingTabs = false, directoryRevision = 0, directoryTabs = [], directoryWork, directoryDirty = false, directorySnapshotPending = false;
+async function nativeTab(args, requireIdentity = false) {
+  if (requireIdentity && (typeof args.native_target_id !== 'string' || !/^[a-f0-9]{32}$/iu.test(args.native_target_id))) throw new Error('tab identity required');
+  const tab = await chrome.tabs.get(Number(args.tab_id));
+  if (tab.incognito) throw new Error('private tab');
+  if (args.native_target_id) {
+    await rememberNativeTargets();
+    if (nativeTargets.get(String(tab.id)) !== args.native_target_id) throw new Error('tab identity changed');
+  }
+  return tab;
+}
+async function inventory() {
+  if (lineageUnavailable) throw new Error('browser directory unavailable');
+  const tabs = (await chrome.tabs.query({})).filter(tab => !tab.incognito && !(tab.url || '').startsWith(chrome.runtime.getURL('')))
+    .sort((a, b) => a.windowId - b.windowId || a.index - b.index);
+  if (tabs.length > 128) throw new Error('inventory limit');
+  await rememberNativeTargets();
+  const retained = new Set(tabs.flatMap(tab => [String(tab.id), ...popupLineage.nativeAncestors('profile', String(tab.id))]));
+  for (const tab of nativeTargets.keys()) if (!retained.has(tab)) { nativeTargets.delete(tab); closedNativeTabs.delete(tab); }
+  return tabs.map(tab => {
+    const nativeTarget = nativeTargets.get(String(tab.id));
+    if (!nativeTarget) throw new Error('refresh browser directory');
+    const ancestors = popupLineage.nativeAncestors('profile', String(tab.id));
+    if (ancestors.length > 128) throw new Error('browser directory depth limit');
+    const url = tab.url || tab.pendingUrl || 'about:blank';
+    return { id: String(tab.id), native_target_id: nativeTarget, opener_native_target_ids: ancestors.map(id => nativeTargets.get(id)).filter(Boolean), profile_id: profile.id,
+      title: (tab.title || '').slice(0, 512), url, pinned: !!tab.pinned, loading: tab.status === 'loading', window_id: tab.windowId, index: tab.index,
+      ...(!/^(https?:\/\/|about:blank$)/u.test(url) ? { availability: 'unsupported' } : {}),
+      ...(ancestors.length ? { opener_tab_id: ancestors[0], opener_tab_ids: ancestors } : {}),
+    };
+  });
+}
+function queueDirectory(snapshot = false) {
+  if (!watchingTabs || !ready) return Promise.resolve();
+  directoryDirty = true;
+  directorySnapshotPending ||= snapshot;
+  if (directoryWork) return directoryWork;
+  const port = native;
+  const current = () => native === port && ready && watchingTabs;
+  const work = (async () => {
+    while (current() && directoryDirty) {
+      directoryDirty = false;
+      let tabs;
+      try { tabs = await inventory(); }
+      catch (error) {
+        // A native event invalidated the in-flight snapshot. Consume that
+        // event's pending update instead of treating an ordinary close as loss
+        // of the whole profile. There is no timer or speculative retry.
+        if (current() && directoryDirty) continue;
+        throw error;
+      }
+      if (!current()) return;
+      if (directoryDirty) continue;
+      if (!directorySnapshotPending && JSON.stringify(tabs) === JSON.stringify(directoryTabs)) continue;
+      const old = new Map(directoryTabs.map(tab => [tab.id, tab]));
+      const ids = new Set(tabs.map(tab => tab.id));
+      const change = directorySnapshotPending ? { tabs } : {
+        upsert: tabs.filter(tab => JSON.stringify(old.get(tab.id)) !== JSON.stringify(tab)),
+        removed: directoryTabs.filter(tab => !ids.has(tab.id)).map(tab => tab.id), order: tabs.map(tab => tab.id),
+      };
+      directorySnapshotPending = false;
+      directoryTabs = tabs;
+      port.postMessage({ type: 'tabs_changed', revision: ++directoryRevision, ...change });
+    }
+  })();
+  directoryWork = work;
+  const settled = () => {
+    if (directoryWork !== work) return;
+    directoryWork = undefined;
+    if (current() && directoryDirty) void queueDirectory().catch(() => {});
+  };
+  void work.then(settled, () => {
+    if (current()) port.postMessage({ type: 'tabs_unavailable', reason: 'directory_unavailable' });
+    settled();
+  });
+  return work;
+}
+for (const event of [chrome.tabs.onCreated, chrome.tabs.onUpdated, chrome.tabs.onRemoved, chrome.tabs.onMoved, chrome.tabs.onAttached, chrome.tabs.onDetached, chrome.tabs.onReplaced])
+  event.addListener(() => { void queueDirectory().catch(() => {}); });
+
 async function disconnect() {
   const port = native; native = undefined; ready = false;
+  watchingTabs = false; directoryRevision = 0; directoryTabs = []; directoryWork = undefined; directoryDirty = false; directorySnapshotPending = false;
   const retired = pending; pending = new Map();
   for (const task of retired.values()) task.cancelled = true;
   for (const tabId of bindings.keys()) {
@@ -119,7 +202,7 @@ async function attach(tabId, selection) {
   await rememberNativeTargets();
   popupLineage.observe('profile', String(tabId));
   popupLineage.bind('profile', String(tabId), String(tabId));
-  return { tab_id: String(tabId), title: tab.title || tab.url || '', binding: bindings.get(tabId).id };
+  return { tab_id: String(tabId), title: tab.title || tab.url || '', native_target_id: nativeTargets.get(String(tabId)), binding: bindings.get(tabId).id };
 }
 function retireCredits(binding) {
   sourceReceipts.delete(binding);
@@ -149,37 +232,36 @@ async function execute(message, task) {
       await chrome.windows.update(tab.windowId, { focused: true });
       return {};
     }
-    case 'inventory': {
-      if (lineageUnavailable) throw new Error('browser directory unavailable');
-      const tabs = (await chrome.tabs.query({})).filter(tab => !tab.incognito && /^(https?:\/\/|about:blank$)/u.test(tab.url || ''));
-      if (tabs.length > 128) throw new Error('inventory limit');
-      await rememberNativeTargets();
-      const retained = new Set(tabs.flatMap(tab => [String(tab.id), ...popupLineage.nativeAncestors('profile', String(tab.id))]));
-      for (const tab of nativeTargets.keys()) if (!retained.has(tab)) { nativeTargets.delete(tab); closedNativeTabs.delete(tab); }
-      return tabs.map(tab => {
-        const nativeTarget = nativeTargets.get(String(tab.id));
-        if (!nativeTarget) throw new Error('refresh browser directory');
-        const ancestors = popupLineage.nativeAncestors('profile', String(tab.id));
-        if (ancestors.length > 128) throw new Error('browser directory depth limit');
-        return { id: String(tab.id), native_target_id: nativeTarget, opener_native_target_ids: ancestors.map(id => nativeTargets.get(id)).filter(Boolean), profile_id: profile.id, title: (tab.title || '').slice(0, 512), url: tab.url,
-          ...(ancestors.length ? { opener_tab_id: ancestors[0], opener_tab_ids: ancestors } : {}),
-        };
-      });
+    case 'inventory': return inventory();
+    case 'watch_tabs': {
+      if (!watchingTabs) { watchingTabs = true; await queueDirectory(true); }
+      return {};
+    }
+    case 'sync_tabs': { await queueDirectory(); return {}; }
+    case 'close_tab': { await nativeTab(args, true); await chrome.tabs.remove(Number(args.tab_id)); await queueDirectory(); return {}; }
+    case 'pin_tab': { if (typeof args.pinned !== 'boolean') throw new Error('invalid pin'); await nativeTab(args, true); await chrome.tabs.update(Number(args.tab_id), { pinned: args.pinned === true }); await queueDirectory(); return {}; }
+    case 'move_tab': {
+      const tab = await nativeTab(args, true);
+      const before = args.before ? await nativeTab(args.before, true) : undefined;
+      const peers = (await chrome.tabs.query({ windowId: before?.windowId ?? tab.windowId })).filter(item => item.id !== tab.id);
+      await chrome.tabs.move(tab.id, { windowId: before?.windowId ?? tab.windowId, index: before ? peers.findIndex(item => item.id === before.id) : -1 });
+      await queueDirectory(); return {};
     }
     case 'bind': {
-      if (typeof args.tab_url !== 'string' || !args.tab_url || typeof args.tab_title !== 'string') throw new Error('select a current tab');
-      const result = await attach(Number(args.tab_id), args);
+      await nativeTab(args);
+      if (!args.native_target_id && (typeof args.tab_url !== 'string' || !args.tab_url || typeof args.tab_title !== 'string')) throw new Error('select a current tab');
+      const result = await attach(Number(args.tab_id), args.tab_url ? args : undefined);
       if (task.cancelled) { await unbind(Number(result.tab_id)); throw new Error('cancelled'); }
       return result;
     }
     case 'new_tab': {
       // No activation, window focus, pointer movement, or clipboard access.
       const tab = await chrome.tabs.create({ active: false, url: 'about:blank' });
-      try {
-        const result = await attach(tab.id);
-        if (task.cancelled) { await unbind(tab.id); throw new Error('cancelled'); }
-        return result;
-      } catch (error) { await chrome.tabs.remove(tab.id); throw error; }
+      // Creation and display have independent outcomes. Cancellation or a
+      // failed debugger attachment must never close the confirmed native tab.
+      await queueDirectory();
+      await rememberNativeTargets();
+      return { tab_id: String(tab.id), native_target_id: nativeTargets.get(String(tab.id)), title: tab.title || '', url: tab.url || 'about:blank' };
     }
     case 'unbind': {
       const binding = bindings.get(Number(args.tab_id));
@@ -246,10 +328,10 @@ async function connect(name, label, remember = false) {
     if (!ready && message.type === 'connection_error' && message.code === 'extension_update_required') {
       rejected(failure(message.code)); return;
     }
-    if (!ready && message.type === 'ready' && message.protocol_version !== 7) {
+    if (!ready && message.type === 'ready' && message.protocol_version !== 8) {
       rejected(failure('extension_update_required')); return;
     }
-    if (message.type === 'ready' && message.protocol_version === 7 && !ready) { ready = true; accepted(); return; }
+    if (message.type === 'ready' && message.protocol_version === 8 && !ready) { ready = true; accepted(); return; }
     if (ready && message.type === 'cdp_ack') {
       const receipt = receipts.get(message.sequence);
       if (receipt) {
@@ -281,7 +363,7 @@ async function connect(name, label, remember = false) {
       }
     })();
   });
-  port.postMessage({ type: 'hello', protocol_version: 7, profile_id: profile.id, profile_name: profile.name });
+  port.postMessage({ type: 'hello', protocol_version: 8, profile_id: profile.id, profile_name: profile.name });
   try {
     await handshake;
     if (remember) await chrome.storage.local.set({ autoConnect: true });

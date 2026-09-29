@@ -19,7 +19,7 @@ vi.mock('./browserTransport', () => ({
     state.carrierOptions = options;
     return {
       subscribe: (listener: (message: ServerMessage) => void | Promise<void>) => { state.receive = listener; return () => undefined; },
-      close: () => options.onClose(),
+      close: () => options.onClose(undefined, true),
     };
   },
 }));
@@ -43,7 +43,7 @@ async function fixture(onOpenWindow?: () => Promise<void>, onInteraction?: () =>
   const onFailure = vi.fn();
   const host = createBrowserWindow({
     session: {} as Session,
-    view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 24, media_wire_version: 1 },
+    view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 25, media_wire_version: 1 },
     child: () => child,
     configuration: { type: 'redeven-browser-ports', nonce: 'nonce', title: 'Browser', locale: 'en-US', messages: {} as BrowserMessages, theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' } },
     onReconnect: vi.fn(), onOpenWindow, onInteraction, onFailure,
@@ -54,7 +54,7 @@ async function fixture(onOpenWindow?: () => Promise<void>, onInteraction?: () =>
   cleanup = () => { host.close(); for (const port of ports) port.close(); };
   const received: ServerMessage[] = [];
   state.connection!.subscribe(message => { received.push(message); });
-  await state.receive!({ type: 'hello', version: 24, mediaWireVersion: 1 });
+  await state.receive!({ type: 'hello', version: 25, mediaWireVersion: 1 });
   received.length = 0;
   let id = 0;
   const acquire = async (target = 'first') => {
@@ -85,11 +85,11 @@ it('retires lost source authority and shows source selection without closing the
   await state.receive!({ type: 'control', target: 'first', active: true });
   expect(token()).toBe('old-token');
   const failure = new Promise(resolve => { product.onmessage = event => resolve(event.data); });
-  state.carrierOptions!.onClose('source_unavailable');
+  state.carrierOptions!.onClose('source_unavailable', false);
   expect(token()).toBe('');
   expect(onFailure).toHaveBeenCalledExactlyOnceWith('BROWSER_SOURCE_UNAVAILABLE');
   expect(await failure).toEqual({ type: 'workspace.failure', code: 'BROWSER_SOURCE_UNAVAILABLE', phase: 'failed' });
-  state.carrierOptions!.onClose('source_unavailable');
+  state.carrierOptions!.onClose('source_unavailable', false);
   host.close();
   expect(onFailure).toHaveBeenCalledOnce();
 });

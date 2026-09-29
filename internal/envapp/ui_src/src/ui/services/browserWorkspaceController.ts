@@ -15,13 +15,13 @@ export type BrowserWorkspaceState = Readonly<{
 }>;
 
 export function openBrowserWorkspace(request: BrowserWorkspaceRequest, signal: AbortSignal): Promise<BrowserViewDescriptor> {
-  const existing = 'source_target' in request;
-  return fetchSessionJSON(existing ? '/_redeven_proxy/api/browser/views' : '/_redeven_proxy/api/browser/workspace', {
-    method: 'POST', body: JSON.stringify(existing ? { targets: [request.source_target] } : request), signal,
+  return fetchSessionJSON('/_redeven_proxy/api/browser/workspace', {
+    method: 'POST', body: JSON.stringify(request), signal,
   });
 }
 export function browserWorkspaceSource(view: BrowserViewDescriptor): BrowserWorkspaceRequest {
-  return view.profile_id ? { managed_profile_id: view.profile_id } : { source_target: view.initial_target };
+  if (!view.workspace_id) throw new BrowserWorkspaceError('BROWSER_SOURCE_UNAVAILABLE');
+  return { workspace_id: view.workspace_id, initial_target: view.initial_target };
 }
 
 /** Owns one product view. Surfaces own only their document/ports; installer and
@@ -31,7 +31,6 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
   let session: Session | undefined;
   let pending: AbortController | undefined;
   let revision = 0;
-  let activeTarget = '';
   let recovery: Promise<void> | undefined;
   let closed = false;
   const listeners = new Set<(value: BrowserWorkspaceState) => void>();
@@ -74,7 +73,6 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
       // from this user/channel-bound view, never from renderer profile claims.
       await fetchSessionJSON('/_redeven_proxy/api/browser/preference', { method: 'POST', body: JSON.stringify({ view_id: issued.id }), signal: combined });
       combined.throwIfAborted();
-      activeTarget = issued.initial_target;
       publish({ phase: 'live', selection: { label: selection.label, request: browserWorkspaceSource(issued) }, view: issued, service: { state: 'ready', generation: issued.generation } });
       issued = undefined;
       release(previous);
@@ -99,7 +97,7 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
       try {
         const saved = await fetchSessionJSON<BrowserSourcePreference>('/_redeven_proxy/api/browser/preference', { method: 'GET', signal: reading.signal });
         if (closed || revision !== attempt || reading.signal.aborted) return;
-        const request = saved.source_target ? { source_target: saved.source_target } : saved.managed_profile_id ? { managed_profile_id: saved.managed_profile_id } : undefined;
+        const request = saved.workspace_id ? { workspace_id: saved.workspace_id } : saved.extension_profile_id ? { connection: { extension_profile_id: saved.extension_profile_id } } : saved.managed_profile_id ? { managed_profile_id: saved.managed_profile_id } : undefined;
         if (!request) {
           publish(saved.preference ? { ...state, phase: 'failed', failure: 'BROWSER_SOURCE_UNAVAILABLE' }
             : { ...state, phase: 'selecting', failure: undefined });
@@ -115,12 +113,7 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
       } finally { if (pending === reading) pending = undefined; }
       return;
     }
-    const request = state.view ? { source_target: activeTarget || state.view.initial_target } : state.selection.request;
-    if ('connection' in request && 'new_tab' in request.connection) {
-      publish({ ...state, phase: 'failed', failure: 'BROWSER_OUTCOME_UNKNOWN' });
-      throw new BrowserWorkspaceError('BROWSER_OUTCOME_UNKNOWN');
-    }
-    await open({ ...state.selection, request });
+    await open(state.selection);
   };
   const fail = async (failure: BrowserFailureCode = 'BROWSER_DISCONNECTED') => {
     if (closed || (!state.view && state.phase === 'failed')) return;
@@ -148,9 +141,12 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
     open, reconnect, fail,
     currentRequest(): BrowserWorkspaceRequest {
       if (!state.view) throw new BrowserWorkspaceError('BROWSER_SOURCE_UNAVAILABLE');
-      return { source_target: activeTarget || state.view.initial_target };
+      return state.selection!.request;
     },
-    selectTarget(target: string) { activeTarget = target; },
+    selectTarget(target: string) {
+      if (!state.view || !state.selection) return;
+      publish({ ...state, selection: { ...state.selection, request: { ...browserWorkspaceSource(state.view), initial_target: target } } });
+    },
     recover(): Promise<void> {
       if (recovery) return recovery;
       const attempt = ++revision;
@@ -163,7 +159,7 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
           publish({ ...state, phase: 'opening' });
           await fetchSessionJSON('/_redeven_proxy/api/browser/recovery', { method: 'POST', body: JSON.stringify({ expected_generation: status.generation }) });
           if (closed || revision !== attempt) return;
-          if (!state.selection || !('managed_profile_id' in state.selection.request)) throw new BrowserWorkspaceError('BROWSER_SOURCE_UNAVAILABLE');
+          publish({ ...state, view: undefined, selection: undefined });
           await reconnect();
         } catch (error) { if (!closed && revision === attempt) publish({ ...state, phase: 'failed', failure: browserFailureCode(error) }); throw error; }
       })();

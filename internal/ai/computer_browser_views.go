@@ -29,6 +29,7 @@ type BrowserViewRequest struct {
 }
 
 type BrowserViewDescriptor struct {
+	WorkspaceID      string `json:"workspace_id,omitempty"`
 	Generation       string `json:"generation"`
 	ID               string `json:"id"`
 	Protocol         int    `json:"protocol_version"`
@@ -53,6 +54,7 @@ type browserView struct {
 	ctx                context.Context
 	cancel             context.CancelFunc
 	mu                 sync.Mutex
+	opening            bool
 	observing          bool
 	input              bool
 	uploads            int
@@ -98,6 +100,13 @@ func (r *ComputerUseRuntime) openBrowserViewLocked(ctx context.Context, meta *se
 		valid = false
 	}
 	for i, target := range request.Targets {
+		if request.workspace != nil && request.workspace.extension != nil {
+			if _, ok := request.workspace.native[target]; !ok || slices.Contains(request.Targets[:i], target) {
+				valid = false
+				break
+			}
+			continue
+		}
 		var sourceHost *browserSourceHost
 		executor, managed := r.executors[target].(*PlaywrightTargetExecutor)
 		if managed {
@@ -123,6 +132,9 @@ func (r *ComputerUseRuntime) openBrowserViewLocked(ctx context.Context, meta *se
 		return BrowserViewDescriptor{}, err
 	}
 	for _, target := range request.Targets {
+		if request.workspace != nil && request.workspace.extension != nil {
+			break
+		}
 		if err := host.call(ctx, "source.ready", map[string]string{"target": target}, nil); err != nil {
 			return BrowserViewDescriptor{}, errBrowserViewUnavailable
 		}
@@ -142,7 +154,7 @@ func (r *ComputerUseRuntime) openBrowserViewLocked(ctx context.Context, meta *se
 	}
 	r.browserViews[view.id] = view
 	r.mu.Unlock()
-	if libraryProfile != "" && (view.workspace == nil || view.workspace.connection != nil) {
+	if libraryProfile != "" && (view.workspace == nil || view.workspace.connection != nil && view.workspace.extension == nil) {
 		var tabs []browserstore.Tab
 		if err := host.call(ctx, "source.describe", map[string]any{"targets": request.Targets}, &tabs); err != nil {
 			_ = view.close()
@@ -158,7 +170,11 @@ func (r *ComputerUseRuntime) openBrowserViewLocked(ctx context.Context, meta *se
 	// its DOM carrier. The DOM stream owns the view lifetime once attached.
 	view.expiry = time.AfterFunc(time.Minute, func() { _ = view.close() })
 	context.AfterFunc(lifetime, func() { _ = view.close() })
-	return BrowserViewDescriptor{Generation: r.browserServiceSnapshot().Generation, ID: view.id, Protocol: browserProjectionProtocolVersion, MediaProtocol: browserMediaWireVersion, ProfileID: view.profile, InitialTarget: view.initial, LibraryProfileID: view.libraryProfile}, nil
+	workspaceID := ""
+	if view.workspace != nil {
+		workspaceID = view.workspace.id
+	}
+	return BrowserViewDescriptor{WorkspaceID: workspaceID, Generation: r.browserServiceSnapshot().Generation, ID: view.id, Protocol: browserProjectionProtocolVersion, MediaProtocol: browserMediaWireVersion, ProfileID: view.profile, InitialTarget: view.initial, LibraryProfileID: view.libraryProfile}, nil
 }
 
 func (r *ComputerUseRuntime) browserView(meta *session.Meta, id string) (*browserView, error) {
@@ -217,19 +233,22 @@ func (r *ComputerUseRuntime) OpenBrowserObservation(ctx context.Context, meta *s
 	// Directory updates must observe the registered helper view and the same
 	// grant snapshot. Only registration holds this lock, never the stream body.
 	r.connectMu.Lock()
-	defer r.connectMu.Unlock()
 	view, err := r.browserView(meta, id)
 	if err != nil {
+		r.connectMu.Unlock()
 		return nil, err
 	}
 	view.mu.Lock()
-	if view.observing {
+	if view.observing || view.opening {
 		view.mu.Unlock()
+		r.connectMu.Unlock()
 		return nil, errBrowserViewUnavailable
 	}
+	view.opening = true
 	view.expiry.Stop()
 	targets := slices.Clone(view.targets)
 	view.mu.Unlock()
+	r.connectMu.Unlock()
 	ctx, cancel := view.operationContext(ctx)
 	body, _ := json.Marshal(map[string]any{"id": view.id, "targets": targets, "initialTab": view.initial, "editable": view.workspace != nil, "restoreClosedTabs": view.workspace != nil && view.workspace.connection == nil, "audio": false, "visible": true})
 	response, err := view.host.request(ctx, http.MethodPost, "/observe", bytes.NewReader(body))
@@ -244,9 +263,18 @@ func (r *ComputerUseRuntime) OpenBrowserObservation(ctx context.Context, meta *s
 		_ = view.close()
 		return nil, errBrowserViewUnavailable
 	}
+	r.connectMu.Lock()
+	defer r.connectMu.Unlock()
 	view.mu.Lock()
-	view.observing = true
+	view.opening, view.observing = false, true
+	latest := slices.Clone(view.targets)
 	view.mu.Unlock()
+	if err := view.host.call(ctx, "view.grants", map[string]any{"view": view.id, "targets": latest}, nil); err != nil {
+		_ = response.Body.Close()
+		cancel()
+		_ = view.close()
+		return nil, err
+	}
 	return &browserObservationBody{ReadCloser: response.Body, close: func() { cancel(); _ = view.close() }}, nil
 }
 

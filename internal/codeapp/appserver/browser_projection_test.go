@@ -201,9 +201,16 @@ func TestBrowserProjectionUsesOneFlowersecSession(t *testing.T) {
 			t.Fatalf("source tab missing: %+v", tabs)
 		}
 	}
-	target, err := runtime.ConnectBrowser(ctx, connection)
-	if err != nil {
-		t.Fatal(err)
+	var target ai.TargetDescriptor
+	if connection.ExtensionProfileID == "" {
+		target, err = runtime.ConnectBrowser(ctx, connection)
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		// Opening the personal profile must enumerate metadata before any page
+		// is admitted. Its first source is resolved by the observing document.
+		connection = ai.ComputerBrowserConnection{ExtensionProfileID: connection.ExtensionProfileID}
 	}
 	srv, err := New(Options{Backend: &stubBackend{}, DistFS: os.DirFS(filepath.Join(ui, "../ui/dist")), ConfigPath: writeTestConfig(t), ResolveSessionMeta: func(channel string) (*session.Meta, bool) { return meta, channel == meta.ChannelID }, ListenAddr: "127.0.0.1:0"})
 	if err != nil {

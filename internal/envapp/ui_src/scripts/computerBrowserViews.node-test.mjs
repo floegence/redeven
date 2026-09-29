@@ -21,7 +21,9 @@ async function fixture(t) {
   }
   const listeners = new Set();
   const directory = {
-    list: () => [...sources.values()].map(owner => ({ page: owner.source })),
+    list: () => [...sources].map(([id, owner]) => ({ id, url: owner.source.url() })),
+    resolve: async id => sources.get(id)?.source ?? (() => { throw new Error('Source tab is unavailable'); })(),
+    downloads: id => sources.get(id)?.source.downloads() ?? [],
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     async create() { throw new Error('Creation requires a Runtime directory command'); },
     async close() { throw new Error('Closing requires a Runtime directory command'); },
@@ -53,7 +55,9 @@ test('overlapping browser windows output each source audio once and hand it off 
     sources.set(id, await createComputerBrowserSource(page, id));
   }
   views = await createComputerBrowserViews({
-    list: () => [...sources.values()].map(owner => ({ page: owner.source })),
+    list: () => [...sources].map(([id, owner]) => ({ id, url: owner.source.url() })),
+    resolve: async id => sources.get(id)?.source ?? (() => { throw new Error('Source tab is unavailable'); })(),
+    downloads: id => sources.get(id)?.source.downloads() ?? [],
     subscribe: () => () => {},
     create: async () => { throw new Error('Not allowed'); }, close: async () => {}, move: async () => {}, pin: async () => {}, restore: async () => {},
   }, { sourceOwner: id => sources.get(id), mediaBridge: bridge, resourceURL: id => `?browser_resource=${id}` });

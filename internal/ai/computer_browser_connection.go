@@ -18,6 +18,7 @@ import (
 )
 
 type ComputerBrowserConnection struct {
+	nativeTargetID     string // Runtime-owned stable native identity for workspace resolution.
 	privatePopup       bool   // Set only by the shared source owner's managed popup event.
 	ManagedProfileID   string `json:"managed_profile_id,omitempty"`
 	ExtensionProfileID string `json:"extension_profile_id,omitempty"`
@@ -64,6 +65,11 @@ func (c ComputerBrowserConnection) validate() error {
 }
 
 type ComputerBrowserTab struct {
+	Availability          string   `json:"availability,omitempty"`
+	Pinned                bool     `json:"pinned,omitempty"`
+	Loading               bool     `json:"loading,omitempty"`
+	WindowID              int      `json:"window_id,omitempty"`
+	Index                 int      `json:"index,omitempty"`
 	NativeTargetID        string   `json:"native_target_id,omitempty"`
 	OpenerNativeTargetIDs []string `json:"opener_native_target_ids,omitempty"`
 	Private               bool     `json:"private,omitempty"`

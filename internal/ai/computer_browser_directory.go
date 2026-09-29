@@ -9,18 +9,20 @@ import (
 	"github.com/floegence/redeven/internal/browserstore"
 )
 
-// Runtime owns the shared product directory. Source adapters apply its order
-// and grants; views retain independent selection and never select a Flower target.
+// Chrome owns personal tab metadata; Runtime owns workspace visibility grants.
+// Views retain independent selection and never select a Flower target.
 // All directory mutations run under connectMu, while view grants use view.mu.
 type browserWorkspace struct {
-	owner, profile string
-	targets        []string
-	pinned         map[string]bool
-	closed         []browserstore.Tab
-	tabs           map[string]browserstore.Tab
-	selected       string
-	connection     *ComputerBrowserConnection // Runtime-only external source scope, never persisted.
-	pendingCloses  int                        // Explicit close transactions may replace the last tab.
+	id, owner, profile string
+	extension          *computerExtensionClient
+	native             map[string]ComputerBrowserTab
+	targets            []string
+	pinned             map[string]bool
+	closed             []browserstore.Tab
+	tabs               map[string]browserstore.Tab
+	selected           string
+	connection         *ComputerBrowserConnection // Runtime-only external source scope, never persisted.
+	pendingCloses      int                        // Explicit close transactions may replace the last tab.
 }
 
 func (r *ComputerUseRuntime) newBrowserWorkspaceTab(ctx context.Context, workspace *browserWorkspace) (TargetDescriptor, error) {
@@ -29,9 +31,6 @@ func (r *ComputerUseRuntime) newBrowserWorkspaceTab(ctx context.Context, workspa
 	}
 	connection := *workspace.connection
 	connection.NewTab, connection.TabID, connection.TabURL, connection.TabTitle = true, "", "", ""
-	if connection.ExtensionProfileID != "" {
-		return r.connectExtensionBrowser(ctx, connection, "")
-	}
 	return r.connectCDPBrowserLocked(ctx, connection, "")
 }
 
@@ -57,6 +56,9 @@ func (r *ComputerUseRuntime) browserDirectoryCommand(ctx context.Context, event 
 	if json.Unmarshal(event.Action, &action) != nil {
 		return "", errBrowserViewUnavailable
 	}
+	if action.Kind == "resolve" {
+		return r.resolveWorkspaceSource(ctx, action.Target)
+	}
 	if action.Kind == "close" {
 		return r.closeBrowserWorkspaceTab(ctx, event, action.Target)
 	}
@@ -72,6 +74,9 @@ func (r *ComputerUseRuntime) browserDirectoryCommand(ctx context.Context, event 
 	ctx, cancel := view.operationContext(ctx)
 	defer cancel()
 	workspace := view.workspace
+	if workspace.extension != nil {
+		return r.extensionWorkspaceCommand(ctx, view, action)
+	}
 	if (action.Kind == "move" || action.Kind == "pin") && !view.permits(action.Target) {
 		return "", errBrowserViewUnavailable
 	}
@@ -158,8 +163,10 @@ func (r *ComputerUseRuntime) refreshBrowserWorkspace(ctx context.Context, worksp
 			pinned = append(pinned, id)
 		}
 	}
-	if err := r.browserHost.call(ctx, "source.order", map[string]any{"targets": workspace.targets, "pinned": pinned}, nil); err != nil {
-		return err
+	if workspace.extension == nil {
+		if err := r.browserHost.call(ctx, "source.order", map[string]any{"targets": workspace.targets, "pinned": pinned}, nil); err != nil {
+			return err
+		}
 	}
 	for _, view := range views {
 		view.mu.Lock()
@@ -223,6 +230,40 @@ func (r *ComputerUseRuntime) closeBrowserWorkspaceTab(ctx context.Context, event
 		defer done()
 		_ = lease.close(cleanup)
 	}()
+	if view.workspace.extension != nil {
+		r.connectMu.Lock()
+		tab, exists := view.workspace.native[targetID]
+		r.connectMu.Unlock()
+		if !exists {
+			return "", errBrowserViewUnavailable
+		}
+		r.mu.RLock()
+		connected := r.executors[targetID] != nil
+		r.mu.RUnlock()
+		var closed bool
+		err := lease.run(ctx, func(ctx context.Context) error {
+			if connected {
+				return view.host.call(ctx, "source.close", map[string]string{"target": targetID}, &closed)
+			}
+			_, err := view.workspace.extension.call(ctx, "close_tab", map[string]any{"tab_id": tab.ID, "native_target_id": tab.NativeTargetID})
+			closed = err == nil
+			return err
+		})
+		if err != nil {
+			r.connectMu.Lock()
+			defer r.connectMu.Unlock()
+			return "", r.reconcileExtensionWorkspaceOutcome(ctx, view.workspace, err)
+		}
+		if !closed {
+			return "", nil
+		}
+		r.connectMu.Lock()
+		defer r.connectMu.Unlock()
+		if _, err := view.workspace.extension.call(ctx, "sync_tabs", nil); err != nil {
+			return "", err
+		}
+		return "", r.refreshExtensionWorkspace(ctx, view.workspace)
+	}
 	var tabs []browserstore.Tab
 	if err := view.host.call(ctx, "source.describe", map[string]any{"targets": []string{targetID}}, &tabs); err != nil {
 		return "", err
@@ -254,7 +295,7 @@ func (r *ComputerUseRuntime) closeBrowserWorkspaceTab(ctx context.Context, event
 	delete(workspace.pinned, targetID)
 	// Keep one blank tab so browser commands retain an addressable selected
 	// source. This does not navigate or reclaim the page that was closed.
-	if len(workspace.targets) == 0 {
+	if len(workspace.targets) == 0 && workspace.connection == nil {
 		target, err := r.newBrowserWorkspaceTab(ctx, workspace)
 		if err != nil {
 			return "", err

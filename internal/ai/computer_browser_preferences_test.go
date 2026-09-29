@@ -25,7 +25,7 @@ func TestBrowserPreferenceRequiresOwnedSuccessfulViewAndNeverRestoresExternalAut
 	client := &computerExtensionClient{done: make(chan struct{}), profile: ComputerExtensionProfile{ID: "ephemeral", LibraryID: profile.ID, InstallationID: installation}}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	host := &ComputerUseRuntime{browserStore: store, browserService: BrowserServiceStatus{State: "ready"}, executors: map[string]TargetToolExecutor{"target": &extensionTargetExecutor{client: client}}, browserViews: map[string]*browserView{"view": {owner: owner, channel: meta.ChannelID, ctx: ctx, initial: "target", libraryProfile: profile.ID}}, browserWorkspaces: map[string]*browserWorkspace{owner + "/" + profile.ID: {owner: owner, profile: profile.ID, selected: "target"}}}
+	host := &ComputerUseRuntime{browserStore: store, browserService: BrowserServiceStatus{State: "ready"}, executors: map[string]TargetToolExecutor{"target": &extensionTargetExecutor{client: client}}, browserViews: map[string]*browserView{"view": {owner: owner, channel: meta.ChannelID, ctx: ctx, initial: "target", libraryProfile: profile.ID}}, browserWorkspaces: map[string]*browserWorkspace{owner + "/" + profile.ID: {id: "workspace", owner: owner, profile: profile.ID, selected: "target", extension: client}}}
 	if err = host.SaveBrowserPreference(t.Context(), meta, "missing"); err == nil {
 		t.Fatal("unsuccessful view saved preference")
 	}
@@ -46,13 +46,14 @@ func TestBrowserPreferenceRequiresOwnedSuccessfulViewAndNeverRestoresExternalAut
 	if err = host.SaveBrowserPreference(t.Context(), meta, "view"); err != nil {
 		t.Fatal(err)
 	}
+	delete(host.executors, "target")
 	saved, err := host.BrowserPreference(t.Context(), meta)
-	if err != nil || saved.Preference == nil || saved.Preference.InstallationID != installation || saved.SourceTarget != "target" {
+	if err != nil || saved.Preference == nil || saved.Preference.InstallationID != installation || saved.WorkspaceID != "workspace" || saved.ExtensionProfileID != "ephemeral" {
 		t.Fatal(saved, err)
 	}
 	close(client.done)
 	saved, err = host.BrowserPreference(t.Context(), meta)
-	if err != nil || saved.SourceTarget != "" || saved.ManagedProfileID != "" || saved.Preference == nil {
+	if err != nil || saved.WorkspaceID != "" || saved.ExtensionProfileID != "" || saved.ManagedProfileID != "" || saved.Preference == nil {
 		t.Fatal("disconnected authority was restored or preference was lost", saved, err)
 	}
 	cancel()

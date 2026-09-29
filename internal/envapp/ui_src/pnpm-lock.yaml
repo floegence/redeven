@@ -44,8 +44,8 @@ importers:
         specifier: 0.81.3
         version: 0.81.3(solid-js@1.9.13)
       '@floegence/floebrowser':
-        specifier: 0.1.25
-        version: 0.1.25
+        specifier: 0.1.26
+        version: 0.1.26
       '@floegence/floeterm-terminal-web':
         specifier: 0.19.2
         version: 0.19.2
@@ -558,8 +558,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floebrowser@0.1.25':
-    resolution: {integrity: sha512-hFkqmxq8bm5wqqENMiUZ8m8jD336ceBsCs83Bcmdy273nxlKVHd84b1YuacgGwT837KKD+JiCjFMLHzgs/7sew==}
+  '@floegence/floebrowser@0.1.26':
+    resolution: {integrity: sha512-YsDmQ51Df9F2HuEPXRiRyl+bYeGitErXvd69k0pHrdlKvpVj/jhT4XWesaQ/h+NDB2HCAy6u7ZMT+2WJ76whew==}
     engines: {node: '>=26'}
     hasBin: true
 
@@ -2920,8 +2920,8 @@ packages:
     resolution: {integrity: sha512-9qv4rlDiopXg4E69k+vMHjNN63YFMe9sZMrdlvKnCjlCRWeCBswPPMPUfx+ipsAWq1LXHe70RcbaHdJJpS6hyQ==}
     engines: {node: '>= 10'}
 
-  zod@4.1.12:
-    resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
@@ -3269,7 +3269,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floebrowser@0.1.25':
+  '@floegence/floebrowser@0.1.26':
     dependencies:
       '@rrweb/record': 2.1.6
       '@rrweb/replay': 2.1.6
@@ -3280,7 +3280,7 @@ snapshots:
       postcss-selector-parser: 7.1.6
       postcss-value-parser: 4.2.0
       ws: 8.21.3
-      zod: 4.1.12
+      zod: 4.6.5
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -5634,6 +5634,6 @@ snapshots:
       compress-commons: 4.1.2
       readable-stream: 3.6.2
 
-  zod@4.1.12: {}
+  zod@4.6.5: {}
 
   zwitch@2.0.4: {}

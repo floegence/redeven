@@ -93,7 +93,6 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
       profiles: async signal => await request({ method: 'source.profiles' }, signal) as Awaited<ReturnType<BrowserSourceService['profiles']>>,
       createProfile: async (name, signal) => await request({ method: 'source.createProfile', name }, signal) as Awaited<ReturnType<BrowserSourceService['profiles']>>,
       status: async signal => await request({ method: 'source.status' }, signal) as Awaited<ReturnType<BrowserSourceService['status']>>,
-      tabs: async (profile, signal) => await request({ method: 'source.tabs', profile }, signal) as Awaited<ReturnType<BrowserSourceService['tabs']>>,
       discover: async (endpoint, signal) => await request({ method: 'source.discover', endpoint }, signal) as Awaited<ReturnType<BrowserSourceService['discover']>>,
       management: {
         browserDesktopAvailable: sources.desktop,

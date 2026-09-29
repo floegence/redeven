@@ -7324,13 +7324,21 @@
       "loading": "Carregando páginas salvas…",
       "empty": "Nenhuma página salva corresponde à pesquisa.",
       "failed": "Não foi possível atualizar as páginas salvas. Tente novamente."
+    },
+    "projection": {
+      "failed": "Não foi possível exibir esta aba",
+      "recovery": "Reconecte a exibição desta aba. A página continuará aberta no navegador de origem.",
+      "retry": "Tentar exibir novamente",
+      "unsupported": "Esta página não pode ser exibida aqui",
+      "unsupportedDescription": "As páginas internas continuam disponíveis no navegador de origem. Selecione outra aba ou abra um site.",
+      "empty": "Nenhuma aba aberta",
+      "emptyDescription": "Crie uma aba para começar a navegar neste espaço de trabalho."
     }
   },
   "browserProduct": {
     "welcomeTitle": "Navegue no seu espaço de trabalho",
     "welcomeDescription": "Conecte seu navegador pessoal ou use o navegador integrado para abrir sites aqui.",
     "chooseSource": "Escolher um navegador",
-    "profile": "Perfil do navegador",
     "defaultProfile": "Perfil padrão",
     "openWindow": "Abrir em uma nova janela",
     "windowUnavailable": "Não foi possível abrir a janela do navegador. Tente novamente.",
@@ -7341,25 +7349,25 @@
     "chromeSource": "Navegador pessoal",
     "profileName": "Nome do novo perfil",
     "createProfile": "Criar perfil",
-    "searchPages": "Pesquisar páginas",
     "noPages": "Nenhuma página encontrada. Abra uma página no navegador de origem e atualize a lista.",
     "openSelection": "Abrir seleção",
-    "selectionHint": "Abrir uma página aqui não altera a página selecionada pelo Flower.",
-    "chromeConfirmHint": "Confirme a conexão no navegador e selecione a página que deseja abrir aqui.",
+    "selectionHint": "Abra todas as abas comuns deste perfil. A página selecionada no Flower e o foco do navegador permanecem inalterados.",
+    "chromeConfirmHint": "Confirme a conexão no navegador e abra o perfil dele aqui.",
     "installTitle": "Configurar o navegador do ambiente",
     "installOpen": "Instalar e abrir",
     "recoverTitle": "O serviço do navegador foi interrompido",
     "recover": "Recuperar navegador",
     "recoveryDescription": "O navegador do ambiente será reiniciado e as abas salvas serão restauradas. Os formulários não enviados e o conteúdo não salvo das páginas podem ser perdidos. Os outros serviços do ambiente continuarão funcionando.",
-    "sourceUnavailable": "Esta página não está mais disponível. Selecione uma origem do navegador.",
+    "sourceUnavailable": "Este navegador está indisponível no momento. Reconecte-o ou escolha outro navegador.",
     "disconnected": "A conexão com o navegador foi interrompida.",
     "openFailed": "Não foi possível abrir o navegador. Tente novamente ou escolha outra origem.",
     "openTimeout": "O navegador não respondeu a tempo.",
     "recoveryBlocked": "Encerre a sessão privada no navegador de origem antes de recuperar o serviço.",
     "outcomeUnknown": "A ação pode já ter sido concluída. Selecione a origem para verificar o estado atual.",
-    "retry": "Tentar novamente",
     "moreActions": "Mais ações do navegador",
     "recommended": "Recomendado",
-    "previouslyUsed": "Usado anteriormente"
+    "previouslyUsed": "Usado anteriormente",
+    "connectionTitle": "Conexão com o navegador interrompida",
+    "reconnectBrowser": "Reconectar navegador"
   }
 }

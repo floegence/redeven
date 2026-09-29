@@ -7320,13 +7320,21 @@
       "loading": "正在加载已保存的页面…",
       "empty": "没有匹配的已保存页面。",
       "failed": "无法更新已保存的页面，请重试。"
+    },
+    "projection": {
+      "failed": "暂时无法显示此标签页",
+      "recovery": "重新连接此标签页的显示。页面会保留在源浏览器中。",
+      "retry": "重试显示",
+      "unsupported": "此页面无法在这里显示",
+      "unsupportedDescription": "浏览器内部页面仍可在源浏览器中使用。请选择其他标签页或打开网站。",
+      "empty": "没有打开的标签页",
+      "emptyDescription": "新建标签页，开始在此工作区中浏览。"
     }
   },
   "browserProduct": {
     "welcomeTitle": "在工作区中浏览网页",
     "welcomeDescription": "连接个人浏览器，或使用内置浏览器，在这里打开网站。",
     "chooseSource": "选择浏览器",
-    "profile": "浏览器配置档案",
     "defaultProfile": "默认配置档案",
     "openWindow": "在新窗口中打开",
     "windowUnavailable": "无法打开浏览器窗口，请重试。",
@@ -7337,25 +7345,25 @@
     "chromeSource": "个人浏览器",
     "profileName": "新配置档案名称",
     "createProfile": "创建配置档案",
-    "searchPages": "搜索页面",
     "noPages": "未找到页面。请先在源浏览器中打开页面，再刷新。",
     "openSelection": "打开所选项",
-    "selectionHint": "在此打开页面不会更改 Flower 当前选择的页面。",
-    "chromeConfirmHint": "在 浏览器 中确认连接，然后选择要在此打开的页面。",
+    "selectionHint": "打开此配置中的所有普通标签页，不改变 Flower 当前选择的页面或本地浏览器焦点。",
+    "chromeConfirmHint": "在浏览器中确认连接，然后在这里打开该配置。",
     "installTitle": "设置环境浏览器",
     "installOpen": "安装并打开",
     "recoverTitle": "浏览器服务已停止",
     "recover": "恢复浏览器",
     "recoveryDescription": "将重启环境浏览器并恢复已保存的标签页。未提交的表单和页面中未保存的内容可能丢失，其他环境服务将继续运行。",
-    "sourceUnavailable": "此页面已不可用，请重新选择浏览器来源。",
+    "sourceUnavailable": "此浏览器目前不可用，请重新连接或选择其他浏览器。",
     "disconnected": "浏览器连接已中断。",
     "openFailed": "无法打开浏览器，请重试或选择其他来源。",
     "openTimeout": "浏览器未及时响应。",
     "recoveryBlocked": "请先在源浏览器中结束私密会话，再恢复浏览器服务。",
     "outcomeUnknown": "操作可能已经完成，请选择来源查看当前状态。",
-    "retry": "重试",
     "moreActions": "更多浏览器操作",
     "recommended": "推荐",
-    "previouslyUsed": "上次使用"
+    "previouslyUsed": "上次使用",
+    "connectionTitle": "浏览器连接已中断",
+    "reconnectBrowser": "重新连接浏览器"
   }
 }

@@ -122,7 +122,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     });
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
-    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 7 }));
+    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 8 }));
     let sequence = 0;
     const nativeCall = async (command, args = {}) => {
       const id = String(++sequence);
@@ -170,7 +170,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
         await owners.get(args.tab_id)?.dispose(); owners.delete(args.tab_id);
       }
       const result = await nativeCall(command, args);
-      if (command === 'bind' || command === 'new_tab') {
+      if (command === 'bind') {
         if (owners.has(result.tab_id)) return result;
         const root = new EventEmitter();
         root.tabId = result.tab_id; root.binding = result.binding; root.children = new Map();
@@ -287,6 +287,8 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     const activeBefore = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
     const created = await call('new_tab');
     assert.ok(created.tab_id);
+    assert.equal(owners.has(created.tab_id), false, 'Native creation must not attach a projection');
+    await call('bind', { tab_id: created.tab_id, native_target_id: created.native_target_id });
     assert.deepEqual(await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id)), activeBefore);
     // A slow wait on one target must not block another target or tear down the
     // profile when cancelled. The extension receives real concurrent messages.
@@ -354,7 +356,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
         await chrome.alarms.create('redeven-native-reconnect', { when: Date.now() });
       });
       await worker.evaluate(() => fixtureWait('hello'));
-      await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 7 }));
+      await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 8 }));
       await popup.locator('#disconnect').waitFor({ state: 'visible' });
       await popup.locator('#repair').waitFor({ state: 'hidden' });
       await popup.locator('#connect-button').waitFor({ state: 'hidden' });
