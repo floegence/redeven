@@ -162,6 +162,9 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 				if err != nil {
 					return fltools.Result{}, err
 				}
+				if def.Source == "mcp" && toolResult.Activity != nil {
+					toolResult.Activity.Label = activityPresentationLabel(def.Presentation.ResultLabelFallback)
+				}
 				return toolResult, nil
 			},
 		)
@@ -418,7 +421,10 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 		if err := json.Unmarshal(def.InputSchema, &parsed); err != nil || parsed == nil {
 			return fltools.Definition{}, fmt.Errorf("invalid input schema for Floret tool %s", toolName)
 		}
-		inputSchema = stripRedevenTargetFieldsFromFloretToolSchema(toolName, parsed)
+		inputSchema = parsed
+		if def.Source != "mcp" {
+			inputSchema = stripRedevenTargetFieldsFromFloretToolSchema(toolName, parsed)
+		}
 	}
 	effects := floretToolEffects(def)
 	readOnly := !def.Mutating && !floretToolOpenWorld(def) && toolName != "terminal.exec"
@@ -437,7 +443,7 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 	}
 	return fltools.Definition{
 		Name:        toolName,
-		Title:       toolName,
+		Title:       firstNonEmptyString(def.Presentation.CallLabelFallback, toolName),
 		Description: strings.TrimSpace(def.Description),
 		InputSchema: inputSchema,
 		Effects:     effects,
@@ -454,14 +460,22 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 			if toolName == "terminal.exec" {
 				args = normalizeTerminalExecArgs(args)
 			}
-			return floretActivityForToolCall(toolName, args), nil
+			activity := floretActivityForToolCall(toolName, args)
+			if def.Source == "mcp" && activity != nil {
+				activity.Label = activityPresentationLabel(def.Presentation.CallLabelFallback)
+			}
+			return activity, nil
 		},
 		InvalidActivity: func(inv fltools.Invocation[map[string]any]) (*fltools.ActivityPresentation, error) {
 			args := cloneAnyMap(inv.Args)
 			if toolName == "terminal.exec" {
 				args = normalizeTerminalExecArgs(args)
 			}
-			return floretActivityForToolCall(toolName, args), nil
+			activity := floretActivityForToolCall(toolName, args)
+			if def.Source == "mcp" && activity != nil {
+				activity.Label = activityPresentationLabel(def.Presentation.CallLabelFallback)
+			}
+			return activity, nil
 		},
 		Annotations: annotations,
 	}, nil
@@ -517,6 +531,9 @@ func floretToolResourceKinds(toolName string) []string {
 }
 
 func floretToolOpenWorld(def ToolDef) bool {
+	if def.Source == "mcp" {
+		return true
+	}
 	switch strings.TrimSpace(def.Name) {
 	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "web.search", "use_skill":
 		return true
@@ -700,6 +717,12 @@ func stripRedevenTargetFieldsFromFloretToolSchema(_ string, inputSchema map[stri
 }
 
 func floretToolEffects(def ToolDef) []fltools.Effect {
+	if def.Source == "mcp" {
+		if def.HasCapability(ToolCapabilityShell) {
+			return []fltools.Effect{fltools.EffectShell, fltools.EffectWrite}
+		}
+		return []fltools.Effect{fltools.EffectNetwork, fltools.EffectWrite}
+	}
 	name := strings.TrimSpace(def.Name)
 	switch name {
 	case "computer.select_target", "computer.exec", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "browser.navigate", "browser.back", "browser.reload":

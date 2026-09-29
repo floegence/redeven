@@ -1262,6 +1262,7 @@ export type FlowerComputerUserInput = Readonly<{
 }>;
 
 export type FlowerSurfaceAdapter = Readonly<{
+  extensions?: import('../extensions/types').FlowerExtensionsAdapter;
   runtime: FlowerSurfaceRuntimeDescriptor;
   canMutate?: boolean;
   /** Keep the canonical summary stream connected while the document is hidden. */

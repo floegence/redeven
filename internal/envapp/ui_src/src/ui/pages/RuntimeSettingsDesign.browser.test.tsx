@@ -107,7 +107,7 @@ it.each([false, true])('identifies filesystem roots and every model provider wit
 it.each([1280, 390])('keeps settings disclosure targets padded and usable at %ipx', async width => {
   await mount(width);
   const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
-  for (const id of ['connection', 'agent', 'ai', 'skills', 'codespaces'] as const) {
+  for (const id of ['connection', 'agent', 'ai', 'codespaces'] as const) {
     const panel = await openSection(id);
     const summaries = [...panel.querySelectorAll<HTMLElement>('.settings-technical-details > summary')].filter(element => element.getClientRects().length);
     expect(summaries.length, `${id} has a visible disclosure`).toBeGreaterThan(0);
@@ -299,19 +299,13 @@ it('edits directory identity separately and confirms write permission before sav
   await expect.element(page.getByRole('button', { name: 'Edit directory', exact: true })).toBeDisabled();
 });
 
-it('keeps provider and skill diagnostics closed without hiding their actions', async () => {
+it('keeps provider diagnostics closed without hiding their actions', async () => {
   await mount();
   const models = await openSection('ai');
   const provider = models.querySelector<HTMLDetailsElement>('.settings-provider-details')!;
   expect(provider.open).toBe(false);
   await expect.element(page.getByRole('button', { name: 'Edit provider', exact: true })).toBeVisible();
-  const skills = await openSection('skills');
-  await expect.element(page.getByText('code-review', { exact: true })).toBeVisible();
-  const detail = skills.querySelector<HTMLDetailsElement>('.settings-skill-details')!;
-  expect(detail.open).toBe(false);
-  expect(detail.textContent).toContain('/Users/alex/.redeven/skills/code-review');
-  await userEvent.click(detail.querySelector('summary')!);
-  await expect.element(page.getByRole('button', { name: 'Reinstall', exact: true })).toBeVisible();
+
 });
 
 it('cancels a new directory without saving an empty filesystem root', async () => {
@@ -406,8 +400,6 @@ it('switches Flower groups without losing permissions or health access and respe
   fixture.setCanAdmin(false);
   await openSection('runtime');
   await expect.element(page.getByPlaceholder('/home/user')).toBeDisabled();
-  await openSection('skills');
-  await expect.element(page.getByRole('button', { name: 'Create Skill', exact: true })).toBeDisabled();
 });
 
 it('navigates through the mobile section picker and exposes storage recovery from the model page', async () => {

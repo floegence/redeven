@@ -36,7 +36,25 @@ const runtimeFlowerIdentifierQuery = (key: string) => (parsed: URL): boolean => 
   return [...parsed.searchParams.keys()].length === 1 && values.length === 1
     && values[0]!.trim().length > 0 && values[0]!.length <= 512;
 };
+const runtimeFlowerSkillBrowseQuery = (kind: 'dir' | 'file') => (parsed: URL): boolean => {
+  return [...parsed.searchParams.keys()].length === 2
+    && parsed.searchParams.getAll('skill_path').length === 1
+    && Boolean(parsed.searchParams.get('skill_path'))
+    && parsed.searchParams.getAll(kind).length === 1
+    && [...parsed.searchParams.values()].every(value => value.length <= 8192);
+};
 const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
+  { path: '/_redeven_proxy/api/ai/mcp', methods: ['GET', 'PUT', 'DELETE'] },
+  { path: '/_redeven_proxy/api/ai/mcp/check', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/skills', methods: ['GET', 'POST', 'DELETE'] },
+  { path: '/_redeven_proxy/api/ai/skills/sources', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/ai/skills/reload', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/skills/toggles', methods: ['PUT'] },
+  { path: '/_redeven_proxy/api/ai/skills/reinstall', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/skills/import/github', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/skills/import/github/validate', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/skills/browse/tree', methods: ['GET'], allowsQuery: runtimeFlowerSkillBrowseQuery('dir') },
+  { path: '/_redeven_proxy/api/ai/skills/browse/file', methods: ['GET'], allowsQuery: runtimeFlowerSkillBrowseQuery('file') },
   { path: '/_redeven_proxy/api/settings', methods: ['GET'] },
   { path: '/_redeven_proxy/api/fs/path_context', methods: ['GET'] },
   { path: '/_redeven_proxy/api/fs/list', methods: ['POST'] },

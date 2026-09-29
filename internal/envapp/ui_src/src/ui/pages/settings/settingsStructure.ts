@@ -4,7 +4,6 @@ import {
   Database,
   FileCode,
   Globe,
-  Layers,
   RefreshIcon,
   Shield,
   Terminal,
@@ -49,7 +48,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
   { id: 'logging', navLabel: 'Logging', icon: Database, group: 'diagnostics' },
   { id: 'permission_policy', navLabel: 'Permission Policy', icon: Shield, group: 'security' },
   { id: 'ai', navLabel: 'Flower', icon: FlowerIcon, group: 'ai_extensions' },
-  { id: 'skills', navLabel: 'Skills', icon: Layers, group: 'ai_extensions' },
   { id: 'debug_console', navLabel: 'Debug Console', icon: RefreshIcon, group: 'diagnostics' },
 ]);
 
@@ -64,7 +62,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
   { id: 'overview', title: 'Overview', sections: ['connection', 'agent'] },
   { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['runtime', 'codespaces'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },
-  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'skills'] },
+  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai'] },
   { id: 'diagnostics', title: 'Diagnostics', sections: ['config', 'logging', 'debug_console'] },
 ]);
 

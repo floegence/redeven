@@ -1,3 +1,4 @@
+import { flowerExtensionsAdapter } from '../../../../internal/flower_ui/host/extensionsAdapter';
 import type { DesktopSecurityRequest, SecurityResult } from '../../shared/runtimeSecurity';
 import { computerManagementAdapter } from '../../../../internal/flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../internal/flower_ui/host/computerFramePath';
@@ -825,6 +826,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
 		submitApproval: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, body),
     },
     mapperOptions: localEnvironmentLiveMapperOptions(),
+    extensions: flowerExtensionsAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), { canInteract: () => true, canAdmin: () => true }),
     loadSettings: () => loadSettingsSnapshot(bridge),
     discoverProviderModels: (input) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/model_catalog', input),
     saveDefaultPermission: async (permissionType) => {

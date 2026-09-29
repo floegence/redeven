@@ -45,6 +45,11 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 	if err := registerBuiltInTools(registry, r); err != nil {
 		return runToolSurface{}, err
 	}
+	for _, def := range r.mcpManager.Tools() {
+		if err := registry.Register(def); err != nil {
+			return runToolSurface{}, err
+		}
+	}
 	permissionFilter := newPermissionToolFilter(!r.noUserInteraction)
 	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
 	activeTools := permissionFilter.FilterTools(permissionType, registry.Snapshot())

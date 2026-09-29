@@ -1,3 +1,4 @@
+import { flowerExtensionsAdapter } from '../../../../../flower_ui/host/extensionsAdapter';
 import { computerManagementAdapter } from '../../../../../flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../../flower_ui/host/computerFramePath';
 import { messageFilePath } from '../../../../../flower_ui/host/messageFilePath';
@@ -73,6 +74,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   desktopSessionTargetRoute?: 'local_host' | 'remote_desktop';
   rpc: RedevenV1Rpc;
   canMutate?: boolean;
+  canManageExtensions?: () => boolean;
   settingsRevision?: () => number;
   isAvailable?: () => boolean;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
@@ -810,6 +812,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }),
     },
     mapperOptions: envLiveMapperOptions(options),
+    extensions: flowerExtensionsAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), { canInteract: () => options.isAvailable?.() ?? true, canAdmin: () => options.canManageExtensions?.() ?? false }),
     loadSettings: loadCachedSettings,
     discoverProviderModels: (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }),
     saveDefaultPermission: async (permissionType) => {

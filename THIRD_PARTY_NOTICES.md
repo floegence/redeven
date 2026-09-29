@@ -1417,6 +1417,7 @@ SOFTWARE.
 | github.com/floegence/redevplugin/v3 | v3.0.33 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.33 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/godbus/dbus/v5 | v5.2.2 | BSD-style | Runtime | https://pkg.go.dev/github.com/godbus/dbus/v5@v5.2.2 | Detected from LICENSE. |
+| github.com/google/jsonschema-go | v0.4.3 | MIT | Runtime | https://pkg.go.dev/github.com/google/jsonschema-go@v0.4.3 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
 | github.com/hashicorp/golang-lru/v2 | v2.0.7 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/hashicorp/golang-lru/v2@v2.0.7 | Detected from LICENSE. |
@@ -1431,6 +1432,7 @@ SOFTWARE.
 | github.com/mholt/archives | v0.1.5 | MIT | Runtime | https://pkg.go.dev/github.com/mholt/archives@v0.1.5 | Detected from LICENSE. |
 | github.com/mikelolasagasti/xz | v1.0.1 | ISC | Runtime | https://pkg.go.dev/github.com/mikelolasagasti/xz@v1.0.1 | Detected from LICENSE. |
 | github.com/minio/minlz | v1.0.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/minio/minlz@v1.0.1 | Detected from LICENSE. |
+| github.com/modelcontextprotocol/go-sdk | v1.8.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk@v1.8.0 | Detected from LICENSE. |
 | github.com/ncruces/go-strftime | v1.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v1.0.0 | Detected from LICENSE. |
 | github.com/nwaples/rardecode/v2 | v2.2.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/nwaples/rardecode/v2@v2.2.0 | Detected from LICENSE. |
 | github.com/openai/openai-go | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go@v1.12.0 | Detected from LICENSE. |
@@ -1444,6 +1446,8 @@ SOFTWARE.
 | github.com/quic-go/webtransport-go | v0.13.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/webtransport-go@v0.13.0 | Detected from LICENSE. |
 | github.com/remyoudompheng/bigfft | v0.0.0-20230129092748-24d4a6f8daec | BSD-style | Runtime | https://pkg.go.dev/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec | Detected from LICENSE. |
 | github.com/santhosh-tekuri/jsonschema/v5 | v5.3.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/santhosh-tekuri/jsonschema/v5@v5.3.1 | Detected from LICENSE. |
+| github.com/segmentio/asm | v1.1.3 | MIT | Runtime | https://pkg.go.dev/github.com/segmentio/asm@v1.1.3 | Detected from LICENSE. |
+| github.com/segmentio/encoding | v0.5.4 | MIT | Runtime | https://pkg.go.dev/github.com/segmentio/encoding@v0.5.4 | Detected from LICENSE. |
 | github.com/shirou/gopsutil/v4 | v4.25.12 | BSD-style | Runtime | https://pkg.go.dev/github.com/shirou/gopsutil/v4@v4.25.12 | Detected from LICENSE. |
 | github.com/sorairolake/lzip-go | v0.3.8 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/sorairolake/lzip-go@v0.3.8 | Detected from LICENSE-APACHE, LICENSE-MIT. |
 | github.com/spf13/afero | v1.15.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/spf13/afero@v1.15.0 | Detected from LICENSE.txt. |
@@ -1458,16 +1462,19 @@ SOFTWARE.
 | github.com/tklauser/numcpus | v0.11.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tklauser/numcpus@v0.11.0 | Detected from LICENSE. |
 | github.com/ulikunitz/xz | v0.5.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/ulikunitz/xz@v0.5.15 | Detected from LICENSE. |
 | github.com/yeka/zip | v0.0.0-20231116150916-03d6312748a9 | MIT | Runtime | https://pkg.go.dev/github.com/yeka/zip@v0.0.0-20231116150916-03d6312748a9 | Detected from LICENSE. |
+| github.com/yosida95/uritemplate/v3 | v3.0.2 | BSD-style | Runtime | https://pkg.go.dev/github.com/yosida95/uritemplate/v3@v3.0.2 | Detected from LICENSE. |
 | github.com/yusufpapurcu/wmi | v1.2.4 | MIT | Runtime | https://pkg.go.dev/github.com/yusufpapurcu/wmi@v1.2.4 | Detected from LICENSE. |
 | go4.org | v0.0.0-20230225012048-214862532bf5 | Apache-2.0 | Runtime | https://pkg.go.dev/go4.org@v0.0.0-20230225012048-214862532bf5 | Detected from LICENSE. |
 | golang.org/x/crypto | v0.57.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.57.0 | Detected from LICENSE. |
 | golang.org/x/image | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.46.0 | Detected from LICENSE. |
 | golang.org/x/mod | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.41.0 | Detected from LICENSE. |
 | golang.org/x/net | v0.59.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.59.0 | Detected from LICENSE. |
+| golang.org/x/oauth2 | v0.35.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.35.0 | Detected from LICENSE. |
 | golang.org/x/sync | v0.23.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.23.0 | Detected from LICENSE. |
 | golang.org/x/sys | v0.48.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.48.0 | Detected from LICENSE. |
 | golang.org/x/term | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.46.0 | Detected from LICENSE. |
 | golang.org/x/text | v0.42.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.42.0 | Detected from LICENSE. |
+| golang.org/x/time | v0.15.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/time@v0.15.0 | Detected from LICENSE. |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT | Runtime | https://pkg.go.dev/gopkg.in/yaml.v3@v3.0.1 | Detected from LICENSE. |
 | modernc.org/libc | v1.75.7 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/libc@v1.75.7 | Detected from LICENSE, LICENSE-3RD-PARTY.md. |
 | modernc.org/mathutil | v1.7.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/mathutil@v1.7.1 | Detected from LICENSE. |

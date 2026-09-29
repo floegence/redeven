@@ -389,9 +389,6 @@ vi.mock('./settings/PermissionPolicyTables', () => ({
   PermissionRuleTable: () => <div>Permission Rules</div>,
 }));
 
-vi.mock('./settings/SkillsCatalogList', () => ({
-  SkillsCatalogList: () => <div>Skills Catalog</div>,
-}));
 
 vi.mock('./settings/SettingsPrimitives', () => ({
   AutoSaveIndicator: () => <span>Auto-save</span>,
@@ -581,7 +578,6 @@ describe('EnvSettingsPage', () => {
       'Logging',
       'Permission Policy',
       'Flower',
-      'Skills',
       'Debug Console',
     ]);
 
@@ -595,7 +591,6 @@ describe('EnvSettingsPage', () => {
       'Codespaces & Tooling',
       'Permission Policy',
       'Flower',
-      'Skills',
       'Config File',
       'Logging',
       'Debug Console',
@@ -628,7 +623,7 @@ describe('EnvSettingsPage', () => {
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
-    expect(aiGroupSections).toEqual(['ai', 'skills']);
+    expect(aiGroupSections).toEqual(['ai']);
     expect(host.querySelector('[data-settings-nav-item="plugins"]')).toBeNull();
 
     await openSettingsSection(host, 'debug_console');

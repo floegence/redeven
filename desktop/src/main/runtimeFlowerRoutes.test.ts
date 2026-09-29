@@ -58,3 +58,20 @@ describe('Desktop computer management routes', () => {
     expect(() => runtimeFlowerPath('/_redeven_proxy/api/ai/threads/t?force=false')).toThrow();
   });
 });
+
+
+describe('Flower extensions management routes', () => {
+  it.each<[string, RuntimeFlowerRequestMethod[]]>([
+    ['mcp', ['GET', 'PUT', 'DELETE']], ['mcp/check', ['POST']],
+    ['skills', ['GET', 'POST', 'DELETE']], ['skills/sources', ['GET']], ['skills/reload', ['POST']],
+    ['skills/toggles', ['PUT']], ['skills/reinstall', ['POST']], ['skills/import/github', ['POST']], ['skills/import/github/validate', ['POST']],
+    ['skills/browse/tree?skill_path=%2Fskills%2Freview&dir=', ['GET']], ['skills/browse/file?skill_path=%2Fskills%2Freview&file=SKILL.md', ['GET']],
+  ])('allows only the declared methods for %s', (suffix, methods) => {
+    const path = '/_redeven_proxy/api/ai/' + suffix;
+    expect(runtimeFlowerPath(path)).toBe(path);
+    for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(methods.includes(method));
+  });
+  it.each(['mcp?secret=x', 'mcp/arbitrary', 'skills/browse/tree?skill_path=x&dir=&dir=y', 'skills/browse/file?skill_path=x&file=y&encoding=base64', 'skills/browse/file?file=x', 'skills/browse/tree?skill_path=&dir=', 'skills/browse/tree?skill_path=x&dir=' + 'x'.repeat(8193)])('rejects undeclared extension paths and queries: %s', suffix => {
+    expect(() => runtimeFlowerPath('/_redeven_proxy/api/ai/' + suffix)).toThrow();
+  });
+});

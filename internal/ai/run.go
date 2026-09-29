@@ -79,6 +79,7 @@ type runOptions struct {
 	NoUserInteraction           bool
 	WebSearch                   config.AIWebSearchResolution
 	SkillManager                *skillManager
+	MCPManager                  *mcpManager
 	SubagentRuntime             subagentRuntime
 	ToolTargetPolicy            ToolTargetPolicy
 	CanonicalReferenceAuthority *flowerCanonicalReferenceTargetAuthority
@@ -201,6 +202,7 @@ type run struct {
 	interactionSafetyGate       InteractionSafetyGate
 
 	skillManager    *skillManager
+	mcpManager      *mcpManager
 	subagentRuntime subagentRuntime
 }
 
@@ -353,6 +355,7 @@ func newRun(opts runOptions) *run {
 		targetResolver:              opts.TargetResolver,
 		interactionSafetyGate:       opts.InteractionSafetyGate,
 		skillManager:                opts.SkillManager,
+		mcpManager:                  opts.MCPManager,
 		noUserInteraction:           opts.NoUserInteraction,
 		allowSubagentDelegate: func() bool {
 			if opts.AllowSubagentDelegate {
@@ -1487,7 +1490,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		ToolError:      nil,
 		RecoveryAction: "",
 	}
-	mutating := isMutatingInvocation(toolName, args)
+	mutating := strings.HasPrefix(toolName, "mcp_") || isMutatingInvocation(toolName, args)
 
 	r.debug("ai.run.tool.call",
 		"tool_id", toolID,
@@ -1577,13 +1580,16 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
 		var partial any
+		if strings.HasPrefix(toolName, "mcp_") {
+			partial = result
+		}
 		if target, ok := result.(targetToolExecution); ok {
 			partial = target.Payload
 			outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
 		}
-		if errors.Is(toolErrRaw, errComputerEffectUnknown) {
-			outcome.dispatchErr = errComputerEffectUnknown
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: errComputerEffectUnknown.Error(), Retryable: false}, "", partial)
+		if errors.Is(toolErrRaw, errComputerEffectUnknown) || errors.Is(toolErrRaw, errMCPEffectUnknown) {
+			outcome.dispatchErr = toolErrRaw
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: toolErrRaw.Error(), Retryable: false}, "", partial)
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.Canceled) {
@@ -1977,6 +1983,12 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return nil, err
 	}
 	ctx = contextWithToolAuthorizationSnapshot(ctx, authorizationSnapshot)
+	if strings.HasPrefix(toolName, "mcp_") {
+		if err := requireRWX(meta); err != nil {
+			return nil, err
+		}
+		return r.mcpManager.Call(ctx, toolName, args)
+	}
 	if r.shouldRouteTargetTool(toolName) {
 		return r.execTargetTool(ctx, toolID, toolName, args)
 	}

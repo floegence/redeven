@@ -34,7 +34,6 @@ export type EnvSettingsSection =
   | 'debug_console'
   | 'codespaces'
   | 'permission_policy'
-  | 'skills'
   | 'ai';
 
 export type EnvSettingsOrigin =

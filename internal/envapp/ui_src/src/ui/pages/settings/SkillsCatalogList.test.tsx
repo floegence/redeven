@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { FlowerExtensionsContext, extensionI18n } from '../../../../../../flower_ui/src/extensions/context';
+import { flowerExtensionsAdapter } from '../../../../../../flower_ui/host/extensionsAdapter';
 
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { SkillsCatalogList } from './SkillsCatalogList';
+import { SkillsCatalogList } from '../../../../../../flower_ui/src/extensions/SkillsCatalogList';
 
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
@@ -71,7 +73,7 @@ describe('SkillsCatalogList', () => {
 
     render(
       () => (
-        <SkillsCatalogList
+        <FlowerExtensionsContext.Provider value={{ ...flowerExtensionsAdapter(vi.fn(), { canInteract: () => true, canAdmin: () => true }), i18n: extensionI18n() }}><SkillsCatalogList
           skills={skills}
           sources={{
             '/skills/skill-installer': {
@@ -94,7 +96,7 @@ describe('SkillsCatalogList', () => {
           onBrowse={onBrowse}
           onReinstall={onReinstall}
           onDelete={onDelete}
-        />
+        /></FlowerExtensionsContext.Provider>
       ),
       host,
     );
@@ -130,7 +132,7 @@ describe('SkillsCatalogList', () => {
 
     render(
       () => (
-        <SkillsCatalogList
+        <FlowerExtensionsContext.Provider value={{ ...flowerExtensionsAdapter(vi.fn(), { canInteract: () => true, canAdmin: () => true }), i18n: extensionI18n() }}><SkillsCatalogList
           skills={[]}
           sources={{}}
           loading={false}
@@ -142,7 +144,7 @@ describe('SkillsCatalogList', () => {
           onBrowse={() => undefined}
           onReinstall={() => undefined}
           onDelete={() => undefined}
-        />
+        /></FlowerExtensionsContext.Provider>
       ),
       host,
     );

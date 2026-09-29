@@ -514,8 +514,38 @@
       "review_note": "Invokes reviewed host coordination or transport sinks; admitted conversation state remains exclusively in Floret."
     },
     {
+      "path": "internal/ai/mcp_manager.go",
+      "sha256": "017a9fb9d39f7db84dd52a3700fe31897ed5c96f3d56853a62c88cd931c9f56e",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Flower",
+      "authority": "product_configuration",
+      "data_classes": [
+        "administrator MCP configuration, write-only credentials, and discovered tool schemas"
+      ],
+      "tables": [
+        "the"
+      ],
+      "codecs": [
+        "encoding/json.Marshal",
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "a",
+        "b",
+        "mcpStore{SchemaVersion: 1, Revision: m.revision + 1, Servers: entries}",
+        "result",
+        "struct {\n\tServer\tMCPServerInput\n\tTool\tmcpToolRecord\n}{server.MCPServerInput, tool}",
+        "tool.InputSchema"
+      ],
+      "review_note": "Persists versioned MCP configuration and discovery metadata only. Private-file writes preserve prior state on failure. SDK sessions are transient; Floret owns canonical thread lifecycle and effects."
+    },
+    {
       "path": "internal/ai/run.go",
-      "sha256": "2267451aedecb0b4a9d724fc33f4bf4080be38307a7f9db686e922f68de1306d",
+      "sha256": "c0b2e0c91046a362c1d6b95f65c9777e1e87a36bb2afa03c7432176ec140e3df",
       "sink_kinds": [
         "file",
         "json_file"
@@ -527,7 +557,9 @@
         "host runtime integration and product coordination calls"
       ],
       "tables": [
-        "assistantmarkdownupdate"
+        "assistantmarkdownupdate",
+        "its",
+        "session"
       ],
       "codecs": [
         "encoding/json.Marshal"
@@ -538,19 +570,43 @@
         "cursor",
         "data",
         "forwardedArgs",
-        "items",
         "msg",
         "payload",
-        "snapshot",
-        "structured",
+        "rawPayload[\"safety\"]",
         "v",
         "value"
       ],
-      "review_note": "Invokes reviewed host coordination or transport sinks; admitted conversation state remains exclusively in Floret."
+      "review_note": "Invokes reviewed host coordination or transport sinks; admitted conversation state remains exclusively in Floret. MCP integration preserves this persistence boundary."
+    },
+    {
+      "path": "internal/ai/service.go",
+      "sha256": "15b76066618f54383ca584ebaca206ae02dd77930cb4f9b6ae7825b5057e6b7e",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Flower",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product state-directory initialization and configuration adapters"
+      ],
+      "tables": [
+        "a",
+        "config"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "body",
+        "envelope"
+      ],
+      "review_note": "Initializes product state paths and routes configured resources through their owners. MCP adds only the configuration manager. JSON envelopes are runtime DTOs, not a canonical Floret lifecycle store."
     },
     {
       "path": "internal/ai/skill_manager.go",
-      "sha256": "d13b06d1a5b1213b003ba464d776a45c6c61e106a4e4f60e41c807c4c04a1fb2",
+      "sha256": "82a92f4c2dd70a1bca7bce80b4865dbc87a18ddd3d1e37fc9eea49415b202f2d",
       "sink_kinds": [
         "file",
         "json_file"
@@ -567,7 +623,7 @@
       "dtos": [
         "payload"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded. MCP integration preserves this persistence boundary."
     },
     {
       "path": "internal/ai/skill_manager_remote.go",
@@ -1244,7 +1300,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "79c717ae1180e13e21fefcd4913715c1f82626600fd1d7941841d552d3cad627",
+      "sha256": "af6bda5cd01aa95a59b6dd87e07955402a3651b8f1a48f2eed71773311123661",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1258,7 +1314,6 @@
       ],
       "tables": [
         "configpath",
-        "runtime",
         "set",
         "the"
       ],
@@ -1267,11 +1322,16 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
+        "[]string{\"redeven-ui-cache-v1\", meta.EndpointID, meta.NamespacePublicID, meta.UserPublicID}",
         "ev",
         "event",
+        "map[string]any{\"base\": base, \"copy\": s.Presentation, \"icon\": s.Application.Icon, \"backend\": s.Backend, \"initial\": map[string]string{\"state\": s.State, \"end_reason\": s.EndReason, \"error_code\": s.ErrorCode}}",
+        "op",
+        "payload",
+        "status",
         "v"
       ],
-      "review_note": "The catalog generation check changes only request validation; this file writes response transport bytes and delegates explicit Web Service save commands without owning durable state."
+      "review_note": "The catalog generation check changes only request validation; this file writes response transport bytes and delegates explicit Web Service save commands without owning durable state. MCP integration preserves this persistence boundary."
     },
     {
       "path": "internal/codeapp/codeserver/artifact.go",
@@ -1654,7 +1714,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "8bf9291a76f752db7435b7ec0852764cbb7899ea473b9464dd3e17260d20324e",
+      "sha256": "506448749774010c50a0a9d8bedd36ebc9275092c6cb12cf09cc60bc4040c5df",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1667,7 +1727,7 @@
       "keys": [
         "expression:THREAD_RAIL_WIDTH_STORAGE_KEY"
       ],
-      "review_note": "Flower stores only the local thread rail width preference; canonical messages and lifecycle state remain server-owned."
+      "review_note": "Flower stores only the local thread rail width preference; canonical messages and lifecycle state remain server-owned. MCP integration preserves this persistence boundary."
     },
     {
       "path": "internal/fs/entries.go",

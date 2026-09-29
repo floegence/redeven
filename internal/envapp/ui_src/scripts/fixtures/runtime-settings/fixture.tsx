@@ -1,7 +1,7 @@
 import { createSignal } from 'solid-js';
 import type { EnvSettingsSection } from '../../../src/ui/pages/EnvContext';
 import type { EnvSettingsPageContextValue } from '../../../src/ui/pages/settings/EnvSettingsPageContext';
-import type { AgentSettingsResponse, SkillCatalogEntry } from '../../../src/ui/pages/settings/types';
+import type { AgentSettingsResponse } from '../../../src/ui/pages/settings/types';
 
 // Acceptance-only data. Production entrypoints never import this module.
 export function createRuntimeSettingsFixture() {
@@ -25,7 +25,6 @@ export function createRuntimeSettingsFixture() {
     ai: { current_model_id: 'openai/gpt-5.4', permission_type: 'approval_required', providers: [{ id: 'openai', name: 'OpenAI', type: 'openai', base_url: '', models: [{ model_name: 'gpt-5.4', context_window: 1047576, max_output_tokens: 32768, input_modalities: ['text', 'image'] }] }] },
     ai_secrets: { provider_api_key_set: { openai: true }, web_search_provider_api_key_set: {} },
   });
-  const [skills, setSkills] = createSignal<SkillCatalogEntry[]>([{ id: 'review', name: 'code-review', description: 'Review a change for correctness, maintainability, and clear intent.', path: '/Users/alex/.redeven/skills/code-review', scope: 'user', enabled: true, effective: true }]);
   const [saveError, setSaveError] = createSignal<string | null>(null);
   const requests: Array<{ url: string; init: RequestInit }> = [];
   const saveSettings = async (patch: Record<string, unknown>) => {
@@ -63,15 +62,6 @@ export function createRuntimeSettingsFixture() {
   const request = async (url: string, init: RequestInit = {}) => {
     requests.push({ url, init });
     const body = init.body ? JSON.parse(String(init.body)) : {};
-    if (url.endsWith('/skills/sources')) return { items: [{ skill_path: skills()[0]?.path, source_type: 'github_import', source_id: 'example/skills#code-review' }] };
-    if (url.endsWith('/skills/toggles')) setSkills((current) => current.map((skill) => ({ ...skill, enabled: body.patches[0].enabled })));
-    if (url.endsWith('/skills') && init.method === 'POST') setSkills((current) => [...current, { ...body, id: body.name, path: `/Users/alex/.redeven/skills/${body.name}`, enabled: true, effective: true }]);
-    if (url.endsWith('/skills') && init.method === 'DELETE') setSkills((current) => current.filter((skill) => skill.name !== body.name));
-    if (url.endsWith('/skills') || url.endsWith('/skills/reload') || url.endsWith('/skills/toggles')) return { catalog_version: requests.length, skills: skills() };
-    if (url.includes('/browse/tree')) return { root: skills()[0]?.path, dir: '.', entries: [{ name: 'SKILL.md', path: 'SKILL.md', is_dir: false }] };
-    if (url.includes('/browse/file')) return { root: skills()[0]?.path, file: 'SKILL.md', encoding: 'utf8', truncated: false, content: '# Code review\n\nReview correctness and maintainability.' };
-    if (url.includes('/import/github/validate')) return { resolved: [{ name: 'new-skill', target_dir: '/Users/alex/.redeven/skills/new-skill' }] };
-    if (url.includes('/import/github') || url.endsWith('/skills/reinstall')) return { catalog: { catalog_version: requests.length, skills: skills() } };
     if (url.endsWith('/maintenance/snapshots')) return { snapshots: [] };
     if (url.endsWith('/ai/models')) return { models: [{ id: 'openai/gpt-5.4', web_search: { status: 'available' } }] };
     if (url.endsWith('/model_catalog')) return { models: settings().ai?.providers?.[0]?.models ?? [] };
