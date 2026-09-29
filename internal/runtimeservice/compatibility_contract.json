@@ -1,12 +1,14 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.13.0",
-    "previous_release": "v0.11.0",
-    "reviewed_at": "2026-09-27",
-    "review_id": "browser-source-system-preparation-v1",
-    "summary": "Epoch 34 requires installation-scoped personal browser setup and status, built-in browser launch readiness and explicit system preparation. Desktop and Runtime share this contract; epoch 33 and older peers remain upgrade-only.",
+    "release_version": "v0.13.1",
+    "previous_release": "v0.13.0",
+    "reviewed_at": "2026-09-29",
+    "review_id": "macos-release-shell-compatibility-v1",
+    "summary": "Repair the macOS release command's Bash 3.2 argument expansion without changing product behavior. Epoch 34 still requires installation-scoped personal browser setup and status, built-in browser launch readiness and explicit system preparation; epoch 33 and older peers remain upgrade-only.",
+    "same_window_rationale": "Compared with v0.13.0, this patch changes only release command argument assembly, its recording-builder regression test, release review metadata and generated knowledge artifacts. Required Runtime build arguments remain identical; Linux retains its relink option and Darwin receives no Linux option. No Runtime Service payload, authentication rule, storage schema, Desktop bridge, startup report or bootstrap behavior changes. The existing protocol, epoch 34 and minimum versions therefore remain the correct compatibility boundary. The v0.13.0 macOS jobs failed before binary compilation and no GitHub Release was published; its immutable tag is retained.",
     "checked_surfaces": [
+      "Reviewed the exact v0.13.0-to-v0.13.1 source diff: Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH runtime bootstrap are unchanged. Executed the release build step through system Bash for Darwin and Linux amd64/arm64 and verified the exact arguments for both redeven and redeven-gateway, including Linux-only relink directories and paths containing spaces.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 34. Personal-browser setup/open requests select a Runtime-discovered installation ID; status exposes installation availability and connection diagnostics. Managed-browser status separates installation from executable readiness and adds the prepare_system action and bounded authorization phases. Source preference uses authenticated view identity. Old Desktop and Runtime combinations cannot interpret these required fields or authorize the new actions and must upgrade through the existing compatibility flow.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 33. HTTP/HTTPS browser refresh retains the existing absolute login lifetime; Runtime restart and security changes still revoke ordinary sessions. Flower HTTP requests retain the complete issued cookie pair, and native CodeSpace descriptors supply access_cookie_name across forwarded ports.",
       "Desktop management consumers share one leased bridge and isolate settings from model preparation. Desktop model connect and pre-upgrade RPC admission use existing AI readiness: transient 503, blocked 409, permanent request/authentication errors unchanged. The connector already classifies these statuses; endpoint paths, successful payloads, TOTP state and Runtime Service wire shapes are unchanged, so epoch 32 remains sufficient.",

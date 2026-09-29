@@ -1,9 +1,60 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 function source(path) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+for (const goos of ["darwin", "linux"]) {
+  for (const goarch of ["amd64", "arm64"]) {
+    test(`release build passes exact ${goos}/${goarch} arguments through the system Bash`, () => {
+      const block = source(".github/workflows/release.yml").match(
+        /      - name: Build binaries\n[\s\S]*?\n        run: \|\n([\s\S]*?)(?=\n      - name:)/u,
+      );
+      assert.ok(block, "release runtime build step must exist");
+      const script = block[1].split("\n").map((line) => line.slice(10)).join("\n");
+      const root = realpathSync(mkdtempSync(join(tmpdir(), "redeven release build ")));
+      try {
+        mkdirSync(join(root, "scripts"));
+        const capture = join(root, "arguments");
+        writeFileSync(join(root, "scripts/build_runtime_binary.sh"), [
+          "#!/bin/sh",
+          "set -eu",
+          'printf "%s\\0" "$@" >> "$RELEASE_BUILD_ARGS"',
+          'printf "__END_CALL__\\0" >> "$RELEASE_BUILD_ARGS"',
+          "",
+        ].join("\n"), { mode: 0o755 });
+        const commit = "1234567890abcdef1234567890abcdef12345678";
+        const result = spawnSync("/bin/bash", ["-c", script], {
+          cwd: root,
+          env: { ...process.env, GOOS: goos, GOARCH: goarch, GITHUB_REF_NAME: "v0.13.1", GITHUB_SHA: commit, RELEASE_BUILD_ARGS: capture },
+          encoding: "utf8",
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const calls = readFileSync(capture, "utf8").split("__END_CALL__\0");
+        assert.equal(calls.pop(), "");
+        assert.equal(calls.length, 2);
+        for (const [index, binary] of ["redeven", "redeven-gateway"].entries()) {
+          const args = calls[index].split("\0");
+          assert.equal(args.pop(), "");
+          assert.match(args[13], /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u);
+          assert.deepEqual(args, [
+            "--goos", goos, "--goarch", goarch,
+            "--output", `dist/${binary}`, "--command", `./cmd/${binary}`,
+            "--version", "v0.13.1", "--commit", commit.slice(0, 12),
+            "--build-time", args[13],
+            ...(goos === "linux" ? ["--relink-dir", `${root}/dist/runtime-relink/${binary}`] : []),
+          ]);
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
 }
 
 test("every shipped Redeven runtime enables the published native Floeterm engine", () => {
