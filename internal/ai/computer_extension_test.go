@@ -102,7 +102,7 @@ func TestExtensionConnectionScopesRepliesAndRemovesDisconnectedProfile(t *testin
 	}
 }
 
-func TestExtensionExistingProjectionStillValidatesExplicitFlowerSelection(t *testing.T) {
+func TestExtensionExistingSourceStillValidatesExplicitFlowerSelection(t *testing.T) {
 	tab := ComputerBrowserTab{ID: "7", NativeTargetID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", URL: "https://example.test/current", Title: "Current"}
 	host, _ := browserHostFixture(t, func(w http.ResponseWriter, request *http.Request) {
 		var command struct{ ID, Method string }
@@ -111,7 +111,7 @@ func TestExtensionExistingProjectionStillValidatesExplicitFlowerSelection(t *tes
 		if command.Method == "source.inventory" {
 			result = []ComputerBrowserTab{tab}
 		} else if command.Method != "source.ready" {
-			t.Error("existing projection was recreated", command.Method)
+			t.Error("existing source was recreated", command.Method)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": command.ID, "result": result})
 	})
@@ -159,7 +159,7 @@ func TestExtensionExistingProjectionStillValidatesExplicitFlowerSelection(t *tes
 	}()
 	connection := ComputerBrowserConnection{ExtensionProfileID: client.profile.ID, TabID: tab.ID, TabURL: tab.URL, TabTitle: "Earlier title"}
 	if _, err := runtime.ConnectBrowser(t.Context(), connection); err == nil {
-		t.Fatal("an existing product projection bypassed explicit Flower selection validation")
+		t.Fatal("an existing source bypassed explicit Flower selection validation")
 	}
 	connection.TabTitle = tab.Title
 	if target, err := runtime.ConnectBrowser(t.Context(), connection); err != nil || target.ID != id || runtime.executors[id] != executor || validations.Load() != 2 {

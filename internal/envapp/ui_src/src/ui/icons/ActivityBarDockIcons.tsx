@@ -73,16 +73,6 @@ export function ActivityBarPortsIcon(props: { class?: string }) {
   );
 }
 
-export function ActivityBarBrowserIcon(props: { class?: string; size?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: props.size ?? '1.5rem', height: props.size ?? '1.5rem' }} class={props.class} aria-hidden="true" data-activity-bar-icon="floebrowser">
-      <circle cx="12" cy="12" r="8.25" fill="currentColor" fill-opacity=".04" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5" />
-      <path d="m16.65 7.35-2.9 6.4-6.4 2.9 2.9-6.4Z" fill="currentColor" fill-opacity=".15" stroke="currentColor" stroke-opacity=".85" stroke-width="1.1" stroke-linejoin="round" />
-      <path d="m10.25 10.25 6.4-2.9-2.9 6.4Z" fill="currentColor" fill-opacity=".9" />
-    </svg>
-  );
-}
-
 export function ActivityBarHostApplicationsIcon(props: { class?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">

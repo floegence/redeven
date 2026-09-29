@@ -36,9 +36,9 @@ browser content never become error copy. Read-only prerequisite observations do
 not invent log events or retained lifecycle state.
 
 Runtime Service epoch 30 pairs these diagnostics with Desktop and Env App.
-The source adapters retain Native Messaging protocol 7 and existing website
-grants. Browser source preferences follow the separately versioned
-[product persistence contract](../architecture/remote-browser-persistence.md).
+The source adapters retain Native Messaging and existing website grants.
+Browser target selection belongs to Flower; no separate browser source
+preference or product database is read during startup.
 
 ## Recovery on the environment host
 

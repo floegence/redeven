@@ -2,7 +2,6 @@ export type EnvViewMode = 'activity' | 'workbench';
 
 export type EnvSurfaceId =
   | 'terminal'
-  | 'browser'
   | 'monitor'
   | 'files'
   | 'codespaces'
@@ -55,7 +54,6 @@ export const ENV_DESKTOP_VIEW_MODES = ['activity', 'workbench'] as const satisfi
 
 export const ENV_SURFACE_IDS = [
   'terminal',
-  'browser',
   'monitor',
   'files',
   'codespaces',
@@ -69,7 +67,6 @@ export const ENV_DEFAULT_SURFACE_ID: EnvSurfaceId = 'terminal';
 
 export const ENV_SURFACE_LABELS: Record<EnvSurfaceId, string> = {
   terminal: 'Terminal',
-  browser: 'Remote Browser',
   monitor: 'Monitoring',
   files: 'File Browser',
   codespaces: 'Codespaces',
@@ -81,7 +78,6 @@ export const ENV_SURFACE_LABELS: Record<EnvSurfaceId, string> = {
 
 export const ENV_SURFACE_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
   terminal: 'redeven.terminal',
-  browser: 'redeven.browser',
   monitor: 'redeven.monitor',
   files: 'redeven.files',
   codespaces: 'redeven.codespaces',
@@ -108,8 +104,7 @@ export function normalizePersistedEnvViewMode(value: unknown): EnvViewMode | nul
 export function isEnvSurfaceId(value: unknown): value is EnvSurfaceId {
   return (
     value === 'terminal' ||
-    value === 'browser'
-    || value === 'monitor'
+    value === 'monitor'
     || value === 'files'
     || value === 'codespaces'
     || value === 'ports'

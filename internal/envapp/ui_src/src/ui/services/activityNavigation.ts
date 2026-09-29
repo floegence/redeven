@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js';
 import { isEnvSurfaceId, type EnvSurfaceId } from '../envViewMode';
-import { isDesktopStateStorageAvailable, readUIStorageItem, readUIStorageJSON, rendererScopedUIStorageKey, writeUIStorageJSON } from './uiStorage';
+import { isDesktopStateStorageAvailable, readUIStorageItem, readUIStorageJSON, removeUIStorageItem, rendererScopedUIStorageKey, writeUIStorageJSON } from './uiStorage';
 import { resolveEnvAppStorageBinding } from './uiPersistence';
 
 export type BuiltinActivityPage = EnvSurfaceId | 'settings' | 'plugin-center';
@@ -62,11 +62,19 @@ export function createActivityNavigation(options: { envID?: string; namespace?: 
   // The local runtime's public identity is fixed even before /api/local/runtime resolves.
   const binding = resolveEnvAppStorageBinding({ envID: envID || 'env_local', desktopStateStorageAvailable: desktop });
   const key = rendererScopedUIStorageKey(`${binding.namespace}-activity-navigation`);
-  const saved = decodeActivityNavigation(readUIStorageJSON(key, null));
+  const stored = readUIStorageJSON<unknown>(key, null);
+  const saved = decodeActivityNavigation(stored);
+  if (saved && JSON.stringify(saved) !== JSON.stringify(stored)) writeUIStorageJSON(key, saved);
   const legacyNamespace = options.namespace ?? resolveEnvAppStorageBinding({ envID, desktopStateStorageAvailable: desktop }).namespace;
-  const layout = readUIStorageJSON<{ sidebar?: { activeTab?: unknown } } | null>(`${legacyNamespace}-layout`, null);
-  const initial: ActivityRestoreTarget = saved?.target ?? legacyTarget(layout?.sidebar?.activeTab)
-    ?? legacyTarget(readUIStorageItem('redeven_envapp_active_tab')) ?? { kind: 'builtin', page: 'terminal' };
+  const layoutKey = `${legacyNamespace}-layout`;
+  const layout = readUIStorageJSON<{ sidebar?: { activeTab?: unknown } } | null>(layoutKey, null);
+  const restoredLayout = layout?.sidebar?.activeTab === 'browser'
+    ? { ...layout, sidebar: { ...layout.sidebar, activeTab: 'terminal' } } : layout;
+  if (restoredLayout !== layout) writeUIStorageJSON(layoutKey, restoredLayout);
+  const legacyTab = readUIStorageItem('redeven_envapp_active_tab');
+  if (legacyTab === 'browser') removeUIStorageItem('redeven_envapp_active_tab');
+  const initial: ActivityRestoreTarget = saved?.target ?? legacyTarget(restoredLayout?.sidebar?.activeTab)
+    ?? legacyTarget(legacyTab) ?? { kind: 'builtin', page: 'terminal' };
   const [record, setRecord] = createSignal<ActivityNavigationRecord>(saved ?? {
     version: 1, target: initial.kind === 'builtin' ? initial : { kind: 'builtin', page: 'terminal' },
     recentBuiltins: initial.kind === 'builtin' ? [initial.page] : [],

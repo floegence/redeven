@@ -1,11 +1,9 @@
 import { observeManagedBrowserDownloads } from './computerManagedDownloads.mjs';
 import { createBrowserLineage } from './computerBrowserLineage.mjs';
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { createComputerBrowserSource, createExtensionBrowserSource } from './computerBrowserSource.mjs';
-import { createComputerBrowserViews } from './computerBrowserViews.mjs';
 
 async function admittedPage(browser, tab, contextID) {
   // Runtime creation and Playwright page readiness travel through different
@@ -58,11 +56,10 @@ export async function createComputerBrowserHost(options) {
   const nativeSources = new Map();
   const pending = new Map();
   const retirements = new Map();
-  const profileDirectories = new Map();
   const popupProbes = new Set();
-  const listeners = new Set();
   const directories = new Map();
   const nativeDirectories = new Map();
+  const privateTargets = new Set();
   const nativeScope = 'chromium';
   const setNativeDirectory = (endpoint, ids) => {
     if (!nativeDirectories.has(endpoint) && nativeDirectories.size >= 128) throw new Error('BROWSER_SOURCE_DIRECTORY_LIMIT');
@@ -73,76 +70,14 @@ export async function createComputerBrowserHost(options) {
     if (typeof id !== 'string' || !/^[a-f0-9]{32}$/iu.test(id)) throw new Error('BROWSER_SOURCE_IDENTITY_CHANGED');
     return id;
   };
-  const lineage = createBrowserLineage(target => views?.ownsPrivacy(target) ?? false);
-  const invocation = new AsyncLocalStorage();
+  const lineage = createBrowserLineage(target => privateTargets.has(target));
   let closed = false;
-  let views;
-  const publish = () => { for (const listener of listeners) listener({}); };
+  const isPrivate = target => [target, ...lineage.ancestors(target)].some(id => privateTargets.has(id));
   const requireSource = id => {
     const source = sources.get(id);
     if (closed || !source || source.owner.source.isClosed()) throw new Error('BROWSER_SOURCE_UNAVAILABLE');
     return source;
   };
-  const describeSource = async source => {
-    // Browser-owned target metadata remains readable when a renderer is busy;
-    // do not evaluate page JavaScript to save a title or close a tab.
-    const { targetInfo } = await source.owner.source.transport.send('Target.getTargetInfo');
-    const url = source.owner.source.url();
-    return { id: source.id, url, title: targetInfo.url === url ? targetInfo.title.slice(0, 512) : '' };
-  };
-  const changed = source => {
-    source.metadataDirty = true;
-    if (source.metadataWork) return;
-    source.metadataWork = (async () => {
-      while (source.metadataDirty && sources.get(source.id) === source) {
-        source.metadataDirty = false;
-        const tab = await describeSource(source);
-        if (sources.get(source.id) === source && source.title !== tab.title) {
-          source.title = tab.title;
-          publish();
-        }
-        if (sources.get(source.id) === source && !views.isPrivate(source.id) && !(source.restorationURL && tab.url === 'about:blank')) options.onSourceChanged?.(source.id, tab, source.descriptor.binding);
-      }
-    })().catch(() => {
-      if (sources.get(source.id) === source) options.onSourceFault?.(source.id, source.descriptor.binding);
-    }).finally(() => { source.metadataWork = undefined; });
-  };
-  const directoryCommand = async action => {
-    const view = invocation.getStore();
-    if (!view || !options.directoryCommand) throw new Error('BROWSER_DIRECTORY_UNAVAILABLE');
-    // Go authorizes the specific view and target, commits directory changes and
-    // refreshes its grants before resolving. A missing response never replays it.
-    const target = await options.directoryCommand(view, action);
-    return target || undefined;
-  };
-  views = await createComputerBrowserViews({
-    list: () => {
-      const entries = new Map();
-      for (const tabs of profileDirectories.values()) for (const { id, url, title, pinned, loading, availability } of tabs) entries.set(id, { id, url, title, pinned, loading, availability });
-      for (const source of sources.values()) if (!entries.has(source.id)) entries.set(source.id, { id: source.id, url: source.owner.source.url(), title: source.title, pinned: source.pinned });
-      return [...entries.values()];
-    },
-    downloads: id => sources.get(id)?.owner.source.downloads() ?? [],
-    resolve: async id => {
-      const source = sources.get(id);
-      if (source && !source.owner.source.isClosed() && !source.owner.controller.page.invalid) return source.owner.source;
-      if (source) await retire(source);
-      await retirements.get(id);
-      await options.directoryCommand('', { kind: 'resolve', target: id });
-      return requireSource(id).owner.source;
-    },
-    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    create: () => directoryCommand({ kind: 'create' }),
-    close: id => directoryCommand({ kind: 'close', target: id }),
-    move: (id, before) => directoryCommand({ kind: 'move', target: id, before }),
-    pin: (id, pinned) => directoryCommand({ kind: 'pin', target: id, pinned }),
-    restore: () => directoryCommand({ kind: 'restore' }),
-  }, {
-    ...options,
-    sourceOwner: target => sources.get(target)?.owner,
-    ancestors: target => lineage.ancestors(target),
-    privacyChanged: () => lineage.refresh(),
-  });
 
   const connection = endpoint => {
     if (!connections.has(endpoint)) {
@@ -154,8 +89,6 @@ export async function createComputerBrowserHost(options) {
           if (targetInfo.type !== 'page') return;
           try {
             inventory.add(nativeIdentity(targetInfo.targetId)); lineage.observe(nativeScope, targetInfo.targetId, targetInfo.openerId);
-            const source = sources.get(nativeSources.get(targetInfo.targetId));
-            if (source) changed(source);
           }
           catch { void browser.close(); }
         };
@@ -179,12 +112,6 @@ export async function createComputerBrowserHost(options) {
     if (sources.get(source.id) !== source) return source.retiring;
     sources.delete(source.id);
     source.owner.source.off('close', source.onClose);
-    source.owner.source.off('framenavigated', source.onNavigation);
-    source.owner.source.off('domcontentloaded', source.onMetadata);
-    source.owner.source.off('load', source.onMetadata);
-    source.owner.source.off('titlechanged', source.onMetadata);
-    source.owner.source.off('downloadschanged', publish);
-    publish();
     options.onSourceClosed?.(source.id, source.descriptor.binding);
     source.retiring = source.owner.dispose().finally(() => {
       if (nativeSources.get(source.key) === source.id) nativeSources.delete(source.key);
@@ -264,23 +191,10 @@ export async function createComputerBrowserHost(options) {
         const dispose = owner.dispose;
         owner.dispose = async () => { stopDownloads(); await dispose(); };
       }
-      const source = { id, key, descriptor: { ...descriptor }, owner, pinned: false, onClose: undefined, retiring: undefined, busy: false, restored: false };
+      const source = { id, key, descriptor: { ...descriptor }, owner, onClose: undefined, retiring: undefined, busy: false };
       source.onClose = () => { void retire(source); };
-      source.onNavigation = frame => {
-        if (frame !== source.owner.source.mainFrame()) return;
-        source.restorationURL = undefined;
-        changed(source);
-      };
-      source.onMetadata = () => changed(source);
       owner.source.on('close', source.onClose);
-      owner.source.on('framenavigated', source.onNavigation);
-      owner.source.on('domcontentloaded', source.onMetadata);
-      owner.source.on('load', source.onMetadata);
-      owner.source.on('titlechanged', source.onMetadata);
-      owner.source.on('downloadschanged', publish);
       sources.set(id, source);
-      changed(source);
-      publish();
       return id;
     } catch (error) {
       nativeSources.delete(key);
@@ -290,7 +204,6 @@ export async function createComputerBrowserHost(options) {
   };
 
   return {
-    views,
     ready(id) {
       const source = requireSource(id);
       if (source.owner.controller.page.invalid) throw new Error('BROWSER_SOURCE_UNAVAILABLE');
@@ -312,7 +225,7 @@ export async function createComputerBrowserHost(options) {
       const source = requireSource(id);
       const provenance = { id: request.id, target_id: source.id, execution_location: source.descriptor.managed ? `${process.platform}_headless_browser` : 'connected_browser' };
       if (request.target_id && request.target_id !== source.id) throw new Error('BROWSER_SOURCE_IDENTITY_CHANGED');
-      if (source.busy || !views.allowsAI(id, request.user_control === true || request.return_control === true)) return { ...provenance, error: 'TARGET_IN_USE' };
+      if (source.busy || isPrivate(id) && request.user_control !== true && request.return_control !== true) return { ...provenance, error: 'TARGET_IN_USE' };
       source.busy = true;
       let completed;
       const task = { cancelled: false, done: new Promise(resolve => { completed = resolve; }) };
@@ -333,9 +246,11 @@ export async function createComputerBrowserHost(options) {
       source.owner.controller.cancel();
       await task.done;
     },
-    async receive(view, token, message) {
-      await invocation.run(view, () => views.receive(view, token, message));
-      if (message?.type === 'command' && message.action?.kind?.startsWith('tab_')) options.onSelection?.(view, views.state(view).active);
+    privacy(id, privateMode) {
+      requireSource(id);
+      if (privateMode) privateTargets.add(id);
+      else privateTargets.delete(id);
+      lineage.refresh();
     },
     async remove(id) {
       const source = sources.get(id);
@@ -357,63 +272,17 @@ export async function createComputerBrowserHost(options) {
       }
       setNativeDirectory(endpoint, live);
       reconcileNative();
-      return tabs.map(tab => lineage.lineage(nativeScope, extension ? tab.native_target_id : tab.id).some(id => views.isPrivate(id)) ? { ...tab, title: '', url: '', private: true } : tab);
-    },
-    async describe(ids) {
-      return Promise.all(ids.map(id => views.isPrivate(id) ? { url: 'about:blank', title: '' } : describeSource(requireSource(id))));
-    },
-    async closePage(id) {
-      const source = requireSource(id);
-      await source.owner.source.close();
-      if (source.owner.source.isClosed()) await retire(source);
-      return source.owner.source.isClosed();
-    },
-    async restore(id, url) {
-      const source = requireSource(id);
-      if (!source.descriptor.managed || source.restored || source.busy || source.owner.source.url() !== 'about:blank') throw new Error('BROWSER_RESTORE_UNAVAILABLE');
-      if (typeof url !== 'string' || url.length > 8192) throw new Error('BROWSER_RESTORE_UNAVAILABLE');
-      if (url !== 'about:blank') {
-        const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error('BROWSER_RESTORE_UNAVAILABLE');
-      }
-      source.restored = true;
-      source.restorationURL = url;
-      await source.owner.setUserBrowsing(true);
-      // Restoring a fresh page admits one GET navigation, not an input lease.
-      // Its loading/error state comes from the source projection. Source stop,
-      // replacement navigation and disposal retain the upstream cancellation
-      // contract; directory admission never waits for a website to respond.
-      void source.owner.source.navigate(url).catch(() => {});
-    },
-    profileDirectory(workspace, tabs) {
-      if (typeof workspace !== 'string' || !workspace || !Array.isArray(tabs) || tabs.length > 128 || new Set(tabs.map(tab => tab.id)).size !== tabs.length) throw new Error('BROWSER_DIRECTORY_CHANGED');
-      for (const tab of tabs) {
-        if (!tab.id || typeof tab.url !== 'string' || !['', undefined, 'unsupported'].includes(tab.availability)) throw new Error('BROWSER_DIRECTORY_CHANGED');
-        const native = nativeIdentity(tab.native);
-        lineage.observe(nativeScope, native);
-        lineage.bind(nativeScope, native, tab.id);
-      }
-      profileDirectories.set(workspace, tabs.map(tab => ({ ...tab })));
-      publish();
-    },
-    order(ids, pinned) {
-      if (new Set(ids).size !== ids.length || ids.some(id => !sources.has(id)) || pinned.some(id => !ids.includes(id))) throw new Error('BROWSER_DIRECTORY_CHANGED');
-      const remaining = [...sources.keys()].filter(id => !ids.includes(id));
-      const ordered = [...remaining, ...ids].map(id => sources.get(id));
-      sources.clear();
-      for (const source of ordered) { if (ids.includes(source.id)) source.pinned = pinned.includes(source.id); sources.set(source.id, source); }
-      publish();
+      return tabs.map(tab => lineage.lineage(nativeScope, extension ? tab.native_target_id : tab.id).some(id => privateTargets.has(id)) ? { ...tab, title: '', url: '', private: true } : tab);
     },
     async close() {
       closed = true;
-      const viewResults = await Promise.allSettled([views.close()]);
       await Promise.allSettled([...pending.values()].map(item => item.work));
       const draining = [...sources.values()].map(source => retire(source));
       const results = await Promise.allSettled(draining);
       await Promise.allSettled([...connections.values()].map(async work => (await work).close()));
-      connections.clear(); nativeDirectories.clear(); profileDirectories.clear();
+      connections.clear(); nativeDirectories.clear(); privateTargets.clear();
       lineage.close();
-      const failure = [...viewResults, ...results].find(result => result.status === 'rejected');
+      const failure = results.find(result => result.status === 'rejected');
       if (failure) throw failure.reason;
     },
   };

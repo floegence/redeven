@@ -71,7 +71,6 @@ type computerExtensionClient struct {
 	sources           map[string]*extensionSourcePipe
 	directoryRevision uint64
 	directoryTabs     []ComputerBrowserTab
-	directoryChanged  chan struct{}
 }
 
 // Initial setup is an explicit local user command. Later Runtime starts restore
@@ -256,7 +255,7 @@ func (h *computerExtensionHub) admit(conn net.Conn, installationID string) {
 		return
 	}
 	libraryDigest := sha256.Sum256([]byte(installationID + "\x00" + hello.ProfileID))
-	client := &computerExtensionClient{hub: h, conn: conn, profile: ComputerExtensionProfile{ID: hex.EncodeToString(token), Name: hello.Name, InstallationID: installationID, LibraryID: "chrome-" + hex.EncodeToString(libraryDigest[:])}, done: make(chan struct{}), pending: make(map[string]chan json.RawMessage), directoryChanged: make(chan struct{}, 1)}
+	client := &computerExtensionClient{hub: h, conn: conn, profile: ComputerExtensionProfile{ID: hex.EncodeToString(token), Name: hello.Name, InstallationID: installationID, LibraryID: "chrome-" + hex.EncodeToString(libraryDigest[:])}, done: make(chan struct{}), pending: make(map[string]chan json.RawMessage)}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed || len(h.profiles) >= 16 {
@@ -271,8 +270,7 @@ func (h *computerExtensionHub) admit(conn net.Conn, installationID string) {
 		registration.diagnostic = nil
 	}
 	admitted = true
-	h.wait.Add(2)
-	go client.directoryUpdates()
+	h.wait.Add(1)
 	go client.read()
 }
 func (c *computerExtensionClient) read() {
@@ -315,10 +313,6 @@ func (c *computerExtensionClient) read() {
 		if envelope.Type == "tabs_changed" && envelope.ID == "" {
 			if !c.applyDirectory(raw) {
 				return
-			}
-			select {
-			case c.directoryChanged <- struct{}{}:
-			default:
 			}
 			continue
 		}
@@ -686,13 +680,13 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 				continue
 			}
 			if tab.Private || connection.nativeTargetID != "" && connection.nativeTargetID != tab.NativeTargetID {
-				return TargetDescriptor{}, errBrowserViewUnavailable
+				return TargetDescriptor{}, errBrowserSourceUnavailable
 			}
 			connection.nativeTargetID = tab.NativeTargetID
 			found = true
 		}
 		if !found {
-			return TargetDescriptor{}, errBrowserViewUnavailable
+			return TargetDescriptor{}, errBrowserSourceUnavailable
 		}
 	}
 	if targetID == "" && connection.nativeTargetID != "" {
@@ -727,7 +721,7 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 		}
 	}
 	// Reuse still passes through Chrome's current-selection validation. An
-	// existing product projection cannot authorize a stale Flower candidate.
+	// existing source cannot authorize a stale Flower candidate.
 	transition("native_bind")
 	raw, err := client.call(ctx, "bind", map[string]any{"tab_id": connection.TabID, "tab_title": connection.TabTitle, "tab_url": connection.TabURL, "native_target_id": connection.nativeTargetID})
 	if err != nil {
@@ -800,7 +794,7 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 	defer r.connectMu.Unlock()
 	currentClient, clientErr := r.extensionClient(connection.ExtensionProfileID)
 	if clientErr != nil || currentClient != client || r.browserHost != host || ctx.Err() != nil {
-		return TargetDescriptor{}, errBrowserViewUnavailable
+		return TargetDescriptor{}, errBrowserSourceUnavailable
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -823,11 +817,23 @@ func (e *extensionTargetExecutor) setBrowserPrivacy(ctx context.Context, target 
 	if e.sourceHost == nil {
 		return errors.New("extension source unavailable")
 	}
-	var owner any
-	if private {
-		owner = ""
+	return e.sourceHost.call(ctx, "source.privacy", map[string]any{"target": target, "private": private}, nil)
+}
+
+func (r *ComputerUseRuntime) extensionWorkspaceTargetID(client *computerExtensionClient, native string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for id, executor := range r.executors {
+		if source, ok := executor.(*extensionTargetExecutor); ok && source.client == client && source.nativeTargetID == native {
+			return id
+		}
 	}
-	return e.sourceHost.call(ctx, "view.privacy", map[string]any{"target": target, "view": owner}, nil)
+	return extensionNativeTargetID(client, native)
+}
+
+func extensionNativeTargetID(client *computerExtensionClient, native string) string {
+	digest := sha256.Sum256([]byte(client.profile.LibraryID + "\x00" + native))
+	return "chrome-" + hex.EncodeToString(digest[:])
 }
 
 func (e *extensionTargetExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
@@ -927,7 +933,7 @@ func (e *extensionTargetExecutor) Close() error {
 	return errors.Join(err, e.pipe.drain(ctx))
 }
 
-// Browser source setup and inventory do not require an AI provider or service.
+// Browser source setup and status do not require an AI provider or service.
 func (r *ComputerUseRuntime) BrowserExtensionSetup(ctx context.Context, meta *session.Meta, installation string) (ComputerExtensionSetup, error) {
 	if err := requireRWX(meta); err != nil {
 		return ComputerExtensionSetup{}, err
@@ -940,13 +946,6 @@ func (r *ComputerUseRuntime) BrowserExtensionStatus(meta *session.Meta) (Compute
 	}
 	return r.extensionStatus(), nil
 }
-func (r *ComputerUseRuntime) BrowserExtensionTabs(ctx context.Context, meta *session.Meta, profile string) ([]ComputerBrowserTab, error) {
-	if err := requireRWX(meta); err != nil {
-		return nil, err
-	}
-	return r.extensionTabs(ctx, profile)
-}
-
 func browserDetachReason(reason string) string {
 	switch reason {
 	case "source_disconnected", "target_closed", "tab_closed", "canceled_by_user", "replaced_with_devtools", "debugger_detached", "native_backpressure":

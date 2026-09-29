@@ -1,12 +1,64 @@
 package ai
 
 import (
+	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/floegence/redeven/internal/browserinstall"
 	"github.com/floegence/redeven/internal/session"
 )
+
+// Tests must name a qualified installation explicitly. A Playwright cache is
+// never an implicit substitute for the product's installation contract.
+func configureBrowserFixture(t *testing.T, runtime *ComputerUseRuntime) {
+	t.Helper()
+	installation := os.Getenv("REDEVEN_BROWSER_TEST_INSTALLATION")
+	if !filepath.IsAbs(installation) {
+		t.Fatal("REDEVEN_BROWSER_TEST_INSTALLATION must name an absolute installed catalog package directory")
+	}
+	pkg, err := browserinstall.NativePackage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := t.TempDir()
+	packages := filepath.Join(state, "browser", "packages")
+	if err := os.MkdirAll(packages, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(installation, filepath.Join(packages, pkg.SHA256)); err != nil {
+		t.Fatal(err)
+	}
+	runtime.ConfigureManagedBrowser(state)
+	if _, err := runtime.requireManagedBrowser(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManagedBrowserConfigurationLeavesRetiredProductDatabaseUntouched(t *testing.T) {
+	state := t.TempDir()
+	legacy := filepath.Join(state, "browser.sqlite")
+	contents := []byte("retired browser product data must remain untouched")
+	if err := os.WriteFile(legacy, contents, 0600); err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), nil, t.TempDir())
+	runtime.ConfigureManagedBrowser(state)
+	if err := runtime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	actual, err := os.ReadFile(legacy)
+	if err != nil || !bytes.Equal(actual, contents) {
+		t.Fatalf("legacy database changed: %v", err)
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, err := os.Stat(legacy + suffix); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("legacy database companion %s was created: %v", suffix, err)
+		}
+	}
+}
 
 func TestComputerMissingBrowserRequestsConsentAndDisabledBrowserCannotRun(t *testing.T) {
 	host, executor, store, _ := computerBindingFixture(t)

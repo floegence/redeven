@@ -3,11 +3,10 @@ package ai
 import (
 	"context"
 	"log/slog"
-	"slices"
 	"time"
 )
 
-// Source events retire projection authority, never native directory identity.
+// Source events retire execution authority, never native directory identity.
 // The helper event reader preserves order and binding generations fence late events.
 func (r *ComputerUseRuntime) browserSourceEvent(event browserHostEvent) {
 	r.browserSourceGenerationEvent(r.browserServiceSnapshot().Generation, event)
@@ -22,7 +21,6 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	}
 	r.mu.RLock()
 	closed := r.closed
-	view := r.browserViews[event.View]
 	executor := r.executors[event.Target]
 	r.mu.RUnlock()
 	if closed {
@@ -33,33 +31,10 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 			return
 		}
 	}
-	if event.Type == "view_fault" {
-		if view != nil {
-			// Only fixed diagnostic categories cross the logging boundary. Never
-			// log helper exceptions, page content, source URLs or input payloads.
-			reason := "cleanup_failed"
-			switch event.Reason {
-			case "input_failed", "dom_message_limit", "dom_backpressure":
-				reason = event.Reason
-			}
-			slog.Warn("browser view closed after source failure", "reason", reason)
-			_ = view.close()
-		}
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.browserHost.ctx, 5*time.Second)
 	defer cancel()
-	if event.Type == "view_selected" {
-		if view != nil && view.workspace != nil && view.permits(event.Target) {
-			view.workspace.selected = event.Target
-			if err := r.saveBrowserWorkspace(ctx, view.workspace); err != nil {
-				slog.Error("browser restoration snapshot failed", "profile_id", view.workspace.profile)
-			}
-		}
-		return
-	}
 	// Native disconnection revokes execution before the helper observes EOF.
-	// Its subsequent close retires direct grants; native workspaces retain metadata.
+	// Its subsequent close retires the admitted target.
 	if executor == nil && event.Type != "source_closed" {
 		return
 	}
@@ -67,10 +42,6 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 		if err := r.admitManagedBrowserPopup(ctx, event); err != nil {
 			slog.Warn("managed browser popup admission failed", "target_id", event.Target)
 		}
-		return
-	}
-	if event.Type == "source_changed" {
-		r.browserSourceMetadata(ctx, event)
 		return
 	}
 	if event.Type == "source_fault" {
@@ -103,58 +74,30 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 		}
 		control.mu.Unlock()
 	}
-	var affected []*browserView
-	for _, candidate := range r.browserViews {
-		if candidate.permits(event.Target) {
-			affected = append(affected, candidate)
-		}
-	}
 	r.mu.Unlock()
 	r.releaseScripts(func(key computerScriptKey) bool { return key.target == event.Target })
-	for _, workspace := range r.browserWorkspaces {
-		if workspace.extension != nil {
-			continue
-		}
-		// Unexpected source loss alone must not progressively overwrite the
-		// recovery checkpoint during a browser-wide shutdown. An explicit tab
-		// close commits its resulting directory in browserDirectoryCommand.
-		workspace.targets = slices.DeleteFunc(workspace.targets, func(id string) bool { return id == event.Target })
-		delete(workspace.pinned, event.Target)
-		delete(workspace.tabs, event.Target)
-	}
-	// Grant removal also covers explicitly connected pages without a managed
-	// workspace. Healthy sources and independent view selections remain alive.
-	for _, candidate := range affected {
-		if candidate.workspace != nil && candidate.workspace.extension != nil {
-			continue
-		}
-		candidate.mu.Lock()
-		candidate.targets = slices.DeleteFunc(candidate.targets, func(id string) bool { return id == event.Target })
-		targets, observing := slices.Clone(candidate.targets), candidate.observing
-		candidate.mu.Unlock()
-		if candidate.retireIfEmpty() {
-			continue
-		}
-		if observing {
-			if err := candidate.host.call(ctx, "view.grants", map[string]any{"view": candidate.id, "targets": targets}, nil); err != nil {
-				_ = candidate.close()
-			}
-		}
-	}
 	if closer, ok := executor.(interface{ Close() error }); ok {
 		_ = closer.Close()
 	}
 }
 
-// Caller holds connectMu. An explicit close may still create its replacement
-// tab; unexpected final-source loss must end observation and input authority.
-func (view *browserView) retireIfEmpty() bool {
-	view.mu.Lock()
-	empty := len(view.targets) == 0
-	view.mu.Unlock()
-	if !empty || view.workspace != nil && (view.workspace.extension != nil || view.workspace.pendingCloses > 0) {
-		return false
+// Only a Runtime-owned managed browser can admit its native popup. External
+// Chrome pages still require explicit target selection by the user.
+func (r *ComputerUseRuntime) admitManagedBrowserPopup(ctx context.Context, event browserHostEvent) error {
+	if event.TabID == "" || len(event.TabID) > 256 {
+		return errBrowserSourceUnavailable
 	}
-	_ = view.close()
-	return true
+	r.mu.RLock()
+	source, managed := r.executors[event.Target].(*PlaywrightTargetExecutor)
+	r.mu.RUnlock()
+	if !managed || !source.ManagedAttachment {
+		return errBrowserSourceUnavailable
+	}
+	for profileID, profile := range r.managedProfiles {
+		if profile.endpoint == source.CDPURL {
+			_, err := r.connectManagedBrowserLocked(ctx, ComputerBrowserConnection{ManagedProfileID: profileID, TabID: event.TabID, privatePopup: true}, "")
+			return err
+		}
+	}
+	return errBrowserSourceUnavailable
 }

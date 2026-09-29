@@ -957,10 +957,6 @@ func (g *Server) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if g.serveBrowserDocument(w, r) {
-		return
-	}
-
 	p := strings.TrimSpace(r.URL.Path)
 	if p == "/_redeven_proxy/env" {
 		target := "/_redeven_proxy/env/"
@@ -1007,7 +1003,8 @@ func shouldServeEnvAppShellForMissingPath(r *http.Request, distPath string) bool
 		return false
 	}
 	cleanPath := cleanDistPath(distPath)
-	if cleanPath == "" || cleanPath == "env/assets" || strings.HasPrefix(cleanPath, "env/assets/") {
+	if cleanPath == "" || cleanPath == "env/assets" || strings.HasPrefix(cleanPath, "env/assets/") ||
+		cleanPath == "env/browser" || strings.HasPrefix(cleanPath, "env/browser/") {
 		return false
 	}
 	base := path.Base(cleanPath)
@@ -2511,7 +2508,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		g.handleUICacheScope(w, r)
 		return
 	}
-	if g.handleBrowserLibraryAPI(w, r) || g.handleBrowserViewsAPI(w, r) || g.handleBrowserWorkspaceAPI(w, r) {
+	if g.handleBrowserConnectionAPI(w, r) {
 		return
 	}
 	if g.handleHostApplicationsAPI(w, r) {

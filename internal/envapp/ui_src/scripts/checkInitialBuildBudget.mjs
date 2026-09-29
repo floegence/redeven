@@ -49,7 +49,7 @@ const compressedBytes = (relativePath) => {
 
 // Each document loads its own static graph. Shared assets count against every
 // document that imports them; independent windows never share one size budget.
-for (const required of ['index.html', 'access.html', 'browser.html']) {
+for (const required of ['index.html', 'access.html']) {
   if (manifest[required]?.isEntry !== true || !fs.existsSync(path.join(outputDir, required))) {
     throw new Error(`Env App build output is missing document: ${required}`);
   }

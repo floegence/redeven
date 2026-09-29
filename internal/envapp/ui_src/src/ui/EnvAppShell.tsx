@@ -1,10 +1,7 @@
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
 import { EnvironmentAccessGate, type AccessGatePhase, type AccessGateFeedback } from './EnvironmentAccessGate';
 import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './services/envResourceCache';
-import { browserSourceMessages } from './i18n/browserSourceMessages';
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
-import { createBrowserWorkspaceWindows } from './services/browserWorkspaceWindows';
-import { browserMessages } from './i18n/browserMessages';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
 import { EnvPageLoading } from './pages/EnvPageLoading';
@@ -13,7 +10,7 @@ import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRec
 import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from './utils/clipboard';
-import { ErrorBoundary, For, Show, Suspense, batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, on, onCleanup, onMount, untrack, type Accessor, type Resource, type Setter } from 'solid-js';
+import { ErrorBoundary, For, Show, Suspense, batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Resource, type Setter } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryContributions, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
@@ -38,7 +35,6 @@ import {
 import type { WorkbenchCanvasWidgetPlacement, WorkbenchExternalDockDragController, WorkbenchHostDockItem } from '@floegence/floe-webapp-core/workbench';
 import {
   ActivityBarCodespacesIcon,
-  ActivityBarBrowserIcon,
   ActivityBarContainersIcon,
   ActivityBarHostApplicationsIcon,
   ActivityBarFolderIcon,
@@ -311,7 +307,6 @@ function pluginActivityComponentID(inventoryKey: string): string {
   return `${PLUGIN_ACTIVITY_COMPONENT_PREFIX}${encodeURIComponent(inventoryKey)}`;
 }
 const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
-const EnvBrowserPage = lazy(() => import('./pages/EnvBrowserPage').then((module) => ({ default: module.EnvBrowserPage })));
 const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module) => ({ default: module.EnvMonitorPage })));
 const EnvFileBrowserPage = lazy(() => import('./pages/EnvFileBrowserPage').then((module) => ({ default: module.EnvFileBrowserPage })));
 const EnvCodespacesPage = lazy(() => import('./pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
@@ -562,17 +557,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     return theme.shellPresetForMode(mode)?.name === presetName;
   };
   const protocol = useProtocol();
-  // The existing local readiness handshake confirms product authority after
-  // transport establishment. Embedded and independent browser views share it.
-  const browserSession = () => protocol.status() === 'connected' && (!isLocalMode() || pluginSessionReady())
-    ? protocol.session?.() ?? undefined : undefined;
-  const browserWindows = createBrowserWorkspaceWindows(() => ({ title: i18n.t('shell.nav.remoteBrowser'), connecting: i18n.t('browserEngine.connection.connecting'), locale: i18n.locale(), messages: browserMessages(i18n), sources: { environment: envId() || 'env_local', messages: browserSourceMessages(i18n) } }), id => revealHostApplication(id));
-  createEffect(() => browserWindows.setSession(browserSession()));
-  const browserPresentation = createMemo(() => JSON.stringify([i18n.locale(), theme.resolvedTheme(), theme.shellPresetForMode(theme.resolvedTheme())?.name]));
-  createEffect(on(browserPresentation, () => browserWindows.refreshPresentation(), { defer: true }));
-  onCleanup(() => browserWindows.close());
-  const BrowserPage = () => <EnvBrowserPage session={browserSession()} onOpenWindow={request => browserWindows.open(request)}
-    onInteraction={() => dismissActivityFlowerCompanion('outside-pointer')} />;
   let remoteProxyServiceWorkerControlled = false;
   const rpc = useRedevenRpc();
   const cmd = useCommand();
@@ -3845,7 +3829,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
       { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: EnvTerminalPage, sidebar: { order: 1, fullScreen: true } },
-      { id: 'browser', name: i18n.t('shell.nav.remoteBrowser'), icon: ActivityBarBrowserIcon, component: BrowserPage, sidebar: { order: 1.5, fullScreen: true } },
       { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: EnvMonitorPage, sidebar: { order: 2, fullScreen: true } },
       { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
       { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
@@ -4224,7 +4207,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
           if (layout.isMobile()) setMobileTerminalSessionsOpen(nextOpen);
         },
       },
-      { id: 'browser', icon: ActivityBarBrowserIcon, label: i18n.t('shell.nav.remoteBrowser'), collapseBehavior: 'preserve' },
       { id: 'monitor', icon: ActivityBarMonitorIcon, label: i18n.t('shell.nav.monitoring'), collapseBehavior: 'preserve' },
       layout.isMobile()
         ? {

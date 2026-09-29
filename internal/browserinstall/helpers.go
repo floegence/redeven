@@ -78,7 +78,7 @@ func validateHelpers(root string) error {
 		return errors.New("computer helper platform mismatch")
 	}
 	required := map[string]bool{"node": false, "redevenComputerHost.mjs": false, "redevenManagedBrowser.mjs": false,
-		"computerBrowserSource.mjs": false, "computerBrowserViews.mjs": false, "node_modules/playwright/package.json": false,
+		"computerBrowserSource.mjs": false, "node_modules/playwright/package.json": false,
 		"redevenBrowserHost.mjs": false, "computerBrowserHost.mjs": false, "computerManagedDownloads.mjs": false, "computerBrowserLineage.mjs": false, "computerExtensionTransport.mjs": false,
 		"node_modules/@floegence/floebrowser/package.json": false, "node_modules/@floegence/floebrowser/dist/host/index.js": false,
 		"node_modules/@floegence/floebrowser/dist/bin/manifest.json":                                       false,

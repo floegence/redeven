@@ -17,6 +17,7 @@ var (
 	errBrowserRecoveryBlocked   = errors.New("finish the external browser session before recovery")
 	errBrowserGenerationChanged = errors.New("browser service generation changed")
 	errBrowserOutcomeUnknown    = errors.New("browser operation outcome is unknown")
+	errBrowserSourceUnavailable = errors.New("browser source unavailable")
 )
 
 type BrowserServiceStatus struct {
@@ -50,7 +51,7 @@ func BrowserErrorCode(err error) string {
 		return "BROWSER_GENERATION_CHANGED"
 	case errors.Is(err, errBrowserHostFailed):
 		return "BROWSER_SERVICE_FAILED"
-	case errors.Is(err, errBrowserViewUnavailable):
+	case errors.Is(err, errBrowserSourceUnavailable):
 		return "BROWSER_SOURCE_UNAVAILABLE"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "BROWSER_OPEN_TIMEOUT"
@@ -128,9 +129,6 @@ func (r *ComputerUseRuntime) RecoverBrowser(ctx context.Context, meta *session.M
 		r.browserRecovery = operation
 		r.mu.Lock()
 		r.browserService.State = "recovering"
-		for _, view := range r.browserViews {
-			view.cancel()
-		}
 		r.mu.Unlock()
 		go r.rebuildBrowser(operation)
 	}
@@ -152,11 +150,6 @@ func (r *ComputerUseRuntime) rebuildBrowser(operation *browserRecovery) {
 		r.mu.Unlock()
 		operation.err = errBrowserHostFailed
 		return
-	}
-	var views []*browserView
-	for _, view := range r.browserViews {
-		view.cancel()
-		views = append(views, view)
 	}
 	retired := make(map[string]bool)
 	var executors []interface{ Close() error }
@@ -196,7 +189,7 @@ func (r *ComputerUseRuntime) rebuildBrowser(operation *browserRecovery) {
 	r.mu.Unlock()
 	// Terminating owned browsers makes uncertain held input terminal. Never
 	// terminate personal Chrome or clear its unresolved privacy reservations.
-	// Stop process owners together before draining views. This interrupts old
+	// Stop process owners together. This interrupts old
 	// source calls and bounds cleanup independently of the number of open tabs.
 	var processes sync.WaitGroup
 	for _, profile := range r.managedProfiles {
@@ -208,16 +201,12 @@ func (r *ComputerUseRuntime) rebuildBrowser(operation *browserRecovery) {
 	processes.Wait()
 	clear(r.managedProfiles)
 	var consumers sync.WaitGroup
-	for _, view := range views {
-		consumers.Go(func() { _ = view.close() })
-	}
 	r.releaseScripts(func(key computerScriptKey) bool { return retired[key.target] })
 	for _, executor := range executors {
 		consumers.Go(func() { _ = executor.Close() })
 	}
 	consumers.Wait()
 	r.browserHost = nil
-	clear(r.browserWorkspaces)
 	r.mu.Lock()
 	for target := range retired {
 		delete(r.controls, target)

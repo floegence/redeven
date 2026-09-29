@@ -50,12 +50,9 @@ The disabled browser hides installation choices and retains installed bytes and
 website data. Re-enabling reuses a valid installation without downloading.
 Installation paths remain secondary details; website-account groups stay separate.
 
-The Remote Browser page uses the same component for first use and catalog
-upgrades. An older package alone is not current readiness. Only Install and open
-records a browser-view continuation, and successful installation resumes that
-intent once. Closing the panel or changing source retires the continuation
-without canceling a confirmed background installation. Reopening an already
-installed panel does not create a new open intent. Managed launch always checks
+Flower's browser setup uses this component for first use and catalog upgrades.
+An older package alone is not current readiness. Closing the panel does not
+cancel a confirmed background installation. Managed launch always checks
 the authoritative manager; neither a missing manager nor Playwright's cache
 provides an implicit executable fallback. Tests and local debugging prepare an
 explicit qualified installation fixture.

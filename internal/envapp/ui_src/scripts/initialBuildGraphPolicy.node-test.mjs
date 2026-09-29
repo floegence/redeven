@@ -12,18 +12,18 @@ const chunk = (modules) => ({ modules });
 test('measures each document with all its static shared imports and its own CSS', () => {
   const manifest = {
     'index.html': entry('assets/index.js', { imports: ['shared'], css: ['assets/shell.css'] }),
-    'browser.html': entry('assets/browser.js', { imports: ['shared'], css: ['assets/browser.css'] }),
+    'access.html': entry('assets/access.js', { imports: ['shared'], css: ['assets/access.css'] }),
     shared: { file: 'assets/shared.js', css: ['assets/shared.css'] },
   };
   const modules = { chunks: {
     'assets/index.js': chunk(['src/index.ts']),
-    'assets/browser.js': chunk(['src/browserDocument.ts']),
+    'assets/access.js': chunk(['src/access.ts']),
     'assets/shared.js': chunk(['ghostty-web/dist/index.js']),
   } };
-  for (const document of ['index', 'browser']) {
+  for (const document of ['index', 'access']) {
     const graph = analyzeInitialBuildGraph(manifest, modules, `${document}.html`);
     assert.deepEqual(graph.javascriptAssets, [`assets/${document}.js`, 'assets/shared.js']);
-    assert.deepEqual(graph.cssAssets, [`assets/${document === 'index' ? 'shell' : 'browser'}.css`, 'assets/shared.css']);
+    assert.deepEqual(graph.cssAssets, [`assets/${document === 'index' ? 'shell' : 'access'}.css`, 'assets/shared.css']);
     assert.equal(graph.forbiddenModules.length, 1, 'Each document independently enforces forbidden shared modules');
   }
   assert.throws(() => analyzeInitialBuildGraph(manifest, modules, 'missing.html'), /does not contain an entry chunk/u);
@@ -118,16 +118,12 @@ test('fails closed when a static manifest edge is missing', () => {
   }), /manifest import is missing/u);
 });
 
-test('loads the browser engine only in its document or behind an optional import', () => {
+test('rejects the retired browser viewer from every initial document', () => {
   const moduleID = '@floegence/floebrowser/dist/viewer/browser.js';
-  const chunks = { chunks: { 'assets/index.js': chunk(['src/index.ts']), 'assets/browser.js': chunk([moduleID]) } };
+  const chunks = { chunks: { 'assets/index.js': chunk(['src/index.ts', moduleID]) } };
   const manifest = {
-    'index.html': entry('assets/index.js', { dynamicImports: ['browser.html'] }),
-    'browser.html': entry('assets/browser.js'),
+    'index.html': entry('assets/index.js'),
   };
-  assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules, []);
-  assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks, 'browser.html').forbiddenModules, []);
-  manifest['index.html'].imports = ['browser.html'];
   assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules.map(item => item.moduleId), [moduleID]);
 });
 

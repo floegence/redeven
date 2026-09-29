@@ -19,8 +19,8 @@ func TestComputerHelperArchiveVerifiesContentsAndRepairsCorruption(t *testing.T)
 	}
 	files := map[string][]byte{
 		"node": []byte("#!/bin/sh\n"), "redevenComputerHost.mjs": []byte("host"), "redevenManagedBrowser.mjs": []byte("browser"),
-		"computerBrowserSource.mjs": []byte("source"), "computerBrowserViews.mjs": []byte("views"),
-		"redevenBrowserHost.mjs": []byte("host"), "computerExtensionTransport.mjs": []byte("extension transport"), "computerBrowserHost.mjs": []byte("shared source host"), "computerManagedDownloads.mjs": []byte("native downloads"), "computerBrowserLineage.mjs": []byte("source lineage"),
+		"computerBrowserSource.mjs": []byte("source"),
+		"redevenBrowserHost.mjs":    []byte("host"), "computerExtensionTransport.mjs": []byte("extension transport"), "computerBrowserHost.mjs": []byte("shared source host"), "computerManagedDownloads.mjs": []byte("native downloads"), "computerBrowserLineage.mjs": []byte("source lineage"),
 		"node_modules/playwright/package.json":                                                             []byte(`{"version":"1.63.0"}`),
 		"node_modules/@floegence/floebrowser/package.json":                                                 []byte(`{"version":"0.1.2"}`),
 		"node_modules/@floegence/floebrowser/dist/host/index.js":                                           []byte("sdk"),

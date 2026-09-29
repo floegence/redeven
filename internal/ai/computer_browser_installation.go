@@ -8,18 +8,12 @@ import (
 	"path/filepath"
 
 	"github.com/floegence/redeven/internal/browserinstall"
-	"github.com/floegence/redeven/internal/browserstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
 // ConfigureManagedBrowser is called once by the product runtime before serving.
 // Helpers remain immutable; downloaded browsers and preferences live in state.
 func (r *ComputerUseRuntime) ConfigureManagedBrowser(stateDirectory string) {
-	if r.browserStore != nil {
-		_ = r.browserStore.Close()
-		r.browserStore = nil
-	}
-	r.browserStore, r.browserStoreErr = browserstore.Open(filepath.Join(stateDirectory, "browser.sqlite"))
 	pkg, err := browserinstall.NativePackage()
 	if err == nil {
 		r.browserInstallation, err = browserinstall.New(filepath.Join(stateDirectory, "browser"), pkg)

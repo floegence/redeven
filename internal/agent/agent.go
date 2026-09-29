@@ -1635,12 +1635,6 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta, externalOrigin strin
 			return nil, nil, err
 		}
 	}
-	cleanupBrowser, err := a.registerBrowserStreams(handlers, meta)
-	cleanups = append(cleanups, cleanupBrowser)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
 	cleanupProxy, err := a.registerEnvSessionProxy(handlers, meta, externalOrigin)
 	if err != nil {
 		cleanup()
