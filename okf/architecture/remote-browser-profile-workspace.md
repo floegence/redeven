@@ -61,6 +61,8 @@ uncertainty; it never repeats the effect. A close decision on an admitted source
 uses its existing beforeunload and target-input gate. Unprojected tabs close by
 verified native identity without attaching a debugger.
 
+# Boundaries
+
 ## Failure and reconnect
 
 Per-page loading, unsupported, unavailable and empty states stay in the released

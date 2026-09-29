@@ -32,6 +32,8 @@ assets. The child is not registered as an environment or IPC owner; API paths,
 other origins, other document instances and non-GET requests receive no grant.
 
 
+# Boundaries
+
 Window source selection, view recovery and presentation belong to the
 [remote browser surface](remote-browser-surface.md). Authenticated DOM, input,
 media and file traffic follow [browser transport](remote-browser-media.md).

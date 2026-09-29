@@ -15,7 +15,9 @@ draft, and each tab retains its filters while the surface remains mounted.
 Readers can inspect skills and server catalogs but cannot mutate administrator
 configuration. Failed operations keep their input and offer an explicit retry.
 
-# Navigation and presentation
+# Contract
+
+## Navigation and presentation
 
 The page has one identity header, a return-to-chat action, and two accessible
 Skills/MCP tabs with arrow, Home, and End navigation. MCP loads on first visit;
@@ -42,7 +44,7 @@ explain their next action, loading has a status, and failures remain actionable.
 Both carriers resolve explicit copy for every shipped locale, including plural
 counts and locale-aware check timestamps.
 
-# Entry icons
+## Entry icons
 
 Every skill and MCP row reserves a 32px icon beside its name without increasing
 row height. A supplied icon takes precedence; unavailable, unsupported, or broken
@@ -64,7 +66,7 @@ Catalog DTOs carry self-contained image data; model-facing skill metadata does
 not carry images. MCP discovery and persistence follow
 [the runtime icon contract](../ai/mcp-runtime.md#presentation-icons).
 
-# Skills
+## Skills
 
 Catalog and source metadata load once the connection is usable. Search and
 scope filters preserve the complete catalog. Rows retain enablement,
@@ -87,7 +89,7 @@ manager. Both bundled and filesystem skills retain size, encoding, relative
 path, and containment checks. Browsing requires read access and never installs
 bundled files on disk.
 
-# MCP
+## MCP
 
 Add or edit a server using a remote HTTP endpoint or a local executable with one
 argument per line. Advanced configuration accepts explicit JSON HTTP headers
@@ -99,8 +101,14 @@ connection checks discover tools before replacing the saved catalog.
 Rows distinguish enabled configuration from a successful live connection; the
 last check is a timestamp, not a continuously polled health claim. Search,
 enabled filtering, discovered tool details, explicit connection checks, and
-confirmed removal are available from the MCP tab. Removal affects Flower's
-configuration, not the external service or its records. See
+confirmed removal are available from the MCP tab.
+
+# Boundaries
+
+Catalog visibility does not grant mutation authority: readers can inspect, while
+configuration changes require administrator access through the authenticated
+management adapter. UI checks do not replace Runtime authorization. Removal
+affects Flower's configuration, not the external service or its records. See
 [the MCP runtime contract](../ai/mcp-runtime.md) for persistence, protocol,
 dependency matching, and execution authorization.
 

@@ -16,7 +16,9 @@ execution queue, lifecycle projection, or retry authority. A lost call outcome
 is terminal and cannot be replayed. Invalid persisted configuration fails closed
 without changing the original bytes.
 
-# Configuration and protocol
+# Contract
+
+## Configuration and protocol
 
 Configuration lives at `<stateDir>/ai/mcp.json`, with schema version 2, one
 monotonic configuration revision, and server revisions for optimistic edits.
@@ -55,7 +57,7 @@ Lists and ordinary startup never connect to servers. Explicit discovery has a
 and closes one SDK session. Catalog limits are 32 servers, 128 tools per server,
 32 KiB per schema, and 4 MiB total persisted configuration.
 
-# Presentation icons
+## Presentation icons
 
 Save and explicit Check read `serverInfo.icons` from the existing SDK initialize
 result. No startup connection, polling, or separate protocol session is added.
@@ -77,7 +79,7 @@ headers. It cannot fetch arbitrary local files or expand to another network
 origin. Stdio servers supply inline images. Rejected sources receive the
 generated identity described in [the shared UI contract](../ui/flower-extensions.md#entry-icons).
 
-# Execution and dependencies
+## Execution and dependencies
 
 Enabled, previously discovered tools join the dynamic tool surface before the
 existing permission filter. Their identity binds the exact server configuration
@@ -89,6 +91,13 @@ remain intact and have no Redeven target-routing authority.
 The configuration revision is checked again after connection establishment and
 before tool dispatch. Disabling or editing a server prevents a call still waiting
 to connect; it does not cancel or replay an already dispatched operation.
+
+Skill dependency declarations never install or enable a server. A dependency's
+name must match the administrator's server ID; any declared transport, URL, or
+command must also match. Enabled, checked configuration satisfies the catalog
+indicator; it does not promise current network reachability or bypass approval.
+
+# Boundaries
 
 MCP tools are conservatively mutating and open-world regardless of server
 annotation claims. HTTP declares network/write effects; stdio declares
@@ -103,11 +112,6 @@ seals it as `effect_outcome_unknown` and rejects Retry; neither the adapter nor
 the SDK retries the call. An explicit MCP tool error retains bounded tool output
 as error context. Server tool errors and known connection failures remain
 distinct from an unknown execution outcome.
-
-Skill dependency declarations never install or enable a server. A dependency's
-name must match the administrator's server ID; any declared transport, URL, or
-command must also match. Enabled, checked configuration satisfies the catalog
-indicator; it does not promise current network reachability or bypass approval.
 
 # Evidence
 
