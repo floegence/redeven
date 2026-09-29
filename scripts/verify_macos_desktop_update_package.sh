@@ -77,7 +77,8 @@ feed_url=$(plist_value SUFeedURL)
 [[ "$feed_url" == https://*"/appcast-mac-${arch}.xml" && "$feed_url" != *"@"* ]]
 
 codesign --verify --deep --strict --verbose=2 "$app_bundle"
-for signed_path in "$app_bundle" "$framework" "$addon"; do
+codesign --verify --strict --verbose=2 "$dmg"
+for signed_path in "$app_bundle" "$framework" "$addon" "$dmg"; do
   signature_info=$(codesign -dv --verbose=4 "$signed_path" 2>&1)
   team_id=$(sed -n 's/^TeamIdentifier=//p' <<<"$signature_info" | head -n 1)
   [[ "$team_id" == "$expected_team_id" ]] || {
@@ -90,7 +91,6 @@ rg -q 'flags=.*runtime' <<<"$app_signature_info"
 
 xcrun stapler validate "$app_bundle"
 xcrun stapler validate "$dmg"
-spctl --assess --type execute --verbose=2 "$app_bundle"
-spctl --assess --type install --verbose=2 "$dmg"
+syspolicy_check distribution "$app_bundle"
 
 echo "Verified signed, notarized, stapled Sparkle package for macOS ${arch}."

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci-check.yml", import.meta.url), "utf8");
@@ -8,6 +11,7 @@ const releaseWorkflow = readFileSync(new URL("../.github/workflows/release.yml",
 const desktopBuilderConfig = readFileSync(new URL("../desktop/electron-builder.config.mjs", import.meta.url), "utf8");
 const redevpluginRuntimeStage = readFileSync(new URL("./stage_redevplugin_release_artifacts.sh", import.meta.url), "utf8");
 const sparkleReleaseScript = readFileSync(new URL("./generate_desktop_sparkle_appcast.sh", import.meta.url), "utf8");
+const macPackageVerifier = readFileSync(new URL("./verify_macos_desktop_update_package.sh", import.meta.url), "utf8");
 const quickGate = readFileSync(new URL("./check_quick_ci.sh", import.meta.url), "utf8");
 const finalGate = readFileSync(new URL("./check_final_integration.sh", import.meta.url), "utf8");
 const uiGate = readFileSync(new URL("./check_ui_tests.sh", import.meta.url), "utf8");
@@ -254,3 +258,71 @@ test("release workflow signs and preserves exact Darwin ReDevPlugin runtime byte
   assert.match(redevpluginRuntimeStage, /verify-runtime-executable "\$runtime" "\$target"/u);
   assert.match(desktopBuilderConfig, /signIgnore: \['\*\*\/Contents\/Resources\/bin\/redevplugin-runtime'\]/u);
 });
+
+test("macOS release signs and notarizes the final disk image before package verification", () => {
+  assert.match(desktopBuilderConfig, /dmg: \{\s+sign: true,/u);
+  const packageOffset = releaseWorkflow.indexOf('- name: Build desktop package');
+  const notarizeOffset = releaseWorkflow.indexOf('- name: Notarize macOS disk image');
+  const verifyOffset = releaseWorkflow.indexOf('- name: Verify packaged ReDevPlugin runtime');
+  assert.ok(notarizeOffset > packageOffset && notarizeOffset < verifyOffset);
+  const notarizeStep = releaseWorkflow.slice(notarizeOffset, releaseWorkflow.indexOf('\n      - name:', notarizeOffset));
+  assert.match(notarizeStep, /notarytool submit "\$dmg"/u);
+  assert.match(notarizeStep, /--wait --timeout 20m --output-format json/u);
+  assert.match(notarizeStep, /Accepted/u);
+  assert.match(notarizeStep, /stapler staple "\$dmg"/u);
+  assert.match(notarizeStep, /stapler validate "\$dmg"/u);
+  assert.match(macPackageVerifier, /codesign --verify --strict --verbose=2 "\$dmg"/u);
+  assert.match(macPackageVerifier, /syspolicy_check distribution "\$app_bundle"/u);
+  assert.doesNotMatch(macPackageVerifier, /spctl --assess/u);
+});
+
+for (const arch of ['amd64', 'arm64']) {
+  for (const [status, commandExit, expectedExit] of [['Accepted', 0, 0], ['Invalid', 0, 1], ['In Progress', 124, 124]]) {
+    test(`macOS ${arch} disk image notarization handles ${status} before stapling`, () => {
+      const root = mkdtempSync(join(tmpdir(), 'redeven-dmg-notary-'));
+      try {
+        const bin = join(root, 'bin');
+        const record = join(root, 'commands');
+        mkdirSync(bin);
+        writeFileSync(join(bin, 'codesign'), '#!/bin/sh\nprintf "codesign %s\\n" "$*" >> "$FIXTURE_COMMANDS"\n', { mode: 0o755 });
+        writeFileSync(join(bin, 'xcrun'), `#!/bin/sh
+printf 'xcrun %s\\n' "$*" >> "$FIXTURE_COMMANDS"
+if [ "$1" = notarytool ]; then
+  printf '{"status":"%s"}\\n' "$FIXTURE_NOTARY_STATUS"
+  exit "$FIXTURE_NOTARY_EXIT"
+fi
+`, { mode: 0o755 });
+        const block = releaseWorkflow.match(/- name: Notarize macOS disk image[\s\S]*?        run: \|\n([\s\S]*?)(?=\n      - name:)/u)?.[1];
+        assert.ok(block, 'missing disk image notarization command');
+        const script = block.replace(/^          /gmu, '').replaceAll('${{ matrix.goarch }}', arch);
+        const result = spawnSync('/bin/bash', ['-c', script], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            GITHUB_REF_NAME: 'v0.13.2',
+            RUNNER_TEMP: root,
+            REDEVEN_DESKTOP_MAC_NOTARY_KEY_PATH: join(root, 'fixture key.p8'),
+            APPLE_API_KEY_ID: 'fixture-key-id',
+            APPLE_API_ISSUER: 'fixture-issuer',
+            FIXTURE_COMMANDS: record,
+            FIXTURE_NOTARY_STATUS: status,
+            FIXTURE_NOTARY_EXIT: String(commandExit),
+          },
+        });
+        assert.equal(result.status, expectedExit, result.stderr);
+        const dmg = `desktop/release/Redeven-Desktop-0.13.2-mac-${arch === 'amd64' ? 'x64' : 'arm64'}.dmg`;
+        const commands = readFileSync(record, 'utf8').trim().split('\n');
+        assert.equal(commands[0], `codesign --verify --strict --verbose=2 ${dmg}`);
+        assert.ok(commands[1].startsWith(`xcrun notarytool submit ${dmg} `));
+        assert.deepEqual(commands.slice(2), expectedExit === 0 ? [
+          `xcrun stapler staple ${dmg}`,
+          `xcrun stapler validate ${dmg}`,
+        ] : []);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+}
