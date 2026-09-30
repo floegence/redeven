@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/stdiobridge"
 )
 
 type SurfaceDialer func(context.Context, StreamSurface) (net.Conn, error)
@@ -37,44 +38,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	conn := newStdioConn(in, out)
-	defer conn.Close()
-	stopWatch := make(chan struct{})
-	defer close(stopWatch)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = conn.Close()
-		case <-stopWatch:
-		}
-	}()
-	protocols := new(http.Protocols)
-	protocols.SetUnencryptedHTTP2(true)
-	server := &http.Server{
-		Protocols:      protocols,
-		MaxHeaderBytes: MaxHeaderListBytes,
-		BaseContext:    func(net.Listener) context.Context { return ctx },
-		Handler:        http.HandlerFunc(s.serveHTTP),
-		HTTP2: &http.HTTP2Config{
-			MaxConcurrentStreams:          MaxConcurrentStreams,
-			MaxDecoderHeaderTableSize:     4 << 10,
-			MaxEncoderHeaderTableSize:     4 << 10,
-			MaxReadFrameSize:              16 << 10,
-			SendPingTimeout:               15 * time.Second,
-			PingTimeout:                   10 * time.Second,
-			WriteByteTimeout:              30 * time.Second,
-			MaxReceiveBufferPerStream:     StreamReceiveWindowBytes,
-			MaxReceiveBufferPerConnection: SessionReceiveWindowBytes,
-		},
-	}
-	err := server.Serve(&stdioListener{conn: conn})
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if errors.Is(err, net.ErrClosed) || errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
+	return stdiobridge.Serve(ctx, in, out, http.HandlerFunc(s.serveHTTP))
 }
 
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -113,30 +77,7 @@ func (s *Server) serveSurface(w http.ResponseWriter, r *http.Request) {
 		writeBridgeError(w, http.StatusBadGateway, ErrorSurfaceDialFailed)
 		return
 	}
-	defer conn.Close()
-	w.WriteHeader(http.StatusOK)
-	flushResponse(w)
-	streamDone := make(chan struct{})
-	defer close(streamDone)
-	go func() {
-		select {
-		case <-r.Context().Done():
-			_ = conn.Close()
-		case <-streamDone:
-		}
-	}()
-
-	requestDone := make(chan struct{})
-	go func() {
-		defer close(requestDone)
-		_, _ = io.Copy(conn, r.Body)
-		if closer, ok := conn.(interface{ CloseWrite() error }); ok {
-			_ = closer.CloseWrite()
-		}
-	}()
-	_, _ = io.Copy(flushingWriter{writer: w}, conn)
-	_ = conn.Close()
-	<-requestDone
+	stdiobridge.Tunnel(w, r, conn)
 }
 
 func writeBridgeError(w http.ResponseWriter, status int, code string) {
@@ -153,72 +94,6 @@ func flushResponse(w http.ResponseWriter) {
 		flusher.Flush()
 	}
 }
-
-type flushingWriter struct {
-	writer http.ResponseWriter
-}
-
-func (w flushingWriter) Write(p []byte) (int, error) {
-	n, err := w.writer.Write(p)
-	flushResponse(w.writer)
-	return n, err
-}
-
-type stdioConn struct {
-	reader io.Reader
-	writer io.Writer
-	once   sync.Once
-	closed chan struct{}
-}
-
-func newStdioConn(reader io.Reader, writer io.Writer) *stdioConn {
-	return &stdioConn{reader: reader, writer: writer, closed: make(chan struct{})}
-}
-
-func (c *stdioConn) Read(p []byte) (int, error)       { return c.reader.Read(p) }
-func (c *stdioConn) Write(p []byte) (int, error)      { return c.writer.Write(p) }
-func (c *stdioConn) LocalAddr() net.Addr              { return stdioAddr("local") }
-func (c *stdioConn) RemoteAddr() net.Addr             { return stdioAddr("remote") }
-func (c *stdioConn) SetDeadline(time.Time) error      { return nil }
-func (c *stdioConn) SetReadDeadline(time.Time) error  { return nil }
-func (c *stdioConn) SetWriteDeadline(time.Time) error { return nil }
-func (c *stdioConn) Close() error {
-	c.once.Do(func() {
-		defer close(c.closed)
-		if closer, ok := c.reader.(io.Closer); ok {
-			_ = closer.Close()
-		}
-		if closer, ok := c.writer.(io.Closer); ok {
-			_ = closer.Close()
-		}
-	})
-	return nil
-}
-
-// stdioListener hands the existing connection to net/http exactly once. It binds
-// no socket and stops accepting only after that connection has closed.
-type stdioListener struct {
-	conn *stdioConn
-	once sync.Once
-}
-
-func (l *stdioListener) Accept() (net.Conn, error) {
-	var conn net.Conn
-	l.once.Do(func() { conn = l.conn })
-	if conn != nil {
-		return conn, nil
-	}
-	<-l.conn.closed
-	return nil, net.ErrClosed
-}
-
-func (l *stdioListener) Close() error   { return l.conn.Close() }
-func (l *stdioListener) Addr() net.Addr { return l.conn.LocalAddr() }
-
-type stdioAddr string
-
-func (stdioAddr) Network() string  { return "stdio" }
-func (a stdioAddr) String() string { return string(a) }
 
 func NewTrustedBridgeSurfaceDialer(localUIBridgeURL string, runtimeControlURL string) (SurfaceDialer, error) {
 	localUIAddr, err := trustedLoopbackAddrFromURL(localUIBridgeURL)

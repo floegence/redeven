@@ -76,6 +76,8 @@ func (c *cli) run(args []string) int {
 		return c.runCmd(args[1:])
 	case "browser-bridge":
 		return c.browserBridgeCmd(args[1:])
+	case "native-bridge":
+		return c.nativeBridgeCmd(args[1:])
 	case "desktop-bridge":
 		return c.desktopBridgeCmd(args[1:])
 	case "desktop-runtime-status":

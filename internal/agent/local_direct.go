@@ -39,7 +39,10 @@ type LocalDirectSessionOptions struct {
 	PluginCredentialHash      [sha256.Size]byte
 	HasPluginCredential       bool
 	AccessSessionID           string
-	OnPluginSessionReady      func()
+	// Native bridge sessions keep their own product identity while the access
+	// gate continues to enforce the authenticated owner's expiry and revocation.
+	AccessGateSessionID  string
+	OnPluginSessionReady func()
 }
 
 func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions, cancel context.CancelFunc) func() {
@@ -51,10 +54,14 @@ func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSe
 		return func() {}
 	}
 
+	accessID := opts.AccessGateSessionID
+	if accessID == "" {
+		accessID = opts.AccessSessionID
+	}
 	a.accessGate.RegisterChannelWithOptions(meta, accessgate.RegisterChannelOptions{
 		Cancel:          cancel,
 		Trusted:         opts.TrustedManagement,
-		AccessSessionID: opts.AccessSessionID,
+		AccessSessionID: accessID,
 	})
 	return func() {
 		a.accessGate.UnregisterChannel(channelID)

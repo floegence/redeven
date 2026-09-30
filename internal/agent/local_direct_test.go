@@ -126,7 +126,10 @@ func TestRegisterLocalDirectChannelStartsUnlockedWhenAccessAlreadyAuthorized(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup := a.registerLocalDirectChannel(meta, LocalDirectSessionOptions{AccessSessionID: local.AccessSessionID}, nil)
+	cleanup := a.registerLocalDirectChannel(meta, LocalDirectSessionOptions{
+		AccessSessionID:     "native:isolated-product-identity",
+		AccessGateSessionID: local.AccessSessionID,
+	}, nil)
 	defer cleanup()
 
 	if !gate.IsChannelUnlocked(meta.ChannelID) {

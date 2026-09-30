@@ -1,6 +1,9 @@
 package desktopbridge
 
-import "github.com/floegence/redeven/internal/runtimemanagement"
+import (
+	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/stdiobridge"
+)
 
 const (
 	ProtocolVersion = "redeven-desktop-placement-h2/1"
@@ -12,11 +15,11 @@ const (
 )
 
 const (
-	MaxConcurrentStreams      = 64
-	MaxHeaderListBytes        = 8 << 10
+	MaxConcurrentStreams      = stdiobridge.MaxConcurrentStreams
+	MaxHeaderListBytes        = stdiobridge.MaxHeaderListBytes
 	MaxControlResponseBytes   = 1 << 20
-	StreamReceiveWindowBytes  = 256 << 10
-	SessionReceiveWindowBytes = 16 << 20
+	StreamReceiveWindowBytes  = stdiobridge.StreamReceiveWindowBytes
+	SessionReceiveWindowBytes = stdiobridge.SessionReceiveWindowBytes
 )
 
 const (
