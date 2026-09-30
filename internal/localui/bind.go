@@ -132,8 +132,8 @@ type interfaceAddress struct {
 }
 
 func resolveNetworkAccessHosts(bind BindSpec) ([]netip.Addr, error) {
-	if !bind.IsWildcard() {
-		return nil, fmt.Errorf("network interface resolution requires a wildcard bind")
+	if !bind.IsNetworkExposure() {
+		return nil, fmt.Errorf("network interface resolution requires a network bind")
 	}
 
 	interfaces, err := net.Interfaces()
@@ -142,9 +142,12 @@ func resolveNetworkAccessHosts(bind BindSpec) ([]netip.Addr, error) {
 	}
 	candidates := make([]interfaceAddress, 0)
 	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
 		addrs, addrErr := iface.Addrs()
 		if addrErr != nil {
-			continue
+			return nil, fmt.Errorf("enumerate addresses for %s: %w", iface.Name, addrErr)
 		}
 		for _, raw := range addrs {
 			prefix, parseErr := netip.ParsePrefix(strings.TrimSpace(raw.String()))
@@ -162,11 +165,14 @@ func resolveNetworkAccessHosts(bind BindSpec) ([]netip.Addr, error) {
 }
 
 func selectNetworkAccessHosts(bind BindSpec, candidates []interfaceAddress) []netip.Addr {
-	wantIPv4 := bind.Host() == "0.0.0.0"
+	wantIPv4 := netip.MustParseAddr(bind.Host()).Is4()
 	unique := make(map[netip.Addr]struct{})
 	for _, candidate := range candidates {
 		addr := candidate.addr
 		if !candidate.up || candidate.loopback || addr.Is4() != wantIPv4 || !eligibleNetworkAccessAddress(addr) {
+			continue
+		}
+		if !bind.IsWildcard() && addr.String() != bind.Host() {
 			continue
 		}
 		unique[addr] = struct{}{}

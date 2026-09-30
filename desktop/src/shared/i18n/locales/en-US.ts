@@ -1124,6 +1124,11 @@ export const enUS = {
     unavailableTrigger: '{label} is unavailable. Show recovery options.',
   },
   environmentConnection: {
+    interfaceScanFailed: "Network addresses could not be read. They will update automatically when the network is available.",
+    boundAddressUnavailable: "The bound IP address is no longer available. Change the listening address in access settings and restart the Runtime.",
+    certificateHostsNotCovered: "The HTTPS certificate does not cover some current network addresses. Update the certificate to use these addresses.",
+    certificateRefreshFailed: "The HTTPS certificate could not be refreshed. Only addresses covered by the current certificate are available. The Runtime will retry automatically.",
+
     addressActions: 'Actions',
     filterAddresses: "Filter addresses",
     clearAddressFilter: "Clear address filter",

@@ -1,3 +1,4 @@
+import { parseLocalUIAddressIssues, type LocalUIAddressIssue } from '../shared/localUIAddressIssues';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { normalizeDesktopPrivateBridgeToken } from './desktopPrivateBridge';
 import {
@@ -29,6 +30,7 @@ export type RuntimePlacementBridgeHello = Readonly<{
     available: boolean;
     base_path: string;
     urls?: readonly string[];
+    address_issues?: readonly LocalUIAddressIssue[];
     password_required?: boolean;
     bridge_token?: string;
   }>;
@@ -105,6 +107,7 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
       base_path: compact(localUI.base_path) || '/',
       urls: Array.isArray(localUI.urls) ? localUI.urls.filter((value): value is string => typeof value === 'string' && /^https?:\/\//u.test(value)) : [],
       password_required: localUI.password_required === true,
+      address_issues: parseLocalUIAddressIssues(localUI.address_issues),
       ...(localUIBridgeToken ? { bridge_token: localUIBridgeToken } : {}),
     },
     runtime_control: {

@@ -2,13 +2,14 @@ import { Dynamic } from 'solid-js/web';
 import { For, Show, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { Check, ChevronRight, Copy, ExternalLink, HelpIcon, Search, ShareIcon, X } from '@floegence/floe-webapp-core/icons';
-import { isShareableConnectionAddress, type DesktopConnectionAddress, type DesktopConnectionRow } from '../shared/desktopEnvironmentConnection';
+import { isShareableConnectionAddress, type AddressRecoveryTarget, type DesktopConnectionAddress, type DesktopConnectionRow } from '../shared/desktopEnvironmentConnection';
 import type { DesktopI18n } from '../shared/i18n';
 import { DesktopTooltip } from './DesktopTooltip';
 
 type ConnectionActions = Readonly<{
   i18n: DesktopI18n;
   selectedID?: string;
+  configureAddress?: (target: AddressRecoveryTarget) => void;
   selectForShare: (id: string) => void;
   openInBrowser: (url: string) => Promise<void>;
   copyEnvironmentValue: (value: string, label: string) => Promise<void>;
@@ -143,6 +144,7 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{
 function ConnectionRow(props: ConnectionActions & Readonly<{ row: DesktopConnectionRow }>) {
   const valueID = createUniqueId();
   const row = () => props.row;
+  const recovery = () => { const value = row(); return value.kind === 'status' ? value.recovery : undefined; };
   const address = () => row().kind === 'address';
   const copyable = () => { const value = row(); return value.kind !== 'status' && value.copyable; };
   const browserOpenable = () => { const value = row(); return value.kind === 'address' && value.browser_openable; };
@@ -159,7 +161,7 @@ function ConnectionRow(props: ConnectionActions & Readonly<{ row: DesktopConnect
     clearTimeout(resetTimer);
     resetTimer = setTimeout(() => setCopiedValue(null), 1500);
   };
-  return <Dynamic component={address() ? 'tr' : 'div'} class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind}
+  return <Dynamic component={address() ? 'tr' : 'div'} class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind} data-address-diagnostic={row().id.startsWith('address-issue:') || undefined}
     data-selected={row().id === props.selectedID ? '' : undefined} role={row().kind === 'status' ? 'status' : undefined}>
     <Show when={!address()}><span class="redeven-card-endpoint-label">{props.i18n.t(row().label_key)}</span></Show>
     <Dynamic component={address() ? 'td' : 'div'} class="redeven-card-endpoint-content min-w-0 select-text">
@@ -168,6 +170,11 @@ function ConnectionRow(props: ConnectionActions & Readonly<{ row: DesktopConnect
     </Dynamic>
     <Dynamic component={address() ? 'td' : 'div'} class="redeven-endpoint-action-cell">
       <div class="redeven-endpoint-actions">
+        <Show when={props.configureAddress && recovery()}>{target => (
+          <Button size="sm" variant="outline" aria-describedby={valueID} onClick={() => props.configureAddress?.(target())}>
+            {props.i18n.t(target() === 'certificate' ? 'settings.certificateManage' : 'accessFlow.changeAccess')}
+          </Button>
+        )}</Show>
         <Show when={copyable()}>
           <Button size="sm" variant="ghost" class="redeven-copy-action" classList={{ 'redeven-endpoint-action': address() }} data-icon-only aria-describedby={valueID} aria-label={copyLabel()}
             title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}

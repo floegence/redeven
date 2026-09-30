@@ -8,7 +8,7 @@ import type { StartupReport } from './startup';
 export function desktopWelcomeOnlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
   startup: Pick<StartupReport, 'local_ui_url' | 'runtime_service' | 'started_at_unix_ms' | 'pid'>
-    & Readonly<{ local_ui_urls?: readonly string[] }>,
+    & Pick<StartupReport, 'local_ui_address_issues'> & Readonly<{ local_ui_urls?: readonly string[] }>,
   maintenance?: DesktopRuntimeMaintenanceRequirement,
 ): DesktopRuntimeHealth {
   const runtimeService = startup.runtime_service ? normalizeRuntimeServiceSnapshot(startup.runtime_service) : undefined;
@@ -19,6 +19,7 @@ export function desktopWelcomeOnlineRuntimeHealth(
     source,
     local_ui_url: startup.local_ui_url,
     ...(startup.local_ui_urls ? { local_ui_urls: [...startup.local_ui_urls] } : {}),
+    ...(startup.local_ui_address_issues ? { local_ui_address_issues: startup.local_ui_address_issues } : {}),
     ...(startup.pid ? { runtime_pid: startup.pid } : {}),
     ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
@@ -192,12 +193,14 @@ export class DesktopWelcomeRuntimeHealthStore {
 
   refresh(
     targets: readonly DesktopWelcomeRuntimeHealthTarget[],
-    options: Readonly<{ force?: boolean; pruneMissing?: boolean }> = {},
+    options: Readonly<{ force?: boolean; pruneMissing?: boolean; mode?: 'auto' | 'manual' }> = {},
   ): Promise<void> {
     if (options.pruneMissing === true) {
       this.retainTargets(targets);
     }
-    const tasks = targets.map((target) => this.refreshTarget(target, options));
+    const tasks = targets
+      .filter(target => options.mode !== 'auto' || target.auto_refresh_enabled)
+      .map(target => this.refreshTarget(target, options));
     return Promise.all(tasks).then(() => undefined);
   }
 

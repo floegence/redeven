@@ -131,10 +131,16 @@ type Server struct {
 	activePluginSession       map[string]activePluginSessionBinding
 	pluginSessionReadyTimeout time.Duration
 
-	authorityMu        sync.RWMutex
-	publicAuthorities  map[string]struct{}
-	displayURLs        []string
-	resolveAccessHosts func(BindSpec) ([]netip.Addr, error)
+	authorityMu           sync.RWMutex
+	publicAccess          *publicAccessSnapshot
+	publicBound           []netip.Addr
+	publicPort            int
+	addressRefreshMu      sync.Mutex
+	addressRefreshClosed  bool
+	addressRefreshCancel  context.CancelFunc
+	addressRefreshDone    chan struct{}
+	resolveAccessHosts    func(BindSpec) ([]netip.Addr, error)
+	signAccessCertificate func(*deviceCA, []string) (tls.Certificate, string, error)
 
 	listeners []net.Listener
 	deviceCA  *deviceCA
@@ -459,7 +465,6 @@ func New(opts Options) (*Server, error) {
 		pluginSessionReadyTimeout: defaultPluginSessionReadyTimeout,
 		handlerCleanup:            make(map[string]func()),
 		authStore:                 authStore,
-		publicAuthorities:         make(map[string]struct{}),
 		resolveAccessHosts:        resolveNetworkAccessHosts,
 		deviceCA:                  opts.deviceCA,
 	}, nil
@@ -494,14 +499,8 @@ func (s *Server) configureAcceptor() error {
 	if err := s.ensureAuthorizationStore(); err != nil {
 		return err
 	}
-	s.authorityMu.RLock()
-	origins := make([]string, 0, len(s.publicAuthorities))
-	for authority := range s.publicAuthorities {
-		origins = append(origins, s.protocol+"://"+publicURLAuthority(authority, s.protocol))
-	}
-	s.authorityMu.RUnlock()
 	acceptor, err := flowersec.NewAcceptor(flowersec.AcceptorOptions{
-		AllowedOrigins:    origins,
+		CheckOrigin:       s.authorizePublicWebSocketRequest,
 		MaxInboundStreams: 32,
 		Authorize: func(_ context.Context, request controlplane.RuntimeAuthorizationRequest) (controlplane.AuthorizationResponse, error) {
 			reserved, err := s.authStore.reserve(request)
@@ -737,6 +736,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		_ = s.Close()
 		return fmt.Errorf("start runtime management socket: %w", err)
 	}
+	s.startPublicAddressRefresh(ctx)
 
 	go func() {
 		<-ctx.Done()
@@ -828,6 +828,7 @@ func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
 		return runtimemanagement.RuntimeAttachStatus{State: runtimemanagement.AttachStateNotRunning}
 	}
 	runtimeService := s.runtimeServiceSnapshot()
+	access := s.publicAccessSnapshot()
 	return runtimemanagement.RuntimeAttachStatus{
 		State: runtimemanagement.AttachStateReady,
 		Identity: runtimemanagement.RuntimeInstanceIdentity{
@@ -841,13 +842,14 @@ func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
 			BinaryPath:      s.a.BinaryPath(),
 		},
 		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
-			LocalUIURL:         firstNonEmptyString(s.DisplayURLs()),
-			LocalUIURLs:        s.DisplayURLs(),
-			LocalUIBridgeURL:   s.localUIBridgeURL,
-			LocalUIBridgeToken: s.localUIBridgeToken,
-			RuntimeControl:     runtimeControlEndpoint(s.runtimeControl),
-			PasswordRequired:   s.accessEnabled(),
-			Exposure:           s.LocalUIExposure(),
+			LocalUIURL:           firstNonEmptyString(access.urls),
+			LocalUIURLs:          access.publicURLs(),
+			LocalUIAddressIssues: access.issues,
+			LocalUIBridgeURL:     s.localUIBridgeURL,
+			LocalUIBridgeToken:   s.localUIBridgeToken,
+			RuntimeControl:       runtimeControlEndpoint(s.runtimeControl),
+			PasswordRequired:     s.accessEnabled(),
+			Exposure:             s.LocalUIExposure(),
 		},
 		RuntimeService: runtimeService,
 		Diagnostics: runtimemanagement.RuntimeAttachDiagnostics{
@@ -869,6 +871,7 @@ func (s *Server) Close() error {
 	}
 	s.closeMu.Lock()
 	defer s.closeMu.Unlock()
+	s.stopPublicAddressRefresh()
 	s.closeNativeCodeAccess("")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -899,8 +902,7 @@ func (s *Server) Close() error {
 	s.networkServers = nil
 	s.tlsConfig = nil
 	s.authorityMu.Lock()
-	s.displayURLs = nil
-	s.publicAuthorities = make(map[string]struct{})
+	s.publicAccess = nil
 	s.authorityMu.Unlock()
 	s.desktopBridgeServer = nil
 	s.desktopBridgeListener = nil
@@ -946,9 +948,7 @@ func (s *Server) DisplayURLs() []string {
 	if s == nil {
 		return nil
 	}
-	s.authorityMu.RLock()
-	defer s.authorityMu.RUnlock()
-	return append([]string(nil), s.displayURLs...)
+	return s.publicAccessSnapshot().publicURLs()
 }
 
 type apiResp struct {
@@ -966,20 +966,22 @@ type apiError struct {
 }
 
 type accessStatusResp struct {
-	PasswordRequired bool                              `json:"password_required"`
-	Unlocked         bool                              `json:"unlocked"`
-	Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
-	URLs             []string                          `json:"urls"`
+	PasswordRequired     bool                                    `json:"password_required"`
+	Unlocked             bool                                    `json:"unlocked"`
+	Exposure             runtimemanagement.LocalUIExposure       `json:"exposure"`
+	URLs                 []string                                `json:"urls"`
+	LocalUIAddressIssues []runtimemanagement.LocalUIAddressIssue `json:"local_ui_address_issues,omitempty"`
 }
 
 type runtimeHealthResp struct {
-	Status           string                            `json:"status"`
-	LocalUIURL       string                            `json:"local_ui_url,omitempty"`
-	LocalUIURLs      []string                          `json:"local_ui_urls,omitempty"`
-	PasswordRequired bool                              `json:"password_required"`
-	Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
-	StartedAtUnixMS  int64                             `json:"started_at_unix_ms,omitempty"`
-	RuntimeService   runtimeservice.Snapshot           `json:"runtime_service"`
+	Status               string                                  `json:"status"`
+	LocalUIURL           string                                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs          []string                                `json:"local_ui_urls"`
+	LocalUIAddressIssues []runtimemanagement.LocalUIAddressIssue `json:"local_ui_address_issues,omitempty"`
+	PasswordRequired     bool                                    `json:"password_required"`
+	Exposure             runtimemanagement.LocalUIExposure       `json:"exposure"`
+	StartedAtUnixMS      int64                                   `json:"started_at_unix_ms,omitempty"`
+	RuntimeService       runtimeservice.Snapshot                 `json:"runtime_service"`
 }
 
 type accessUnlockReq = accessgate.AuthenticationRequest
@@ -1504,11 +1506,13 @@ func (s *Server) handleAccessStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	access := s.publicAccessSnapshot()
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: accessStatusResp{
-		PasswordRequired: s.accessEnabled(),
-		Unlocked:         s.hasLocalAccess(r),
-		Exposure:         s.LocalUIExposure(),
-		URLs:             s.DisplayURLs(),
+		PasswordRequired:     s.accessEnabled(),
+		Unlocked:             s.hasLocalAccess(r),
+		Exposure:             s.LocalUIExposure(),
+		URLs:                 access.publicURLs(),
+		LocalUIAddressIssues: access.issues,
 	}})
 }
 
@@ -1520,15 +1524,16 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	displayURLs := s.DisplayURLs()
+	access := s.publicAccessSnapshot()
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
-		Status:           "online",
-		LocalUIURL:       firstNonEmptyString(displayURLs),
-		LocalUIURLs:      displayURLs,
-		PasswordRequired: s.accessEnabled(),
-		Exposure:         s.LocalUIExposure(),
-		StartedAtUnixMS:  s.a.ProcessStartedAtUnixMS(),
-		RuntimeService:   s.runtimeServiceSnapshot(),
+		Status:               "online",
+		LocalUIURL:           firstNonEmptyString(access.urls),
+		LocalUIURLs:          access.publicURLs(),
+		LocalUIAddressIssues: access.issues,
+		PasswordRequired:     s.accessEnabled(),
+		Exposure:             s.LocalUIExposure(),
+		StartedAtUnixMS:      s.a.ProcessStartedAtUnixMS(),
+		RuntimeService:       s.runtimeServiceSnapshot(),
 	}})
 }
 

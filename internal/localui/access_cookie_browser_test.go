@@ -69,7 +69,7 @@ func TestLocalAccessBrowserSession(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		server.publicAuthorities = map[string]struct{}{listener.Addr().String(): {}}
+		server.publicAccess.authorities = map[string]struct{}{listener.Addr().String(): {}}
 		f := &fixture{server: server, state: state}
 		// The test-only lock permits replacing the process-local gate on restart.
 		// Every browser request still runs through the production network handler.

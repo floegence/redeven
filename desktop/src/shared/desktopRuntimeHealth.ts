@@ -72,6 +72,7 @@ export type DesktopRuntimeHealth = Readonly<{
   freshness?: DesktopRuntimeHealthFreshness;
   local_ui_url?: string;
   local_ui_urls?: readonly string[];
+  local_ui_address_issues?: readonly LocalUIAddressIssue[];
   runtime_pid?: number;
   started_at_unix_ms?: number;
   runtime_service?: RuntimeServiceSnapshot;
@@ -478,3 +479,4 @@ export function classifyDesktopRuntimeBlockedLaunchReport(
     ...diagnostics,
   };
 }
+import type { LocalUIAddressIssue } from './localUIAddressIssues';

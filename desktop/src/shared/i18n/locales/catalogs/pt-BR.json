@@ -2975,7 +2975,11 @@
     "networkAccessAddress": "Endereço de acesso pela rede",
     "listenerDetails": "Ver endereço de escuta interno",
     "openViaDesktop": "Selecione “{action}” no Desktop para abrir este ambiente.",
-    "loopbackHelp": "Este endereço de loopback pertence a {host}. Hosts diferentes podem usar a mesma porta. Ele não é um endereço para acessar este ambiente no navegador do seu dispositivo."
+    "loopbackHelp": "Este endereço de loopback pertence a {host}. Hosts diferentes podem usar a mesma porta. Ele não é um endereço para acessar este ambiente no navegador do seu dispositivo.",
+    "interfaceScanFailed": "Não foi possível obter os endereços de rede. Eles serão atualizados automaticamente quando a rede estiver disponível.",
+    "boundAddressUnavailable": "O endereço IP vinculado não está mais disponível. Altere o endereço de escuta nas configurações de acesso e reinicie o ambiente de execução.",
+    "certificateHostsNotCovered": "O certificado HTTPS não cobre alguns endereços de rede atuais. Atualize o certificado para usar esses endereços.",
+    "certificateRefreshFailed": "Não foi possível atualizar o certificado HTTPS. Apenas os endereços cobertos pelo certificado atual estão disponíveis. O ambiente de execução tentará novamente automaticamente."
   },
   "flowerRuntime": {
     "preparingDetail": "O Flower está preparando o serviço de IA. As conversas aparecerão automaticamente quando ele estiver pronto. Você pode voltar à lista de ambientes a qualquer momento.",

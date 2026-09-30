@@ -23,7 +23,7 @@ import { ConsoleActionIconButton, EnvironmentStatusIndicator } from './environme
 import { EnvironmentConnectionRows } from './EnvironmentConnectionRows';
 import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBoundary';
 import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
-import { buildRuntimeConnectionRows, isShareableConnectionAddress, type DesktopShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
+import { buildRuntimeConnectionRows, isShareableConnectionAddress, type DesktopShareableConnectionAddress, type AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -3746,8 +3746,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       : {}));
   }
 
-  function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
+  function startEditingEnvironment(environment: DesktopEnvironmentEntry, recovery?: AddressRecoveryTarget): void {
     openSettingsSurface(environment.id);
+    if (recovery) {
+      settingsController.update({ focus_access: recovery });
+      settingsController.selectTab('access');
+    }
   }
 
   function createEnvironmentConnectionDraft(environment: DesktopEnvironmentEntry): ConnectionDialogState {
@@ -6608,6 +6612,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         connectionDirty={connectionSettingsDirty()}
         showConnectionSettings={() => settingsController.selectTab('connection')}
         focusTwoFactor={settingsPresentation()?.focus_two_factor}
+        focusAccess={settingsPresentation()?.focus_access}
         certificate={props.runtime.settings.certificate ? async request => {
           const opening = settingsSession();
           const result = await props.runtime.settings.certificate!(request);
@@ -7264,7 +7269,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   openInBrowser: (url: string) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-  editEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  editEnvironment: (environment: DesktopEnvironmentEntry, recovery?: AddressRecoveryTarget) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
@@ -7825,6 +7830,7 @@ export function EnvironmentCardFactsBlock(props: Readonly<{
   onEndpointPopoverOpenChange: (open: boolean) => void;
   selectedEndpointID?: string;
   selectEndpointForQRCode: (endpointID: string) => void;
+  configureAddress?: (target: AddressRecoveryTarget) => void;
 }>) {
   // Fact identity survives both snapshot replacement and localization. Values stay live.
   const factsByID = createMemo(() => new Map(props.facts.map(fact => [fact.id, fact])));
@@ -7902,6 +7908,7 @@ export function EnvironmentCardFactsBlock(props: Readonly<{
                       environmentID={props.environmentID}
                       i18n={props.i18n}
                       endpoints={fact().endpoints!}
+                      configureAddress={props.configureAddress}
                       environmentLabel={props.environmentLabel}
                       openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
                       open={props.endpointPopoverOpen}
@@ -7967,6 +7974,7 @@ export function EndpointsPopover(props: Readonly<{
   onOpenChange: (open: boolean) => void;
   selectedEndpointID?: string;
   selectEndpointForQRCode: (endpointID: string) => void;
+  configureAddress?: (target: AddressRecoveryTarget) => void;
 }>) {
   let anchorRef: HTMLButtonElement | undefined;
   let popoverRef: HTMLDivElement | undefined;
@@ -8086,6 +8094,7 @@ export function EndpointsPopover(props: Readonly<{
               <div class="redeven-endpoints-popover-list">
                 <EnvironmentConnectionRows environmentID={props.environmentID} rows={props.endpoints} i18n={props.i18n}
                   selectedID={presentedSelection()} selectForShare={props.selectEndpointForQRCode}
+                  configureAddress={props.configureAddress ? target => { close(); props.configureAddress?.(target); } : undefined}
                   openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
               </div>
               <div class="redeven-endpoints-share" data-expanded={Boolean(selectedEndpoint())}
@@ -12277,6 +12286,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   connectionDirty?: boolean;
   showConnectionSettings?: () => void;
   focusTwoFactor?: boolean;
+  focusAccess?: AddressRecoveryTarget;
   runtimeRestartAvailable: boolean;
   runtimeRunning: boolean;
   runtimeStatusLabel: string;
@@ -12301,7 +12311,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
     ? connectionRows().filter(isShareableConnectionAddress).find(row => row.id === sharedAddress()?.id) : undefined);
   createEffect(() => { if (!props.open || (sharedAddress() && !selectedShareAddress())) setSharedAddress(null); });
   const saving = () => busyStateMatchesAction(props.busyState, 'save_settings');
-  return <EnvironmentAccessWorkflow {...props} connection={(
+  return <EnvironmentAccessWorkflow {...props} connection={configureAddress => (
         <section aria-label={props.i18n.t('settings.currentConnection')} class="environment-access-overview">
           <div class="environment-access-overview-header">
             <div class="environment-access-overview-heading">
@@ -12319,7 +12329,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
           </div>
           <div class="redeven-settings-connections redeven-settings-connections--summary">
             <EnvironmentConnectionRows environmentID={props.snapshot.environment_id} rows={connectionRows()} i18n={props.i18n}
-              presentation="settings-summary"
+              presentation="settings-summary" configureAddress={configureAddress}
               selectedID={selectedShareAddress()?.id}
               selectForShare={(id) => setSharedAddress(id ? { environment_id: props.snapshot.environment_id, id } : null)}
               openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />

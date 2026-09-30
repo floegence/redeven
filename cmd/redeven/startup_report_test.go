@@ -259,3 +259,33 @@ func TestWriteDesktopLaunchReportRejectsMissingBlockedCode(t *testing.T) {
 		t.Fatalf("expected missing blocked code error")
 	}
 }
+
+func TestDesktopAttachReportKeepsExplicitEmptyAddressList(t *testing.T) {
+	report := desktopLaunchReportFromRuntimeStatus(runtimemanagement.RuntimeAttachStatus{
+		State: runtimemanagement.AttachStateReady,
+		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+			LocalUIURL: "http://192.0.2.10:23998/", LocalUIURLs: []string{},
+			LocalUIBridgeURL: "http://127.0.0.1:43123/", LocalUIBridgeToken: testLocalUIBridgeToken,
+			Exposure: runtimemanagement.NewLocalUIExposure("http", true, true), PasswordRequired: true,
+			LocalUIAddressIssues: []runtimemanagement.LocalUIAddressIssue{{Code: runtimemanagement.LocalUIBoundAddressUnavailable}},
+		},
+	}, desktopLaunchStatusAttached)
+	path := filepath.Join(t.TempDir(), "report.json")
+	if err := writeDesktopLaunchReport(path, report); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var read desktopLaunchReport
+	if err := json.Unmarshal(body, &read); err != nil {
+		t.Fatal(err)
+	}
+	if read.LocalUIURL != "" || read.LocalUIURLs == nil || len(read.LocalUIURLs) != 0 {
+		t.Fatalf("empty list restored old address: %s", body)
+	}
+	if len(read.LocalUIAddressIssues) != 1 {
+		t.Fatal("address diagnostic lost")
+	}
+}

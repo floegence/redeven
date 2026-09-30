@@ -2975,7 +2975,11 @@
     "networkAccessAddress": "Adresse d’accès réseau",
     "listenerDetails": "Afficher l’adresse d’écoute interne",
     "openViaDesktop": "Choisissez « {action} » dans Desktop pour ouvrir cet environnement.",
-    "loopbackHelp": "Cette adresse de bouclage appartient à {host}. Des hôtes différents peuvent utiliser le même port. Elle ne permet pas d’accéder à cet environnement dans le navigateur de votre appareil."
+    "loopbackHelp": "Cette adresse de bouclage appartient à {host}. Des hôtes différents peuvent utiliser le même port. Elle ne permet pas d’accéder à cet environnement dans le navigateur de votre appareil.",
+    "interfaceScanFailed": "Impossible de récupérer les adresses réseau. Elles seront mises à jour automatiquement lorsque le réseau sera disponible.",
+    "boundAddressUnavailable": "L’adresse IP liée n’est plus disponible. Modifiez l’adresse d’écoute dans les paramètres d’accès et redémarrez l’environnement d’exécution.",
+    "certificateHostsNotCovered": "Le certificat HTTPS ne couvre pas certaines adresses réseau actuelles. Mettez-le à jour pour utiliser ces adresses.",
+    "certificateRefreshFailed": "Impossible de renouveler le certificat HTTPS. Seules les adresses couvertes par le certificat actuel sont disponibles. L’environnement d’exécution réessaiera automatiquement."
   },
   "flowerRuntime": {
     "preparingDetail": "Flower prépare son service d’IA. Les conversations s’afficheront automatiquement dès qu’il sera prêt. Vous pouvez revenir à la liste des environnements à tout moment.",

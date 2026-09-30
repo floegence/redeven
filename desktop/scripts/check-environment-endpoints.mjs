@@ -676,6 +676,28 @@ try {
   report.cases.push('network-mode-local-aliases-and-remote-namespace');
   report.cases.push('address-help-hover-keyboard-locales-and-geometry');
 
+  // Network diagnoses use current Runtime data without a page or panel replacement.
+  await page.setViewportSize({ width: 480, height: 700 });
+  await page.goto(new URL('environment-endpoints.html?locale=zh-CN&theme=dark', report.url).href);
+  await page.evaluate(() => window.addressFixture.publish({ urls: ['https://192.0.2.30:23998/'],
+    issues: [{ code: 'certificate_hosts_not_covered', hosts: ['192.0.2.20'] }] }));
+  await page.locator('[data-environment="Network"] [aria-haspopup="dialog"]').click();
+  const diagnosticPanel = page.locator('.redeven-endpoints-popover');
+  await diagnosticPanel.waitFor();
+  const diagnostic = diagnosticPanel.locator('[data-address-diagnostic]');
+  assert.ok((await diagnostic.innerText()).includes('HTTPS 证书未覆盖'));
+  const action = diagnostic.getByRole('button');
+  const actionBounds = await action.boundingBox();
+  assert.ok(actionBounds.x >= 0 && actionBounds.x + actionBounds.width <= 480);
+  await stableScreenshot(`${output}/network-address-diagnostic-zh-CN.png`);
+  await action.click();
+  const recovery = page.getByRole('dialog');
+  await recovery.waitFor();
+  assert.ok((await recovery.innerText()).includes('HTTPS 证书未覆盖'));
+  await page.evaluate(() => window.addressFixture.publish({ urls: ['https://192.0.2.30:23998/'], issues: [] }));
+  await recovery.locator('[data-address-diagnostic]').waitFor({ state: 'detached' });
+  report.cases.push('network-address-diagnostic-recovery-and-narrow-localized-layout');
+
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
   console.log(`Environment connections passed: ${report.cases.length} browser cases. Evidence: ${output}`);

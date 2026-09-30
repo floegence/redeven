@@ -18,7 +18,8 @@ describe('Welcome health refresh relationship continuity', () => {
         auto_refresh_enabled: true,
         checking_health: { status: 'offline', checked_at_unix_ms: 0, source: 'local_runtime_probe' },
         probe: async () => {
-          const startup = { ...presence, local_ui_urls: [presence.local_ui_url, 'http://127.0.0.1:23999/', 'http://192.168.1.10:23999/'] };
+          const startup = { ...presence, local_ui_urls: [presence.local_ui_url, 'http://127.0.0.1:23999/', 'http://192.168.1.10:23999/'],
+            local_ui_address_issues: [{ code: 'certificate_hosts_not_covered' as const, hosts: ['192.0.2.20'] }] };
           return { presence: startup, health: desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', startup) };
         },
       }));
@@ -29,6 +30,7 @@ describe('Welcome health refresh relationship continuity', () => {
       const initialGroups = groups();
       const pair = initialGroups.find(group => group.provider_entry)!;
       expect(pair.primary_entry.kind).toBe(linkKind);
+      expect(pair.primary_entry.runtime_health.local_ui_address_issues).toEqual([{ code: 'certificate_hosts_not_covered', hosts: ['192.0.2.20'] }]);
       const linkedTarget = targets.find(target => target.environment_id === pair.id)!;
       if (open) {
         const runtime = pair.primary_entry;
@@ -54,6 +56,7 @@ describe('Welcome health refresh relationship continuity', () => {
       const during = groups();
       expect(during.map(group => [group.id, group.member_ids])).toEqual(initialGroups.map(group => [group.id, group.member_ids]));
       const refreshing = during.find(group => group.id === pair.id)!;
+      expect(refreshing.primary_entry.runtime_health.local_ui_address_issues).toEqual(pair.primary_entry.runtime_health.local_ui_address_issues);
       expect(refreshing.primary_entry.runtime_health.freshness).toBe('checking');
       expect(refreshing.primary_entry.local_ui_urls).toEqual(pair.primary_entry.local_ui_urls);
       expect(refreshing.primary_entry.runtime_started_at_unix_ms).toBe(pair.primary_entry.runtime_started_at_unix_ms);
@@ -88,11 +91,12 @@ describe('Welcome health refresh relationship continuity', () => {
 
       // An online Runtime may explicitly report that it has no browser listener.
       await store.refresh([{ ...linkedTarget, probe: async () => ({
-        health: desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', { ...observed.presence!, local_ui_urls: [] }),
+        health: desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', { ...observed.presence!, local_ui_urls: [], local_ui_address_issues: [] }),
       }) }], { force: true });
       const withoutListener = snapshot().environments.find(entry => entry.id === pair.id)!;
       expect(withoutListener.runtime_health.status).toBe('online');
       expect(withoutListener.local_ui_urls).toEqual([]);
+      expect(withoutListener.runtime_health.local_ui_address_issues).toEqual([]);
     },
   );
 });

@@ -169,7 +169,7 @@ func TestPrepareSecureNetworkRequiresServingIdentityWithoutClaimingClientTrust(t
 	if err := s.prepareNetwork([]net.Listener{listener}); err != nil {
 		t.Fatalf("prepareNetwork() rejected a valid serving identity: %v", err)
 	}
-	if s.deviceCA == nil || s.tlsConfig == nil || len(s.tlsConfig.Certificates) != 1 {
+	if s.deviceCA == nil || s.tlsConfig == nil || s.tlsConfig.GetCertificate == nil {
 		t.Fatal("prepareNetwork() did not retain the validated CA-backed serving identity")
 	}
 }

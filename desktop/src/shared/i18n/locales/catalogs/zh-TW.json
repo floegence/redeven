@@ -2969,7 +2969,11 @@
     "networkAccessAddress": "網路存取位址",
     "listenerDetails": "查看內部監聽位址",
     "openViaDesktop": "透過 Desktop 的「{action}」進入此環境。",
-    "loopbackHelp": "此回環位址屬於 {host} 本身。不同主機可以使用相同連接埠；它不是此裝置存取該環境的瀏覽器入口。"
+    "loopbackHelp": "此回環位址屬於 {host} 本身。不同主機可以使用相同連接埠；它不是此裝置存取該環境的瀏覽器入口。",
+    "interfaceScanFailed": "無法讀取網路位址。網路恢復後將自動更新。",
+    "boundAddressUnavailable": "綁定的 IP 位址已無法使用。請在存取設定中修改監聽位址，並重新啟動執行階段。",
+    "certificateHostsNotCovered": "HTTPS 憑證未涵蓋部分目前的網路位址。請更新憑證後再使用這些位址。",
+    "certificateRefreshFailed": "無法更新 HTTPS 憑證。目前僅提供現有憑證涵蓋的位址，執行階段將自動重試。"
   },
   "flowerRuntime": {
     "preparingDetail": "Flower 正在準備 AI 服務，就緒後會自動顯示對話。你可以隨時返回環境清單。",

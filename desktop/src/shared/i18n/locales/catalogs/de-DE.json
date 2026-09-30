@@ -2974,7 +2974,11 @@
     "networkAccessAddress": "Adresse für den Netzwerkzugriff",
     "listenerDetails": "Interne Listener-Adresse anzeigen",
     "openViaDesktop": "Wählen Sie in Desktop „{action}“, um diese Umgebung zu öffnen.",
-    "loopbackHelp": "Diese Loopback-Adresse gehört zu {host}. Verschiedene Hosts können denselben Port verwenden. Sie ist kein Browserzugang zu dieser Umgebung auf Ihrem Gerät."
+    "loopbackHelp": "Diese Loopback-Adresse gehört zu {host}. Verschiedene Hosts können denselben Port verwenden. Sie ist kein Browserzugang zu dieser Umgebung auf Ihrem Gerät.",
+    "interfaceScanFailed": "Die Netzwerkadressen konnten nicht ermittelt werden. Sie werden automatisch aktualisiert, sobald das Netzwerk verfügbar ist.",
+    "boundAddressUnavailable": "Die gebundene IP-Adresse ist nicht mehr verfügbar. Ändern Sie die Bind-Adresse in den Zugriffseinstellungen und starten Sie die Laufzeit neu.",
+    "certificateHostsNotCovered": "Das HTTPS-Zertifikat deckt einige aktuelle Netzwerkadressen nicht ab. Aktualisieren Sie das Zertifikat, um diese Adressen zu verwenden.",
+    "certificateRefreshFailed": "Das HTTPS-Zertifikat konnte nicht aktualisiert werden. Nur Adressen, die vom aktuellen Zertifikat abgedeckt werden, sind verfügbar. Die Laufzeit versucht es automatisch erneut."
   },
   "flowerRuntime": {
     "preparingDetail": "Flower bereitet den KI-Dienst vor. Sobald er bereit ist, werden die Unterhaltungen automatisch angezeigt. Sie können jederzeit zur Umgebungsübersicht zurückkehren.",

@@ -1,3 +1,4 @@
+import { DesktopWelcomeRuntimePoller } from './desktopWelcomeRuntimePoller';
 import { RuntimeSessionHandoff, runtimeSessionMatchesTarget } from './runtimeSessionHandoff';
 import { sessionRestartDocumentURL, SESSION_RESTART_REOPEN_URL, SESSION_RESTART_CENTER_URL } from './sessionRestartDocument';
 import { SESSION_RESTART_INIT, SESSION_RESTART_REGISTER, SESSION_RESTART_PREPARE, SESSION_RESTART_CANCEL, SESSION_RESTART_SUBMIT, SESSION_RESTART_READ, SESSION_RESTART_RESTORED } from '../shared/sessionRestartIPC';
@@ -2063,6 +2064,7 @@ async function verifyLocalEnvironmentRuntimeRecord(
         env_public_id: startup.env_public_id ?? record.startup.env_public_id,
         local_ui_url: startup.local_ui_url,
         local_ui_urls: startup.local_ui_urls,
+        local_ui_address_issues: startup.local_ui_address_issues,
         password_required: startup.password_required,
         started_at_unix_ms: startup.started_at_unix_ms ?? record.startup.started_at_unix_ms,
         effective_run_mode: startup.effective_run_mode ?? record.startup.effective_run_mode,
@@ -2195,6 +2197,7 @@ function managedRuntimePresence(args: Readonly<{
   running: boolean;
   localUIURL: string;
   localUIURLs?: readonly string[];
+  localUIAddressIssues?: StartupReport['local_ui_address_issues'];
   startedAtUnixMS?: number;
   openConnectionRequired?: boolean;
   runtimeService?: RuntimeServiceSnapshot;
@@ -2219,6 +2222,7 @@ function managedRuntimePresence(args: Readonly<{
     running: args.running,
     local_ui_url: args.running ? args.localUIURL : '',
     local_ui_urls: args.running ? args.localUIURLs ?? (args.localUIURL ? [args.localUIURL] : []) : [],
+    local_ui_address_issues: args.running ? args.localUIAddressIssues : undefined,
     ...(Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? { started_at_unix_ms: startedAtUnixMS } : {}),
     openable,
     ...(openConnectionRequired ? { open_connection_required: true } : {}),
@@ -3830,14 +3834,13 @@ function rendererSafeStartupReport(startup: StartupReport): StartupReport {
   delete rendererStartup.local_ui_bridge_url;
   delete rendererStartup.local_ui_bridge_token;
   delete rendererStartup.runtime_control;
-  const localUIURL = stripSensitiveURLPayload(startup.local_ui_url);
   const localUIURLs = startup.local_ui_urls
     .map((url) => stripSensitiveURLPayload(url))
     .filter((url) => url !== '');
   return {
     ...rendererStartup,
-    local_ui_url: localUIURL,
-    local_ui_urls: localUIURLs.length > 0 ? localUIURLs : localUIURL ? [localUIURL] : [],
+    local_ui_url: localUIURLs[0] ?? '',
+    local_ui_urls: localUIURLs,
   };
 }
 
@@ -4504,6 +4507,7 @@ async function localEnvironmentPresenceFromRecord(
     running: true,
     localUIURL: record.startup.local_ui_url,
     localUIURLs: record.startup.local_ui_urls,
+    localUIAddressIssues: record.startup.local_ui_address_issues,
     startedAtUnixMS: record.startup.started_at_unix_ms,
     runtimeService: record.startup.runtime_service,
     runtimeControlStatus: await runtimeControlStatusForStartup(record.startup),
@@ -4668,6 +4672,7 @@ function runtimeTargetHealthFromState(
     return desktopWelcomeOnlineRuntimeHealth(source, {
       local_ui_url: state.local_ui_url,
       local_ui_urls: state.startup?.local_ui_urls,
+      local_ui_address_issues: state.startup?.local_ui_address_issues,
       runtime_service: state.runtime_service,
       pid: state.startup?.pid,
       started_at_unix_ms: state.startup?.started_at_unix_ms,
@@ -4701,6 +4706,7 @@ function runtimeTargetPresenceFromState(
     running: state.running,
     localUIURL: state.local_ui_url,
     localUIURLs: state.startup?.local_ui_urls,
+    localUIAddressIssues: state.startup?.local_ui_address_issues,
     startedAtUnixMS: state.startup?.started_at_unix_ms,
     openConnectionRequired: state.open_connection_required === true,
     runtimeService: state.runtime_service,
@@ -4847,9 +4853,9 @@ async function refreshWelcomeRuntimeHealth(options: Readonly<{
     .map((value) => compact(value))
     .filter((value) => value !== ''));
   const targets = buildWelcomeRuntimeHealthTargets(preferences, openSessions)
-    .filter((target) => targetEnvironmentIDs.size === 0 || targetEnvironmentIDs.has(target.environment_id))
-    .filter((target) => mode === 'manual' || target.auto_refresh_enabled);
+    .filter((target) => targetEnvironmentIDs.size === 0 || targetEnvironmentIDs.has(target.environment_id));
   await welcomeRuntimeHealthStore.refresh(targets, {
+    mode,
     force: options.force === true,
     pruneMissing: mode === 'manual' && targetEnvironmentIDs.size === 0,
   });
@@ -9992,6 +9998,7 @@ async function openUtilityWindow(
   utilityWindowKindByWebContentsID.set(win.webContentsID, kind);
   if (kind === 'launcher') {
     win.browserWindow.on('focus', () => {
+      void pollWelcomeRuntimeState();
       void syncVisibleControlPlanesIfNeeded();
       void syncVisibleGatewaysIfNeeded();
     });
@@ -12709,32 +12716,22 @@ async function recoverAttachedProviderCredentials(): Promise<void> {
   return providerCredentialRecoveryTask;
 }
 
-let welcomeRuntimePollTask: Promise<void> | null = null;
+const welcomeRuntimePoller = new DesktopWelcomeRuntimePoller(
+  options => refreshWelcomeRuntimeHealth(options).catch(() => {
+    // The health store publishes target-specific failures to the launcher.
+  }),
+  () => refreshAllProviderEnvironmentRuntimeHealth().then(() => {
+    broadcastDesktopWelcomeSnapshots();
+  }),
+);
 
 async function pollWelcomeRuntimeState(): Promise<void> {
-  if (welcomeRuntimePollTask) {
-    return welcomeRuntimePollTask;
+  const launcher = liveUtilityWindow('launcher');
+  if (!launcher || launcher.isDestroyed()) {
+    updateWelcomeRuntimePoller();
+    return;
   }
-  welcomeRuntimePollTask = (async () => {
-    const launcher = liveUtilityWindow('launcher');
-    if (!launcher || launcher.isDestroyed()) {
-      updateWelcomeRuntimePoller();
-      return;
-    }
-    await Promise.all([
-      refreshWelcomeRuntimeHealth().catch(() => {
-        // Best-effort runtime health refresh should not interrupt launcher updates.
-      }),
-      refreshAllProviderEnvironmentRuntimeHealth().then(() => {
-        broadcastDesktopWelcomeSnapshots();
-      }).catch(() => {
-        // Best-effort runtime health refresh should not interrupt launcher updates.
-      }),
-    ]);
-  })().finally(() => {
-    welcomeRuntimePollTask = null;
-  });
-  return welcomeRuntimePollTask;
+  await welcomeRuntimePoller.poll();
 }
 
 function updateWelcomeRuntimePoller(): void {

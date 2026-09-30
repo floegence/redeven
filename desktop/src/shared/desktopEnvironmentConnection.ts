@@ -1,3 +1,4 @@
+import type { LocalUIAddressIssueCode } from './localUIAddressIssues';
 import type { DesktopRuntimeHealth } from './desktopRuntimeHealth';
 import type { DesktopRuntimeHostAccess, DesktopRuntimePlacement } from './desktopRuntimePlacement';
 import { desktopRuntimeContainerReference } from './desktopRuntimePlacement';
@@ -30,9 +31,11 @@ export type DesktopConnectionAddress = ConnectionRowBase & Readonly<{
   shareable: boolean;
 }>;
 
+export type AddressRecoveryTarget = 'access' | 'certificate';
+
 export type DesktopConnectionRow = DesktopConnectionAddress
   | (ConnectionRowBase & Readonly<{ kind: 'connection'; copyable: boolean }>)
-  | (ConnectionRowBase & Readonly<{ kind: 'status'; value_key: DesktopTranslationKey }>);
+  | (ConnectionRowBase & Readonly<{ kind: 'status'; value_key: DesktopTranslationKey; recovery?: AddressRecoveryTarget }>);
 
 export type DesktopShareableConnectionAddress = DesktopConnectionAddress & Readonly<{ shareable: true }>;
 
@@ -140,5 +143,15 @@ export function buildRuntimeConnectionRows(input: Readonly<{
   health: DesktopRuntimeHealth;
 }>): readonly DesktopConnectionRow[] {
   const addresses = connectionAddressRows(input.urls, input.context);
-  return [...runtimeConnectionRows(input.context), ...(addresses.length ? addresses : [runtimeAddressStatus(input.health)])];
+  const diagnostics: Record<LocalUIAddressIssueCode, { key: DesktopTranslationKey; recovery?: AddressRecoveryTarget }> = {
+    interface_scan_failed: { key: 'environmentConnection.interfaceScanFailed' },
+    bound_address_unavailable: { key: 'environmentConnection.boundAddressUnavailable', recovery: 'access' },
+    certificate_hosts_not_covered: { key: 'environmentConnection.certificateHostsNotCovered', recovery: 'certificate' },
+    certificate_refresh_failed: { key: 'environmentConnection.certificateRefreshFailed', recovery: 'certificate' },
+  };
+  const issues: DesktopConnectionRow[] = (input.health.local_ui_address_issues ?? []).map(issue => ({
+    id: `address-issue:${issue.code}`, kind: 'status', label_key: 'environmentConnection.networkAccessAddress',
+    value: '', value_key: diagnostics[issue.code].key, recovery: diagnostics[issue.code].recovery,
+  }));
+  return [...runtimeConnectionRows(input.context), ...issues, ...(addresses.length ? addresses : issues.length ? [] : [runtimeAddressStatus(input.health)])];
 }

@@ -1,3 +1,4 @@
+import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
@@ -123,7 +124,7 @@ export function EnvironmentCardsPanel(
     toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
     openInBrowser: (url: string) => Promise<void>;
     copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-    editEnvironment: (environment: DesktopEnvironmentEntry) => void;
+    editEnvironment: (environment: DesktopEnvironmentEntry, recovery?: AddressRecoveryTarget) => void;
     deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
     cancelOperation: (progress: DesktopLauncherActionProgress) => void;
     dismissOperation: (progress: DesktopLauncherActionProgress) => void;
@@ -710,7 +711,7 @@ function EnvironmentOwnerSurface(
     toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
     openInBrowser: (url: string) => Promise<void>;
     copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-    editEnvironment: (environment: DesktopEnvironmentEntry) => void;
+    editEnvironment: (environment: DesktopEnvironmentEntry, recovery?: AddressRecoveryTarget) => void;
     deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
     cancelOperation: (progress: DesktopLauncherActionProgress) => void;
     dismissOperation: (progress: DesktopLauncherActionProgress) => void;
@@ -853,6 +854,7 @@ function EnvironmentOwnerSurface(
           environmentID={props.environment.id} i18n={props.i18n} facts={facts()}
           environmentLabel={props.environment.label} minRows={props.paired ? 2 : 3}
           onFactAction={props.runEnvironmentCardFactAction}
+          configureAddress={props.environment.can_edit ? target => props.editEnvironment(props.environment, target) : undefined}
           openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
           endpointPopoverOpen={props.endpointPopoverOpen} onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
           selectedEndpointID={props.selectedEndpointID} selectEndpointForQRCode={props.selectEndpointForQRCode}

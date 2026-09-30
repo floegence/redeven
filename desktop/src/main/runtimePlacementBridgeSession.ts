@@ -1138,6 +1138,7 @@ export async function startRuntimePlacementBridgeSession(
   const startup: StartupReport = {
     local_ui_url: hello.local_ui.urls?.[0] ?? '',
     local_ui_urls: [...(hello.local_ui.urls ?? [])],
+    local_ui_address_issues: hello.local_ui.address_issues,
     password_required: hello.local_ui.password_required,
     ...(localUIURL ? { local_ui_bridge_url: localUIURL } : {}),
     ...(localUIBridgeToken ? { local_ui_bridge_token: localUIBridgeToken } : {}),

@@ -54,13 +54,14 @@ type RuntimeControlEndpoint struct {
 }
 
 type RuntimeAttachEndpoint struct {
-	LocalUIURL         string                  `json:"local_ui_url,omitempty"`
-	LocalUIURLs        []string                `json:"local_ui_urls,omitempty"`
-	LocalUIBridgeURL   string                  `json:"local_ui_bridge_url"`
-	LocalUIBridgeToken string                  `json:"local_ui_bridge_token"`
-	RuntimeControl     *RuntimeControlEndpoint `json:"runtime_control,omitempty"`
-	PasswordRequired   bool                    `json:"password_required"`
-	Exposure           LocalUIExposure         `json:"exposure"`
+	LocalUIURL           string                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs          []string                `json:"local_ui_urls"`
+	LocalUIAddressIssues []LocalUIAddressIssue   `json:"local_ui_address_issues,omitempty"`
+	LocalUIBridgeURL     string                  `json:"local_ui_bridge_url"`
+	LocalUIBridgeToken   string                  `json:"local_ui_bridge_token"`
+	RuntimeControl       *RuntimeControlEndpoint `json:"runtime_control,omitempty"`
+	PasswordRequired     bool                    `json:"password_required"`
+	Exposure             LocalUIExposure         `json:"exposure"`
 }
 
 type RuntimeAttachDiagnostics struct {

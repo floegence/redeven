@@ -42,30 +42,19 @@ func (s *Server) prepareNetwork(listeners []net.Listener) error {
 		return fmt.Errorf("create ephemeral Local UI certificate: %w", err)
 	}
 	s.deviceCA = ca
+	access := s.publicAccessSnapshot()
+	access.certificate = &certificate
+	s.publishPublicAccess(access)
 	s.tlsConfig = &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{certificate},
+		MinVersion:     tls.VersionTLS13,
+		GetCertificate: s.currentAccessCertificate,
 	}
 
 	return nil
 }
 
 func (s *Server) secureCertificateHosts() ([]string, error) {
-	s.authorityMu.RLock()
-	authorities := make([]string, 0, len(s.publicAuthorities))
-	for authority := range s.publicAuthorities {
-		authorities = append(authorities, authority)
-	}
-	s.authorityMu.RUnlock()
-	hosts := make([]string, 0, len(authorities))
-	for _, authority := range authorities {
-		host, _, err := net.SplitHostPort(authority)
-		if err != nil {
-			return nil, fmt.Errorf("invalid Local UI certificate authority")
-		}
-		hosts = append(hosts, host)
-	}
-	hosts = uniqueCertificateHosts(hosts)
+	hosts := uniqueCertificateHosts(s.publicAccessSnapshot().hosts)
 	if len(hosts) == 0 {
 		return nil, errors.New("missing Local UI certificate hosts")
 	}
