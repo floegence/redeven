@@ -1,5 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
+import { parseLocalUIAddressIssues, type LocalUIAddressIssue } from '../shared/localUIAddressIssues';
 
 import { isAllowedAppNavigation } from './navigation';
 import { type StartupReport } from './startup';
@@ -56,6 +57,7 @@ type RuntimeProbeStatus = Readonly<{
   status: 'online';
   local_ui_url?: string;
   local_ui_urls?: readonly string[];
+  local_ui_address_issues?: readonly LocalUIAddressIssue[];
   password_required: boolean;
   exposure?: LocalUIExposure;
   pid?: number;
@@ -169,7 +171,7 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
       return null;
     }
     const rawLocalUIURL = String(data.local_ui_url ?? '').trim();
-    if (data.local_ui_urls != null && !Array.isArray(data.local_ui_urls)) {
+    if (data.local_ui_urls !== undefined && !Array.isArray(data.local_ui_urls)) {
       return null;
     }
     const rawLocalUIURLs = Array.isArray(data.local_ui_urls)
@@ -178,7 +180,7 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
     let localUIURL = '';
     let localUIURLs: string[] = [];
     try {
-      localUIURL = rawLocalUIURL ? normalizeLocalUIBaseURL(rawLocalUIURL) : '';
+      localUIURL = !Array.isArray(data.local_ui_urls) && rawLocalUIURL ? normalizeLocalUIBaseURL(rawLocalUIURL) : '';
       localUIURLs = rawLocalUIURLs
         .filter((value) => value !== '')
         .map((value) => normalizeLocalUIBaseURL(value));
@@ -196,8 +198,9 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
     return {
       status: 'online',
       ...(localUIURL ? { local_ui_url: localUIURL } : {}),
-      ...(localUIURLs.length > 0 ? { local_ui_urls: localUIURLs } : {}),
+      ...(Array.isArray(data.local_ui_urls) || localUIURLs.length > 0 ? { local_ui_urls: localUIURLs } : {}),
       password_required: data.password_required,
+      local_ui_address_issues: parseLocalUIAddressIssues(data.local_ui_address_issues),
       exposure,
       ...(() => {
         const pid = normalizePositiveInteger(data.pid);
@@ -417,13 +420,14 @@ async function applyEnvAppShellReadiness(
 }
 
 function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatus): StartupReport {
-  const localUIURL = status.local_ui_urls?.includes(baseURL) ? baseURL : status.local_ui_url ?? baseURL;
-  const localUIURLs = status.local_ui_urls && status.local_ui_urls.length > 0
+  const localUIURLs = status.local_ui_urls !== undefined
     ? [...status.local_ui_urls]
-    : [localUIURL];
+    : status.local_ui_url ? [status.local_ui_url] : [];
+  const localUIURL = localUIURLs.includes(baseURL) ? baseURL : localUIURLs[0] ?? '';
   return {
     local_ui_url: localUIURL,
     local_ui_urls: localUIURLs,
+    local_ui_address_issues: status.local_ui_address_issues,
     password_required: status.password_required,
     ...(status.exposure ? { exposure: status.exposure } : {}),
     ...(status.pid ? { pid: status.pid } : {}),
@@ -435,6 +439,7 @@ function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatu
 function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
   return {
     status: 'online',
+    local_ui_address_issues: startup.local_ui_address_issues,
     password_required: startup.password_required === true,
     ...(startup.exposure ? { exposure: startup.exposure } : {}),
     ...(startup.pid ? { pid: startup.pid } : {}),
@@ -506,16 +511,14 @@ export async function probeLocalRuntimeBridgeHealth(
   if (!bridge) {
     return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
-  const result = await probeExternalLocalUIHealth(bridge.bridgeURL, bridge.options);
+  const result = await probeRedevenLocalUIHealth(bridge.bridgeURL, normalizedProbeOptions(bridge.options));
   if (!result.ok) {
     return result;
   }
   return {
     ok: true,
     value: {
-      ...result.value,
-      local_ui_url: startup.local_ui_url,
-      local_ui_urls: startup.local_ui_urls,
+      ...startupReportFromProbeStatus('', result.value),
       local_ui_bridge_url: bridge.bridgeURL,
       local_ui_bridge_token: bridge.bridgeToken,
     },
@@ -530,16 +533,14 @@ export async function probeLocalRuntimeBridgeStartup(
   if (!bridge) {
     return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
-  const result = await probeExternalLocalUIStartup(bridge.bridgeURL, bridge.options);
+  const result = await probeLocalRuntimeBridgeHealth(startup, options);
   if (!result.ok) {
     return result;
   }
   return {
     ok: true,
     value: {
-      ...result.value,
-      local_ui_url: startup.local_ui_url,
-      local_ui_urls: startup.local_ui_urls,
+      ...await validateExternalLocalUIShellAtBaseURL(result.value, bridge.bridgeURL, bridge.options),
       local_ui_bridge_url: bridge.bridgeURL,
       local_ui_bridge_token: bridge.bridgeToken,
     },

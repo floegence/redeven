@@ -2969,7 +2969,11 @@
     "networkAccessAddress": "网络访问地址",
     "listenerDetails": "查看内部监听地址",
     "openViaDesktop": "通过 Desktop 的“{action}”进入此环境。",
-    "loopbackHelp": "此回环地址属于 {host} 自身。不同主机可以使用相同端口；它不是此设备访问该环境的浏览器入口。"
+    "loopbackHelp": "此回环地址属于 {host} 自身。不同主机可以使用相同端口；它不是此设备访问该环境的浏览器入口。",
+    "interfaceScanFailed": "无法读取网络地址。网络恢复后将自动更新。",
+    "boundAddressUnavailable": "绑定的 IP 地址已不可用。请在访问设置中修改监听地址，并重启运行时。",
+    "certificateHostsNotCovered": "HTTPS 证书未覆盖部分当前网络地址。请更新证书后再使用这些地址。",
+    "certificateRefreshFailed": "无法刷新 HTTPS 证书。目前仅提供现有证书覆盖的地址，运行时将自动重试。"
   },
   "flowerRuntime": {
     "preparingDetail": "Flower 正在准备 AI 服务，就绪后会自动显示会话。你可以随时返回环境列表。",

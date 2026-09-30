@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -369,7 +370,8 @@ func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachS
 	return desktopLaunchReport{
 		Status:                   status,
 		LocalUIURL:               endpoint.LocalUIURL,
-		LocalUIURLs:              append([]string(nil), endpoint.LocalUIURLs...),
+		LocalUIURLs:              slices.Clone(endpoint.LocalUIURLs),
+		LocalUIAddressIssues:     endpoint.LocalUIAddressIssues,
 		LocalUIBridgeURL:         endpoint.LocalUIBridgeURL,
 		LocalUIBridgeToken:       endpoint.LocalUIBridgeToken,
 		RuntimeControl:           runtimeControlEndpointFromRuntimeStatus(endpoint.RuntimeControl),

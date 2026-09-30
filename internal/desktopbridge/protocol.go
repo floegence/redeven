@@ -1,5 +1,7 @@
 package desktopbridge
 
+import "github.com/floegence/redeven/internal/runtimemanagement"
+
 const (
 	ProtocolVersion = "redeven-desktop-placement-h2/1"
 
@@ -36,11 +38,12 @@ type Hello struct {
 }
 
 type HelloLocalUI struct {
-	URLs             []string `json:"urls"`
-	PasswordRequired bool     `json:"password_required"`
-	Available        bool     `json:"available"`
-	BasePath         string   `json:"base_path"`
-	BridgeToken      string   `json:"bridge_token,omitempty"`
+	AddressIssues    []runtimemanagement.LocalUIAddressIssue `json:"address_issues,omitempty"`
+	URLs             []string                                `json:"urls"`
+	PasswordRequired bool                                    `json:"password_required"`
+	Available        bool                                    `json:"available"`
+	BasePath         string                                  `json:"base_path"`
+	BridgeToken      string                                  `json:"bridge_token,omitempty"`
 }
 
 type GatewayProtocol struct {

@@ -1,3 +1,4 @@
+import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import { createSignal } from 'solid-js';
 import { desktopSettingsDraftRequiresRuntimeRestart } from '../shared/desktopAccessModel';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
@@ -30,6 +31,7 @@ export type EnvironmentSettingsSession<C> = Readonly<{
   saving: 'connection' | 'access' | null;
   access_save_intent?: 'save' | 'restart';
   focus_two_factor?: boolean;
+  focus_access?: AddressRecoveryTarget;
 }>;
 
 /** One opening owns both drafts. Remote completions never choose or reopen a surface. */

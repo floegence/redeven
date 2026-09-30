@@ -70,7 +70,8 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 			RuntimeCommit:   Commit,
 			StartedAtUnixMS: state.Identity.StartedAtUnixMS,
 			LocalUI: desktopbridge.HelloLocalUI{
-				URLs:             append([]string(nil), state.Endpoint.LocalUIURLs...),
+				URLs:             append([]string{}, state.Endpoint.LocalUIURLs...),
+				AddressIssues:    state.Endpoint.LocalUIAddressIssues,
 				PasswordRequired: state.Endpoint.PasswordRequired,
 				Available:        true,
 				BasePath:         "/",

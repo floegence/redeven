@@ -3,10 +3,12 @@ import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { parseLocalUIExposure, type LocalUIExposure } from '../shared/localUIExposure';
 import { normalizeLocalUIBridgeURL } from './localUIURL';
 import { normalizeDesktopPrivateBridgeToken } from './desktopPrivateBridge';
+import { parseLocalUIAddressIssues, type LocalUIAddressIssue } from '../shared/localUIAddressIssues';
 
 export type StartupReport = Readonly<{
   local_ui_url: string;
   local_ui_urls: string[];
+  local_ui_address_issues?: readonly LocalUIAddressIssue[];
   local_ui_bridge_url?: string;
   local_ui_bridge_token?: string;
   runtime_control?: DesktopRuntimeControlEndpoint;
@@ -49,7 +51,11 @@ function normalizePositiveInteger(value: unknown): number | undefined {
 
 export function parseStartupReport(raw: string): StartupReport {
   const parsed = JSON.parse(raw) as Record<string, unknown>;
-  const localUIURL = String(parsed.local_ui_url ?? '').trim();
+  const reportedURL = String(parsed.local_ui_url ?? '').trim();
+  const localUIURLs = Array.isArray(parsed.local_ui_urls)
+    ? parsed.local_ui_urls.map((value) => String(value ?? '').trim()).filter(Boolean)
+    : reportedURL ? [reportedURL] : [];
+  const localUIURL = localUIURLs[0] ?? '';
   const runtimeControl = parseRuntimeControlEndpoint(parsed.runtime_control);
   const exposure = parsed.exposure == null ? undefined : parseLocalUIExposure(parsed.exposure);
   const localUIBridgeURLRaw = String(parsed.local_ui_bridge_url ?? '').trim();
@@ -62,13 +68,10 @@ export function parseStartupReport(raw: string): StartupReport {
   if (!localUIURL && !localUIBridgeURL) {
     throw new Error('startup report missing Local UI endpoint');
   }
-  const localUIURLs = localUIURL && Array.isArray(parsed.local_ui_urls)
-    ? parsed.local_ui_urls.map((value) => String(value ?? '').trim()).filter(Boolean)
-    : [];
-
   return {
     local_ui_url: localUIURL,
-    local_ui_urls: localUIURL && localUIURLs.length === 0 ? [localUIURL] : localUIURLs,
+    local_ui_urls: localUIURLs,
+    local_ui_address_issues: parseLocalUIAddressIssues(parsed.local_ui_address_issues),
     ...(localUIBridgeURL ? { local_ui_bridge_url: localUIBridgeURL } : {}),
     ...(localUIBridgeToken ? { local_ui_bridge_token: localUIBridgeToken } : {}),
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),

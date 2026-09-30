@@ -108,7 +108,7 @@ func TestNetworkHandlerRejectsDNSRebindingBeforeRouting(t *testing.T) {
 	t.Parallel()
 
 	s := newTestServer(t, nil)
-	s.publicAuthorities = map[string]struct{}{
+	s.publicAccess.authorities = map[string]struct{}{
 		"localhost:23998": {},
 		"127.0.0.1:23998": {},
 		"[::1]:23998":     {},
@@ -302,7 +302,7 @@ func TestDirectWSURLFromRequestUsesPublicPort(t *testing.T) {
 	}
 	s := newTestServer(t, nil)
 	s.bind = bind
-	s.publicAuthorities = map[string]struct{}{
+	s.publicAccess.authorities = map[string]struct{}{
 		"localhost:23998": {}, "127.0.0.1:23998": {}, "[::1]:23998": {},
 	}
 

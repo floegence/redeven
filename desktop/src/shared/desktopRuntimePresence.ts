@@ -1,3 +1,4 @@
+import type { LocalUIAddressIssue } from './localUIAddressIssues';
 import type { DesktopRuntimeMaintenanceRequirement } from './desktopRuntimeHealth';
 import type { DesktopRuntimeOperationPlans } from './desktopRuntimeOperations';
 import type { DesktopRuntimePackageState } from './desktopRuntimePackageState';
@@ -39,6 +40,7 @@ export type DesktopRuntimePresence = Readonly<{
   running: boolean;
   local_ui_url: string;
   local_ui_urls?: readonly string[];
+  local_ui_address_issues?: readonly LocalUIAddressIssue[];
   started_at_unix_ms?: number;
   openable: boolean;
   open_connection_required?: boolean;

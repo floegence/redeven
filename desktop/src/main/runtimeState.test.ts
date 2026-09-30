@@ -75,6 +75,18 @@ async function closeServer(server: http.Server): Promise<void> {
 }
 
 describe('runtimeState', () => {
+  it('does not turn a saved probe entry into a current public address', async () => {
+    const server = http.createServer((_request, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(openableHealthPayload(123));
+    });
+    const baseURL = await listenOnLoopback(server);
+    try {
+      expect(expectProbeSuccess(await probeExternalLocalUIHealth(baseURL))).toMatchObject({
+        local_ui_url: '', local_ui_urls: [],
+      });
+    } finally { await closeServer(server); }
+  });
   it('keeps the reachable address selected by the client on a multi-interface Runtime', async () => {
     let baseURL = '';
     const server = http.createServer((_request, response) => {
@@ -109,6 +121,41 @@ describe('runtimeState', () => {
       expect(await probeExternalLocalUIHealth(baseURL)).toMatchObject({ ok: false, failure: { kind: 'protocol_mismatch' } });
     } finally { await closeServer(server); }
   });
+  it.each([
+    { name: 'changed addresses', reported: { local_ui_url: 'http://192.168.50.22:23998/', local_ui_urls: ['http://192.168.50.22:23998/'] }, expected: ['http://192.168.50.22:23998/'] },
+    { name: 'explicit empty list', reported: { local_ui_url: 'http://192.168.100.118:23998/', local_ui_urls: [] }, expected: [] },
+    { name: 'list without singular address', reported: { local_ui_urls: ['http://192.168.50.22:23998/'] }, expected: ['http://192.168.50.22:23998/'] },
+    { name: 'singular-only report', reported: { local_ui_url: 'http://192.168.50.22:23998/' }, expected: ['http://192.168.50.22:23998/'] },
+    { name: 'absent public addresses', reported: {}, expected: [] },
+  ])('uses current public addresses from private bridge health and startup: $name', async ({ reported, expected }) => {
+    const server = http.createServer((request, response) => {
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' }); response.end(validEnvAppShellHTML); return;
+      }
+      if (request.url === '/_redeven_proxy/env/assets/index.js') {
+        response.writeHead(200, { 'Content-Type': 'application/javascript' }); response.end(); return;
+      }
+      const payload = JSON.parse(openableHealthPayload(123));
+      Object.assign(payload.data, reported);
+      response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(payload));
+    });
+    const bridgeURL = await listenOnLoopback(server);
+    const startup: StartupReport = {
+      local_ui_url: 'http://192.168.100.118:23998/', local_ui_urls: ['http://192.168.100.118:23998/'],
+      local_ui_bridge_url: bridgeURL, local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    };
+    try {
+      for (const probe of [probeLocalRuntimeBridgeHealth, probeLocalRuntimeBridgeStartup]) {
+        const observed = expectProbeSuccess(await probe(startup));
+        expect(observed.local_ui_urls).toEqual(expected);
+        expect(observed.local_ui_url).toBe(expected[0] ?? '');
+        expect(observed.local_ui_urls).not.toContain(bridgeURL);
+        expect(observed.local_ui_bridge_url).toBe(bridgeURL);
+        expect(observed.started_at_unix_ms).toBe(123);
+      }
+    } finally { await closeServer(server); }
+  });
+
   it('requires and probes the trusted Local Runtime bridge', async () => {
     const authorizedPaths: string[] = [];
     const server = http.createServer((request, response) => {
@@ -129,7 +176,7 @@ describe('runtimeState', () => {
         return;
       }
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(openableHealthPayload(123));
+      response.end(JSON.stringify({ ...JSON.parse(openableHealthPayload(123)), data: { ...JSON.parse(openableHealthPayload(123)).data, local_ui_urls: ['http://127.0.0.1:26800/'] } }));
     });
     const bridgeURL = await listenOnLoopback(server);
     const startup: StartupReport = {
@@ -183,6 +230,7 @@ describe('runtimeState', () => {
           ok: true,
           data: {
             status: 'online',
+            local_ui_urls: [`http://${request.headers.host}/`],
             password_required: false,
             exposure: loopbackExposure,
             runtime_service: {
@@ -398,6 +446,7 @@ describe('runtimeState', () => {
           ok: true,
           data: {
             status: 'online',
+            local_ui_urls: [`http://${request.headers.host}/`],
             password_required: false,
             exposure: loopbackExposure,
             runtime_service: {
@@ -586,7 +635,7 @@ describe('runtimeState', () => {
     const server = http.createServer((request, response) => {
       if (request.url === '/api/local/runtime/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(openableHealthPayload(startedAtUnixMS));
+        response.end(JSON.stringify({ ...JSON.parse(openableHealthPayload(startedAtUnixMS)), data: { ...JSON.parse(openableHealthPayload(startedAtUnixMS)).data, local_ui_urls: [`http://${request.headers.host}/`] } }));
         return;
       }
       if (request.url === '/_redeven_proxy/env/') {
@@ -717,7 +766,7 @@ describe('runtimeState', () => {
     const server = http.createServer((request, response) => {
       if (request.url === '/api/local/runtime/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(openableHealthPayload(300));
+        response.end(JSON.stringify({ ...JSON.parse(openableHealthPayload(300)), data: { ...JSON.parse(openableHealthPayload(300)).data, local_ui_urls: [`http://${request.headers.host}/`] } }));
         return;
       }
       if (request.url === '/_redeven_proxy/env/') {

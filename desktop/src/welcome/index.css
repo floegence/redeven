@@ -4438,3 +4438,23 @@ pre,
   .redeven-cloud-connection-panel button, .redeven-cloud-connection-diagnostics summary { min-height: 44px; }
   .redeven-cloud-connection-heading button { min-width: 44px; }
 }
+
+/* Address recovery guidance has its own readable line above its settings action. */
+.redeven-card-endpoint-row[data-address-diagnostic],
+.redeven-endpoints-popover .redeven-card-endpoint-row[data-address-diagnostic],
+.access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row[data-address-diagnostic] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: .375rem;
+  align-items: start;
+}
+.redeven-card-endpoint-row[data-address-diagnostic] .redeven-card-endpoint-content,
+.access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row[data-address-diagnostic] .redeven-card-endpoint-content {
+  grid-column: 1;
+  grid-row: 2;
+}
+.redeven-card-endpoint-row[data-address-diagnostic] .redeven-endpoint-actions,
+.redeven-endpoints-popover .redeven-card-endpoint-row[data-address-diagnostic] .redeven-endpoint-actions {
+  grid-column: 1;
+  grid-row: 3;
+  justify-self: start;
+}

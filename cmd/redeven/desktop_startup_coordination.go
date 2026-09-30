@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -46,7 +47,8 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 	return writeDesktopLaunchReport(reportPath, desktopLaunchReport{
 		Status:                   status,
 		LocalUIURL:               startup.LocalUIURL,
-		LocalUIURLs:              append([]string(nil), startup.LocalUIURLs...),
+		LocalUIURLs:              slices.Clone(startup.LocalUIURLs),
+		LocalUIAddressIssues:     startup.LocalUIAddressIssues,
 		LocalUIBridgeURL:         startup.LocalUIBridgeURL,
 		LocalUIBridgeToken:       startup.LocalUIBridgeToken,
 		RuntimeControl:           startup.RuntimeControl,
@@ -70,6 +72,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 type runtimeStartupReport struct {
 	LocalUIURL               string
 	LocalUIURLs              []string
+	LocalUIAddressIssues     []runtimemanagement.LocalUIAddressIssue
 	LocalUIBridgeURL         string
 	LocalUIBridgeToken       string
 	RuntimeControl           *runtimeControlEndpoint
@@ -95,10 +98,11 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 		endpoint = &runtimemanagement.RuntimeAttachEndpoint{}
 	}
 	return runtimeStartupReport{
-		LocalUIURL:         endpoint.LocalUIURL,
-		LocalUIURLs:        append([]string(nil), endpoint.LocalUIURLs...),
-		LocalUIBridgeURL:   endpoint.LocalUIBridgeURL,
-		LocalUIBridgeToken: endpoint.LocalUIBridgeToken,
+		LocalUIURL:           endpoint.LocalUIURL,
+		LocalUIURLs:          slices.Clone(endpoint.LocalUIURLs),
+		LocalUIAddressIssues: endpoint.LocalUIAddressIssues,
+		LocalUIBridgeURL:     endpoint.LocalUIBridgeURL,
+		LocalUIBridgeToken:   endpoint.LocalUIBridgeToken,
 		RuntimeControl: func() *runtimeControlEndpoint {
 			if endpoint.RuntimeControl == nil {
 				return nil

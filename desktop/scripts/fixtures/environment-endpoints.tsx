@@ -4,6 +4,7 @@ import qrcode from 'qrcode-generator';
 import { FloeProvider, useTheme, builtInShellThemePresets } from '@floegence/floe-webapp-core';
 import { EndpointsPopover, EnvironmentAccessSettingsForm } from '../../src/welcome/App';
 import { EnvironmentSettingsDialog } from '../../src/welcome/EnvironmentSettingsDialog';
+import type { LocalUIAddressIssue } from '../../src/shared/localUIAddressIssues';
 import type { DesktopEnvironmentEntry } from '../../src/shared/desktopLauncherIPC';
 import { buildRuntimeConnectionRows, type DesktopRuntimeConnectionContext } from '../../src/shared/desktopEnvironmentConnection';
 import { createDesktopI18n, type RedevenLocale } from '../../src/shared/i18n';
@@ -52,6 +53,10 @@ function Fixture() {
     const mode = preset?.mode === 'light' || preset?.mode === 'dark' ? preset.mode : dark ? 'dark' : 'light';
     theme.selectShellTheme(mode, preset?.name ?? (dark ? 'ocean' : 'classic-light'));
   });
+  const [liveAddresses, setLiveAddresses] = createSignal<{ urls: string[]; issues: LocalUIAddressIssue[] }>();
+  const currentAddresses = (name: string) => name === 'Network' && liveAddresses() ? liveAddresses()!.urls : addresses(name);
+  const currentHealth = () => ({ status: 'online' as const, freshness: 'fresh' as const, source: 'ssh_runtime_probe' as const, checked_at_unix_ms: Date.now(), local_ui_address_issues: liveAddresses()?.issues });
+  Object.assign(window, { addressFixture: { publish: setLiveAddresses } });
   const [active, setActive] = createSignal('');
   const [selected, setSelected] = createSignal<{ host: string; id: string } | null>(null);
   const [settings, setSettings] = createSignal('');
@@ -101,8 +106,8 @@ function Fixture() {
     environment_id: settings(), environment_label: settings(), environment_kind: settings() === 'Local Environment' ? 'local' : 'runtime_target',
     runtime_connection: context(settings()),
     local_ui_password_configured: passwordConfigured(),
-    current_runtime_running: true, current_runtime_url: address(settings()), current_runtime_urls: addresses(settings()),
-  }), runtime_configuration_pending: pending() }));
+    current_runtime_running: true, current_runtime_url: address(settings()), current_runtime_urls: currentAddresses(settings()),
+  }), runtime_health: currentHealth(), runtime_configuration_pending: pending() }));
   return <main style={{ padding: '32px', 'min-height': '100vh' }}>
     <h1 style={{ 'font-size': '20px', 'margin-bottom': '24px' }}>Environment connection acceptance</h1>
     <div style={{ display: 'grid', gap: '24px', 'grid-template-columns': 'repeat(auto-fit, minmax(240px, 1fr))' }}>
@@ -111,12 +116,13 @@ function Fixture() {
         <div class="flex items-center justify-between gap-3">
           <span>{i18n.t('environmentFacts.runsOn')}</span>
           <EndpointsPopover environmentID={name} environmentLabel={query.get('label') || name} i18n={i18n}
-            endpoints={buildRuntimeConnectionRows({ context: context(name), urls: addresses(name),
-              health: { status: 'online', freshness: 'fresh', source: 'ssh_runtime_probe', checked_at_unix_ms: 1 } })}
+            endpoints={buildRuntimeConnectionRows({ context: context(name), urls: currentAddresses(name),
+              health: currentHealth() })}
             open={active() === name} onOpenChange={(open) => {
               setActive(open ? name : '');
               if (!open) setSelected(null);
             }}
+            configureAddress={() => { setActive(''); setSettings(name); }}
             selectedEndpointID={selected()?.host === name ? selected()?.id : undefined}
             selectEndpointForQRCode={(id) => setSelected({ host: name, id })} openInBrowser={copy} copyEnvironmentValue={copy} />
         </div>

@@ -21,7 +21,7 @@ function button(label: string): HTMLButtonElement {
   return result;
 }
 
-async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'legacy'; remote?: boolean; urls?: string[]; pending?: boolean; passwordConfigured?: boolean; security?: (request: SecurityRequest) => Promise<SecurityResult>; certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport> } = {}) {
+async function mount(options: { focusAccess?: 'access' | 'certificate'; url?: string; protocol?: 'http' | 'https' | 'legacy'; remote?: boolean; urls?: string[]; pending?: boolean; passwordConfigured?: boolean; security?: (request: SecurityRequest) => Promise<SecurityResult>; certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport> } = {}) {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('CSS', { escape: (value: string) => value });
   const host = document.createElement('div');
@@ -50,7 +50,7 @@ async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'leg
     <EnvironmentSettingsDialog open={isOpen()} environment={{ id: 'local', label: 'Local Environment',
       registration_ref: { kind: options.remote ? 'runtime_target' : 'local_environment', id: 'local' } } as DesktopEnvironmentEntry}
       tab="access" i18n={createDesktopI18n('en-US')} onClose={() => setOpen(false)} onTabChange={() => {}} connection={null} access={(
-    <EnvironmentAccessSettingsForm open={isOpen()} snapshot={liveSnapshot()} baselineSnapshot={liveSnapshot()} draft={draft()}
+    <EnvironmentAccessSettingsForm focusAccess={options.focusAccess} open={isOpen()} snapshot={liveSnapshot()} baselineSnapshot={liveSnapshot()} draft={draft()}
       i18n={createDesktopI18n('en-US')} busyState={IDLE_LAUNCHER_BUSY_STATE} settingsError={settingsError()}
       settingsErrorRef={() => {}} updateDraftField={(name, value) => setDraft((current) => ({ ...current, [name]: value, ...(name === 'local_ui_password' ? {local_ui_password_mode: value ? 'replace' : 'keep'} : {}) }))}
       applyAccessMode={(mode) => setDraft((current) => applyDesktopAccessModeToDraft(current, mode))}
@@ -81,6 +81,51 @@ const ready = { status: 'ready', code: '', identity: 'ready', trust: 'untrusted'
 const disabledSecurity: SecurityResult = { https_ready: true, enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
 
 describe('Environment access workflows', () => {
+  it('opens the requested recovery page directly and does not replay it on address refresh', async () => {
+    const test = await mount({ focusAccess: 'certificate', url: 'https://localhost:23998/', protocol: 'https' });
+    expect(document.querySelector('[data-flow-heading]')?.textContent).toBe('HTTPS certificate');
+    button('Back').click();
+    await settle();
+    test.setSnapshot(snapshot => ({ ...snapshot, current_runtime_urls: ['https://192.0.2.20:23998/'] }));
+    await settle();
+    expect(document.querySelector('[data-flow-heading]')).toBeNull();
+  });
+
+  it('opens certificate recovery from a current address diagnostic', async () => {
+    const test = await mount({ url: 'https://localhost:23998/', protocol: 'https' });
+    test.setSnapshot(snapshot => ({ ...snapshot, runtime_health: { ...snapshot.runtime_health,
+      local_ui_address_issues: [{ code: 'certificate_hosts_not_covered', hosts: ['192.0.2.20'] }],
+    } }));
+    await settle();
+    const issue = document.querySelector('[data-endpoint-id="address-issue:certificate_hosts_not_covered"]')!;
+    expect(issue.textContent).toContain('The HTTPS certificate does not cover');
+    expect(issue.querySelector('[aria-label="Share connection"]')).toBeNull();
+    issue.querySelector<HTMLButtonElement>('button')!.click();
+    await settle();
+    expect(document.querySelector('[data-flow-heading]')?.textContent).toBe('HTTPS certificate');
+  });
+
+  it('shows live address diagnostics without stopping the runtime or discarding drafts', async () => {
+    const test = await mount({ url: 'https://localhost:23998/', protocol: 'https' });
+    test.setDraft(draft => ({ ...draft, local_ui_bind: '0.0.0.0:23999' }));
+    test.setSnapshot(snapshot => ({ ...snapshot, runtime_health: { ...snapshot.runtime_health,
+      local_ui_address_issues: [{ code: 'bound_address_unavailable', hosts: ['192.0.2.10'] }],
+    } }));
+    await settle();
+    expect(document.body.textContent).toContain('The bound IP address is no longer available');
+    expect(document.querySelector('.environment-access-status')?.textContent).toContain('Running');
+    button('Change access').click();
+    await settle();
+    expect(test.draft().local_ui_bind).toBe('0.0.0.0:23999');
+    const port = document.getElementById('local-ui-port') as HTMLInputElement;
+    port.focus();
+    test.setSnapshot(snapshot => ({ ...snapshot, runtime_health: { ...snapshot.runtime_health, local_ui_address_issues: [] } }));
+    await settle();
+    expect(document.activeElement).toBe(port);
+    expect(test.draft().local_ui_bind).toBe('0.0.0.0:23999');
+    expect(document.body.textContent).not.toContain('The bound IP address is no longer available');
+  });
+
   it('keeps connection facts compact and defers address lists until requested', async () => {
     await mount({ url: 'http://localhost:23998/', urls: [
       'http://localhost:23998/', 'http://127.0.0.1:23998/', 'http://192.168.1.11:23998/',

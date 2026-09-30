@@ -1050,6 +1050,8 @@ function runtimeHealthFromPresence(
     source,
     freshness: fallback.freshness === 'unknown' ? undefined : fallback.freshness,
     local_ui_url: presence.local_ui_url || undefined,
+    local_ui_urls: presence.local_ui_urls,
+    local_ui_address_issues: presence.local_ui_address_issues,
     ...(presence.started_at_unix_ms ? { started_at_unix_ms: presence.started_at_unix_ms } : {}),
     runtime_service: presenceRuntimeService,
     runtime_maintenance: presenceMaintenance,

@@ -74,6 +74,7 @@ export async function observeRuntimePlacementBridge(
           ...record.startup,
           local_ui_url: startup.local_ui_url,
           local_ui_urls: startup.local_ui_urls,
+          local_ui_address_issues: startup.local_ui_address_issues,
           runtime_control: record.startup.runtime_control,
           password_required: startup.password_required,
           started_at_unix_ms: startup.started_at_unix_ms

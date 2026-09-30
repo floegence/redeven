@@ -2975,7 +2975,11 @@
     "networkAccessAddress": "Dirección de acceso por red",
     "listenerDetails": "Ver dirección de escucha interna",
     "openViaDesktop": "Selecciona «{action}» en Desktop para abrir este entorno.",
-    "loopbackHelp": "Esta dirección de bucle local pertenece a {host}. Distintos hosts pueden usar el mismo puerto. No es una dirección para acceder a este entorno desde el navegador de tu dispositivo."
+    "loopbackHelp": "Esta dirección de bucle local pertenece a {host}. Distintos hosts pueden usar el mismo puerto. No es una dirección para acceder a este entorno desde el navegador de tu dispositivo.",
+    "interfaceScanFailed": "No se pudieron obtener las direcciones de red. Se actualizarán automáticamente cuando la red esté disponible.",
+    "boundAddressUnavailable": "La dirección IP vinculada ya no está disponible. Cambia la dirección de escucha en los ajustes de acceso y reinicia el entorno de ejecución.",
+    "certificateHostsNotCovered": "El certificado HTTPS no cubre algunas direcciones de red actuales. Actualiza el certificado para usar estas direcciones.",
+    "certificateRefreshFailed": "No se pudo actualizar el certificado HTTPS. Solo están disponibles las direcciones cubiertas por el certificado actual. El entorno de ejecución lo reintentará automáticamente."
   },
   "flowerRuntime": {
     "preparingDetail": "Flower está preparando su servicio de IA. Las conversaciones aparecerán automáticamente cuando esté listo. Puedes volver a la lista de entornos en cualquier momento.",

@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop Environment connections
 description: Explain each Environment connection and apply one address namespace policy to Welcome and settings.
 tags: [desktop, environment, connection, settings]
-timestamp: 2026-09-27T16:00:00Z
+timestamp: 2026-09-30T00:00:00Z
 ---
 # Summary
 
@@ -20,6 +20,10 @@ Only an HTTP or HTTPS public URL is an address row. Management text, Gateway nam
 A loopback URL on this device remains copyable and browser-openable but has no cross-device QR action. SSH, WSL, and container loopback addresses appear as an internal-only browser-access explanation naming their namespace and directing users to Open Env App in Desktop. Their literal URL is selectable only after expanding internal listening details, which explain that loopback belongs to that host and separate hosts may reuse a port. These rows have no URL copy, browser, or share controls. This-device and network addresses have explicit browser-access labels. Actual non-loopback addresses remain copyable, browser-openable, and shareable, with a network-availability explanation rather than a claim of tested client reachability. Connection information may be copied separately and never enters the QR component.
 
 An explicitly present public-address list, including an empty list, is authoritative; its singular companion is not a second fallback source. The legacy singular-only report shape is read only when no list exists. Welcome chooses one current managed report rather than merging report, private entry, and generic card text. Pending health probes retain the last complete public-address list and process start identity in the existing observed-health record while withdrawing live control presence. That observation takes precedence over an older open-window startup report; it supplies presentation only, never control authority. A completed stopped or failed observation clears current addresses even with a stale open session. No-address presentation follows health freshness and explicit stopped reasons: not checked, checking, unconfirmed, running without a reported address, or confirmed stopped. These are presentation results, not another lifecycle state machine.
+
+The open Environment surface probes automatically eligible targets every five seconds, bypassing the thirty-second health freshness cache while retaining per-target request deduplication. Opening or refocusing the launcher immediately probes; slow Cloud observations do not block Runtime probes or subsequent ticks. Remote environments with automatic probing disabled retain that preference. Once network addresses are stable and the management connection responds normally, the open panel reflects the new addresses within ten seconds, including Runtime's two-second enumeration interval.
+
+Health and attach reports may include `local_ui_address_issues` with `interface_scan_failed`, `bound_address_unavailable`, `certificate_hosts_not_covered`, or `certificate_refresh_failed`. Desktop carries diagnostics through private bridge observations and Runtime presence into the common connection model. Localized address-region guidance opens the applicable access or certificate settings page directly; it does not turn a healthy Runtime into a stopped Runtime. Recovery clears the guidance. Routine updates do not show a toast, remount the panel, or replace settings drafts.
 
 Popover sharing is keyed by Environment and address-row identity. Snapshot refresh preserves the open popover and removes only an absent or no-longer-shareable selection. Settings also clear sharing when their Environment changes. Keyboard dismissal restores trigger focus; explanatory rows retain native text selection.
 
@@ -46,6 +50,9 @@ Managed settings use the selected Runtime's private control channel, or its auth
 [Environment settings](desktop-environment-settings.md) owns section layout, draft/session identity, validation, and committed rebinding. [Local UI certificates](../security/local-ui-certificates.md) owns explicit HTTPS, certificate validity and client trust, maintenance confirmation, and restart blocking. [Local UI network exposure](../security/local-ui-network-exposure.md) owns bind, public-address, and password authority. Missing saved protocols retain HTTP; explicit HTTPS is preserved. Native settings remain readable for older Runtimes, while unsupported management requires an update or stop before saving. Failed writes preserve the prior password verifier and report failure rather than claiming success.
 
 # Evidence
+
+- `redeven:desktop/src/main/desktopWelcomeRuntimePoller.test.ts` - Verifies five-second real probes with a pending Cloud request, per-target deduplication, and disabled automatic probing.
+- `redeven:desktop/src/main/runtimeState.test.ts` - Keeps current public reports authoritative over private startup metadata and handles explicit empty lists.
 
 - `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - One typed connection, address, and status model for Welcome and settings.
 - `redeven:desktop/src/welcome/EnvironmentConnectionRows.tsx` - Shared scoped groups, bounded address lists, stable row identity and Environment-owned filtering.

@@ -63,25 +63,26 @@ type desktopLaunchReport struct {
 	Code    string              `json:"code,omitempty"`
 	Message string              `json:"message,omitempty"`
 
-	LocalUIURL               string                            `json:"local_ui_url,omitempty"`
-	LocalUIURLs              []string                          `json:"local_ui_urls,omitempty"`
-	LocalUIBridgeURL         string                            `json:"local_ui_bridge_url,omitempty"`
-	LocalUIBridgeToken       string                            `json:"local_ui_bridge_token,omitempty"`
-	RuntimeControl           *runtimeControlEndpoint           `json:"runtime_control,omitempty"`
-	PasswordRequired         bool                              `json:"password_required"`
-	Exposure                 runtimemanagement.LocalUIExposure `json:"exposure"`
-	EffectiveRunMode         string                            `json:"effective_run_mode,omitempty"`
-	RemoteEnabled            bool                              `json:"remote_enabled"`
-	ProviderOrigin           string                            `json:"provider_origin,omitempty"`
-	ControlplaneBaseURL      string                            `json:"controlplane_base_url,omitempty"`
-	ControlplaneProviderID   string                            `json:"controlplane_provider_id,omitempty"`
-	EnvPublicID              string                            `json:"env_public_id,omitempty"`
-	StateDir                 string                            `json:"state_dir,omitempty"`
-	RuntimeControlSocketPath string                            `json:"runtime_control_socket_path,omitempty"`
-	DiagnosticsEnabled       bool                              `json:"diagnostics_enabled"`
-	PID                      int                               `json:"pid,omitempty"`
-	StartedAtUnixMS          int64                             `json:"started_at_unix_ms,omitempty"`
-	RuntimeService           runtimeservice.Snapshot           `json:"runtime_service"`
+	LocalUIURL               string                                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs              []string                                `json:"local_ui_urls"`
+	LocalUIAddressIssues     []runtimemanagement.LocalUIAddressIssue `json:"local_ui_address_issues,omitempty"`
+	LocalUIBridgeURL         string                                  `json:"local_ui_bridge_url,omitempty"`
+	LocalUIBridgeToken       string                                  `json:"local_ui_bridge_token,omitempty"`
+	RuntimeControl           *runtimeControlEndpoint                 `json:"runtime_control,omitempty"`
+	PasswordRequired         bool                                    `json:"password_required"`
+	Exposure                 runtimemanagement.LocalUIExposure       `json:"exposure"`
+	EffectiveRunMode         string                                  `json:"effective_run_mode,omitempty"`
+	RemoteEnabled            bool                                    `json:"remote_enabled"`
+	ProviderOrigin           string                                  `json:"provider_origin,omitempty"`
+	ControlplaneBaseURL      string                                  `json:"controlplane_base_url,omitempty"`
+	ControlplaneProviderID   string                                  `json:"controlplane_provider_id,omitempty"`
+	EnvPublicID              string                                  `json:"env_public_id,omitempty"`
+	StateDir                 string                                  `json:"state_dir,omitempty"`
+	RuntimeControlSocketPath string                                  `json:"runtime_control_socket_path,omitempty"`
+	DiagnosticsEnabled       bool                                    `json:"diagnostics_enabled"`
+	PID                      int                                     `json:"pid,omitempty"`
+	StartedAtUnixMS          int64                                   `json:"started_at_unix_ms,omitempty"`
+	RuntimeService           runtimeservice.Snapshot                 `json:"runtime_service"`
 
 	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`
 	Diagnostics *desktopLaunchDiagnostics `json:"diagnostics,omitempty"`
@@ -129,12 +130,13 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 		if report.LocalUIBridgeToken == "" {
 			return errors.New("invalid local_ui_bridge_token")
 		}
-		report.LocalUIURL = strings.TrimSpace(report.LocalUIURL)
-		report.LocalUIURLs = compactStrings(report.LocalUIURLs)
-		if report.LocalUIURL == "" {
-			report.LocalUIURLs = nil
-		} else if len(report.LocalUIURLs) == 0 {
+		if report.LocalUIURLs == nil && strings.TrimSpace(report.LocalUIURL) != "" {
 			report.LocalUIURLs = []string{report.LocalUIURL}
+		}
+		report.LocalUIURLs = append([]string{}, compactStrings(report.LocalUIURLs)...)
+		report.LocalUIURL = ""
+		if len(report.LocalUIURLs) > 0 {
+			report.LocalUIURL = report.LocalUIURLs[0]
 		}
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
 		report.ProviderOrigin = strings.TrimSpace(report.ProviderOrigin)

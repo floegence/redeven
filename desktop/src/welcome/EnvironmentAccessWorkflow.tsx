@@ -1,7 +1,7 @@
 import { StatusRegion, StableText, Button, Checkbox, Input, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type ComponentProps, type JSX } from 'solid-js';
 import { AlertCircle, ArrowLeft, Check, ChevronRight, Clock, FileText, Globe, Key, Lock, Refresh, Shield } from '@floegence/floe-webapp-core/icons';
-import { runtimeConnectionIsOnThisDevice } from '../shared/desktopEnvironmentConnection';
+import { type AddressRecoveryTarget, runtimeConnectionIsOnThisDevice } from '../shared/desktopEnvironmentConnection';
 import type { DesktopTranslationKey } from '../shared/i18n';
 import { desktopSettingsDraftRequiresRuntimeRestart, deriveDesktopAccessDraftModel, validateDesktopAccessDraft } from '../shared/desktopAccessModel';
 import { desktopCertificateIdentity, type DesktopCertificateReport } from '../shared/desktopCertificate';
@@ -15,7 +15,7 @@ import './EnvironmentAccessWorkflow.css';
 
 type Page = 'overview' | 'access' | 'security' | 'password' | 'guard' | 'factor' | 'prepare' | 'certificate' | 'review';
 type Task = 'access' | 'password' | 'remove' | 'enroll';
-type Props = ComponentProps<typeof EnvironmentAccessSettingsForm> & { connection: JSX.Element };
+type Props = ComponentProps<typeof EnvironmentAccessSettingsForm> & { connection: (configure: (target: AddressRecoveryTarget) => void) => JSX.Element };
 
 /** Navigation is local to this opening. The settings session remains the only access-draft owner. */
 export function EnvironmentAccessWorkflow(props: Props) {
@@ -145,7 +145,7 @@ export function EnvironmentAccessWorkflow(props: Props) {
     </Show>;
   }
   const identity = createMemo(() => `${props.open}:${props.snapshot.environment_id}`);
-  createEffect(on(identity, () => { setPage(props.focusTwoFactor ? 'security' : 'overview'); setNotice(''); setLocalError(''); setConfirmation(''); }));
+  createEffect(on(identity, () => { setPage(props.focusAccess ?? (props.focusTwoFactor ? 'security' : 'overview')); setNotice(''); setLocalError(''); setConfirmation(''); }));
   let focusHandled = false;
   createEffect(() => {
     if (props.focusTwoFactor && security.status() && !focusHandled) {
@@ -198,7 +198,7 @@ export function EnvironmentAccessWorkflow(props: Props) {
     </>}>
       <div class="environment-access-form" inert={saving()}>
         <Show when={page() === 'overview'}>
-          {props.connection}
+          {props.connection(target => { setTask('access'); go(target); })}
           <div class="access-flow-summary">
             <section><Globe class="access-flow-icon" aria-hidden="true" /><div><h3>{t('settings.visibilityTitle')}</h3><p>{scope(baseline().network_exposure)} · {props.baselineSnapshot.draft.local_ui_protocol?.toUpperCase() ?? 'HTTP'} · {baseline().bind_port_text}</p><Show when={savedPending()}><p>{t('settings.nextStartLabel')}</p></Show></div><Button size="sm" variant="outline" onClick={() => { setTask('access'); go('access'); }}>{t('accessFlow.changeAccess')}</Button></section>
             <section><Shield class="access-flow-icon" aria-hidden="true" /><div><h3>{t('accessFlow.loginProtection')}</h3><p>{securitySummary()}</p></div><Button size="sm" variant="outline" onClick={() => go('security')}>{t('accessFlow.manageProtection')}</Button></section>

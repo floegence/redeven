@@ -338,7 +338,7 @@ func TestServer_E2E_PlaintextNetworkRejectsDirectArtifactWithoutInternalError(t 
 		t.Fatalf("ParseBind() error = %v", err)
 	}
 	s.bind = bind
-	s.publicAuthorities = map[string]struct{}{"192.0.2.10:23998": {}}
+	s.publicAccess.authorities = map[string]struct{}{"192.0.2.10:23998": {}}
 
 	req := httptest.NewRequest(http.MethodPost, "http://192.0.2.10:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	req.Host = "192.0.2.10:23998"

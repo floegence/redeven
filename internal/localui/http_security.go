@@ -52,17 +52,9 @@ func (s *Server) configurePublicAuthorities(listeners []net.Listener) error {
 	if err != nil {
 		return err
 	}
-	allowed := make(map[string]struct{}, len(hosts))
-	displayURLs := make([]string, 0, len(hosts))
-	for _, host := range hosts {
-		authority := net.JoinHostPort(host, strconv.Itoa(port))
-		allowed[authority] = struct{}{}
-		displayURLs = append(displayURLs, s.protocol+"://"+publicURLAuthority(authority, s.protocol)+"/")
-	}
-	s.authorityMu.Lock()
-	s.publicAuthorities = allowed
-	s.displayURLs = dedupeStrings(displayURLs)
-	s.authorityMu.Unlock()
+	s.publicBound, s.publicPort = bound, port
+	s.addressRefreshClosed = false
+	s.publishPublicAccess(s.accessSnapshotForHosts(hosts, nil, nil))
 	return nil
 }
 
@@ -163,9 +155,7 @@ func (s *Server) isAllowedPublicAuthority(raw string) bool {
 	if err != nil {
 		return false
 	}
-	s.authorityMu.RLock()
-	_, allowed := s.publicAuthorities[canonical]
-	s.authorityMu.RUnlock()
+	_, allowed := s.publicAccessSnapshot().authorities[canonical]
 	return allowed
 }
 
@@ -189,7 +179,7 @@ func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
 		return err == nil
 	}
 	s.authorityMu.RLock()
-	configured := len(s.publicAuthorities) > 0
+	configured := s.publicAccess != nil
 	s.authorityMu.RUnlock()
 	if configured {
 		return s.isAllowedPublicAuthority(r.Host)
