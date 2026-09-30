@@ -160,7 +160,7 @@ scan_root() {
       die "runtime archive evidence is invalid: $archive"
     fi
     rm -rf "$extract_parent"
-  done < <(find "$root" -mindepth 1 -maxdepth 1 -type f -name 'redeven_*.tar.gz' -print | sort)
+  done < <(find "$root" -mindepth 1 -maxdepth 1 -type f -name 'redeven_*.tar.gz' ! -name 'redeven_relink_linux_*.tar.gz' -print | sort)
 
   if find "$root" -mindepth 2 -type f \( -name redevplugin-runtime -o -name "$RUNTIME_MARKER" \) -print -quit | grep -q .; then
     die "nested unpacked ReDevPlugin payload is outside the verified runtime directory"
