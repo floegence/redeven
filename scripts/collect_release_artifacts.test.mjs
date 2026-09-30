@@ -115,6 +115,26 @@ test('collects only the closed four-target release inventory', () => {
   }
 });
 
+test('normalizes Linux update feeds to the published installer names', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-release-collector-'));
+  try {
+    const downloads = createFixture(root);
+    write(path.join(downloads, 'desktop-linux-amd64'), 'latest-linux.yml', Buffer.from(`version: 1.2.3\nfiles:\n  - url: Redeven-Desktop-1.2.3-linux-amd64.deb\n  - url: Redeven-Desktop-1.2.3-linux-x86_64.rpm\npath: Redeven-Desktop-1.2.3-linux-amd64.deb\n`));
+    write(path.join(downloads, 'desktop-linux-arm64'), 'latest-linux-arm64.yml', Buffer.from(`version: 1.2.3\nfiles:\n  - url: Redeven-Desktop-1.2.3-linux-arm64.deb\n  - url: Redeven-Desktop-1.2.3-linux-aarch64.rpm\npath: Redeven-Desktop-1.2.3-linux-arm64.deb\n`));
+    const destination = path.join(root, 'release');
+    collect(downloads, destination, 'v1.2.3');
+    const amd64Feed = readFileSync(path.join(destination, 'latest-linux.yml'), 'utf8');
+    const arm64Feed = readFileSync(path.join(destination, 'latest-linux-arm64.yml'), 'utf8');
+    assert.match(amd64Feed, /Redeven-Desktop-1\.2\.3-linux-x64\.deb/);
+    assert.match(amd64Feed, /Redeven-Desktop-1\.2\.3-linux-x64\.rpm/);
+    assert.match(arm64Feed, /Redeven-Desktop-1\.2\.3-linux-arm64\.rpm/);
+    assert.doesNotMatch(amd64Feed, /linux-amd64|linux-x86_64/);
+    assert.doesNotMatch(arm64Feed, /linux-aarch64/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('excludes Sparkle stable-feed assets from prereleases', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-release-collector-'));
   try {

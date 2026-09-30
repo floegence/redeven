@@ -19,6 +19,7 @@ import {
   readdirSync,
   rmSync,
   unlinkSync,
+  writeFileSync,
   writeSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -162,7 +163,9 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
         addOutput(outputs, receiptName, receipt);
       }
       for (const updateFile of target.updateFiles) {
-        addOutput(outputs, updateFile, stage(path.join(desktopDirectory, updateFile)));
+        const update = stage(path.join(desktopDirectory, updateFile));
+        if (target.goos === 'linux') normalizeLinuxUpdateFeed(update, target, installerNames);
+        addOutput(outputs, updateFile, update);
       }
     }
 
@@ -192,6 +195,25 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
   } finally {
     rmSync(stagingDirectory, { recursive: true, force: true });
   }
+}
+
+function normalizeLinuxUpdateFeed(staged, target, installerNames) {
+  const original = readFileSync(staged.stagedPath, 'utf8');
+  if (!original.includes('files:')) return;
+  const generatedArchitectures = target.desktopArch === 'x64' ? ['amd64', 'x86_64'] : ['arm64', 'aarch64'];
+  let normalized = original;
+  for (const [index, installerName] of installerNames.entries()) {
+    const extension = path.extname(installerName);
+    const generatedName = installerName.replace(`-${target.desktopArch}${extension}`, `-${generatedArchitectures[index]}${extension}`);
+    if (normalized.includes(generatedName)) normalized = normalized.split(generatedName).join(installerName);
+  }
+  if (normalized === original) return;
+  for (const installerName of installerNames) {
+    if (!normalized.includes(installerName)) fail(`${path.basename(staged.source)} does not reference the published installer ${installerName}`);
+  }
+  writeFileSync(staged.stagedPath, normalized, { mode: 0o644 });
+  const descriptor = descriptorFromFile(staged.stagedPath);
+  staged.descriptor = { ...descriptor, name: path.basename(staged.source) };
 }
 
 function stageSource(source, stagingDirectory, sequence, testHooks) {
