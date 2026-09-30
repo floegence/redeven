@@ -11641,7 +11641,7 @@
         "security",
         "ui"
       ],
-      "timestamp": "2026-09-23T08:00:00Z",
+      "timestamp": "2026-10-01T00:00:00Z",
       "frontmatter": {
         "description": "Browse Linux and macOS host applications and open owned, reconnectable graphical sessions through existing authorized windows.",
         "tags": [
@@ -11651,19 +11651,19 @@
           "security",
           "ui"
         ],
-        "timestamp": "2026-09-23T08:00:00Z",
+        "timestamp": "2026-10-01T00:00:00Z",
         "title": "Host application catalog and owned native sessions",
         "type": "Runtime Contract"
       },
-      "body_length": 8471,
+      "body_length": 9000,
       "summary": "Redeven owns application discovery, authorization and independent sharing.\nApplications run as the host OS user without a container or virtual machine.\nClosing a viewer, stopping sharing or exiting Runtime preserves the application;\nordinary quit and confirmed force quit are separate explicit actions. Sharing\nroutes are ephemeral. Surviving Linux instances require verified recovery, while\nmacOS uses native OS inventory. Missing capabilities and failed capture remain\nvisible and never imply that an application exited.",
       "sections": [
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The [macOS contract](macos-host-applications.md) owns native launch and capture;\nthe [Linux lifecycle contract](linux-application-lifecycle.md) owns private display\nrecovery. [Env App resource snapshots](../ui/env-resource-cache.md) restore inventory\npresentation without granting process or route authority.\n\nLinux consumes published private Wayland/Xwayland and retained Xpra capabilities.\nThe [managed preparation contract](host-application-preparation.md) owns private\ncomponent acquisition; [platform initialization](host-application-platforms.md)\nowns immutable launch plans, package identity and limited host-service access.\nNative host applications need no physical display or complete desktop. Sandboxed\npackages still need their installed runtime and required host services. Private\ngraphics is not an OS sandbox and does not change the user's files or permissions.\n\nGIO supplies standard application metadata, localized names, visibility, executable\nresolution, and field expansion. Descriptions and category identifiers come directly\nfrom each host desktop entry. The library derives its entire category filter from\nthat inventory, preserving unfamiliar identifiers without a product taxonomy or\ncategory-to-description substitution. Missing descriptions remain absent; custom\nentries receive no invented categories or icons. Icon lookup uses the host's active\nGTK theme, or GTK's standard installed icon paths when no display is available;\nRedeven does not force an icon theme. An unresolved icon uses a neutral application\nglyph. Terminal-only desktop entries are excluded.\nFor entries declaring D-Bus activation, a private launch copy disables activation\nso GIO executes the declared command within the new display/bus environment; the published planner\nthen owns package-specific scope/portal adaptation without adopting external windows.\nApplications without a desktop entry can be registered by absolute executable\npath and arguments. Redeven stores these entries in its private application\ndirectory, without changing the host's system menu. Arguments never pass through\na shell; literal percent signs and Desktop Entry quoting are preserved. Custom\nentries are shared within this Runtime's host-user catalog.\n\nSupport for native packages, Snap, Flatpak, AppImage, Wayland and Xwayland is\nbounded by real [platform evidence](../operations/host-application-platform-validation.md).\nApplication-specific singleton, hardware, permissions and desktop service limits\nremain explicit. No failure retries the application with a second backend. The\n[client input contract](host-application-input.md) owns composition, keys and\nclipboard. Browser permissions and reserved shortcuts still apply. Audio,\nmicrophone, webcam, printing and remote notification forwarding remain excluded.",
-          "char_count": 2792
+          "body": "The [macOS contract](macos-host-applications.md) owns native launch and capture;\nthe [Linux lifecycle contract](linux-application-lifecycle.md) owns private display\nrecovery. [Env App resource snapshots](../ui/env-resource-cache.md) restore inventory\npresentation without granting process or route authority.\n\nLinux consumes published private Wayland/Xwayland and retained Xpra capabilities.\nThe [managed preparation contract](host-application-preparation.md) owns private\ncomponent acquisition; [platform initialization](host-application-platforms.md)\nowns immutable launch plans, package identity and limited host-service access.\nNative host applications need no physical display or complete desktop. Sandboxed\npackages still need their installed runtime and required host services. Private\ngraphics is not an OS sandbox and does not change the user's files or permissions.\n\nGIO supplies standard application metadata, localized names, visibility, executable\nresolution, and field expansion. Descriptions and category identifiers come directly\nfrom each host desktop entry. The library derives its entire category filter from\nthat inventory, preserving unfamiliar identifiers without a product taxonomy or\ncategory-to-description substitution. Missing descriptions remain absent; custom\nentries receive no invented categories or icons. Icon lookup uses the host's active\nGTK theme and its normal inheritance first, or GTK's standard search paths when\nno display is available. Missing or unreadable named icons are then looked up in\ninstalled application icon themes, in search-path order and stable theme-name\norder. Independent theme objects preserve the host's active theme; cursor-only\nand invalid themes are ignored. Absolute file icons keep their declared source.\nThe published native component supplies standalone SVG decoding and PNG encoding;\ninstalling the current component recipe is required for that capability. Returned\nicons remain bounded PNG data URIs. An unresolved icon uses a neutral application\nglyph. Terminal-only desktop entries are excluded.\nFor entries declaring D-Bus activation, a private launch copy disables activation\nso GIO executes the declared command within the new display/bus environment; the published planner\nthen owns package-specific scope/portal adaptation without adopting external windows.\nApplications without a desktop entry can be registered by absolute executable\npath and arguments. Redeven stores these entries in its private application\ndirectory, without changing the host's system menu. Arguments never pass through\na shell; literal percent signs and Desktop Entry quoting are preserved. Custom\nentries are shared within this Runtime's host-user catalog.\n\nSupport for native packages, Snap, Flatpak, AppImage, Wayland and Xwayland is\nbounded by real [platform evidence](../operations/host-application-platform-validation.md).\nApplication-specific singleton, hardware, permissions and desktop service limits\nremain explicit. No failure retries the application with a second backend. The\n[client input contract](host-application-input.md) owns composition, keys and\nclipboard. Browser permissions and reserved shortcuts still apply. Audio,\nmicrophone, webcam, printing and remote notification forwarding remain excluded.",
+          "char_count": 3272
         },
         {
           "id": "contract",
@@ -29275,5 +29275,5 @@
       ]
     }
   ],
-  "source_sha256": "41fff158cd9d8f6a737f5d0114ad943fe73f61d032eb0b47a8f10f675ed84703"
+  "source_sha256": "a7ca76c3ee109074aeec65007db06a507081113f30d40f0ced9769d4e8f7a2d9"
 }

@@ -27,27 +27,58 @@ def applications(directory):
     return found
 
 
-def icon_data(app):
+def icon_themes():
+    # Preserve GTK's active theme and inherited/hicolor lookup first. Alternate
+    # installed themes use independent objects and never change host settings.
+    active = Gtk.IconTheme.get_default() if Gtk.Settings.get_default() else Gtk.IconTheme.new()
+    yield active
+    paths = active.get_search_path()
+    seen = set()
+    for directory in paths:
+        try:
+            entries = sorted(pathlib.Path(directory).iterdir(), key=lambda path: path.name)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.name in seen:
+                continue
+            try:
+                metadata = GLib.KeyFile.new()
+                metadata.load_from_file(str(entry / "index.theme"), GLib.KeyFileFlags.NONE)
+                if not metadata.get_string_list("Icon Theme", "Directories"):
+                    continue
+            except GLib.Error:
+                # Cursor-only themes and incomplete installations supply no
+                # application icon directories.
+                continue
+            seen.add(entry.name)
+            theme = Gtk.IconTheme.new()
+            theme.set_search_path(paths)
+            theme.set_custom_theme(entry.name)
+            yield theme
+
+
+def icon_data(app, themes=None):
     icon = app.get_icon()
     if not icon:
         return ""
-    try:
-        # Use the host's active GTK theme. With no display, GTK's standalone
-        # lookup still resolves file icons and the standard installed icon paths.
-        theme = Gtk.IconTheme.get_default() if Gtk.Settings.get_default() else Gtk.IconTheme.new()
-        info = theme.lookup_by_gicon(icon, 64, Gtk.IconLookupFlags.FORCE_SIZE)
-        if not info:
-            return ""
-        success, data = info.load_icon().save_to_bufferv("png", [], [])
-        if success and len(data) <= 65536:
-            return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
-    except GLib.Error:
-        pass
+    for theme in themes if themes is not None else icon_themes():
+        try:
+            info = theme.lookup_by_gicon(icon, 64, Gtk.IconLookupFlags.FORCE_SIZE)
+            if info:
+                success, data = info.load_icon().save_to_bufferv("png", [], [])
+                if success and len(data) <= 65536:
+                    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+        except GLib.Error:
+            pass
+        if not isinstance(icon, Gio.ThemedIcon):
+            break
     return ""
 
 
 def catalog(directory):
     result = []
+    themes = list(icon_themes())
     for identity, app in applications(directory).items():
         if not isinstance(app, Gio.DesktopAppInfo) or not app.should_show():
             continue
@@ -58,7 +89,7 @@ def catalog(directory):
             "name": app.get_display_name(),
             "description": app.get_description() or "",
             "categories": [s for s in (app.get_categories() or "").split(";") if s],
-            "icon": icon_data(app),
+            "icon": icon_data(app, themes),
             "custom": identity.startswith("custom:"),
         })
     return sorted(result, key=lambda item: (item["name"].casefold(), item["id"]))

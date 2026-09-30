@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Host application catalog and owned native sessions
 description: Browse Linux and macOS host applications and open owned, reconnectable graphical sessions through existing authorized windows.
 tags: [runtime, desktop, applications, security, ui]
-timestamp: 2026-09-23T08:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 # Summary
 
@@ -36,8 +36,14 @@ from each host desktop entry. The library derives its entire category filter fro
 that inventory, preserving unfamiliar identifiers without a product taxonomy or
 category-to-description substitution. Missing descriptions remain absent; custom
 entries receive no invented categories or icons. Icon lookup uses the host's active
-GTK theme, or GTK's standard installed icon paths when no display is available;
-Redeven does not force an icon theme. An unresolved icon uses a neutral application
+GTK theme and its normal inheritance first, or GTK's standard search paths when
+no display is available. Missing or unreadable named icons are then looked up in
+installed application icon themes, in search-path order and stable theme-name
+order. Independent theme objects preserve the host's active theme; cursor-only
+and invalid themes are ignored. Absolute file icons keep their declared source.
+The published native component supplies standalone SVG decoding and PNG encoding;
+installing the current component recipe is required for that capability. Returned
+icons remain bounded PNG data URIs. An unresolved icon uses a neutral application
 glyph. Terminal-only desktop entries are excluded.
 For entries declaring D-Bus activation, a private launch copy disables activation
 so GIO executes the declared command within the new display/bus environment; the published planner
@@ -122,7 +128,7 @@ loading uses matching horizontal skeleton cards and respects reduced motion.
 # Evidence
 
 - `internal/hostapps/manager.go`, `linux.go` and `desktop.py`: discovery, instance recovery and sharing ownership.
-- `internal/hostapps/manager_test.go` and `desktop_test.py`: lifecycle, installed-stack launch/resume/stop, and literal argument preservation.
+- `internal/hostapps/manager_test.go` and `desktop_test.py`: lifecycle, installed-stack launch/resume/stop, managed/system icon decoding and theme priority, and literal argument preservation.
 - `internal/codeapp/appserver/host_applications.go`, `host_application_viewer/`, and `host_applications_test.go`: API, permission/owner gates, and escaped private bootstrap.
 - `internal/portforward/owned_session_test.go`: pinned route lifetime and persistence rejection.
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.tsx` and its tests: library, session controls, permission states, and window opening.

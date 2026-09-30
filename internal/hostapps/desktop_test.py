@@ -1,4 +1,5 @@
 """Integration checks for the host GIO adapter (requires Python GIO/GTK 3)."""
+import base64
 import importlib.util
 import json
 import os
@@ -8,6 +9,10 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
+
+import gi
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import GdkPixbuf
 
 spec = importlib.util.spec_from_file_location("desktop", Path(__file__).with_name("desktop.py"))
 desktop = importlib.util.module_from_spec(spec)
@@ -79,6 +84,67 @@ class DesktopEntryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     desktop.add_application(directory, "invalid", {"executable": executable, "name": "Invalid"})
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+
+class DesktopIconTests(unittest.TestCase):
+    def test_icon_fallback_uses_installed_themes_without_changing_active_theme(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def theme(name, color, icon_name):
+                theme_root = root / name
+                icons = theme_root / '64x64/apps'
+                icons.mkdir(parents=True)
+                (theme_root / 'index.theme').write_text('[Icon Theme]\nName=' + name + '\nDirectories=64x64/apps\n[64x64/apps]\nSize=64\nType=Fixed\nContext=Applications\n')
+                (icons / (icon_name + '.svg')).write_text('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="' + color + '"/></svg>')
+            (root / 'CursorOnly').mkdir()
+            (root / 'CursorOnly/index.theme').write_text('[Icon Theme]\nName=Cursor Only\n')
+            theme('Active', '#13579b', 'shared')
+            theme('Alternate', '#abcdef', 'shared')
+            theme('OtherInstalled', '#2468ac', 'alternate-only')
+            (root / 'Active/64x64/apps/unreadable.svg').write_text('<svg invalid')
+            (root / 'Alternate/64x64/apps/unreadable.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#abcdef"/></svg>')
+            active = desktop.Gtk.IconTheme.new()
+            active.set_search_path([str(root)])
+            active.set_custom_theme('Active')
+            def app(name):
+                entry = root / (name + '.desktop')
+                entry.write_text('[Desktop Entry]\nType=Application\nName=Fixture\nExec=/bin/true\nIcon=' + name + '\n')
+                return desktop.Gio.DesktopAppInfo.new_from_filename(str(entry))
+            def pixels(data):
+                self.assertTrue(data.startswith('data:image/png;base64,'))
+                loader = GdkPixbuf.PixbufLoader.new_with_type('png')
+                loader.write(base64.b64decode(data.split(',', 1)[1]))
+                loader.close()
+                image = loader.get_pixbuf()
+                self.assertEqual((image.get_width(), image.get_height()), (64, 64))
+                return bytes(image.get_pixels()[:3])
+            with patch.object(desktop.Gtk.Settings, 'get_default', return_value=object()), patch.object(desktop.Gtk.IconTheme, 'get_default', return_value=active):
+                self.assertEqual(pixels(desktop.icon_data(app('shared'))), bytes([19, 87, 155]))
+                self.assertEqual(pixels(desktop.icon_data(app('alternate-only'))), bytes([36, 104, 172]))
+                self.assertEqual(pixels(desktop.icon_data(app('unreadable'))), bytes([171, 205, 239]))
+                self.assertEqual(desktop.icon_data(app('no-such-fixture-icon')), '')
+                self.assertEqual(pixels(desktop.icon_data(app('shared'))), bytes([19, 87, 155]))
+            self.assertIsNone(active.lookup_icon('alternate-only', 64, 0))
+
+    def test_icon_fallback_without_display_uses_standard_search_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            icons = root / 'Installed/64x64/apps'
+            icons.mkdir(parents=True)
+            (root / 'Installed/index.theme').write_text('[Icon Theme]\nName=Installed\nDirectories=64x64/apps\n[64x64/apps]\nSize=64\nType=Fixed\nContext=Applications\n')
+            image = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 64, 64)
+            image.fill(0x13579bff)
+            image.savev(str(icons / 'fixture.png'), 'png', [], [])
+            entry = root / 'fixture.desktop'
+            entry.write_text('[Desktop Entry]\nType=Application\nName=Fixture\nExec=/bin/true\nIcon=fixture\n')
+            app = desktop.Gio.DesktopAppInfo.new_from_filename(str(entry))
+            original_new = desktop.Gtk.IconTheme.new
+            def isolated_theme():
+                result = original_new()
+                result.set_search_path([str(root)])
+                return result
+            with patch.object(desktop.Gtk.Settings, 'get_default', return_value=None), patch.object(desktop.Gtk.IconTheme, 'new', side_effect=isolated_theme):
+                self.assertTrue(desktop.icon_data(app).startswith('data:image/png;base64,'))
 
 
 if __name__ == "__main__":
