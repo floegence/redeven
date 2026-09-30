@@ -173,6 +173,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
         </div>
 
         <div
+          data-file-workspace-toolbar-actions
           class={cn(
             'flex min-w-0 items-center gap-1.5',
             toolbarLayout() === 'inline'

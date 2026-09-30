@@ -9,22 +9,24 @@
 .file-workspace-header [data-toolbar-layout="stacked"] .file-workspace-view-toggle { padding-inline: 0; }
 
 /* The path remains on its own row; the filter and every file action share the
- * next row so the content viewport starts as high as possible on phones. */
-.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child {
+ * next row so the content viewport starts as high as possible on phones.
+ * Use the action marker rather than :last-child: canvas preview insertion must
+ * not invalidate unrelated widget descendants through positional selectors. */
+.file-workspace-header [data-toolbar-layout="stacked"] > div[data-file-workspace-toolbar-actions] {
   min-width: 0;
   flex-wrap: nowrap;
   gap: 4px;
 }
-.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child > label {
+.file-workspace-header [data-toolbar-layout="stacked"] > div[data-file-workspace-toolbar-actions] > label {
   min-width: 128px;
   flex: 1 1 auto;
 }
-.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child > div,
-.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child > div > div {
+.file-workspace-header [data-toolbar-layout="stacked"] > div[data-file-workspace-toolbar-actions] > div,
+.file-workspace-header [data-toolbar-layout="stacked"] > div[data-file-workspace-toolbar-actions] > div > div {
   flex-shrink: 0;
   gap: 4px;
 }
-.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child button {
+.file-workspace-header [data-toolbar-layout="stacked"] > div[data-file-workspace-toolbar-actions] button {
   flex: 0 0 var(--floe-control-height-md);
   height: var(--floe-control-height-md);
   width: var(--floe-control-height-md);
@@ -35,6 +37,6 @@
 @media (pointer: coarse) {
   .file-workspace-header input { font-size: 1rem; }
   .file-workspace-header label { height: 2.75rem; }
-  .file-workspace-header [data-toolbar-layout="stacked"] > div:last-child button { flex-basis: 2.75rem; width: 2.75rem; }
+  .file-workspace-header [data-toolbar-layout="stacked"] > div[data-file-workspace-toolbar-actions] button { flex-basis: 2.75rem; width: 2.75rem; }
   .file-workspace-header button { min-width: 2.75rem; min-height: 2.75rem; }
 }

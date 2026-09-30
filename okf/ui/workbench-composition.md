@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench composition surfaces and editing
 description: Edit notes, text, and optional region names through published Floe surfaces while preserving layout content and materials.
 tags: [ui, workbench, composition, editing, persistence]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 # Summary
 
@@ -18,6 +18,14 @@ Canvas and widget surfaces use the published matte palette across every shell pr
 Sticky notes offer tint, tab, and ruled materials with six colors, including graphite. Notes expose an editable body, an optional editable title, and a dedicated drag handle. Existing body-only notes keep their title absent. They do not show an uneditable metadata strip. Regions offer color field, outline, hatch, dots, grid, and wash materials; existing stored materials retain their identity. Newly created regions use solid fill at 0.72 opacity. Palette previews share the actual object’s theme-aware colors. Compact material thumbnails emphasize pattern contrast and density so hatch, dots, grid, and wash remain distinct at small sizes; they contain no miniature widget decorations.
 
 Selected-object tools stay anchored to the object during movement and viewport changes. The published local floating layer owns projection, clamping, and above/below placement. Tools keep a readable screen size and hide when their object leaves the visible canvas. Compact material and emoji menus use one mutually exclusive popup, measured before it becomes visible, without resizing the toolbar. Region and text drag handles sit outside the left edge. Position updates are driven by geometry or viewport changes and resize observation, without continuous idle polling. Materials use fills, borders, and static patterns rather than animated filters.
+
+Dock placement previews retain Floe's published drag threshold, cancellation,
+geometry, and final-pointer placement. Redeven business styles must not make
+preview insertion invalidate unrelated widget subtrees. The Files toolbar
+targets its explicitly marked action row instead of a positional `div:last-child`
+ancestor selector. Responsive layout and action dimensions remain stable when
+adjacent nodes appear or disappear; the host adds no alternate preview or drag
+implementation.
 
 ## Editing
 
@@ -52,6 +60,9 @@ Migration atomicity, incompatible-schema rejection, and startup failure behavior
 - `redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts` - English first-run content, non-overlapping region placement, and complete-scene laptop framing.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Thin published-surface adapter and localized composition messages.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx` - Product CSS across themes and direct localized note/region editing in Chromium.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - The Files header marks its product-owned action row across responsive layout updates.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/file-workspace-header.css` - Explicit action-row selectors avoid canvas-wide positional style invalidation.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.toolbar.browser.test.tsx` - Real browser checks preserve action geometry across narrow/wide layouts and adjacent insertion/removal.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/runtimeWorkbenchLayout.test.ts` - Material-aware equality and blank-content projection round trip.
 - `redeven:internal/workbenchlayout/schema.go` - Contiguous schema upgrade and historical migration read boundary.
 - `redeven:internal/workbenchlayout/composition_test.go` - Persistence, migration preservation, rollback, drift rejection, and repeated open behavior.
