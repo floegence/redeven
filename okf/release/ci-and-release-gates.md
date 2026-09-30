@@ -300,7 +300,9 @@ architecture verification passes the final framework binary before Apple's
 `-verify_arch` option so the hosted `lipo` invocation matches the native tool
 contract on both macOS targets. The ReDevPlugin consumption scan excludes the
 Linux relink source/object archives from its runtime archive pattern; the
-dedicated relink gate validates those archives separately.
+dedicated relink gate validates those archives separately. Compatibility
+manifest release tests read the current reviewed contract so generated epoch
+and upgrade-window assertions cannot drift from the published source.
 The DEB parser accepts POSIX ustar and GNU regular/directory headers,
 bounded GNU long names, and a metadata-only root directory. RPM packaging
 disables optional build-id symlink indexes rather than admitting links into the
