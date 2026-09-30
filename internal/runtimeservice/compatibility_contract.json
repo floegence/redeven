@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.13.11",
-    "previous_release": "v0.13.10",
+    "release_version": "v0.13.12",
+    "previous_release": "v0.13.11",
     "reviewed_at": "2026-09-30",
     "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Retain Runtime Service protocol and compatibility epoch 34 while keeping compatibility-manifest release tests aligned with the reviewed contract.",
+    "summary": "Retain Runtime Service protocol and compatibility epoch 34 while binding Linux update feeds to the published installer names.",
     "same_window_rationale": "Compared with v0.13.6, the release workflow now uploads only installers, verification receipts and Linux update feeds, excluding Electron Builder diagnostics and unrelated YAML files. This repairs the boundary between native packaging and the closed release collector. Runtime and Desktop executable behavior, signed-resource handling, authorization, storage schemas, attach/start wire shapes, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, protocol version, compatibility epoch, minimum versions and terminal behavior remain unchanged. No downstream compatibility-window change is required.",
     "checked_surfaces": [
+      "Reviewed the v0.13.11-to-v0.13.12 release-asset correction: the collector rewrites Electron Builder's Linux architecture aliases in latest-linux*.yml to the exact x64 and arm64 installer names staged in the closed inventory, preserving each file's size and SHA512 fields. Runtime and Desktop executable behavior, signed-resource handling, authorization, storage schemas, attach/start wire shapes, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap remain unchanged within epoch 34.",
       "Reviewed the v0.13.10-to-v0.13.11 release-test correction: compatibility-manifest generation tests now read the current reviewed contract for the epoch and upgrade window, so a release cannot pass stale expectations after an approved compatibility update. Generated manifests still bind the exact runtime executable digest and four-target release set; Runtime Service, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap remain unchanged within epoch 34.",
       "Reviewed the v0.13.9-to-v0.13.10 release-gate correction: the ReDevPlugin consumption scan now excludes Linux relink source/object archives from the runtime archive pattern, while the dedicated relink package gate continues to validate their contents. Runtime and Desktop executable behavior, signed-resource handling, authorization, storage schemas, attach/start wire shapes, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap remain unchanged within epoch 34.",
       "Reviewed the v0.13.8-to-v0.13.9 macOS package-verification correction: Apple's lipo accepts the final Sparkle binary path before the -verify_arch option, so the hosted verifier now uses the native command syntax exercised by both arm64 and x64 fixtures. The verifier still binds the architecture, Team ID, hardened runtime, Sparkle updater policy, stapled tickets, and Gatekeeper distribution result without changing Runtime Service, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, or SSH bootstrap contracts.",
