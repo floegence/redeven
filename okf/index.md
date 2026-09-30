@@ -8,6 +8,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
+- [Native Runtime bridge](architecture/native-runtime-bridge.md) - Attach native SSH clients to running instances with independent, restricted authorization.
+
 - [Flower browser source ownership](architecture/flower-browser-sources.md) - Admit browser targets once, preserve private ancestry and fence source loss without product projection.
 - [Flower browser Linux preparation](architecture/flower-browser-linux-preparation.md) - Prepare a separate persistent browser application while preserving personal data and the existing application lifecycle.
 - [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.

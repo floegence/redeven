@@ -20,6 +20,8 @@ import (
 
 const StatusPath = "/v1/status"
 
+const NativeBridgePath = "/v1/native-bridge"
+
 type AttachState string
 
 const (
@@ -108,11 +110,13 @@ func NormalizeLocalUIBridgeURL(raw string) (string, error) {
 type StatusProvider func(context.Context) (RuntimeAttachStatus, error)
 
 type Server struct {
-	lifecycleMu sync.Mutex
-	socketPath  string
-	provider    StatusProvider
-	httpServer  *http.Server
-	listener    net.Listener
+	// NativeBridge is reachable only through the owner-only Unix socket.
+	NativeBridge http.Handler
+	lifecycleMu  sync.Mutex
+	socketPath   string
+	provider     StatusProvider
+	httpServer   *http.Server
+	listener     net.Listener
 }
 
 func NewServer(socketPath string, provider StatusProvider) (*Server, error) {
@@ -151,6 +155,9 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc(StatusPath, s.handleStatus)
+	if s.NativeBridge != nil {
+		mux.Handle(NativeBridgePath, s.NativeBridge)
+	}
 	srv := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,

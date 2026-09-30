@@ -113,14 +113,14 @@ func targetProcessKnownRole(snapshot runtimeProcessSnapshot, targetRoot string) 
 		switch command {
 		case "run":
 			role = "runtime"
-		case "desktop-bridge":
+		case "desktop-bridge", "native-bridge":
 			role = "runtime_bridge"
 		}
 	case "redeven-gateway":
 		switch command {
 		case "serve":
 			role = "gateway"
-		case "desktop-bridge":
+		case "desktop-bridge", "native-bridge":
 			role = "gateway_bridge"
 		}
 	}

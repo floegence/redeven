@@ -41,6 +41,8 @@ Desktop Web Service handoff cookies are HttpOnly and SameSite=Strict. TLS redemp
 
 Cookies isolate presentation scopes but cannot extend or create authorization. Expiry, logout, security changes and Runtime restart require authentication again. Invalid authorities and incompatible Desktop peers fail closed through accessgate.
 
+Native SSH clients use the [native Runtime bridge](../architecture/native-runtime-bridge.md). Each bridge retains a separate native access identity linked to its access-gate owner; revoking the owner cancels that bridge. Native transport never acquires trusted Desktop management identity.
+
 # Evidence
 
 - `redeven:internal/localui/access_cookie.go` - Owns name derivation, attributes and exact-scope deletion.

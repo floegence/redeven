@@ -9,7 +9,7 @@ require (
 	github.com/floegence/floe-native-apps v0.21.1
 	github.com/floegence/floeterm/terminal-go v0.19.2
 	github.com/floegence/floret/v7 v7.18.3
-	github.com/floegence/flowersec/flowersec-go/v5 v5.6.0
+	github.com/floegence/flowersec/flowersec-go/v5 v5.7.0
 	github.com/floegence/redeven-service-templates v0.6.0
 	github.com/floegence/redevplugin/v3 v3.0.33
 	github.com/godbus/dbus/v5 v5.2.2

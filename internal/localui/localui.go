@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
@@ -93,9 +94,11 @@ type Options struct {
 }
 
 type Server struct {
-	closeMu      sync.Mutex
-	nativeAccess sync.Map // *nativeCodeAccess -> access-session cancellation
-	log          *slog.Logger
+	closeMu           sync.Mutex
+	nativeBridges     sync.Map // *nativeRuntimeBridge -> context.CancelFunc
+	nativeBridgeCount atomic.Int32
+	nativeAccess      sync.Map // *nativeCodeAccess -> access-session cancellation
+	log               *slog.Logger
 
 	bind                   BindSpec
 	protocol               string
@@ -565,12 +568,22 @@ func (s *Server) configureAcceptor() error {
 				return errors.New("local session metadata is unavailable")
 			}
 			metaCopy := pending.meta
+			accessGateSessionID := pending.accessSessionID
+			if strings.HasPrefix(pending.accessSessionID, "native:") {
+				var active bool
+				accessGateSessionID, active = s.nativeAccessOwner(pending.accessSessionID)
+				if !active {
+					s.releaseAcceptedSession(channelID)
+					return errors.New("native bridge session has closed")
+				}
+			}
 			err := s.a.ServeLocalDirectSession(ctx, current, &metaCopy, agent.LocalDirectSessionOptions{
 				TraceID:                   pending.traceID,
 				ConnectArtifactIssuedAtMs: pending.connectArtifactIssuedAtMs,
 				PluginCredentialHash:      pending.pluginCredentialHash,
 				HasPluginCredential:       true,
 				AccessSessionID:           pending.accessSessionID,
+				AccessGateSessionID:       accessGateSessionID,
 				TrustedManagement:         pending.accessSessionID == "trusted-desktop",
 				OnPluginSessionReady: func() {
 					s.markAcceptedPluginSessionReady(channelID, pending.accessSessionID, pending.pluginCredentialHash)
@@ -802,6 +815,7 @@ func (s *Server) startRuntimeStatusServer(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	statusServer.NativeBridge = http.HandlerFunc(s.handleNativeRuntimeBridge)
 	if err := statusServer.Start(ctx); err != nil {
 		return err
 	}
@@ -871,6 +885,7 @@ func (s *Server) Close() error {
 	}
 	s.closeMu.Lock()
 	defer s.closeMu.Unlock()
+	s.closeNativeRuntimeBridges()
 	s.stopPublicAddressRefresh()
 	s.closeNativeCodeAccess("")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -1114,6 +1129,14 @@ func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) activeLocalAccessSession(r *http.Request) (string, time.Time, bool) {
+	id, expires, ok := s.resolveLocalAccessSession(r)
+	if bridge := nativeRuntimeRequest(r); ok && bridge != nil {
+		id = bridge.bindAccess(id)
+	}
+	return id, expires, ok
+}
+
+func (s *Server) resolveLocalAccessSession(r *http.Request) (string, time.Time, bool) {
 	if s == nil {
 		return "", time.Time{}, false
 	}
@@ -1566,7 +1589,7 @@ func (s *Server) handleAccessUnlock(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Message: "invalid json"}})
 		return
 	}
-	if s.accessGate.TwoFactorEnabled() && r.TLS == nil && !isTrustedLocalUIBridge(r) {
+	if s.accessGate.TwoFactorEnabled() && r.TLS == nil && !isTrustedLocalUIBridge(r) && nativeRuntimeRequest(r) == nil {
 		http.Error(w, "HTTPS is required for two-factor authentication", http.StatusForbidden)
 		return
 	}
@@ -1789,6 +1812,9 @@ func (s *Server) runtimeServiceSnapshot() runtimeservice.Snapshot {
 func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if r == nil {
 		return "", errors.New("nil request")
+	}
+	if bridge := nativeRuntimeRequest(r); bridge != nil {
+		return bridge.endpoint, nil
 	}
 	requestAuthority, err := canonicalPublicAuthority(r.Host, s.protocol)
 	if err != nil {
@@ -2014,7 +2040,7 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 		}
 		artifact = json.RawMessage(issued.ArtifactJSON())
 		authorizationRecord = issued.AuthorizationRecord()
-	} else if s.protocol == config.LocalUIProtocolHTTP {
+	} else if s.protocol == config.LocalUIProtocolHTTP || strings.HasPrefix(accessSessionID, "native:") {
 		issued, issueErr := controlplane.NewIssuer().IssueHTTPDirect(controlplane.HTTPDirectIssueOptions{
 			Session: sessionOptions, Endpoint: strings.TrimSpace(wsURL),
 			RendezvousGroupID: "local-ui-" + channelID, ListenerAudience: "redeven-local-ui",
@@ -2086,7 +2112,7 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.TLS == nil && s.protocol != config.LocalUIProtocolHTTP && !isTrustedLocalUIBridge(r) {
+	if r.TLS == nil && s.protocol != config.LocalUIProtocolHTTP && !isTrustedLocalUIBridge(r) && nativeRuntimeRequest(r) == nil {
 		http.Error(w, "This Runtime requires HTTPS for public connections", http.StatusForbidden)
 		return
 	}
@@ -2134,6 +2160,7 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "local access session unavailable", http.StatusLocked)
 		return
 	}
+	bridge := nativeRuntimeRequest(r)
 	acquisition, err := s.mintPending(meta, wsURL, spendOrigin, traceID, accessSessionID, accessExpiresAt, privateLoopback)
 	if err != nil {
 		if s.log != nil {
@@ -2144,6 +2171,11 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusServiceUnavailable
 		}
 		http.Error(w, "failed to mint connect artifact", status)
+		return
+	}
+	if bridge != nil && !bridge.register(acquisition.ChannelID) {
+		s.releaseAcceptedSession(acquisition.ChannelID)
+		http.Error(w, "native session closed", http.StatusGone)
 		return
 	}
 	if len(acquisition.Artifact) == 0 {
@@ -2663,6 +2695,7 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 	if s == nil || strings.TrimSpace(accessSessionID) == "" {
 		return
 	}
+	s.closeNativeRuntimeAccess(accessSessionID)
 	s.closeNativeCodeAccess(accessSessionID)
 	accessSessionID = strings.TrimSpace(accessSessionID)
 	if accessSessionID == "" {

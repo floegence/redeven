@@ -174,6 +174,9 @@ func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
 	if r == nil || s == nil {
 		return false
 	}
+	if bridge := nativeRuntimeRequest(r); bridge != nil {
+		return r.Host == bridge.authority
+	}
 	if isTrustedLocalUIBridge(r) {
 		_, err := canonicalLoopbackAuthority(r.Host)
 		return err == nil
