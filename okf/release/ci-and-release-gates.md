@@ -298,7 +298,9 @@ hosted runner. Pipeline readers consume complete command output under
 and distribution-policy failures continue to reject the package. Sparkle
 architecture verification passes the final framework binary before Apple's
 `-verify_arch` option so the hosted `lipo` invocation matches the native tool
-contract on both macOS targets.
+contract on both macOS targets. The ReDevPlugin consumption scan excludes the
+Linux relink source/object archives from its runtime archive pattern; the
+dedicated relink gate validates those archives separately.
 The DEB parser accepts POSIX ustar and GNU regular/directory headers,
 bounded GNU long names, and a metadata-only root directory. RPM packaging
 disables optional build-id symlink indexes rather than admitting links into the

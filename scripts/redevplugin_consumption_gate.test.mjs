@@ -80,6 +80,7 @@ test('accepts a signed development runtime and rejects tampered evidence', () =>
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-consumption-'));
   try {
     createFixture(root);
+    writeFileSync(path.join(root, 'redeven_relink_linux_amd64.tar.gz'), 'relink payload is verified by the Linux relink gate');
     run(['--scan-root', root, '--runtime-target', 'linux/amd64']);
     writeFileSync(path.join(root, runtimeNoticesName), 'tampered\n');
     run(['--scan-root', root, '--runtime-target', 'linux/amd64'], 1);
