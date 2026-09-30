@@ -1,8 +1,11 @@
 package hostapps
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
+	"encoding/base64"
+	"image/png"
 	"net"
 	"os"
 	"os/exec"
@@ -57,14 +60,89 @@ func TestInstalledGIOCatalogAndArguments(t *testing.T) {
 	if python == "" {
 		t.Fatal("Python GIO/GTK 3 is unavailable")
 	}
+	runInstalledGIOTests(t, ctx, python, os.Environ())
+}
+
+func TestInstalledDesktopCatalogIcons(t *testing.T) {
+	components := os.Getenv("REDEVEN_TEST_DESKTOP_COMPONENT_STATE")
+	if runtime.GOOS != "linux" || components == "" {
+		t.Skip("requires a task-owned native desktop component installation")
+	}
+	pkg, err := nativeapps.DesktopForPlatform(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := nativeapps.New(components, pkg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := New(t.TempDir(), t.TempDir(), nil)
+	m.setup = manager
+	defer m.Close()
+	root, err := manager.DirectoryFor(pkg.Digest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools, err := nativeapps.ResolveDesktopTools(root, runtime.GOARCH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	// Use the same published interpreter and scoped environment as inventory.
+	runInstalledGIOTests(t, ctx, tools.Python, tools.Environment(os.Environ()), "-k", "icon")
+	if err := m.prepare(); err != nil {
+		t.Fatal(err)
+	}
+	icon := filepath.Join(m.custom, "fixture.svg")
+	if err := os.WriteFile(icon, []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#13579b"/></svg>`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	entry := "[Desktop Entry]\nType=Application\nName=Icon acceptance fixture\nExec=/bin/true\nIcon=" + icon + "\n"
+	if err := os.WriteFile(filepath.Join(m.custom, "icon-fixture.desktop"), []byte(entry), 0600); err != nil {
+		t.Fatal(err)
+	}
+	catalog, selected, err := m.catalog(ctx, "fixture", "en-US")
+	if err != nil || !catalog.Availability.Ready || selected.componentDigest != pkg.Digest() {
+		t.Fatalf("published component catalog unavailable: %+v %v", catalog.Availability, err)
+	}
+	for _, app := range catalog.Applications {
+		if app.ID != "custom:icon-fixture.desktop" {
+			continue
+		}
+		encoded, ok := strings.CutPrefix(app.Icon, "data:image/png;base64,")
+		if !ok {
+			t.Fatal("catalog lost the SVG fixture icon")
+		}
+		data, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := png.Decode(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, g, b, _ := decoded.At(32, 32).RGBA()
+		if decoded.Bounds().Dx() != 64 || decoded.Bounds().Dy() != 64 || r>>8 != 19 || g>>8 != 87 || b>>8 != 155 {
+			t.Fatal("catalog returned incorrect icon pixels")
+		}
+		return
+	}
+	t.Fatal("catalog omitted its private desktop entry")
+}
+
+func runInstalledGIOTests(t *testing.T, ctx context.Context, python string, environment []string, arguments ...string) {
+	t.Helper()
 	dir := t.TempDir()
 	for name, data := range map[string][]byte{"desktop.py": desktopHelper, "desktop_test.py": desktopTests} {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if out, err := exec.CommandContext(ctx, python, filepath.Join(dir, "desktop_test.py")).CombinedOutput(); err != nil {
-		t.Fatalf("GIO catalog/argument checks: %v\n%s", err, out)
+	command := exec.CommandContext(ctx, python, append([]string{"-B", filepath.Join(dir, "desktop_test.py")}, arguments...)...)
+	command.Env = environment
+	if out, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("GIO catalog checks: %v\n%s", err, out)
 	}
 }
 
