@@ -1423,7 +1423,9 @@ describe('FileBrowserWorkspace interactions', () => {
 
     try {
       const toolbar = host.querySelector('[data-toolbar-layout]') as HTMLDivElement | null;
+      const toolbarActions = host.querySelector('[data-file-workspace-toolbar-actions]');
       expect(toolbar).toBeTruthy();
+      expect(toolbarActions?.parentElement).toBe(toolbar);
 
       defineElementWidth(toolbar!, 560);
       triggerResizeObservers();
