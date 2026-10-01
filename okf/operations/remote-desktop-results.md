@@ -3,7 +3,7 @@ type: Acceptance Record
 title: Current-desktop qualification results
 description: Assess published remote desktop measurements, retained failures and outstanding real-host qualification.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-02T03:00:00Z
+timestamp: 2026-10-01T20:36:00Z
 ---
 # Summary
 
@@ -18,15 +18,14 @@ earlier failures or establish their cause.
 
 Redeven commit `314718e5765e1193db225f5dc2ab8b32e224dfe7` consumes published
 `floe-native-apps` v0.22.4 Go and Swift packages at
-`32e7efbce4d3ba9581f7606204eb4768630acc84`. Upstream source checks, release
-qualification, module proxy and checksum-database readback passed. Formal
-product binaries use `GOWORK=off` and no sibling dependency overrides.
+`32e7efbce4d3ba9581f7606204eb4768630acc84` for the results below. The feature
+now adopts published v0.22.5 at `a2c11dabc0c5d4860887f075e79a577ba82447a0`.
+Its release gate and module-proxy/checksum readback passed; product requalification
+is pending. Formal binaries use `GOWORK=off` without sibling overrides.
 
-The Apple Silicon host uses VideoToolbox hardware H.264 at 1080p/1440p. The
-Chromium decoder negotiates `no-preference`; this preference does not prove
-hardware decoding. The product Runtime listens on a task-owned loopback port.
-Foreground qualification is serialized and stops when another application gains
-focus. Shared system load varies substantially and is recorded with measurements.
+Apple Silicon uses VideoToolbox hardware H.264 at 1080p/1440p. Chromium's
+`no-preference` does not prove hardware decoding. The Runtime uses task loopback.
+Foreground tests stop on focus loss and record shared system load.
 
 `server` runs Ubuntu 24.04 GNOME X11, RTX 4090 D and driver 550.90.07. The
 managed musl media stack selects software `x264enc`; its CUDA driver integration
@@ -86,19 +85,17 @@ frames/s. This run loses cadence before client decoding. Shared client system
 load was high and is retained with the evidence.
 
 The published ten-minute input/audio attempt stopped after about 510 seconds
-when native identity changed to `session_unavailable`, revoking input. The
-fixture remained focused and the graphical login was later verified active and
-unlocked. A deterministic upstream regression reproduces interruption when a
-seatless SSH login disappears between logind enumeration and property lookup.
-The candidate filters seatless logins before lookup and preserves failure for
-missing graphical-session properties. It is not yet published or accepted in
-the product; the original failure remains retained.
+with `session_unavailable` despite a focused fixture and active, unlocked login.
+A deterministic regression reproduced a seatless SSH login disappearing between
+logind enumeration and property lookup. Published v0.22.5 excludes seatless
+logins before lookup; missing graphical-session properties still fail closed.
+Its product stability requalification is pending.
 
 A 30-second read-only real-host comparison made 2,208 identity checks per
-version while 100 task SSH logins exited. Published v0.22.4 returned D-Bus
-`UnknownObject` 27 times; the v0.22.5 candidate returned no failures. No capture,
-input or session policy changed. Upstream source CI and installed media-stack
-checks passed; the new tag is awaiting release qualification.
+version while 100 task SSH logins exited: v0.22.4 returned 27 `UnknownObject`
+errors, v0.22.5 none. It captured no screen and injected no input. Source,
+installed-stack, both architecture and macOS checks passed before the immutable
+v0.22.5 release gate and publication.
 
 An actual task Runtime restart passed on v0.22.4: both channels closed, old
 session and ticket routes returned 404, a new session waited for fresh paint,
@@ -111,13 +108,13 @@ unresolved; retain both results rather than treating the retry as a diagnosis.
 
 # Diagnostics And Retained Failures
 
-An intrusive published-engine diagnostic at 1080p observed 60 capture callbacks
-per second, software encoding P95 around 4-7ms and no growing frame-credit
-backlog. Twenty-second native scrolling and window-motion observations each
-drew about 56.3 FPS with interval P95 30.5ms. These short, instrumented runs are
-diagnostics, not substitutes for the required product matrices. A product stage
-probe measured decode-to-draw P95 4.2ms but already saw long capture intervals;
-client load alone cannot explain every failure.
+An intrusive v0.22.5 1440p window diagnostic drew 54.70 FPS/32.4ms over 30s.
+Capture averaged 60 callbacks/s but only 53-59 changed pictures/s in several
+intervals. Typical codec P95 was 3-4ms, submission-to-publication P95 6-8ms and
+frame credits 0-2. The fixture requested 59.84 updates/s. This locates lost
+cadence before encoding without distinguishing capture timing from compositor
+presentation. Short instrumented runs do not replace product matrices. Earlier
+1080p diagnostics drew about 56.3 FPS; client load cannot explain every failure.
 
 Retained v0.22.2 Linux 1440p matrices failed at 52.48-53.86 FPS/33.3-33.5ms.
 Input runs failed at 83.8/84.3ms, and ten-minute input failed at 80.4ms. Reference
@@ -132,9 +129,8 @@ No Linux GPU qualification follows from this host. A view-only public portal
 comparison on `server` still requires host consent. Previous requests timed out,
 including a request with the fixture hidden; no request is kept active.
 
-Earlier native macOS candidates passed twelve matrix runs and 611.1-second
-input/video stability, without establishing published-product qualification.
-The desktop contract owns the explicit paste policy and its composition boundary.
+Native macOS candidates passed twelve matrix runs and 611.1-second stability;
+these do not qualify published-product behavior.
 
 # Remaining Qualification
 
@@ -160,4 +156,5 @@ committed. Representative records are:
 - `product-linux-v0224-ten-minute.log` and `product-linux-restart-linux-v0224-runtime-restart.json`: identity suspension and real restart behavior.
 - `identity-churn-probe-server.log`: real login enumeration race and candidate comparison.
 - `server-v0224-native-stage-scroll-server.log` and `server-v0224-native-stage-window-server.log`: intrusive native stage timings.
+- `server-v0225-detailed-1440-window-server.log`: capture, change, submission, codec and credit observations.
 - `product-progress.json`: task state, Runtime identities and historical observations.
