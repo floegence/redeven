@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Human remote desktop sessions
 description: Share the host's current graphical desktop with an authenticated viewer, exclusive remote input, and bounded media.
 tags: [runtime, desktop, applications, security, media]
-timestamp: 2026-10-01T08:00:00Z
+timestamp: 2026-10-01T17:30:00Z
 ---
 # Summary
 
@@ -101,9 +101,17 @@ not proof of the physical decoder. Dependent H.264 frames cannot be dropped as
 independent images; recovery requires a fresh keyframe boundary.
 
 The published Floe input and pointer controllers own client composition, physical
-keys, pointer gestures and release. macOS accepts native committed text. Linux
-committed text takes the explicit clipboard-paste path. This does not claim that
-arbitrary Unicode can be represented as synthetic key presses. Clipboard access
+keys, pointer gestures and release. The viewer defaults to the host input method,
+using physical keys from a direct-input client keyboard. Client-composed text is
+sent only after explicitly selecting Paste client text. That operation replaces
+the host text clipboard and uses the published native paste command on both
+platforms. The settings describe this effect and require users to finish or cancel
+host composition before switching. Changing the mode cancels the client's pending
+composition; no text is replayed and no Escape/Enter is guessed on the host.
+Advertised accessibility insertion does not guarantee Electron text insertion,
+and simultaneous unfinished host/client composition is outside this input path.
+This does not claim arbitrary Unicode can be represented as synthetic key presses.
+Clipboard access
 is text-only and tied to the active controller. A manual text panel remains
 available when browser clipboard permission is unavailable. Clipboard contents,
 keys, passwords and pixels never enter audit records.

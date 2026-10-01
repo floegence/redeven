@@ -69,3 +69,19 @@ const desktopCatalogSource = `// Generated from explicit Env App catalogs; run b
 if (process.argv.includes('--check')) {
   if (readFileSync(desktopCatalogTarget, 'utf8') !== desktopCatalogSource) throw new Error('Desktop catalog is stale');
 } else writeFileSync(desktopCatalogTarget, desktopCatalogSource);
+
+const desktopIcons = await build({
+  stdin: { contents: `import {render} from 'solid-js/web'; import {createComponent} from 'solid-js';
+    import {Maximize,Restore,Grid3x3,Settings,Copy,Key,Folder,PowerIcon,Pin,X} from '@floegence/floe-webapp-core/icons';
+    const icons={fit:Maximize,pixels:Grid3x3,fullscreen:Maximize,exitFullscreen:Restore,settings:Settings,clipboard:Copy,shortcuts:Key,files:Folder,disconnect:PowerIcon,pin:Pin,close:X};
+    const disposers=new WeakMap();
+    export function mount(element,key){disposers.get(element)?.();element.replaceChildren();disposers.set(element,render(()=>createComponent(icons[key],{size:16}),element));element.querySelector('svg').setAttribute('aria-hidden','true');}
+  `, resolveDir: root },
+  // Resolve published browser exports without the source typecheck path mappings.
+  bundle: true, write: false, minify: true, format: 'iife', globalName: 'remoteDesktopIcons', platform: 'browser', tsconfigRaw: {},
+});
+const desktopIconsTarget = path.resolve(output, '../remote_desktop_viewer/icons.generated.js');
+const desktopIconsSource = `// Generated from published Floe icons; run buildHostApplicationAppearance.mjs.\n${desktopIcons.outputFiles[0].text}`;
+if (process.argv.includes('--check')) {
+  if (readFileSync(desktopIconsTarget, 'utf8') !== desktopIconsSource) throw new Error('Desktop icons are stale');
+} else writeFileSync(desktopIconsTarget, desktopIconsSource);

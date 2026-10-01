@@ -9,3 +9,5 @@ dialog{width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);border
 
 .window-actions{display:none}[data-redeven-host-application-chrome=true] .window-actions{display:flex}[data-redeven-host-application-chrome=true] #toolbar{padding-top:32px;-webkit-app-region:drag}[data-redeven-host-application-chrome=true] button,[data-redeven-host-application-chrome=true] select{-webkit-app-region:no-drag}.desktop-fullscreen #toolbar{padding-top:10px}
 #toolbar{padding:8px 12px;gap:8px}.identity{font-size:13px;min-width:150px;max-width:210px}.identity span{font-size:11px}.actions{flex:1;font-size:12px}.actions button,.actions select{padding:6px 8px}
+#panel-body label{flex-wrap:wrap}#text-input{width:200px;min-width:0}
+[data-icon]{width:32px;height:32px;flex:0 0 32px;display:inline-grid;place-items:center;padding:0!important}[data-icon] svg{display:block;pointer-events:none}

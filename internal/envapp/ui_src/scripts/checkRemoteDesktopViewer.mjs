@@ -17,6 +17,7 @@ const assets = path.join(root, 'internal/codeapp/appserver/remote_desktop_viewer
 const shared = path.join(root, 'internal/codeapp/appserver/host_application_viewer');
 const native = JSON.parse(execFileSync('go', ['list', '-m', '-json', 'github.com/floegence/floe-native-apps'], { cwd: root, env: { ...process.env, GOWORK: 'off' }, encoding: 'utf8' })).Dir;
 const token = 'qualification-private-ticket';
+const backend = process.argv.includes('--macos') ? 'macos' : 'x11';
 let messages = [], controls = [], sockets = [], generation = 0, frame = 0, selectedMode = 'control';
 let control, media, display = 'one', connectionCount = 0, disconnects = 0, ticketFailures = 0;
 let conflictNextConnect = false;
@@ -60,7 +61,7 @@ server.on('upgrade', (request, socket, head) => {
       control = connection; controls.push(connection);
       connection.on('message', data => {
         const packet = JSON.parse(data); const command = packet.command; messages.push(packet);
-        if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: { backend: 'x11', displays } }));
+        if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: { backend, displays } }));
         if (command.method === 'connect') {
           if (lockedNextConnect) {
             lockedNextConnect = false;
@@ -112,7 +113,7 @@ try {
     browser = await chromium.launch({ headless: true });
     page = await browser.newPage({ viewport: { width: 1000, height: 720 } });
   }
-  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('Viewer error:', error.stack); });
   await page.addInitScript(() => {
     const denied = async () => { throw new DOMException('Fixture clipboard permission denied', 'NotAllowedError'); };
     Object.defineProperty(navigator, 'clipboard', { value: { readText: denied, writeText: denied } });
@@ -124,13 +125,31 @@ try {
   paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
   await page.locator('#desktop').click(); await page.keyboard.press('x');
-  await page.locator('.floe-remote-input').evaluate(element => {
+  const compose = text => page.locator('.floe-remote-input').evaluate((element, text) => {
     element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
-    element.dispatchEvent(new CompositionEvent('compositionend', { data: '中文办公😀', bubbles: true }));
-  });
+    element.dispatchEvent(new CompositionEvent('compositionend', { data: text, bubbles: true }));
+  }, text);
+  await compose('默认不提交');
   await page.waitForTimeout(80);
-  assert(messages.some(item => item.command.input?.kind === 'paste' && item.command.input.text === '中文办公😀'), 'Linux composition must use paste');
+  assert(!messages.some(item => ['text', 'paste'].includes(item.command.input?.kind)), 'host input mode must not silently submit client text');
+  assert.match(await page.locator('#notice').textContent(), /Paste client text/, 'client composition needs an actionable mode hint');
+  await page.locator('#settings').click();
+  assert.equal(await page.getByLabel('Text input', { exact: true }).inputValue(), 'host');
+  assert.match(await page.locator('#text-input-hint').textContent(), /Finish or cancel.*host.*composition/);
+  await page.getByLabel('Text input', { exact: true }).selectOption('paste');
+  await page.keyboard.press('Escape');
+  await page.locator('#desktop').click();
+  await compose('中文办公😀');
+  await page.waitForTimeout(80);
+  assert(messages.some(item => item.command.input?.kind === 'paste' && item.command.input.text === '中文办公😀'), 'opted-in client composition must use explicit native paste');
   assert(messages.some(item => item.command.input?.code === 'KeyX'), 'physical key not delivered');
+  await page.locator('.floe-remote-input').evaluate(element => element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })));
+  await page.locator('#settings').click();
+  await page.getByLabel('Text input', { exact: true }).selectOption('host');
+  await page.keyboard.press('Escape');
+  await page.locator('.floe-remote-input').evaluate(element => element.dispatchEvent(new CompositionEvent('compositionend', { data: '过期文本', bubbles: true })));
+  await page.waitForTimeout(80);
+  assert(!messages.some(item => item.command.input?.text === '过期文本'), 'switching modes must cancel the old client composition');
   await page.locator('#clipboard').click();
   await page.getByRole('button', { name: 'Copy from host', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#clipboard-text').value === 'Task clipboard 中文');
@@ -234,18 +253,33 @@ try {
     assert.equal(await page.evaluate(() => typeof window.redevenDesktop), 'undefined');
     await page.locator('#files').click();
     await page.waitForFunction(() => document.documentElement.dataset.fixtureFiles === '1');
-    const catalogs = await page.evaluate(() => window.remoteDesktopCatalog);
-    for (const [locale, catalog] of Object.entries(catalogs)) {
-      await page.evaluate(locale => { document.documentElement.lang = locale; }, locale);
-      await page.waitForFunction(title => document.title.startsWith(title), catalog.title);
-      assert.equal(await page.locator('#files').textContent(), catalog.files);
-      assert.equal(await page.locator('#desktop').getAttribute('aria-label'), catalog.title);
-      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${locale} narrow window overflow`);
+  }
+  const catalogs = await page.evaluate(() => window.remoteDesktopCatalog);
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    await page.evaluate(locale => { document.documentElement.lang = locale; }, locale);
+    await page.waitForFunction(title => document.title.startsWith(title), catalog.title);
+    assert.equal(await page.locator('#files').getAttribute('aria-label'), catalog.files);
+    assert.equal(await page.locator('#files').getAttribute('title'), catalog.files);
+    assert.equal(await page.locator('#files svg').count(), 1);
+    assert.equal(await page.locator('#desktop').getAttribute('aria-label'), catalog.title);
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${locale} narrow window overflow`);
+    await page.locator('#settings').click();
+    const selector = page.getByLabel(catalog.textInput, { exact: true });
+    assert.equal(await selector.getAttribute('title'), catalog.hostInput);
+    assert.equal(await page.locator('#text-input-hint').textContent(), catalog.textInputHint);
+    const layout = await page.locator('#panel-body').evaluate(element => ({
+      width: element.clientWidth, content: element.scrollWidth,
+      children: [...element.children].map(child => ({ text: child.textContent, width: child.clientWidth, content: child.scrollWidth })),
+    }));
+    assert(layout.content <= layout.width, `${locale} narrow settings overflow: ${JSON.stringify(layout)}`);
+    if (process.env.REDEVEN_DESKTOP_EVIDENCE_DIR && ['en-US', 'zh-CN'].includes(locale)) {
+      await page.screenshot({ path: path.join(process.env.REDEVEN_DESKTOP_EVIDENCE_DIR, `text-input-${desktop ? 'electron' : 'browser'}-${locale}.png`) });
     }
+    await page.keyboard.press('Escape');
   }
   await page.locator('#disconnect').click(); await page.waitForTimeout(100);
   assert.equal(disconnects, 1); assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ passed: true, checks: ['paint authority', 'Chinese paste', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'narrow window', 'dialog keyboard', 'disconnect'] }));
+  console.log(JSON.stringify({ passed: true, checks: ['paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'narrow localized settings', 'dialog keyboard', 'disconnect'] }));
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));
   if (directory) await rm(directory, { recursive: true, force: true });

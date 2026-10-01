@@ -3,7 +3,7 @@ type: Validation Guide
 title: Current-desktop acceptance and performance evidence
 description: Distinguish remote desktop contract checks, real office behavior, failed performance thresholds and remaining qualification.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-01T15:00:00Z
+timestamp: 2026-10-01T18:20:00Z
 ---
 # Summary
 
@@ -33,6 +33,15 @@ is paused sharing, never successful remote unlocking. Credentials and raw captur
 remain outside the repository and audit payloads.
 
 # Recorded evidence, 2026-10-01
+
+## Current dependency
+
+Redeven now pins the published `floe-native-apps` v0.22.4 Go module and Swift
+package at `32e7efbce4d3ba9581f7606204eb4768630acc84`. Source checks and the
+upstream Release gate passed; module proxy and checksum-database readback matched.
+This ships the candidate playback and explicit macOS paste contract below.
+Published-product requalification remains required; earlier results retain their
+original dependency versions and measurement boundaries.
 
 ## Linux product behavior
 
@@ -80,23 +89,62 @@ handoff, not complete audiovisual synchronization.
 
 ## macOS product and input
 
-Native macOS FPS/interval checks passed both resolutions, but input-to-next-frame
-confirmation remained above 80ms. Product Runtime `6990d5692`, using published
+Product Runtime `6990d5692`, using published
 v0.22.2, passed authenticated 2560×1440 viewing and basic text/emoji, pointer,
 bidirectional clipboard, fullscreen and view/control takeover. The office run
 explicitly cancelled remote Pinyin composition before client text submission.
-Leaving remote marked text active caused client submission to fail; mixed
-composition remains unresolved. Earlier 40-key and 100-key product runs recorded
+Leaving remote marked text active caused client submission to fail. Earlier
+40-key and 100-key product runs recorded
 86.4ms and 87.0ms P95, respectively, and failed.
 
-The input fixture now responds visibly to a native Q event as an app shortcut,
-consuming the key independently of IME text-commit notifications. A run with that
-corrected detector lost foreground and stopped; it supplies no passing latency
-or stability evidence. Independent native-pixel reference and expanded office
-fixtures build, but real execution is pending foreground coordination. The
-unlocked-host Electron contract regression passed takeover, transitions,
+The unlocked-host Electron contract regression passed takeover, transitions,
 view-only clipboard cleanup, fullscreen, Files and all ten locales. These partial
 results do not establish full macOS acceptance.
+
+## macOS native candidate qualification
+
+Upstream commit `6c53f6445b2f15f0185a66e0f0ab23b2f3ac67c6` was tested with
+separate capture and fixture processes on this Apple Silicon host. The controlled
+fixture covers the desktop; no user applications receive test input. Each matrix
+cell contains three 60-second runs using VideoToolbox hardware H.264 and the
+candidate browser player. These are native qualification results, not a
+published Redeven product matrix.
+
+| Resolution / scene | Painted FPS | Maximum interval P95 |
+| --- | --- | --- |
+| 1080p scrolling | 55.52 / 57.32 / 57.58 | 30.6ms |
+| 1080p window motion | 56.59 / 56.76 / 57.45 | 27.2ms |
+| 1440p scrolling | 57.70 / 57.22 / 57.43 | 28.8ms |
+| 1440p window motion | 57.40 / 57.33 / 57.41 | 27.1ms |
+
+All twelve runs passed FPS, interval and refinement thresholds without errors;
+maximum refinement was 346.7ms. A separate 100-key test measured 65.8ms P95
+from client command to a task after the rendering opportunity that displayed the
+changed fixture pixel. The native Q shortcut changes that marker independently
+of IME composition. A 611.1-second run completed 3,000 transitions with 67.5ms
+P95 and no errors. Sampled pending/decoder queues stayed empty and tracked frames
+never exceeded one. This proves observed input/video stability, not output-device
+audiovisual synchronization. Earlier foreground-loss and latency failures remain
+retained; aggregate CPU/GPU attribution for this matrix is still incomplete.
+
+At the actual 4608×2592 size, the hardware encoder rejected a real test frame.
+The explicitly reported software path produced a PNG refinement whose 800×120
+multilingual text/emoji region matched an independent authorized screenshot
+byte-for-byte. No 4K60 claim follows. Three injected decoder failures recovered
+in 42–46.4ms without restarting capture. A task-generated system-output tone
+produced 227 decoded Opus frames with nonzero energy and no errors; this was not
+a listening or output-device latency test. Concurrent owned-window JPEG/H.264
+and display H.264 streams preserved independent generations and start/stop state.
+
+Explicit native paste passed AppKit and Electron after completing host
+composition. Unfinished Electron Pinyin composition consumes the paste shortcut;
+advertised accessibility text replacement can also report success without
+inserting text. Those fallback experiments were removed. The accepted product
+policy defaults to the host input method and requires an explicit client-text
+paste choice, explaining clipboard replacement and completion/cancellation of
+host composition before switching. The product viewer implements this choice,
+with all ten locales and browser/Electron contract tests passing. Real product
+requalification remains pending.
 
 ## Capture and playback diagnostics
 
@@ -116,16 +164,20 @@ A 20-second synthetic source received/decoded 60.04 frames/s and drew 59.29
 frames/s with interval P95 17.5ms. Real X11 window motion still failed: the GTK
 frame clock requested 59.93 updates/s, capture observed 54.33 different pictures/s,
 and the candidate drew 51.40 frames/s with P95 33.4ms. Reducing presentation backlog
-alone does not repair capture cadence. This candidate is not ready to publish.
+alone does not repair capture cadence. The subsequent progress-aware decoder
+drain fix eliminated false keyframe stalls in a 60-second X11 run, but its
+53.39 FPS and 33.5ms interval P95 still failed the hard thresholds.
 
 A view-only public-portal capture comparison is prepared for `server`, pending
-host consent. It retains real login identity and does not change product selection.
+host consent. Two requests expired without a consent result; the second kept its
+fixture hidden until authorization. No request remains active. This diagnostic
+retains real login identity and does not change product backend selection.
 
 # Remaining qualification
 
-- Resolve published-product FPS, input latency and mixed macOS composition.
-- Complete macOS office behavior, app/desktop takeover, independent reference
-  pixels and uninterrupted foreground stability.
+- Resolve Linux capture cadence and complete both published-product matrices.
+- Integrate explicit text-input modes and requalify office interaction, app/desktop
+  takeover, reference pixels and stability against the published dependency.
 - Coordinate Linux/macOS lock and host-side unlock; distinguish OS refusal from
   remote-unlock success.
 - Complete actual shortcuts, display hotplug and output-device audiovisual delay.

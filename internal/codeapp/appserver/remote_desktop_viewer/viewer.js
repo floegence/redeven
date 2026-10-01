@@ -10,17 +10,28 @@ let session = config.session, control, media, player, epoch = 0, sequence = 0;
 let generation = 0, state = 'disconnected', reason = '', painted = false, stopped = false, retry;
 let backend = '', stats, clipboardText = '', clipboardSync = false, clipboardBusy = false;
 let original = false, quality = 'smooth', audio = false, volume = .7, pinned = false, hideTimer;
+let textInput = 'host';
 let awaitingMedia = [], reconnectAttempts = 0, noticeTimer, awaitingState = false;
 let nativeFullscreen = false, pendingFullscreen;
 const windowBridge = window.redevenHostApplicationWindow;
 const fullscreen = () => windowBridge ? nativeFullscreen : !!document.fullscreenElement;
+for (const element of document.querySelectorAll('[data-icon]')) remoteDesktopIcons.mount(element, element.dataset.icon);
+
+function fullscreenLabel() {
+  const key = fullscreen() ? 'exitFullscreen' : 'fullscreen';
+  $('fullscreen').setAttribute('aria-label', copy(key)); $('fullscreen').title = copy(key);
+  if ($('fullscreen').dataset.icon !== key) { remoteDesktopIcons.mount($('fullscreen'), key); $('fullscreen').dataset.icon = key; }
+}
 
 function localize() {
   for (const element of document.querySelectorAll('[data-copy]')) element.textContent = copy(element.dataset.copy);
-  for (const element of document.querySelectorAll('[data-label]')) element.setAttribute('aria-label', copy(element.dataset.label));
+  for (const element of document.querySelectorAll('[data-label]')) {
+    element.setAttribute('aria-label', copy(element.dataset.label));
+    if (element.tagName === 'BUTTON') element.title = copy(element.dataset.label);
+  }
   document.title = `${copy('title')} · ${session.host_name}`;
   $('host').textContent = session.host_name;
-  $('fullscreen').textContent = copy(fullscreen() ? 'exitFullscreen' : 'fullscreen');
+  fullscreenLabel();
 }
 localize();
 new MutationObserver(localize).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
@@ -37,7 +48,13 @@ function command(method, values = {}, takeover = false) {
 function release(target) { if (target === generation && state === 'active') command('release_input'); }
 const input = hostApplicationInput.createRemoteInput({
   surface: canvas, label: copy('input'),
-  commitText(text, target) { pointer.flush(); if (active(target)) { if (new TextEncoder().encode(text).length > 16000) { notice('clipboardFailed'); return; } command('input', { input: { kind: backend === 'macos' ? 'text' : 'paste', text } }); } },
+  commitText(text, target) {
+    pointer.flush();
+    if (!active(target)) return;
+    if (textInput !== 'paste') { notice('textInputRequired'); return; }
+    if (new TextEncoder().encode(text).length > 16000) { notice('textTooLong'); return; }
+    command('input', { input: { kind: 'paste', text } });
+  },
   sendKey(key, target) { pointer.flush(); if (active(target)) command('input', { input: { kind: 'key', ...key } }); },
   release,
   clipboard(event, target) {
@@ -227,7 +244,7 @@ function setOriginal(value) { original = value; $('stage').classList.toggle('ori
 $('fit').onclick = () => setOriginal(false); $('pixels').onclick = () => setOriginal(true);
 function updateFullscreen() {
   document.documentElement.classList.toggle('desktop-fullscreen', fullscreen());
-  $('fullscreen').textContent = copy(fullscreen() ? 'exitFullscreen' : 'fullscreen');
+  fullscreenLabel();
   $('fullscreen').disabled = pendingFullscreen !== undefined;
   wakeToolbar();
 }
@@ -262,6 +279,16 @@ $('settings').onclick = () => {
   const selector = element('select', '', { id: 'quality' }); for (const value of ['smooth', 'clarity', 'data']) selector.append(element('option', copy(value), { value })); selector.value = quality;
   selector.onchange = () => { quality = selector.value; configure(); };
   const qualityLabel = element('label', copy('quality')); qualityLabel.append(selector);
+  const textMode = element('select', '', { id: 'text-input' });
+  for (const [value, key] of [['host', 'hostInput'], ['paste', 'pasteInput']]) textMode.append(element('option', copy(key), { value }));
+  textMode.value = textInput; textMode.title = copy(textInput === 'host' ? 'hostInput' : 'pasteInput');
+  textMode.setAttribute('aria-label', copy('textInput'));
+  textMode.setAttribute('aria-describedby', 'text-input-hint');
+  textMode.onchange = () => {
+    pointer.reset(); input.bindTarget(null); release(generation);
+    textInput = textMode.value; textMode.title = copy(textInput === 'host' ? 'hostInput' : 'pasteInput');
+  };
+  const textLabel = element('label', copy('textInput')); textLabel.append(textMode);
   const sound = button('enableSound', async () => { if (await player.enableAudio()) { audio = true; player.setVolume(volume); configure(); sound.textContent = copy('sound'); } });
   sound.id = 'enable-sound';
   const slider = element('input', '', { type: 'range', min: '0', max: '1', step: '.05', value: String(volume) });
@@ -271,7 +298,7 @@ $('settings').onclick = () => {
   mute.onchange = async () => { audio = mute.checked && await player.enableAudio(); mute.checked = audio; player.setVolume(volume, !audio); configure(); };
   const muteLabel = element('label', copy('sound')); muteLabel.append(mute);
   const lock = button('lock', async () => { panel.close(); if (await confirmation('lock', 'lockHint')) command('lock'); }); lock.disabled = session.mode !== 'control';
-  openPanel('settings', [qualityLabel, sound, muteLabel, volumeLabel, lock, element('output', '', { id: 'statistics' })]); updateTransitionControls(); refreshStats();
+  openPanel('settings', [qualityLabel, textLabel, element('p', copy('textInputHint'), { id: 'text-input-hint' }), sound, muteLabel, volumeLabel, lock, element('output', '', { id: 'statistics' })]); updateTransitionControls(); refreshStats();
 };
 async function localClipboard(target, paste = false) {
   if (!authorized(target) || clipboardBusy) return;
