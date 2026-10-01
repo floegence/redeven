@@ -55,7 +55,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const showHeader = () => props.showHeader !== false;
-  const ownsViewport = createMemo(() => ['pdf', 'docx', 'image', 'video', 'audio', 'text', 'markdown'].includes(props.descriptor.mode));
+  const ownsViewport = createMemo(() => ['pdf', 'docx', 'image', 'video', 'audio', 'text', 'markdown', 'html'].includes(props.descriptor.mode));
   let previewContentEl: HTMLDivElement | undefined;
 
   return (

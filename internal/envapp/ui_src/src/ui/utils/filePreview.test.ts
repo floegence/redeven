@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { describeFilePreview, mimeFromExtDot, previewModeByName } from './filePreview';
 
 describe('describeFilePreview', () => {
+  it.each(['report.html', 'report.htm', 'report.xhtml', '/workspace/REPORT.HTML', 'C:\\reports\\REPORT.HTM'])(
+    'opens %s as an HTML page with source-editing metadata', (name) => {
+      expect(describeFilePreview(name)).toEqual({
+        mode: 'html', textPresentation: 'code', language: 'html', wrapText: false,
+      });
+    },
+  );
+
   it('classifies source files as code previews with a language when known', () => {
     expect(describeFilePreview('src/app.ts')).toEqual({
       mode: 'text',

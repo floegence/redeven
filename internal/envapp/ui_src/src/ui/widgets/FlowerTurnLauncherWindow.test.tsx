@@ -110,6 +110,7 @@ vi.mock('../utils/filePreview', () => ({
   describeFilePreview: (value: string) => {
     const normalized = String(value ?? '').toLowerCase();
     if (normalized.endsWith('.xlsx') || normalized.endsWith('.xls')) return { mode: 'xlsx' };
+    if (normalized.endsWith('.html')) return { mode: 'html', language: 'html' };
     return { mode: 'text' };
   },
   FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR: { mode: 'text', textPresentation: 'plain', wrapText: true },
@@ -122,7 +123,7 @@ vi.mock('../utils/fileStreamReader', () => fileStreamReaderMock);
 
 vi.mock('./FilePreviewContent', () => ({
   FilePreviewContent: (props: any) => (
-    <div data-testid="file-preview-content">
+    <div data-testid="file-preview-content" data-preview-mode={props.descriptor.mode}>
       <div>{props.item?.path}</div>
       <div>{props.text}</div>
       <div>{props.message}</div>
@@ -939,6 +940,24 @@ describe('FlowerTurnLauncherWindow', () => {
       expect(host.textContent).toContain('Showing the attached snapshot that Flower will receive.');
       expect(host.textContent).toContain('export default [];');
     });
+  });
+
+  it.each([false, true])('routes an HTML attachment snapshot through bounded page preview (oversized: %s)', async oversized => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const source = oversized ? 'x'.repeat(3 * 1024 * 1024) : '<h1>Attached report</h1>';
+    const attachment = setFlowerTurnLauncherAttachmentSourcePath(
+      new File([source], 'report.html', { type: 'text/html' }), '/workspace/report.html',
+    );
+    const dispose = render(() => <FlowerTurnLauncherWindow open intent={{ ...baseIntent,
+      source_surface: 'file_browser', context_items: [{ kind: 'file_path', path: '/workspace/report.html', is_directory: false }],
+      pending_attachments: [attachment],
+    }} onClose={() => undefined} onSubmit={async () => undefined} />, host);
+    try {
+      host.querySelector<HTMLButtonElement>('button[aria-label="Preview attached snapshot for report.html"]')!.click();
+      await vi.waitFor(() => expect(host.querySelector('[data-preview-mode]')?.getAttribute('data-preview-mode')).toBe(oversized ? 'unsupported' : 'html'));
+      expect(host.textContent).toContain(oversized ? 'This document is too large to preview.' : source);
+    } finally { dispose(); }
   });
 
   it('shows a lightweight attached snapshot notice for spreadsheet files instead of parsing them inline', async () => {

@@ -5,6 +5,7 @@ import type { FilePreviewDescriptor, FilePreviewSurface, PreviewMode } from '../
 import { DocxPreviewPane } from '../widgets/DocxPreviewPane';
 import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';
 import { MarkdownPreviewPane } from '../widgets/MarkdownPreviewPane';
+import { HtmlPreviewPane } from '../widgets/HtmlPreviewPane';
 import type { BindPdfPreviewEditor } from '../widgets/pdfPreviewEditor';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 const PdfPreviewPane = lazy(() => import('../widgets/PdfPreviewPane').then(module => ({ default: module.PdfPreviewPane })));
@@ -15,6 +16,7 @@ import { useI18n } from '../i18n';
 export type RedevenFilePreviewRendererId =
   | 'text'
   | 'markdown'
+  | 'html'
   | 'image'
   | 'pdf'
   | 'docx'
@@ -39,6 +41,7 @@ export type RedevenFilePreviewRenderProps = Readonly<{
   resourceUrl?: string;
   bytes?: Uint8Array<ArrayBuffer> | null;
   truncated?: boolean;
+  loading?: boolean;
   xlsxSheetName?: string;
   xlsxRows?: string[][];
   onDraftChange?: (value: string) => void;
@@ -168,6 +171,11 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
     id: 'markdown',
     modes: ['markdown'],
     render: renderMarkdownPreview,
+  },
+  {
+    id: 'html',
+    modes: ['html'],
+    render: (props) => <HtmlPreviewPane {...props} path={props.item?.path ?? 'preview.html'} text={props.text ?? ''} />,
   },
   {
     id: 'image',

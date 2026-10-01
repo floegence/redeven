@@ -16,6 +16,7 @@ import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { useI18n } from '../i18n';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
+import { isTextFilePreview } from '../utils/filePreview';
 import type { FilePreviewContentProps } from './FilePreviewContent';
 
 export interface FilePreviewActionsProps extends Pick<
@@ -63,7 +64,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const buttonClass = () => cn(PREVIEW_HEADER_ICON_BUTTON_CLASS, props.compact ? 'size-7' : 'size-8');
   const showEditorActions = () =>
-    ['text', 'markdown', 'pdf'].includes(props.descriptor.mode) && Boolean(props.canEdit);
+    (isTextFilePreview(props.descriptor) || props.descriptor.mode === 'pdf') && Boolean(props.canEdit);
   const [pathCopied, setPathCopied] = createSignal(false);
   const [menu, setMenu] = createSignal<{ x: number; y: number; selection: string } | null>(null);
   const menuId = createUniqueId();

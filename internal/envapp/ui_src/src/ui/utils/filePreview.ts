@@ -1,6 +1,6 @@
 // File preview helpers: extension classification, language resolution, and basic content sniffing.
 
-export type PreviewMode = 'text' | 'markdown' | 'image' | 'pdf' | 'docx' | 'xlsx' | 'video' | 'audio' | 'binary' | 'unsupported';
+export type PreviewMode = 'text' | 'markdown' | 'html' | 'image' | 'pdf' | 'docx' | 'xlsx' | 'video' | 'audio' | 'binary' | 'unsupported';
 /** Surface ownership for a file preview. Desktop floating windows use the window material. */
 export type FilePreviewSurface = 'main' | 'window';
 export type TextPreviewPresentation = 'plain' | 'code';
@@ -19,10 +19,11 @@ const PLAIN_TEXT_PREVIEW_EXTENSIONS = [
 ] as const;
 
 const MARKDOWN_PREVIEW_EXTENSIONS = ['.md', '.markdown'] as const;
+const HTML_PREVIEW_EXTENSIONS = ['.html', '.htm', '.xhtml'] as const;
 
 const CODE_PREVIEW_EXTENSIONS = [
   '.json', '.jsonc', '.webmanifest', '.yaml', '.yml', '.toml', '.ini', '.conf', '.config', '.env',
-  '.html', '.htm', '.xml', '.xhtml', '.css', '.scss', '.sass', '.less',
+  '.xml', '.css', '.scss', '.sass', '.less',
   '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte', '.astro',
   '.mdx', '.graphql', '.gql',
   '.py', '.pyw', '.pyi', '.java', '.kt', '.scala',
@@ -57,6 +58,7 @@ export const FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR: FilePreviewDescriptor = {
 
 const PLAIN_TEXT_EXTENSION_SET = new Set<string>(PLAIN_TEXT_PREVIEW_EXTENSIONS);
 const MARKDOWN_PREVIEW_EXTENSION_SET = new Set<string>(MARKDOWN_PREVIEW_EXTENSIONS);
+const HTML_PREVIEW_EXTENSION_SET = new Set<string>(HTML_PREVIEW_EXTENSIONS);
 const CODE_PREVIEW_EXTENSION_SET = new Set<string>(CODE_PREVIEW_EXTENSIONS);
 const IMAGE_PREVIEW_EXTENSION_SET = new Set<string>(IMAGE_PREVIEW_EXTENSIONS);
 const PDF_PREVIEW_EXTENSION_SET = new Set<string>(PDF_PREVIEW_EXTENSIONS);
@@ -81,10 +83,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, string | undefined> = {
   '.conf': 'ini',
   '.config': 'ini',
   '.env': 'ini',
-  '.html': 'html',
-  '.htm': 'html',
   '.xml': 'xml',
-  '.xhtml': 'xml',
   '.css': 'css',
   '.scss': 'scss',
   '.sass': 'sass',
@@ -213,6 +212,9 @@ export function describeFilePreview(name: string): FilePreviewDescriptor {
   if (IMAGE_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'image' };
   if (VIDEO_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'video' };
   if (AUDIO_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'audio' };
+  if (HTML_PREVIEW_EXTENSION_SET.has(ext)) {
+    return { mode: 'html', textPresentation: 'code', language: 'html', wrapText: false };
+  }
 
   if (Object.prototype.hasOwnProperty.call(SPECIAL_CODE_FILENAMES, basename)) {
     return {
@@ -253,8 +255,18 @@ export function previewModeByName(name: string): PreviewMode {
   return describeFilePreview(name).mode;
 }
 
+/** These rendered previews retain an editable and downloadable text source. */
+export function isTextFilePreview(descriptor: FilePreviewDescriptor): boolean {
+  return ['text', 'markdown', 'html'].includes(descriptor.mode);
+}
+
 export function mimeFromExtDot(ext: string): string | undefined {
   switch (ext) {
+    case '.html':
+    case '.htm':
+      return 'text/html';
+    case '.xhtml':
+      return 'application/xhtml+xml';
     case '.png':
       return 'image/png';
     case '.jpg':

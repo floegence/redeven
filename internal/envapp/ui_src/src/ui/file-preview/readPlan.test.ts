@@ -24,6 +24,14 @@ describe('Redeven file preview read plan', () => {
       oversizedMessage: 'This PDF is too large to preview.',
     });
 
+    expect(getRedevenFilePreviewReadPlan({ mode: 'html' })).toEqual({
+      strategy: 'bytes',
+      maxBytes: REDEVEN_FILE_PREVIEW_LIMITS.textMaxBytes,
+      readBytes: REDEVEN_FILE_PREVIEW_LIMITS.textMaxBytes,
+      rejectOversizedBeforeRead: true,
+      oversizedMessage: 'This file is too large to preview.',
+    });
+
     expect(getRedevenFilePreviewReadPlan({ mode: 'binary' })).toEqual({
       strategy: 'bytes',
       maxBytes: REDEVEN_FILE_PREVIEW_LIMITS.defaultMaxBytes,

@@ -44,13 +44,13 @@ export function getRedevenFilePreviewReadPlan(descriptor: FilePreviewDescriptor)
     };
   }
 
-  if (descriptor.mode === 'text') {
+  if (descriptor.mode === 'text' || descriptor.mode === 'html') {
     return {
       strategy: 'bytes',
       maxBytes: REDEVEN_FILE_PREVIEW_LIMITS.textMaxBytes,
       readBytes: REDEVEN_FILE_PREVIEW_LIMITS.textMaxBytes,
-      rejectOversizedBeforeRead: false,
-      oversizedMessage: getRedevenFilePreviewOversizedMessage('text'),
+      rejectOversizedBeforeRead: descriptor.mode === 'html',
+      oversizedMessage: getRedevenFilePreviewOversizedMessage(descriptor.mode),
     };
   }
 
