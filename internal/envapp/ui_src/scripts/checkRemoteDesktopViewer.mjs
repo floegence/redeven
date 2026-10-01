@@ -20,6 +20,7 @@ const token = 'qualification-private-ticket';
 let messages = [], controls = [], sockets = [], generation = 0, frame = 0, selectedMode = 'control';
 let control, media, display = 'one', connectionCount = 0, disconnects = 0, ticketFailures = 0;
 let conflictNextConnect = false;
+let lockedNextConnect = false;
 const configuration = { session: { id: 'qualification', host_name: 'Task desktop', locale: 'en-US', mode: 'control', display_id: '' }, base: '/_redeven_desktop/' };
 const names = { 'input.js': 'remote-input.generated.js', 'pointer.js': 'remote-pointer.generated.js', 'floe.css': 'appearance.generated.css' };
 const server = http.createServer((request, response) => {
@@ -61,6 +62,11 @@ server.on('upgrade', (request, socket, head) => {
         const packet = JSON.parse(data); const command = packet.command; messages.push(packet);
         if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: { backend: 'x11', displays } }));
         if (command.method === 'connect') {
+          if (lockedNextConnect) {
+            lockedNextConnect = false;
+            connection.send(JSON.stringify({ version: 1, type: 'error', code: 'LOCKED', generation: ++generation }));
+            return;
+          }
           if (conflictNextConnect) {
             conflictNextConnect = false;
             connection.send(JSON.stringify({ version: 1, type: 'error', code: 'CONTROL_IN_USE' }));
@@ -183,6 +189,14 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection').hidden, null, { timeout: 10000 });
   assert(connectionCount >= 4, 'temporary ticket failures stopped automatic reconnect');
   assert(await page.locator('.floe-remote-input').isDisabled(), 'reconnect reused prior paint');
+  paint(); await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  lockedNextConnect = true; controls.at(-1).close();
+  await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host is locked', null, { timeout: 3000 });
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'initially locked host retained input');
+  assert(await page.locator('#reconnect').isVisible(), 'initially locked host cannot reconnect after local unlock');
+  await page.locator('#reconnect').click();
+  await page.waitForFunction(() => document.querySelector('#connection').hidden);
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'unlock reconnect reused prior paint');
   paint(); await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
   await page.locator('#fullscreen').click();
   try {

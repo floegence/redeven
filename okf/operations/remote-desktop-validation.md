@@ -94,11 +94,16 @@ capture/input/clipboard/audio and grant restoration. Its 1080p result was about
 37.6 FPS; capture alone reached 38–41 FPS. It exposes neither 1440p nor usable
 hardware encoding. These are limitations, not Linux GPU qualification.
 
-Native macOS passed FPS/interval checks at both resolutions, but 1440p input
-P95 was 80.6ms and failed. Its ten-minute fixture lost foreground and safely
-stopped; stability remains unqualified. Later Electron reruns encountered a
-locked console and could not focus or enter fullscreen. Rerun after unlock;
-keep these failures distinct from earlier unlocked-host office evidence.
+Native macOS passed FPS/interval checks at both resolutions. A 1440p input run
+recorded 80.6ms P95 to canvas draw and 95.0ms to the following animation-frame
+confirmation. A later cadence experiment recorded 69.9ms and 83.6ms respectively;
+confirmation still failed the 80ms requirement. Its ten-minute fixture lost
+foreground and safely stopped; stability remains unqualified. The latest
+unlocked-host Electron regression passed takeover, transitions, view-only
+clipboard cleanup, native fullscreen, Files and all ten locales. An isolated
+macOS product Runtime using published v0.22.2 also passed authenticated view-only
+connection and 2560×1440 H.264 decoding/rendering without errors. These checks do
+not establish full macOS office or performance acceptance.
 
 An unpublished X11 diagnostic requested capture at 240Hz while retaining a 60 FPS
 encoder limit. Three 60-second 1440p scroll runs reached 57.20 / 57.12 / 57.40 FPS
@@ -109,6 +114,22 @@ and 54.6 client draws/s: the loss existed before encoding. This source outside
 the repositories was neither released nor consumed by Redeven. A requested
 capture rate is not measured FPS and this experiment is not formal acceptance.
 
+Follow-up diagnostics used the GTK frame clock to animate real task windows.
+The fixture requested about 59.7 updates/s, while capture still observed about
+55.4 changed pictures/s. Removing BGRA conversion, removing the cursor in a
+diagnostic, decoupling capture with a one-buffer queue, and enabling XDamage did
+not meet the required motion thresholds. They are not product changes. A
+temporary 120Hz physical-scanout experiment improved changed-picture cadence,
+but its different display conditions cannot certify the original 60Hz case.
+
+An unpublished player candidate keeps only the freshest fully decoded picture
+before each animation-frame draw. With the same published v0.22.2 Linux capture,
+paired 100-key 1440p diagnostics measured input-to-next-frame-confirmation P95
+of 81.0ms for the published player and 65.3ms for the candidate. This does not
+qualify sustained motion: fewer queued decoded pictures can also reduce painted
+FPS when capture or arrival is uneven. Keep formal acceptance on published
+artifacts and resolve both latency and cadence before release.
+
 # Remaining qualification
 
 - Resolve published-product FPS and input failures without lowering thresholds.
@@ -118,7 +139,7 @@ capture rate is not measured FPS and this experiment is not formal acceptance.
   from remote-unlock success.
 - Complete actual shortcut, display-hotplug and output-device audiovisual delay
   evidence. Synthetic state transitions do not replace these checks.
-- Rerun the latest viewer on an unlocked Electron host before accepted local-main
+- Validate subsequent viewer changes on an unlocked Electron host before local-main
   integration. Runtime restart invalidates credentials and requires a new product
   session; transport reconnect alone does not recreate an expired session.
 
@@ -137,6 +158,8 @@ lock/permission states and transient ticket recovery. They reject old paint
 receipts during transitions, disable competing transition controls and clear the
 former controller's clipboard when moving to view-only. Declining native takeover
 continues view-only on the selected display; connect cannot escalate that mode.
+An initially rejected `LOCKED` connection must show a locked status and an
+explicit reconnect action; that reconnect cannot reuse prior painted authority.
 Electron additionally checks actual native fullscreen, the owning Files bridge
 and all ten locales at narrow width. These are contract checks, not performance
 proof.
