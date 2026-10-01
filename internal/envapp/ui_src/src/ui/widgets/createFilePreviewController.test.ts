@@ -52,6 +52,62 @@ afterEach(() => {
 });
 
 describe('createFilePreviewController', () => {
+  it('opens HTML in page mode and preserves save, discard, and dirty-close behavior', async () => {
+    const file = { id: '/workspace/report.html', name: 'report.html', path: '/workspace/report.html', type: 'file' } satisfies FileItem;
+    const original = '<h1>Original report</h1>';
+    const saved = '<h1>Saved report</h1>';
+    const writeFile = vi.fn(async () => ({ success: true }));
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel(original));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => ({ fs: { writeFile } } as any), canWrite: () => true });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      expect(controller.descriptor().mode).toBe('html');
+      expect(controller.text()).toBe(original);
+      expect(controller.editing()).toBe(false);
+      expect(controller.canEdit()).toBe(true);
+      controller.beginEditing();
+      controller.updateDraft(saved);
+      expect(controller.dirty()).toBe(true);
+      expect(await controller.saveCurrent()).toBe(true);
+      expect(writeFile).toHaveBeenCalledWith({ path: file.path, content: saved, encoding: 'utf8', createDirs: false });
+      controller.revertCurrent();
+      expect(controller.editing()).toBe(false);
+      expect(controller.text()).toBe(saved);
+      controller.beginEditing();
+      controller.updateDraft('<h1>Unsaved report</h1>');
+      controller.closePreview();
+      expect(controller.closeConfirmOpen()).toBe(true);
+      controller.cancelPendingAction();
+      controller.revertCurrent();
+      expect(controller.draftText()).toBe(saved);
+      expect(controller.dirty()).toBe(false);
+    } finally { dispose(); }
+  });
+
+  it.each([true, false])('rejects incomplete HTML without executing a partial document (known size: %s)', async knownSize => {
+    const file = { id: '/report.html', name: 'report.html', path: '/report.html', type: 'file', size: knownSize ? 3 * 1024 * 1024 : undefined } satisfies FileItem;
+    const channel = createTextChannel('<script>incomplete', true);
+    openReadFileStreamChannelMock.mockResolvedValue(channel);
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => undefined, canWrite: () => true });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      expect(controller.descriptor().mode).toBe('unsupported');
+      expect(controller.text()).toBe('');
+      expect(controller.canEdit()).toBe(false);
+      expect(controller.message()).toBe('This file is too large to preview.');
+      if (knownSize) expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+      else expect(channel.channel.close).toHaveBeenCalledOnce();
+    } finally { dispose(); }
+  });
+
   it('keeps a PDF draft dirty after a failed binary save and confirms before closing', async () => {
     const file = { id: '/workspace/form.pdf', name: 'form.pdf', path: '/workspace/form.pdf', type: 'file' } satisfies FileItem;
     const writeFile = vi.fn().mockRejectedValueOnce(new Error('Disk is full')).mockResolvedValue({ success: true });

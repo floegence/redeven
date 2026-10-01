@@ -11,6 +11,7 @@ import {
   FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
   getExtDot,
   isLikelyTextContent,
+  isTextFilePreview,
   mimeFromExtDot,
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
@@ -188,7 +189,7 @@ export function createFilePreviewController(params: {
     Boolean(
       params.canWrite()
       && previewItem()?.type === 'file'
-      && ['text', 'markdown', 'pdf'].includes(previewDescriptor().mode)
+      && (isTextFilePreview(previewDescriptor()) || previewDescriptor().mode === 'pdf')
       && !previewLoading()
       && !previewError()
       && !previewTruncated(),
@@ -302,7 +303,12 @@ export function createFilePreviewController(params: {
         const extDot = getExtDot(item.name);
         mime = mimeFromExtDot(extDot) ?? 'application/octet-stream';
 
-        if (baseDescriptor.mode === 'text' || baseDescriptor.mode === 'markdown') {
+        if (isTextFilePreview(baseDescriptor)) {
+          if (baseDescriptor.mode === 'html' && truncated) {
+            setPreviewDescriptor({ mode: 'unsupported' });
+            setPreviewMessage(readPlan.oversizedMessage);
+            return;
+          }
           const decodedText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
           setPreviewText(decodedText);
           resetEditorState(decodedText);
@@ -515,7 +521,7 @@ export function createFilePreviewController(params: {
   };
 
   const updateDraft = (value: string) => {
-    if (previewDescriptor().mode !== 'text' && previewDescriptor().mode !== 'markdown') return;
+    if (!isTextFilePreview(previewDescriptor())) return;
     setPreviewDraftText(value);
     setPreviewDirty(value !== previewText());
     if (previewSaveError()) {
@@ -613,7 +619,7 @@ export function createFilePreviewController(params: {
       setPreviewBytes(bytes?.slice() ?? null);
       return;
     }
-    if (previewDescriptor().mode !== 'text' && previewDescriptor().mode !== 'markdown') return;
+    if (!isTextFilePreview(previewDescriptor())) return;
     resetEditorState(previewText());
   };
 

@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview viewport and rendering
 description: Fit documents and images to their actual reading area and isolate asynchronous renderer work.
 tags: [ui, files, preview, viewport, rendering]
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 # Summary
 
@@ -17,6 +17,8 @@ old document work cannot replace the current document. Normal cancellation is no
 an error. A genuine PDF page failure stays local to that page and can be retried.
 Markdown enhancement work follows document content: previews without Mermaid
 skip diagram theme sampling across theme changes.
+HTML files open as isolated pages using published Floe document isolation;
+source editing is explicit, and incomplete HTML is never executed.
 
 # Contract
 
@@ -121,6 +123,11 @@ only against its detached nodes; it cannot overwrite the current body or install
 styles back into the current surface. Layout observers belong to that source and
 are disconnected on removal. Image load and error callbacks must match the
 currently displayed resource.
+
+## HTML pages
+
+The [HTML file preview contract](file-preview-html.md) owns page-first opening,
+source editing, bounded content, and isolated document interaction.
 
 ## Markdown enhancements
 

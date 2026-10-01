@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createTestI18nHelpers as createI18nHelpers } from '../i18n/locales/testDictionaries';
+import { describeFilePreview } from '../utils/filePreview';
 import {
   renderRedevenFilePreviewBody,
   resolveRedevenFilePreviewRenderer,
@@ -39,6 +41,42 @@ afterEach(() => {
 });
 
 describe('Redeven file preview renderer registry', () => {
+  it('renders HTML as an isolated page and switches to source only for explicit editing', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [editing, setEditing] = createSignal(false);
+    const [text, setText] = createSignal('<h1>Report</h1>');
+    const [path, setPath] = createSignal('/workspace/report.html');
+    const [loading, setLoading] = createSignal(false);
+    const dispose = render(() => renderRedevenFilePreviewBody({
+      get item() { return { id: path(), name: 'report.html', path: path(), type: 'file' as const }; },
+      descriptor: describeFilePreview('report.html'),
+      get text() { return text(); },
+      get editing() { return editing(); },
+      get loading() { return loading(); },
+    }), host);
+    try {
+      const frame = host.querySelector('iframe')!;
+      expect(frame).toBeTruthy();
+      expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+      expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer');
+      expect(frame.srcdoc).toContain('<h1>Report</h1>');
+      expect(host.querySelector('[data-testid="text-renderer"]')).toBeNull();
+      setEditing(true);
+      expect(host.querySelector('iframe')).toBeNull();
+      expect(host.querySelector('[data-testid="text-renderer"]')?.textContent).toContain('<h1>Report</h1>');
+      setText('<h1>Saved</h1>');
+      setEditing(false);
+      expect(host.querySelector('iframe')!.srcdoc).toContain('<h1>Saved</h1>');
+      const savedFrame = host.querySelector('iframe');
+      setPath('/workspace/other.html');
+      expect(host.querySelector('iframe')).not.toBe(savedFrame);
+      expect(host.querySelector('iframe')!.title).toBe('/workspace/other.html');
+      setLoading(true);
+      expect(host.querySelector('iframe')).toBeNull();
+    } finally { dispose(); }
+  });
+
   it('resolves preview modes through the Redeven-owned registry', () => {
     expect(resolveRedevenFilePreviewRenderer({ mode: 'text' }).id).toBe('text');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'pdf' }).id).toBe('pdf');

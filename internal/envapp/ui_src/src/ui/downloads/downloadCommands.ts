@@ -1,7 +1,7 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import type { FilePreviewDescriptor } from '../utils/filePreview';
-import { getExtDot, mimeFromExtDot } from '../utils/filePreview';
+import { getExtDot, isTextFilePreview, mimeFromExtDot } from '../utils/filePreview';
 import type { DownloadCommand, DownloadCommandOrigin } from './types';
 
 function compact(value: unknown): string {
@@ -72,7 +72,7 @@ export function buildFilePreviewDownloadCommand(params: Readonly<{
 
   if (
     params.dirty
-    && (params.descriptor.mode === 'text' || params.descriptor.mode === 'markdown')
+    && isTextFilePreview(params.descriptor)
   ) {
     return {
       entryKind: 'file',

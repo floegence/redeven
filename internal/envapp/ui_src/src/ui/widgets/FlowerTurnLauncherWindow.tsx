@@ -22,6 +22,7 @@ import {
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
 import { basenameFromPath, fileItemFromPath } from '../utils/filePreviewItem';
+import { getRedevenFilePreviewReadPlan } from '../file-preview/readPlan';
 import { useI18n } from '../i18n';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewContent } from './FilePreviewContent';
@@ -322,6 +323,16 @@ async function buildFileLikeContextPreview(params: {
   const helperParts = params.helper ? [params.helper] : [];
   const truncated = !!params.truncated;
 
+  if (descriptor.mode === 'html') {
+    if (truncated || params.bytes.length > getRedevenFilePreviewReadPlan(descriptor).maxBytes) {
+      return contextPreviewStateForMessage({ ...params, message: params.copy.t('flowerTurnLauncher.preview.documentTooLarge') });
+    }
+    return {
+      ...contextPreviewStateForText({ ...params, text: new TextDecoder('utf-8', { fatal: false }).decode(params.bytes) }),
+      descriptor,
+    };
+  }
+
   if (descriptor.mode === 'text') {
     const preview = trimPreviewBody(new TextDecoder('utf-8', { fatal: false }).decode(params.bytes));
     if (truncated) helperParts.push(params.copy.t('flowerTurnLauncher.preview.showingPartialContent'));
@@ -513,7 +524,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
     const actionLabel = livePath ? i18n.t('flowerTurnLauncher.preview.openLiveFilePreviewAction') : undefined;
     const onAction = livePath ? () => void openFullFilePreview(livePath) : undefined;
 
-    if (descriptor.mode !== 'text' && descriptor.mode !== 'markdown' && descriptor.mode !== 'binary') {
+    if (descriptor.mode !== 'text' && descriptor.mode !== 'markdown' && descriptor.mode !== 'html' && descriptor.mode !== 'binary') {
       const message = descriptor.mode === 'image'
         ? i18n.t('flowerTurnLauncher.preview.imageSnapshotNotice')
         : descriptor.mode === 'pdf'

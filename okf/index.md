@@ -136,6 +136,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Mobile shell navigation](ui/mobile-shell-navigation.md) - Reach global tools and plugins above an interactive bottom bar while reclaiming the mobile toolbar row.
 - [File preview window actions](ui/file-preview-window-actions.md) - Read files with compact title-bar actions while preserving selection, editing, and dismissal behavior.
 - [File preview viewport and rendering](ui/file-preview-viewport-and-rendering.md) - Fit pages and images to the full reading area, float zoom controls, and prevent stale or overlapping renders.
+- [HTML file preview](ui/file-preview-html.md) - Open HTML pages by default with isolated interaction, bounded reads, and explicit source editing.
 - [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.
 - [Shared surface material](ui/surface-material.md) - Apply lightweight shared depth, quiet seams, and immediate control feedback across Env App, Desktop, and Flower.
 - [Input focus boundaries](ui/input-focus-boundaries.md) - Keep one stable focus border across standard and compound inputs while preserving non-input keyboard cues.

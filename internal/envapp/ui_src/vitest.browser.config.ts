@@ -106,6 +106,42 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        pasteFilePreviewSource: async ({ page }, source: string) => {
+          const host = await frameForSelector(page, '.monaco-editor');
+          await host.locator('.monaco-editor .view-lines').click();
+          await page.keyboard.press('ControlOrMeta+A');
+          await page.keyboard.insertText(source);
+        },
+        inspectHtmlFilePreview: async ({ page }, action: 'inspect' | 'click' | 'wheel' = 'inspect') => {
+          const host = await frameForSelector(page, '.html-preview-frame');
+          const element = await host.locator('iframe.html-preview-frame').elementHandle();
+          const preview = await element?.contentFrame();
+          if (!preview) throw new Error('HTML file preview frame is unavailable');
+          await preview.getByRole('heading', { level: 1 }).waitFor();
+          if (action === 'click') await preview.getByRole('button', { name: 'Update report', exact: true }).click();
+          if (action === 'wheel') {
+            const bounds = await element!.boundingBox();
+            if (!bounds) throw new Error('HTML file preview geometry is unavailable');
+            await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+            await page.mouse.wheel(0, 300);
+          }
+          return preview.evaluate(async () => {
+            let parentBlocked = false;
+            let storageBlocked = false;
+            try { void window.parent.document.body; } catch { parentBlocked = true; }
+            try { void window.localStorage.length; } catch { storageBlocked = true; }
+            const networkBlocked = await fetch('/html-preview-network-probe').then(() => false, () => true);
+            return {
+              heading: document.querySelector('h1')!.textContent,
+              headingColor: getComputedStyle(document.querySelector('h1')!).color,
+              button: document.querySelector('button')!.textContent,
+              scriptRan: document.body.dataset.scriptRan === 'true',
+              parentBlocked, storageBlocked, networkBlocked,
+              scrollY: window.scrollY,
+              viewportWidth: window.innerWidth,
+            };
+          });
+        },
         hostApplicationDisplayFixture: async ({ page }, html: string | null) => {
           const route = '**/__host_display_fixture__/index.html';
           await page.unroute(route);
