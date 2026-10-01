@@ -172,6 +172,12 @@ async function connect() {
         awaitingState = false;
         updateTransitionControls();
         if (message.code === 'CONTROL_IN_USE') { session.mode = 'view'; $('mode').value = 'view'; void confirmControl(true); }
+        else if (message.code === 'LOCKED') {
+          updateState({ ...message, state: 'locked' });
+          // A rejected initial connection has no native capture observer yet.
+          // Let the user reconnect after unlocking the host locally.
+          $('reconnect').hidden = false;
+        }
         else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });
         else notice(message.code.includes('CLIPBOARD') ? 'clipboardFailed' : 'failure');
       }

@@ -79,6 +79,12 @@ or uncapturable sessions cannot retain input, clipboard or audio authority. Remo
 unlock is supported only where the actual OS permits it; disk unlock and a login
 without a graphical user session are outside this contract.
 
+If the initial native connection is rejected because the host is locked, the
+viewer shows the locked state and an explicit reconnect action after local
+unlock. There is no active capture observer on that rejected connection. A new
+attachment must paint a fresh frame before input is enabled. A previously active
+connection suspended by locking follows the native observer's recovery events.
+
 `remote_desktop.last_display_id` stores the last active selection in the existing
 host configuration. The launcher and viewer select that display when it still
 exists, otherwise the primary display. This preference is shared by authorized
