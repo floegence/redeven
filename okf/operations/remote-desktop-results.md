@@ -3,7 +3,7 @@ type: Acceptance Record
 title: Current-desktop qualification results
 description: Assess published remote desktop measurements, retained failures and outstanding real-host qualification.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-01T20:36:00Z
+timestamp: 2026-10-01T21:00:00Z
 ---
 # Summary
 
@@ -20,17 +20,18 @@ Redeven commit `314718e5765e1193db225f5dc2ab8b32e224dfe7` consumes published
 `floe-native-apps` v0.22.4 Go and Swift packages at
 `32e7efbce4d3ba9581f7606204eb4768630acc84` for the results below. The feature
 now adopts published v0.22.5 at `a2c11dabc0c5d4860887f075e79a577ba82447a0`.
-Its release gate and module-proxy/checksum readback passed; product requalification
-is pending. Formal binaries use `GOWORK=off` without sibling overrides.
+Its release gate and module-proxy/checksum readback passed. Redeven commit
+`a0ab99cb3f4fe725de039321d72fc22f42ba4492` binaries use `GOWORK=off` and the
+published native Floeterm build, without sibling overrides.
 
 Apple Silicon uses VideoToolbox hardware H.264 at 1080p/1440p. Chromium's
 `no-preference` does not prove hardware decoding. The Runtime uses task loopback.
 Foreground tests stop on focus loss and record shared system load.
 
 `server` runs Ubuntu 24.04 GNOME X11, RTX 4090 D and driver 550.90.07. The
-managed musl media stack selects software `x264enc`; its CUDA driver integration
-has not been qualified. System FFmpeg NVENC encoded a 1440p test pattern, which
-is a diagnostic and does not certify the production stack. The client uses
+musl media stack cannot load the host's glibc CUDA library and selects software
+`x264enc`; GPU encoding is unqualified. System FFmpeg NVENC encoded a 1440p test
+pattern; this does not certify the production stack. The client uses
 authenticated Redeven WebSockets through an owned SSH forward on the local LAN.
 Ten ping samples had no loss and 4.242/5.985/9.329ms minimum/average/maximum RTT.
 
@@ -89,22 +90,23 @@ with `session_unavailable` despite a focused fixture and active, unlocked login.
 A deterministic regression reproduced a seatless SSH login disappearing between
 logind enumeration and property lookup. Published v0.22.5 excludes seatless
 logins before lookup; missing graphical-session properties still fail closed.
-Its product stability requalification is pending.
+Its published product rerun completed 600.1s and 670 physical inputs at P95
+62.8ms. Decoder queue depth stayed zero; 30,226 audio blocks reached the worklet
+with at most one pending handoff. Resource sampling opened 136 SSH sessions
+without revocation. Physical audio output and audiovisual delay remain unqualified.
 
-A 30-second read-only real-host comparison made 2,208 identity checks per
-version while 100 task SSH logins exited: v0.22.4 returned 27 `UnknownObject`
-errors, v0.22.5 none. It captured no screen and injected no input. Source,
-installed-stack, both architecture and macOS checks passed before the immutable
-v0.22.5 release gate and publication.
+A read-only 30s comparison made 2,208 checks/version during 100 SSH exits:
+v0.22.4 returned 27 `UnknownObject` errors, v0.22.5 none.
 
-An actual task Runtime restart passed on v0.22.4: both channels closed, old
-session and ticket routes returned 404, a new session waited for fresh paint,
-and host fixture/text survived without input replay.
+Runtime restart passed on v0.22.4 and v0.22.5: channels closed, old session and
+ticket returned 404, and a new session required fresh paint while the fixture
+and text survived. The first v0.22.5 restart assertion used a pre-key snapshot
+(669 characters versus 670 delivered keys). A focused retry with correlated
+pre/post snapshots passed; retain the original harness failure.
 
-A subsequent 1440p original-pixel comparison failed its hash after wheel
-scrolling. Its focused retry matched the independent reference exactly and
-repeated extended office/audio checks without errors. The initial cause remains
-unresolved; retain both results rather than treating the retry as a diagnosis.
+A v0.22.4 1440p original-pixel hash failed after wheel scrolling. A focused retry
+and v0.22.5 1080p check matched the reference exactly. The initial 1440p cause
+remains unresolved; retain both results.
 
 # Diagnostics And Retained Failures
 
@@ -137,7 +139,7 @@ these do not qualify published-product behavior.
 - Resolve Linux cadence and the intermittent reference mismatch; complete both published product matrices.
 - Complete the macOS 1440p matrix and published ten-minute interaction checks.
 - Coordinate real Linux/macOS lock and host-side unlock; distinguish refusal from remote-unlock success.
-- Verify actual shortcut delivery, display hotplug, application/desktop takeover and Runtime restart/reconnect.
+- Verify shortcuts, display hotplug, application/desktop takeover and macOS Runtime restart/reconnect.
 - Qualify physical audio output and accumulated audiovisual delay.
 - Regenerate OKF, rerun affected checks and integrate locally only after acceptance.
 
@@ -157,4 +159,7 @@ committed. Representative records are:
 - `identity-churn-probe-server.log`: real login enumeration race and candidate comparison.
 - `server-v0224-native-stage-scroll-server.log` and `server-v0224-native-stage-window-server.log`: intrusive native stage timings.
 - `server-v0225-detailed-1440-window-server.log`: capture, change, submission, codec and credit observations.
+- `product-audiovisual-stability-1080-linux-v0225-stability-native-runtime.json` and `linux-resources-linux-v0225-stability-native-runtime.jsonl`: published stability and SSH sampling.
+- `product-failure-linux-v0225-stability-native-runtime.json` and `product-linux-restart-linux-v0225-restart-correlated.json`: stale harness snapshot and corrected restart.
+- `product-v0225-*-build-metadata.log` and focused Go/Swift/browser logs: published artifacts, native build and platform contracts.
 - `product-progress.json`: task state, Runtime identities and historical observations.
