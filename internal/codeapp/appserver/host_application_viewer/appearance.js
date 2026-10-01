@@ -32,6 +32,9 @@ const hostApplicationAppearance = (() => {
         quitDescription: messages[config.backend === 'macos' ? 'quitDescription' : 'sessionQuitDescription'],
         pictureHint: messages[config.backend === 'macos' ? 'pictureHint' : 'sessionPictureHint']};
     }
+    // Console arbitration is product viewer copy, outside the application launch
+    // presentation contract. Apply it on first load as well as locale changes.
+    Object.assign(config.copy, hostApplicationCatalog.consoleControl?.[root.lang]);
     refreshCopy();
     for (const listener of listeners) listener();
   }

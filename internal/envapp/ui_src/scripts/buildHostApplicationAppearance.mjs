@@ -14,6 +14,10 @@ const source = await build({
 });
 const { enUS, hostApplicationCopyKeys, hostApplicationLaunchFailures, SUPPORTED_LOCALES } = await import(`data:text/javascript;base64,${Buffer.from(source.outputFiles[0].text).toString('base64')}`);
 const keys = { ...hostApplicationCopyKeys, sessionQuit: 'hostApplications.closeAllWindows', sessionQuitTitle: 'hostApplications.closeAllWindowsTitle', sessionWaitingHint: 'hostApplications.sessionWaitingHint', sessionQuitDescription: 'hostApplications.sessionQuitDescription', sessionPictureHint: 'hostApplications.sessionPictureHint' };
+const consoleControl = Object.fromEntries(SUPPORTED_LOCALES.map(locale => {
+  const dictionary = locale === 'en-US' ? enUS : JSON.parse(readFileSync(path.join(root, `src/ui/i18n/locales/catalogs/${locale}.json`), 'utf8'));
+  return [locale, { desktopTakeover: dictionary.remoteDesktop.takeover, desktopTakeoverHint: dictionary.remoteDesktop.takeoverHint }];
+}));
 const locales = Object.fromEntries(SUPPORTED_LOCALES.map(locale => {
   const dictionary = locale === 'en-US' ? enUS : JSON.parse(readFileSync(path.join(root, `src/ui/i18n/locales/catalogs/${locale}.json`), 'utf8'));
   return [locale, Object.fromEntries(Object.entries(keys).map(([key, source]) => {
@@ -28,7 +32,7 @@ const inputStyle = readFileSync(require.resolve('@floegence/floe-webapp-core/rem
 const input = await build({ stdin: {contents: `export {createRemoteInput} from '@floegence/floe-webapp-core/remote-input'; export const style = ${JSON.stringify(inputStyle)};`, resolveDir: root}, bundle: true, write: false, minify: true, format: 'iife', globalName: 'hostApplicationInput', platform: 'browser' });
 const pointerStyle = readFileSync(require.resolve('@floegence/floe-webapp-core/remote-pointer.css'), 'utf8');
 const pointer = await build({ stdin: {contents: `export {createRemotePointer} from '@floegence/floe-webapp-core/remote-pointer'; export const style = ${JSON.stringify(pointerStyle)};`, resolveDir: root}, bundle: true, write: false, minify: true, format: 'iife', globalName: 'hostApplicationPointer', platform: 'browser' });
-const catalog = { defaults: BUILT_IN_SHELL_THEME_DEFAULTS, themes: Object.fromEntries(builtInShellThemePresets.map(p => [p.name, p.mode])), locales, launchFailures: hostApplicationLaunchFailures };
+const catalog = { defaults: BUILT_IN_SHELL_THEME_DEFAULTS, themes: Object.fromEntries(builtInShellThemePresets.map(p => [p.name, p.mode])), locales, consoleControl, launchFailures: hostApplicationLaunchFailures };
 const artifacts = {
   'remote-input.generated.js': `// Generated from published Floe remote-input; run buildHostApplicationAppearance.mjs.\n${input.outputFiles[0].text}`,
   'remote-input.generated.css': `/* Generated from published Floe remote-input.css; run buildHostApplicationAppearance.mjs. */\n${inputStyle}`,
@@ -52,3 +56,16 @@ const standaloneSource = `// Generated from published Floe standalone.css; run i
 if (process.argv.includes('--check')) {
   if (readFileSync(standaloneTarget, 'utf8') !== standaloneSource) throw new Error('floeStandaloneStyles.generated.ts is stale');
 } else writeFileSync(standaloneTarget, standaloneSource);
+
+// Desktop and application viewers share the published input assets; each keeps
+// its own explicit product catalog.
+const desktopLocales = Object.fromEntries(SUPPORTED_LOCALES.map(locale => {
+  const dictionary = locale === 'en-US' ? enUS : JSON.parse(readFileSync(path.join(root, `src/ui/i18n/locales/catalogs/${locale}.json`), 'utf8'));
+  if (!dictionary.remoteDesktop) throw new Error(`Missing desktop catalog: ${locale}`);
+  return [locale, dictionary.remoteDesktop];
+}));
+const desktopCatalogTarget = path.resolve(output, '../remote_desktop_viewer/catalog.generated.js');
+const desktopCatalogSource = `// Generated from explicit Env App catalogs; run buildHostApplicationAppearance.mjs.\nwindow.remoteDesktopCatalog = ${JSON.stringify(desktopLocales).replaceAll('<', '\\u003c')};\n`;
+if (process.argv.includes('--check')) {
+  if (readFileSync(desktopCatalogTarget, 'utf8') !== desktopCatalogSource) throw new Error('Desktop catalog is stale');
+} else writeFileSync(desktopCatalogTarget, desktopCatalogSource);

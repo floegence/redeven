@@ -76,10 +76,18 @@ type macMessage struct {
 }
 
 func macCommand(helper string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, error) {
+	return macCommandMedia(helper, nil)
+}
+
+func macCommandMedia(helper string, media *os.File) (*exec.Cmd, io.WriteCloser, io.ReadCloser, error) {
 	if helper == "" {
 		return nil, nil, nil, ErrUnavailable
 	}
 	cmd := exec.Command(helper, "--host-applications")
+	if media != nil {
+		cmd.ExtraFiles = []*os.File{media}
+		cmd.Env = append(os.Environ(), "REDEVEN_HOST_MEDIA_FD=3")
+	}
 	input, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, nil, nil, err
@@ -568,7 +576,7 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			// Explicit sharing termination is normal even before the first frame.
 			// A failed application launch arrives as a separate native error.
 			return
-		case "menu", "operation_error", "operation_complete":
+		case "menu", "operation_error", "operation_complete", "control_revoked":
 			n.enqueueNotice(raw)
 		case "error":
 			slog.Warn("native application error", "session", s.view.ID, "code", msg.Code)
@@ -680,7 +688,7 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 			}
 			action, _ := request["action"].(string)
 			if action == "resume" {
-				if resumed {
+				if takeover, _ := request["takeover"].(bool); resumed && !takeover {
 					return
 				}
 				resumed = true

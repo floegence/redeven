@@ -3,6 +3,14 @@ import CoreVideo
 @testable import RedevenComputerHost
 
 final class HostApplicationCaptureTests: XCTestCase {
+    func testApplicationPacketsCannotEnableDesktopAudioOrPipeline() throws {
+        let settings = try HostApplicationCaptureSettings(request: ["audio": true, "native_pixels": true, "frame_capacity": 4, "require_video": true])
+        XCTAssertFalse(settings.native.audio)
+        XCTAssertFalse(settings.native.nativePixels)
+        XCTAssertFalse(settings.native.requireVideo)
+        XCTAssertEqual(settings.native.frameCapacity, 1)
+    }
+
     func testRetinaUsesPhysicalPixelsWithoutUpscalingSource() throws {
         let settings = try HostApplicationCaptureSettings(request: ["pixel_ratio": 2])
         XCTAssertEqual(settings.dimensions(points: CGSize(width: 1000, height: 700), sourceScale: 2), CGSize(width: 2000, height: 1400))

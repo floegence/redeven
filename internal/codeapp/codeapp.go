@@ -30,6 +30,7 @@ import (
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
+	"github.com/floegence/redeven/internal/remotedesktop"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/terminal"
@@ -99,17 +100,18 @@ type Service struct {
 	codePortMin int
 	codePortMax int
 
-	reg        *registry.Registry
-	pf         *portforward.Service
-	managed    *managedwebservice.Manager
-	hostApps   *hostapps.Manager
-	containers *containerresource.Service
-	runner     *codeserver.Runner
-	runtime    *codeserver.RuntimeManager
-	notes      *notes.Service
-	layouts    *workbenchlayout.Service
-	aiReady    *aiReadinessController
-	appSrv     *appserver.Server
+	reg           *registry.Registry
+	pf            *portforward.Service
+	managed       *managedwebservice.Manager
+	hostApps      *hostapps.Manager
+	remoteDesktop *remotedesktop.Manager
+	containers    *containerresource.Service
+	runner        *codeserver.Runner
+	runtime       *codeserver.RuntimeManager
+	notes         *notes.Service
+	layouts       *workbenchlayout.Service
+	aiReady       *aiReadinessController
+	appSrv        *appserver.Server
 
 	pluginIntegration *redevpluginintegration.Integration
 
@@ -352,9 +354,18 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	hostApps := hostapps.New(stateAbs, agentHomeDir, pfSvc)
+	remoteDesktop := remotedesktop.New(stateAbs, pfSvc, hostApps.OpenDesktop)
+	desktopOwned := true
+	defer func() {
+		if desktopOwned {
+			_ = remoteDesktop.Close()
+			_ = hostApps.Close()
+		}
+	}()
 	browserRuntime, _ := opts.ComputerUseExecutor.(*ai.ComputerUseRuntime)
 	appSrv, err := appserver.New(appserver.Options{
 		HostApplications:      hostApps,
+		RemoteDesktop:         remoteDesktop,
 		Logger:                logger,
 		DistFS:                mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:               svc,
@@ -404,6 +415,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	svc.hostApps = hostApps
+	svc.remoteDesktop = remoteDesktop
+	desktopOwned = false
 	svc.appSrv = appSrv
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
@@ -427,6 +440,9 @@ func (s *Service) Close() error {
 		_ = s.managed.Close()
 	}
 
+	if s.remoteDesktop != nil {
+		_ = s.remoteDesktop.Close()
+	}
 	if s.hostApps != nil {
 		_ = s.hostApps.Close()
 	}

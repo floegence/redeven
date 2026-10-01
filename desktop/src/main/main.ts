@@ -298,6 +298,7 @@ import {
   webServiceBrowserDisplayURL,
 } from './navigation';
 import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveHostApplicationWindowPreloadPath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
+import { REMOTE_DESKTOP_FILES_CHANNEL } from '../shared/hostApplicationWindowIPC';
 import { attachHostApplicationWindow } from './hostApplicationWindow';
 import { HostApplicationPreparationWindows } from './hostApplicationPreparationWindows';
 import { HOST_APPLICATION_PREPARATION_CHANNEL, HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL, hostApplicationPreparationDocument, updateHostApplicationPreparationDocument, validHostApplicationPreparationView, type HostApplicationPreparationRequest, type HostApplicationPreparationResult } from '../shared/hostApplicationPreparation';
@@ -8779,7 +8780,7 @@ function createWebServiceBrowserController(
   let loadingUnavailablePage = false;
   const webSession = session.fromPartition(partition);
   const targetAddress = new URL(request.target_url).origin;
-  const applicationWindow = request.presentation === 'application';
+  const applicationWindow = request.presentation !== 'browser';
   const onApplicationClosed = (closedWindow: Readonly<{ webContentsID: number }>) => {
     webServiceBrowserByToolbarWebContentsID.delete(closedWindow.webContentsID);
     sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
@@ -8825,7 +8826,12 @@ function createWebServiceBrowserController(
   const refreshHostAppearance = applicationWindow ? attachHostApplicationWindow(win, contentView.webContents, browserEntryURL, () => ({
     theme: desktopRendererThemeSnapshot(desktopThemeState().getSnapshot()),
     locale: desktopLanguageState().getSnapshot().resolved_locale,
-  })) : () => {};
+  }), () => {
+    if (request.presentation !== 'desktop' || sessionRecord.root_window.browserWindow.isDestroyed()) return;
+    const root = sessionRecord.root_window.browserWindow;
+    root.webContents.send(REMOTE_DESKTOP_FILES_CHANNEL);
+    presentAppWindow(root, { stealAppFocus: true });
+  }) : () => {};
 
   const layoutContent = (): void => {
     if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;

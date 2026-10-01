@@ -1,8 +1,12 @@
 package hostapps
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
+	nativeapps "github.com/floegence/floe-native-apps"
 	"io"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -24,6 +28,7 @@ type macHostClient struct {
 	host     *macHost
 	id       string
 	messages chan []byte
+	media    chan nativeapps.HostDesktopMessage
 	done     chan struct{}
 	pending  []byte // Owned by the single response reader.
 }
@@ -46,15 +51,22 @@ func (m *Manager) openMacClient() (*macHostClient, error) {
 		}
 	}
 	if h == nil {
-		cmd, input, output, err := macCommand(m.macHelper())
+		mediaRead, mediaWrite, err := os.Pipe()
 		if err != nil {
+			return nil, err
+		}
+		cmd, input, output, err := macCommandMedia(m.macHelper(), mediaWrite)
+		_ = mediaWrite.Close()
+		if err != nil {
+			_ = mediaRead.Close()
 			return nil, err
 		}
 		h = &macHost{cmd: cmd, input: input, clients: make(map[string]*macHostClient), done: make(chan struct{})}
 		m.nativeHost = h
 		go h.read(output)
+		go h.readMedia(mediaRead)
 	}
-	c := &macHostClient{host: h, id: randomID(), messages: make(chan []byte, 128), done: make(chan struct{})}
+	c := &macHostClient{host: h, id: randomID(), messages: make(chan []byte, 128), media: make(chan nativeapps.HostDesktopMessage, 16), done: make(chan struct{})}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.clients == nil {
@@ -186,5 +198,53 @@ func (m *Manager) closeMacHost() {
 	case <-time.After(2 * time.Second):
 		_ = h.cmd.Process.Kill()
 		<-h.done
+	}
+}
+
+func (h *macHost) readMedia(output io.ReadCloser) {
+	defer output.Close()
+	defer h.input.Close()
+	for {
+		var prefix [4]byte
+		if _, err := io.ReadFull(output, prefix[:]); err != nil {
+			return
+		}
+		size := binary.BigEndian.Uint32(prefix[:])
+		if size == 0 || size > 8<<20 {
+			return
+		}
+		header := make([]byte, size)
+		if _, err := io.ReadFull(output, header); err != nil {
+			return
+		}
+		var envelope struct {
+			SessionID string `json:"session_id"`
+			Bytes     int    `json:"bytes"`
+		}
+		if json.Unmarshal(header, &envelope) != nil || envelope.Bytes < 1 || envelope.Bytes > 64<<20 {
+			return
+		}
+		data := make([]byte, envelope.Bytes)
+		if _, err := io.ReadFull(output, data); err != nil {
+			return
+		}
+		message, err := nativeapps.ReadHostDesktopMessage(io.MultiReader(bytes.NewReader(prefix[:]), bytes.NewReader(header), bytes.NewReader(data)))
+		if err != nil {
+			return
+		}
+		h.mu.Lock()
+		c := h.clients[envelope.SessionID]
+		h.mu.Unlock()
+		if c == nil {
+			continue
+		}
+		select {
+		case c.media <- message:
+		case <-c.done:
+		default:
+			if h.remove(c) {
+				go func() { _ = h.send(c.id, map[string]any{"action": "detach"}) }()
+			}
+		}
 	}
 }

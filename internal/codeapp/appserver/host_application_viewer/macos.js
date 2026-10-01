@@ -136,11 +136,12 @@
   function savePicture() {
     try { localStorage.setItem(preferenceKey, JSON.stringify(picture)); } catch { /* Preferences are optional. */ }
   }
-  function configurePicture(action = 'configure') {
+  let controlling = false;
+  function configurePicture(action = 'configure', takeover = false) {
     if (socket?.readyState !== WebSocket.OPEN) return;
     const size = viewportSize();
     configuredGeometry = `${size.width}:${size.height}:${devicePixelRatio}`;
-    socket.send(JSON.stringify({action, ...picture, ...size,
+    socket.send(JSON.stringify({action, takeover, ...picture, ...size,
       pixel_ratio: Math.min(4, Math.max(0.5, devicePixelRatio || 1)), video: videoSupported}));
   }
   hostApplicationAppearance.subscribe(() => { syncWindowPicker(); positionPopover(); });
@@ -468,7 +469,7 @@
     onResize: () => pointerController.reset(),
     onPaint(next, width, height) {
       renderedGeneration = current.generation;
-      inputController.bindTarget(current);
+      inputController.bindTarget(controlling ? current : null);
       canvas.setAttribute('aria-busy', 'false');
       statisticValues.resolution.textContent = `${width} × ${height}`;
       hostApplicationAppearance.copy(statisticValues.transport, next.meta.transport === 'video' ? 'pictureVideo' : 'pictureImages');
@@ -546,6 +547,9 @@
           invalidateCapture();
           current = { generation: message.generation };
           present(message.type === 'waiting' ? 'waiting' : 'captureUnavailable');
+        } else if (message.type === 'control_revoked' || message.type === 'operation_error' && message.code === 'CONTROL_IN_USE') {
+          controlling = false; pointerController.reset(); inputController.bindTarget(null);
+          showControlTakeover();
         } else if (message.type === 'operation_error') {
           if (message.action === 'quit_application') {
             clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback('quitFailed');
@@ -559,6 +563,7 @@
             clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback('quitPending');
           } else feedback.hidden = true;
         } else if (message.type === 'window') {
+          controlling = message.control === true; takeoverButton.hidden = controlling;
           if (message.input_version !== 1) { disconnect('inputVersionUnsupported'); return; }
           clearTimeout(deadline);
           deadline = setTimeout(() => {
@@ -612,8 +617,33 @@
       if (mine === attempt && !abort?.signal.aborted) disconnect('disconnected');
     }
   }
+  const takeoverPanel = document.createElement('dialog');
+  takeoverPanel.className = 'mac-app-takeover';
+  const takeoverTitle = document.createElement('strong');
+  takeoverTitle.id = 'desktop-takeover-title';
+  hostApplicationAppearance.copy(takeoverTitle, 'desktopTakeover');
+  takeoverPanel.setAttribute('aria-labelledby', takeoverTitle.id);
+  const takeoverHint = document.createElement('p');
+  hostApplicationAppearance.copy(takeoverHint, 'desktopTakeoverHint');
+  const takeoverCancel = document.createElement('button');
+  hostApplicationAppearance.copy(takeoverCancel, 'cancel');
+  const takeoverConfirm = document.createElement('button');
+  hostApplicationAppearance.copy(takeoverConfirm, 'desktopTakeover');
+  takeoverCancel.onclick = () => takeoverPanel.close();
+  takeoverConfirm.onclick = () => { takeoverPanel.close(); configurePicture('resume', true); };
+  takeoverPanel.append(takeoverTitle, takeoverHint, takeoverCancel, takeoverConfirm);
+  document.body.append(takeoverPanel);
+  const takeoverButton = document.createElement('button');
+  takeoverButton.hidden = true;
+  hostApplicationAppearance.copy(takeoverButton, 'desktopTakeover');
+  takeoverButton.onclick = () => takeoverPanel.showModal();
+  toolbar.append(takeoverButton);
+  function showControlTakeover() {
+    takeoverButton.hidden = false;
+    if (!takeoverPanel.open) takeoverPanel.showModal();
+  }
   function validPointerTarget(target) {
-    return target === current && Boolean(target?.window) && renderedGeneration === target.generation
+    return controlling && target === current && Boolean(target?.window) && renderedGeneration === target.generation
       && socket?.readyState === WebSocket.OPEN && document.body.dataset.state === 'active';
   }
   const stopViewport = hostApplicationViewport.observeViewport(window, viewport => {

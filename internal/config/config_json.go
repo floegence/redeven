@@ -6,6 +6,7 @@ import (
 )
 
 var configKnownJSONFields = map[string]struct{}{
+	"remote_desktop":              {},
 	"provider_origin":             {},
 	"controlplane_base_url":       {},
 	"controlplane_provider_id":    {},

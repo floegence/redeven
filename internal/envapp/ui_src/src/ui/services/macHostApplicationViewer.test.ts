@@ -15,6 +15,8 @@ afterEach(() => { dom?.window.dispatchEvent(new dom.window.Event('beforeunload')
 
 async function viewer(video = false, icon = '', initial?: Record<string, string>, setup?: (view: Window & typeof globalThis) => void) {
   dom = new JSDOM(html, { url: 'http://localhost/pf/test/_redeven_host_app/', runScripts: 'dangerously', pretendToBeVisual: true });
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new dom.window.Event('close')); };
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ state: 'running', password: 'private' }) });
   const drawImage = vi.fn();
   const bitmap = vi.fn().mockResolvedValue({ width: 640, height: 480, close: vi.fn() });
@@ -30,7 +32,7 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
     send = vi.fn();
     close = vi.fn(() => { this.readyState = 3; });
     constructor(readonly url: URL, readonly protocols: string[]) { Socket.instances.push(this); }
-    message(value: unknown) { const msg = value as {type: string; generation: number}; if (msg.type === 'window') this.generation = msg.generation; this.onmessage?.({ data: JSON.stringify(msg.type === 'window' ? {input_version:1, ...value as object} : value) }); }
+    message(value: unknown) { const msg = value as {type: string; generation: number}; if (msg.type === 'window') this.generation = msg.generation; this.onmessage?.({ data: JSON.stringify(msg.type === 'window' ? {input_version:1, control:true, ...value as object} : value) }); }
     frame(metadata: Record<string, unknown> = {}) {
       const header = new TextEncoder().encode(JSON.stringify({codec: 'jpeg', generation: this.generation, frame_id: ++this.frameID, transport: 'images', ...metadata}));
       const packet = new dom.window.Uint8Array(4 + header.length + 5);
@@ -64,6 +66,18 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
 }
 
 describe('macOS application viewer', () => {
+  it('keeps a taken-over viewer read-only until the host grants control on a fresh window', async () => {
+    const v = await viewer(); await v.activate();
+    v.socket().message({type:'control_revoked', generation:1});
+    v.socket().message({type:'window', window:'owned', generation:2, control:false, width:640, height:480});
+    v.socket().frame(); await drain();
+    const input = dom.window.document.querySelector<HTMLTextAreaElement>('.floe-remote-input')!;
+    expect(input.disabled).toBe(true);
+    v.socket().message({type:'window', window:'owned', generation:3, control:true, width:640, height:480});
+    expect(input.disabled).toBe(true);
+    v.socket().frame(); await drain();
+    expect(input.disabled).toBe(false);
+  });
   it('keeps an established viewer open when the host supplies no known end reason', async () => {
     const v = await viewer(); await v.activate();
     v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'ended',end_reason:'unexpected'})});

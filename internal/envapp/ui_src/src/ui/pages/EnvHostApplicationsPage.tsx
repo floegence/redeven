@@ -20,6 +20,7 @@ import { LocalApiError } from '../services/localApi';
 import { openWebServiceRoute, resolveWebServiceOpenRoute } from '../services/webServiceWindows';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { RemoteDesktopLauncher } from './RemoteDesktopPanel';
 import { HostApplicationsHeader, HostApplicationsListSkeleton } from './HostApplicationsPresentation';
 
 class ComponentAcquisitionError extends Error {
@@ -634,6 +635,7 @@ export function EnvHostApplicationsPage() {
   ];
   return <div ref={pageRoot} class="host-apps h-full min-h-0 flex flex-col" data-testid="host-applications" data-env-reload-state={catalog() ? 'content' : displayError() ? 'error' : 'pending'}>
     <HostApplicationsHeader feedback={feedback()} actions={<>
+<RemoteDesktopLauncher />
 
         <Button variant="ghost" size="sm" onClick={() => void refresh()} aria-busy={loading()} disabled={loading() || !canRead()} title={i18n.t('hostApplications.refresh')} aria-label={i18n.t('hostApplications.refresh')}><Refresh class={`w-4 h-4 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
         <Button aria-label={i18n.t(emptyLinuxHost() ? 'hostApplications.addExisting' : 'hostApplications.add')} title={i18n.t(emptyLinuxHost() ? 'hostApplications.addExisting' : 'hostApplications.add')} variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch() || !catalog()?.availability.supported}><Plus class="w-3.5 h-3.5" /><span>{i18n.t(emptyLinuxHost() ? 'hostApplications.addExisting' : 'hostApplications.add')}</span></Button>

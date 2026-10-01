@@ -37,6 +37,7 @@ export type DesktopRuntimeMaintenanceResult = Readonly<{
 export type RuntimeMaintenanceContext = DesktopShellRuntimeMaintenanceContext;
 
 export interface DesktopShellBridge {
+  onRemoteDesktopFiles?: (listener: () => void) => () => void;
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;
   openFlowerSettings?: () => Promise<void>;

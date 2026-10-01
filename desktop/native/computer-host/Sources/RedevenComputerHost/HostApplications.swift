@@ -145,7 +145,8 @@ private final class HostApplicationDelivery {
 
 final class HostApplicationSession {
     private let output: ([String: Any]) -> Void
-    init(output: @escaping ([String: Any]) -> Void) { self.output = output }
+    private let mayControl: () -> Bool
+    init(mayControl: @escaping () -> Bool = { true }, output: @escaping ([String: Any]) -> Void) { self.mayControl = mayControl; self.output = output }
     private var picture = try! HostApplicationCaptureSettings()
     private var app: NSRunningApplication?
     private let inventory = HostApplicationWindows()
@@ -441,7 +442,7 @@ final class HostApplicationSession {
                         finish(); return
                     }
                     self.waiting = false
-                    let stream = HostApplicationStream(generation: selectionGeneration, settings: self.picture, output: self.output) { [weak self] error in
+                    let stream = HostApplicationStream(generation: selectionGeneration, settings: self.picture.native, output: self.output) { [weak self] error in
                         guard let self, self.app != nil, self.generation == selectionGeneration else { return }
                         let failure = error as NSError
                         if failure.domain == SCStreamErrorDomain && failure.code == SCStreamError.Code.noCaptureSource.rawValue {
@@ -463,14 +464,14 @@ final class HostApplicationSession {
     private func applicationTarget(_ request: [String: Any]) throws -> NSRunningApplication {
         // Application controls remain bound even when the app has no window.
         // Every capture/wait transition revokes old menu handles and generations.
-        guard viewerReady, checkAccess(),
+        guard viewerReady, mayControl(), checkAccess(),
               let app, !app.isTerminated, request["generation"] as? Int == generation else {
             throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current application.")
         }
         return app
     }
     private func target(_ request: [String: Any]) throws -> NativeWindow {
-        guard viewerReady, checkAccess(),
+        guard viewerReady, mayControl(), checkAccess(),
               let selected, !selected.destructionObserved, request["window"] as? String == selected.id,
               request["generation"] as? Int == generation else { throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current window.") }
         try selected.validate()
@@ -572,6 +573,12 @@ final class HostApplicationSession {
             }
         }
     }
+    func revokeControl() {
+        releaseInput()
+        menu.invalidate()
+        output(["type": "control_revoked", "generation": generation])
+    }
+
     func releaseInput() {
         if let app {
             for release in heldKeys.values { release.postToPid(app.processIdentifier) }
@@ -633,10 +640,10 @@ enum HostApplications {
                 buffer.append(contentsOf: chunk.prefix(count))
                 while let newline = buffer.firstIndex(of: 10) {
                     let line = Data(buffer[..<newline]); buffer.removeSubrange(...newline)
-                    guard line.count <= 262144, let request = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { exit(2) }
+                    guard line.count <= 8 << 20, let request = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { exit(2) }
                     DispatchQueue.main.sync { host.handle(request) }
                 }
-                if buffer.count > 262144 { exit(2) }
+                if buffer.count > 8 << 20 { exit(2) }
             }
             DispatchQueue.main.async { host.end { exit(0) } }
         }
