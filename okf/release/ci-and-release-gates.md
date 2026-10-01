@@ -26,6 +26,11 @@ checks the staged diff, README localization contract, staged open-source
 hygiene, and third-party notices when dependency or attribution inputs change.
 It does not run full asset, Desktop, Docker, or repository suites.
 
+Secret scanning excludes the downloaded SwiftPM dependency checkouts under
+`desktop/native/computer-host/.build/checkouts/`, like the configured npm
+dependency caches. Redeven native sources and other build output remain scanned;
+upstream fixture literals must not require disabling a rule for product code.
+
 The notice check exports the Git index to a temporary tree and calls that
 tree's existing generator with `--check`. It checks the content being committed,
 including partial staging; an unstaged notice update cannot satisfy it. The

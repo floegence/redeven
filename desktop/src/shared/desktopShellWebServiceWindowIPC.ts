@@ -1,7 +1,7 @@
 export const DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL = 'redeven-desktop:shell-open-web-service-window';
 
 export type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
-export type ForwardWindowPresentation = 'browser' | 'application';
+export type ForwardWindowPresentation = 'browser' | 'application' | 'desktop';
 
 export type DesktopShellOpenWebServiceWindowRequest = Readonly<{
   url: string;
@@ -58,7 +58,7 @@ export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown)
     if (accessMode !== 'unified_proxy' && accessMode !== 'desktop_loopback') return null;
     if (accessMode === 'desktop_loopback' && targetURL.protocol !== 'http:') return null;
     const presentation = compact(candidate.presentation) || 'browser';
-    if (presentation !== 'browser' && presentation !== 'application') return null;
+    if (presentation !== 'browser' && presentation !== 'application' && presentation !== 'desktop') return null;
     const preparationID = compact(candidate.preparation_id);
     if (preparationID && (presentation !== 'application' || !/^[a-f0-9-]{36}$/u.test(preparationID))) return null;
     return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString(), access_mode: accessMode, presentation, ...(preparationID ? { preparation_id: preparationID } : {}) };

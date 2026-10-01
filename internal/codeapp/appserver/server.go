@@ -47,6 +47,7 @@ import (
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
+	"github.com/floegence/redeven/internal/remotedesktop"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/settings"
@@ -62,6 +63,7 @@ type Options struct {
 	PortForward          PortForwardBackend
 	ManagedWebServices   managedwebservice.Backend
 	HostApplications     hostapps.Backend
+	RemoteDesktop        *remotedesktop.Manager
 	ContainerResources   *containerresource.Service
 	AIServiceProvider    AIServiceProvider
 	BrowserRuntime       *ai.ComputerUseRuntime
@@ -228,6 +230,7 @@ type Server struct {
 	pf             PortForwardBackend
 	managed        managedwebservice.Backend
 	hostApps       hostapps.Backend
+	remoteDesktop  *remotedesktop.Manager
 	containers     *containerresource.Service
 	aiProvider     AIServiceProvider
 	browserRuntime *ai.ComputerUseRuntime
@@ -418,7 +421,7 @@ func New(opts Options) (*Server, error) {
 			return nil, err
 		}
 	}
-	return &Server{
+	g := &Server{
 		log:                   logger,
 		agentHomeDir:          scope.HomePathAbs(),
 		scope:                 scope,
@@ -427,6 +430,7 @@ func New(opts Options) (*Server, error) {
 		pf:                    opts.PortForward,
 		managed:               opts.ManagedWebServices,
 		hostApps:              opts.HostApplications,
+		remoteDesktop:         opts.RemoteDesktop,
 		containers:            opts.ContainerResources,
 		aiProvider:            opts.AIServiceProvider,
 		browserRuntime:        opts.BrowserRuntime,
@@ -451,7 +455,25 @@ func New(opts Options) (*Server, error) {
 		pluginConns:           make(map[*pluginAdmissionConn]struct{}),
 		distFS:                opts.DistFS,
 		addr:                  addr,
-	}, nil
+	}
+	if g.remoteDesktop != nil {
+		g.remoteDesktop.SetDisplayPreference(func(id string) {
+			_, err := g.updateConfigLocked(func(cfg *config.Config) error {
+				if cfg.RemoteDesktop == nil {
+					cfg.RemoteDesktop = &config.RemoteDesktopConfig{}
+				}
+				cfg.RemoteDesktop.LastDisplayID = id
+				return nil
+			})
+			if err != nil {
+				g.log.Warn("save desktop display preference", "error", err)
+			}
+		})
+		g.remoteDesktop.SetAudit(func(owner, id, event, reason string) {
+			g.appendAudit(&session.Meta{UserPublicID: owner}, "remote_desktop_"+event, reason, map[string]any{"session_id": id}, nil)
+		})
+	}
+	return g, nil
 }
 
 func (g *Server) CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error) {
@@ -2511,6 +2533,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	if g.handleBrowserConnectionAPI(w, r) {
 		return
 	}
+	if g.handleRemoteDesktopAPI(w, r) {
+		return
+	}
 	if g.handleHostApplicationsAPI(w, r) {
 		return
 	}
@@ -2983,6 +3008,17 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)
+		if len(body.PermissionPolicy) > 0 && g.remoteDesktop != nil {
+			g.remoteDesktop.RevokeDisallowed(func(owner string) bool {
+				for _, app := range []string{localFloeAppAgent, localFloeAppPortForward} {
+					cap := config.ResolvePermissionCapFromConfigPath(g.configPath, owner, app, config.PermissionSet{Read: true, Write: false, Execute: true})
+					if !cap.Read || !cap.Write || !cap.Execute {
+						return false
+					}
+				}
+				return true
+			})
+		}
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
@@ -6753,6 +6789,11 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 
 	// Session status and the viewer document outlive the released network route.
 	// The owner/full-permission guard still runs before any presentation is sent.
+	if g.remoteDesktop != nil {
+		if s, owner, found := g.remoteDesktop.ForForward(forwardID); found && g.guardRemoteDesktopSession(w, r, s, owner, localPrefix) {
+			return
+		}
+	}
 	if g.hostApps != nil {
 		if s, owner, found := g.hostApps.ForForward(forwardID); found && g.guardHostApplicationSession(w, r, s, owner, localPrefix) {
 			return
@@ -6769,6 +6810,11 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if g.remoteDesktop != nil {
+		if s, owner, found := g.remoteDesktop.ForTarget(fw.TargetURL); found && g.guardRemoteDesktopSession(w, r, s, owner, localPrefix) {
+			return
+		}
+	}
 	if g.guardHostApplicationForward(w, r, fw.TargetURL, localPrefix) {
 		return
 	}

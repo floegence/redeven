@@ -25,6 +25,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Web Services interface](architecture/web-services-interface.md) - Read service status, open archives, and resolve exceptions in compact, accessible Activity and Workbench panels.
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
 - [Managed host application preparation](architecture/host-application-preparation.md) - Prepare native graphical support and recover interrupted setup without host configuration.
+- [Remote desktop sessions](architecture/remote-desktop.md) - Share the current host desktop with exclusive remote control, private media and explicit OS authorization.
+- [Remote desktop acceptance](operations/remote-desktop-validation.md) - Assess physical-desktop office behavior and measured performance against the required thresholds.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.
 - [Cross-platform application behavior](architecture/host-application-behavior.md) - Compare common operations and the OS limits that prevent identical behavior.
 - [Linux application lifecycle](architecture/linux-application-lifecycle.md) - Recover surviving application instances and separate sharing, normal window closure and explicit force quit.

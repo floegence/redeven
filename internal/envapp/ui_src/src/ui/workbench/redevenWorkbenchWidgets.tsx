@@ -31,6 +31,7 @@ import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 const FRONTABLE_WORKBENCH_RENDER_MODE = 'projected_surface';
 const EnvCodespacesPage = lazy(() => import('../pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
 const EnvContainersPage = lazy(() => import('../pages/EnvContainersPage').then((module) => ({ default: module.EnvContainersPage })));
+const RemoteDesktopPanel = lazy(() => import('../pages/RemoteDesktopPanel').then(module => ({ default: module.RemoteDesktopPanel })));
 const EnvHostApplicationsPage = lazy(() => import('../pages/EnvHostApplicationsPage').then((module) => ({ default: module.EnvHostApplicationsPage })));
 const EnvPortForwardsPage = lazy(() => import('../pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
 const RemoteFileBrowser = lazy(() => import('../widgets/RemoteFileBrowser').then((module) => ({ default: module.RemoteFileBrowser })));
@@ -201,6 +202,10 @@ function CodespacesWidget() {
       </Suspense>
     </div>
   );
+}
+
+function RemoteDesktopWidget() {
+  return <div class="h-full min-h-0 overflow-auto" {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}><Suspense><RemoteDesktopPanel /></Suspense></div>;
 }
 
 function HostApplicationsWidget() {
@@ -381,6 +386,17 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     projectedSurfaceScaleBehavior: 'settle_sharp_zoom',
   },
   {
+    type: 'redeven.remote-desktop',
+    label: 'Remote Desktop',
+    icon: HostApplicationsWorkbenchIcon,
+    body: RemoteDesktopWidget,
+    defaultTitle: 'Remote Desktop',
+    defaultSize: { width: 520, height: 580 },
+    group: 'runtime',
+    singleton: true,
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
+  },
+  {
     type: 'redeven.applications',
     label: 'Host Applications',
     icon: HostApplicationsWorkbenchIcon,
@@ -436,6 +452,8 @@ function localizedWorkbenchWidgetCopy(
       return { label: t('workbench.widgets.codespaces.label'), defaultTitle: t('workbench.widgets.codespaces.defaultTitle') };
     case 'redeven.ports':
       return { label: t('workbench.widgets.ports.label'), defaultTitle: t('workbench.widgets.ports.defaultTitle') };
+    case 'redeven.remote-desktop':
+      return { label: t('remoteDesktop.title'), defaultTitle: t('remoteDesktop.title') };
     case 'redeven.applications':
       return { label: t('hostApplications.title'), defaultTitle: t('hostApplications.title') };
     case 'redeven.containers':
@@ -461,6 +479,7 @@ export const redevenWorkbenchFilterBarWidgetTypes: readonly WorkbenchWidgetType[
   'redeven.codespaces',
   'redeven.ports',
   'redeven.applications',
+  'redeven.remote-desktop',
   'redeven.containers',
   'redeven.ai',
 ];

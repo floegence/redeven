@@ -2,6 +2,20 @@ import XCTest
 @testable import RedevenComputerHost
 
 final class HostApplicationHostTests: XCTestCase {
+    func testRejectedDesktopConnectDoesNotReserveConsoleControl() {
+        var messages: [[String: Any]] = []
+        let host = HostApplicationHost { messages.append($0) }
+        for letter in ["a", "b"] {
+            host.handle(["protocol_version": 2, "session_id": String(repeating: letter, count: 32), "action": "desktop",
+                         "command": ["version": 1, "id": 1, "method": "connect", "mode": "control", "picture": ["mode": "invalid"]]])
+            XCTAssertEqual(messages.last?["type"] as? String, "error")
+            XCTAssertNotEqual(messages.last?["code"] as? String, "CONTROL_IN_USE")
+        }
+        let stopped = expectation(description: "Rejected desktops detach without owning host work")
+        host.end { stopped.fulfill() }
+        wait(for: [stopped], timeout: 1)
+    }
+
     func testChannelsRouteIndependentlyAndDetachOnlyTheirOwnSession() {
         var messages: [[String: Any]] = []
         let host = HostApplicationHost { messages.append($0) }

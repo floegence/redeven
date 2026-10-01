@@ -743,6 +743,17 @@ func TestMacViewerNegotiatesOnceBeforeControlAndWaitsForHelper(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("viewer configuration did not reach ready helper")
 	}
+	if err := c.WriteJSON(map[string]any{"action": "resume", "takeover": true, "mode": "clarity", "video": true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case request := <-requests:
+		if request["action"] != "resume" || request["takeover"] != true || request["mode"] != "clarity" {
+			t.Fatalf("explicit takeback lost its authority request: %v", request)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("explicit takeback closed the viewer instead of reaching the helper")
+	}
 	if err := c.WriteJSON(map[string]any{"action": "resume"}); err != nil {
 		t.Fatal(err)
 	}

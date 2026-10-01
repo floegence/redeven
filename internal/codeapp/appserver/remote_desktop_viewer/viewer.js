@@ -1,0 +1,300 @@
+import { HostDesktopPlayer, unpackDesktopMedia } from './host_desktop_player.mjs';
+
+const config = window.remoteDesktopConfig;
+const $ = id => document.getElementById(id);
+const catalog = window.remoteDesktopCatalog;
+const copy = key => (catalog[document.documentElement.lang] ?? catalog['en-US'])[key];
+const canvas = $('desktop'), panel = $('panel'), toolbar = $('toolbar');
+const base = config.base;
+let session = config.session, control, media, player, epoch = 0, sequence = 0;
+let generation = 0, state = 'disconnected', reason = '', painted = false, stopped = false, retry;
+let backend = '', stats, clipboardText = '', clipboardSync = false, clipboardBusy = false;
+let original = false, quality = 'smooth', audio = false, volume = .7, pinned = false, hideTimer;
+let awaitingMedia = [], reconnectAttempts = 0, noticeTimer, awaitingState = false;
+let nativeFullscreen = false, pendingFullscreen;
+const windowBridge = window.redevenHostApplicationWindow;
+const fullscreen = () => windowBridge ? nativeFullscreen : !!document.fullscreenElement;
+
+function localize() {
+  for (const element of document.querySelectorAll('[data-copy]')) element.textContent = copy(element.dataset.copy);
+  for (const element of document.querySelectorAll('[data-label]')) element.setAttribute('aria-label', copy(element.dataset.label));
+  document.title = `${copy('title')} · ${session.host_name}`;
+  $('host').textContent = session.host_name;
+  $('fullscreen').textContent = copy(fullscreen() ? 'exitFullscreen' : 'fullscreen');
+}
+localize();
+new MutationObserver(localize).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+
+function notice(key) { $('notice').textContent = copy(key); clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('notice').textContent = ''; }, 6000); }
+function authorized(target) { return !awaitingState && target === generation && painted && state === 'active' && session.mode === 'control' && control?.readyState === WebSocket.OPEN; }
+function active(target) { return !panel.open && authorized(target); }
+function command(method, values = {}, takeover = false) {
+  if (control?.readyState !== WebSocket.OPEN) return false;
+  if (control.bufferedAmount > 256 * 1024) { control.close(); return false; }
+  control.send(JSON.stringify({ command: { version: 1, id: ++sequence, method, ...(!['probe', 'connect', 'disconnect'].includes(method) ? { generation } : {}), ...values }, takeover }));
+  return true;
+}
+function release(target) { if (target === generation && state === 'active') command('release_input'); }
+const input = hostApplicationInput.createRemoteInput({
+  surface: canvas, label: copy('input'),
+  commitText(text, target) { pointer.flush(); if (active(target)) { if (new TextEncoder().encode(text).length > 16000) { notice('clipboardFailed'); return; } command('input', { input: { kind: backend === 'macos' ? 'text' : 'paste', text } }); } },
+  sendKey(key, target) { pointer.flush(); if (active(target)) command('input', { input: { kind: 'key', ...key } }); },
+  release,
+  clipboard(event, target) {
+    if (!clipboardSync || !active(target) || !(event.ctrlKey || event.metaKey) || event.code !== 'KeyV') return false;
+    event.preventDefault(); void localClipboard(target, true); return true;
+  },
+});
+const pointer = hostApplicationPointer.createRemotePointer({
+  surface: canvas, resolveTarget: () => active(generation) ? generation : null, isTargetValid: active,
+  onActivate(position) { input.setAnchor(position.clientX, position.clientY); input.focus(); },
+  release,
+  sendPointer(packet, target) {
+    if (!active(target)) return false;
+    const rect = canvas.getBoundingClientRect();
+    const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
+    const width = canvas.width * scale, height = canvas.height * scale;
+    const x = Math.max(0, Math.min(1, (packet.clientX - rect.left - (rect.width - width) / 2) / width));
+    const y = Math.max(0, Math.min(1, (packet.clientY - rect.top - (rect.height - height) / 2) / height));
+    return command('input', { input: { kind: packet.kind, x, y, button: packet.button ?? 0, clicks: packet.clicks ?? 0,
+      dx: Math.max(-10000, Math.min(10000, packet.dx ?? 0)), dy: Math.max(-10000, Math.min(10000, packet.dy ?? 0)),
+      shiftKey: !!packet.shiftKey, ctrlKey: !!packet.ctrlKey, altKey: !!packet.altKey, metaKey: !!packet.metaKey } });
+  },
+});
+function revoke() { painted = false; pointer.reset(); input.bindTarget(null); }
+function updateTransitionControls() {
+  for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'enable-sound', 'sound']) {
+    if ($(id)) $(id).disabled = awaitingState || state !== 'active';
+  }
+}
+function changeDesktop(method, values, takeover = false) {
+  if (awaitingState) return;
+  revoke(); awaitingState = true; player?.reset(generation);
+  updateTransitionControls();
+  command(method, values, takeover);
+}
+function picture() { return { mode: quality, max_dimension: quality === 'data' ? 1920 : 2560, frame_rate: quality === 'data' ? 30 : 60, audio, native_pixels: original }; }
+function configure() { if (state !== 'active') return; changeDesktop('configure', { picture: picture() }); }
+function status(key, hint = '') { $('connection').hidden = key === ''; $('status').textContent = key ? copy(key) : ''; $('hint').textContent = hint ? copy(hint) : ''; }
+function updateDisplays(displays) {
+  $('display').replaceChildren(...displays.map((display, index) => {
+    const option = document.createElement('option'); option.value = display.id;
+    option.textContent = display.name || `${copy('display')} ${index + 1} · ${display.width} × ${display.height}`;
+    return option;
+  }));
+  $('display').value = session.display_id;
+  if (state === 'suspended' && reason === 'DISPLAY_CHANGED') {
+    const next = displays.find(display => display.id === session.display_id) ?? displays.find(display => display.primary) ?? displays[0];
+    if (next) changeDesktop('select_display', { display_id: next.id });
+  }
+}
+function updateState(message) {
+  const nextGeneration = message.generation ?? 0;
+  const changed = generation !== nextGeneration;
+  state = message.state; reason = message.code ?? ''; generation = nextGeneration;
+  awaitingState = false;
+  if (state === 'active') session.mode = message.mode ?? session.mode;
+  $('mode').value = session.mode;
+  if (changed || state !== 'active') { revoke(); player.reset(generation); }
+  if (state !== 'active' || session.mode !== 'control') { clipboardSync = false; clipboardText = ''; if ($('clipboard-text')) $('clipboard-text').value = ''; if ($('clipboard-sync')) $('clipboard-sync').checked = false; }
+  const permission = /permission|authorization|host_action/i.test(state + ' ' + reason);
+  const locked = ['locked', 'locking'].includes(state) || ['locked', 'locking'].includes(reason);
+  const connecting = ['connecting', 'authorizing'].includes(state);
+  status(state === 'active' ? '' : locked ? 'locked' : permission ? 'permissionRequired' : connecting ? 'connecting' : 'disconnected', permission ? 'permissionHint' : '');
+  $('reconnect').hidden = state === 'active' || connecting || locked;
+  if (message.displays) updateDisplays(message.displays);
+  if (message.display_id) {
+    session.display_id = message.display_id; $('display').value = message.display_id;
+  }
+  updateTransitionControls();
+  if (state === 'active') {
+    for (const packet of awaitingMedia) player.receive(packet);
+    awaitingMedia = [];
+  }
+  if (state === 'reconnect_required' && /^DISPLAY_/.test(reason)) retry = setTimeout(() => void connect(), 400);
+}
+
+function retryConnection() {
+  if (!stopped && reconnectAttempts++ < 8) retry = setTimeout(() => void connect(), Math.min(5000, 400 * 2 ** reconnectAttempts));
+}
+async function connect() {
+  clearTimeout(retry); if (stopped) return;
+  const current = ++epoch; revoke(); state = 'connecting'; generation = 0; sequence = 0; awaitingMedia = []; awaitingState = false;
+  updateTransitionControls();
+  player?.close(); control?.close(); media?.close(); status('connecting'); $('reconnect').hidden = true;
+  if (!HostDesktopPlayer.supported()) { status('unsupported', 'unsupportedHint'); return; }
+  try {
+    const response = await fetch(base + 'ticket', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) {
+      if (current !== epoch || stopped) return;
+      state = 'disconnected'; status('disconnected'); $('reconnect').hidden = false;
+      // Retry temporary transport/service failures, while expired sessions and
+      // revoked access require an explicit action from the authenticated host UI.
+      if (response.status >= 500 || response.status === 408 || response.status === 429) retryConnection();
+      return;
+    }
+    const result = await response.json(); if (current !== epoch || stopped) return;
+    session = result.data.session; localize();
+    const address = path => { const url = new URL(base + path, location.href); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'; return url; };
+    control = new WebSocket(address('control'), ['redeven-desktop-v1', result.data.token]);
+    media = new WebSocket(address('media'), ['redeven-desktop-v1', result.data.token]);
+    media.binaryType = 'arraybuffer';
+    player = new HostDesktopPlayer(canvas, {
+      acknowledge(g, frame) { if (!awaitingState && state === 'active' && g === generation) command('frame_ack', { frame_id: frame }); },
+      painted(g) { if (awaitingState || g !== generation || state !== 'active') return; painted = true; input.bindTarget(active(g) ? g : null); reconnectAttempts = 0; },
+      recover() { revoke(); if (state === 'active') changeDesktop('keyframe'); },
+      statistics(value) { stats = value; refreshStats(); },
+      audioState(value) { if (value === 'unavailable' || value === 'unsupported') notice('failure'); },
+      workletURL: base + 'assets/host_desktop_audio.mjs',
+    });
+    player.setVolume(volume, !audio);
+    let opened = 0;
+    const ready = () => { if (current === epoch && ++opened === 2) command('probe'); };
+    control.onopen = media.onopen = ready;
+    control.onmessage = ({ data }) => {
+      if (current !== epoch) return;
+      const message = JSON.parse(data);
+      if (message.type === 'capabilities') {
+        backend = message.capabilities.backend;
+        const displays = message.capabilities.displays;
+        const display = displays.length && !displays.some(item => item.id === session.display_id) ? '' : session.display_id;
+        command('connect', { mode: session.mode, display_id: display, picture: picture() });
+      } else if (message.type === 'state') updateState(message);
+      else if (message.type === 'displays') updateDisplays(message.displays);
+      else if (message.type === 'clipboard') {
+        if (message.generation !== generation || !authorized(generation)) return;
+        clipboardText = message.text ?? ''; if ($('clipboard-text')) $('clipboard-text').value = clipboardText;
+        if (clipboardSync && authorized(generation) && document.hasFocus()) {
+          if (!navigator.clipboard?.writeText) disableClipboardSync();
+          else void navigator.clipboard.writeText(clipboardText).catch(disableClipboardSync);
+        }
+      } else if (message.type === 'error') {
+        awaitingState = false;
+        updateTransitionControls();
+        if (message.code === 'CONTROL_IN_USE') { session.mode = 'view'; $('mode').value = 'view'; void confirmControl(true); }
+        else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });
+        else notice(message.code.includes('CLIPBOARD') ? 'clipboardFailed' : 'failure');
+      }
+    };
+    media.onmessage = ({ data }) => {
+      if (current !== epoch) return;
+      const packet = unpackDesktopMedia(data);
+      if (packet.header.generation > generation || state === 'connecting') {
+        if (awaitingMedia.length >= 8) { media.close(); return; }
+        awaitingMedia.push(data);
+      } else if (!awaitingState) player.receive(data);
+    };
+    const lost = () => {
+      if (current !== epoch || stopped) return;
+      epoch++; revoke(); state = 'disconnected'; player.close(); control.close(); media.close();
+      updateTransitionControls();
+      clipboardSync = false; clipboardText = ''; awaitingMedia = []; status('disconnected'); $('reconnect').hidden = false;
+      retryConnection();
+    };
+    control.onclose = media.onclose = lost;
+  } catch { if (current === epoch && !stopped) { state = 'disconnected'; status('disconnected'); $('reconnect').hidden = false; retryConnection(); } }
+}
+
+function element(tag, text, properties = {}) { const node = document.createElement(tag); if (text) node.textContent = text; Object.assign(node, properties); return node; }
+function button(key, onClick) { const node = element('button', copy(key), { type: 'button' }); node.onclick = onClick; return node; }
+function openPanel(title, children) { pointer.reset(); input.bindTarget(null); $('panel-title').textContent = copy(title); $('panel-body').replaceChildren(...children); panel.showModal(); }
+panel.addEventListener('close', () => { if (active(generation)) input.bindTarget(generation); });
+async function confirmation(title, hint) {
+  return new Promise(resolve => {
+    const row = element('div', '', { className: 'row' });
+    const accept = button(title, () => { panel.returnValue = 'accept'; panel.close('accept'); });
+    row.append(button('cancel', () => panel.close('cancel')), accept);
+    panel.addEventListener('close', () => resolve(panel.returnValue === 'accept'), { once: true });
+    panel.returnValue = ''; openPanel(title, [element('p', copy(hint)), row]);
+  });
+}
+async function confirmControl(reconnect = false) {
+  const current = epoch;
+  const accepted = await confirmation('takeover', 'takeoverHint');
+  if (current !== epoch || stopped) return;
+  if (reconnect) command('connect', { mode: accepted ? 'control' : 'view', display_id: session.display_id, picture: picture() }, accepted);
+  else if (accepted) changeDesktop('set_mode', { mode: 'control' }, true);
+}
+$('mode').onchange = () => { if ($('mode').value === 'control') { $('mode').value = session.mode; void confirmControl(); } else changeDesktop('set_mode', { mode: 'view' }); };
+$('display').onchange = () => changeDesktop('select_display', { display_id: $('display').value });
+function setOriginal(value) { original = value; $('stage').classList.toggle('original', value); $('fit').setAttribute('aria-pressed', String(!value)); $('pixels').setAttribute('aria-pressed', String(value)); configure(); }
+$('fit').onclick = () => setOriginal(false); $('pixels').onclick = () => setOriginal(true);
+function updateFullscreen() {
+  document.documentElement.classList.toggle('desktop-fullscreen', fullscreen());
+  $('fullscreen').textContent = copy(fullscreen() ? 'exitFullscreen' : 'fullscreen');
+  $('fullscreen').disabled = pendingFullscreen !== undefined;
+  wakeToolbar();
+}
+function setFullscreen(value) {
+  if (pendingFullscreen !== undefined) return;
+  if (windowBridge) {
+    pendingFullscreen = value; $('fullscreen').disabled = true;
+    windowBridge.request(value ? 'enter-fullscreen' : 'exit-fullscreen');
+  } else void (value ? document.documentElement.requestFullscreen() : document.exitFullscreen()).catch(() => notice('failure'));
+}
+$('fullscreen').onclick = () => setFullscreen(!fullscreen());
+windowBridge?.subscribe(snapshot => {
+  nativeFullscreen = snapshot.fullscreen;
+  if (nativeFullscreen === pendingFullscreen) pendingFullscreen = undefined;
+  updateFullscreen();
+});
+document.addEventListener('fullscreenchange', updateFullscreen);
+document.addEventListener('keydown', event => {
+  if (windowBridge && fullscreen() && event.key === 'Escape' && !panel.open) {
+    event.preventDefault(); event.stopImmediatePropagation(); release(generation); setFullscreen(false);
+  }
+}, true);
+function wakeToolbar() { clearTimeout(hideTimer); toolbar.classList.remove('hidden-toolbar'); if (!pinned && fullscreen()) hideTimer = setTimeout(() => toolbar.classList.add('hidden-toolbar'), 2200); }
+document.addEventListener('pointermove', wakeToolbar, { passive: true });
+$('pin').onclick = () => { pinned = !pinned; $('pin').setAttribute('aria-pressed', String(pinned)); wakeToolbar(); };
+
+function refreshStats() {
+  if (!$('statistics') || !stats) return;
+  $('statistics').textContent = `${stats.width} × ${stats.height}\n${copy('frameRate')}: ${stats.fps.toFixed(1)} FPS\n${copy('bandwidth')}: ${(stats.bitsPerSecond / 1e6).toFixed(2)} Mbps\n${stats.encoder} · ${stats.codec}\n${copy('decoder')}: ${stats.decoderPreference}`;
+}
+$('settings').onclick = () => {
+  const selector = element('select', '', { id: 'quality' }); for (const value of ['smooth', 'clarity', 'data']) selector.append(element('option', copy(value), { value })); selector.value = quality;
+  selector.onchange = () => { quality = selector.value; configure(); };
+  const qualityLabel = element('label', copy('quality')); qualityLabel.append(selector);
+  const sound = button('enableSound', async () => { if (await player.enableAudio()) { audio = true; player.setVolume(volume); configure(); sound.textContent = copy('sound'); } });
+  sound.id = 'enable-sound';
+  const slider = element('input', '', { type: 'range', min: '0', max: '1', step: '.05', value: String(volume) });
+  slider.oninput = () => { volume = Number(slider.value); player.setVolume(volume, !audio); };
+  const volumeLabel = element('label', copy('volume')); volumeLabel.append(slider);
+  const mute = element('input', '', { id: 'sound', type: 'checkbox', checked: audio });
+  mute.onchange = async () => { audio = mute.checked && await player.enableAudio(); mute.checked = audio; player.setVolume(volume, !audio); configure(); };
+  const muteLabel = element('label', copy('sound')); muteLabel.append(mute);
+  const lock = button('lock', async () => { panel.close(); if (await confirmation('lock', 'lockHint')) command('lock'); }); lock.disabled = session.mode !== 'control';
+  openPanel('settings', [qualityLabel, sound, muteLabel, volumeLabel, lock, element('output', '', { id: 'statistics' })]); updateTransitionControls(); refreshStats();
+};
+async function localClipboard(target, paste = false) {
+  if (!authorized(target) || clipboardBusy) return;
+  clipboardBusy = true;
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!authorized(target)) return;
+    if (paste) pasteClipboard(text);
+    else if (text !== clipboardText) { clipboardText = text; command('set_clipboard', { text }); }
+  } catch { disableClipboardSync(); } finally { clipboardBusy = false; }
+}
+function disableClipboardSync() { clipboardSync = false; if ($('clipboard-sync')) $('clipboard-sync').checked = false; command('set_clipboard_sync', { enabled: false }); notice('clipboardFailed'); }
+function pasteClipboard(text) { if (!authorized(generation)) return; if (new TextEncoder().encode(text).length > (1 << 20)) { notice('clipboardFailed'); return; } clipboardText = text; command('set_clipboard', { text }); chord([backend === 'macos' ? 'MetaLeft' : 'ControlLeft', 'KeyV']); }
+$('clipboard').onclick = () => {
+  const text = element('textarea', '', { id: 'clipboard-text', value: clipboardText, maxLength: 1 << 20 }); text.setAttribute('aria-label', copy('text'));
+  const row = element('div', '', { className: 'row' });
+  row.append(button('copyRemote', () => { if (authorized(generation)) command('get_clipboard'); }), button('pasteRemote', () => pasteClipboard(text.value)));
+  const sync = element('input', '', { id: 'clipboard-sync', type: 'checkbox', checked: clipboardSync }); sync.onchange = () => { clipboardSync = sync.checked; command('set_clipboard_sync', { enabled: clipboardSync }); if (clipboardSync) void localClipboard(generation); };
+  const label = element('label', copy('clipboardSync')); label.append(sync);
+  for (const control of [...row.children, sync]) control.disabled = session.mode !== 'control';
+  openPanel('clipboard', [element('p', copy('clipboardHint')), text, row, label]);
+};
+window.addEventListener('focus', () => { if (clipboardSync) void localClipboard(generation); });
+function chord(codes) { if (!authorized(generation)) return; for (const code of codes) command('input', { input: { kind: 'key', key: code, code, pressed: true, metaKey: codes.includes('MetaLeft'), altKey: codes.includes('AltLeft'), ctrlKey: codes.includes('ControlLeft'), shiftKey: codes.includes('ShiftLeft') } }); for (const code of [...codes].reverse()) command('input', { input: { kind: 'key', key: code, code, pressed: false } }); }
+$('shortcuts').onclick = () => openPanel('shortcuts', [button('switchApp', () => chord([backend === 'macos' ? 'MetaLeft' : 'AltLeft', 'Tab'])), button('systemMenu', () => chord(backend === 'macos' ? ['ControlLeft', 'F2'] : ['MetaLeft']))]);
+$('files').onclick = () => { window.redevenHostApplicationWindow?.request('files'); window.opener?.postMessage({ type: 'redeven:remote-desktop:files', session_id: session.id }, '*'); window.dispatchEvent(new CustomEvent('redeven:remote-desktop:files')); };
+$('reconnect').onclick = () => { reconnectAttempts = 0; void connect(); };
+function disconnect() { stopped = true; clearTimeout(retry); epoch++; revoke(); player?.close(); control?.close(); media?.close(); void fetch(base + 'disconnect', { method: 'POST', credentials: 'same-origin', keepalive: true }); state = 'disconnected'; status('disconnected'); }
+$('disconnect').onclick = disconnect;
+$('window-close').onclick = () => window.redevenHostApplicationWindow?.request('close');
+window.addEventListener('pagehide', disconnect);
+void connect();

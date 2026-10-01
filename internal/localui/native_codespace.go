@@ -82,11 +82,8 @@ func (s *Server) handleNativeCodeSpace(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "access expired", http.StatusLocked)
 		return
 	}
-	lifetime, cancel := context.WithCancel(binding.Context)
-	defer cancel()
-	resource := &nativeCodeAccess{id: accessID, cancel: cancel}
-	s.nativeAccess.Store(resource, struct{}{})
-	defer s.nativeAccess.Delete(resource)
+	lifetime, release := s.trackLocalAccessLifetime(binding.Context, accessID)
+	defer release()
 	// Recheck after registration so a concurrent logout cannot escape cancellation.
 	if _, _, active = s.activeLocalAccessSession(r); !active {
 		http.Error(w, "access expired", http.StatusLocked)
@@ -105,6 +102,15 @@ func (s *Server) handleNativeCodeSpace(w http.ResponseWriter, r *http.Request) {
 type nativeCodeAccess struct {
 	id     string
 	cancel context.CancelFunc
+}
+
+// Both native editor and desktop proxy requests end with their access session.
+// Callers recheck access after registration to close the concurrent logout race.
+func (s *Server) trackLocalAccessLifetime(parent context.Context, id string) (context.Context, func()) {
+	lifetime, cancel := context.WithCancel(parent)
+	resource := &nativeCodeAccess{id: id, cancel: cancel}
+	s.nativeAccess.Store(resource, struct{}{})
+	return lifetime, func() { cancel(); s.nativeAccess.Delete(resource) }
 }
 
 func (s *Server) closeNativeCodeAccess(id string) {

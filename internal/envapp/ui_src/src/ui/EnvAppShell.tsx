@@ -2372,6 +2372,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     });
   };
 
+  onMount(() => {
+    const stop = window.redevenDesktopShell?.onRemoteDesktopFiles?.(() => openSurface('files'));
+    onCleanup(() => stop?.());
+  });
+
   const openFileBrowserAtPath = async (
     path: string,
     options?: {

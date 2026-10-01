@@ -254,10 +254,18 @@ func validatePendingControlArtifactTopUp(pending *ControlArtifactPendingTopUp, g
 	return nil
 }
 
+// RemoteDesktopConfig enables reuse of an existing OS desktop grant.
+// Omission keeps unattended authorization reuse disabled.
+type RemoteDesktopConfig struct {
+	Unattended    bool   `json:"unattended"`
+	LastDisplayID string `json:"last_display_id,omitempty"`
+}
+
 // Config is the runtime configuration for Redeven. Runtime-managed one-shot
 // artifacts remain opaque but are intentionally persisted here for recovery;
 // user-provided provider keys are loaded separately from secrets.json.
 type Config struct {
+	RemoteDesktop            *RemoteDesktopConfig `json:"remote_desktop,omitempty"`
 	ProviderOrigin           string               `json:"provider_origin"`
 	ControlplaneBaseURL      string               `json:"controlplane_base_url"`
 	ControlplaneProviderID   string               `json:"controlplane_provider_id,omitempty"`

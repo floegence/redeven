@@ -7,8 +7,8 @@ import { DesktopThemeState } from './desktopThemeState';
 import { attachHostApplicationWindow } from './hostApplicationWindow';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL as actionChannel, HOST_APPLICATION_WINDOW_STATE_CHANNEL as stateChannel } from '../shared/hostApplicationWindowIPC';
 
-function fixture(appearance?: Parameters<typeof attachHostApplicationWindow>[3]) {
-  const url = 'http://127.0.0.1:18181/pf/owned/_redeven_host_app/';
+function fixture(appearance?: Parameters<typeof attachHostApplicationWindow>[3], desktop = false, openFiles?: () => void) {
+  const url = `http://127.0.0.1:18181/pf/owned/${desktop ? '_redeven_desktop' : '_redeven_host_app'}/`;
   const state = { maximized:false, minimized:false, fullscreen:false };
   const win = Object.assign(new EventEmitter(), {
     isDestroyed: () => false, isMaximized: () => state.maximized, isMinimized: () => state.minimized, isFullScreen: () => state.fullscreen,
@@ -16,28 +16,55 @@ function fixture(appearance?: Parameters<typeof attachHostApplicationWindow>[3])
     unmaximize: vi.fn(() => { state.maximized = false; }), setFullScreen: vi.fn((value: boolean) => { state.fullscreen = value; }),
   });
   const contents = Object.assign(new EventEmitter(), { isDestroyed: () => false, mainFrame:{url}, getURL: () => contents.mainFrame.url, send: vi.fn() });
-  const publish = attachHostApplicationWindow(win as unknown as BrowserWindow, contents as unknown as WebContents, url, appearance);
+  const publish = attachHostApplicationWindow(win as unknown as BrowserWindow, contents as unknown as WebContents, url, appearance, openFiles);
   const send = (action: unknown, override: Record<string, unknown> = {}) => contents.emit('ipc-message', {sender:contents, senderFrame:contents.mainFrame, ...override} as unknown as IpcMainEvent, actionChannel, action);
   return {win, contents, state, send, publish};
 }
 
 describe('native host application window controls', () => {
+  it('routes fullscreen only through the exact desktop window owner', () => {
+    const application = fixture();
+    application.send('enter-fullscreen');
+    expect(application.win.setFullScreen).not.toHaveBeenCalled();
+    const desktop = fixture(undefined, true);
+    desktop.send('enter-fullscreen', {senderFrame:{url:desktop.contents.mainFrame.url}});
+    expect(desktop.win.setFullScreen).not.toHaveBeenCalled();
+    desktop.send('enter-fullscreen');
+    expect(desktop.win.setFullScreen).toHaveBeenLastCalledWith(true);
+    desktop.send('exit-fullscreen');
+    expect(desktop.win.setFullScreen).toHaveBeenLastCalledWith(false);
+  });
+  it('opens host files only from the exact desktop bootstrap and its owning main frame', () => {
+    const files = vi.fn();
+    const application = fixture(undefined, false, files);
+    application.send('files');
+    expect(files).not.toHaveBeenCalled();
+    const desktop = fixture(undefined, true, files);
+    desktop.send('files', {senderFrame:{url:desktop.contents.mainFrame.url}});
+    expect(files).not.toHaveBeenCalled();
+    desktop.send('files');
+    expect(files).toHaveBeenCalledOnce();
+    desktop.contents.mainFrame.url = 'http://127.0.0.1:18181/pf/other/_redeven_desktop/';
+    desktop.send('files'); desktop.send('close');
+    expect(files).toHaveBeenCalledOnce();
+    expect(desktop.win.close).not.toHaveBeenCalled();
+  });
   it('controls only the attached window and publishes its authoritative state', () => {
     const v = fixture();
     v.send('maximize');
     expect(v.win.maximize).toHaveBeenCalledOnce();
-    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:true, minimized:false, chrome:resolveDesktopWindowChromeSnapshot()});
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:true, minimized:false, fullscreen:false, chrome:resolveDesktopWindowChromeSnapshot()});
     v.send('unmaximize'); v.send('minimize');
-    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:false, minimized:true, chrome:resolveDesktopWindowChromeSnapshot()});
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:false, minimized:true, fullscreen:false, chrome:resolveDesktopWindowChromeSnapshot()});
     v.state.minimized = false; v.win.emit('restore');
-    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:false, minimized:false, chrome:resolveDesktopWindowChromeSnapshot()});
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:false, minimized:false, fullscreen:false, chrome:resolveDesktopWindowChromeSnapshot()});
     v.send('close'); expect(v.win.close).toHaveBeenCalledOnce();
   });
 
   it('updates the titlebar safe area from native fullscreen state', () => {
     const v = fixture();
     v.state.fullscreen = true; v.win.emit('enter-full-screen');
-    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:true, minimized:false,
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:true, minimized:false, fullscreen:true,
       chrome:resolveDesktopWindowChromeSnapshot(process.platform, {fullScreen:true})});
   });
 

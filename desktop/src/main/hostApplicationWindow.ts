@@ -4,19 +4,19 @@ import { desktopWindowChromeSnapshotForWindow } from './windowChrome';
 import type { BrowserWindow, IpcMainEvent, WebContents } from 'electron';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL, HOST_APPLICATION_WINDOW_STATE_CHANNEL, isHostApplicationWindowAction } from '../shared/hostApplicationWindowIPC';
 
-export function attachHostApplicationWindow(win: BrowserWindow, contents: WebContents, entryURL: string, appearance?: () => Readonly<{theme: DesktopRendererThemeSnapshot; locale: RedevenLocale}>): () => void {
+export function attachHostApplicationWindow(win: BrowserWindow, contents: WebContents, entryURL: string, appearance?: () => Readonly<{theme: DesktopRendererThemeSnapshot; locale: RedevenLocale}>, openFiles?: () => void): () => void {
   const entry = new URL(entryURL);
   const isBootstrap = (url: string): boolean => {
     try {
       const current = new URL(url);
       return current.origin === entry.origin && current.pathname === entry.pathname
-        && current.pathname.endsWith('/_redeven_host_app/');
+        && (current.pathname.endsWith('/_redeven_host_app/') || current.pathname.endsWith('/_redeven_desktop/'));
     } catch { return false; }
   };
   const publish = (): void => {
     if (win.isDestroyed() || contents.isDestroyed() || !isBootstrap(contents.getURL())) return;
     contents.send(HOST_APPLICATION_WINDOW_STATE_CHANNEL, {
-      maximized: win.isMaximized() || win.isFullScreen(), minimized: win.isMinimized(),
+      maximized: win.isMaximized() || win.isFullScreen(), minimized: win.isMinimized(), fullscreen: win.isFullScreen(),
       chrome: desktopWindowChromeSnapshotForWindow(win),
       ...appearance?.(),
     });
@@ -26,6 +26,12 @@ export function attachHostApplicationWindow(win: BrowserWindow, contents: WebCon
     if (win.isDestroyed() || contents.isDestroyed() || event.sender !== contents
       || event.senderFrame !== contents.mainFrame || !isBootstrap(event.senderFrame.url)) return;
     switch (action) {
+      case 'enter-fullscreen':
+      case 'exit-fullscreen':
+        if (!entry.pathname.endsWith('/_redeven_desktop/')) return;
+        win.setFullScreen(action === 'enter-fullscreen');
+        break;
+      case 'files': if (entry.pathname.endsWith('/_redeven_desktop/')) openFiles?.(); return;
       case 'close': win.close(); return;
       case 'minimize': win.minimize(); break;
       case 'maximize': win.maximize(); break;

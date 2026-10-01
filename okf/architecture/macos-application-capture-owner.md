@@ -8,8 +8,8 @@ timestamp: 2026-09-22T01:30:00Z
 # Summary
 
 The host application Manager owns one lazily started Swift helper for its Runtime
-lifetime. All catalog requests and human-operated application sessions use that
-process. Suspending one application must not interrupt another application's
+lifetime. All catalog requests, human-operated application sessions and
+[remote desktop sessions](remote-desktop.md) use that process. Suspending one application must not interrupt another application's
 capture. Application identity, viewer authorization, input, frame credit and
 cleanup remain independent. A helper crash fails its current sharing sessions
 without quitting native applications; a later explicit open may start a new
@@ -46,6 +46,19 @@ Catalog, validation, native-open and permission requests use short-lived channel
 on the same process. They do not create additional AppKit helper processes. Empty
 channel inventory leaves the helper idle until the Runtime closes, so the next
 application uses the same ScreenCaptureKit process identity.
+
+## Physical desktop integration
+
+The exact released `FloeNativeDesktop` package owns reusable capture and native
+desktop input. Redeven retains application-specific process/window validation.
+One helper lease arbitrates human remote input across application and physical
+desktop channels. Takeover releases the previous controller's held state and
+reports its revoked authority while preserving sharing. Application window
+messages carry the actual control lease; a fresh window alone is not a grant.
+An explicit takeover may resume an already connected application viewer, while
+a duplicate ordinary resume remains invalid. Desktop media uses a separate
+binary pipe and bounded per-channel queues so pictures do not serialize behind
+control messages.
 
 ## Failure and shutdown
 

@@ -1484,6 +1484,20 @@ func (s *Server) handlePortForward(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if strings.HasPrefix(strings.TrimPrefix(r.URL.Path, basePath), "/_redeven_desktop/") {
+		accessID, _, active := s.activeLocalAccessSession(r)
+		if !active {
+			http.Error(w, "access expired", http.StatusLocked)
+			return
+		}
+		lifetime, release := s.trackLocalAccessLifetime(r.Context(), accessID)
+		defer release()
+		if _, _, active = s.activeLocalAccessSession(r); !active {
+			http.Error(w, "access expired", http.StatusLocked)
+			return
+		}
+		r = r.WithContext(lifetime)
+	}
 	s.appServer.ServeHTTP(w, appserver.WithLocalUIPortForwardRoute(r, forwardID))
 }
 

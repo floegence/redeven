@@ -14,7 +14,7 @@ import {
 
 // This surface can control only its own native window. It receives no environment,
 // filesystem, shell, session, or general Desktop bridge.
-if (process.isMainFrame && location.pathname.endsWith('/_redeven_host_app/')) {
+if (process.isMainFrame && (location.pathname.endsWith('/_redeven_host_app/') || location.pathname.endsWith('/_redeven_desktop/'))) {
   // Geometry is presentation-only. Apply it in this trusted bootstrap document,
   // never inside the remote application iframe or through a general shell bridge.
   let chrome = resolveDesktopWindowChromeSnapshot(process.platform);
@@ -47,7 +47,7 @@ if (process.isMainFrame && location.pathname.endsWith('/_redeven_host_app/')) {
     },
     subscribe: (listener: (state: HostApplicationWindowState) => void): (() => void) => {
       const receive = (_event: unknown, value: unknown): void => {
-        if (isHostApplicationWindowState(value)) listener({ maximized: value.maximized, minimized: value.minimized });
+        if (isHostApplicationWindowState(value)) listener({ maximized: value.maximized, minimized: value.minimized, fullscreen: value.fullscreen });
       };
       ipcRenderer.on(HOST_APPLICATION_WINDOW_STATE_CHANNEL, receive);
       ipcRenderer.send(HOST_APPLICATION_WINDOW_ACTION_CHANNEL, 'state');

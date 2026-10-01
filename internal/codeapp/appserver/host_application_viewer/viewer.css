@@ -159,3 +159,5 @@ body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; 
 .host-app-input-notice { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:1; pointer-events:none; width:min(520px,calc(100% - 32px)); padding:12px 16px; border:1px solid var(--border); border-radius:var(--floe-radius-group); color:var(--foreground); background:var(--background); box-shadow:0 4px 16px #0002; font-size:13px; }
 .host-app-input-notice[hidden] { display:none; }
 .host-app-input-notice p { margin:4px 0 0; color:var(--muted-foreground); line-height:1.5; }
+
+.mac-app-takeover{max-width:min(480px,calc(100vw - 24px));border:1px solid var(--border);border-radius:12px;padding:20px;background:var(--background);color:var(--foreground)}.mac-app-takeover::backdrop{background:#0005}.mac-app-takeover button{cursor:pointer;white-space:nowrap;margin:8px 8px 0 0;padding:6px 12px}

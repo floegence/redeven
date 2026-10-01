@@ -11,6 +11,8 @@ paths = [
   '''^node_modules/''',
   '''^internal/envapp/ui_src/node_modules/''',
   '''^internal/codeapp/ui_src/node_modules/''',
+  # SwiftPM downloads immutable upstream source here, including its fixtures.
+  '''^desktop/native/computer-host/\.build/checkouts/''',
 ]
 
 # The Chrome manifest embeds only this public RSA key to keep the extension ID stable.
