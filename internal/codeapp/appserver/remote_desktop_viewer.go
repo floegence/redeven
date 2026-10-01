@@ -54,7 +54,7 @@ func serveRemoteDesktopAsset(w http.ResponseWriter, r *http.Request, name string
 		data = []byte(hostApplicationPointerJS)
 	case "floe.css":
 		data = []byte(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationPointerCSS)
-	case "viewer.js", "viewer.css", "catalog.generated.js":
+	case "viewer.js", "viewer.css", "catalog.generated.js", "icons.generated.js":
 		data, err = remoteDesktopAssets.ReadFile("remote_desktop_viewer/" + name)
 	default:
 		http.NotFound(w, r)

@@ -6,20 +6,20 @@
 </head>
 <body>
   <header id="toolbar" aria-label="" data-label="title">
-    <div class="window-actions"><button id="window-close" data-label="close">×</button></div>
+    <div class="window-actions"><button id="window-close" data-label="close" data-icon="close"></button></div>
     <div class="identity"><strong data-copy="title"></strong><span id="host"></span></div>
     <div class="actions">
       <label><span class="sr-only" data-copy="display"></span><select id="display"></select></label>
       <label><span class="sr-only" data-copy="control"></span><select id="mode"><option value="view" data-copy="view"></option><option value="control" data-copy="control"></option></select></label>
-      <button id="fit" data-copy="fit" aria-pressed="true"></button>
-      <button id="pixels" data-copy="pixels" aria-pressed="false"></button>
-      <button id="fullscreen" data-copy="fullscreen"></button>
-      <button id="settings" data-copy="settings"></button>
-      <button id="clipboard" data-copy="clipboard"></button>
-      <button id="shortcuts" data-copy="shortcuts"></button>
-      <button id="files" data-copy="files"></button>
-      <button id="disconnect" data-copy="disconnect"></button>
-      <button id="pin" data-copy="pin" aria-pressed="false"></button>
+      <button id="fit" data-label="fit" data-icon="fit" aria-pressed="true"></button>
+      <button id="pixels" data-label="pixels" data-icon="pixels" aria-pressed="false"></button>
+      <button id="fullscreen" data-label="fullscreen" data-icon="fullscreen"></button>
+      <button id="settings" data-label="settings" data-icon="settings"></button>
+      <button id="clipboard" data-label="clipboard" data-icon="clipboard"></button>
+      <button id="shortcuts" data-label="shortcuts" data-icon="shortcuts"></button>
+      <button id="files" data-label="files" data-icon="files"></button>
+      <button id="disconnect" data-label="disconnect" data-icon="disconnect"></button>
+      <button id="pin" data-label="pin" data-icon="pin" aria-pressed="false"></button>
     </div>
   </header>
   <main id="stage"><canvas id="desktop" tabindex="0" data-label="title" data-floe-remote-pointer></canvas></main>
@@ -27,6 +27,6 @@
   <output id="notice" aria-live="polite"></output>
   <dialog id="panel" aria-labelledby="panel-title"><form method="dialog"><header><h2 id="panel-title"></h2><button data-copy="close" value="close"></button></header></form><div id="panel-body"></div></dialog>
   <script nonce="{{.Nonce}}">window.remoteDesktopConfig={{.Configuration}};</script>
-  <script src="{{.Base}}assets/catalog.generated.js"></script><script src="{{.Base}}assets/input.js"></script><script src="{{.Base}}assets/pointer.js"></script>
+  <script src="{{.Base}}assets/catalog.generated.js"></script><script src="{{.Base}}assets/icons.generated.js"></script><script src="{{.Base}}assets/input.js"></script><script src="{{.Base}}assets/pointer.js"></script>
   <script type="module" src="{{.Base}}assets/viewer.js"></script>
 </body></html>

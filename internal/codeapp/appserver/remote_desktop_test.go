@@ -68,7 +68,7 @@ func TestRemoteDesktopForwardOwnerProtectsViewOnlyAndMedia(t *testing.T) {
 	}{{"alice", true, true}, {"alice", false, false}, {"bob", true, false}} {
 		server := &Server{resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: test.owner, CanRead: true, CanWrite: test.full, CanExecute: test.full})}
 		s := remotedesktop.Session{ID: "one", Mode: "view", Locale: "en-US", HostName: "fixture"}
-		for _, path := range []string{"", "control", "media", "assets/host_desktop_player.mjs"} {
+		for _, path := range []string{"", "control", "media", "assets/host_desktop_player.mjs", "assets/icons.generated.js"} {
 			r := httptest.NewRequest("GET", "/pf/owned"+remotedesktop.ViewerPath+path, nil)
 			r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))
 			w := httptest.NewRecorder()
