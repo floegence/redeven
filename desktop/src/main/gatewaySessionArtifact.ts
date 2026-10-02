@@ -1,6 +1,5 @@
 import { GatewayClientError, type GatewayOpenSessionResponse } from './gatewayClient';
 import type { GatewayRecord } from './gatewayStore';
-import { buildLocalUIEnvAppEntryURL } from './localUIURL';
 import type { RuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
 
 type GatewayArtifactBridgeSession = Pick<RuntimePlacementBridgeSession, 'placement_target_id' | 'local_ui_url'>;
@@ -19,9 +18,9 @@ export function gatewaySessionArtifactURL(
   bridgeSession: GatewayArtifactBridgeSession | undefined,
 ): string {
   const artifact = response.connect_artifact;
-  if (record.connection.kind === 'url') {
-    if (artifact.kind !== 'local_direct_artifact') {
-      throw new GatewayClientError('GATEWAY_ARTIFACT_UNSUPPORTED', 'URL Gateways must return a direct environment artifact.');
+  if (artifact.kind === 'local_direct_artifact' || record.connection.kind === 'url') {
+    if (artifact.kind !== 'local_direct_artifact' && artifact.kind !== 'gateway_proxy_artifact') {
+      throw new GatewayClientError('GATEWAY_ARTIFACT_UNSUPPORTED', 'URL Gateways must return a supported access artifact.');
     }
     const directURL = compact(artifact.url);
     if (!directURL) {
@@ -37,8 +36,9 @@ export function gatewaySessionArtifactURL(
     artifact.kind !== 'desktop_bridge_artifact'
     || compact(artifact.bridge_session_id) !== bridgeSession.placement_target_id
     || compact(artifact.route_id) !== gatewayEnvAppBridgeRouteID(record)
+    || !/^\/gateway\/v3\/access\/[A-Za-z0-9_-]{43}\/$/u.test(artifact.url ?? '')
   ) {
     throw new GatewayClientError('GATEWAY_ARTIFACT_UNSUPPORTED', 'SSH and container Gateways must return a matching bridge environment artifact.');
   }
-  return buildLocalUIEnvAppEntryURL(bridgeSession.local_ui_url);
+  return new URL(`__redeven_runtime_gateway${artifact.url}`, bridgeSession.local_ui_url).href;
 }

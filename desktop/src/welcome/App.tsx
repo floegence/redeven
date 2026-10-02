@@ -421,6 +421,7 @@ type GatewayURLProfileConnectionDialogState = Readonly<{
   gateway_id: string;
   label: string;
   target_url: string;
+  access_mode: 'direct_url' | 'gateway_proxy';
   origin_label: string;
   // Retained only to read and discard legacy profile drafts; URL is the sole
   // canonical route and these fields are never persisted or rendered.
@@ -448,6 +449,7 @@ type GatewaySetupDialogState = Readonly<{
   connection_kind: DesktopGatewayConnectionKind;
   gateway_url: string;
   pairing_code: string;
+  profile_write: boolean;
   allow_loopback_http: boolean;
   ssh_destination: string;
   ssh_port: string;
@@ -713,6 +715,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     'Not running': 'settings.notRunning',
     OPENING: 'environmentStatus.opening',
     READY: 'status.ready',
+    'CATALOG AVAILABLE': 'gatewayAccess.catalogAvailable',
     CHECKING: 'environmentStatus.checking',
     'NOT CHECKED': 'environmentStatus.notChecked',
     'CHECK FAILED': 'environmentStatus.checkFailed',
@@ -1578,12 +1581,13 @@ function localizedEnvironmentFact(
   i18n: DesktopI18n,
   fact: EnvironmentCardFactModel,
 ): EnvironmentCardFactModel {
+  const value = fact.value_key ? i18n.t(fact.value_key) : fact.value_tone === 'placeholder'
+    ? localizedPlaceholderFactValue(i18n, fact.value)
+    : localizedFactValue(i18n, fact.label, fact.value);
   return {
     ...fact,
-    label: localizedFactLabel(i18n, fact.label),
-    value: fact.value_key ? i18n.t(fact.value_key) : fact.value_tone === 'placeholder'
-      ? localizedPlaceholderFactValue(i18n, fact.value)
-      : localizedFactValue(i18n, fact.label, fact.value),
+    label: fact.label_key ? i18n.t(fact.label_key) : localizedFactLabel(i18n, fact.label),
+    value: fact.checked_at_unix_ms ? `${value} · ${i18n.formatDateTime(fact.checked_at_unix_ms)}` : value,
     action: fact.action
       ? {
           ...fact.action,
@@ -1885,6 +1889,7 @@ function createGatewayURLProfileConnectionDialogState(
     gateway_id: trimString(overrides.gateway_id),
     label: trimString(overrides.label),
     target_url: trimString(overrides.target_url),
+    access_mode: overrides.access_mode ?? (mode === 'create' ? 'gateway_proxy' : 'direct_url'),
     origin_label: trimString(overrides.origin_label),
     ssh_destination: sshDestination,
     ssh_port: sshPort,
@@ -1938,6 +1943,7 @@ function createGatewaySetupDialogState(
     connection_kind: connectionKind,
     gateway_url: trimString(overrides.gateway_url),
     pairing_code: trimString(overrides.pairing_code),
+    profile_write: overrides.profile_write === true,
     allow_loopback_http: overrides.allow_loopback_http === true,
     ssh_destination: sshDestination,
     ssh_port: sshPort,
@@ -3807,6 +3813,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         label: environment.label,
         profile_route_kind: route.kind,
         target_url: route.url ?? '',
+        access_mode: environment.gateway_environment_profile?.access_mode ?? 'direct_url',
         origin_label: route.origin_label ?? environment.gateway_environment_origin?.label ?? '',
       });
     } else {
@@ -3923,7 +3930,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label' | 'profile_route_kind',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label' | 'profile_route_kind' | 'access_mode',
     value: string,
   ): void {
     if (connectionDialogState()?.mode === 'edit' && connectionDialogState()?.connection_kind === 'ssh_environment') {
@@ -4757,6 +4764,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' = 'connect',
     route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
+    accessMode?: 'direct_url' | 'gateway_proxy',
   ): Promise<boolean> {
     const canCheckBeforeOpen = environment.runtime_health.freshness === 'unknown'
       && environment.kind !== 'provider_environment';
@@ -4766,6 +4774,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       && !canCheckBeforeOpen
       && environment.kind !== 'provider_environment'
       && environment.kind !== 'external_local_ui'
+      && environment.kind !== 'gateway_environment'
     ) {
       // A fresh offline/unknown snapshot is not an instruction to stop. The
       // authoritative open attempt must re-check the target, then route to
@@ -4787,7 +4796,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return openProviderEnvironment(environment, errorTarget, route);
     }
     if (environment.kind === 'gateway_environment') {
-      return openGatewayEnvironment(environment, errorTarget);
+      return openGatewayEnvironment(environment, errorTarget, accessMode);
     }
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
@@ -4832,6 +4841,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           environment,
           errorTarget === 'settings' ? 'connect' : errorTarget,
           action.route ?? 'auto',
+          action.access_mode,
         );
       case 'open_with_preflight':
       case 'initialize_and_open':
@@ -5575,7 +5585,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       gateway_id: string;
       gateway_env_id?: string;
       label: string;
-      access_route: DesktopGatewayEnvironmentProfileAccessRoute;
+      access_route: DesktopGatewayEnvironmentProfileAccessRoute & Readonly<{ kind: 'url' }>;
+      access_mode: 'direct_url' | 'gateway_proxy';
       errorTarget: 'connect' | 'dialog';
       successMessage: string;
     }>,
@@ -5596,6 +5607,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         },
         display_name: trimString(request.label),
         access_route: request.access_route,
+        access_mode: request.access_mode,
       },
     }, request.errorTarget);
     if (result?.outcome !== 'saved_gateway_environment') {
@@ -5647,6 +5659,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       connection_kind: 'url',
       gateway_url: trimString(state.gateway_url),
       pairing_code: trimString(state.pairing_code) || undefined,
+      profile_write: state.profile_write,
       allow_loopback_http: state.allow_loopback_http,
     };
     const result = await performLauncherAction(action, 'gateway_dialog');
@@ -5705,8 +5718,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openGatewayEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' = 'connect',
+    accessMode?: 'direct_url' | 'gateway_proxy',
   ): Promise<boolean> {
-    if (environment.is_open && environment.open_session_key) {
+    if (!accessMode && environment.is_open && environment.open_session_key) {
       return focusEnvironmentWindow(environment.open_session_key, errorTarget);
     }
     const gatewayID = trimString(environment.gateway_id);
@@ -5721,6 +5735,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       gateway_id: gatewayID,
       gateway_env_id: gatewayEnvID,
       label: environment.label,
+      access_mode: accessMode ?? environment.gateway_environment_profile?.access_mode ?? 'direct_url',
     }, errorTarget);
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
@@ -5780,7 +5795,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return errors;
   }
 
-  function gatewayEnvironmentProfileAccessRouteFromState(state: GatewayURLProfileConnectionDialogState): DesktopGatewayEnvironmentProfileAccessRoute {
+  function gatewayEnvironmentProfileAccessRouteFromState(state: GatewayURLProfileConnectionDialogState): DesktopGatewayEnvironmentProfileAccessRoute & Readonly<{ kind: 'url' }> {
     return {
       kind: 'url',
       url: trimString(state.target_url),
@@ -5904,6 +5919,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         gateway_env_id: state.mode === 'edit' ? state.environment_id : '',
         label: state.label,
         access_route: gatewayEnvironmentProfileAccessRouteFromState(state),
+        access_mode: state.access_mode,
         errorTarget: 'dialog',
         successMessage: i18n().t('toast.gatewayEnvironmentSaved'),
       });
@@ -9713,6 +9729,10 @@ export function EnvironmentSplitActionButton(
                               case 'copy_diagnostics':
                                 props.copyOperationDiagnostics(progress);
                                 break;
+                              case 'open_gateway_environment':
+                                props.onRunAction({ intent: 'open', label: action.label, label_key: action.label_key,
+                                  enabled: true, variant: 'default', access_mode: action.access_mode });
+                                break;
                               case 'dismiss':
                                 props.dismissOperation(progress);
                                 props.onProgressOpenChange(false);
@@ -11730,6 +11750,7 @@ function GatewaySourceCard(props: Readonly<{
                             gateway_env_id: action.gateway_env_id,
                             label: action.label,
                             ...(action.start_policy ? { start_policy: action.start_policy } : {}),
+                            ...(action.access_mode ? { access_mode: action.access_mode } : {}),
                           }, currentProgress);
                           break;
                       }
@@ -13011,7 +13032,7 @@ type ConnectionDialogProps = Readonly<{
   gatewayProfileSources: readonly DesktopGatewaySource[];
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label' | 'profile_route_kind',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label' | 'profile_route_kind' | 'access_mode',
     value: string,
   ) => void;
   toggleAutoRuntimeProbe: (enabled: boolean) => void;
@@ -13213,6 +13234,17 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     </Show>
                   </div>
                   </Show>
+                  <div class="environment-connection-field">
+                    <label for="gateway-environment-access-mode" class="block text-xs font-medium text-foreground">
+                      {props.i18n.t('gatewayAccess.mode')}
+                    </label>
+                    <select id="gateway-environment-access-mode" class="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                      value={props.state?.connection_kind === 'gateway_url_profile' ? props.state.access_mode : 'gateway_proxy'}
+                      onChange={(event) => props.updateField('access_mode', event.currentTarget.value)}>
+                      <option value="gateway_proxy">{props.i18n.t('gatewayAccess.proxy')}</option>
+                      <option value="direct_url">{props.i18n.t('gatewayAccess.direct')}</option>
+                    </select>
+                  </div>
                   <div class="environment-connection-field">
                     <label for="gateway-environment-origin-label" class="block text-xs font-medium text-foreground">
                       {props.i18n.t('connectionDialog.gatewayEnvironmentOriginLabel')}
@@ -13648,6 +13680,11 @@ function GatewaySetupDialog(props: Readonly<{
                 <div class="text-[11px] leading-5 text-muted-foreground">
                   {props.i18n.t('connectionDialog.gatewayPairingCodeHelp')}
                 </div>
+                <label class="flex items-center gap-2 text-xs text-foreground">
+                  <input type="checkbox" checked={props.state?.profile_write === true}
+                    onChange={(event) => props.updateField('profile_write', event.currentTarget.checked)} />
+                  {props.i18n.t('gatewayAccess.grantWrite')}
+                </label>
               </div>
             </div>
           </div>

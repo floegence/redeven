@@ -131,12 +131,14 @@ func TestOpenSessionReturnsSignedDesktopBridgeArtifact(t *testing.T) {
 		t.Fatalf("GenerateKeyPair() error = %v", err)
 	}
 	service := NewService(WithConnectArtifactIssuer(ConnectArtifactIssuerFunc(func(_ context.Context, req protocol.OpenSessionRequest) (GatewayConnectArtifactIssue, error) {
-		return NewSignedDesktopBridgeIssue(struct {
+		return NewSignedGatewayProxyIssue(struct {
 			GatewayID           string
 			GatewayEnvID        string
 			BindingAudience     string
 			RequestedCapability protocol.RequestedCapability
 			ClientNonce         string
+			GatewaySessionID    string
+			AccessURL           string
 			BridgeSessionID     string
 			RouteID             string
 			GatewayPrivateKey   string
@@ -147,6 +149,8 @@ func TestOpenSessionReturnsSignedDesktopBridgeArtifact(t *testing.T) {
 			BindingAudience:     "ssh://bastion:22/opt/redeven",
 			RequestedCapability: req.RequestedCapability,
 			ClientNonce:         req.ClientNonce,
+			GatewaySessionID:    "gws_bridge",
+			AccessURL:           "/gateway/v3/access/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/",
 			BridgeSessionID:     req.BridgeSessionID,
 			RouteID:             req.RouteID,
 			GatewayPrivateKey:   keys.PrivateKeyPEM,
@@ -171,7 +175,7 @@ func TestOpenSessionReturnsSignedDesktopBridgeArtifact(t *testing.T) {
 	payload, err := security.CanonicalJSON(map[string]any{
 		"artifact_kind":        string(protocol.ConnectArtifactKindDesktopBridge),
 		"artifact_nonce":       resp.ConnectArtifact.ArtifactNonce,
-		"artifact_url":         "",
+		"artifact_url":         resp.ConnectArtifact.URL,
 		"binding_audience":     "ssh://bastion:22/opt/redeven",
 		"bridge_session_id":    "bridge-demo",
 		"client_nonce":         "client-nonce",

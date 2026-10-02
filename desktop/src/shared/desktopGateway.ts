@@ -6,7 +6,8 @@ export type DesktopGatewayManagementCapability = 'access_only' | 'managed_local_
 
 export type DesktopGatewayCapability =
   | 'env_catalog'
-  | 'env_open_session'
+  | 'env_direct_open'
+  | 'env_proxy_open'
   | 'env_profile_write'
   | 'terminal'
   | 'files'
@@ -40,6 +41,8 @@ export type DesktopGatewayEnvironmentState =
 
 export type DesktopGatewayEnvironmentCapability =
   | 'open'
+  | 'open_direct'
+  | 'open_via_gateway'
   | 'terminal'
   | 'files'
   | 'web_service'
@@ -52,14 +55,22 @@ export type DesktopGatewayEnvironmentOriginKind =
   | 'network_target';
 
 export type DesktopGatewayEnvironmentProfileAccessRoute = Readonly<{
-  kind: 'url';
+  kind: 'url' | 'ssh_host' | 'ssh_container';
   url?: string;
   origin_label?: string;
+  ssh_destination?: string;
+  ssh_port?: number;
+  auth_mode?: string;
+  ssh_runtime_root?: string;
+  container_engine?: string;
+  container_id?: string;
+  container_runtime_root?: string;
 }>;
 
 export type DesktopGatewayEnvironmentProfile = Readonly<{
   managed: boolean;
-  access_route_kind: 'url';
+  access_route_kind: DesktopGatewayEnvironmentProfileAccessRoute['kind'];
+  access_mode?: 'direct_url' | 'gateway_proxy';
 }>;
 
 export type DesktopGatewayEnvironment = Readonly<{
@@ -77,6 +88,13 @@ export type DesktopGatewayEnvironment = Readonly<{
     label: string;
   }>;
   last_seen_at_unix_ms?: number;
+  last_access_result?: DesktopGatewayAccessResult;
+}>;
+
+export type DesktopGatewayAccessResult = Readonly<{
+  access_mode: 'direct_url' | 'gateway_proxy';
+  status: 'ready' | 'gateway_unavailable' | 'target_unavailable' | 'runtime_authentication_required' | 'session_expired';
+  checked_at_unix_ms: number;
 }>;
 
 export type DesktopGatewayServiceStatus =
@@ -372,6 +390,6 @@ export function desktopGatewayCanOpenEnvironment(
     }
   }
   return gateway.status === 'online'
-    && environment.state === 'available'
-    && accessCapabilities.includes('open');
+    && environment.state !== 'archived'
+    && (accessCapabilities.includes('open_direct') || accessCapabilities.includes('open_via_gateway'));
 }

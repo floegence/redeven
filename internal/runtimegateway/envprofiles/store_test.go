@@ -39,10 +39,10 @@ func TestStoreUpsertURLProfileNormalizesAndPersistsAccessOnlyCatalogEntry(t *tes
 	if env.Profile == nil || !env.Profile.Managed || env.Profile.AccessRouteKind != protocol.EnvProfileAccessRouteKindURL {
 		t.Fatalf("Profile = %#v, want managed URL profile marker", env.Profile)
 	}
-	if got := env.AccessCapabilities; !reflect.DeepEqual(got, []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen}) {
+	if got := env.AccessCapabilities; !reflect.DeepEqual(got, []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen, protocol.EnvironmentCapabilityOpenDirect, protocol.EnvironmentCapabilityOpenViaGateway}) {
 		t.Fatalf("AccessCapabilities = %#v", got)
 	}
-	if got := env.Capabilities; !reflect.DeepEqual(got, []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen}) {
+	if got := env.Capabilities; !reflect.DeepEqual(got, []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen, protocol.EnvironmentCapabilityOpenDirect, protocol.EnvironmentCapabilityOpenViaGateway}) {
 		t.Fatalf("Capabilities = %#v", got)
 	}
 	if env.ProfileAccessRoute == nil || env.ProfileAccessRoute.Kind != protocol.EnvProfileAccessRouteKindURL || env.ProfileAccessRoute.URL != "https://example.com:8443/" {

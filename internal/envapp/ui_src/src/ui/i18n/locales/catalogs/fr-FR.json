@@ -4594,7 +4594,10 @@
       "missingEnvironmentContext": "L'identité de l'environnement requise pour cette session est manquante.",
       "secureSessionFailed": "La session sécurisée n'a pas pu être reprise.",
       "remoteCommandEnded": "La commande d'origine assurant le pont avec l'environnement d'exécution distant s'est terminée.",
-      "processIdentityChanged": "L'identité de l'environnement d'exécution distant a changé ; cette fenêtre ne peut donc pas y être réassociée en toute sécurité."
+      "processIdentityChanged": "L'identité de l'environnement d'exécution distant a changé ; cette fenêtre ne peut donc pas y être réassociée en toute sécurité.",
+      "gatewayUnavailable": "Gateway indisponible",
+      "gatewayTargetUnavailable": "Cible inaccessible",
+      "gatewaySessionExpired": "Session expirée. Rouvrez cet environnement."
     },
     "stopRetry": "Arrêter les tentatives",
     "resumeRetry": "Reprendre la connexion",

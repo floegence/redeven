@@ -14,7 +14,7 @@ func TestGatewayDoesNotExposeRuntimeLifecycleRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/runtime-operations/prepare", nil)
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v3/runtime-operations/prepare", nil)
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {

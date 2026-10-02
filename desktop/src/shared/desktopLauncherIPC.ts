@@ -306,6 +306,7 @@ export type DesktopGatewayStartRequiredRetryAction = Readonly<
       gateway_env_id: string;
       label: string;
       start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
+      access_mode?: 'direct_url' | 'gateway_proxy';
     }
 >;
 export type DesktopGatewayResolveFocus =
@@ -345,6 +346,7 @@ export type DesktopEnvironmentRegistrationUpsert = Readonly<
   | {
       registration_ref: Extract<EnvironmentRegistrationRef, { kind: 'gateway_environment' }>;
       display_name: string;
+      access_mode?: 'direct_url' | 'gateway_proxy';
       access_route: Readonly<{
         kind: 'url';
         url?: string;
@@ -421,6 +423,8 @@ export type DesktopEnvironmentEntry = Readonly<{
   gateway_environment_profile?: DesktopGatewayEnvironment['profile'];
   gateway_environment_profile_access_route?: DesktopGatewayEnvironment['profile_access_route'];
   gateway_environment_origin?: DesktopGatewayEnvironment['origin'];
+  gateway_access_result?: DesktopGatewayEnvironment['last_access_result'];
+  gateway_sync_state?: DesktopGatewaySource['sync_state'];
   environment_source?: DesktopEnvironmentSource;
   pinned: boolean;
   control_plane_label?: string;
@@ -657,6 +661,7 @@ export type DesktopLauncherOperationNextAction = Readonly<
       gateway_env_id: string;
       label: string;
       start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
+      access_mode?: 'direct_url' | 'gateway_proxy';
       label_key?: DesktopTranslationKey;
     }
   | {
@@ -685,6 +690,7 @@ export type DesktopLauncherActionRequest = Readonly<
       gateway_env_id: string;
       label: string;
       start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
+      access_mode?: 'direct_url' | 'gateway_proxy';
     }
   | {
       kind: 'open_remote_environment';
@@ -779,6 +785,7 @@ export type DesktopLauncherActionRequest = Readonly<
       connection_kind: 'url';
       gateway_url: string;
       pairing_code?: string;
+      profile_write?: boolean;
       allow_loopback_http: boolean;
     }
   | {
@@ -1188,6 +1195,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
     }
     case 'open_gateway_environment': {
+      const accessMode = compact((candidate as { access_mode?: unknown }).access_mode);
+      if (accessMode && accessMode !== 'direct_url' && accessMode !== 'gateway_proxy') return null;
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
       const gatewayEnvID = compact((candidate as { gateway_env_id?: unknown }).gateway_env_id);
@@ -1205,6 +1214,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         gateway_id: gatewayID,
         gateway_env_id: gatewayEnvID,
         label,
+        ...(accessMode ? { access_mode: accessMode as 'direct_url' | 'gateway_proxy' } : {}),
         ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
       };
     }
@@ -1377,6 +1387,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           display_name: displayName,
           connection_kind: 'url',
           gateway_url: gatewayURL,
+          profile_write: (candidate as { profile_write?: unknown }).profile_write === true,
           ...(compact((candidate as { pairing_code?: unknown }).pairing_code)
             ? { pairing_code: compact((candidate as { pairing_code?: unknown }).pairing_code) }
             : {}),
@@ -1548,12 +1559,15 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       if (!normalizedRoute.url) {
         return null;
       }
+      const accessMode = compact(registrationCandidate.access_mode);
+      if (accessMode && accessMode !== 'direct_url' && accessMode !== 'gateway_proxy') return null;
       return {
         kind,
         registration: {
           registration_ref: registrationRef,
           display_name: displayName,
           access_route: normalizedRoute,
+          ...(accessMode ? { access_mode: accessMode as 'direct_url' | 'gateway_proxy' } : {}),
         },
       };
     }

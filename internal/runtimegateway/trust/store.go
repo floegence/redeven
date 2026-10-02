@@ -84,7 +84,8 @@ func (s *Store) GatewayMetadata(bindingAudience string) (protocol.GatewayMetadat
 		Status:      protocol.GatewayStatusOnline,
 		Capabilities: []protocol.GatewayCapability{
 			protocol.GatewayCapabilityEnvCatalog,
-			protocol.GatewayCapabilityEnvOpenSession,
+			protocol.GatewayCapabilityEnvDirectOpen,
+			protocol.GatewayCapabilityEnvProxyOpen,
 		},
 		GatewayPublicKeyFingerprint: fingerprint,
 	}, fingerprint, nil

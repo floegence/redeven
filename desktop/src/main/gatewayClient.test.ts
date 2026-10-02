@@ -3,14 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { normalizeGatewayCatalogResponse, normalizeGatewayOpenSessionResponse, redactGatewayDiagnosticValue } from './gatewayClient';
 
 describe('Gateway access client contracts', () => {
+  it('rejects invalid or missing v3 profile access modes instead of selecting a route', () => {
+    for (const mode of [undefined, '', 'automatic', false]) {
+      expect(() => normalizeGatewayCatalogResponse({
+        protocol_version: 'redeven-gateway-v3', gateway: { gateway_id: 'gw-1' },
+        environments: [{ gateway_env_id: 'env-1', profile: { managed: true, access_route_kind: 'url', access_mode: mode } }],
+      })).toThrow('Gateway profile access_mode is invalid.');
+    }
+  });
   it('normalizes an access-only catalog environment', () => {
     const catalog = normalizeGatewayCatalogResponse({
-      protocol_version: 'redeven-gateway-v2',
+      protocol_version: 'redeven-gateway-v3',
       gateway: {
         gateway_id: 'gw-1',
         display_name: 'Gateway',
         status: 'online',
-        capabilities: ['env_catalog', 'env_open_session'],
+        capabilities: ['env_catalog', 'env_direct_open', 'env_proxy_open'],
       },
       environments: [{
         gateway_env_id: 'env-1',
@@ -30,7 +38,7 @@ describe('Gateway access client contracts', () => {
 
   it('validates open-session response shape', () => {
     const response = normalizeGatewayOpenSessionResponse({
-      protocol_version: 'redeven-gateway-v2',
+      protocol_version: 'redeven-gateway-v3',
       gateway_session_id: 'session',
       gateway_env_id: 'env-1',
       connect_artifact: {

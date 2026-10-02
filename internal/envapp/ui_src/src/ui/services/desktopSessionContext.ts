@@ -25,6 +25,9 @@ export type DesktopTransportRecoveryFailureCode =
   | 'transport_unavailable'
   | 'authentication_failed'
   | 'remote_command_ended'
+  | 'gateway_unavailable'
+  | 'gateway_target_unavailable'
+  | 'gateway_session_expired'
   | 'process_identity_changed';
 
 export type DesktopTransportRecoverySnapshot = Readonly<{
@@ -156,6 +159,9 @@ export function normalizeDesktopTransportRecoverySnapshot(
       && code !== 'transport_unavailable'
       && code !== 'authentication_failed'
       && code !== 'remote_command_ended'
+      && code !== 'gateway_unavailable'
+      && code !== 'gateway_target_unavailable'
+      && code !== 'gateway_session_expired'
       && code !== 'process_identity_changed'
     ) {
       return undefined;

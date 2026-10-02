@@ -138,7 +138,8 @@ function cloneHeaders(headers: DiagnosticsHeaders | null | undefined): Diagnosti
 }
 
 function sanitizeText(value: unknown, max = 240): string {
-  const text = String(value ?? '').trim().replace(/\r/g, ' ').replace(/\n/g, ' ');
+  const text = String(value ?? '').trim().replace(/\r/g, ' ').replace(/\n/g, ' ')
+    .replace(/(\/gateway\/v3\/access\/)[A-Za-z0-9_-]+/gu, '$1[redacted]');
   if (!max || text.length <= max) {
     return text;
   }

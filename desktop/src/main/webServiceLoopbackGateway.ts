@@ -34,6 +34,7 @@ export type WebServiceLoopbackGatewayOptions = Readonly<{
   targetURL: string;
   protectedRequestHeaders?: Readonly<Record<string, string>>;
   authorizationToken?: string;
+  agent?: http.Agent | https.Agent;
 }>;
 
 function compact(value: unknown): string {
@@ -250,7 +251,7 @@ export async function startWebServiceLoopbackGateway(
     const upstream = upstreamURLForRequest(routeRoot, request.url ?? '/');
     const headers = copyRequestHeaders(request.headers, upstream, loopbackOrigin, routeRoot.origin, protectedHeaders);
     const requestImpl = upstream.protocol === 'https:' ? https.request : http.request;
-    const upstreamRequest = requestImpl(requestOptions(upstream, request, headers), (upstreamResponse) => {
+    const upstreamRequest = requestImpl({ ...requestOptions(upstream, request, headers), agent: options.agent }, (upstreamResponse) => {
       const responseHeaders = copyResponseHeaders(upstreamResponse.headers);
       for (const headerName of ['content-security-policy', 'content-security-policy-report-only', 'access-control-allow-origin', 'link', 'refresh']) {
         const value = responseHeaders[headerName];
@@ -329,7 +330,7 @@ export async function startWebServiceLoopbackGateway(
     headers.connection = 'Upgrade';
     headers.upgrade = request.headers.upgrade ?? 'websocket';
     const requestImpl = upstream.protocol === 'https:' ? https.request : http.request;
-    const upstreamRequest = requestImpl(requestOptions(upstream, request, headers));
+    const upstreamRequest = requestImpl({ ...requestOptions(upstream, request, headers), agent: options.agent });
     activeRequests.add(upstreamRequest);
     upstreamRequest.once('close', () => activeRequests.delete(upstreamRequest));
     upstreamRequest.once('upgrade', (upstreamResponse, upstreamSocket, upstreamHead) => {

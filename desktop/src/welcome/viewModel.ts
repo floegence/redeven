@@ -86,8 +86,10 @@ export type EnvironmentCardFactActionModel = Readonly<
 export type EnvironmentCardFactModel = Readonly<{
   id: string;
   label: string;
+  label_key?: DesktopTranslationKey;
   value: string;
   value_key?: DesktopTranslationKey;
+  checked_at_unix_ms?: number;
   value_tone: 'default' | 'placeholder';
   action?: EnvironmentCardFactActionModel;
   label_icon?: string;
@@ -208,6 +210,7 @@ export type EnvironmentActionModel = Readonly<{
   provider_origin?: string;
   provider_id?: string;
   gateway_id?: string;
+  access_mode?: 'direct_url' | 'gateway_proxy';
   runtime_operation?: DesktopRuntimeOperation;
   runtime_operation_method?: DesktopRuntimeOperationMethod;
   disabled_reason?: string;
@@ -310,7 +313,7 @@ function formatRuntimeStartedRelativeTimestamp(unixMS: number): string {
 function environmentRuntimeStartedLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'gateway_environment') {
     const gatewayLabel = compact(environment.gateway_label) || 'Gateway';
-    if (environment.gateway_environment_access_capabilities?.includes('open')) {
+    if (environment.gateway_environment_access_capabilities?.some(capability => capability === 'open_direct' || capability === 'open_via_gateway')) {
       return `Gateway available:${gatewayLabel}`;
     }
     return 'Gateway access-only';
@@ -776,9 +779,27 @@ function baseEnvironmentCardFactsModel(
   if (environment.kind === 'provider_environment') return cloudEnvironmentFacts(environment);
 
   if (environment.kind === 'gateway_environment') {
+    const result = environment.gateway_access_result;
+    const resultKey: DesktopTranslationKey = !result ? 'gatewayAccess.targetNotChecked'
+      : result.status === 'ready' ? 'gatewayAccess.accessReady'
+      : result.status === 'session_expired' ? 'gatewayAccess.expired'
+      : result.status === 'runtime_authentication_required' ? 'gatewayAccess.runtimeAuthentication'
+      : result.status === 'gateway_unavailable' ? 'gatewayAccess.unavailable' : 'gatewayAccess.targetUnavailable';
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       buildEnvironmentCardFact('GATEWAY', gatewayFactLabel(environment)),
+      { id: 'access-mode', label: 'Default access', label_key: 'gatewayAccess.mode', value: '',
+        value_key: environment.gateway_environment_profile?.access_mode === 'gateway_proxy' ? 'gatewayAccess.proxy' : 'gatewayAccess.direct', value_tone: 'default' },
+      { id: 'gateway-trust', label: 'Trust', label_key: 'environmentCenter.gatewayPanelFactTrust', value: '', value_tone: 'default',
+        value_key: environment.gateway_trust_state === 'paired' ? 'environmentCenter.gatewayPanelTrustPaired'
+          : environment.gateway_trust_state === 'trust_changed' ? 'environmentCenter.gatewayPanelTrustReviewRequired'
+          : environment.gateway_trust_state === 'revoked' ? 'environmentCenter.gatewayPanelTrustRevoked' : 'environmentCenter.gatewayPanelTrustNotPaired' },
+      { id: 'gateway-catalog', label: 'Gateway catalog', label_key: 'environmentCenter.gatewayPanelFactGatewayCatalog', value: '', value_tone: 'default',
+        value_key: environment.gateway_sync_state === 'ready' ? 'gatewayAccess.catalogAvailable'
+          : environment.gateway_sync_state === 'catalog_failed' ? 'environmentStatus.syncFailed' : 'environmentStatus.notChecked' },
+      { id: 'access-check', label: 'Last access check',
+        label_key: !result ? 'gatewayAccess.lastCheck' : result.access_mode === 'gateway_proxy' ? 'gatewayAccess.lastCheckProxy' : 'gatewayAccess.lastCheckDirect',
+        checked_at_unix_ms: result?.checked_at_unix_ms, value: '', value_key: resultKey, value_tone: 'default' },
       compact(environment.gateway_env_id) !== ''
         ? buildEnvironmentCardFact('ENV ID', environment.gateway_env_id ?? '', { copy_value: true })
         : buildPlaceholderEnvironmentCardFact('ENV ID', 'UNKNOWN'),
@@ -875,19 +896,8 @@ function environmentRuntimeDisplayState(environment: DesktopEnvironmentEntry): E
     return 'window_opening';
   }
   if (environment.kind === 'gateway_environment') {
-    if (environment.gateway_status === 'online' && environment.gateway_environment_state === 'available') {
+    if (environment.gateway_status === 'online' && environment.runtime_operations.open.availability === 'available') {
       return 'ready_to_open';
-    }
-    if (environment.gateway_status === 'online' && environment.gateway_environment_state === 'stopped') {
-      return 'offline';
-    }
-    if (
-      environment.gateway_status === 'installing'
-      || environment.gateway_status === 'starting'
-      || environment.gateway_status === 'updating'
-      || environment.gateway_environment_state === 'starting'
-    ) {
-      return 'running';
     }
     if (environment.gateway_environment_state === 'archived') {
       return 'removed';
@@ -979,7 +989,7 @@ function environmentDisplayStatusLabel(
     case 'window_opening':
       return 'OPENING';
     case 'ready_to_open':
-      return 'READY';
+      return environment.kind === 'gateway_environment' ? 'CATALOG AVAILABLE' : 'READY';
     case 'running':
       return 'RUNTIME PREPARING';
     case 'checking':
@@ -1140,17 +1150,6 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
         variant: 'default',
         runtime_operation: openPlan.operation,
         runtime_operation_method: openPlan.method,
-      };
-    }
-    const startPlan = environment.runtime_operations.start;
-    if (environment.gateway_environment_state === 'stopped' && startPlan.availability === 'available') {
-      return {
-        intent: 'start_and_open',
-        label: 'Open',
-        enabled: true,
-        variant: 'default',
-        runtime_operation: startPlan.operation,
-        runtime_operation_method: startPlan.method,
       };
     }
     return {
@@ -1533,12 +1532,22 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   const items: EnvironmentActionMenuItemModel[] = [];
   if (environment.kind === 'gateway_environment') {
     const refreshPlan = environment.runtime_operations.refresh;
+    for (const mode of ['gateway_proxy', 'direct_url'] as const) {
+      const capability = mode === 'gateway_proxy' ? 'open_via_gateway' : 'open_direct';
+      if (!environment.gateway_environment_access_capabilities?.includes(capability)) continue;
+      const label = mode === 'gateway_proxy' ? 'Open through Gateway' : 'Open direct URL';
+      const labelKey = mode === 'gateway_proxy' ? 'gatewayAccess.openProxy' : 'gatewayAccess.openDirect';
+      items.push({ id: `open_${mode}`, label, label_key: labelKey,
+        action: { intent: 'open', label, label_key: labelKey, enabled: true, variant: 'outline', access_mode: mode } });
+    }
     items.push({
       id: 'refresh_runtime',
-      label: 'Refresh',
+      label: 'Refresh access',
+      label_key: 'gatewayAccess.refresh',
       action: {
         intent: 'refresh_runtime',
-        label: 'Refresh',
+        label: 'Refresh access',
+        label_key: 'gatewayAccess.refresh',
         enabled: refreshPlan?.availability !== 'blocked',
         variant: 'outline',
       },

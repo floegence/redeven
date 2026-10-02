@@ -123,7 +123,7 @@ describe('resolveDesktopSessionTransport', () => {
     expect(transport.partition.startsWith('persist:')).toBe(false);
   });
 
-  it('uses a non-persistent direct partition for Gateway loopback sessions', () => {
+  it('requires explicit Gateway access modes and isolates proxy, managed bridge and direct sessions', () => {
     const target: DesktopSessionTarget = {
       kind: 'gateway_environment',
       session_key: 'gateway:demo:env:one:session:token',
@@ -134,14 +134,18 @@ describe('resolveDesktopSessionTransport', () => {
       gateway_env_id: 'one',
       gateway_session_id: 'token',
     };
-    const transport = resolveDesktopSessionTransport(target, {
-      local_ui_url: 'http://127.0.0.1:45000/session?ticket=secret',
-      local_ui_urls: ['http://127.0.0.1:45000/session?ticket=secret'],
-    });
-    expect(transport.kind).toBe('gateway_bridge');
-    expect(transport.entryURL).toContain('ticket=secret');
-    expect(transport.proxyPolicy).toBe('direct');
-    expect(transport.partition.startsWith('persist:')).toBe(false);
+    expect(() => resolveDesktopSessionTransport(target, localStartup)).toThrow('Gateway session requires an explicit access mode.');
+    const startup = { local_ui_url: 'https://runtime.example/', local_ui_urls: ['https://runtime.example/'] };
+    const proxy = resolveDesktopSessionTransport(target, startup, { gatewayProxy: true });
+    expect(proxy).toMatchObject({ kind: 'gateway_proxy', proxyPolicy: 'gateway', allowedBaseURL: 'https://runtime.example/' });
+    expect(proxy.entryURL).toBe('https://runtime.example/_redeven_proxy/env/');
+    expect(proxy.partition).not.toBe('');
+    expect(proxy.partition.startsWith('persist:')).toBe(false);
+    expect(resolveDesktopSessionTransport(target, startup, { gatewayProxy: true, gatewayBridge: true }))
+      .toMatchObject({ kind: 'gateway_bridge', proxyPolicy: 'gateway' });
+    const direct = resolveDesktopSessionTransport({ ...target, session_key: `${target.session_key}:direct` }, startup, { gatewayDirect: true });
+    expect(direct).toMatchObject({ kind: 'external_local_ui', proxyPolicy: 'system' });
+    expect(direct.partition).not.toBe(proxy.partition);
   });
 
   it('keeps Provider remote sessions on system proxy policy', () => {

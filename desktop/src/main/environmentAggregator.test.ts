@@ -11,7 +11,7 @@ describe('Gateway environment projection', () => {
         local_enabled: true,
         connection_kind: 'url',
         management_capability: 'access_only',
-        capabilities: ['env_catalog', 'env_open_session'],
+        capabilities: ['env_catalog', 'env_direct_open', 'env_proxy_open'],
         status: 'online',
         created_at_ms: 1,
         updated_at_ms: 1,

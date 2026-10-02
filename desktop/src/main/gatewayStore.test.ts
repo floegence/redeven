@@ -85,13 +85,13 @@ describe('GatewayStore', () => {
     });
   });
 
-  it('initializes fresh stores at schema v2', async () => {
+  it('initializes fresh stores at schema v3', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     const store = new GatewayStore(filePath);
 
-    expect(await store.load()).toEqual({ schema_version: 2, gateways: [] });
+    expect(await store.load()).toEqual({ schema_version: 3, gateways: [] });
     await store.upsert({
       gateway_id: 'gw_fresh',
       display_name: 'Fresh Gateway',
@@ -100,8 +100,8 @@ describe('GatewayStore', () => {
     });
 
     expect(JSON.parse(await fs.readFile(filePath, 'utf8'))).toMatchObject({
-      schema_version: 2,
-      gateways: [expect.objectContaining({ schema_version: 2, gateway_id: 'gw_fresh' })],
+      schema_version: 3,
+      gateways: [expect.objectContaining({ schema_version: 3, gateway_id: 'gw_fresh' })],
     });
   });
 
@@ -126,7 +126,7 @@ describe('GatewayStore', () => {
     expect(await new GatewayStore(filePath).list()).toEqual([]);
   });
 
-  it('migrates the exact v1 store to v2 and preserves user records', async () => {
+  it('migrates the exact v1 store to v3 and preserves user records', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
@@ -147,9 +147,9 @@ describe('GatewayStore', () => {
     const snapshot = await new GatewayStore(filePath).load();
 
     expect(snapshot).toMatchObject({
-      schema_version: 2,
+      schema_version: 3,
       gateways: [{
-        schema_version: 2,
+        schema_version: 3,
         gateway_id: 'gw_v1',
         display_name: 'Existing Gateway',
         local_enabled: false,
@@ -185,12 +185,31 @@ describe('GatewayStore', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
   });
 
+  it('migrates v2 without changing URL endpoints, trust, names, or timestamps', async () => {
+    const root = await createTempRoot(); cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    const store = new GatewayStore(filePath);
+    await store.upsert({ gateway_id: 'gw_preserved', display_name: 'Preserved', now_ms: 20,
+      connection: { kind: 'url', base_url: 'https://gateway.example/office/' },
+      trust_profile: { trust_profile_id: 'trust_id', paired_client_key_id: 'client_id', paired_client_private_key_ref: 'gateway-client-key:gw_preserved:client_id',
+        gateway_id: 'gw_preserved', gateway_public_key: 'PUBLIC KEY', gateway_public_key_fingerprint: 'SHA256:identity',
+        binding_audience: 'https://gateway.example/office/', created_at_unix_ms: 10 } });
+    const expected = await store.load();
+    const legacy = { ...expected, schema_version: 2, gateways: expected.gateways.map(record => ({ ...record, schema_version: 2 })) };
+    const original = JSON.stringify(legacy);
+    await fs.writeFile(filePath, original);
+    const failing = new GatewayStore(filePath, async () => { throw new Error('atomic migration failure'); });
+    await expect(failing.load()).rejects.toThrow('atomic migration failure');
+    expect(await fs.readFile(filePath, 'utf8')).toBe(original);
+    expect(await new GatewayStore(filePath).load()).toEqual(expected);
+  });
+
   it('rejects future schemas without changing the file', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const original = '{"schema_version":3,"gateways":[]}\n';
+    const original = '{"schema_version":4,"gateways":[]}\n';
     await fs.writeFile(filePath, original, 'utf8');
 
     await expect(new GatewayStore(filePath).load()).rejects.toMatchObject({
@@ -199,7 +218,7 @@ describe('GatewayStore', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
   });
 
-  it('leaves v1 bytes intact when the v2 migration cannot commit', async () => {
+  it('leaves v1 bytes intact when the v3 migration cannot commit', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
@@ -214,15 +233,15 @@ describe('GatewayStore', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
   });
 
-  it('keeps the last committed snapshot when a v2 mutation cannot persist', async () => {
+  it('keeps the last committed snapshot when a v3 mutation cannot persist', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     const original = `${JSON.stringify({
-      schema_version: 2,
+      schema_version: 3,
       gateways: [{
-        schema_version: 2,
+        schema_version: 3,
         gateway_id: 'gw_committed',
         display_name: 'Committed Gateway',
         local_enabled: true,

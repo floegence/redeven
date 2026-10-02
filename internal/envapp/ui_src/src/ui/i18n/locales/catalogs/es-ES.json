@@ -4594,7 +4594,10 @@
       "missingEnvironmentContext": "Falta la identidad del entorno necesaria para esta sesión.",
       "secureSessionFailed": "No se pudo reanudar la sesión segura.",
       "remoteCommandEnded": "Finalizó el comando original del puente del entorno de ejecución remoto.",
-      "processIdentityChanged": "La identidad del proceso del entorno de ejecución remoto cambió, por lo que esta ventana no se puede volver a vincular de forma segura."
+      "processIdentityChanged": "La identidad del proceso del entorno de ejecución remoto cambió, por lo que esta ventana no se puede volver a vincular de forma segura.",
+      "gatewayUnavailable": "Gateway no disponible",
+      "gatewayTargetUnavailable": "Destino no accesible",
+      "gatewaySessionExpired": "La sesión ha caducado. Vuelve a abrir el entorno."
     },
     "stopRetry": "Detener reintentos",
     "resumeRetry": "Reanudar conexión",

@@ -4594,7 +4594,10 @@
       "missingEnvironmentContext": "缺少此工作階段所需的環境身分資訊。",
       "secureSessionFailed": "無法恢復安全工作階段。",
       "remoteCommandEnded": "原本用於橋接遠端執行階段的命令已結束。",
-      "processIdentityChanged": "遠端執行階段身分已變更，因此無法安全地將此視窗重新繫結。"
+      "processIdentityChanged": "遠端執行階段身分已變更，因此無法安全地將此視窗重新繫結。",
+      "gatewayUnavailable": "Gateway 無法使用",
+      "gatewayTargetUnavailable": "無法連線至目標",
+      "gatewaySessionExpired": "工作階段已到期，請重新開啟環境。"
     },
     "stopRetry": "停止重試",
     "resumeRetry": "繼續連線",

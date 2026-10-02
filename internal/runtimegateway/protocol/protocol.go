@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	Version                    = "redeven-gateway-v2"
+	Version                    = "redeven-gateway-v3"
 	ReservedLocalEnvironmentID = "env_local"
 )
 
@@ -16,7 +16,8 @@ type GatewayCapability string
 
 const (
 	GatewayCapabilityEnvCatalog      GatewayCapability = "env_catalog"
-	GatewayCapabilityEnvOpenSession  GatewayCapability = "env_open_session"
+	GatewayCapabilityEnvDirectOpen   GatewayCapability = "env_direct_open"
+	GatewayCapabilityEnvProxyOpen    GatewayCapability = "env_proxy_open"
 	GatewayCapabilityEnvProfileWrite GatewayCapability = "env_profile_write"
 	GatewayCapabilityTerminal        GatewayCapability = "terminal"
 	GatewayCapabilityFiles           GatewayCapability = "files"
@@ -44,11 +45,13 @@ const (
 type EnvironmentCapability string
 
 const (
-	EnvironmentCapabilityOpen        EnvironmentCapability = "open"
-	EnvironmentCapabilityTerminal    EnvironmentCapability = "terminal"
-	EnvironmentCapabilityFiles       EnvironmentCapability = "files"
-	EnvironmentCapabilityWebService  EnvironmentCapability = "web_service"
-	EnvironmentCapabilityPortForward EnvironmentCapability = "port_forward"
+	EnvironmentCapabilityOpen           EnvironmentCapability = "open" // legacy aggregate capability
+	EnvironmentCapabilityOpenDirect     EnvironmentCapability = "open_direct"
+	EnvironmentCapabilityOpenViaGateway EnvironmentCapability = "open_via_gateway"
+	EnvironmentCapabilityTerminal       EnvironmentCapability = "terminal"
+	EnvironmentCapabilityFiles          EnvironmentCapability = "files"
+	EnvironmentCapabilityWebService     EnvironmentCapability = "web_service"
+	EnvironmentCapabilityPortForward    EnvironmentCapability = "port_forward"
 )
 
 type EnvironmentOriginKind string
@@ -83,6 +86,14 @@ type ConnectArtifactKind string
 const (
 	ConnectArtifactKindLocalDirect   ConnectArtifactKind = "local_direct_artifact"
 	ConnectArtifactKindDesktopBridge ConnectArtifactKind = "desktop_bridge_artifact"
+	ConnectArtifactKindGatewayProxy  ConnectArtifactKind = "gateway_proxy_artifact"
+)
+
+type AccessMode string
+
+const (
+	AccessModeDirectURL    AccessMode = "direct_url"
+	AccessModeGatewayProxy AccessMode = "gateway_proxy"
 )
 
 type GatewayErrorCode string
@@ -144,6 +155,7 @@ type Environment struct {
 type EnvironmentProfile struct {
 	Managed         bool                      `json:"managed,omitempty"`
 	AccessRouteKind EnvProfileAccessRouteKind `json:"access_route_kind,omitempty"`
+	AccessMode      AccessMode                `json:"access_mode,omitempty"`
 }
 
 type EnvironmentOrigin struct {
@@ -156,6 +168,7 @@ type OpenSessionRequest struct {
 	GatewayEnvID        string              `json:"gateway_env_id"`
 	RequestedCapability RequestedCapability `json:"requested_capability"`
 	ClientNonce         string              `json:"client_nonce"`
+	AccessMode          AccessMode          `json:"access_mode,omitempty"`
 	BridgeSessionID     string              `json:"bridge_session_id,omitempty"`
 	RouteID             string              `json:"route_id,omitempty"`
 }
@@ -177,6 +190,7 @@ type EnvProfileInput struct {
 	GatewayEnvID string                `json:"gateway_env_id,omitempty"`
 	DisplayName  string                `json:"display_name"`
 	AccessRoute  EnvProfileAccessRoute `json:"access_route"`
+	AccessMode   AccessMode            `json:"access_mode,omitempty"`
 	SSHSecret    *EnvProfileSSHSecret  `json:"ssh_secret,omitempty"`
 
 	sshSecretFieldPresent bool
@@ -226,13 +240,25 @@ type EnvProfileDeleteResponse struct {
 }
 
 type GatewayConnectArtifact struct {
-	Kind            ConnectArtifactKind `json:"kind"`
-	URL             string              `json:"url,omitempty"`
-	BridgeSessionID string              `json:"bridge_session_id,omitempty"`
-	RouteID         string              `json:"route_id,omitempty"`
-	ExpiresAtUnixMS int64               `json:"expires_at_unix_ms"`
-	ArtifactNonce   string              `json:"artifact_nonce"`
-	Proof           string              `json:"proof"`
+	Kind             ConnectArtifactKind `json:"kind"`
+	URL              string              `json:"url,omitempty"`
+	GatewaySessionID string              `json:"gateway_session_id,omitempty"`
+	BridgeSessionID  string              `json:"bridge_session_id,omitempty"`
+	RouteID          string              `json:"route_id,omitempty"`
+	ExpiresAtUnixMS  int64               `json:"expires_at_unix_ms"`
+	ArtifactNonce    string              `json:"artifact_nonce"`
+	Proof            string              `json:"proof"`
+}
+
+type CloseSessionRequest struct {
+	ProtocolVersion  string `json:"protocol_version,omitempty"`
+	GatewaySessionID string `json:"gateway_session_id"`
+}
+
+type CloseSessionResponse struct {
+	ProtocolVersion  string `json:"protocol_version"`
+	GatewaySessionID string `json:"gateway_session_id"`
+	Closed           bool   `json:"closed"`
 }
 
 type DiagnosticsHint struct {
@@ -298,6 +324,8 @@ var (
 	ErrInvalidSSHAuthMode         = errors.New("access_route.auth_mode is invalid")
 	ErrSSHPasswordAuthUnsupported = errors.New("ssh password auth is not supported")
 	ErrInvalidClientCapability    = errors.New("client_capability is invalid")
+	ErrInvalidAccessMode          = errors.New("access_mode is invalid")
+	ErrMissingGatewaySessionID    = errors.New("gateway_session_id is required")
 )
 
 func (input *EnvProfileInput) UnmarshalJSON(data []byte) error {
@@ -307,7 +335,7 @@ func (input *EnvProfileInput) UnmarshalJSON(data []byte) error {
 	}
 	for key := range raw {
 		switch key {
-		case "gateway_env_id", "display_name", "access_route", "ssh_secret":
+		case "gateway_env_id", "display_name", "access_route", "access_mode", "ssh_secret":
 		default:
 			return fmt.Errorf("unknown field %q", key)
 		}
@@ -464,6 +492,10 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 
 func normalizeEnvironmentProfile(profile EnvironmentProfile) EnvironmentProfile {
 	profile.AccessRouteKind = normalizeEnvProfileAccessRouteKind(profile.AccessRouteKind)
+	profile.AccessMode = normalizeAccessMode(profile.AccessMode)
+	if profile.AccessMode == "" && profile.AccessRouteKind == EnvProfileAccessRouteKindURL {
+		profile.AccessMode = AccessModeDirectURL
+	}
 	if !profile.Managed || profile.AccessRouteKind == "" {
 		return EnvironmentProfile{}
 	}
@@ -473,6 +505,7 @@ func normalizeEnvironmentProfile(profile EnvironmentProfile) EnvironmentProfile 
 func NormalizeEnvProfileUpsertRequest(req EnvProfileUpsertRequest) EnvProfileUpsertRequest {
 	req.Profile.GatewayEnvID = strings.TrimSpace(req.Profile.GatewayEnvID)
 	req.Profile.DisplayName = strings.TrimSpace(req.Profile.DisplayName)
+	req.Profile.AccessMode = normalizeAccessMode(req.Profile.AccessMode)
 	req.Profile.AccessRoute.Kind = normalizeEnvProfileAccessRouteKind(req.Profile.AccessRoute.Kind)
 	req.Profile.AccessRoute.URL = strings.TrimSpace(req.Profile.AccessRoute.URL)
 	req.Profile.AccessRoute.OriginLabel = strings.TrimSpace(req.Profile.AccessRoute.OriginLabel)
@@ -486,7 +519,13 @@ func NormalizeEnvProfileUpsertRequest(req EnvProfileUpsertRequest) EnvProfileUps
 }
 
 func ValidateEnvProfileUpsertRequest(req EnvProfileUpsertRequest) error {
+	if req.Profile.AccessMode != "" && req.Profile.AccessMode != AccessModeDirectURL && req.Profile.AccessMode != AccessModeGatewayProxy {
+		return ErrInvalidAccessMode
+	}
 	req = NormalizeEnvProfileUpsertRequest(req)
+	if req.Profile.AccessMode == AccessModeGatewayProxy && req.Profile.AccessRoute.Kind != EnvProfileAccessRouteKindURL {
+		return ErrInvalidAccessMode
+	}
 	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
 		return err
 	}
@@ -606,6 +645,7 @@ func NormalizeOpenSessionRequest(req OpenSessionRequest) OpenSessionRequest {
 	req.BridgeSessionID = strings.TrimSpace(req.BridgeSessionID)
 	req.RouteID = strings.TrimSpace(req.RouteID)
 	req.RequestedCapability = normalizeRequestedCapability(req.RequestedCapability)
+	req.AccessMode = AccessMode(strings.TrimSpace(string(req.AccessMode)))
 	return req
 }
 
@@ -620,6 +660,25 @@ func ValidateOpenSessionRequest(req OpenSessionRequest) error {
 	if req.ClientNonce == "" {
 		return ErrMissingClientNonce
 	}
+	if req.AccessMode != "" && req.AccessMode != AccessModeDirectURL && req.AccessMode != AccessModeGatewayProxy {
+		return ErrInvalidAccessMode
+	}
+	return nil
+}
+
+func NormalizeCloseSessionRequest(req CloseSessionRequest) CloseSessionRequest {
+	req.GatewaySessionID = strings.TrimSpace(req.GatewaySessionID)
+	return req
+}
+
+func ValidateCloseSessionRequest(req CloseSessionRequest) error {
+	req = NormalizeCloseSessionRequest(req)
+	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
+		return err
+	}
+	if req.GatewaySessionID == "" {
+		return ErrMissingGatewaySessionID
+	}
 	return nil
 }
 
@@ -628,7 +687,7 @@ func normalizeGatewayCapabilities(capabilities []GatewayCapability) []GatewayCap
 	seen := make(map[GatewayCapability]struct{}, len(capabilities))
 	for _, capability := range capabilities {
 		switch capability {
-		case GatewayCapabilityEnvCatalog, GatewayCapabilityEnvOpenSession, GatewayCapabilityEnvProfileWrite,
+		case GatewayCapabilityEnvCatalog, GatewayCapabilityEnvDirectOpen, GatewayCapabilityEnvProxyOpen, GatewayCapabilityEnvProfileWrite,
 			GatewayCapabilityTerminal, GatewayCapabilityFiles, GatewayCapabilityWebService, GatewayCapabilityPortForward:
 		default:
 			continue
@@ -655,7 +714,7 @@ func normalizeEnvironmentCapabilities(capabilities []EnvironmentCapability) []En
 	seen := make(map[EnvironmentCapability]struct{}, len(capabilities))
 	for _, capability := range capabilities {
 		switch capability {
-		case EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
+		case EnvironmentCapabilityOpen, EnvironmentCapabilityOpenDirect, EnvironmentCapabilityOpenViaGateway, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
 			EnvironmentCapabilityWebService, EnvironmentCapabilityPortForward:
 		default:
 			continue
@@ -677,7 +736,7 @@ func normalizeEnvironmentAccessCapabilities(capabilities []EnvironmentCapability
 	seen := make(map[EnvironmentCapability]struct{}, len(capabilities))
 	for _, capability := range normalizeEnvironmentCapabilities(capabilities) {
 		switch capability {
-		case EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
+		case EnvironmentCapabilityOpen, EnvironmentCapabilityOpenDirect, EnvironmentCapabilityOpenViaGateway, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
 			EnvironmentCapabilityWebService, EnvironmentCapabilityPortForward:
 		default:
 			continue
@@ -707,6 +766,15 @@ func normalizeEnvProfileAccessRouteKind(kind EnvProfileAccessRouteKind) EnvProfi
 	switch kind {
 	case EnvProfileAccessRouteKindURL, EnvProfileAccessRouteKindSSHHost, EnvProfileAccessRouteKindSSHContainer:
 		return kind
+	default:
+		return ""
+	}
+}
+
+func normalizeAccessMode(mode AccessMode) AccessMode {
+	switch mode {
+	case AccessModeDirectURL, AccessModeGatewayProxy:
+		return mode
 	default:
 		return ""
 	}

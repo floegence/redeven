@@ -37,7 +37,7 @@ function memorySecretStore(): GatewaySecretStore & { values: Map<string, string>
 
 function gatewayRecord(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
   return {
-    schema_version: 2,
+    schema_version: 3,
     gateway_id: 'gw_demo',
     display_name: 'Demo Gateway',
     local_enabled: true,
@@ -63,7 +63,7 @@ function signedChallenge(
   }> = {},
 ) {
   const challenge = {
-    protocol_version: overrides.protocol_version ?? 'redeven-gateway-v2',
+    protocol_version: overrides.protocol_version ?? 'redeven-gateway-v3',
     gateway_id: overrides.gateway_id ?? 'gw_demo',
     gateway_public_key: gatewayMaterial.client_public_key,
     gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayMaterial.client_public_key),
@@ -95,7 +95,7 @@ function signedRuntimeStyleChallenge(
   const gatewayPublicKey = gatewayMaterial.client_public_key.trim();
   const gatewayPublicKeyWire = `${gatewayPublicKey}\n`;
   const challenge = {
-    protocol_version: 'redeven-gateway-v2',
+    protocol_version: 'redeven-gateway-v3',
     gateway_id: 'gw_demo',
     gateway_public_key: gatewayPublicKeyWire,
     gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayPublicKey),
@@ -276,12 +276,12 @@ describe('gatewayTrust', () => {
     const gatewayMaterial = createGatewayPairingMaterial(record);
     const challenge = signedChallenge(material, gatewayMaterial);
     const response = {
-      protocol_version: 'redeven-gateway-v2',
+      protocol_version: 'redeven-gateway-v3',
       gateway_id: record.gateway_id,
       client_key_id: material.client_key_id,
       paired_at_unix_ms: 1_000,
       proof: signGatewayPayload(gatewayMaterial.client_private_key, pairingCompleteResponsePayload({
-        protocol_version: 'redeven-gateway-v2',
+        protocol_version: 'redeven-gateway-v3',
         client_nonce: material.client_nonce,
         gateway_nonce: challenge.gateway_nonce,
         gateway_id: record.gateway_id,
@@ -327,7 +327,7 @@ describe('gatewayTrust', () => {
     await expect(createGatewayAuthHeaders({
       record: gatewayRecord(),
       method: 'POST',
-      route: '/gateway/v1/catalog',
+      route: '/gateway/v3/catalog',
       body: {},
       secret_store: store,
     })).rejects.toMatchObject({ code: 'GATEWAY_PAIRING_REQUIRED' });
@@ -346,7 +346,7 @@ describe('gatewayTrust', () => {
     await expect(createGatewayAuthHeaders({
       record: gatewayRecord({ trust_profile: profile }),
       method: 'POST',
-      route: '/gateway/v1/catalog',
+      route: '/gateway/v3/catalog',
       body: {},
       secret_store: store,
     })).rejects.toMatchObject({ code: 'GATEWAY_TRUST_REVOKED' });
@@ -373,7 +373,7 @@ describe('gatewayTrust', () => {
     await expect(createGatewayAuthHeaders({
       record: paired,
       method: 'POST',
-      route: '/gateway/v1/catalog',
+      route: '/gateway/v3/catalog',
       body: {},
       secret_store: store,
     })).rejects.toMatchObject({ code: 'GATEWAY_TRUST_CHANGED' });
@@ -399,8 +399,8 @@ describe('gatewayTrust', () => {
         },
       }),
       method: 'POST',
-      route: '/gateway/v1/catalog',
-      body: { protocol_version: 'redeven-gateway-v2' },
+      route: '/gateway/v3/catalog',
+      body: { protocol_version: 'redeven-gateway-v3' },
       secret_store: store,
       timestamp_unix_ms: 1_770_000_000_000,
       nonce: 'nonce',
@@ -438,7 +438,7 @@ describe('gatewayTrust', () => {
   it('builds pairing challenge requests from generated key material', () => {
     const material = createGatewayPairingMaterial(gatewayRecord());
     expect(pairingChallengeRequest(material)).toMatchObject({
-      protocol_version: 'redeven-gateway-v2',
+      protocol_version: 'redeven-gateway-v3',
       client_nonce: material.client_nonce,
       client_public_key: material.client_public_key,
       binding_audience: 'https://gateway.example/',

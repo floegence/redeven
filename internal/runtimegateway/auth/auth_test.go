@@ -27,7 +27,7 @@ func TestVerifierAcceptsSignedCanonicalRequest(t *testing.T) {
 	material := pairTestClient(t, store, "https://gateway.example.internal")
 	verifier := NewVerifier(store)
 	body := []byte(`{"z":2,"a":{"b":true}}`)
-	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v1/catalog", body, "nonce-ok")
+	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v3/catalog", body, "nonce-ok")
 
 	verified, err := verifier.Verify(context.Background(), req, body, material.bindingAudience)
 	if err != nil {
@@ -50,7 +50,7 @@ func TestVerifierRejectsTamperedSignature(t *testing.T) {
 	material := pairTestClient(t, store, "https://gateway.example.internal")
 	verifier := NewVerifier(store)
 	body := []byte(`{"ok":true}`)
-	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v1/catalog", body, "nonce-tampered-signature")
+	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v3/catalog", body, "nonce-tampered-signature")
 	req.Header.Set("X-Redeven-Request-Signature", "not-a-valid-signature")
 
 	if _, err := verifier.Verify(context.Background(), req, body, material.bindingAudience); err == nil {
@@ -63,7 +63,7 @@ func TestVerifierInvalidSignatureDoesNotConsumeNonce(t *testing.T) {
 	material := pairTestClient(t, store, "https://gateway.example.internal")
 	verifier := NewVerifier(store)
 	body := []byte(`{"ok":true}`)
-	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v1/catalog", body, "nonce-retry-after-invalid-signature")
+	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v3/catalog", body, "nonce-retry-after-invalid-signature")
 	validSignature := req.Header.Get("X-Redeven-Request-Signature")
 	req.Header.Set("X-Redeven-Request-Signature", "not-a-valid-signature")
 
@@ -82,7 +82,7 @@ func TestVerifierRejectsBodyDigestMismatch(t *testing.T) {
 	material := pairTestClient(t, store, "https://gateway.example.internal")
 	verifier := NewVerifier(store)
 	signedBody := []byte(`{"ok":true}`)
-	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v1/catalog", signedBody, "nonce-body-digest")
+	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v3/catalog", signedBody, "nonce-body-digest")
 	tamperedBody := []byte(`{"ok":false}`)
 
 	if _, err := verifier.Verify(context.Background(), req, tamperedBody, material.bindingAudience); err == nil {
@@ -95,11 +95,11 @@ func TestVerifierRejectsNonceReplay(t *testing.T) {
 	material := pairTestClient(t, store, "https://gateway.example.internal")
 	verifier := NewVerifier(store)
 	body := []byte(`{"ok":true}`)
-	first := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v1/catalog", body, "nonce-replay")
+	first := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v3/catalog", body, "nonce-replay")
 	if _, err := verifier.Verify(context.Background(), first, body, material.bindingAudience); err != nil {
 		t.Fatalf("first Verify() error = %v", err)
 	}
-	replayed := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v1/catalog", body, "nonce-replay")
+	replayed := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v3/catalog", body, "nonce-replay")
 
 	if _, err := verifier.Verify(context.Background(), replayed, body, material.bindingAudience); err == nil {
 		t.Fatal("Verify() error = nil, want nonce replay error")
@@ -111,7 +111,7 @@ func TestVerifierRejectsWrongAudience(t *testing.T) {
 	material := pairTestClient(t, store, "https://gateway.example.internal")
 	verifier := NewVerifier(store)
 	body := []byte(`{"ok":true}`)
-	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v1/catalog", body, "nonce-wrong-audience")
+	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v3/catalog", body, "nonce-wrong-audience")
 
 	if _, err := verifier.Verify(context.Background(), req, body, "https://other-gateway.example.internal"); err == nil {
 		t.Fatal("Verify() error = nil, want wrong audience error")
@@ -123,7 +123,7 @@ func TestVerifierDoesNotInitializeUnpairedGatewayIdentity(t *testing.T) {
 	store := trust.NewStore(path)
 	verifier := NewVerifier(store)
 	body := []byte(`{"ok":true}`)
-	req, err := http.NewRequest(http.MethodPost, "http://runtime.local/gateway/v1/catalog", nil)
+	req, err := http.NewRequest(http.MethodPost, "http://runtime.local/gateway/v3/catalog", nil)
 	if err != nil {
 		t.Fatalf("NewRequest() error = %v", err)
 	}

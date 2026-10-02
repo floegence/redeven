@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway service
 description: Standalone optional Gateway identity, catalog, session, and access forwarding service.
 tags: [gateway, desktop, release, access]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-10-02T00:00:00Z
 ---
 # Summary
 
@@ -19,9 +19,20 @@ The service persists only access-plane state: Gateway identity, paired clients, 
 
 Gateway access remains useful without Desktop lifecycle management. An explicit Gateway profile can publish a catalog and issue an open-session artifact for a configured access endpoint. HTTP, WebSocket, and streaming traffic is forwarded according to that access contract; the Gateway does not translate access requests into process commands.
 
+[Gateway access sessions](gateway-access-sessions.md) owns Direct URL versus
+Gateway proxy selection, the fixed listening endpoint, session expiry and
+revocation, Runtime login isolation, target policy, and configuration migration.
+Catalog availability never claims Runtime health. Profile writes require both
+the service flag and independent paired-client permission on either transport.
+
 ## Packaging
 
 Gateway is built and published as the independent `redeven-gateway_<os>_<arch>.tar.gz` archive. The Desktop Runtime bundle and Runtime archive must not contain `redeven-gateway`, and normal Local, SSH, or container Runtime installation must not create a Gateway managed directory. Desktop may install or update a standalone Gateway only through an explicit Gateway workflow, with its binary stored under the Gateway state root rather than a Runtime root.
+
+The archive and Desktop must use Gateway protocol v3 together. An older Gateway
+returns a clear protocol-mismatch diagnosis; Desktop does not probe retired v2
+routes. Installing a v3 Gateway automatically migrates supported local profile
+state before serving requests; it does not reset trust or require deleting files.
 
 ## Retired state
 
@@ -36,6 +47,6 @@ Desktop owns Runtime lifecycle only for targets with an authorized direct manage
 - `redeven:cmd/redeven-gateway/main.go:1` - Standalone Gateway CLI and Gateway-only service commands.
 - `redeven:internal/gatewayservice/server.go:1` - Pairing, catalog, profile, open-session, and access forwarding routes.
 - `redeven:internal/gatewayservice/server_test.go:1` - Verifies Runtime lifecycle routes and state are absent.
-- `redeven:spec/openapi/gateway-v2.yaml:1` - Access-only Gateway HTTP contract.
+- `redeven:spec/openapi/gateway-v3.yaml:1` - Access-only Gateway HTTP contract.
 - `redeven:desktop/src/main/gatewayServiceHost.ts:1` - Explicit standalone Gateway installation under the Gateway state root.
 - `redeven:.github/workflows/release.yml:1` - Independent Gateway archive build and publication.

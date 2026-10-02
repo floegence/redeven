@@ -4594,7 +4594,10 @@
       "missingEnvironmentContext": "A identidade do ambiente necessária para esta sessão está ausente.",
       "secureSessionFailed": "Não foi possível retomar a sessão segura.",
       "remoteCommandEnded": "O comando original da ponte para o ambiente de execução remoto foi encerrado.",
-      "processIdentityChanged": "A identidade do ambiente de execução remoto mudou, por isso esta janela não pode ser vinculada novamente com segurança."
+      "processIdentityChanged": "A identidade do ambiente de execução remoto mudou, por isso esta janela não pode ser vinculada novamente com segurança.",
+      "gatewayUnavailable": "Gateway indisponível",
+      "gatewayTargetUnavailable": "Destino inacessível",
+      "gatewaySessionExpired": "Sessão expirada. Abra este ambiente novamente."
     },
     "stopRetry": "Parar tentativas",
     "resumeRetry": "Retomar conexão",

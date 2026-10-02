@@ -1869,6 +1869,7 @@ SOFTWARE.
 | @types/semver | 7.7.1 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fsemver/v/7.7.1 |  |
 | @types/trusted-types | 2.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Ftrusted-types/v/2.0.7 |  |
 | @types/unist | 3.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Funist/v/3.0.3 |  |
+| @types/ws | 8.18.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fws/v/8.18.1 |  |
 | @typescript-eslint/eslint-plugin | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Feslint-plugin/v/8.57.0 |  |
 | @typescript-eslint/eslint-plugin | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Feslint-plugin/v/8.57.1 |  |
 | @typescript-eslint/eslint-plugin | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Feslint-plugin/v/8.60.0 | License verified from the exact registry package manifest. |

@@ -12,7 +12,7 @@ export function isSupportedLocalHostname(hostname: string): boolean {
   return isLoopbackHost(host) || net.isIP(host.replace(/^\[|\]$/g, '')) !== 0;
 }
 
-export function normalizeLocalUIBaseURL(rawURL: string): string {
+export function normalizeLocalUIBaseURL(rawURL: string, options: Readonly<{ gatewayEndpoint?: boolean }> = {}): string {
   const cleanValue = String(rawURL ?? '').trim();
   if (!cleanValue) {
     throw new Error('Redeven URL is required.');
@@ -28,7 +28,7 @@ export function normalizeLocalUIBaseURL(rawURL: string): string {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Redeven URL must start with http:// or https://.');
   }
-  if (!isSupportedLocalHostname(parsed.hostname)) {
+  if (!options.gatewayEndpoint && !isSupportedLocalHostname(parsed.hostname)) {
     throw new Error('Redeven URL must use localhost or an IP literal.');
   }
   if (parsed.username || parsed.password) {
@@ -41,8 +41,8 @@ export function normalizeLocalUIBaseURL(rawURL: string): string {
   return parsed.toString();
 }
 
-export function buildLocalUIEnvAppEntryURL(rawURL: string): string {
-  const parsed = new URL(normalizeLocalUIBaseURL(rawURL));
+export function buildLocalUIEnvAppEntryURL(rawURL: string, options: Readonly<{ gatewayEndpoint?: boolean }> = {}): string {
+  const parsed = new URL(normalizeLocalUIBaseURL(rawURL, options));
   parsed.pathname = LOCAL_UI_ENV_APP_ENTRY_PATH;
   parsed.search = '';
   parsed.hash = '';

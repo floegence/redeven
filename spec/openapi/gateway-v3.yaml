@@ -1,8 +1,7 @@
 openapi: 3.1.0
 x-redeven-contract-scope:
-  includes: /gateway/v2/* JSON protocol endpoints only.
+  includes: Signed /gateway/v3 JSON endpoints and session-scoped HTTP, WebSocket, and byte-stream access.
   excludes:
-    - Gateway Env App page/data routes on isolated local-direct listeners.
     - Desktop bridge Local UI routes such as /, /_redeven_proxy/*, /_redeven_direct/*, and /api/local/*.
     - Desktop bridge stdio frame and hello protocol schemas.
 x-redeven-signature-payload:
@@ -19,7 +18,7 @@ x-redeven-signature-payload:
     - timestamp_unix_ms
 info:
   title: Redeven Gateway Protocol
-  version: redeven-gateway-v2
+  version: redeven-gateway-v3
   summary: Gateway HTTP API for pairing, catalog, environment sessions, and access profile management.
 servers:
   - url: https://gateway.example
@@ -32,7 +31,7 @@ tags:
   - name: Session
   - name: Profiles
 paths:
-  /gateway/v2/pairing/challenge:
+  /gateway/v3/pairing/challenge:
     post:
       tags: [Pairing]
       operationId: createGatewayPairingChallenge
@@ -55,12 +54,12 @@ paths:
                 $ref: '#/components/schemas/PairingChallengeEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v2/pairing/complete:
+  /gateway/v3/pairing/complete:
     post:
       tags: [Pairing]
       operationId: completeGatewayPairing
       summary: Complete pairing after the client verifies the challenge.
-      description: Profile-write pairing is accepted only on the Desktop bridge transport.
+      description: Profile-write pairing requires explicit env_profile_write consent and the Gateway enable-profile-write policy on either supported transport.
       parameters:
         - $ref: '#/components/parameters/GatewayTransportHeader'
       requestBody:
@@ -78,7 +77,7 @@ paths:
                 $ref: '#/components/schemas/PairingCompleteEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v2/catalog:
+  /gateway/v3/catalog:
     post:
       tags: [Catalog]
       operationId: listGatewayEnvironments
@@ -107,7 +106,7 @@ paths:
                 $ref: '#/components/schemas/CatalogEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v2/open-session:
+  /gateway/v3/open-session:
     post:
       tags: [Session]
       operationId: openGatewayEnvironmentSession
@@ -136,12 +135,76 @@ paths:
                 $ref: '#/components/schemas/OpenSessionEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v2/env-profiles/upsert:
+  /gateway/v3/close-session:
+    post:
+      tags: [Session]
+      operationId: closeGatewayEnvironmentSession
+      summary: Idempotently revoke a proxy session owned by the authenticated client.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseSessionRequest'
+      responses:
+        '200':
+          description: Session revocation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloseSessionEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v3/access/{token}/{path}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+      - name: path
+        in: path
+        required: true
+        schema: {type: string}
+        description: Remaining Runtime root-relative path, including an empty root. The service also accepts POST, PUT, PATCH, DELETE, HEAD, OPTIONS, and WebSocket upgrades.
+    x-redeven-catch-all: true
+    get:
+      tags: [Session]
+      operationId: accessGatewayEnvironment
+      summary: Proxy an HTTP request through the Gateway fixed listener.
+      description: Token is a short-lived bearer secret. HTTP access uses a per-session Gateway Cookie jar, strips Set-Cookie and internal proxy headers, rejects cross-origin redirects, and streams without buffering. Runtime login remains mandatory. Never log the token or full access URL.
+      responses:
+        '200': {description: Streaming Runtime response.}
+        '101': {description: Runtime WebSocket upgrade.}
+        '401': {description: Gateway session expired or missing; Runtime may independently return its authentication response. X-Redeven-Gateway-Error distinguishes Gateway failures.}
+        '502': {description: Gateway target unavailable.}
+  /gateway/v3/access/{token}/_tunnel:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+    get:
+      tags: [Session]
+      operationId: tunnelGatewayEnvironment
+      summary: Open a target-bound WebSocket byte stream for Desktop.
+      description: Only the stored profile host and port can be dialed. Desktop preserves Runtime origin and HTTPS end-to-end through an authenticated loopback HTTP or CONNECT proxy. Runtime cookies stay in the isolated Desktop partition on this path. Client binary messages are consumed incrementally without a request-size limit tied to message framing; Gateway output is chunked into at most 32 KiB messages. Messages form one continuous byte stream. Revocation uses WebSocket close code 4001. Normal upstream EOF ends the stream; no address-selection or Runtime-management command is accepted.
+      responses:
+        '101': {description: Binary byte stream opened.}
+        '401': {description: Gateway session expired or revoked.}
+        '502': {description: Gateway target unavailable.}
+  /gateway/v3/env-profiles/upsert:
     post:
       tags: [Profiles]
       operationId: upsertGatewayEnvironmentProfile
       summary: Create or update a Gateway-owned environment profile.
-      description: Requires a paired profile-write client over the Desktop bridge transport.
+      description: Requires a paired client with env_profile_write and the Gateway enable-profile-write policy, independently of URL or Desktop bridge transport.
       security:
         - GatewayID: []
           GatewayBindingAudience: []
@@ -167,12 +230,12 @@ paths:
                 $ref: '#/components/schemas/EnvProfileUpsertEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v2/env-profiles/delete:
+  /gateway/v3/env-profiles/delete:
     post:
       tags: [Profiles]
       operationId: deleteGatewayEnvironmentProfile
       summary: Delete a Gateway-owned environment profile.
-      description: Requires a paired profile-write client over the Desktop bridge transport.
+      description: Requires a paired client with env_profile_write and the Gateway enable-profile-write policy on either supported transport.
       security:
         - GatewayID: []
           GatewayBindingAudience: []
@@ -249,7 +312,7 @@ components:
   schemas:
     ProtocolVersion:
       type: string
-      const: redeven-gateway-v2
+      const: redeven-gateway-v3
     GatewayErrorCode:
       type: string
       enum:
@@ -343,7 +406,8 @@ components:
       type: string
       enum:
         - env_catalog
-        - env_open_session
+        - env_direct_open
+        - env_proxy_open
         - env_profile_write
         - terminal
         - files
@@ -411,13 +475,15 @@ components:
       type: string
       enum:
         - open
+        - open_direct
+        - open_via_gateway
         - terminal
         - files
         - web_service
         - port_forward
     EnvironmentProfile:
       type: object
-      required: [managed, access_route_kind]
+      required: [managed, access_route_kind, access_mode]
       additionalProperties: false
       properties:
         managed:
@@ -425,6 +491,8 @@ components:
           const: true
         access_route_kind:
           $ref: '#/components/schemas/EnvProfileAccessRouteKind'
+        access_mode:
+          $ref: '#/components/schemas/AccessMode'
     EnvironmentOrigin:
       type: object
       required: [kind, label]
@@ -572,6 +640,8 @@ components:
           $ref: '#/components/schemas/ProtocolVersion'
         gateway_env_id:
           type: string
+        access_mode:
+          $ref: '#/components/schemas/AccessMode'
         requested_capability:
           $ref: '#/components/schemas/RequestedCapability'
         client_nonce:
@@ -579,6 +649,58 @@ components:
         bridge_session_id:
           type: string
         route_id:
+          type: string
+    AccessMode:
+      type: string
+      enum: [direct_url, gateway_proxy]
+      description: Explicit access route. Existing v1 profiles migrate to direct_url; new URL profiles default to gateway_proxy. No automatic fallback. SSH profile kinds cannot select gateway_proxy.
+    CloseSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol_version, gateway_session_id]
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_session_id:
+          type: string
+    CloseSessionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, data]
+      properties:
+        ok:
+          const: true
+        data:
+          type: object
+          additionalProperties: false
+          required: [protocol_version, gateway_session_id, closed]
+          properties:
+            protocol_version:
+              $ref: '#/components/schemas/ProtocolVersion'
+            gateway_session_id:
+              type: string
+            closed:
+              type: boolean
+              description: True when an owned live proxy session was revoked; repeated, missing, or other-client sessions return false without disclosing ownership.
+    GatewayProxyConnectArtifact:
+      type: object
+      additionalProperties: false
+      required: [kind, url, gateway_session_id, expires_at_unix_ms, artifact_nonce, proof]
+      properties:
+        kind:
+          const: gateway_proxy_artifact
+        url:
+          type: string
+          format: uri
+          description: Fixed Gateway origin and access prefix with a 256-bit opaque token; secret and main-process-only.
+        gateway_session_id:
+          type: string
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+        artifact_nonce:
+          type: string
+        proof:
           type: string
     RequestedCapability:
       type: string
@@ -620,6 +742,7 @@ components:
     GatewayConnectArtifact:
       oneOf:
         - $ref: '#/components/schemas/LocalDirectConnectArtifact'
+        - $ref: '#/components/schemas/GatewayProxyConnectArtifact'
         - $ref: '#/components/schemas/DesktopBridgeConnectArtifact'
     LocalDirectConnectArtifact:
       type: object
@@ -648,6 +771,8 @@ components:
       type: object
       required:
         - kind
+        - url
+        - gateway_session_id
         - bridge_session_id
         - route_id
         - expires_at_unix_ms
@@ -655,6 +780,12 @@ components:
         - proof
       additionalProperties: false
       properties:
+        url:
+          type: string
+          pattern: '^/gateway/v3/access/[A-Za-z0-9_-]{43}/$'
+          description: Session access path resolved only through the bound Desktop bridge gateway_protocol surface.
+        gateway_session_id:
+          type: string
         kind:
           type: string
           const: desktop_bridge_artifact
@@ -697,6 +828,8 @@ components:
           pattern: '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$'
         display_name:
           type: string
+        access_mode:
+          $ref: '#/components/schemas/AccessMode'
         access_route:
           $ref: '#/components/schemas/EnvProfileAccessRoute'
     EnvProfileAccessRoute:

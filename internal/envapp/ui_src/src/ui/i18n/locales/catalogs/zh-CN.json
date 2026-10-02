@@ -4594,7 +4594,10 @@
       "missingEnvironmentContext": "此会话所需的环境身份信息缺失。",
       "secureSessionFailed": "无法恢复安全会话。",
       "remoteCommandEnded": "原远程运行时桥接命令已经结束。",
-      "processIdentityChanged": "远程运行时的进程标识已变化，因此无法安全地将此窗口重新绑定。"
+      "processIdentityChanged": "远程运行时的进程标识已变化，因此无法安全地将此窗口重新绑定。",
+      "gatewayUnavailable": "Gateway 不可用",
+      "gatewayTargetUnavailable": "目标不可达",
+      "gatewaySessionExpired": "会话已过期，请重新打开环境。"
     },
     "stopRetry": "停止重试",
     "resumeRetry": "继续连接",

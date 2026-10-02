@@ -327,7 +327,7 @@ describe('environment open flow decisions', () => {
         presentation_state: 'allowed' as const,
         target: { lifecycle_target_id: 'rlt_local', target_generation: 1 },
         compatibility: {
-          gateway_protocol: 'redeven-gateway-v2',
+          gateway_protocol: 'redeven-gateway-v3',
           runtime_platform: 'darwin' as const,
           runtime_architecture: 'arm64' as const,
           runtime_service_protocol: 'redeven-runtime-v2',
@@ -636,7 +636,8 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
       env_kind: 'reachable_env',
       state: 'available',
       capabilities: ['open'],
-      access_capabilities: ['open'],
+      access_capabilities: ['open_direct', 'open_via_gateway'],
+      access_endpoint: { kind: 'url', url: 'https://runtime.example.invalid/' },
       origin: { kind: 'network_target', label: 'Finance subnet' },
     }],
     ...overrides,
@@ -3519,14 +3520,14 @@ describe('Gateway view models', () => {
     expect(offlineEntry).toBeTruthy();
     expect(buildEnvironmentCardModel(readyEntry!)).toMatchObject({
       kind_label: 'Gateway',
-      status_label: 'READY',
+      status_label: 'CATALOG AVAILABLE',
       target_primary: 'Gateway: Bastion',
       target_secondary: 'https://gateway.example.invalid',
     });
     expect(buildGatewayRowModel(readyEntry!)).toMatchObject({
       source_label: 'Gateway: Bastion',
       transport_label: 'URL transport',
-      status_label: 'READY',
+      status_label: 'CATALOG AVAILABLE',
       primary_action: expect.objectContaining({
         intent: 'open',
         label: 'Open',
