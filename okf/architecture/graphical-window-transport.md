@@ -99,4 +99,5 @@ APIs; product code does not mark an insecure network origin as trustworthy.
 - `internal/codeapp/appserver/window_transport.go` and `window_transport_test.go`: raw-data rejection and static bootstrap boundaries.
 - `internal/runtimeproxy/window_tunnel_browser_test.go` and `internal/codeapp/ui_src/scripts/checkWindowTunnel.mjs`: actual encrypted tunnel, separate duplex streams, large-frame integrity and bounded frames.
 - `internal/hostapps/application_proxy.go` and `client_assets_test.go`: published required-host-transport Xpra preparation.
+- `internal/hostapps/desktop_transport_linux_test.go`: bounded application reply delivery and shutdown without lost acknowledgements.
 - `desktop/src/main/desktopSessionTransport.ts` and `desktopSessionTransport.test.ts`: exact numeric bridge origin and resource-scoped native authorization.
