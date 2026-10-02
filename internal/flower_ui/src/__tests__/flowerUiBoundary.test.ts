@@ -241,7 +241,7 @@ describe('shared Flower UI boundary', () => {
     expect(envAdapterSrc).not.toContain("id.startsWith('desktop:model_')");
     expect(envAdapterSrc).not.toContain('await loadModels().catch(() => undefined)');
     expect(surfaceSrc).not.toContain("source?: 'model_profile'");
-    expect(surfaceSrc).toContain("source: 'model_profile' | 'desktop_model_source' | 'thread_snapshot'");
+    expect(surfaceSrc).toContain("source: 'model_profile' | 'desktop_model_source' | 'platform' | 'thread_snapshot'");
     expect(contractsSrc).toContain('ready: boolean');
   });
 

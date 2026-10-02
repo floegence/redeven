@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/floegence/redeven/internal/session"
 	"hash"
 	"io"
 	"mime"
@@ -317,6 +318,10 @@ func logicalAttachmentLocator(uploadID string, displayName string) string {
 }
 
 func (s *Service) AttachmentCapabilities(ctx context.Context, modelID string) AttachmentCapabilities {
+	return s.AttachmentCapabilitiesForSession(ctx, nil, modelID)
+}
+
+func (s *Service) AttachmentCapabilitiesForSession(ctx context.Context, meta *session.Meta, modelID string) AttachmentCapabilities {
 	modelID = strings.TrimSpace(modelID)
 	if s == nil || modelID == "" {
 		return attachmentCapabilitiesForModel(modelID, config.AIProvider{}, contextmodel.ModelCapability{})
@@ -324,7 +329,8 @@ func (s *Service) AttachmentCapabilities(ctx context.Context, modelID string) At
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
-	if cfg == nil {
+	cfg, err := s.sessionModelConfig(ctxOrBackground(ctx), meta, cfg)
+	if err != nil || cfg == nil {
 		return attachmentCapabilitiesForModel(modelID, config.AIProvider{}, contextmodel.ModelCapability{})
 	}
 	resolved, err := s.resolveRunModel(ctxOrBackground(ctx), cfg, modelID, "", nil)

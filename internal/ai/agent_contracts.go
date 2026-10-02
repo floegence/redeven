@@ -86,17 +86,23 @@ type ModeFlags struct {
 }
 
 type ModelGatewayRequest struct {
-	Protocol         string                   `json:"protocol,omitempty"`
-	RunID            flidentity.RunID         `json:"run_id,omitempty"`
-	PromptScopeID    flidentity.PromptScopeID `json:"prompt_scope_id,omitempty"`
-	PreviousState    *ModelGatewayState       `json:"previous_state,omitempty"`
-	Model            string                   `json:"model"`
-	Messages         []Message                `json:"messages"`
-	Tools            []ToolDef                `json:"tools"`
-	Budgets          TurnBudgets              `json:"budgets"`
-	ModeFlags        ModeFlags                `json:"mode_flags"`
-	ProviderControls ProviderControls         `json:"provider_controls,omitempty"`
-	WebSearchMode    string                   `json:"web_search_mode,omitempty"`
+	ThreadID         flidentity.ThreadID         `json:"thread_id,omitempty"`
+	TurnID           flidentity.TurnID           `json:"turn_id,omitempty"`
+	TraceID          flidentity.TraceID          `json:"trace_id,omitempty"`
+	LogicalRequestID flidentity.LogicalRequestID `json:"logical_request_id,omitempty"`
+	AttemptID        string                      `json:"attempt_id,omitempty"`
+	AttemptEpoch     int                         `json:"attempt_epoch,omitempty"`
+	Protocol         string                      `json:"protocol,omitempty"`
+	RunID            flidentity.RunID            `json:"run_id,omitempty"`
+	PromptScopeID    flidentity.PromptScopeID    `json:"prompt_scope_id,omitempty"`
+	PreviousState    *ModelGatewayState          `json:"previous_state,omitempty"`
+	Model            string                      `json:"model"`
+	Messages         []Message                   `json:"messages"`
+	Tools            []ToolDef                   `json:"tools"`
+	Budgets          TurnBudgets                 `json:"budgets"`
+	ModeFlags        ModeFlags                   `json:"mode_flags"`
+	ProviderControls ProviderControls            `json:"provider_controls,omitempty"`
+	WebSearchMode    string                      `json:"web_search_mode,omitempty"`
 }
 
 type ToolCall struct {

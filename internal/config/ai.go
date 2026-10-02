@@ -138,6 +138,7 @@ type AIProviderWebSearch struct {
 }
 
 type AIProviderModel struct {
+	HostedWebSearch               bool                  `json:"hosted_web_search,omitempty"`
 	DisplayName                   string                `json:"display_name,omitempty"`
 	Status                        string                `json:"status,omitempty"`
 	ModelName                     string                `json:"model_name"`

@@ -49,6 +49,23 @@ function errorResponse(code: string, data: unknown): Response {
 
 const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
 
+it('loads authorized platform models without exposing editable provider credentials', async () => {
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === '/_redeven_proxy/api/settings') return jsonResponse({ ai: null, ai_runtime: { platform_available: true } });
+    if (url === '/_redeven_proxy/api/ai/models' || url === '/_redeven_proxy/api/ai/current_model') return jsonResponse({
+      current_model: 'platform/available', models: [{ id: 'platform/available', label: 'Redeven AI / Available', input_modalities: ['text', 'image'], context_window: 64000, max_output_tokens: 2048 }],
+    });
+    throw new Error(`Unexpected request: ${init?.method} ${url}`);
+  });
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
+  const snapshot = await adapter.loadSettings();
+  expect(snapshot.model_profile).toBeNull();
+  expect(snapshot.provider_secrets).toEqual([]);
+  expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/available', models: [{ id: 'platform/available', input_modalities: ['text', 'image'] }] });
+  await adapter.persistDefaultModel?.('platform/available');
+  expect(fetchMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/ai/current_model')).toBe(true);
+});
+
 function stagingScope(targetID: string): FlowerAttachmentStagingScope {
   return {
     staging_scope_id: `staging_${targetID}`,

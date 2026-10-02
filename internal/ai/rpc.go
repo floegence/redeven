@@ -117,7 +117,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			return nil, acquireErr
 		}
 		defer release()
-		if !service.Enabled() {
+		if !service.EnabledForSession(meta) {
 			return nil, &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 		}
 		clientRequestID := strings.TrimSpace(req.ClientRequestID)
@@ -163,7 +163,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			return nil, acquireErr
 		}
 		defer release()
-		if !service.Enabled() {
+		if !service.EnabledForSession(meta) {
 			return nil, &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 		}
 		resp, err := service.SubmitRequestUserInputResponse(leaseCtx, meta, SubmitRequestUserInputResponseRequest{

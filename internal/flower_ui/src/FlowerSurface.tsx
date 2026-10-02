@@ -2008,6 +2008,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const mid = trimString(modelID);
     if (!mid) return;
     setSnapshot((current) => {
+      if (current?.platform_model_source?.models.some((model) => model.id === mid)) {
+        return { ...current, platform_model_source: { ...current.platform_model_source, current_model_id: mid } };
+      }
       if (!current?.model_profile) return current;
       const profile = current.model_profile;
       const belongsToProfile = profile.providers.some((provider) => (
@@ -2022,7 +2025,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!mid) return;
     const option = modelSelectOptions().find((item) => item.id === mid);
     if (!option) return;
-    const persistsRemoteDefault = option.source === 'model_profile';
+    const persistsRemoteDefault = option.source === 'model_profile' || option.source === 'platform';
     const threadID = trimString(selectedThreadID());
     if (!threadID) {
       const previous = selectedComposerModelID();
@@ -2568,6 +2571,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
   const currentModelID = createMemo(() => {
     const current = snapshot();
+    if (current?.platform_model_source?.current_model_id) return trimString(current.platform_model_source.current_model_id);
     if (current?.model_profile?.current_model_id) return trimString(current.model_profile.current_model_id);
     return current?.model_source?.state === 'ready' ? trimString(current.model_source.current_model_id) : '';
   });
@@ -2606,7 +2610,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   type ComposerModelOption = Readonly<{
     id: string;
     label: string;
-    source: 'model_profile' | 'desktop_model_source' | 'thread_snapshot';
+    source: 'model_profile' | 'desktop_model_source' | 'platform' | 'thread_snapshot';
     disabled?: boolean;
     providerType?: FlowerProviderType;
     supportsImageInput: boolean;
@@ -2655,7 +2659,13 @@ webSearch: model.web_search,
   });
   const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => {
     const seen = new Set<string>();
-    return [...configuredModelOptions(), ...sourceModelOptions()].filter((option) => {
+    const platformOptions: ComposerModelOption[] = (snapshot()?.platform_model_source?.models ?? []).map((model) => ({
+      id: model.id, label: model.label, source: 'platform',
+      supportsImageInput: flowerModelSupportsImage(model.input_modalities),
+      webSearch: model.web_search, contextWindow: model.context_window,
+      maxOutputTokens: model.max_output_tokens, reasoningCapability: model.reasoning_capability,
+    }));
+    return [...configuredModelOptions(), ...sourceModelOptions(), ...platformOptions].filter((option) => {
       if (seen.has(option.id)) return false;
       seen.add(option.id);
       return true;
@@ -2696,8 +2706,8 @@ webSearch: model.web_search,
     const options = modelSelectOptions();
     const remoteOptions = options.filter((option) => option.source === 'model_profile');
     const desktopOptions = options.filter((option) => option.source === 'desktop_model_source');
-    if (remoteOptions.length === 0 || desktopOptions.length === 0) return null;
-    return [
+    const platformOptions = options.filter((option) => option.source === 'platform');
+    const groups = [
       {
         source: 'model_profile' as const,
         label: trimString(props.adapter.runtime.display_name),
@@ -2708,7 +2718,9 @@ webSearch: model.web_search,
         label: 'Desktop',
         options: desktopOptions,
       },
-    ];
+      { source: 'platform' as const, label: 'Redeven AI', options: platformOptions },
+    ].filter((group) => group.options.length > 0);
+    return groups.length > 1 ? groups : null;
   });
   const selectedReasoningCapability = createMemo(() => {
     const thread = selectedThreadSettings();
@@ -2758,6 +2770,7 @@ webSearch: model.web_search,
   const modelSource = createMemo(() => snapshot()?.model_source ?? null);
   const modelOptionReady = (option: ComposerModelOption | null | undefined): boolean => {
     if (!option) return false;
+    if (option.source === 'platform') return snapshot()?.platform_model_source?.models.some((model) => model.id === option.id) ?? false;
     if (option.source === 'desktop_model_source') {
       const source = modelSource();
       return source?.kind === 'desktop_model_source'

@@ -887,15 +887,20 @@ func (r *run) resolveModelGatewayForModel(modelID string, providerID string, pro
 		if r.sessionMeta == nil || strings.TrimSpace(r.sessionMeta.PlatformAIGrant) == "" {
 			return resolvedRunModelGateway{}, errors.New("platform AI grant is missing from session metadata")
 		}
-		gatewayURL := strings.TrimSpace(providerCfg.BaseURL)
-		if gatewayURL == "" {
-			gatewayURL = strings.TrimSpace(r.sessionMeta.PlatformAIGatewayURL)
+		// Only trusted control-channel metadata can choose where a platform lease is sent.
+		gatewayURL := strings.TrimSpace(r.sessionMeta.PlatformAIGatewayURL)
+		alias := modelID
+		if _, model, ok := r.cfg.ProviderModelByID(modelID); ok && strings.TrimSpace(model.WireModelName) != "" {
+			// A local display profile may name only a public alias; Edge owns its routing.
+			alias = strings.TrimSpace(model.WireModelName)
 		}
-		adapter, err := newPlatformGatewayProvider(gatewayURL, r.sessionMeta.PlatformAIGrant, modelID, r.sessionMeta.PlatformAIEntitlementVersion)
+		adapter, err := newPlatformGatewayProvider(gatewayURL, r.sessionMeta.PlatformAIGrant, alias, r.sessionMeta.PlatformAIEntitlementVersion)
 		if err != nil {
 			return resolvedRunModelGateway{}, err
 		}
-		return resolvedRunModelGateway{provider: *providerCfg, providerType: platformGatewayProviderType, modelName: modelName, adapterOverride: adapter}, nil
+		provider := *providerCfg
+		provider.BaseURL = gatewayURL
+		return resolvedRunModelGateway{provider: provider, providerType: platformGatewayProviderType, modelName: modelName, adapterOverride: adapter}, nil
 	}
 
 	providerDisplay := providerID

@@ -19,7 +19,7 @@ var remoteDesktopAssets embed.FS
 func (g *Server) serveRemoteDesktop(w http.ResponseWriter, s remotedesktop.Session, base string) {
 	var random [18]byte
 	if _, err := rand.Read(random[:]); err != nil {
-		http.Error(w, "unavailable", 503)
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	nonce := base64.RawStdEncoding.EncodeToString(random[:])
@@ -30,7 +30,7 @@ func (g *Server) serveRemoteDesktop(w http.ResponseWriter, s remotedesktop.Sessi
 	source, _ := remoteDesktopAssets.ReadFile("remote_desktop_viewer/viewer.html")
 	page, err := template.New("desktop").Parse(string(source))
 	if err != nil {
-		http.Error(w, "unavailable", 503)
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	_ = page.Execute(w, struct {

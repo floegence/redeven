@@ -22,7 +22,7 @@ import (
 
 const (
 	flowersecGoModule       = "github.com/floegence/flowersec/flowersec-go/v5"
-	flowersecGoVersion      = "v5.4.1"
+	flowersecGoVersion      = "v5.7.0"
 	flowersecCorePackage    = "@floegence/flowersec-core"
 	flowersecCoreVersion    = "5.4.1"
 	flowersecCodeAppVersion = "5.2.2"

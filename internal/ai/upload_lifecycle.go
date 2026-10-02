@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"github.com/floegence/redeven/internal/session"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,6 +92,7 @@ func (s *Service) normalizeInputAttachments(ctx context.Context, owner UploadOwn
 
 func (s *Service) prepareInputAttachmentClaimPolicy(
 	ctx context.Context,
+	meta *session.Meta,
 	owner UploadOwner,
 	stagingScope *threadstore.UploadStagingScope,
 	modelID string,
@@ -123,7 +125,7 @@ func (s *Service) prepareInputAttachmentClaimPolicy(
 	if err != nil {
 		return input, nil, contract, err
 	}
-	capability := s.AttachmentCapabilities(ctxOrBackground(ctx), strings.TrimSpace(modelID))
+	capability := s.AttachmentCapabilitiesForSession(ctxOrBackground(ctx), meta, strings.TrimSpace(modelID))
 	contract.CapabilityRevision = capability.Revision
 	contract.MaxCount = capability.MaxCount
 	contract.MaxTurnBytes = capability.MaxTurnBytes
