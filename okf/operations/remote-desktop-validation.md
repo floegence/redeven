@@ -25,7 +25,8 @@ admission and packet arrival are not visible response.
 Refinement must finish within 500ms and match a lossless text reference at the
 same dimensions after host motion stops. Verify original-pixel coordinates and
 text separately. Compare the actual PNG draw after its paint receipt with the
-independent reference; retain later video draws separately so asynchronous
+independent reference. After capture reconfiguration, require the new generation's
+paint receipt and matching snapshot dimensions. Retain later video draws separately so asynchronous
 screenshot timing cannot substitute a lossy frame for the refinement.
 Ten-minute interaction requires bounded queues, released keys
 and no accumulated audiovisual delay. Record encoder, decoder preference,
