@@ -1753,7 +1753,7 @@
               "ui",
               "viewport"
             ],
-            "summary": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe\nWebapp owns local content-box measurement, pure fit-scale calculation, and the\nPDF document engine with synchronized canvas, text, and annotation layers. Opening\na PDF, DOCX, or image fits a complete page or image to the available reading area,\nincluding enlargement above 100%. Container changes update automatic fit modes;\nmanual zoom keeps its chosen scale. Each PDF page has one rendering owner and\nold document work cannot replace the current document. Normal cancellation is not\nan error. A genuine PDF page failure stays local to that page and can be retried.\nMarkdown enhancement work follows document content: previews without Mermaid\nskip diagram theme sampling across theme changes.\nHTML files open as isolated pages using published Floe document isolation;\nsource editing is explicit, and incomplete HTML is never executed.",
+            "summary": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe\nWebapp owns measurement, fit scales, and synchronized PDF layers. PDF, DOCX, and\nimages initially fit the reading area, including enlargement; resizing updates\nautomatic fit but preserves manual zoom. Each PDF page has one rendering owner.\nStale work cannot replace the current document; cancellation is neutral, and real\npage failures remain local and retryable. Markdown without Mermaid skips diagram\ntheme sampling. HTML opens as an isolated page through published Floe document\nisolation; source editing is explicit, and incomplete HTML never executes.",
             "section_count": 2
           },
           {
@@ -22967,8 +22967,8 @@
         "title": "File preview viewport and rendering",
         "type": "UI Contract"
       },
-      "body_length": 10207,
-      "summary": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe\nWebapp owns local content-box measurement, pure fit-scale calculation, and the\nPDF document engine with synchronized canvas, text, and annotation layers. Opening\na PDF, DOCX, or image fits a complete page or image to the available reading area,\nincluding enlargement above 100%. Container changes update automatic fit modes;\nmanual zoom keeps its chosen scale. Each PDF page has one rendering owner and\nold document work cannot replace the current document. Normal cancellation is not\nan error. A genuine PDF page failure stays local to that page and can be retried.\nMarkdown enhancement work follows document content: previews without Mermaid\nskip diagram theme sampling across theme changes.\nHTML files open as isolated pages using published Floe document isolation;\nsource editing is explicit, and incomplete HTML is never executed.",
+      "body_length": 9928,
+      "summary": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe\nWebapp owns measurement, fit scales, and synchronized PDF layers. PDF, DOCX, and\nimages initially fit the reading area, including enlargement; resizing updates\nautomatic fit but preserves manual zoom. Each PDF page has one rendering owner.\nStale work cannot replace the current document; cancellation is neutral, and real\npage failures remain local and retryable. Markdown without Mermaid skips diagram\ntheme sampling. HTML opens as an isolated page through published Floe document\nisolation; source editing is explicit, and incomplete HTML never executes.",
       "sections": [
         {
           "id": "contract",
@@ -23042,7 +23042,7 @@
           "description": "Verified PDF resource license texts and attribution."
         }
       ],
-      "snippet": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe Webapp owns local content-box measurement, pure fit-scale calculation, and the PDF document engine with synchronized canvas, text, and annotation layers. Open",
+      "snippet": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe Webapp owns measurement, fit scales, and synchronized PDF layers. PDF, DOCX, and images initially fit the reading area, including enlargement; resizing update",
       "links": [
         {
           "label": "Env App session event transport",
@@ -29535,5 +29535,5 @@
       ]
     }
   ],
-  "source_sha256": "bdeb1b5a1ad5e4222964fbc9b64ba34608f2674029cb5970851d6e29ae442c57"
+  "source_sha256": "e20f677ffcfac8d8861a405ade8d1a24dd023e55b290afea5a70623609800418"
 }

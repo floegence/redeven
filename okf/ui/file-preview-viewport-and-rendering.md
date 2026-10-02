@@ -8,17 +8,13 @@ timestamp: 2026-10-01T00:00:00Z
 # Summary
 
 Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe
-Webapp owns local content-box measurement, pure fit-scale calculation, and the
-PDF document engine with synchronized canvas, text, and annotation layers. Opening
-a PDF, DOCX, or image fits a complete page or image to the available reading area,
-including enlargement above 100%. Container changes update automatic fit modes;
-manual zoom keeps its chosen scale. Each PDF page has one rendering owner and
-old document work cannot replace the current document. Normal cancellation is not
-an error. A genuine PDF page failure stays local to that page and can be retried.
-Markdown enhancement work follows document content: previews without Mermaid
-skip diagram theme sampling across theme changes.
-HTML files open as isolated pages using published Floe document isolation;
-source editing is explicit, and incomplete HTML is never executed.
+Webapp owns measurement, fit scales, and synchronized PDF layers. PDF, DOCX, and
+images initially fit the reading area, including enlargement; resizing updates
+automatic fit but preserves manual zoom. Each PDF page has one rendering owner.
+Stale work cannot replace the current document; cancellation is neutral, and real
+page failures remain local and retryable. Markdown without Mermaid skips diagram
+theme sampling. HTML opens as an isolated page through published Floe document
+isolation; source editing is explicit, and incomplete HTML never executes.
 
 # Contract
 
