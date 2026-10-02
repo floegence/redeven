@@ -20189,7 +20189,7 @@
         "title": "Current-desktop qualification results",
         "type": "Acceptance Record"
       },
-      "body_length": 12635,
+      "body_length": 13355,
       "summary": "Acceptance remains incomplete for the [desktop contract](../architecture/remote-desktop.md).\nPublished v0.22.6 passes macOS and Linux X11 performance repetitions and ten-minute\ninput/queue checks. Linux motion required a fixture clock correction; its initial\nfailure and narrow first-run margin remain recorded. Physical-host checks and\nWayland performance conditions still prevent final acceptance and integration.\nPreserve the [thresholds](remote-desktop-validation.md) and failed measurements;\na passing retry neither erases a failure nor establishes its cause. Integrate\nonly after acceptance. No Redeven push, push gate or full integration gate is authorized.",
       "sections": [
         {
@@ -20210,8 +20210,8 @@
           "id": "capture-release-and-regression",
           "title": "Capture Release And Regression",
           "level": 1,
-          "body": "v0.22.6 source CI, CodeQL, both native architectures, private applications,\nhost-desktop media and macOS Swift checks passed. The amd64 private-application\njob initially failed during host-service initialization, then passed on the same\nimmutable tag's rerun. Its root cause is not established.\n\nLinux XCB acquisition avoids per-frame server grabs and caches cursor shapes.\nIts native candidate passed twelve 60-second cells, with minimum 55.416 FPS and\nmaximum interval P95 32.6ms. Isolated authenticated Xvfb checks passed pixel\nidentity, resource lifetime, protocol isolation, cursor, input and recovery.\n\nmacOS separates pixel comparison from encoding with a bounded latest-sample\nmailbox. Callback-queue wait P95 fell from about 8.6ms to 0.02ms; cancellation\nand concurrent owned application/desktop capture passed. Both platforms have\nred/green coverage for last-display-return defects. Physical hotplug is pending.\n\nCurrent published checks pass Go race/vet for desktop, host applications and\nappserver, 32 Swift helper tests, both browser viewer variants, Electron 41.10.5\nviewer/preload interaction, module sums, generated appearance, affected dependency\nboundaries and localization. Electron covers all ten narrow locales, dialog\nkeyboard, input authority, composition, clipboard, display selection and reconnect.",
-          "char_count": 1323
+          "body": "v0.22.6 source CI, CodeQL, both native architectures, private applications,\nhost-desktop media and macOS Swift checks passed. The amd64 private-application\njob initially failed during host-service initialization, then passed on the same\nimmutable tag's rerun. Its root cause is not established.\n\nLinux XCB acquisition avoids per-frame server grabs and caches cursor shapes.\nIts native candidate passed twelve 60-second cells, with minimum 55.416 FPS and\nmaximum interval P95 32.6ms. Isolated authenticated Xvfb checks passed pixel\nidentity, resource lifetime, protocol isolation, cursor, input and recovery.\n\nmacOS separates pixel comparison from encoding with a bounded latest-sample\nmailbox. Callback-queue wait P95 fell from about 8.6ms to 0.02ms; cancellation\nand concurrent owned application/desktop capture passed. Both platforms have\nred/green coverage for last-display-return defects. Physical hotplug is pending.\nDuring a user-confirmed Mac display unplug/reconnect, the published product\nreported `generation 1 active → generation 2 connecting → generation 2 active`\nwhile macOS retained the same stable display identifier and catalog. The initial\nhotplug harness required a catalog change and therefore did not record its final\nclient paint receipt; the corrected harness accepts this native generation\nrecovery, but a second physical action was not observed before the session was\nstopped. The native recovery evidence remains retained and the client hotplug\nqualification stays open.\n\nCurrent published checks pass Go race/vet for desktop, host applications and\nappserver, 32 Swift helper tests, both browser viewer variants, Electron 41.10.5\nviewer/preload interaction, module sums, generated appearance, affected dependency\nboundaries and localization. Electron covers all ten narrow locales, dialog\nkeyboard, input authority, composition, clipboard, display selection and reconnect.",
+          "char_count": 1898
         },
         {
           "id": "retained-earlier-evidence-and-limits",
@@ -29881,5 +29881,5 @@
       ]
     }
   ],
-  "source_sha256": "0fc9b771114f3a3f62b092f5845ed8800e4c3ef41edad1cce38ba49ca8ec346b"
+  "source_sha256": "85df5de981cfea94d94a2665b2864eb7894f02c86702a2dbb9b022c3d6169456"
 }
