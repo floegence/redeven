@@ -15,6 +15,7 @@ import (
 	"time"
 
 	termgo "github.com/floegence/floeterm/terminal-go"
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 func TestRealBashIntegrationPreservesDelimitedPromptCommand(t *testing.T) {
@@ -289,10 +290,14 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 	shellInitBaseDir := filepath.Join(t.TempDir(), "shell-init")
+	scope, err := filesystemscope.NewDefaultRegistry(root)
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry(%q): %v", root, err)
+	}
 
 	manager := &Manager{
 		agentHomeAbs:     root,
-		scope:            mustTestFilesystemScope(t, root),
+		scope:            scope,
 		log:              logger,
 		sessionLifecycle: make(map[string]SessionLifecycleRecord),
 		workloadReleases: make(map[string]func()),
