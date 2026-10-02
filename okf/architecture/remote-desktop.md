@@ -8,7 +8,7 @@ timestamp: 2026-10-01T17:30:00Z
 # Summary
 
 Redeven owns remote desktop authorization, ephemeral sessions, window placement,
-configuration and audit. Published `floe-native-apps` v0.22.5 owns current-desktop
+configuration and audit. Published `floe-native-apps` v0.22.6 owns current-desktop
 selection, OS authorization, native input, capture, codecs and bounded playback.
 A desktop session shares the existing signed-in macOS or Linux desktop. It never
 creates an application-private desktop, changes system security policy or grants

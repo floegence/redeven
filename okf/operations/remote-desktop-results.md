@@ -3,7 +3,7 @@ type: Acceptance Record
 title: Current-desktop qualification results
 description: Assess published remote desktop measurements, retained failures and outstanding real-host qualification.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-02T07:40:00Z
+timestamp: 2026-10-02T08:35:00Z
 ---
 # Summary
 
@@ -92,11 +92,15 @@ Six Linux system-output tones reached the unmuted Mac AudioContext destination
 with advancing clocks. Human listening and accumulated audiovisual delay remain
 unqualified; worklet acceptance is not physical speaker evidence.
 
-# Native Capture Candidate
+# Released Capture Update
 
-Unpublished upstream commits `8b57d73` and `dec4e3f` change acquisition and
-reconnection. These results do not qualify the Redeven product or an unpublished
-dependency override.
+Upstream v0.22.6 publishes `8b57d73` and `dec4e3f` for acquisition and
+reconnection. Source, CodeQL, both native architectures, private applications,
+host-desktop media and macOS Swift checks passed. The unchanged amd64 private
+application job passed on rerun after a host-systemd initialization failure.
+The official module/checksum readback passed; Redeven now pins this release in
+Go and Swift. Product rebuild and qualification remain pending. Native-candidate
+results below do not substitute for authenticated product acceptance.
 
 The Linux XCB candidate passed all twelve 60-second cells: 1080p/1440p scroll
 and window motion, each repeated three times. Minimum painted FPS was 55.416,
@@ -124,6 +128,13 @@ observing outputs while suspended, and macOS retained an empty selection after
 all outputs disappeared. Focused tests failed before the candidate fix and pass
 after it. Physical hotplug still requires real-host qualification.
 
+The final native 1440p matrix passed all six 60-second cells with continuously
+verified fixture focus: minimum 57.060 FPS, maximum interval P95 30.1ms and
+refinement 364.4ms. Prior runs retain an unobserved-visibility 44.781 FPS failure
+and a foreground-verified 54.852 FPS run with `KEYFRAME_REQUIRED`. Later drain
+instrumentation recorded no flushes or errors; it does not establish the earlier
+recovery cause. An intervening scroll attempt stopped on actual foreground loss.
+
 # Lifecycle And Diagnostic Limits
 
 Published v0.22.5 product lock/resume passed on Linux and macOS: explicit product
@@ -144,7 +155,7 @@ does not qualify or repair this Wayland host's capture limit.
 
 # Remaining Qualification
 
-- Publish qualified upstream fixes and repeat both Linux product dynamic matrices.
+- Deploy v0.22.6 and repeat both Linux product dynamic matrices.
 - Resolve macOS performance and complete 1440p and ten-minute interaction.
 - Verify physical hotplug and rerun affected lifecycle checks after dependency upgrades.
 - Qualify physical audio output and accumulated audiovisual delay.
