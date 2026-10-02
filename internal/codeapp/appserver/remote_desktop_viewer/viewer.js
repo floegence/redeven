@@ -1,6 +1,7 @@
 import { HostDesktopPlayer, unpackDesktopMedia } from './host_desktop_player.mjs';
 
 const config = window.remoteDesktopConfig;
+const windowTransport = RedevenWindowTransport.create(config.transport);
 const $ = id => document.getElementById(id);
 const catalog = window.remoteDesktopCatalog;
 const copy = key => (catalog[document.documentElement.lang] ?? catalog['en-US'])[key];
@@ -163,7 +164,7 @@ async function connect() {
   player?.reset(0); control?.close(); media?.close(); status('connecting'); $('reconnect').hidden = true;
   if (!HostDesktopPlayer.supported()) { status('unsupported', 'unsupportedHint'); return; }
   try {
-    const response = await fetch(base + 'ticket', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+    const response = await windowTransport.fetch(base + 'ticket', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok) {
       if (current !== epoch || stopped) return;
       state = 'disconnected'; status('disconnected'); $('reconnect').hidden = false;
@@ -175,8 +176,8 @@ async function connect() {
     const result = await response.json(); if (current !== epoch || stopped) return;
     session = result.data.session; localize();
     const address = path => { const url = new URL(base + path, location.href); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'; return url; };
-    control = new WebSocket(address('control'), ['redeven-desktop-v1', result.data.token]);
-    media = new WebSocket(address('media'), ['redeven-desktop-v1', result.data.token]);
+    control = new windowTransport.WebSocket(address('control'), ['redeven-desktop-v1', result.data.token]);
+    media = new windowTransport.WebSocket(address('media'), ['redeven-desktop-v1', result.data.token]);
     media.binaryType = 'arraybuffer';
     player ??= new HostDesktopPlayer(canvas, {
       acknowledge(g, frame) { if (!awaitingState && state === 'active' && g === generation) command('frame_ack', { frame_id: frame }); },
@@ -364,8 +365,19 @@ function chord(codes) { if (!authorized(generation)) return; for (const code of 
 $('shortcuts').onclick = () => openPanel('shortcuts', [button('switchApp', () => chord([backend === 'macos' ? 'MetaLeft' : 'AltLeft', 'Tab'])), button('systemMenu', () => chord(backend === 'macos' ? ['ControlLeft', 'F2'] : ['MetaLeft']))]);
 $('files').onclick = () => { window.redevenHostApplicationWindow?.request('files'); window.opener?.postMessage({ type: 'redeven:remote-desktop:files', session_id: session.id }, '*'); window.dispatchEvent(new CustomEvent('redeven:remote-desktop:files')); };
 $('reconnect').onclick = () => { reconnectAttempts = 0; void connect(); };
-function disconnect() { stopped = true; clearTimeout(retry); epoch++; revoke(); player?.close(); control?.close(); media?.close(); void fetch(base + 'disconnect', { method: 'POST', credentials: 'same-origin', keepalive: true }); state = 'disconnected'; status('disconnected'); }
+function stopViewer() { stopped = true; clearTimeout(retry); epoch++; revoke(); player?.close(); control?.close(); media?.close(); state = 'disconnected'; status('disconnected'); }
+async function disconnect() {
+  if (stopped) return;
+  stopViewer();
+  try {
+    const response = await windowTransport.fetch(base + 'disconnect', { method: 'POST', signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw new Error('Desktop disconnect failed');
+  } catch { notice('failure'); }
+  finally { windowTransport.dispose(); }
+}
 $('disconnect').onclick = disconnect;
 $('window-close').onclick = () => window.redevenHostApplicationWindow?.request('close');
-window.addEventListener('pagehide', disconnect);
+// Page unload cannot await a request. Closing the native streams immediately
+// releases input and capture; the server expires its bounded reconnect lease.
+window.addEventListener('pagehide', () => { stopViewer(); windowTransport.dispose(); });
 void connect();

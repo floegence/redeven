@@ -18,6 +18,11 @@ owns toolbar presentation.
 
 # Contract
 
+Graphical state and every backend's picture/input connection use the
+[Flowersec window transport](graphical-window-transport.md). That contract owns
+direct and tunnel admission, resource isolation and transport disposal. The
+viewer owns the presentation and recovery rules below.
+
 ## Browser launch admission
 
 The catalog reserves a browser tab in the initiating click and keeps application

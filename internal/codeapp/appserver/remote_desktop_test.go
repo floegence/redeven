@@ -85,7 +85,7 @@ func TestRemoteDesktopForwardOwnerProtectsViewOnlyAndMedia(t *testing.T) {
 func TestRemoteDesktopDocumentKeepsCredentialsOutOfURLAndEscapesIdentity(t *testing.T) {
 	w := httptest.NewRecorder()
 	server := &Server{}
-	server.serveRemoteDesktop(w, remotedesktop.Session{ID: "fixture", Locale: "en-US", HostName: `</script><script>alert(1)</script>`}, "/pf/one")
+	server.serveRemoteDesktop(w, httptest.NewRequest(http.MethodGet, "/pf/one/_redeven_desktop/", nil), remotedesktop.Session{ID: "fixture", Locale: "en-US", HostName: `</script><script>alert(1)</script>`}, "/pf/one")
 	html := w.Body.String()
 	if !strings.Contains(html, `"base":"/pf/one/_redeven_desktop/"`) || strings.Contains(html, `<script>alert(1)</script>`) {
 		t.Fatal("viewer identity or base is unsafe")

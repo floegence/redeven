@@ -57,6 +57,7 @@ func New(opts Options) (*flowersec.ProxyServer, error) {
 		Upstream:                    opts.Upstream,
 		UpstreamOrigin:              opts.UpstreamOrigin,
 		MaxConcurrentStreams:        opts.MaxConcurrentStreams,
+		MaxWebSocketFrameBytes:      MaxWSFrameBytes,
 		MaxBodyBytes:                opts.MaxBodyBytes,
 		DefaultHTTPRequestTimeout:   opts.DefaultHTTPRequestTimeout,
 		MaxHTTPRequestTimeout:       opts.MaxHTTPRequestTimeout,

@@ -59,6 +59,7 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
   browserLocation?: BrowserLocationLike;
   appPath?: string;
   desktopWindowAvailable?: boolean;
+  presentation?: ForwardWindowPresentation;
 }>): WebServiceOpenRoute {
   const forwardID = compact(args.forwardID);
   if (!args.localRuntime) {
@@ -66,7 +67,8 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
   }
 
   const locationLike = args.browserLocation ?? window.location;
-  const desktopPrivateBridge = args.desktopWindowAvailable === true
+  const desktopPrivateBridge = args.presentation !== 'application' && args.presentation !== 'desktop'
+    && args.desktopWindowAvailable === true
     && args.desktopContext?.document_transport === 'desktop_private_bridge_v2';
 
   return {

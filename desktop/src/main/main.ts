@@ -8757,9 +8757,10 @@ async function prepareWebServiceWindowPartition(
   partition: string,
   forwardID: string,
   loopbackGateway?: WebServiceLoopbackGateway,
+  graphicalWindow = false,
 ): Promise<void> {
   const webSession = session.fromPartition(partition);
-  installDesktopDiagnosticsHooks(webSession, forwardID, loopbackGateway);
+  installDesktopDiagnosticsHooks(webSession, forwardID, loopbackGateway, graphicalWindow);
   if (loopbackGateway) await webSession.setProxy({ mode: 'direct' });
   else if (sessionRecord.gateway_proxy) await prepareGatewayProxyPartition(webSession, sessionRecord.gateway_proxy);
   else {
@@ -9276,7 +9277,7 @@ async function openWebServiceWindowFromShellNow(
       });
       sessionRecord.web_service_loopback_gateways.set(request.forward_id, loopbackGateway);
     }
-    await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id, loopbackGateway);
+    await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id, loopbackGateway, request.presentation !== 'browser');
   } catch {
     sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
     await loopbackGateway?.close();
@@ -18095,6 +18096,7 @@ function installDesktopDiagnosticsHooks(
   webSession: Session,
   webServiceForwardID?: string,
   loopbackGateway?: WebServiceLoopbackGateway,
+  graphicalWindow = false,
 ): void {
   if (desktopDiagnosticsHookSessions.has(webSession)) {
     return;
@@ -18118,7 +18120,7 @@ function installDesktopDiagnosticsHooks(
       sessionRecord.startup,
       details.url,
       diagnosticHeaders ?? details.requestHeaders as Record<string, string | string[]>,
-      webServiceForwardID ? { webServiceForwardID } : {},
+      webServiceForwardID ? { webServiceForwardID, graphicalWindow } : {},
     );
     for (const name of Object.keys(requestHeaders)) {
       if (name.toLowerCase() === loopbackGateway?.authorization_header.toLowerCase()) delete requestHeaders[name];

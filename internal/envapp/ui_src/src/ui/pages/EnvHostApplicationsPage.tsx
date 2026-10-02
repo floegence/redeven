@@ -584,7 +584,7 @@ export function EnvHostApplicationsPage() {
       if (result.mode === 'native') {if (prepared) closePending(prepared); await refresh(true);return;}
       if (!result.forward) throw new Error('Missing application forward');
       const { forward, app_path: appPath } = result.forward;
-      const route = resolveWebServiceOpenRoute({ forwardID: forward.forward_id, localRuntime: ctx.localRuntime(), desktopContext: readDesktopSessionContextSnapshot(), appPath, desktopWindowAvailable: desktop });
+      const route = resolveWebServiceOpenRoute({ forwardID: forward.forward_id, localRuntime: ctx.localRuntime(), desktopContext: readDesktopSessionContextSnapshot(), appPath, desktopWindowAvailable: desktop, presentation: 'application' });
       await openWebServiceRoute(route, forward.forward_id, forward.target_url, 'unified_proxy', appPath, desktop, () => {}, {
         missingEnvContext: i18n.t('webServices.errors.missingEnvContext'), opening: i18n.t('hostApplications.starting'),
         openingLocalProxy: i18n.t('webServices.status.openingLocalProxy'), requestingEntryTicket: i18n.t('webServices.status.requestingEntryTicket'),

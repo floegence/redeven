@@ -314,7 +314,7 @@
       if(!['starting','running'].includes(state.state)){disconnect(state.state);return;}
       clearTimeout(deadline);
       const url=new URL(config.base+'/_redeven_host_app/stream',location.href);url.protocol=url.protocol==='https:'?'wss:':'ws:';
-      const ws=new WebSocket(url,['redeven-host-application-v1',state.password]);socket=ws;ws.binaryType='arraybuffer';serial=0;
+      const ws=new windowTransport.WebSocket(url,['redeven-host-application-v1',state.password]);socket=ws;ws.binaryType='arraybuffer';serial=0;
       ws.onmessage=event=>{
         if(mine!==attempt||socket!==ws)return;
         try {

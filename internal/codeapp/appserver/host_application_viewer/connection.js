@@ -16,7 +16,7 @@ const hostApplicationConnection = (() => {
     return data.state;
   }
   async function read(signal) {
-    const response = await fetch(config.base + '/_redeven_host_app/state', {cache:'no-store', signal});
+    const response = await windowTransport.fetch(config.base + '/_redeven_host_app/state', {cache:'no-store', signal});
     if ([401, 403, 423].includes(response.status)) return {state:'accessRequired'};
     if ([404, 410].includes(response.status)) return {state:'sessionMissing'};
     if (!response.ok) throw Error('Application status unavailable');

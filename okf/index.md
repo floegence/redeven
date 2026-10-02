@@ -26,6 +26,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
 - [Managed host application preparation](architecture/host-application-preparation.md) - Prepare native graphical support and recover interrupted setup without host configuration.
 - [Remote desktop sessions](architecture/remote-desktop.md) - Share the current host desktop with exclusive remote control, private media and explicit OS authorization.
+- [Graphical window transport](architecture/graphical-window-transport.md) - Route every desktop and host application data channel through resource-scoped Flowersec direct or tunnel sessions.
 - [Remote desktop validation](operations/remote-desktop-validation.md) - Qualify office interaction, lifecycle and actual painted performance with published dependencies.
 - [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 performance, local delivery and remaining acceptance limits.
 - [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.

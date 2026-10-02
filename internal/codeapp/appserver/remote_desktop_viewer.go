@@ -16,7 +16,7 @@ import (
 //go:embed remote_desktop_viewer/*
 var remoteDesktopAssets embed.FS
 
-func (g *Server) serveRemoteDesktop(w http.ResponseWriter, s remotedesktop.Session, base string) {
+func (g *Server) serveRemoteDesktop(w http.ResponseWriter, r *http.Request, s remotedesktop.Session, base string) {
 	var random [18]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
@@ -26,7 +26,7 @@ func (g *Server) serveRemoteDesktop(w http.ResponseWriter, s remotedesktop.Sessi
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; connect-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self'; img-src blob:; base-uri 'none'; frame-ancestors 'none'")
-	configuration, _ := json.Marshal(map[string]any{"session": s, "base": base + remotedesktop.ViewerPath})
+	configuration, _ := json.Marshal(map[string]any{"transport": graphicalWindowTransport(r, s.ForwardID, base), "session": s, "base": base + remotedesktop.ViewerPath})
 	source, _ := remoteDesktopAssets.ReadFile("remote_desktop_viewer/viewer.html")
 	page, err := template.New("desktop").Parse(string(source))
 	if err != nil {
@@ -34,9 +34,9 @@ func (g *Server) serveRemoteDesktop(w http.ResponseWriter, s remotedesktop.Sessi
 		return
 	}
 	_ = page.Execute(w, struct {
-		Locale, Theme, Base, Nonce string
-		Configuration              template.JS
-	}{s.Locale, s.Theme, base + remotedesktop.ViewerPath, nonce, template.JS(configuration)})
+		Locale, Theme, Base, Nonce, TransportScript string
+		Configuration                               template.JS
+	}{s.Locale, s.Theme, base + remotedesktop.ViewerPath, nonce, base + windowTransportScript, template.JS(configuration)})
 }
 func serveRemoteDesktopAsset(w http.ResponseWriter, r *http.Request, name string) {
 	if strings.ContainsAny(name, "/\\") {

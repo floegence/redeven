@@ -39,6 +39,8 @@ async function main() {
   console.log("Bundling Code App inject UI...");
   cleanDist();
   await buildInject();
+  await esbuild.build({ entryPoints: [path.join(srcDir, "windowTransport.ts")], outfile: path.join(distDir,"window-transport.js"),
+    bundle:true, platform:"browser", format:"iife", globalName:"RedevenWindowTransport", target:["es2022"], sourcemap:false, minify:true, legalComments:"none" });
 }
 
 main().catch((err) => {

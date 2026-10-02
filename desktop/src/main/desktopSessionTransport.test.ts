@@ -202,6 +202,20 @@ describe('shouldFailDesktopSessionMainDocument', () => {
 });
 
 describe('desktopPrivateBridgeRequestHeaders', () => {
+  it('limits graphical windows to the numeric carrier and their own bootstrap', () => {
+    const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+    const scope = { webServiceForwardID: 'owned', graphicalWindow: true };
+    for (const path of ['/pf/owned/_redeven_desktop/', '/pf/owned/_redeven_window/connect', '/pf/owned/_redeven_window/spend', '/flowersec/v3/direct', '/_redeven_proxy/host-application-assets/digest/js/Client.js']) {
+      for (const scheme of ['http', 'ws']) {
+        expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, `${scheme}://127.0.0.1:43123${path}`, {}, scope))
+          .toEqual({ 'X-Redeven-Desktop-Bridge-Token': localStartup.local_ui_bridge_token });
+      }
+    }
+    for (const url of ['http://127.0.0.1:43123/pf/other/', 'http://127.0.0.1:43123/api/local/direct/connect_artifact', 'http://127.0.0.1:43123/_redeven_proxy/api/remote-desktop', 'http://pf-owned.localhost:43123/', 'http://127.0.0.1:43124/pf/owned/', 'https://127.0.0.1:43123/pf/owned/']) {
+      expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, {}, scope)).toEqual({});
+    }
+  });
+
   it('injects private authorization only on the exact bridge origin', () => {
     const transport = resolveDesktopSessionTransport(localTarget, localStartup);
     expect(desktopPrivateBridgeRequestHeaders(

@@ -69,7 +69,9 @@ func newApplicationProxy(target string, viewer *nativeapps.PreparedViewer) (*app
 	if viewer == nil {
 		return nil, "", ErrViewerPreparation
 	}
-	document, err := viewer.Document(ClientAssetsPath + viewer.Assets().Digest() + "/")
+	document, err := viewer.DocumentWithOptions(ClientAssetsPath+viewer.Assets().Digest()+"/", nativeapps.ViewerDocumentOptions{
+		TransportScriptURL: "/_redeven_proxy/window-transport.js",
+	})
 	if err != nil {
 		return nil, "", err
 	}

@@ -505,7 +505,7 @@
         location.href,
       );
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-      const connection = new WebSocket(url, [
+      const connection = new windowTransport.WebSocket(url, [
         'redeven-host-application-v1',
         state.password,
       ]);

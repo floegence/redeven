@@ -380,7 +380,9 @@ function startCodeAppProxyRuntime(): void {
 }
 
 try {
-  startCodeAppProxyRuntime();
+  if (!document.documentElement.hasAttribute("data-redeven-window") && !document.documentElement.hasAttribute("data-floe-host-transport")) {
+    startCodeAppProxyRuntime();
+  }
 } catch (error) {
   failClosedCodeAppBootstrap(error);
 }

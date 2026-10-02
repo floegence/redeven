@@ -30,7 +30,7 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
   }) };
   if (native) Object.assign(dom.window, { redevenHostApplicationWindow: nativeWindow });
   if (savedPicture) dom.window.localStorage.setItem('redeven.xpra-app.picture.v1', savedPicture);
-  dom.window.eval(`const config = ${JSON.stringify({base:'/pf/test', copy, icon:'', initial})};\n${source}`);
+  dom.window.eval(`const windowTransport = {fetch:window.fetch,WebSocket:window.WebSocket}; const config = ${JSON.stringify({base:'/pf/test', copy, icon:'', initial})};\n${source}`);
   await drain();
   const frame = dom.window.document.querySelector('iframe')!;
   const doc = frame.contentDocument!;
