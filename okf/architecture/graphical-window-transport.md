@@ -17,6 +17,11 @@ viewer backend may silently open a raw graphical HTTP or WebSocket connection.
 
 # Contract
 
+Env App resource-management requests, including the forward touch immediately
+before opening a graphical window, use its active Flowersec session HTTP carrier.
+Window creation must not reintroduce a raw HTTP step between session admission
+and the resource-scoped viewer connection. Missing session transport fails closed.
+
 ## One session boundary for every backend
 
 The viewer's `WindowTransport` maps product paths into the published

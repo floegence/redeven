@@ -3,7 +3,7 @@ type: Acceptance Record
 title: Graphical window native transport qualification
 description: Assess published Flowersec direct and tunnel coverage, Linux application and desktop behavior, and the remaining unlocked macOS qualification.
 tags: [desktop, applications, transport, validation]
-timestamp: 2026-10-02T18:40:00Z
+timestamp: 2026-10-02T19:13:00Z
 ---
 # Summary
 
@@ -18,7 +18,7 @@ replace the separate [performance measurement contract](remote-desktop-validatio
 
 ## Source And Published Dependencies
 
-The final live Runtime builds use source
+The live capture checks below used Runtime source
 `5b4e303718adcb5e1b7e244dd306ab8043d2ad9d`, `GOWORK=off`, and no sibling module
 or package overlays. Go and all three TypeScript consumers use Flowersec 5.7.1
 from source `38a06b98c43fee60a37999d5debfc30e98dd8b98`. Go and Swift consume
@@ -82,6 +82,29 @@ The wider Electron viewer fixture stopped at native fullscreen while the host wa
 locked. Active host application input, live desktop capture and this fullscreen
 step require normal host unlock before they can be recorded as passed. Prior
 desktop acceptance results are not substituted for this transport build.
+
+## Connection Launcher Refinement
+
+The launcher now names the actual Desktop connection or reported local hostname,
+keeps optional view/grant-reuse settings collapsed, omits a single-display selector,
+and separates status checking from connecting. Host permission, lock, setup and
+unavailable states expose the appropriate next step. A successful window open
+dismisses the dialog without ending the viewer. Connection failures survive status
+refreshes and include structured diagnostics; rejected settings return to the
+confirmed value. The previous generic operation-failed copy is no longer the
+launcher error boundary.
+
+Nineteen launcher state/lifecycle tests and the graphical carrier tests pass.
+The focused Env App regression set passes 155 tests. Chromium, Firefox and WebKit
+each pass 55 launcher cases covering all ten locales, 320px and desktop layouts,
+all 26 shipped themes, keyboard focus, accessibility, error recovery and a scaled
+Workbench panel. Build, TypeScript, localization, source focus/wheel/theme checks,
+viewer catalog generation and the browser viewer interaction fixture pass.
+
+A deterministic test also exposed a raw HTTP request in the pre-window forward
+touch operation. That request now uses the active Env Flowersec HTTP carrier,
+like session creation and resource management. The test rejects raw network fetch
+and verifies the native request before viewer navigation.
 
 # Evidence
 

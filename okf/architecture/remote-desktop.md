@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Human remote desktop sessions
 description: Share the host's current graphical desktop with an authenticated viewer, exclusive remote input, and bounded media.
 tags: [runtime, desktop, applications, security, media]
-timestamp: 2026-10-02T14:32:09Z
+timestamp: 2026-10-02T19:08:00Z
 ---
 # Summary
 
@@ -129,8 +129,10 @@ is text-only and tied to the active controller. A manual text panel remains
 available when browser clipboard permission is unavailable. Clipboard contents,
 keys, passwords and pixels never enter audit records.
 
-The Host Applications page and Workbench launcher expose an independent remote
-desktop entry. Desktop opens an isolated owned window; browsers open a separate
+## Viewer window
+
+The [connection launcher](remote-desktop-launcher.md) owns target identity,
+readiness, preparation, grant-reuse settings and launch feedback. Desktop opens an isolated owned window; browsers open a separate
 viewer. Each window presents one selected display. Fit and original-pixel modes
 change local rendering/capture settings without resizing the host desktop.
 Fullscreen offers a hideable, pinnable toolbar and an explicit exit. Desktop

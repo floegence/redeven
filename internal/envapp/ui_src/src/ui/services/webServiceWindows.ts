@@ -1,7 +1,7 @@
 import { getEnvPublicIDFromSession, mintEnvEntryTicketForApp, type LocalRuntimeInfo } from './controlplaneApi';
 import type { DesktopSessionContextSnapshot } from './desktopSessionContext';
 import { FLOE_APP_PORT_FORWARD } from './floeproxyContract';
-import { fetchLocalApiJSON } from './localApi';
+import { fetchSessionJSON } from './sessionHTTP';
 import { trustedLauncherOriginFromSandboxLocation } from './sandboxOrigins';
 import { registerSandboxWindow } from './sandboxWindowRegistry';
 import { openWebServiceWindowInDesktopShell } from './desktopShellBridge';
@@ -96,7 +96,7 @@ type OpenWebServiceCopy = Readonly<{
 
 async function touchWebService(forwardID: string, setStatus: (s: string) => void, copy: Pick<OpenWebServiceCopy, 'updating'>): Promise<void> {
   setStatus(copy.updating);
-  await fetchLocalApiJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(forwardID)}/touch`, { method: 'POST' });
+  await fetchSessionJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(forwardID)}/touch`, { method: 'POST' });
 }
 
 async function preparePortForwardTunnel(

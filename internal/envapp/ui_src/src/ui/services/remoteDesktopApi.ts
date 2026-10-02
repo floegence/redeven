@@ -3,7 +3,7 @@ import { fetchSessionJSON } from './sessionHTTP';
 const api = '/_redeven_proxy/api/remote-desktop';
 export type DesktopDisplay = { id: string; name: string; width: number; height: number; scale: number; primary: boolean };
 export type RemoteDesktopStatus = {
-  capabilities: { backend: string; state: string; screen: boolean; input: boolean; audio: boolean; clipboard: boolean; displays: DesktopDisplay[] };
+  capabilities: { backend: string; state: string; reason?: string; screen: boolean; input: boolean; audio: boolean; clipboard: boolean; unattended?: boolean; unlock?: boolean; displays: DesktopDisplay[] };
   unattended: boolean;
   control_in_use: boolean;
   last_display_id: string;
