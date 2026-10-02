@@ -45,7 +45,7 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	}
 	req.Model = strings.TrimSpace(settings.ModelID)
 	req.Options.PermissionType = strings.TrimSpace(settings.PermissionType)
-	capability, modelDefault, _, err := s.threadReasoningDefaults(ctxOrBackground(ctx), req.Model)
+	capability, modelDefault, _, err := s.threadReasoningDefaults(ctxOrBackground(ctx), meta, req.Model)
 	if err != nil {
 		return fail(initialTurnPhaseLookupFrozenState, err)
 	}

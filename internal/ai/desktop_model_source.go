@@ -91,6 +91,7 @@ type DesktopModelSourceStatus struct {
 }
 
 type AIRuntimeStatus struct {
+	PlatformAvailable  bool                      `json:"platform_available,omitempty"`
 	RemoteConfigured   bool                      `json:"remote_configured"`
 	DesktopModelSource *DesktopModelSourceStatus `json:"desktop_model_source,omitempty"`
 }

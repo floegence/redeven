@@ -58,6 +58,15 @@ func (c AIWebSearchResolution) HostedTool() bool {
 func ResolveAIWebSearch(provider AIProvider, wireModelName string, braveKeyConfigured bool) AIWebSearchResolution {
 	typ := strings.ToLower(strings.TrimSpace(provider.Type))
 	out := AIWebSearchResolution{AIWebSearchAvailability: AIWebSearchAvailability{Status: "unavailable", Reason: "not_integrated"}, Mode: AIWebSearchDisabled, DeclarationStatus: "not_integrated"}
+	if typ == "redeven_platform" {
+		for _, model := range provider.EffectiveModels() {
+			if model.EffectiveWireModelName() == wireModelName && model.HostedWebSearch {
+				out.Status, out.Reason, out.Mode, out.DeclarationStatus = "available", "catalog_supported", AIWebSearchOpenAI, "supported"
+				return out
+			}
+		}
+		return out
+	}
 	if typ == "openai_compatible" {
 		out.DeclarationStatus = "configured"
 		out.Reason = "not_configured"

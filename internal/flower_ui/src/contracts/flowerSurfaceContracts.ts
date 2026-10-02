@@ -166,6 +166,10 @@ export type FlowerSettingsSnapshot = Readonly<{
   model_profile: FlowerModelProfile | null;
   provider_secrets: readonly FlowerProviderSecretState[];
   model_source?: FlowerModelSourceStatus;
+  platform_model_source?: Readonly<{
+    models: readonly FlowerModelSourceModel[];
+    current_model_id?: string;
+  }>;
 }>;
 
 export type FlowerChatMessageRole = 'user' | 'assistant' | 'system';

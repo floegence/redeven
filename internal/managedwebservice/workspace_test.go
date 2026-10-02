@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -345,6 +346,14 @@ func TestRetryRestartRepairsWorkspaceBeforeStoppingRuntime(t *testing.T) {
 
 func TestRuntimeWorkspaceValidationRejectsUnsafePaths(t *testing.T) {
 	manager, _, home := newWorkspaceTestManager(t)
+	// The default scope exposes Computer as writable. This test deliberately
+	// exercises an administrator's narrower writable-root policy.
+	if err := manager.scope.UpdateFromConfig(&config.Config{AgentHomeDir: home, FilesystemScope: &config.FilesystemScope{
+		SchemaVersion: config.FilesystemScopeSchemaVersionV1, DefaultRootID: "home",
+		Roots: []config.FilesystemRootPolicy{{ID: "home", Label: "Home", Path: home, Kind: config.FilesystemRootHome, Permissions: config.FilesystemPermissionSet{Read: true, Write: true}}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
 	valid := filepath.Join(home, "valid-workspace")
 	if err := os.Mkdir(valid, 0o700); err != nil {
 		t.Fatal(err)

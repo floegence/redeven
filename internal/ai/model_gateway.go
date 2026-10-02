@@ -90,6 +90,7 @@ type openAIProvider struct {
 	forceChat        bool
 	gemini           bool
 	parallelTools    parallelToolCallsWireMode
+	requireTerminal  bool
 }
 
 type parallelToolCallsWireMode string
@@ -220,6 +221,8 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	var textBuf strings.Builder
 	var completed oresponses.Response
 	gotCompleted := false
+	var reasoningBuf strings.Builder
+	hosted := newResponsesHostedEvents(onEvent)
 
 	type partialCall struct {
 		ItemID      string
@@ -307,8 +310,14 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			textBuf.WriteString(delta)
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: delta})
 
+		case "response.reasoning_summary_text.delta":
+			delta := event.Delta.OfString
+			reasoningBuf.WriteString(delta)
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventThinkingDelta, Text: delta})
+
 		case "response.output_item.added":
 			item := event.Item
+			hosted.item(item)
 			if strings.TrimSpace(item.Type) != "function_call" {
 				continue
 			}
@@ -357,6 +366,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 		case "response.output_item.done":
 			item := event.Item
+			hosted.item(item)
 			if strings.TrimSpace(item.Type) != "function_call" {
 				continue
 			}
@@ -375,13 +385,21 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			}
 			emitEnd(pc, pc.ArgsRaw.String())
 
-		case "response.completed":
+		case "response.completed", "response.incomplete":
 			completed = event.Response
 			gotCompleted = true
+			for _, item := range completed.Output {
+				hosted.item(item)
+			}
+		case "response.failed", "error":
+			return ModelGatewayResult{}, errors.New("provider response failed")
 		}
 	}
 	if err := stream.Err(); err != nil {
 		return ModelGatewayResult{}, err
+	}
+	if p.requireTerminal && !gotCompleted {
+		return ModelGatewayResult{}, errors.New("provider stream closed without terminal response")
 	}
 	// Some OpenAI-compatible endpoints omit `response.completed` even when they have already
 	// streamed usable text or tool call deltas. Treat missing completion as a soft-failure
@@ -404,10 +422,23 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	result := ModelGatewayResult{
 		FinishReason:    "unknown",
 		Text:            strings.TrimSpace(textBuf.String()),
+		Reasoning:       reasoningBuf.String(),
 		RawProviderDiag: map[string]any{},
 	}
 	if gotCompleted {
 		result.FinishReason = mapOpenAIStatus(completed.Status)
+		if completed.Status == "incomplete" && completed.IncompleteDetails.Reason == "content_filter" {
+			result.FinishReason = "content_filter"
+		}
+		if result.Reasoning == "" {
+			for _, item := range completed.Output {
+				if item.Type == "reasoning" {
+					for _, summary := range item.Summary {
+						result.Reasoning += summary.Text
+					}
+				}
+			}
+		}
 		result.Sources = extractOpenAIURLSources(completed)
 		usage, usageErr := turnUsageFromOpenAIResponse(completed.Usage)
 		if usageErr != nil {
@@ -727,6 +758,9 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
+	if p.requireTerminal && result.FinishReason == "unknown" {
+		return ModelGatewayResult{}, errors.New("provider stream closed without finish reason")
+	}
 	for _, idx := range order {
 		pc := partials[idx]
 		if pc == nil {

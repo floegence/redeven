@@ -120,8 +120,9 @@ type Service struct {
 	scope        *filesystemscope.Registry
 	shell        string
 
-	cfg                *config.AIConfig
-	desktopModelSource *desktopModelSourceClient
+	cfg                      *config.AIConfig
+	desktopModelSource       *desktopModelSourceClient
+	platformModelPreferences map[string]platformModelPreference
 
 	persistOpTO time.Duration
 
@@ -975,11 +976,14 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 }
 
 func (s *Service) ListModels() (*ModelsResponse, error) {
+	return s.ListModelsForSession(context.Background(), nil)
+}
+
+func (s *Service) listModels(ctx context.Context, cfg *config.AIConfig) (*ModelsResponse, error) {
 	if s == nil {
 		return nil, ErrNotConfigured
 	}
 	s.mu.Lock()
-	cfg := s.cfg
 	modelSource := s.desktopModelSource
 	modelSourceCurrent := ""
 	if modelSource != nil {
@@ -987,13 +991,14 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 	}
 	s.mu.Unlock()
 	var catalogErr error
-	cfg, catalogErr = resolveModelCatalogs(context.Background(), cfg, s.resolveProviderKey, "")
+	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, "")
 
 	if !cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding()) {
 		return nil, ErrNotConfigured
 	}
 
 	out := NewModelsResponse(s.RuntimeStatus(context.Background()))
+	out.Runtime.RemoteConfigured = cfg.HasModelProfile()
 	configModels, currentModelID, err := configModelViews(cfg)
 	if err != nil && cfg.HasModelProfile() {
 		return nil, errors.Join(err, catalogErr)
@@ -1443,7 +1448,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
-	if (cfg == nil || !cfg.HasModelProfile()) && (desktopModelSource == nil || !desktopModelSource.hasBinding()) {
+	if (cfg == nil || !cfg.HasModelProfile()) && (desktopModelSource == nil || !desktopModelSource.hasBinding()) && !platformSessionAvailable(meta) {
 		return nil, ErrNotConfigured
 	}
 	pctx, cancel := context.WithTimeout(context.Background(), persistTO)
@@ -1563,6 +1568,13 @@ func (s *Service) buildThreadEffectAgent(ctx context.Context, effect *threadEffe
 }
 
 func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, requestedModel string, threadModelID string, r *run) (resolvedRunModel, error) {
+	if r != nil {
+		var err error
+		cfg, err = s.sessionModelConfig(ctx, r.sessionMeta, cfg)
+		if err != nil {
+			return resolvedRunModel{}, err
+		}
+	}
 	model := ""
 	requestedModel = strings.TrimSpace(requestedModel)
 	threadModelID = strings.TrimSpace(threadModelID)

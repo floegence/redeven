@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	flidentity "github.com/floegence/floret/v7/identity"
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
@@ -420,6 +421,9 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	budgets := p.budgets
 	if req.MaxOutputTokens > 0 {
 		budgets.MaxOutputToken = int(req.MaxOutputTokens)
+		if p.providerType == platformGatewayProviderType && p.budgets.MaxOutputToken > 0 && budgets.MaxOutputToken > p.budgets.MaxOutputToken {
+			budgets.MaxOutputToken = p.budgets.MaxOutputToken
+		}
 	}
 	webSearch, err := p.requestWebSearchMode(req.HostedTools)
 	if err != nil {
@@ -441,7 +445,8 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		// The Desktop executor owns the actual provider and its transport.
 		protocol = ""
 	}
-	return ModelGatewayRequest{
+	turn := ModelGatewayRequest{
+		ThreadID: req.ThreadID, TurnID: req.TurnID, TraceID: req.TraceID, LogicalRequestID: req.LogicalRequestID, AttemptID: req.AttemptID, AttemptEpoch: req.AttemptEpoch,
 		RunID: req.RunID, PromptScopeID: req.PromptScopeID, PreviousState: previousState,
 		Model:            p.modelName,
 		Messages:         messages,
@@ -450,7 +455,23 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		ProviderControls: controls,
 		WebSearchMode:    webSearch,
 		Protocol:         protocol,
-	}, nil
+	}
+	if p.providerType == platformGatewayProviderType && turn.AttemptID == "" {
+		// Floret auxiliary operations provide a stable operation RunID but no
+		// effect-attempt identity. Bind their complete semantic request to that
+		// identity so recovery cannot replay an identical provider execution.
+		raw, err := json.Marshal(turn)
+		if err != nil {
+			return ModelGatewayRequest{}, err
+		}
+		digest := sha256.Sum256(raw)
+		if turn.LogicalRequestID == "" {
+			turn.LogicalRequestID = flidentity.LogicalRequestID(fmt.Sprintf("aux_%x", digest))
+		}
+		turn.AttemptID = fmt.Sprintf("aux_%x:attempt:1", digest)
+		turn.AttemptEpoch = 1
+	}
+	return turn, nil
 }
 
 func (p *floretProviderAdapter) stateCompatibilityRoute() string {
@@ -475,7 +496,7 @@ func (p *floretProviderAdapter) requestWebSearchMode(hosted []flprovider.HostedT
 			return "", errors.New("invalid web search wire shape")
 		}
 	}
-	supported := map[string]string{"openai": config.AIWebSearchOpenAI, "openai_compatible": config.AIWebSearchOpenAI,
+	supported := map[string]string{"openai": config.AIWebSearchOpenAI, "openai_compatible": config.AIWebSearchOpenAI, platformGatewayProviderType: config.AIWebSearchOpenAI,
 		"moonshot": config.AIWebSearchKimi,
 		"chatglm":  config.AIWebSearchGLM, "qwen": config.AIWebSearchQwen}
 	if mode == "" || supported[p.providerType] != mode {

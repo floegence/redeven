@@ -192,6 +192,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## AI
 
+- [Authorized platform model gateway](ai/platform-model-gateway.md) - Session-scoped catalogs, credential isolation, and stable streamed execution.
+
 - [Model directory and selection](ai/model-directory-and-selection.md) - Update the offline catalog, preserve model preferences, and discover installed Agent models.
 
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.

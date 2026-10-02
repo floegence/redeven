@@ -17,6 +17,16 @@ afterEach(() => {
 });
 
 describe('Flower setup browser presentation', () => {
+  it('makes platform models ready without local setup or a provider key', async () => {
+    const runtime = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [],
+      loadSettings: async () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [],
+        platform_model_source: { current_model_id: 'platform/available', models: [{ id: 'platform/available', label: 'Redeven AI / Available' }] },
+      }),
+    });
+    await waitFor(() => runtime.textContent?.includes('Redeven AI / Available') === true);
+    expect(runtime.querySelector('.flower-setup-welcome')).toBeNull();
+    expect(runtime.querySelector<HTMLTextAreaElement>('textarea')?.disabled).toBe(false);
+  });
   it('keeps both setup destinations readable inside the expanded companion', async () => {
     await page.viewport(1440, 900);
     const runtime = renderSurfaceWithAdapterProps({

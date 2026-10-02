@@ -623,7 +623,20 @@ async function loadSettingsSnapshot(
       catalog = { state: 'failed', message: error instanceof Error ? error.message : String(error) };
     }
   }
-  const snapshot = mapSettings(settings, catalog, exposeDesktopModelSource);
+  let snapshot = mapSettings(settings, catalog, exposeDesktopModelSource);
+  if (settings.ai_runtime?.platform_available) {
+    const response = catalog?.state === 'loaded' ? catalog.response : await loadCatalog();
+    const models = (response.models ?? []).filter((model) => trim(model.id).startsWith('platform/')).map((model) => ({
+      id: trim(model.id), label: trim(model.label) || trim(model.id),
+      context_window: model.context_window, max_output_tokens: model.max_output_tokens,
+      input_modalities: model.input_modalities, web_search: model.web_search,
+      reasoning_capability: normalizeFlowerReasoningCapability(model.reasoning_capability),
+    }));
+    snapshot = { ...snapshot, platform_model_source: {
+      models, ...(models.some((model) => model.id === response.current_model) ? { current_model_id: response.current_model } : {}),
+    } };
+    assertAvailable();
+  }
   if (!snapshot.model_profile) return snapshot;
   const { hydrateFlowerProviderCatalog } = await import('../../../../../flower_ui/src/settings/modelSelection');
   assertAvailable();
@@ -650,6 +663,7 @@ async function loadDesktopModelCatalog(loadCatalog: () => Promise<unknown> = loa
 }
 
 function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse): string {
+  if (snapshot.platform_model_source?.current_model_id) return snapshot.platform_model_source.current_model_id;
   const configured = trim(snapshot.model_profile?.current_model_id);
   if (configured) return configured;
   return trim(models.current_model);
@@ -657,6 +671,7 @@ function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse
 
 function profileContainsModel(snapshot: FlowerSettingsSnapshot, modelID: string): boolean {
   const mid = trim(modelID);
+  if (snapshot.platform_model_source?.models.some((model) => model.id === mid)) return true;
   return snapshot.model_profile?.providers.some((provider) => (
     provider.models.some((model) => `${trim(provider.id)}/${trim(model.model_name)}` === mid)
   )) ?? false;

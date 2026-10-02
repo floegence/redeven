@@ -2839,7 +2839,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/settings":
-		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
 			return
 		}
 		acquireAI()
@@ -2848,7 +2849,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.toSettingsView(cfg, aiSvc)})
+		view := g.toSettingsView(cfg, aiSvc)
+		if view.AIRuntime != nil {
+			view.AIRuntime.PlatformAvailable = aiSvc.PlatformAvailableForSession(meta)
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/settings":
@@ -4517,17 +4522,18 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/models":
-		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
 			return
 		}
 		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !aiSvc.Enabled() {
+		if !aiSvc.EnabledForSession(meta) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
-		models, err := aiSvc.ListModels()
+		models, err := aiSvc.ListModelsForSession(r.Context(), meta)
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
@@ -4554,7 +4560,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !aiSvc.Enabled() {
+		if !aiSvc.EnabledForSession(meta) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -4589,12 +4595,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		if err := aiSvc.SetCurrentModelID(modelID, persist); err != nil {
+		if err := aiSvc.SetCurrentModelForSession(r.Context(), meta, modelID, persist); err != nil {
 			g.appendAudit(meta, "ai_current_model_update", "failure", map[string]any{"model_id": modelID}, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		models, err := aiSvc.ListModels()
+		models, err := aiSvc.ListModelsForSession(r.Context(), meta)
 		if err != nil {
 			g.appendAudit(meta, "ai_current_model_update", "failure", map[string]any{"model_id": modelID}, err)
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
@@ -4824,7 +4830,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !aiSvc.Enabled() {
+		if !aiSvc.EnabledForSession(meta) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -5181,7 +5187,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			if !aiSvc.Enabled() {
+			if !aiSvc.EnabledForSession(meta) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 				return
 			}
@@ -5604,7 +5610,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !aiSvc.Enabled() {
+		if !aiSvc.EnabledForSession(meta) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -5725,13 +5731,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/attachments/capabilities":
-		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
 			return
 		}
 		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !aiSvc.Enabled() {
+		if !aiSvc.EnabledForSession(meta) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -5740,7 +5747,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("model_id is required")))
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: aiSvc.AttachmentCapabilities(r.Context(), modelID)})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: aiSvc.AttachmentCapabilitiesForSession(r.Context(), meta, modelID)})
 		return
 
 	case r.URL.Path == "/_redeven_proxy/api/ai/uploads":
@@ -5755,7 +5762,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !aiSvc.Enabled() {
+		if !aiSvc.EnabledForSession(meta) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -5850,7 +5857,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !aiSvc.Enabled() {
+		if !aiSvc.EnabledForSession(meta) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}

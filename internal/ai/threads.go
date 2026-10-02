@@ -380,7 +380,7 @@ func requestUserInputPromptFromCurrent(current flruntime.ThreadView) *RequestUse
 	return nil
 }
 
-func (s *Service) threadReasoningDefaults(ctx context.Context, modelID string) (config.AIReasoningCapability, config.AIReasoningSelection, bool, error) {
+func (s *Service) threadReasoningDefaults(ctx context.Context, meta *session.Meta, modelID string) (config.AIReasoningCapability, config.AIReasoningSelection, bool, error) {
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" || s == nil {
 		return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false, nil
@@ -389,6 +389,10 @@ func (s *Service) threadReasoningDefaults(ctx context.Context, modelID string) (
 	cfg := s.cfg
 	s.mu.Unlock()
 	var catalogErr error
+	cfg, catalogErr = s.sessionModelConfig(ctx, meta, cfg)
+	if catalogErr != nil {
+		return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false, catalogErr
+	}
 	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, modelID)
 	if catalogErr != nil {
 		return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false, catalogErr
@@ -588,6 +592,10 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
+	cfg, catalogErr := s.sessionModelConfig(ctx, meta, cfg)
+	if catalogErr != nil {
+		return threadstore.ThreadSettings{}, catalogErr
+	}
 	modelID := strings.TrimSpace(req.ModelID)
 	defaultPermission := FlowerPermissionApprovalRequired
 	if cfg != nil {
@@ -632,7 +640,7 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 			return threadstore.ThreadSettings{}, fmt.Errorf("model not allowed: %s", modelID)
 		}
 	}
-	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, modelID)
+	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, meta, modelID)
 	if err != nil {
 		return threadstore.ThreadSettings{}, err
 	}
@@ -1035,6 +1043,10 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	cfg := s.cfg
 	s.mu.Unlock()
 	var catalogErr error
+	cfg, catalogErr = s.sessionModelConfig(ctx, meta, cfg)
+	if catalogErr != nil {
+		return catalogErr
+	}
 	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, modelID)
 	if catalogErr != nil {
 		return catalogErr
@@ -1066,7 +1078,7 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 		return nil
 	}
 
-	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, modelID)
+	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, meta, modelID)
 	if err != nil {
 		return err
 	}
@@ -1119,7 +1131,7 @@ func (s *Service) SetThreadReasoningSelection(ctx context.Context, meta *session
 	if preferenceBlocked {
 		return ErrThreadBusy
 	}
-	capability, modelDefault, _, err := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
+	capability, modelDefault, _, err := s.threadReasoningDefaults(ctx, meta, strings.TrimSpace(th.ModelID))
 	if err != nil {
 		return err
 	}

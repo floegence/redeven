@@ -62,6 +62,7 @@ export type AISecretsView = Readonly<{
 }>;
 
 export type AIRuntimeStatus = Readonly<{
+  platform_available?: boolean;
   remote_configured?: boolean;
   desktop_model_source?: Readonly<{
     binding_state?: string;
