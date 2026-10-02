@@ -124,6 +124,18 @@ try {
   assert.equal(messages.filter(item => item.command.method === 'input').length, 0, 'input before first paint');
   paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  await page.locator('#settings').click();
+  assert.deepEqual(await page.evaluate(() => {
+    document.querySelector('#quality').value = 'clarity';
+    document.querySelector('#quality').dispatchEvent(new Event('change'));
+    const lock = [...document.querySelectorAll('#panel-body button')].find(button => button.textContent === 'Lock host');
+    const disabled = lock.disabled;
+    lock.click();
+    return [disabled, document.querySelector('#panel-title').textContent];
+  }), [true, 'Desktop settings'], 'lock must wait for the configuration and fresh paint');
+  await page.getByRole('button', { name: 'Lock host', exact: true }).waitFor();
+  await page.waitForFunction(() => ![...document.querySelectorAll('#panel-body button')].find(button => button.textContent === 'Lock host').disabled);
+  await page.keyboard.press('Escape');
   for (const response of ['cancel', 'escape', 'confirm']) {
     const beforeLock = messages.filter(item => item.command.method === 'lock').length;
     await page.locator('#settings').click();
@@ -139,6 +151,19 @@ try {
     assert(!await page.getByRole('dialog').isVisible(), 'lock confirmation did not close');
     assert(await page.locator('#settings').evaluate(element => element === document.activeElement), 'confirmation did not restore settings focus');
   }
+  const beforeRevokedLock = messages.filter(item => item.command.method === 'lock').length;
+  await page.locator('#settings').click();
+  await page.getByRole('button', { name: 'Lock host', exact: true }).click();
+  control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'permission_revoked', generation: ++generation }));
+  await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host authorization required');
+  assert(await page.getByRole('button', { name: 'Lock host', exact: true }).isDisabled(), 'revoked confirmation remained enabled');
+  state(); paint();
+  await page.waitForFunction(() => document.querySelector('#connection').hidden);
+  await page.getByRole('button', { name: 'Lock host', exact: true }).evaluate(button => button.click());
+  assert(await page.getByRole('button', { name: 'Lock host', exact: true }).isDisabled(), 'new authority reused an old confirmation');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  assert.equal(messages.filter(item => item.command.method === 'lock').length, beforeRevokedLock, 'revoked confirmation sent a lock command');
   await page.locator('#desktop').click(); await page.keyboard.press('x');
   const compose = text => page.locator('.floe-remote-input').evaluate((element, text) => {
     element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));

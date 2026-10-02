@@ -132,6 +132,10 @@ Lock host replaces the settings content inside the same modal and focuses
 Cancel. Only explicit confirmation sends the lock command; Cancel and Escape
 send nothing. Closing the confirmation restores focus to the settings trigger.
 A queued settings-close event must never dismiss or resolve its replacement.
+Lock is available only after the current control generation has painted. Its
+confirmation belongs to that attachment and generation; losing authority disables
+it permanently, even if a successor becomes active. The user can cancel and open
+a fresh confirmation after recovery.
 
 # Boundaries
 

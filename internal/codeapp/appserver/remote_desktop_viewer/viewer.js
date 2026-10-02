@@ -83,6 +83,9 @@ function updateTransitionControls() {
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'enable-sound', 'sound']) {
     if ($(id)) $(id).disabled = awaitingState || state !== 'active';
   }
+  if ($('lock-host')) $('lock-host').disabled = !authorized(generation);
+  const confirm = $('confirm-lock');
+  if (confirm) confirm.disabled ||= !authorized(Number(confirm.dataset.generation)) || epoch !== Number(confirm.dataset.epoch);
 }
 function changeDesktop(method, values, takeover = false) {
   if (awaitingState) return;
@@ -158,7 +161,7 @@ async function connect() {
     media.binaryType = 'arraybuffer';
     player = new HostDesktopPlayer(canvas, {
       acknowledge(g, frame) { if (!awaitingState && state === 'active' && g === generation) command('frame_ack', { frame_id: frame }); },
-      painted(g) { if (awaitingState || g !== generation || state !== 'active') return; painted = true; input.bindTarget(active(g) ? g : null); reconnectAttempts = 0; },
+      painted(g) { if (awaitingState || g !== generation || state !== 'active') return; painted = true; input.bindTarget(active(g) ? g : null); updateTransitionControls(); reconnectAttempts = 0; },
       recover() { revoke(); if (state === 'active') changeDesktop('keyframe'); },
       statistics(value) { stats = value; refreshStats(); },
       audioState(value) { if (value === 'unavailable' || value === 'unsupported') notice('failure'); },
@@ -227,13 +230,19 @@ function openPanel(title, children) {
   else panel.showModal();
 }
 panel.addEventListener('close', () => { if (active(generation)) input.bindTarget(generation); });
-async function confirmation(title, hint) {
+async function confirmation(title, hint, authority) {
   return new Promise(resolve => {
     const row = element('div', '', { className: 'row' });
-    const accept = button(title, () => { panel.returnValue = 'accept'; panel.close('accept'); });
+    const accept = button(title, () => {
+      if (authority && (authority.epoch !== epoch || !authorized(authority.generation))) return;
+      panel.returnValue = 'accept'; panel.close('accept');
+    });
+    if (authority) {
+      accept.id = 'confirm-lock'; accept.dataset.generation = String(authority.generation); accept.dataset.epoch = String(authority.epoch);
+    }
     row.append(button('cancel', () => panel.close('cancel')), accept);
     panel.addEventListener('close', () => resolve(panel.returnValue === 'accept'), { once: true });
-    panel.returnValue = ''; openPanel(title, [element('p', copy(hint)), row]);
+    panel.returnValue = ''; openPanel(title, [element('p', copy(hint)), row]); updateTransitionControls();
   });
 }
 async function confirmControl(reconnect = false) {
@@ -302,7 +311,11 @@ $('settings').onclick = () => {
   const mute = element('input', '', { id: 'sound', type: 'checkbox', checked: audio });
   mute.onchange = async () => { audio = mute.checked && await player.enableAudio(); mute.checked = audio; player.setVolume(volume, !audio); configure(); };
   const muteLabel = element('label', copy('sound')); muteLabel.append(mute);
-  const lock = button('lock', async () => { if (await confirmation('lock', 'lockHint')) command('lock'); }); lock.disabled = session.mode !== 'control';
+  const lock = button('lock', async () => {
+    const authority = { epoch, generation };
+    if (!authorized(authority.generation)) return;
+    if (await confirmation('lock', 'lockHint', authority) && authority.epoch === epoch && authorized(authority.generation)) command('lock');
+  }); lock.id = 'lock-host';
   openPanel('settings', [qualityLabel, textLabel, element('p', copy('textInputHint'), { id: 'text-input-hint' }), sound, muteLabel, volumeLabel, lock, element('output', '', { id: 'statistics' })]); updateTransitionControls(); refreshStats();
 };
 async function localClipboard(target, paste = false) {
