@@ -2016,7 +2016,20 @@ func TestServer_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
 	home := t.TempDir()
 	custom := t.TempDir()
 	cfgPath := writeTestConfig(t)
-	scope, err := filesystemscope.NewRegistry(&config.Config{AgentHomeDir: home})
+	// The refresh contract starts from an explicit Home-only scope, independent
+	// of the default Computer access policy.
+	scope, err := filesystemscope.NewRegistry(&config.Config{
+		AgentHomeDir: home,
+		FilesystemScope: &config.FilesystemScope{
+			SchemaVersion: config.FilesystemScopeSchemaVersionV1,
+			DefaultRootID: "home",
+			Roots: []config.FilesystemRootPolicy{{
+				ID: "home", Label: "Home", Path: home, Kind: config.FilesystemRootHome,
+				Permissions: config.FilesystemPermissionSet{Read: true, Write: true},
+				System:      true,
+			}},
+		},
+	})
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
