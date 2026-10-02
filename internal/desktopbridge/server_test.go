@@ -507,7 +507,7 @@ func TestGatewayProtocolHeaderConnLimitsOnlyHTTPHeadersWhenFirstWriteIncludesLar
 	defer clientConn.Close()
 	defer serverConn.Close()
 	wrapped := &gatewayProtocolHeaderConn{Conn: clientConn, token: "managed-token"}
-	header := []byte("PUT /gateway/v2/runtime-operations/op/artifact HTTP/1.1\r\nHost: gateway.local\r\n\r\n")
+	header := []byte("PUT /gateway/v3/runtime-operations/op/artifact HTTP/1.1\r\nHost: gateway.local\r\n\r\n")
 	body := bytes.Repeat([]byte{0x5a}, 128*1024)
 	request := append(append([]byte(nil), header...), body...)
 	injectedHeader := []byte("X-Redeven-Gateway-Managed-Bridge-Token: managed-token\r\n")

@@ -138,7 +138,7 @@ describe('runtimePlacementBridgeSession', () => {
     socket.on('error', () => undefined);
     try {
       await new Promise<void>((resolve) => socket.once('connect', resolve));
-      socket.write('POST /__redeven_runtime_gateway/gateway/v1/catalog HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n');
+      socket.write('POST /__redeven_runtime_gateway/gateway/v3/catalog HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n');
       await waitForEventCount(events, 2);
     } finally {
       socket.destroy();
@@ -146,7 +146,7 @@ describe('runtimePlacementBridgeSession', () => {
     }
 
     expect(events[0]).toBe('open:gateway_protocol');
-    expect(events[1]).toBe('data:POST /gateway/v1/catalog HTTP/1.1');
+    expect(events[1]).toBe('data:POST /gateway/v3/catalog HTTP/1.1');
   });
 
   it('rewrites every runtime-control request on a reused loopback keep-alive connection', async () => {

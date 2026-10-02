@@ -1845,6 +1845,9 @@ export const enUS = defineDictionary({
       secureSessionFailed: 'The secure session could not be resumed.',
       remoteCommandEnded: 'The original remote runtime bridge command ended.',
       processIdentityChanged: 'The remote runtime identity changed, so this window cannot be rebound safely.',
+      gatewayUnavailable: 'Gateway unavailable',
+      gatewayTargetUnavailable: 'Target unavailable',
+      gatewaySessionExpired: 'Session expired. Reopen this environment.',
     },
   },
   accessGate: {

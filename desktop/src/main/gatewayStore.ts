@@ -24,7 +24,7 @@ import {
 } from '../shared/desktopSSH';
 import type { DesktopContainerEngine } from '../shared/desktopRuntimePlacement';
 
-export const GATEWAY_STORE_SCHEMA_VERSION = 2;
+export const GATEWAY_STORE_SCHEMA_VERSION = 3;
 
 export type GatewayURLConnection = Readonly<{
   kind: 'url';
@@ -104,7 +104,7 @@ export type GatewayTrustProfile = Readonly<{
 }>;
 
 export type GatewayRecord = Readonly<{
-  schema_version: 2;
+  schema_version: 3;
   gateway_id: string;
   display_name: string;
   local_enabled: boolean;
@@ -116,7 +116,7 @@ export type GatewayRecord = Readonly<{
 }>;
 
 export type GatewayStoreSnapshot = Readonly<{
-  schema_version: 2;
+  schema_version: 3;
   gateways: readonly GatewayRecord[];
 }>;
 
@@ -652,7 +652,7 @@ function migrateGatewayStoreFile(value: unknown, now = Date.now()): Readonly<{
   if (schemaVersion > GATEWAY_STORE_SCHEMA_VERSION) {
     throw new GatewayStoreError('GATEWAY_STORE_FUTURE_SCHEMA', 'Gateway store was created by a newer Redeven Desktop.');
   }
-  if (schemaVersion !== 1 && schemaVersion !== GATEWAY_STORE_SCHEMA_VERSION) {
+  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== GATEWAY_STORE_SCHEMA_VERSION) {
     throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_UNSUPPORTED', 'Gateway store schema version is unsupported.');
   }
   if (!Array.isArray(candidate.gateways)) {

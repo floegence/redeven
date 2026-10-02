@@ -11,7 +11,7 @@ import (
 
 func TestGatewayOpenAPIContractExposesAccessOnlySurface(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
-	raw, err := os.ReadFile(filepath.Join(root, "spec", "openapi", "gateway-v2.yaml"))
+	raw, err := os.ReadFile(filepath.Join(root, "spec", "openapi", "gateway-v3.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,12 +22,15 @@ func TestGatewayOpenAPIContractExposesAccessOnlySurface(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"/gateway/v2/pairing/challenge",
-		"/gateway/v2/pairing/complete",
-		"/gateway/v2/catalog",
-		"/gateway/v2/open-session",
-		"/gateway/v2/env-profiles/upsert",
-		"/gateway/v2/env-profiles/delete",
+		"/gateway/v3/pairing/challenge",
+		"/gateway/v3/pairing/complete",
+		"/gateway/v3/catalog",
+		"/gateway/v3/open-session",
+		"/gateway/v3/close-session",
+		"/gateway/v3/access/{token}/{path}",
+		"/gateway/v3/access/{token}/_tunnel",
+		"/gateway/v3/env-profiles/upsert",
+		"/gateway/v3/env-profiles/delete",
 	}
 	if len(document.Paths) != len(want) {
 		t.Fatalf("Gateway OpenAPI path count = %d, want %d", len(document.Paths), len(want))
@@ -38,8 +41,69 @@ func TestGatewayOpenAPIContractExposesAccessOnlySurface(t *testing.T) {
 		}
 	}
 	for path := range document.Paths {
+		if !strings.HasPrefix(path, "/gateway/v3/") {
+			t.Fatalf("Gateway OpenAPI exposes an obsolete wire path %q", path)
+		}
 		if strings.Contains(path, "runtime") || strings.Contains(path, "lifecycle") {
 			t.Fatalf("Gateway OpenAPI contract exposes Runtime lifecycle path %q", path)
 		}
+	}
+}
+
+func TestGatewayOpenAPIContractAccessModesAndArtifacts(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "spec", "openapi", "gateway-v3.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Info struct {
+			Version string `yaml:"version"`
+		} `yaml:"info"`
+		Components struct {
+			Schemas map[string]struct {
+				Enum       []string       `yaml:"enum"`
+				Required   []string       `yaml:"required"`
+				Properties map[string]any `yaml:"properties"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Info.Version != Version {
+		t.Fatal("OpenAPI and Go protocol versions differ")
+	}
+	modes := doc.Components.Schemas["AccessMode"].Enum
+	if strings.Join(modes, ",") != "direct_url,gateway_proxy" {
+		t.Fatalf("access modes: %v", modes)
+	}
+	for schema, required := range map[string][]string{
+		"EnvironmentProfile":           {"access_mode"},
+		"GatewayProxyConnectArtifact":  {"kind", "url", "gateway_session_id", "expires_at_unix_ms", "artifact_nonce", "proof"},
+		"DesktopBridgeConnectArtifact": {"url", "gateway_session_id", "bridge_session_id", "route_id"},
+		"CloseSessionRequest":          {"protocol_version", "gateway_session_id"},
+	} {
+		value, ok := doc.Components.Schemas[schema]
+		if !ok {
+			t.Fatalf("missing %s", schema)
+		}
+		for _, key := range required {
+			found := false
+			for _, field := range value.Required {
+				found = found || field == key
+			}
+			if !found || value.Properties[key] == nil {
+				t.Fatalf("%s does not require %s", schema, key)
+			}
+		}
+	}
+	capabilities := strings.Join(doc.Components.Schemas["GatewayCapability"].Enum, ",")
+	for _, capability := range []string{"env_catalog", "env_direct_open", "env_proxy_open", "env_profile_write"} {
+		if !strings.Contains(capabilities, capability) {
+			t.Fatalf("missing capability %s", capability)
+		}
+	}
+	if strings.Contains(capabilities, "env_open_session") {
+		t.Fatal("obsolete ambiguous opening capability")
 	}
 }

@@ -25,6 +25,8 @@ import { TEMPLATE_SOURCE_ACQUIRE_CHANNEL, TEMPLATE_SOURCE_CANCEL_CHANNEL } from 
 import { CodeSpaceBrowserSessions } from './codespaceBrowserSessions';
 import { CodeSpaceNativeWindow, CodeSpaceNativeWindowError, codeSpaceWindowFailure } from './codespaceNativeWindows';
 import { createLocalNativeCodeSpaceRoute } from './codespaceNativeRoute';
+import { GatewayProxyError, type GatewayProxyTransport } from './gatewayProxyTransport';
+import { prepareGatewayEnvironmentAccess, type GatewayEnvironmentAccess } from './gatewayEnvironmentAccess';
 import { createRemoteNativeCodeSpaceRoute } from './codespaceNativeRemote';
 import { NativeCodeSpaceProfiles, nativeCodeSpaceIdentity } from './codespaceNativeProfiles';
 import { installNativeCodeSpaceSession } from './codespaceNativeSession';
@@ -143,6 +145,7 @@ import {
   buildManagedLocalRuntimeDesktopTarget,
   desktopSessionKeyFromRuntimeTargetID,
   buildExternalLocalUIDesktopTarget,
+  buildGatewayDesktopTarget,
   buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
   buildWSLDesktopTarget,
@@ -814,6 +817,12 @@ type DesktopSessionRecord = {
   restart_capable: boolean;
   restart_handoff?: RuntimeSessionHandoff;
   bridge_lease?: RuntimePlacementBridgeLease;
+  gateway_proxy?: GatewayProxyTransport;
+  gateway_session_close?: () => Promise<void>;
+  gateway_access_mode?: 'direct_url' | 'gateway_proxy';
+  gateway_expires_at_unix_ms?: number;
+  gateway_expiry_timer?: ReturnType<typeof setTimeout>;
+  gateway_failure_unsubscribe?: () => void;
   session_key: DesktopSessionKey;
   target: DesktopSessionTarget;
   startup: StartupReport;
@@ -1047,6 +1056,14 @@ function refreshWebServicePresentation(): void {
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
 const desktopDiagnosticsHookSessions = new WeakSet<Session>();
 const directDesktopSessionTasks = new Map<string, Promise<Session>>();
+const gatewayProxyCredentials = new Map<number, { token: string; partitions: Set<Session> }>();
+app.on('login', (event, webContents, _request, authInfo, callback) => {
+  const credentials = authInfo.isProxy && authInfo.host === '127.0.0.1'
+    ? gatewayProxyCredentials.get(authInfo.port) : undefined;
+  if (!credentials || (webContents && !credentials.partitions.has(webContents.session))) return;
+  event.preventDefault();
+  callback('redeven', credentials.token);
+});
 const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 const desktopDownloadWriter = new DesktopDownloadWriter(() => desktopLanguageState().getSnapshot().resolved_locale);
@@ -1072,6 +1089,13 @@ const controlPlaneAccessStateByKey = new Map<string, DesktopControlPlaneAccessSt
 const controlPlaneSyncStateByKey = new Map<string, DesktopControlPlaneSyncRecord>();
 const providerRuntimeHealthByControlPlaneKey = new Map<string, Map<string, DesktopProviderEnvironmentRuntimeHealth>>();
 const gatewaySyncStateByID = new Map<string, GatewaySyncRecord>();
+const gatewayAccessResults = new Map<string, NonNullable<DesktopGatewaySource['environments'][number]['last_access_result']>>();
+
+function recordGatewayAccessResult(gatewayID: string, envID: string, mode: 'direct_url' | 'gateway_proxy',
+  status: NonNullable<DesktopGatewaySource['environments'][number]['last_access_result']>['status']): void {
+  gatewayAccessResults.set(JSON.stringify([gatewayID, envID]), { access_mode: mode, status, checked_at_unix_ms: Date.now() });
+  broadcastDesktopWelcomeSnapshots();
+}
 const gatewayDiagnosisByID = new Map<string, DesktopGatewayDiagnosis>();
 const gatewaySyncTaskByID = new Map<string, GatewaySyncTaskRecord>();
 const supersededGatewaySyncTaskTokens = new Set<symbol>();
@@ -5447,6 +5471,9 @@ function mergeGatewaySourceRecord(
   return {
     ...base,
     ...source,
+    environments: source.environments.map(environment => ({ ...environment,
+      last_access_result: gatewayAccessResults.get(JSON.stringify([record.gateway_id, environment.gateway_env_id])),
+    })),
     display_name: base.display_name,
     connection_kind: base.connection_kind,
     management_capability: base.management_capability,
@@ -5762,6 +5789,7 @@ async function pairGatewayWithClient(
     signal?: AbortSignal;
     onStage?: (stage: Extract<GatewayWorkflowStepID, 'fetching_pairing_challenge' | 'saving_trust_profile'>) => void;
     pairingCode?: string;
+    profileWrite?: boolean;
     beforeStoreWrite?: () => Promise<GatewayRecord> | GatewayRecord;
   }> = {},
 ): Promise<GatewayRecord> {
@@ -5780,11 +5808,7 @@ async function pairGatewayWithClient(
     expected_pairing_code: record.connection.kind === 'url' ? options.pairingCode : undefined,
   });
   options.onStage?.('saving_trust_profile');
-  const pairingOptions = record.connection.kind === 'url'
-    ? {}
-    : {
-        profileWrite: true,
-      };
+  const pairingOptions = { profileWrite: options.profileWrite ?? record.connection.kind !== 'url' };
   const completionRequest = buildPairingCompleteRequest(material, challenge, pairingOptions);
   const completion = await client.completePairing(record, completionRequest, {
     signal: options.signal,
@@ -5936,6 +5960,20 @@ async function syncGatewayRecord(
       const syncedRecord = await gatewayStore().markCatalogSynced(currentRecord.gateway_id, syncedAtMS).catch(() => currentRecord);
       await assertSyncActive();
       const catalogEnvironments = [...catalog.environments];
+      const publishedIDs = new Set(catalogEnvironments.map(environment => environment.gateway_env_id));
+      for (const sessionRecord of sessionsByKey.values()) {
+        const target = sessionRecord.target;
+        if (target.kind !== 'gateway_environment' || target.gateway_id !== currentRecord.gateway_id) continue;
+        const published = catalogEnvironments.find(environment => environment.gateway_env_id === target.gateway_env_id);
+        if (!published || published.access_endpoint?.url !== sessionRecord.startup.local_ui_url) {
+          failGatewaySessionTransport(sessionRecord, new GatewayProxyError('GATEWAY_SESSION_EXPIRED'));
+          void sessionRecord.gateway_proxy?.close();
+        }
+      }
+      for (const key of gatewayAccessResults.keys()) {
+        const [gatewayID, environmentID] = JSON.parse(key) as string[];
+        if (gatewayID === currentRecord.gateway_id && !publishedIDs.has(environmentID)) gatewayAccessResults.delete(key);
+      }
       const source = mergeGatewaySourceRecord(gatewayRecordToSourceWithCatalog(syncedRecord, {
         status: catalog.gateway.status,
         capabilities: catalog.gateway.capabilities,
@@ -6036,7 +6074,7 @@ async function upsertGatewayFromLauncher(
         record,
         new GatewayURLClient(gatewaySecretStore()),
         gatewaySecretStore(),
-        { pairingCode: request.pairing_code },
+        { pairingCode: request.pairing_code, profileWrite: request.profile_write },
       );
     }
     return record;
@@ -6237,6 +6275,7 @@ async function upsertGatewayEnvironmentProfileFromLauncher(
     const saved = await gatewayLifecycleManager().upsertEnvironmentProfile(record, {
       gateway_env_id: request.registration_ref.gateway_env_id || undefined,
       display_name: request.display_name,
+      access_mode: request.access_mode,
       access_route: {
         kind: 'url',
         ...(request.access_route.url ? { url: request.access_route.url } : {}),
@@ -6346,8 +6385,10 @@ async function deleteGatewayEnvironmentProfileFromLauncher(
     }
     const sessionRecords = liveGatewayEnvironmentSessions(record.gateway_id, registrationRef.gateway_env_id);
     for (const sessionRecord of sessionRecords) {
-      await finalizeSessionClosure(sessionRecord.session_key);
+      failGatewaySessionTransport(sessionRecord, new GatewayProxyError('GATEWAY_SESSION_EXPIRED'));
+      await sessionRecord.gateway_proxy?.close();
     }
+    gatewayAccessResults.delete(JSON.stringify([record.gateway_id, registrationRef.gateway_env_id]));
     await syncGatewayRecord(record, {
       force: true,
       mode: 'refresh_catalog',
@@ -7678,6 +7719,14 @@ async function reinstallTargetFromLauncher(
 
 async function deleteGatewayFromLauncher(gatewayID: string): Promise<GatewayRecord | null> {
   const existing = await gatewayStore().get(gatewayID);
+  for (const record of [...sessionsByKey.values()]) {
+    if (record.target.kind === 'gateway_environment' && record.target.gateway_id === gatewayID) {
+      await finalizeSessionClosure(record.session_key);
+    }
+  }
+  for (const key of gatewayAccessResults.keys()) {
+    if ((JSON.parse(key) as string[])[0] === gatewayID) gatewayAccessResults.delete(key);
+  }
   if (existing?.trust_profile) {
     await gatewaySecretStore().deleteSecret(existing.trust_profile.paired_client_private_key_ref);
   }
@@ -8582,7 +8631,8 @@ async function createSessionCodeSpaceRoute(record: DesktopSessionRecord, codeSpa
   const webSession = session.fromPartition(record.session_partition);
   return record.transport.kind === 'provider_remote'
     ? createRemoteNativeCodeSpaceRoute({ webSession, environmentOrigin: record.transport.baseURL, envPublicID: record.target.kind === 'local_environment' ? record.target.env_public_id ?? '' : '', codeSpaceID, authorization, signal })
-    : createLocalNativeCodeSpaceRoute({ transport: record.transport, startup: record.startup, webSession, codeSpaceID, signal });
+    : createLocalNativeCodeSpaceRoute({ transport: record.transport, startup: record.startup, webSession, codeSpaceID, signal,
+      openConnection: record.gateway_proxy?.openConnection });
 }
 
 async function openSessionCodespaceLoadingWindow(
@@ -8710,7 +8760,12 @@ async function prepareWebServiceWindowPartition(
 ): Promise<void> {
   const webSession = session.fromPartition(partition);
   installDesktopDiagnosticsHooks(webSession, forwardID, loopbackGateway);
-  await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });
+  if (loopbackGateway) await webSession.setProxy({ mode: 'direct' });
+  else if (sessionRecord.gateway_proxy) await prepareGatewayProxyPartition(webSession, sessionRecord.gateway_proxy);
+  else {
+    if (sessionRecord.transport.proxyPolicy === 'gateway') throw new Error('Gateway proxy transport is missing its session owner.');
+    await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });
+  }
 }
 
 function clearWebServiceWindowPartition(partition: string): void {
@@ -9217,6 +9272,7 @@ async function openWebServiceWindowFromShellNow(
         protectedRouteURL,
         targetURL: request.target_url,
         protectedRequestHeaders,
+        agent: sessionRecord.gateway_proxy?.agent,
       });
       sessionRecord.web_service_loopback_gateways.set(request.forward_id, loopbackGateway);
     }
@@ -9432,10 +9488,28 @@ function sessionTransportRecoveryFailed(sessionRecord: DesktopSessionRecord): bo
   return sessionRecord.transport_recovery_snapshot?.phase === 'failed';
 }
 
+function failGatewaySessionTransport(record: DesktopSessionRecord, error: GatewayProxyError): void {
+  if (record.closing || record.target.kind !== 'gateway_environment') return;
+  if (record.transport_recovery_snapshot?.failure?.code === 'gateway_session_expired') return;
+  const code = error.code === 'GATEWAY_SESSION_EXPIRED' ? 'gateway_session_expired'
+    : error.code === 'GATEWAY_TARGET_UNAVAILABLE' ? 'gateway_target_unavailable' : 'gateway_unavailable';
+  record.transport_recovery_snapshot = { generation: 0, revision: (record.transport_recovery_snapshot?.revision ?? 0) + 1,
+    phase: 'failed', attempt_count: 0, failure: { code, error_name: 'GatewayProxyError', technical_detail: code },
+    actions: ['open_connection_center'] };
+  recordGatewayAccessResult(record.target.gateway_id, record.target.gateway_env_id, record.gateway_access_mode ?? 'direct_url',
+    code === 'gateway_session_expired' ? 'session_expired' : code === 'gateway_target_unavailable' ? 'target_unavailable' : 'gateway_unavailable');
+  sendSessionTransportRecoverySnapshot(record);
+  void record.gateway_proxy?.close();
+}
+
 function markSessionAppReady(
   sessionRecord: DesktopSessionRecord,
   payload: DesktopSessionAppReadyPayload,
 ): void {
+  if (!sessionRecord.closing && !sessionTransportRecoveryFailed(sessionRecord) && sessionRecord.target.kind === 'gateway_environment') {
+    recordGatewayAccessResult(sessionRecord.target.gateway_id, sessionRecord.target.gateway_env_id,
+      sessionRecord.gateway_access_mode ?? 'direct_url', payload.state === 'access_gate_interactive' ? 'runtime_authentication_required' : 'ready');
+  }
   if (sessionRecord.lifecycle !== 'opening') {
     return;
   }
@@ -9595,9 +9669,27 @@ function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, start
   return path.join(app.getPath('userData'), 'session-diagnostics', desktopSessionStateKeyFragment(target.session_key));
 }
 
-async function prepareDesktopSessionTransport(transport: DesktopSessionTransport): Promise<void> {
+async function prepareGatewayProxyPartition(webSession: Session, proxy: GatewayProxyTransport): Promise<void> {
+  const port = Number(new URL(proxy.proxyURL).port);
+  let credentials = gatewayProxyCredentials.get(port);
+  if (!credentials) { credentials = { token: proxy.token, partitions: new Set() }; gatewayProxyCredentials.set(port, credentials); }
+  credentials.partitions.add(webSession);
+  await webSession.setProxy({ mode: 'fixed_servers', proxyRules: proxy.proxyURL, proxyBypassRules: '<-loopback>' });
+  await webSession.closeAllConnections();
+}
+
+async function prepareDesktopSessionTransport(transport: DesktopSessionTransport, gatewayProxy?: GatewayProxyTransport): Promise<void> {
+  if (transport.proxyPolicy === 'gateway') {
+    if (!gatewayProxy) throw new Error('Gateway proxy transport is missing its session owner.');
+    const webSession = session.fromPartition(transport.partition);
+    installDesktopDiagnosticsHooks(webSession);
+    await prepareGatewayProxyPartition(webSession, gatewayProxy);
+    return;
+  }
   if (transport.proxyPolicy !== 'direct') {
-    installDesktopDiagnosticsHooks(session.defaultSession);
+    const webSession = transport.partition ? session.fromPartition(transport.partition) : session.defaultSession;
+    installDesktopDiagnosticsHooks(webSession);
+    if (transport.partition) await webSession.setProxy({ mode: 'system' });
     return;
   }
   let task = directDesktopSessionTasks.get(transport.partition);
@@ -9619,7 +9711,7 @@ async function prepareDesktopSessionTransport(transport: DesktopSessionTransport
 }
 
 async function releaseDesktopSessionTransport(transport: DesktopSessionTransport): Promise<void> {
-  if (transport.proxyPolicy !== 'direct') {
+  if (transport.proxyPolicy === 'system' && !transport.partition) {
     return;
   }
   const task = directDesktopSessionTasks.get(transport.partition);
@@ -9644,6 +9736,11 @@ async function createSessionRecord(
     runtimeTargetKey?: string;
     reuseSessionWindow?: DesktopSessionRecord;
     restartHandoff?: RuntimeSessionHandoff;
+    gatewayProxy?: GatewayProxyTransport;
+    gatewaySessionClose?: () => Promise<void>;
+    gatewayAccessMode?: 'direct_url' | 'gateway_proxy';
+    gatewayExpiresAtUnixMS?: number;
+    gatewayBridge?: boolean;
   }> = {},
 ): Promise<DesktopSessionRecord> {
   const identityKeys = options.runtimeLifecycleGenerationIdentityKeys ?? [
@@ -9670,6 +9767,9 @@ async function createSessionRecord(
   try {
     transport = resolveDesktopSessionTransport(target, startup, {
       placementBridge: options.transportRecovery != null,
+      gatewayProxy: !!options.gatewayProxy,
+      gatewayDirect: options.gatewayAccessMode === 'direct_url',
+      gatewayBridge: options.gatewayBridge,
     });
   } catch (error) {
     if (target.kind === 'local_environment' && target.route === 'local_host') {
@@ -9690,7 +9790,7 @@ async function createSessionRecord(
     || options.reuseSessionWindow.session_partition !== transport.partition)) {
     throw new Error('The retained Env App window cannot accept this session.');
   }
-  await prepareDesktopSessionTransport(transport);
+  await prepareDesktopSessionTransport(transport, options.gatewayProxy);
   assertRuntimeLifecycleGenerationUnchanged();
   const diagnostics = options.reuseSessionWindow?.diagnostics ?? new DesktopDiagnosticsRecorder();
   await diagnostics.configureRuntime(startup, transport.allowedBaseURL, {
@@ -9759,6 +9859,10 @@ async function createSessionRecord(
   });
   sessionRecord = {
     document_generation: crypto.randomUUID(),
+    gateway_proxy: options.gatewayProxy,
+    gateway_session_close: options.gatewaySessionClose,
+    gateway_access_mode: options.gatewayAccessMode,
+    gateway_expires_at_unix_ms: options.gatewayExpiresAtUnixMS,
     runtime_target_key: options.runtimeTargetKey,
     restart_capable: false,
     restart_handoff: options.restartHandoff,
@@ -9798,6 +9902,13 @@ async function createSessionRecord(
   if (!liveTrackedBrowserWindow(rootWindow)) throw new Error('The Env App window was closed.');
   sessionsByKey.set(target.session_key, sessionRecord);
   sessionKeyByWebContentsID.set(rootWindow.webContentsID, target.session_key);
+  if (options.gatewayProxy) {
+    sessionRecord.gateway_failure_unsubscribe = options.gatewayProxy.subscribeFailure(error => failGatewaySessionTransport(sessionRecord, error));
+    sessionRecord.gateway_expiry_timer = setTimeout(() => {
+      failGatewaySessionTransport(sessionRecord, new GatewayProxyError('GATEWAY_SESSION_EXPIRED'));
+      void options.gatewayProxy?.close();
+    }, Math.max(0, (options.gatewayExpiresAtUnixMS ?? Date.now()) - Date.now()));
+  }
   void rootWindow.browserWindow.loadURL(entryURL).catch(error => failOpeningSession(sessionRecord, error));
   if (options.transportRecovery) {
     attachSessionTransportRecovery(sessionRecord, options.transportRecovery);
@@ -9932,6 +10043,21 @@ async function finalizeSessionClosure(
 
     await sessionRecord.bridge_lease?.release();
     sessionRecord.bridge_lease = undefined;
+
+    if (sessionRecord.gateway_proxy) {
+      clearTimeout(sessionRecord.gateway_expiry_timer);
+      sessionRecord.gateway_failure_unsubscribe?.();
+      gatewayProxyCredentials.delete(Number(new URL(sessionRecord.gateway_proxy.proxyURL).port));
+      await sessionRecord.gateway_proxy.close();
+      sessionRecord.gateway_proxy = undefined;
+    }
+    // Remote revocation cannot hold a closed window hostage; Gateway also expires the lease.
+    void sessionRecord.gateway_session_close?.().catch(() => {
+      recordWindowLifecycle(sessionRecord.diagnostics, 'gateway.session.close_failed', 'Gateway session revocation failed', {
+        session_key: sessionRecord.session_key,
+      });
+    });
+    sessionRecord.gateway_session_close = undefined;
 
     sessionRecord.runtime_handle = null;
     sessionRecord.diagnostics.clearRuntime();
@@ -13831,35 +13957,125 @@ async function openGatewayEnvironmentFromLauncher(
       },
     );
   }
-  // Gateway-backed Environments are access-only. The Standalone Gateway is
-  // used to read the catalog, then Desktop opens the explicit Environment URL
-  // directly; it never asks the target machine's internal Gateway for a
-  // session or creates an implicit Gateway-to-Gateway hop.
-  const source = await refreshGatewaySourceForAuthorizedAction(record, {
-    startPolicy: record.connection.kind === 'url' ? undefined : 'require_ready',
+  const targetID = `gateway:${encodeURIComponent(record.gateway_id)}:env:${encodeURIComponent(request.gateway_env_id)}`;
+  const operationKey = `${targetID}:open`;
+  const progress = (phase: DesktopOpenConnectionPhase) => buildOpenConnectionProgress({
+    hostAccess: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: '' },
+    phase, environmentID: request.environment_id, environmentLabel: request.label ?? request.gateway_env_id,
+    targetID, targetLabel: request.label ?? request.gateway_env_id, targetDetail: record.display_name, location: 'runtime_gateway',
   });
-  const environment = source.environments.find((candidate) => candidate.gateway_env_id === request.gateway_env_id);
-  const endpoint = environment ? gatewayEnvironmentAccessEndpoint(record, environment) : null;
-  if (!endpoint) {
-    return launcherActionFailure(
-      'action_invalid',
-      'environment',
-      'This Gateway-backed Environment has no supported URL access endpoint.',
-      {
-        environmentID: request.environment_id,
-        gatewayID: record.gateway_id,
-        gatewayLabel: record.display_name,
-        shouldRefreshSnapshot: true,
-      },
-    );
+  const operation = launcherOperations.create({
+    operation_key: operationKey, action: 'open_gateway_environment', subject_kind: 'gateway', subject_id: record.gateway_id,
+    environment_id: request.environment_id, environment_label: request.label, gateway_id: record.gateway_id,
+    active_progress_surface: 'open', phase: 'checking_runtime_record',
+    title: 'Checking Gateway access', detail: 'Desktop is verifying Gateway trust and catalog access.',
+    title_key: 'gatewayAccess.checkingAccess', detail_key: 'gatewayAccess.checkingAccessDetail',
+    open_progress: progress('checking_runtime_record'), cancelable: true,
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  let access: GatewayEnvironmentAccess | undefined;
+  let opened: DesktopSessionRecord | undefined;
+  const cachedEnvironment = gatewaySyncStateByID.get(record.gateway_id)?.source?.environments.find(candidate => candidate.gateway_env_id === request.gateway_env_id);
+  let mode = request.access_mode ?? cachedEnvironment?.profile?.access_mode ?? 'direct_url';
+  let environment: DesktopGatewaySource['environments'][number] | undefined;
+  try {
+    const source = await refreshGatewaySourceForAuthorizedAction(record, {
+      signal,
+      startPolicy: record.connection.kind === 'url' ? undefined : request.start_policy ?? 'require_ready',
+    });
+    if (source.trust_state !== 'paired') throw new GatewayTrustError('GATEWAY_PAIRING_REQUIRED', 'Pair this Gateway before opening its environments.');
+    environment = source.environments.find(candidate => candidate.gateway_env_id === request.gateway_env_id);
+    mode = request.access_mode ?? environment?.profile?.access_mode ?? 'direct_url';
+    const gatewayCapability = mode === 'gateway_proxy' ? 'env_proxy_open' : 'env_direct_open';
+    if (source.status !== 'online') throw new GatewayProxyError('GATEWAY_UNREACHABLE');
+    if (!environment || !source.capabilities.includes(gatewayCapability) || !gatewayEnvironmentAccessEndpoint(record, environment)) {
+      throw new GatewayClientError('GATEWAY_CAPABILITY_UNSUPPORTED', 'This Gateway profile does not support the selected access mode.');
+    }
+    const existing = liveGatewayEnvironmentSessions(record.gateway_id, request.gateway_env_id).find(candidate =>
+      candidate.gateway_access_mode === mode && !sessionTransportRecoveryFailed(candidate)
+      && candidate.startup.local_ui_url === environment?.access_endpoint?.url
+      && (mode === 'direct_url' || (candidate.gateway_expires_at_unix_ms ?? 0) > Date.now()));
+    if (existing) {
+      if (existing.lifecycle === 'opening') throw new GatewayClientError('GATEWAY_OPEN_IN_PROGRESS', 'This Gateway environment is already opening.');
+      focusEnvironmentSession(existing.session_key, { stealAppFocus: true });
+      launcherOperations.finish(operationKey, 'succeeded', { phase: 'open_ready', title: 'Environment open', detail: 'Desktop focused this environment.', open_progress: progress('open_ready') });
+      scheduleLauncherOperationRemoval(operationKey);
+      return launcherActionSuccess('focused_environment_window', { sessionKey: existing.session_key });
+    }
+    launcherOperations.update(operationKey, { phase: 'checking_env_app_readiness', title: 'Checking Runtime access',
+      detail: 'Desktop is checking the selected access route.', open_progress: progress('checking_env_app_readiness') });
+    access = await prepareGatewayEnvironmentAccess(record, environment, mode, {
+      openSession: (gateway, req, options) => gatewayLifecycleManager().openSessionWithBridge(gateway, req, options),
+      closeSession: (gateway, sessionID) => gatewayLifecycleManager().closeSession(gateway, sessionID),
+      onRevokeFailure: (gatewayID, environmentID, sessionID) => console.warn('[redeven:gateway] session revocation failed', {
+        gateway_id: gatewayID, environment_id: environmentID, session_id: sessionID,
+      }),
+    }, signal);
+    if (!runtimeServiceIsOpenable(access.startup.runtime_service)) {
+      throw new GatewayClientError('GATEWAY_RUNTIME_NOT_READY', 'The target Runtime is not ready to open.');
+    }
+    const target = buildGatewayDesktopTarget({ gatewayID: record.gateway_id, gatewayLabel: record.display_name,
+      gatewayEnvID: environment.gateway_env_id, label: request.label ?? environment.display_name,
+      gatewaySessionID: access.response.gateway_session_id });
+    launcherOperations.update(operationKey, { phase: 'opening_window', title: 'Opening environment',
+      detail: 'Desktop is opening the Runtime environment.', open_progress: progress('opening_window') });
+    if (signal?.aborted) throw new GatewayProxyError('GATEWAY_CANCELED');
+    opened = await createSessionRecord(target, access.startup, { stealAppFocus: true,
+      gatewayProxy: access.proxy, gatewaySessionClose: access.close, gatewayAccessMode: mode,
+      gatewayBridge: record.connection.kind !== 'url',
+      gatewayExpiresAtUnixMS: access.response.connect_artifact.expires_at_unix_ms });
+    const cancelOpen = () => { if (opened) void finalizeSessionClosure(opened.session_key); };
+    signal?.addEventListener('abort', cancelOpen, { once: true });
+    try {
+      if (signal?.aborted) cancelOpen();
+      await waitForSessionInitialLoad(opened);
+    } finally { signal?.removeEventListener('abort', cancelOpen); }
+    resetLauncherIssueState();
+    launcherOperations.finish(operationKey, 'succeeded', { phase: 'open_ready', title: 'Environment open',
+      detail: 'Desktop opened this environment.', open_progress: progress('open_ready') });
+    scheduleLauncherOperationRemoval(operationKey);
+    return launcherActionSuccess('opened_environment_window', { sessionKey: target.session_key });
+  } catch (error) {
+    if (opened) await finalizeSessionClosure(opened.session_key).catch(() => undefined);
+    else await access?.close().catch(() => undefined);
+    const code = error instanceof GatewayProxyError || error instanceof GatewayClientError || error instanceof GatewayTrustError ? error.code : gatewaySyncErrorCode(error);
+    const gatewayUnavailable = error instanceof GatewayServiceUnavailableError || ['GATEWAY_UNREACHABLE', 'GATEWAY_TIMEOUT', 'GATEWAY_BRIDGE_UNAVAILABLE', 'GATEWAY_BRIDGE_FAILED', 'GATEWAY_BRIDGE_WRITE_FAILED'].includes(code);
+    if (!signal?.aborted && (gatewayUnavailable || ['GATEWAY_SESSION_EXPIRED', 'GATEWAY_TARGET_UNAVAILABLE', 'GATEWAY_DIRECT_TARGET_UNAVAILABLE'].includes(code))) {
+      recordGatewayAccessResult(record.gateway_id, request.gateway_env_id, mode,
+        gatewayUnavailable ? 'gateway_unavailable' : code === 'GATEWAY_SESSION_EXPIRED' ? 'session_expired' : 'target_unavailable');
+    }
+    const summaryKey = gatewayUnavailable ? 'gatewayAccess.unavailable'
+      : code === 'GATEWAY_SESSION_EXPIRED' ? 'gatewayAccess.expired'
+      : error instanceof GatewayServiceStartRequiredError ? 'toast.gatewayStartRequired'
+      : error instanceof GatewayTrustError ? code === 'GATEWAY_PAIRING_REQUIRED' || code === 'GATEWAY_TRUST_REVOKED'
+        ? 'environmentCenter.gatewayGuidancePreparingTrustDetail' : 'environmentCenter.gatewayPanelTrustCheckFailedTitle'
+      : code === 'GATEWAY_CAPABILITY_UNSUPPORTED' ? 'gatewayAccess.unsupported'
+      : code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' ? 'gatewayAccess.protocolMismatch'
+      : code === 'GATEWAY_TARGET_UNAVAILABLE' || code === 'GATEWAY_DIRECT_TARGET_UNAVAILABLE' ? 'gatewayAccess.targetUnavailable'
+      : 'progress.environmentOpenFailedSummary';
+    const failure = desktopFailureFromError(error, { code: 'environment_open_failed', title: 'Open Failed',
+      titleKey: 'progress.environmentOpenFailedTitle', summary: code, summaryKey, targetLabel: request.label ?? request.gateway_env_id });
+    const actions: DesktopLauncherOperationNextAction[] = [{ kind: 'retry', operation_key: operationKey,
+      label: 'Retry', label_key: error instanceof GatewayServiceStartRequiredError && error.service_state.can_start
+        ? 'environmentCenter.gatewayActionStartService' : 'common.retry',
+      retry_action: { ...request, access_mode: mode,
+        ...(error instanceof GatewayServiceStartRequiredError && error.service_state.can_start ? { start_policy: 'start_if_needed' } : {}) } }];
+    const other = mode === 'gateway_proxy' ? 'direct_url' : 'gateway_proxy';
+    if (environment?.access_capabilities?.includes(other === 'gateway_proxy' ? 'open_via_gateway' : 'open_direct')) {
+      actions.push({ kind: 'open_gateway_environment', environment_id: request.environment_id, gateway_id: record.gateway_id,
+        gateway_env_id: request.gateway_env_id, label: request.label ?? environment.display_name, access_mode: other,
+        label_key: other === 'gateway_proxy' ? 'gatewayAccess.openProxy' : 'gatewayAccess.openDirect' });
+    }
+    launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+      phase: signal?.aborted ? 'canceled' : 'failed', title: signal?.aborted ? 'Open canceled' : 'Open failed',
+      detail: signal?.aborted ? 'Desktop canceled this open request.' : failure.summary,
+      ...(signal?.aborted ? {} : { failure, next_actions: actions }),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    return signal?.aborted ? launcherActionSuccess('canceled_launcher_operation') : launcherActionFailure(
+      'environment_route_unavailable', 'environment', failure.summary, { environmentID: request.environment_id,
+        gatewayID: record.gateway_id, gatewayLabel: record.display_name, shouldRefreshSnapshot: true, failure });
   }
-  return openRemoteEnvironmentFromLauncher({
-    kind: 'open_remote_environment',
-    environment_id: request.environment_id,
-    label: request.label,
-    external_local_ui_url: endpoint,
-  });
-
 }
 
 async function openProviderRemoteEnvironmentRecord(

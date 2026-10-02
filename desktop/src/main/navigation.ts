@@ -178,6 +178,9 @@ export function isAllowedAppNavigation(input: string, allowedBaseURL: string): b
     if (normalizeHTTPPort(candidate) !== normalizeHTTPPort(allowed)) {
       return false;
     }
+    if (!candidate.username && !candidate.password && candidate.origin === allowed.origin) {
+      return true;
+    }
     const remoteFamily = parseRemoteSessionFamily(allowed.hostname);
     if (remoteFamily) {
       return isSandboxHostInFamily(candidate.hostname, remoteFamily) || isRuntimeHostInFamily(candidate.hostname, remoteFamily);

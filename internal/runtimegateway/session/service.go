@@ -147,11 +147,86 @@ func connectArtifactShapeValid(artifact protocol.GatewayConnectArtifact) bool {
 	switch artifact.Kind {
 	case protocol.ConnectArtifactKindLocalDirect:
 		return strings.TrimSpace(artifact.URL) != ""
+	case protocol.ConnectArtifactKindGatewayProxy:
+		return strings.TrimSpace(artifact.URL) != "" && strings.TrimSpace(artifact.GatewaySessionID) != ""
 	case protocol.ConnectArtifactKindDesktopBridge:
 		return strings.TrimSpace(artifact.BridgeSessionID) != "" && strings.TrimSpace(artifact.RouteID) != ""
 	default:
 		return false
 	}
+}
+
+func NewSignedGatewayProxyIssue(input struct {
+	GatewayID           string
+	GatewayEnvID        string
+	BindingAudience     string
+	RequestedCapability protocol.RequestedCapability
+	ClientNonce         string
+	GatewaySessionID    string
+	AccessURL           string
+	BridgeSessionID     string
+	RouteID             string
+	GatewayPrivateKey   string
+	TTL                 time.Duration
+}) (GatewayConnectArtifactIssue, error) {
+	gatewayID := strings.TrimSpace(input.GatewayID)
+	gatewayEnvID := strings.TrimSpace(input.GatewayEnvID)
+	bindingAudience := strings.TrimSpace(input.BindingAudience)
+	sessionID := strings.TrimSpace(input.GatewaySessionID)
+	accessURL := strings.TrimSpace(input.AccessURL)
+	if gatewayID == "" || gatewayEnvID == "" || bindingAudience == "" || sessionID == "" || accessURL == "" {
+		return GatewayConnectArtifactIssue{}, errors.New("gateway proxy artifact input is incomplete")
+	}
+	artifactNonce, err := randomID("ga", 18)
+	if err != nil {
+		return GatewayConnectArtifactIssue{}, err
+	}
+	ttl := input.TTL
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	expiresAt := time.Now().Add(ttl).UnixMilli()
+	kind := protocol.ConnectArtifactKindGatewayProxy
+	if input.BridgeSessionID != "" && input.RouteID != "" {
+		kind = protocol.ConnectArtifactKindDesktopBridge
+	}
+	payload, err := security.CanonicalJSON(map[string]any{
+		"artifact_kind":        string(kind),
+		"artifact_nonce":       artifactNonce,
+		"artifact_url":         accessURL,
+		"binding_audience":     bindingAudience,
+		"bridge_session_id":    input.BridgeSessionID,
+		"client_nonce":         strings.TrimSpace(input.ClientNonce),
+		"expires_at_unix_ms":   expiresAt,
+		"gateway_env_id":       gatewayEnvID,
+		"gateway_id":           gatewayID,
+		"gateway_session_id":   sessionID,
+		"protocol_version":     protocol.Version,
+		"requested_capability": string(input.RequestedCapability),
+		"route_id":             input.RouteID,
+	})
+	if err != nil {
+		return GatewayConnectArtifactIssue{}, err
+	}
+	proof, err := security.SignPayload(input.GatewayPrivateKey, payload)
+	if err != nil {
+		return GatewayConnectArtifactIssue{}, err
+	}
+	return GatewayConnectArtifactIssue{
+		GatewayID:        gatewayID,
+		GatewaySessionID: sessionID,
+		ConnectArtifact: protocol.GatewayConnectArtifact{
+			Kind:             kind,
+			URL:              accessURL,
+			BridgeSessionID:  input.BridgeSessionID,
+			RouteID:          input.RouteID,
+			GatewaySessionID: sessionID,
+			ExpiresAtUnixMS:  expiresAt,
+			ArtifactNonce:    artifactNonce,
+			Proof:            proof,
+		},
+		DiagnosticsHint: &protocol.DiagnosticsHint{GatewayEnvID: gatewayEnvID, ConnectionKind: "gateway_proxy"},
+	}, nil
 }
 
 func NewSignedLocalDirectIssue(input struct {
@@ -219,78 +294,6 @@ func NewSignedLocalDirectIssue(input struct {
 		DiagnosticsHint: &protocol.DiagnosticsHint{
 			GatewayEnvID:   gatewayEnvID,
 			ConnectionKind: "gateway_url",
-		},
-	}, nil
-}
-
-func NewSignedDesktopBridgeIssue(input struct {
-	GatewayID           string
-	GatewayEnvID        string
-	BindingAudience     string
-	RequestedCapability protocol.RequestedCapability
-	ClientNonce         string
-	BridgeSessionID     string
-	RouteID             string
-	GatewayPrivateKey   string
-	TTL                 time.Duration
-}) (GatewayConnectArtifactIssue, error) {
-	gatewayID := strings.TrimSpace(input.GatewayID)
-	gatewayEnvID := strings.TrimSpace(input.GatewayEnvID)
-	bindingAudience := strings.TrimSpace(input.BindingAudience)
-	bridgeSessionID := strings.TrimSpace(input.BridgeSessionID)
-	routeID := strings.TrimSpace(input.RouteID)
-	if gatewayID == "" || gatewayEnvID == "" || bindingAudience == "" || bridgeSessionID == "" || routeID == "" {
-		return GatewayConnectArtifactIssue{}, errors.New("gateway desktop bridge artifact input is incomplete")
-	}
-	gatewaySessionID, err := randomID("gws", 24)
-	if err != nil {
-		return GatewayConnectArtifactIssue{}, err
-	}
-	artifactNonce, err := randomID("ga", 18)
-	if err != nil {
-		return GatewayConnectArtifactIssue{}, err
-	}
-	ttl := input.TTL
-	if ttl <= 0 {
-		ttl = 10 * time.Minute
-	}
-	expiresAt := time.Now().Add(ttl).UnixMilli()
-	payload, err := security.CanonicalJSON(map[string]any{
-		"artifact_kind":        string(protocol.ConnectArtifactKindDesktopBridge),
-		"artifact_nonce":       artifactNonce,
-		"artifact_url":         "",
-		"binding_audience":     bindingAudience,
-		"bridge_session_id":    bridgeSessionID,
-		"client_nonce":         strings.TrimSpace(input.ClientNonce),
-		"expires_at_unix_ms":   expiresAt,
-		"gateway_env_id":       gatewayEnvID,
-		"gateway_id":           gatewayID,
-		"gateway_session_id":   gatewaySessionID,
-		"protocol_version":     protocol.Version,
-		"requested_capability": string(input.RequestedCapability),
-		"route_id":             routeID,
-	})
-	if err != nil {
-		return GatewayConnectArtifactIssue{}, err
-	}
-	proof, err := security.SignPayload(input.GatewayPrivateKey, payload)
-	if err != nil {
-		return GatewayConnectArtifactIssue{}, err
-	}
-	return GatewayConnectArtifactIssue{
-		GatewayID:        gatewayID,
-		GatewaySessionID: gatewaySessionID,
-		ConnectArtifact: protocol.GatewayConnectArtifact{
-			Kind:            protocol.ConnectArtifactKindDesktopBridge,
-			BridgeSessionID: bridgeSessionID,
-			RouteID:         routeID,
-			ExpiresAtUnixMS: expiresAt,
-			ArtifactNonce:   artifactNonce,
-			Proof:           proof,
-		},
-		DiagnosticsHint: &protocol.DiagnosticsHint{
-			GatewayEnvID:   gatewayEnvID,
-			ConnectionKind: "desktop_bridge",
 		},
 	}, nil
 }

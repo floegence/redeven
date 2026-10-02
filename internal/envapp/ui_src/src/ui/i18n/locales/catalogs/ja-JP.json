@@ -4594,7 +4594,10 @@
       "missingEnvironmentContext": "このセッションに必要な環境識別情報がありません。",
       "secureSessionFailed": "セキュアセッションを再開できませんでした。",
       "remoteCommandEnded": "元のリモートランタイムブリッジコマンドが終了しました。",
-      "processIdentityChanged": "リモートランタイムの識別情報が変わったため、このウィンドウを安全に再バインドできません。"
+      "processIdentityChanged": "リモートランタイムの識別情報が変わったため、このウィンドウを安全に再バインドできません。",
+      "gatewayUnavailable": "Gateway に接続できません",
+      "gatewayTargetUnavailable": "接続先に到達できません",
+      "gatewaySessionExpired": "セッションの有効期限が切れました。環境を開き直してください。"
     },
     "stopRetry": "再試行を停止",
     "resumeRetry": "接続を再開",

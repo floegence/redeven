@@ -119,6 +119,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## Gateway
 
 - [Gateway service](gateway/gateway-service.md) - Run the optional standalone identity, catalog, open-session, and access forwarding service.
+- [Gateway access sessions](gateway/gateway-access-sessions.md) - Choose Direct URL or Gateway proxy access while preserving Runtime login, target isolation, and session revocation.
 
 ## Code
 
@@ -230,7 +231,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Protocol
 
-- [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Define signed pairing, catalog, profile, open-session, and access-only Gateway routes.
+- [Gateway v3 protocol](protocol/gateway-v1-protocol.md) - Define explicit access modes, signed artifacts, and owner-scoped close-session on the Gateway wire contract.
 - [RCPP v3 provider API](protocol/rcpp-v3-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.
 
 ## Release

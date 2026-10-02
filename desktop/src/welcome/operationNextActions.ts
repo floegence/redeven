@@ -15,6 +15,8 @@ export function environmentActionForLauncherRetry(
     case 'open_local_environment':
     case 'open_ssh_environment':
       return { intent: 'open_with_preflight', label: 'Open', enabled: true, variant: 'default' };
+    case 'open_gateway_environment':
+      return { intent: 'open_with_preflight', label: 'Open', enabled: true, variant: 'default', access_mode: request.access_mode };
     case 'start_environment_runtime':
       return { intent: 'start_runtime', label: 'Start', enabled: true, variant: 'default' };
     case 'stop_environment_runtime':
@@ -52,7 +54,7 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'resolve_gateway':
       return `${action.kind}:gateway:${action.gateway_id}:${action.resolve_focus ?? ''}`;
     case 'open_gateway_environment':
-      return `${action.kind}:gateway:${action.gateway_id}:environment:${action.environment_id}:${action.start_policy ?? ''}`;
+      return `${action.kind}:gateway:${action.gateway_id}:environment:${action.environment_id}:${action.access_mode ?? ''}`;
     case 'copy_diagnostics':
     case 'dismiss':
     case 'retry':
@@ -124,6 +126,9 @@ export function visibleOperationNextActions(
     // original reinstall action. Keep that retry visible for the same
     // operation so a failed confirmation never becomes a dead end.
     push('retry');
+  } else if (progress.action === 'open_gateway_environment') {
+    push('retry');
+    push('open_gateway_environment');
   } else if (progress.subject_kind !== 'gateway') {
     push('update_runtime');
     push('manage_desktop_update');
@@ -142,6 +147,7 @@ export type OperationNextActionLayoutGroup = Readonly<{
 
 function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction): boolean {
   return action.kind === 'refresh_status'
+    || action.kind === 'open_gateway_environment'
     || action.kind === 'retry'
     || action.kind === 'update_runtime'
     || action.kind === 'manage_desktop_update'

@@ -24,6 +24,8 @@ export type RuntimeProbeOptions = Readonly<{
   signal?: AbortSignal;
   headers?: Readonly<Record<string, string>>;
   shellCacheScope?: string;
+  agent?: http.Agent | https.Agent;
+  gatewayEndpoint?: boolean;
 }>;
 
 type NormalizedRuntimeProbeOptions = Readonly<{
@@ -31,6 +33,7 @@ type NormalizedRuntimeProbeOptions = Readonly<{
   signal?: AbortSignal;
   headers?: Readonly<Record<string, string>>;
   shellCacheScope?: string;
+  agent?: http.Agent | https.Agent;
 }>;
 
 export type RuntimeProbeFailureStage = 'runtime_health' | 'env_app_shell' | 'env_app_asset';
@@ -95,6 +98,7 @@ function request(
     method?: 'GET' | 'HEAD';
     accept?: string;
     headers?: Readonly<Record<string, string>>;
+    agent?: http.Agent | https.Agent;
   }>,
 ): Promise<RuntimeProbeResponse> {
   return new Promise((resolve, reject) => {
@@ -104,6 +108,7 @@ function request(
       method: options.method ?? 'GET',
       timeout: options.timeoutMs,
       signal: options.signal,
+      agent: options.agent,
       headers: {
         Accept: options.accept ?? 'application/json;q=1.0,text/html;q=0.8,*/*;q=0.5',
         ...options.headers,
@@ -180,10 +185,10 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
     let localUIURL = '';
     let localUIURLs: string[] = [];
     try {
-      localUIURL = !Array.isArray(data.local_ui_urls) && rawLocalUIURL ? normalizeLocalUIBaseURL(rawLocalUIURL) : '';
+      localUIURL = !Array.isArray(data.local_ui_urls) && rawLocalUIURL ? normalizeLocalUIBaseURL(rawLocalUIURL, { gatewayEndpoint: true }) : '';
       localUIURLs = rawLocalUIURLs
         .filter((value) => value !== '')
-        .map((value) => normalizeLocalUIBaseURL(value));
+        .map((value) => normalizeLocalUIBaseURL(value, { gatewayEndpoint: true }));
     } catch {
       return null;
     }
@@ -311,6 +316,7 @@ async function probeEnvAppShell(
     signal: options.signal,
     accept: 'text/html;q=1.0,*/*;q=0.5',
     headers: options.headers,
+    agent: options.agent,
   });
   if (!shellResponse.ok && shellResponse.failure.kind !== 'invalid_response') {
     return { result: 'unavailable' };
@@ -331,6 +337,7 @@ async function probeEnvAppShell(
       method: 'HEAD',
       accept: '*/*',
       headers: options.headers,
+      agent: options.agent,
     });
   }));
   if (assetResponses.some((response) => !response.ok && response.failure.kind !== 'invalid_response')) {
@@ -454,6 +461,7 @@ function normalizedProbeOptions(options: RuntimeProbeOptions): NormalizedRuntime
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
     ...(options.signal ? { signal: options.signal } : {}),
     ...(options.headers ? { headers: options.headers } : {}),
+    ...(options.agent ? { agent: options.agent } : {}),
     ...(String(options.shellCacheScope ?? '').trim()
       ? { shellCacheScope: String(options.shellCacheScope).trim() }
       : {}),
@@ -490,7 +498,7 @@ export async function probeExternalLocalUIHealth(
   baseURL: string,
   options: RuntimeProbeOptions = {},
 ): Promise<RuntimeProbeResult<StartupReport>> {
-  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
+  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL, options);
   const result = await probeRedevenLocalUIHealth(normalizedBaseURL, normalizedProbeOptions(options));
   if (!result.ok) {
     return result;
@@ -552,7 +560,7 @@ async function validateExternalLocalUIShellAtBaseURL(
   baseURL: string,
   options: RuntimeProbeOptions = {},
 ): Promise<StartupReport> {
-  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
+  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL, options);
   const status = await applyEnvAppShellReadiness(
     normalizedBaseURL,
     probeStatusFromStartup(startup),
@@ -577,7 +585,7 @@ export async function probeExternalLocalUIStartup(
   baseURL: string,
   options: RuntimeProbeOptions = {},
 ): Promise<RuntimeProbeResult<StartupReport>> {
-  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
+  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL, options);
   const result = await probeExternalLocalUIHealth(normalizedBaseURL, options);
   if (!result.ok) {
     return result;

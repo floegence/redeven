@@ -45,7 +45,8 @@ func NewService(options ...ServiceOption) *Service {
 			Status:      protocol.GatewayStatusPairingRequired,
 			Capabilities: []protocol.GatewayCapability{
 				protocol.GatewayCapabilityEnvCatalog,
-				protocol.GatewayCapabilityEnvOpenSession,
+				protocol.GatewayCapabilityEnvDirectOpen,
+				protocol.GatewayCapabilityEnvProxyOpen,
 			},
 		},
 	}

@@ -81,6 +81,9 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
   });
   const failureReason = createMemo(() => {
     const errorCode = props.snapshot.failure?.error_code;
+    if (errorCode === 'gateway_unavailable') return i18n.t('connectionRecovery.failure.gatewayUnavailable');
+    if (errorCode === 'gateway_target_unavailable') return i18n.t('connectionRecovery.failure.gatewayTargetUnavailable');
+    if (errorCode === 'gateway_session_expired') return i18n.t('connectionRecovery.failure.gatewaySessionExpired');
     if (errorCode === 'process_identity_changed') return i18n.t('connectionRecovery.failure.processIdentityChanged');
     if (errorCode === 'remote_command_ended') return i18n.t('connectionRecovery.failure.remoteCommandEnded');
     switch (props.snapshot.failure?.code) {

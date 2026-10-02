@@ -7,7 +7,7 @@ import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 function gatewayRecord(connection: GatewayRecord['connection']): GatewayRecord {
   return {
-    schema_version: 2,
+    schema_version: 3,
     gateway_id: 'gw_demo',
     display_name: 'Demo Gateway',
     local_enabled: true,
@@ -26,6 +26,7 @@ function openSessionArtifact(
 function bridgeArtifact(overrides: Partial<GatewayOpenSessionResponse['connect_artifact']> = {}): GatewayOpenSessionResponse['connect_artifact'] {
   return {
     kind: 'desktop_bridge_artifact',
+    url: `/gateway/v3/access/${'a'.repeat(43)}/`,
     bridge_session_id: 'ssh://bridge_demo',
     route_id: 'env_app:gw_demo',
     expires_at_unix_ms: Date.now() + 60_000,
@@ -36,7 +37,7 @@ function bridgeArtifact(overrides: Partial<GatewayOpenSessionResponse['connect_a
 }
 
 describe('gatewaySessionArtifact', () => {
-  it('uses direct artifacts only for URL Gateways', () => {
+  it('accepts direct and proxy artifacts for URL Gateways', () => {
     const record = gatewayRecord({
       kind: 'url',
       base_url: 'https://gateway.example/',
@@ -49,7 +50,7 @@ describe('gatewaySessionArtifact', () => {
       artifact_nonce: 'artifact-nonce',
       proof: 'proof',
     }), undefined)).toBe('https://gateway.example/_redeven_proxy/env/');
-    expect(() => gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact()), undefined)).toThrowError(/direct environment artifact/u);
+    expect(() => gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact()), undefined)).toThrowError(/supported access artifact/u);
   });
 
   it('requires SSH and container Gateway artifacts to match the active bridge session and route', () => {
@@ -64,20 +65,21 @@ describe('gatewaySessionArtifact', () => {
     };
 
     expect(gatewayEnvAppBridgeRouteID(record)).toBe('env_app:gw_demo');
-    expect(gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact()), bridgeSession)).toBe('http://127.0.0.1:24000/_redeven_proxy/env/');
+    expect(gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact()), bridgeSession)).toBe(`http://127.0.0.1:24000/__redeven_runtime_gateway/gateway/v3/access/${'a'.repeat(43)}/`);
     expect(() => gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact({
       bridge_session_id: 'ssh://bridge_other',
     })), bridgeSession)).toThrowError(/matching bridge environment artifact/u);
     expect(() => gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact({
       route_id: 'env_app:other',
     })), bridgeSession)).toThrowError(/matching bridge environment artifact/u);
-    expect(() => gatewaySessionArtifactURL(record, openSessionArtifact({
+    expect(gatewaySessionArtifactURL(record, openSessionArtifact({
       kind: 'local_direct_artifact',
       url: 'https://gateway.example/_redeven_proxy/env/',
       expires_at_unix_ms: Date.now() + 60_000,
       artifact_nonce: 'artifact-nonce',
       proof: 'proof',
-    }), bridgeSession)).toThrowError(/matching bridge environment artifact/u);
+    }), bridgeSession)).toBe('https://gateway.example/_redeven_proxy/env/');
+    expect(() => gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact({ url: 'https://other.example/' })), bridgeSession)).toThrowError(/matching bridge environment artifact/u);
     expect(() => gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact()), undefined)).toThrowError(/bridge session is unavailable/u);
   });
 });

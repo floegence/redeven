@@ -42,7 +42,7 @@ export type GatewayPairingChallengeResponse = Readonly<{
 }>;
 
 export type GatewayPairingCompleteRequest = Readonly<{
-  protocol_version: 'redeven-gateway-v2';
+  protocol_version: 'redeven-gateway-v3';
   client_nonce: string;
   gateway_nonce: string;
   gateway_id: string;
@@ -147,13 +147,13 @@ export function createGatewayPairingMaterial(record: GatewayRecord): GatewayPair
 }
 
 export function pairingChallengeRequest(material: GatewayPairingMaterial): Readonly<{
-  protocol_version: 'redeven-gateway-v2';
+  protocol_version: 'redeven-gateway-v3';
   client_nonce: string;
   client_public_key: string;
   binding_audience: string;
 }> {
   return {
-    protocol_version: 'redeven-gateway-v2',
+    protocol_version: 'redeven-gateway-v3',
     client_nonce: material.client_nonce,
     client_public_key: compact(material.client_public_key),
     binding_audience: material.binding_audience,
@@ -231,7 +231,7 @@ export function buildPairingCompleteRequest(
     throw new GatewayTrustError('GATEWAY_PAIRING_CHALLENGE_INVALID', 'Gateway pairing challenge is incomplete.');
   }
   const base = {
-    protocol_version: 'redeven-gateway-v2' as const,
+    protocol_version: 'redeven-gateway-v3' as const,
     client_nonce: material.client_nonce,
     gateway_nonce: gatewayNonce,
     gateway_id: gatewayID,
@@ -273,7 +273,7 @@ export function gatewayConnectArtifactProofPayload(input: Readonly<{
   artifact_nonce: string;
 }>): string {
   return canonicalJSON({
-    protocol_version: 'redeven-gateway-v2',
+    protocol_version: 'redeven-gateway-v3',
     gateway_id: input.gateway_id,
     gateway_env_id: input.gateway_env_id,
     gateway_session_id: input.gateway_session_id,
@@ -325,7 +325,7 @@ export function assertGatewayPairingChallenge(input: Readonly<{
   if (!Number.isFinite(expiresAt) || Math.floor(expiresAt) <= now) {
     throw new GatewayTrustError('GATEWAY_PAIRING_CHALLENGE_EXPIRED', 'Gateway pairing challenge expired.');
   }
-  if (input.challenge.protocol_version !== 'redeven-gateway-v2') {
+  if (input.challenge.protocol_version !== 'redeven-gateway-v3') {
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
   }
   const expectedPairingCode = compact(input.expected_pairing_code);
@@ -347,7 +347,7 @@ export function assertGatewayPairingCompleteResponse(
   response: GatewayPairingCompleteResponse,
   options: Readonly<{ client_capability?: string }> = {},
 ): void {
-  if (response.protocol_version !== 'redeven-gateway-v2') {
+  if (response.protocol_version !== 'redeven-gateway-v3') {
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
   }
   if (response.gateway_id !== challenge.gateway_id || response.client_key_id !== material.client_key_id) {
@@ -496,7 +496,7 @@ export async function createGatewayAuthHeaders(
   const route = compact(input.route);
   const method = compact(input.method).toUpperCase();
   const signaturePayload = canonicalJSON({
-    protocol_version: 'redeven-gateway-v2',
+    protocol_version: 'redeven-gateway-v3',
     method,
     route,
     body_digest: bodyDigest,

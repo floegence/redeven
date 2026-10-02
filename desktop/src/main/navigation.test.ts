@@ -17,6 +17,13 @@ import {
 import { isLoopbackHost } from './localUIURL';
 
 describe('navigation', () => {
+  it('allows Gateway DNS endpoints only within their original authenticated origin', () => {
+    const origin = 'https://runtime.example:23998/';
+    expect(isAllowedAppNavigation('https://runtime.example:23998/_redeven_proxy/env/', origin)).toBe(true);
+    for (const url of ['http://runtime.example:23998/', 'https://runtime.example:23999/', 'https://other.example:23998/', 'https://user:password@runtime.example:23998/']) {
+      expect(isAllowedAppNavigation(url, origin)).toBe(false);
+    }
+  });
   it('recognizes supported loopback hosts', () => {
     expect(isLoopbackHost('localhost')).toBe(true);
     expect(isLoopbackHost('127.0.0.1')).toBe(true);

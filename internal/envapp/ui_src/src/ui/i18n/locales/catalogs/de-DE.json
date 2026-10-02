@@ -4594,7 +4594,10 @@
       "missingEnvironmentContext": "Die für diese Sitzung erforderliche Umgebungsidentität fehlt.",
       "secureSessionFailed": "Die sichere Sitzung konnte nicht fortgesetzt werden.",
       "remoteCommandEnded": "Der ursprüngliche Remote-Laufzeit-Bridge-Befehl wurde beendet.",
-      "processIdentityChanged": "Die Identität der Remote-Laufzeit hat sich geändert. Dieses Fenster kann daher nicht sicher neu gebunden werden."
+      "processIdentityChanged": "Die Identität der Remote-Laufzeit hat sich geändert. Dieses Fenster kann daher nicht sicher neu gebunden werden.",
+      "gatewayUnavailable": "Gateway nicht erreichbar",
+      "gatewayTargetUnavailable": "Ziel nicht erreichbar",
+      "gatewaySessionExpired": "Sitzung abgelaufen. Umgebung erneut öffnen."
     },
     "stopRetry": "Wiederholungen stoppen",
     "resumeRetry": "Verbindung fortsetzen",

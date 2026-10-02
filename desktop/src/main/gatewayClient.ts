@@ -27,7 +27,7 @@ import type {
 import { desktopGatewayProfileURLHasEmbeddedCredentials } from '../shared/desktopGateway';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
 
-const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v2';
+const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v3';
 const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 20_000;
 
 type GatewayRequestOptions = Readonly<{
@@ -51,6 +51,7 @@ export type GatewayOpenSessionRequest = Readonly<{
   gateway_env_id: string;
   requested_capability: 'env_app' | 'terminal' | 'files' | 'web_service' | 'port_forward';
   client_nonce: string;
+  access_mode?: 'direct_url' | 'gateway_proxy';
   bridge_session_id?: string;
   route_id?: string;
 }>;
@@ -76,6 +77,7 @@ export type GatewayEnvProfileUpsertRequest = Readonly<{
   gateway_env_id?: string;
   display_name: string;
   access_route: GatewayEnvProfileAccessRoute;
+  access_mode?: 'direct_url' | 'gateway_proxy';
 }>;
 
 export type GatewayEnvProfileUpsertResponse = Readonly<{
@@ -96,8 +98,9 @@ export type GatewayEnvProfileDeleteResponse = Readonly<{
 /* Runtime lifecycle is managed by Desktop direct channels, never by Gateway. */
 /* Removed Gateway Runtime lifecycle protocol types. */
 export type GatewayConnectArtifact = Readonly<{
-  kind: 'local_direct_artifact' | 'desktop_bridge_artifact';
+  kind: 'local_direct_artifact' | 'gateway_proxy_artifact' | 'desktop_bridge_artifact';
   url?: string;
+  gateway_session_id?: string;
   bridge_session_id?: string;
   route_id?: string;
   expires_at_unix_ms: number;
@@ -117,12 +120,13 @@ type GatewayHTTPEnvelope = Readonly<{
 }>;
 
 type GatewayRouteTemplate =
-  | 'gateway/v2/pairing/challenge'
-  | 'gateway/v2/pairing/complete'
-  | 'gateway/v2/catalog'
-  | 'gateway/v2/open-session'
-  | 'gateway/v2/env-profiles/upsert'
-  | 'gateway/v2/env-profiles/delete';
+  | 'gateway/v3/pairing/challenge'
+  | 'gateway/v3/pairing/complete'
+  | 'gateway/v3/catalog'
+  | 'gateway/v3/open-session'
+  | 'gateway/v3/close-session'
+  | 'gateway/v3/env-profiles/upsert'
+  | 'gateway/v3/env-profiles/delete';
 
 type GatewayRoute = GatewayRouteTemplate;
 
@@ -164,7 +168,7 @@ function parseEnvelope(raw: string): GatewayHTTPEnvelope | null {
 function gatewayErrorMessage(envelope: GatewayHTTPEnvelope, statusCode: number): string {
   const redactedDetail = compact(envelope.error?.redacted_detail);
   if (redactedDetail) {
-    return redactedDetail.slice(0, 240);
+    return String(redactGatewayDiagnosticValue(redactedDetail));
   }
   const code = compact(envelope.error?.code);
   return code
@@ -201,6 +205,9 @@ function throwIfCanceled(signal: AbortSignal | undefined): void {
 
 function parseGatewayHTTPResponse(raw: string, statusCode: number): unknown {
   const parsed = parseEnvelope(raw);
+  if (statusCode === 404 && !parsed) {
+    throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol mismatch. Update Gateway and Desktop to matching versions.', statusCode);
+  }
   if (!parsed) {
     throw new GatewayClientError(
       'GATEWAY_INVALID_RESPONSE',
@@ -390,7 +397,7 @@ function requestGatewayJSON(
 
 function requestGatewayPairingJSON(
   record: GatewayRecord,
-  route: Extract<GatewayRoute, 'gateway/v2/pairing/challenge' | 'gateway/v2/pairing/complete'>,
+  route: Extract<GatewayRoute, 'gateway/v3/pairing/challenge' | 'gateway/v3/pairing/complete'>,
   body: unknown,
   options: GatewayRequestOptions = {},
 ): Promise<unknown> {
@@ -597,6 +604,8 @@ function normalizeEnvironmentState(value: unknown): DesktopGatewayEnvironmentSta
 function normalizeEnvironmentCapability(value: unknown): DesktopGatewayEnvironmentCapability | null {
   switch (compact(value)) {
     case 'open':
+    case 'open_direct':
+    case 'open_via_gateway':
     case 'terminal':
     case 'files':
     case 'web_service':
@@ -610,7 +619,8 @@ function normalizeEnvironmentCapability(value: unknown): DesktopGatewayEnvironme
 function normalizeGatewayCapability(value: unknown): DesktopGatewayCapability | null {
   switch (compact(value)) {
     case 'env_catalog':
-    case 'env_open_session':
+    case 'env_direct_open':
+    case 'env_proxy_open':
     case 'env_profile_write':
     case 'terminal':
     case 'files':
@@ -647,7 +657,8 @@ function normalizeOriginKind(value: unknown): DesktopGatewayEnvironmentOriginKin
 }
 
 function normalizeProfileAccessRouteKind(value: unknown): DesktopGatewayEnvironmentProfileAccessRoute['kind'] | null {
-  return compact(value) === 'url' ? 'url' : null;
+  const kind = compact(value);
+  return kind === 'url' || kind === 'ssh_host' || kind === 'ssh_container' ? kind : null;
 }
 
 function normalizeGatewayEnvironmentProfileAccessRoute(value: unknown): DesktopGatewayEnvironmentProfileAccessRoute | undefined {
@@ -663,6 +674,12 @@ function normalizeGatewayEnvironmentProfileAccessRoute(value: unknown): DesktopG
     kind,
     ...(compact(candidate.url) ? { url: compact(candidate.url) } : {}),
     ...(compact(candidate.origin_label) ? { origin_label: compact(candidate.origin_label) } : {}),
+    ...(kind !== 'url' ? {
+      ssh_destination: compact(candidate.ssh_destination), ssh_port: Number(candidate.ssh_port) || 22,
+      auth_mode: compact(candidate.auth_mode), ssh_runtime_root: compact(candidate.ssh_runtime_root),
+      ...(kind === 'ssh_container' ? { container_engine: compact(candidate.container_engine),
+        container_id: compact(candidate.container_id), container_runtime_root: compact(candidate.container_runtime_root) } : {}),
+    } : {}),
   };
   if (route.kind === 'url' && (!route.url || desktopGatewayProfileURLHasEmbeddedCredentials(route.url))) {
     return undefined;
@@ -679,9 +696,13 @@ function normalizeGatewayEnvironmentProfile(value: unknown): DesktopGatewayEnvir
   if (candidate.managed !== true || !kind) {
     return undefined;
   }
+  if (candidate.access_mode !== 'direct_url' && candidate.access_mode !== 'gateway_proxy') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile access_mode is invalid.');
+  }
   return {
     managed: true,
     access_route_kind: kind,
+    access_mode: candidate.access_mode,
   };
 }
 
@@ -787,6 +808,7 @@ function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unkn
     profile: {
       ...(compact(request.gateway_env_id) ? { gateway_env_id: compact(request.gateway_env_id) } : {}),
       display_name: compact(request.display_name),
+      ...(request.access_mode ? { access_mode: request.access_mode } : {}),
       access_route: {
         kind: 'url',
         ...(routeURL ? { url: routeURL } : {}),
@@ -909,15 +931,20 @@ function normalizeConnectArtifact(value: unknown): GatewayConnectArtifact {
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || !artifactNonce || !proof) {
     throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway connect artifact is invalid or expired.');
   }
-  if (kind === 'local_direct_artifact') {
+  if (kind === 'local_direct_artifact' || kind === 'gateway_proxy_artifact') {
     const url = compact(candidate.url);
     if (!url) {
       throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact is missing its URL.');
     }
     const normalizedURL = assertLocalDirectArtifactURL(url);
+    const gatewaySessionID = compact(candidate.gateway_session_id);
+    if (kind === 'gateway_proxy_artifact' && !gatewaySessionID) {
+      throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway proxy artifact is missing its session identity.');
+    }
     return {
       kind,
       url: normalizedURL,
+      ...(kind === 'gateway_proxy_artifact' ? { gateway_session_id: gatewaySessionID } : {}),
       expires_at_unix_ms: Math.floor(expiresAt),
       artifact_nonce: artifactNonce,
       proof,
@@ -931,6 +958,8 @@ function normalizeConnectArtifact(value: unknown): GatewayConnectArtifact {
     }
     return {
       kind,
+      ...(compact(candidate.url) ? { url: compact(candidate.url) } : {}),
+      ...(compact(candidate.gateway_session_id) ? { gateway_session_id: compact(candidate.gateway_session_id) } : {}),
       bridge_session_id: bridgeSessionID,
       route_id: routeID,
       expires_at_unix_ms: Math.floor(expiresAt),
@@ -968,11 +997,23 @@ export function normalizeGatewayOpenSessionResponse(value: unknown): GatewayOpen
   };
 }
 
+function assertProxyArtifactIdentity(record: GatewayRecord, response: GatewayOpenSessionResponse): void {
+  const artifact = response.connect_artifact;
+  if (artifact.kind !== 'gateway_proxy_artifact') return;
+  const url = new URL(artifact.url!);
+  const prefix = record.connection.kind === 'url' ? new URL('gateway/v3/access/', record.connection.base_url).pathname : '';
+  if (record.connection.kind !== 'url' || url.origin !== new URL(record.connection.base_url).origin
+    || artifact.gateway_session_id !== response.gateway_session_id
+    || !url.pathname.startsWith(prefix) || !/^[A-Za-z0-9_-]{43}\/$/u.test(url.pathname.slice(prefix.length))) {
+    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway proxy artifact does not match its Gateway and session.');
+  }
+}
+
 export class GatewayURLClient {
   constructor(private readonly secretStore: GatewaySecretStore) {}
 
   async catalog(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayCatalogResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v2/catalog', {
+    const data = await requestGatewayJSON(record, 'gateway/v3/catalog', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
     }, {
       secretStore: this.secretStore,
@@ -987,7 +1028,7 @@ export class GatewayURLClient {
   async pairingChallenge(
     record: GatewayRecord,
     request: Readonly<{
-      protocol_version: 'redeven-gateway-v2';
+      protocol_version: 'redeven-gateway-v3';
 	      client_nonce: string;
 	      client_public_key: string;
 	      binding_audience: string;
@@ -995,7 +1036,7 @@ export class GatewayURLClient {
 	    }>,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingChallengeResponse> {
-    const data = await requestGatewayPairingJSON(record, 'gateway/v2/pairing/challenge', request, options);
+    const data = await requestGatewayPairingJSON(record, 'gateway/v3/pairing/challenge', request, options);
     return normalizePairingChallengeResponse(data);
   }
 
@@ -1004,7 +1045,7 @@ export class GatewayURLClient {
     request: GatewayPairingCompleteRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingCompleteResponse> {
-    const data = await requestGatewayPairingJSON(record, 'gateway/v2/pairing/complete', request, options);
+    const data = await requestGatewayPairingJSON(record, 'gateway/v3/pairing/complete', request, options);
     return normalizePairingCompleteResponse(data);
   }
 
@@ -1013,17 +1054,19 @@ export class GatewayURLClient {
     request: GatewayOpenSessionRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayOpenSessionResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v2/open-session', {
+    const data = await requestGatewayJSON(record, 'gateway/v3/open-session', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
       gateway_env_id: request.gateway_env_id,
       requested_capability: request.requested_capability,
       client_nonce: request.client_nonce,
+      ...(request.access_mode ? { access_mode: request.access_mode } : {}),
     }, {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });
     const response = normalizeGatewayOpenSessionResponse(data.data);
+    assertProxyArtifactIdentity(record, response);
     if (response.gateway_env_id !== request.gateway_env_id) {
       throw new GatewayClientError('GATEWAY_ENV_ID_MISMATCH', 'Gateway open-session response does not match the requested environment.');
     }
@@ -1043,7 +1086,7 @@ export class GatewayURLClient {
     request: GatewayEnvProfileUpsertRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayEnvProfileUpsertResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v2/env-profiles/upsert', gatewayEnvProfilePayload(request), {
+    const data = await requestGatewayJSON(record, 'gateway/v3/env-profiles/upsert', gatewayEnvProfilePayload(request), {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -1051,12 +1094,19 @@ export class GatewayURLClient {
     return normalizeGatewayEnvProfileUpsertResponse(data.data);
   }
 
+  async closeSession(record: GatewayRecord, gatewaySessionID: string, options: GatewayRequestOptions = {}): Promise<void> {
+    await requestGatewayJSON(record, 'gateway/v3/close-session', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      gateway_session_id: gatewaySessionID,
+    }, { secretStore: this.secretStore, ...options });
+  }
+
   async deleteEnvironmentProfile(
     record: GatewayRecord,
     request: GatewayEnvProfileDeleteRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayEnvProfileDeleteResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v2/env-profiles/delete', {
+    const data = await requestGatewayJSON(record, 'gateway/v3/env-profiles/delete', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
       gateway_env_id: compact(request.gateway_env_id),
     }, {
@@ -1088,7 +1138,7 @@ export class GatewayBridgeClient {
   ) {}
 
   async catalog(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayCatalogResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/catalog', {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/catalog', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
     }, {
       secretStore: this.secretStore,
@@ -1100,10 +1150,17 @@ export class GatewayBridgeClient {
     return catalog;
   }
 
+  async closeSession(record: GatewayRecord, gatewaySessionID: string, options: GatewayRequestOptions = {}): Promise<void> {
+    await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/close-session', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      gateway_session_id: gatewaySessionID,
+    }, { secretStore: this.secretStore, ...options });
+  }
+
   async pairingChallenge(
     record: GatewayRecord,
     request: Readonly<{
-      protocol_version: 'redeven-gateway-v2';
+      protocol_version: 'redeven-gateway-v3';
 	      client_nonce: string;
 	      client_public_key: string;
 	      binding_audience: string;
@@ -1111,7 +1168,7 @@ export class GatewayBridgeClient {
 	    }>,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingChallengeResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/pairing/challenge', request, {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/pairing/challenge', request, {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -1125,7 +1182,7 @@ export class GatewayBridgeClient {
     request: GatewayPairingCompleteRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingCompleteResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/pairing/complete', request, {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/pairing/complete', request, {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -1139,13 +1196,14 @@ export class GatewayBridgeClient {
     request: GatewayOpenSessionRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayOpenSessionResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/open-session', {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/open-session', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
       gateway_env_id: request.gateway_env_id,
       requested_capability: request.requested_capability,
       client_nonce: request.client_nonce,
       bridge_session_id: request.bridge_session_id,
       route_id: request.route_id,
+      ...(request.access_mode ? { access_mode: request.access_mode } : {}),
     }, {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
@@ -1171,7 +1229,7 @@ export class GatewayBridgeClient {
     request: GatewayEnvProfileUpsertRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayEnvProfileUpsertResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/env-profiles/upsert', gatewayEnvProfilePayload(request), {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/env-profiles/upsert', gatewayEnvProfilePayload(request), {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -1184,7 +1242,7 @@ export class GatewayBridgeClient {
     request: GatewayEnvProfileDeleteRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayEnvProfileDeleteResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/env-profiles/delete', {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/env-profiles/delete', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
       gateway_env_id: compact(request.gateway_env_id),
     }, {
@@ -1219,7 +1277,7 @@ export function redactGatewayDiagnosticValue(value: unknown): unknown {
       isSensitiveGatewayKey(key) ? '[redacted]' : redactGatewayDiagnosticValue(nested),
     ]));
   }
-  return typeof value === 'string' ? value.slice(0, 240) : value;
+  return typeof value === 'string' ? value.replace(/(\/gateway\/v3\/access\/)[A-Za-z0-9_-]+/gu, '$1[redacted]').slice(0, 240) : value;
 }
 
 function isSensitiveGatewayKey(key: string): boolean {

@@ -16,6 +16,7 @@ export async function createLocalNativeCodeSpaceRoute(
     webSession: Session;
     codeSpaceID: string;
     signal: AbortSignal;
+    openConnection?: (signal?: AbortSignal) => Promise<Duplex>;
   }>,
 ): Promise<NativeCodeSpaceRoute> {
   const base = new URL(input.transport.baseURL);
@@ -64,6 +65,13 @@ export async function createLocalNativeCodeSpaceRoute(
     },
     openConnection: async (signal) => {
       if (closed) throw new Error('codespace_closed');
+      if (input.openConnection) {
+        const socket = await input.openConnection(signal);
+        if (closed) { socket.destroy(); throw new Error('codespace_closed'); }
+        sockets.add(socket);
+        socket.once('close', () => sockets.delete(socket));
+        return socket;
+      }
       const options = {
         host,
         port: Number(base.port || (base.protocol === 'https:' ? 443 : 80)),

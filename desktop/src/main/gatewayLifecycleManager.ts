@@ -242,6 +242,14 @@ export class GatewayLifecycleManager {
     return session.client.deleteEnvironmentProfile(record, request, options);
   }
 
+  async closeSession(record: GatewayRecord, gatewaySessionID: string): Promise<void> {
+    if (record.connection.kind === 'url') {
+      return new GatewayURLClient(this.options.secret_store).closeSession(record, gatewaySessionID, { timeoutMs: 5_000 });
+    }
+    const session = this.sessions.get(gatewayLifecycleTargetID(record));
+    if (session) await session.client.closeSession(record, gatewaySessionID, { timeoutMs: 5_000 });
+  }
+
 
   async bridgeClient(record: GatewayRecord, options: Readonly<{
     startPolicy: GatewayStartPolicy;

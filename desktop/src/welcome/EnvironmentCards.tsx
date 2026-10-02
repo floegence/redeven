@@ -1001,11 +1001,15 @@ function EnvironmentOwnerSurface(
               </ConsoleActionIconButton>
             </DesktopTooltip>
           </Show>
-          <Show when={props.environment.can_edit}>
-            <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
+          <Show when={props.environment.can_edit || props.environment.gateway_environment_profile?.managed}>
+            <DesktopTooltip content={props.i18n.t(props.environment.kind === 'gateway_environment'
+              ? props.environment.can_edit ? 'gatewayAccess.editProfile'
+                : props.environment.gateway_environment_profile?.access_route_kind !== 'url' ? 'gatewayAccess.unsupported' : 'gatewayAccess.writePermission'
+              : 'common.settings')} placement="top">
               <ConsoleActionIconButton
                 title={props.i18n.t('environmentCenter.environmentSettings')}
                 aria-label={props.i18n.t('environmentCenter.settingsForLabel', { label: ownerLabel() })}
+                disabled={!props.environment.can_edit}
                 onClick={() => props.editEnvironment(props.environment)}
               >
                 <Settings class="h-3.5 w-3.5" />
@@ -1013,7 +1017,7 @@ function EnvironmentOwnerSurface(
             </DesktopTooltip>
           </Show>
           <Show when={props.environment.can_delete}>
-            <DesktopTooltip content={props.i18n.t('common.delete')} placement="top">
+            <DesktopTooltip content={props.i18n.t(props.environment.kind === 'gateway_environment' ? 'gatewayAccess.deleteProfile' : 'common.delete')} placement="top">
               <ConsoleActionIconButton
                 title={deleteTitle()}
                 aria-label={props.i18n.t('environmentCenter.removeLabel', {

@@ -54,6 +54,17 @@ All operation labels, details, errors, recovery actions, tooltips, and accessibi
 
 # Boundaries
 
+## Gateway access readiness
+
+Gateway catalog availability is publication evidence only. An explicit Direct
+URL open probes the target from Desktop; Gateway proxy probes use the newly
+authorized Gateway session transport. Both retain Gateway Environment identity
+and ordinary Runtime login/MFA. Failure never triggers another access mode or a
+Runtime lifecycle action. Open progress, cancellation, explicit alternate-mode
+retry, and focus restoration remain the shared Desktop presentation contract.
+[Gateway access sessions](../gateway/gateway-access-sessions.md) owns lease,
+transport, and authentication boundaries.
+
 Read-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.
 
 ## Desktop Flower compatibility

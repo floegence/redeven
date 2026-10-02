@@ -127,7 +127,10 @@ function buildGatewayEnvironmentEntry(
   }
   const displayName = compact(environment.display_name) || environment.gateway_env_id;
   const gatewayLabel = compact(gateway.display_name) || gateway.gateway_id;
-  const accessCapabilities = environment.access_capabilities ?? [];
+  const accessCapabilities = (environment.access_capabilities ?? []).filter(capability =>
+    environment.access_endpoint?.kind === 'url' && !!environment.access_endpoint.url
+    && (capability === 'open_direct' ? gateway.capabilities.includes('env_direct_open')
+      : capability === 'open_via_gateway' && gateway.capabilities.includes('env_proxy_open')));
   const isOpenable = desktopGatewayCanOpenEnvironment(gateway, environment);
   const needsResolve = desktopGatewayNeedsResolution(gateway.status);
   const canWriteGatewayProfile = gateway.status === 'online'
@@ -137,7 +140,7 @@ function buildGatewayEnvironmentEntry(
   const hasEditableGatewayProfile = hasManagedGatewayProfile
     && !!environment.profile_access_route
     && environment.profile_access_route.kind === environment.profile?.access_route_kind;
-  const canEditGatewayProfile = canWriteGatewayProfile && hasEditableGatewayProfile;
+  const canEditGatewayProfile = canWriteGatewayProfile && hasEditableGatewayProfile && environment.profile?.access_route_kind === 'url';
   const runtimeOperations = gatewayRuntimeOperations({
     openable: isOpenable,
     needsResolve,
@@ -168,6 +171,8 @@ function buildGatewayEnvironmentEntry(
     gateway_environment_profile: environment.profile,
     gateway_environment_profile_access_route: environment.profile_access_route,
     gateway_environment_origin: environment.origin,
+    gateway_access_result: environment.last_access_result,
+    gateway_sync_state: gateway.sync_state,
     environment_source: source,
     pinned: false,
     tag: gateway.status === 'online' ? 'Gateway' : 'Resolve',
@@ -176,10 +181,10 @@ function buildGatewayEnvironmentEntry(
     is_open: false,
     is_opening: false,
     runtime_health: {
-      status: isOpenable ? 'online' : 'offline',
-      checked_at_unix_ms: Date.now(),
+      status: 'offline',
+      checked_at_unix_ms: 0,
       source: 'gateway_service_probe',
-      freshness: needsResolve ? 'failed' : 'fresh',
+      freshness: 'unknown',
       offline_reason_code: gatewayOfflineReasonCode(gateway.status, environment.state),
       offline_reason: gatewayOfflineReason(gateway, environment),
     },
@@ -285,9 +290,7 @@ function gatewayOfflineReason(
     case 'unknown':
       return 'Gateway status has not been checked yet.';
     case 'online':
-      return environment.state === 'stopped'
-        ? 'Start this Gateway-managed environment before opening it.'
-        : 'This Gateway environment is not available right now.';
+      return 'This Gateway profile does not support opening yet.';
   }
 }
 

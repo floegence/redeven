@@ -114,7 +114,7 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
 
 function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
   return {
-    schema_version: 2,
+    schema_version: 3,
     gateway_id: 'gw_bastion',
     display_name: 'Bastion',
     local_enabled: true,
@@ -136,7 +136,7 @@ function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
 
 function containerGateway(): GatewayRecord {
   return {
-    schema_version: 2,
+    schema_version: 3,
     gateway_id: 'gw_container',
     display_name: 'Container Gateway',
     local_enabled: true,
@@ -158,7 +158,7 @@ function containerGateway(): GatewayRecord {
 
 function localGateway(): GatewayRecord {
   return {
-    schema_version: 2,
+    schema_version: 3,
     gateway_id: 'gw_local',
     display_name: 'Local Environment service',
     local_enabled: true,
@@ -731,7 +731,7 @@ describe('GatewayLifecycleManager', () => {
 
   it('does not allow Desktop to manage URL Gateways as local services', async () => {
     const record: GatewayRecord = {
-      schema_version: 2,
+      schema_version: 3,
       gateway_id: 'gw_url',
       display_name: 'URL Gateway',
     local_enabled: true,

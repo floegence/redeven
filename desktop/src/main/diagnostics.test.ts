@@ -202,7 +202,7 @@ describe("DesktopDiagnosticsRecorder", () => {
         recorder.startRequest({
           requestID: 12,
           method: "POST",
-          url: "https://gateway.example/gateway/v1/open-session",
+          url: "https://gateway.example/gateway/v3/open-session",
           requestHeaders: {
             "x-redeven-request-signature": "signature-secret",
           },
@@ -229,12 +229,15 @@ describe("DesktopDiagnosticsRecorder", () => {
         "https://gateway.example/session/env-app",
       );
 
-      await recorder.recordLifecycle("gateway_artifact_seen", "artifact received", {
+      const artifactURL = `https://gateway.example/gateway/v3/access/${'a'.repeat(43)}/_tunnel`;
+      await recorder.recordLifecycle("gateway_artifact_seen", `request failed at ${artifactURL}`, {
         proof: "proof-secret",
         signature: "signature-secret",
         private_key: "PRIVATE KEY",
         artifact_nonce: "artifact-nonce-secret",
         connect_artifact: { url: "https://gateway.example/session?proof=secret" },
+        endpoint: artifactURL,
+        nested: { reason: `cannot reach ${artifactURL}` },
       });
 
       const raw = await fs.readFile(
@@ -247,6 +250,8 @@ describe("DesktopDiagnosticsRecorder", () => {
       expect(raw).not.toContain("PRIVATE KEY");
       expect(raw).not.toContain("artifact-nonce-secret");
       expect(raw).not.toContain("https://gateway.example/session?proof=secret");
+      expect(raw).not.toContain('a'.repeat(43));
+      expect(raw).toContain('/gateway/v3/access/[redacted]/_tunnel');
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
     }

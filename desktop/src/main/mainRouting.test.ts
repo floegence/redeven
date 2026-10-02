@@ -1906,7 +1906,7 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('resolveDesktopSessionTransport(target, startup');
     expect(mainSrc).toContain('placementBridge: options.transportRecovery != null');
-    expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport);');
+    expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport, options.gatewayProxy);');
     expect(mainSrc).toContain("await webSession.setProxy({ mode: 'direct' });");
     expect(mainSrc).toContain('loopbackGateway?: WebServiceLoopbackGateway,\n): void');
     expect(mainSrc).toContain('desktopDiagnosticsHookSessions.has(webSession)');
@@ -2020,7 +2020,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('assertGatewayPairingChallenge({');
     expect(pairSrc).not.toContain('confirmDesktopImpact({');
     expect(pairSrc).not.toContain("phase: 'waiting_for_identity_confirmation'");
-    expect(helperSrc).toContain("const pairingOptions = record.connection.kind === 'url'");
+    expect(helperSrc).toContain("const pairingOptions = { profileWrite: options.profileWrite ?? record.connection.kind !== 'url' };");
     expect(helperSrc).not.toContain('runtimeGrants');
     expect(helperSrc).not.toContain('runtime_grants');
     expect(helperSrc).toContain(
@@ -2345,8 +2345,11 @@ describe('main routing', () => {
     expect(openEnd).toBeGreaterThan(openStart);
     const openSrc = mainSrc.slice(openStart, openEnd);
     expect(openSrc).toContain('gatewayEnvironmentAccessEndpoint(record, environment)');
-    expect(openSrc).toContain('openRemoteEnvironmentFromLauncher({');
-    expect(openSrc).not.toContain('openSessionWithBridge');
+    expect(openSrc).toContain('prepareGatewayEnvironmentAccess(record, environment, mode');
+    expect(openSrc).toContain('openSessionWithBridge');
+    expect(openSrc).toContain('buildGatewayDesktopTarget');
+    expect(openSrc).not.toContain('openRemoteEnvironmentFromLauncher({');
+    expect(openSrc).not.toContain('start_environment_runtime');
     expect(openSrc).not.toContain('pairGatewayWithClient');
     const endpointStart = mainSrc.indexOf('function gatewayEnvironmentAccessEndpoint(');
     const endpointEnd = mainSrc.indexOf('async function upsertGatewayEnvironmentProfileFromLauncher(', endpointStart);

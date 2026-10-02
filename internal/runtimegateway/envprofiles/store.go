@@ -1,12 +1,14 @@
 package envprofiles
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"net/url"
@@ -21,7 +23,7 @@ import (
 	"github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 var (
 	gatewayEnvIDPattern = regexp.MustCompile(`\A[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\z`)
@@ -66,6 +68,7 @@ type fileState struct {
 type EnvironmentProfile struct {
 	GatewayEnvID    string                         `json:"gateway_env_id"`
 	DisplayName     string                         `json:"display_name"`
+	AccessMode      protocol.AccessMode            `json:"access_mode"`
 	AccessRoute     protocol.EnvProfileAccessRoute `json:"access_route"`
 	SSHPasswordSet  bool                           `json:"ssh_password_set,omitempty"`
 	CreatedAtUnixMS int64                          `json:"created_at_unix_ms"`
@@ -140,6 +143,7 @@ func (s *Store) Upsert(ctx context.Context, req protocol.EnvProfileUpsertRequest
 		return protocol.Environment{}, err
 	}
 	now := time.Now().UnixMilli()
+	state.Profiles = append([]EnvironmentProfile(nil), state.Profiles...)
 	if profile.GatewayEnvID == "" {
 		profile.GatewayEnvID, err = s.nextGatewayEnvIDLocked(state)
 		if err != nil {
@@ -160,6 +164,9 @@ func (s *Store) Upsert(ctx context.Context, req protocol.EnvProfileUpsertRequest
 			continue
 		}
 		profile.CreatedAtUnixMS = state.Profiles[i].CreatedAtUnixMS
+		if req.Profile.AccessMode == "" {
+			profile.AccessMode = state.Profiles[i].AccessMode
+		}
 		state.Profiles[i] = profile
 		replaced = true
 		break
@@ -188,7 +195,7 @@ func (s *Store) Delete(ctx context.Context, req protocol.EnvProfileDeleteRequest
 	if err != nil {
 		return protocol.EnvProfileDeleteResponse{}, err
 	}
-	next := state.Profiles[:0]
+	next := make([]EnvironmentProfile, 0, len(state.Profiles))
 	deleted := false
 	for _, profile := range state.Profiles {
 		if profile.GatewayEnvID == req.GatewayEnvID {
@@ -221,6 +228,7 @@ func EnvironmentFromProfile(profile EnvironmentProfile) protocol.Environment {
 		Profile: &protocol.EnvironmentProfile{
 			Managed:         true,
 			AccessRouteKind: profile.AccessRoute.Kind,
+			AccessMode:      profile.AccessMode,
 		},
 		Origin: protocol.EnvironmentOrigin{
 			Kind:  profileOriginKind(profile),
@@ -297,7 +305,7 @@ func profileAccessRouteForCatalog(profile EnvironmentProfile) *protocol.EnvProfi
 func profileAccessCapabilities(profile EnvironmentProfile) []protocol.EnvironmentCapability {
 	switch profile.AccessRoute.Kind {
 	case protocol.EnvProfileAccessRouteKindURL:
-		return []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen}
+		return []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen, protocol.EnvironmentCapabilityOpenDirect, protocol.EnvironmentCapabilityOpenViaGateway}
 	default:
 		return nil
 	}
@@ -335,9 +343,14 @@ func profileFromRequest(req protocol.EnvProfileUpsertRequest, policy URLTargetPo
 	if err != nil {
 		return EnvironmentProfile{}, err
 	}
+	mode := profileAccessMode(req.Profile.AccessMode)
+	if route.Kind != protocol.EnvProfileAccessRouteKindURL {
+		mode = protocol.AccessModeDirectURL
+	}
 	return EnvironmentProfile{
 		GatewayEnvID:   strings.TrimSpace(req.Profile.GatewayEnvID),
 		DisplayName:    strings.TrimSpace(req.Profile.DisplayName),
+		AccessMode:     mode,
 		AccessRoute:    route,
 		SSHPasswordSet: sshPasswordSet,
 	}, nil
@@ -570,40 +583,65 @@ func (s *Store) loadState() (fileState, error) {
 		return fileState{}, err
 	}
 	var state fileState
-	if err := json.Unmarshal(raw, &state); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&state); err != nil {
 		return fileState{}, err
 	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return fileState{}, errors.New("Gateway profile state contains trailing JSON; original state was kept")
+	}
+	if state.SchemaVersion != 1 && state.SchemaVersion != schemaVersion {
+		return fileState{}, fmt.Errorf("Gateway profile schema %d is unsupported; original state was kept", state.SchemaVersion)
+	}
+	oldVersion := state.SchemaVersion
+	profiles := make([]EnvironmentProfile, 0, len(state.Profiles))
+	seen := make(map[string]bool)
+	for _, profile := range state.Profiles {
+		if oldVersion == 1 {
+			if profile.AccessMode != "" {
+				return fileState{}, errors.New("Gateway v1 profile contains access_mode; original state was kept")
+			}
+			profile.AccessMode = protocol.AccessModeDirectURL
+		}
+		normalized, err := normalizeProfile(profile, s.policy)
+		originalFields, originalErr := json.Marshal(profile)
+		normalizedFields, normalizedErr := json.Marshal(normalized)
+		if err != nil || originalErr != nil || normalizedErr != nil || seen[normalized.GatewayEnvID] || !bytes.Equal(originalFields, normalizedFields) {
+			return fileState{}, fmt.Errorf("Gateway profile state is invalid; original state was kept")
+		}
+		seen[normalized.GatewayEnvID] = true
+		profiles = append(profiles, normalized)
+	}
 	state.SchemaVersion = schemaVersion
-	state.Profiles = normalizeProfiles(state.Profiles, s.policy)
+	state.Profiles = profiles
+	if oldVersion == 1 {
+		if err := s.persistState(state); err != nil {
+			return fileState{}, err
+		}
+	}
 	return state, nil
 }
 
-func normalizeProfiles(profiles []EnvironmentProfile, policy URLTargetPolicy) []EnvironmentProfile {
-	out := make([]EnvironmentProfile, 0, len(profiles))
-	seen := map[string]struct{}{}
-	for _, profile := range profiles {
-		normalized, err := normalizeProfile(profile, policy)
-		if err != nil {
-			continue
-		}
-		if _, ok := seen[normalized.GatewayEnvID]; ok {
-			continue
-		}
-		seen[normalized.GatewayEnvID] = struct{}{}
-		out = append(out, normalized)
-	}
-	return out
-}
-
 func normalizeProfile(profile EnvironmentProfile, policy URLTargetPolicy) (EnvironmentProfile, error) {
-	input := protocol.NormalizeEnvProfileUpsertRequest(protocol.EnvProfileUpsertRequest{
+	input := protocol.EnvProfileUpsertRequest{
 		ProtocolVersion: protocol.Version,
 		Profile: protocol.EnvProfileInput{
 			GatewayEnvID: profile.GatewayEnvID,
 			DisplayName:  profile.DisplayName,
 			AccessRoute:  profile.AccessRoute,
+			AccessMode:   profile.AccessMode,
 		},
-	})
+	}
+	if profile.AccessMode != protocol.AccessModeDirectURL && profile.AccessMode != protocol.AccessModeGatewayProxy {
+		return EnvironmentProfile{}, protocol.ErrInvalidAccessMode
+	}
+	if profile.CreatedAtUnixMS <= 0 || profile.UpdatedAtUnixMS <= 0 {
+		return EnvironmentProfile{}, errors.New("Gateway profile timestamps are invalid")
+	}
+	if err := protocol.ValidateEnvProfileUpsertRequest(input); err != nil {
+		return EnvironmentProfile{}, err
+	}
 	normalized, err := profileFromRequest(input, policy)
 	if err != nil {
 		return EnvironmentProfile{}, err
@@ -620,11 +658,24 @@ func normalizeProfile(profile EnvironmentProfile, policy URLTargetPolicy) (Envir
 	return normalized, nil
 }
 
+func profileAccessMode(mode protocol.AccessMode) protocol.AccessMode {
+	if mode == protocol.AccessModeDirectURL || mode == protocol.AccessModeGatewayProxy {
+		return mode
+	}
+	return protocol.AccessModeGatewayProxy
+}
+
 func (s *Store) saveStateLocked(state fileState) error {
 	state.SchemaVersion = schemaVersion
-	state.Profiles = normalizeProfiles(state.Profiles, s.policy)
+	if err := s.persistState(state); err != nil {
+		return err
+	}
 	s.state = state
 	s.loaded = true
+	return nil
+}
+
+func (s *Store) persistState(state fileState) error {
 	if strings.TrimSpace(s.filePath) == "" {
 		return nil
 	}
@@ -635,7 +686,24 @@ func (s *Store) saveStateLocked(state fileState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath, append(body, '\n'), 0o600)
+	tmp, err := os.CreateTemp(filepath.Dir(s.filePath), ".gateway-profiles-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer os.Remove(name)
+	if _, err := tmp.Write(append(body, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, s.filePath)
 }
 
 func (s *Store) nextGatewayEnvIDLocked(state fileState) (string, error) {

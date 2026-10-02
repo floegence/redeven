@@ -35,6 +35,20 @@ Address presentation groups this-device, network and internal listeners by their
 
 # Boundaries
 
+## Gateway connection facts
+
+Gateway Environment cards show source, Gateway connection, trust, catalog sync,
+default access mode and the latest attempted access result separately. No access
+attempt means target not checked, even when the catalog is available. Explicit
+Direct URL and Gateway proxy actions appear only with their specific published
+capabilities. Profile information remains visible without write permission;
+disabled editing explains the independent authorization requirement. Unsupported
+SSH/container profile kinds remain visible without fabricated opening support.
+Runtime login state is never labeled as Gateway connectivity. The
+[Gateway access owner](../gateway/gateway-access-sessions.md) defines transports,
+revocation and error distinctions. Session tokens and private loopback proxy
+credentials never enter card facts, clipboard actions or QR data.
+
 ## Environment library presentation
 
 [Environment library](desktop-environment-library.md) owns relationship cards, Runtime/Cloud access perspectives, source grids, searching, counts, and owner-scoped pin presentation. A selected perspective supplies the original owner to this connection model. Switching perspectives closes the previous owner's endpoint popover; it does not change address validity, cancel work, or rebind open settings. Standalone Runtime metadata retains startup age and one Cloud affiliation, while Cloud perspectives show only source, ENV ID and remote entry facts. Unsupported legacy links retain their recovery fact.
