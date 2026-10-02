@@ -318,8 +318,8 @@
               "lifecycle",
               "validation"
             ],
-            "summary": "The actual Linux X11 product viewer passes reconnect regression at 1920x1080\nand 2560x1440 with published `floe-native-apps` v0.22.6 and clean Redeven source\n`cb2fd0c6c7d15d609426449f17df77998b1eaa23`. A transport replacement retains\nthe window's running audio device; fresh remote system-output samples reach its\nproduction AudioWorklet, and input resumes after current paint. This closes the\ntested sound-reconnect defect. It does not certify the unreleased v0.22.7 product,\nphysical display hotplug or the outstanding\n[Wayland performance boundary](remote-desktop-wayland-results.md).\nThe [session contract](../architecture/remote-desktop.md) owns normative behavior;\nthe [overall record](remote-desktop-results.md) owns original performance and\nlocal delivery.",
-            "section_count": 3
+            "summary": "The actual Linux X11 and macOS product viewers pass reconnect regression with\npublished `floe-native-apps` v0.22.6. Linux tested 1920x1080 and 2560x1440 with\nclean source `cb2fd0c6c7d15d609426449f17df77998b1eaa23`; macOS tested the\n1440p office workflow and original pixels with source `07337d309`. A transport replacement retains\nthe window's running audio device; fresh remote system-output samples reach its\nproduction AudioWorklet, and input resumes after current paint. This closes the\ntested sound-reconnect defect. It does not certify the unreleased v0.22.7 product,\nphysical display hotplug or the outstanding\n[Wayland performance boundary](remote-desktop-wayland-results.md).\nThe [session contract](../architecture/remote-desktop.md) owns normative behavior;\nthe [overall record](remote-desktop-results.md) owns original performance and\nlocal delivery.",
+            "section_count": 4
           },
           {
             "concept_id": "operations.remote-desktop-wayland-results",
@@ -20390,7 +20390,7 @@
         "lifecycle",
         "validation"
       ],
-      "timestamp": "2026-10-02T14:50:00Z",
+      "timestamp": "2026-10-02T15:08:00Z",
       "frontmatter": {
         "description": "Verify retained sound and fresh-paint authority after transport replacement, and distinguish native recovery candidates from published product acceptance.",
         "tags": [
@@ -20399,12 +20399,12 @@
           "lifecycle",
           "validation"
         ],
-        "timestamp": "2026-10-02T14:50:00Z",
+        "timestamp": "2026-10-02T15:08:00Z",
         "title": "Desktop reconnect qualification results",
         "type": "Acceptance Record"
       },
-      "body_length": 5471,
-      "summary": "The actual Linux X11 product viewer passes reconnect regression at 1920x1080\nand 2560x1440 with published `floe-native-apps` v0.22.6 and clean Redeven source\n`cb2fd0c6c7d15d609426449f17df77998b1eaa23`. A transport replacement retains\nthe window's running audio device; fresh remote system-output samples reach its\nproduction AudioWorklet, and input resumes after current paint. This closes the\ntested sound-reconnect defect. It does not certify the unreleased v0.22.7 product,\nphysical display hotplug or the outstanding\n[Wayland performance boundary](remote-desktop-wayland-results.md).\nThe [session contract](../architecture/remote-desktop.md) owns normative behavior;\nthe [overall record](remote-desktop-results.md) owns original performance and\nlocal delivery.",
+      "body_length": 7069,
+      "summary": "The actual Linux X11 and macOS product viewers pass reconnect regression with\npublished `floe-native-apps` v0.22.6. Linux tested 1920x1080 and 2560x1440 with\nclean source `cb2fd0c6c7d15d609426449f17df77998b1eaa23`; macOS tested the\n1440p office workflow and original pixels with source `07337d309`. A transport replacement retains\nthe window's running audio device; fresh remote system-output samples reach its\nproduction AudioWorklet, and input resumes after current paint. This closes the\ntested sound-reconnect defect. It does not certify the unreleased v0.22.7 product,\nphysical display hotplug or the outstanding\n[Wayland performance boundary](remote-desktop-wayland-results.md).\nThe [session contract](../architecture/remote-desktop.md) owns normative behavior;\nthe [overall record](remote-desktop-results.md) owns original performance and\nlocal delivery.",
       "sections": [
         {
           "id": "deterministic-regression",
@@ -20421,6 +20421,13 @@
           "char_count": 1644
         },
         {
+          "id": "real-macos-product-reconnect",
+          "title": "Real macOS Product Reconnect",
+          "level": 1,
+          "body": "Clean Redeven source `07337d30981561ffd9b72ecfdb5c80b68af67dae` contains the\nsame product fix and an evidence-only follow-up. Its native-Floeterm build uses\npublished native v0.22.6 with SHA-256\n`16893767aa11a06ceec9a8539640d23875ee2ffc02293b044cc46c5791d8c972`.\nThe helper retained its previously qualified published Swift build.\n\nThe actual product's 2560x1440 office flow passed Chinese/emoji paste, pointer,\ndrag, scrolling, bidirectional clipboard, full screen, view-only and takeover.\nOriginal-pixel mode captured 4608x2592; its 800x120 text-region refinement matched\nthe independent ScreenCaptureKit screenshot. The same running AudioContext\nsurvived transport replacement and received a second system-output tone through\nthe production worklet. At most two handoffs were pending, with zero at the\nsampled completion. Client volume remained zero to prevent same-host feedback;\nthis is decoded-sample evidence, not physical listening.\n\nAfter returning to 2560x1440, 100 input samples measured P95 68.4ms using the\nsame DOM-to-post-render boundary. No page, protocol or failed-request error\noccurred. The fixture's frontmost ownership was checked before every input;\nthe task fixture exited normally. This regression did not repeat the full\nperformance matrix or certify physical hotplug.",
+          "char_count": 1293
+        },
+        {
           "id": "native-recovery-candidate",
           "title": "Native Recovery Candidate",
           "level": 1,
@@ -20428,7 +20435,7 @@
           "char_count": 1072
         }
       ],
-      "snippet": "The actual Linux X11 product viewer passes reconnect regression at 1920x1080 and 2560x1440 with published `floe-native-apps` v0.22.6 and clean Redeven source `cb2fd0c6c7d15d609426449f17df77998b1eaa23`. A transport replacement retains",
+      "snippet": "The actual Linux X11 and macOS product viewers pass reconnect regression with published `floe-native-apps` v0.22.6. Linux tested 1920x1080 and 2560x1440 with clean source `cb2fd0c6c7d15d609426449f17df77998b1eaa23`; macOS tested the",
       "links": [
         {
           "label": "session contract",
@@ -30305,5 +30312,5 @@
       ]
     }
   ],
-  "source_sha256": "1f133295565c42b910e3d4bc3293375f768150c23f4ff045015d9e9982bfdf79"
+  "source_sha256": "20d10b18e568fcfd3856630116a591a31fa2a875d77b5dfaa50a574c733fd038"
 }
