@@ -8,7 +8,7 @@ timestamp: 2026-10-02T14:32:09Z
 # Summary
 
 Redeven owns remote desktop authorization, ephemeral sessions, window placement,
-configuration and audit. Published `floe-native-apps` v0.22.6 owns current-desktop
+configuration and audit. Published `floe-native-apps` v0.22.7 owns current-desktop
 selection, OS authorization, native input, capture, codecs and bounded playback.
 A desktop session shares the existing signed-in macOS or Linux desktop. It never
 creates an application-private desktop, changes system security policy or grants
@@ -79,11 +79,20 @@ or uncapturable sessions cannot retain input, clipboard or audio authority. Remo
 unlock is supported only where the actual OS permits it; disk unlock and a login
 without a graphical user session are outside this contract.
 
-If the initial native connection is rejected because the host is locked, the
-viewer shows the locked state and an explicit reconnect action after local
-unlock. There is no active capture observer on that rejected connection. A new
-attachment must paint a fresh frame before input is enabled. A previously active
-connection suspended by locking follows the native observer's recovery events.
+An authorized macOS connection created while locked remains suspended with its
+native observer running. It captures no video or audio and accepts no input until
+normal local unlock produces a fresh frame. If a backend rejects the initial
+connection as `LOCKED`, the viewer exposes explicit reconnect after local unlock;
+that rejected connection has no capture observer. Previously active connections
+follow the native observer's recovery events. Every recovered attachment must
+paint a fresh current-generation frame before input is enabled.
+
+When a Wayland display configuration retires the authorized PipeWire node,
+`DISPLAY_STREAM_LOST` revokes held input and old frame authority and requires
+a replacement RemoteDesktop portal attachment. The viewer reconnects using the existing product session
+and its completed OS grant where supported. Retired pipeline errors cannot
+invalidate a successor. Codec or audio failures retain their separate suspended
+failure boundary; they do not select another desktop.
 
 `remote_desktop.last_display_id` stores the last active selection in the existing
 host configuration. The launcher and viewer select that display when it still

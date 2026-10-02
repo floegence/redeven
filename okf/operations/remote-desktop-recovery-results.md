@@ -13,7 +13,7 @@ clean source `cb2fd0c6c7d15d609426449f17df77998b1eaa23`; macOS tested the
 1440p office workflow and original pixels with source `07337d309`. A transport replacement retains
 the window's running audio device; fresh remote system-output samples reach its
 production AudioWorklet, and input resumes after current paint. This closes the
-tested sound-reconnect defect. It does not certify the unreleased v0.22.7 product,
+tested sound-reconnect defect. It does not certify the v0.22.7 product recovery path,
 physical display hotplug or the outstanding
 [Wayland performance boundary](remote-desktop-wayland-results.md).
 The [session contract](../architecture/remote-desktop.md) owns normative behavior;
@@ -91,9 +91,12 @@ performance matrix or certify physical hotplug.
 # Native Recovery Candidate
 
 Upstream commit `29ed2f3f71b429f18cbea19811522931ce97cf0c` has an immutable
-v0.22.7 tag. Its GitHub release remains pending the owning Release gate. Passing
-source, Swift or host-desktop media checks alone cannot authorize a downstream
-dependency upgrade.
+v0.22.7 tag. Its Release qualification run `37016208383` and final Release gate
+passed, and the GitHub release was published on 2026-10-02 at 15:10:02 UTC.
+The official Go proxy and checksum database returned the tagged source and
+module checksum `h1:MJLggW9f34s8gDXhleRxlSWYr24YAQ3aMxHKEE4mBcI=`.
+Redeven's Go and exact Swift pins now reference this release. Candidate evidence
+below remains distinct from the still-pending published-product recovery checks.
 
 A real Wayland native candidate recognized Mutter's retired PipeWire node after
 a supported mode change as `DISPLAY_STREAM_LOST`. It retired held input and old
