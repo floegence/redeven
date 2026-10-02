@@ -28,6 +28,11 @@ test fixture to preserve main's new Computer access default.
 Apple Silicon uses VideoToolbox H.264 and authenticated task-loopback WebSockets.
 Chromium's `no-preference` does not prove hardware decoding. Shared CPU/GPU
 counters are not process attribution. Tests stop on fixture foreground loss.
+Performance and stability measurements use headless Chromium with the actual
+authenticated product viewer. FPS counts canvas draws; input latency spans DOM
+keydown through a changed host marker to the player's post-render receipt. These
+measurements exclude physical keyboard scanning and display scanout. Separate
+Electron interaction checks exercise its real window and preload.
 
 `server` is Ubuntu 24.04/GNOME X11 with an RTX 4090 D/driver 550.90.07. Its glibc
 CUDA library cannot load into the isolated musl stack, which selects software
@@ -55,7 +60,7 @@ There were no decoder flushes, recoveries, protocol errors or failed requests.
 Separate 100-input runs passed at P95 68.4ms/68.7ms for 1080p/1440p. Chinese and
 emoji paste, pointer, clipboard, full screen, view-only and takeover also passed.
 
-Ten-minute interaction completed 600.5 seconds/637 physical-input samples at
+Ten-minute interaction completed 600.5 seconds/637 physical-key protocol samples at
 overall input-to-post-render-receipt P95 69.5ms. Decoder queue samples were zero.
 Audio delivered 30,278 blocks, with at most two pending worklet handoffs and zero
 at completion. No decoder recovery or protocol error occurred. Per-minute input

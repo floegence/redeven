@@ -19,15 +19,19 @@ remaining qualification.
 At both 1920x1080 and 2560x1440, measure scrolling and task-owned window motion
 for at least 60 seconds, three times each, on a documented low-latency connection.
 Each run requires actual painted FPS >=55 and frame interval P95 <=33ms.
-Physical input to changed client presentation requires P95 <=80ms; server input
-admission and packet arrival are not visible response.
+Client key input to changed client presentation requires P95 <=80ms; server input
+admission and packet arrival are not visible response. The automated measurement
+starts at the viewer's DOM keydown, sends the physical-key protocol, observes the
+changed host marker in the client canvas, and ends at the player's subsequent
+animation-frame paint receipt. It excludes hardware keyboard scanning and physical
+display scanout; record the client mode, including headless operation.
 
 Refinement must finish within 500ms and match a lossless text reference at the
 same dimensions after host motion stops. Verify original-pixel coordinates and
 text separately. Compare the actual PNG draw after its paint receipt with the
 independent reference. After capture reconfiguration, require the new generation's
-paint receipt and matching snapshot dimensions. Retain later video draws separately so asynchronous
-screenshot timing cannot substitute a lossy frame for the refinement.
+paint receipt and matching snapshot dimensions. Retain later video draws separately
+so asynchronous screenshot timing cannot substitute a lossy frame for refinement.
 Ten-minute interaction requires bounded queues, released keys
 and no accumulated audiovisual delay. Record encoder, decoder preference,
 CPU/GPU attribution, bandwidth and failures. Whole-device GPU counters cannot
