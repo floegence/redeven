@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1564,11 +1563,9 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 		envID = strings.TrimSpace(a.cfg.EnvironmentID)
 	}
 	if strings.TrimSpace(meta.CodeSpaceID) == "env-ui" && envID != "" && strings.TrimSpace(meta.EndpointID) == envID {
-		baseOrigin, err := a.code.ExternalOriginForEnvApp(meta.EndpointID)
-		if err != nil {
-			return err
-		}
-		origin, err := originWithChannelLabel(baseOrigin, meta.ChannelID)
+		// The SDK sends the browser-visible origin. Session identity is bound
+		// by accessproxy's trusted channel header, not synthetic DNS labels.
+		origin, err := a.code.ExternalOriginForEnvApp(meta.EndpointID)
 		if err != nil {
 			return err
 		}
@@ -1920,41 +1917,6 @@ func hostnameBestEffort() string {
 		return ""
 	}
 	return strings.TrimSpace(h)
-}
-
-func originWithChannelLabel(baseOrigin string, channelID string) (string, error) {
-	baseOrigin = strings.TrimSpace(baseOrigin)
-	channelID = strings.TrimSpace(channelID)
-	if baseOrigin == "" || channelID == "" {
-		return "", errors.New("invalid origin args")
-	}
-
-	u, err := url.Parse(baseOrigin)
-	if err != nil || u == nil {
-		return "", errors.New("invalid base origin")
-	}
-	host := strings.TrimSpace(u.Host)
-	if host == "" {
-		return "", errors.New("invalid base origin host")
-	}
-
-	labels := strings.Split(host, ".")
-	if len(labels) < 2 {
-		return "", errors.New("invalid base origin host")
-	}
-
-	enc := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(channelID))
-	enc = strings.ToLower(strings.TrimSpace(enc))
-	if enc == "" {
-		return "", errors.New("invalid channel id")
-	}
-
-	// Insert as the second label: env-xxx.ch-<enc>.<rest>.
-	out := make([]string, 0, len(labels))
-	out = append(out, labels[0], "ch-"+enc)
-	out = append(out, labels[1:]...)
-	u.Host = strings.Join(out, ".")
-	return u.String(), nil
 }
 
 // --- control channel types (wire JSON) ---
