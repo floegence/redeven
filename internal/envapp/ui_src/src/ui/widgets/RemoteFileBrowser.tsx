@@ -56,7 +56,6 @@ import {
   basenameFromAbsolutePath,
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
-import { fetchFilesystemSettings, saveFilesystemRootWritePermission } from '../services/filesystemScopeSettings';
 import {
   defaultFilesystemPath,
   matchFilesystemRoot,
@@ -1184,47 +1183,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setFilesystemContext(ctx);
     setAgentHomePathAbs(home || homePathDisplayHint() || homePathOverride());
     return root;
-  };
-
-  const handleRootWritePermissionChange = async (root: NormalizedFilesystemRoot, write: boolean) => {
-    try {
-      const settings = await fetchFilesystemSettings();
-      await saveFilesystemRootWritePermission(settings, root.id, write);
-      ctx.bumpSettingsSeq();
-      setFilesystemContext((current) => ({
-        ...current,
-        roots: current.roots.map((item) => (
-          item.id === root.id
-            ? {
-                ...item,
-                permissions: {
-                  read: true,
-                  write,
-                },
-              }
-            : item
-        )),
-      }));
-      await refreshFilesystemPathContext();
-      const currentPath = normalizeAbsolutePath(activeDirectoryPath()) || defaultRootPath();
-      if (currentPath) {
-        await requestDirectoryNavigation(currentPath, {
-          persistEnvId: envId(),
-          persistOnReady: true,
-          intent: 'scope-change',
-        });
-      }
-      notification.success(
-        i18n.t('files.notifications.filesystemAccessUpdatedTitle'),
-        i18n.t('files.notifications.filesystemAccessUpdatedMessage', {
-          label: root.label,
-          mode: write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess'),
-        }),
-      );
-    } catch (error) {
-      notification.error(i18n.t('files.notifications.filesystemAccessUpdateFailedTitle'), error instanceof Error ? error.message : String(error));
-      throw error;
-    }
   };
 
   const repoHistoryAvailable = () => Boolean(repoInfo()?.available && repoInfo()?.repoRootPath);
@@ -5557,7 +5515,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onRootSelect={(path) => {
                         void requestManualDirectoryNavigation(path);
                       }}
-                      onRootWritePermissionChange={handleRootWritePermissionChange}
                       pathEditRequestKey={pathEditorRequestKey()}
                       toolbarEndActions={fileBrowserToolbarEndActions()}
                       revealRequest={pendingEntryReveal()}

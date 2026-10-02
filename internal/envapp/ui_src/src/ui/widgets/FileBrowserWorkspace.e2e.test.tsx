@@ -1075,12 +1075,10 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
-  it('keeps root navigation separate from the RO/RW toggle hit area', async () => {
+  it.each([true, false])('shows root access without permission controls when Computer write is %s', async (write) => {
     let rootSelectedPath = '';
-    const writePermissionChanges: Array<{ id: string; write: boolean }> = [];
     const host = document.createElement('div');
     document.body.appendChild(host);
-
     const dispose = render(() => (
       <LayoutProvider>
         <div class="h-[560px]">
@@ -1093,122 +1091,31 @@ describe('FileBrowserWorkspace interactions', () => {
             homePath="/Users/tester"
             roots={[
               { id: 'home', label: 'Home', kind: 'home', pathAbs: '/Users/tester', permissions: { read: true, write: true }, system: true },
-              { id: 'computer', label: 'Computer', kind: 'computer', pathAbs: '/', permissions: { read: true, write: true }, system: true },
+              { id: 'computer', label: 'Computer', kind: 'computer', pathAbs: '/', permissions: { read: true, write }, system: true },
+              { id: 'shared', label: 'Shared', kind: 'custom', pathAbs: '/shared', permissions: { read: true, write: false } },
             ]}
-            persistenceKey="test-files-workspace-root-write-toggle"
-            instanceId="test-files-workspace-root-write-toggle"
+            persistenceKey="test-files-workspace-root-access"
+            instanceId="test-files-workspace-root-access"
             resetKey={0}
             width={260}
             open
-            onRootSelect={(path) => {
-              rootSelectedPath = path;
-            }}
-            onRootWritePermissionChange={(root, write) => {
-              writePermissionChanges.push({ id: root.id, write });
-            }}
+            onRootSelect={(path) => { rootSelectedPath = path; }}
           />
         </div>
       </LayoutProvider>
     ), host);
-
     try {
       await flush();
-      expect(host.querySelector('[data-filesystem-root-write-toggle="home"]')).toBeNull();
-      const homeBadge = host.querySelector('[data-filesystem-root-write-badge="home"]');
-      expect(homeBadge?.textContent?.trim()).toBe('RW');
-      const computerToggle = host.querySelector('[data-filesystem-root-write-toggle="computer"]');
-      const computerReadOnlyButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
-        .find((node) => node.getAttribute('aria-label') === 'Set Computer to read-only') as HTMLButtonElement | undefined;
-      expect(computerToggle).toBeTruthy();
-      expect(Array.from(computerToggle!.querySelectorAll('button')).map((button) => button.getAttribute('aria-label'))).toEqual(['Set Computer to read-only', 'Set Computer to read/write']);
-      expect(computerReadOnlyButton).toBeTruthy();
-      computerReadOnlyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await flush();
-
-      expect(rootSelectedPath).toBe('');
-      expect(writePermissionChanges).toEqual([{ id: 'computer', write: false }]);
-    } finally {
-      dispose();
-    }
-  });
-
-  it('requires confirmation before enabling Computer RW from the root row', async () => {
-    let rootSelectedPath = '';
-    const writePermissionChanges: Array<{ id: string; write: boolean }> = [];
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const dispose = render(() => (
-      <LayoutProvider>
-        <div class="h-[560px]">
-          <FileBrowserWorkspace
-            mode="files"
-            onModeChange={() => {}}
-            files={[{ id: '/', name: 'Computer', type: 'folder', path: '/', children: [] }]}
-            currentPath="/"
-            initialPath="/"
-            homePath="/Users/tester"
-            roots={[
-              { id: 'home', label: 'Home', kind: 'home', pathAbs: '/Users/tester', permissions: { read: true, write: true }, system: true },
-              { id: 'computer', label: 'Computer', kind: 'computer', pathAbs: '/', permissions: { read: true, write: false }, system: true },
-            ]}
-            persistenceKey="test-files-workspace-root-write-confirm"
-            instanceId="test-files-workspace-root-write-confirm"
-            resetKey={0}
-            width={260}
-            open
-            onRootSelect={(path) => {
-              rootSelectedPath = path;
-            }}
-            onRootWritePermissionChange={(root, write) => {
-              writePermissionChanges.push({ id: root.id, write });
-            }}
-          />
-        </div>
-      </LayoutProvider>
-    ), host);
-
-    try {
-      await flush();
-      const computerToggle = host.querySelector('[data-filesystem-root-write-toggle="computer"]');
-      const computerReadOnlyButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
-        .find((node) => node.getAttribute('aria-label') === 'Set Computer to read-only') as HTMLButtonElement | undefined;
-      const computerReadWriteButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
-        .find((node) => node.getAttribute('aria-label') === 'Set Computer to read/write') as HTMLButtonElement | undefined;
-      expect(computerToggle).toBeTruthy();
-      expect(Array.from(computerToggle!.querySelectorAll('button')).map((button) => button.getAttribute('aria-label'))).toEqual(['Set Computer to read-only', 'Set Computer to read/write']);
-      expect(computerReadOnlyButton).toBeTruthy();
-      expect(computerReadWriteButton).toBeTruthy();
-
-      computerReadOnlyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await flush();
-      expect(rootSelectedPath).toBe('');
-      expect(writePermissionChanges).toEqual([]);
-      expect(document.body.textContent).not.toContain('Enable write access for Computer?');
-
-      computerReadWriteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await flush();
-      expect(rootSelectedPath).toBe('');
-      expect(writePermissionChanges).toEqual([]);
-      expect(document.body.textContent).toContain('Enable write access for Computer?');
-
-      const cancelButton = Array.from(document.body.querySelectorAll('button'))
-        .find((node) => node.textContent?.trim() === 'Cancel') as HTMLButtonElement | undefined;
-      expect(cancelButton).toBeTruthy();
-      cancelButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await flush();
-      expect(writePermissionChanges).toEqual([]);
-
-      computerReadWriteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await flush();
-      const confirmButton = Array.from(document.body.querySelectorAll('button'))
-        .find((node) => node.textContent?.trim() === 'Enable RW') as HTMLButtonElement | undefined;
-      expect(confirmButton).toBeTruthy();
-      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await flush();
-
-      expect(rootSelectedPath).toBe('');
-      expect(writePermissionChanges).toEqual([{ id: 'computer', write: true }]);
+      expect(host.querySelector('[data-filesystem-root-write-toggle]')).toBeNull();
+      for (const [id, mode, path] of [['home', 'RW', '/Users/tester'], ['computer', write ? 'RW' : 'RO', '/'], ['shared', 'RO', '/shared']]) {
+        const row = host.querySelector(`[data-filesystem-root-id="${id}"]`)!;
+        expect(row.querySelectorAll('button')).toHaveLength(1);
+        expect(row.querySelector(`[data-filesystem-root-write-badge="${id}"]`)?.textContent?.trim()).toBe(mode);
+        row.querySelector('button')!.click();
+        await flush();
+        expect(rootSelectedPath).toBe(path);
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+      }
     } finally {
       dispose();
     }

@@ -282,7 +282,7 @@ type Config struct {
 
 	// FilesystemScope defines the endpoint-local filesystem roots exposed to
 	// runtime capabilities. When omitted, the runtime derives a Home root from
-	// AgentHomeDir and a read-only Computer root at the OS filesystem root.
+	// AgentHomeDir and a read/write Computer root at the OS filesystem root.
 	FilesystemScope *FilesystemScope `json:"filesystem_scope,omitempty"`
 
 	// Shell is the shell command used for terminal sessions.

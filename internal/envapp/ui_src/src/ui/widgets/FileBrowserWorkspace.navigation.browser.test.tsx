@@ -13,6 +13,41 @@ const paint = () => new Promise<void>((resolve) => requestAnimationFrame(() => r
 afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); document.body.replaceChildren(); });
 
 describe('Files Activity navigation continuity', () => {
+  it.each([1000, 640])('keeps root navigation free of permission controls at %s px', async (width) => {
+    await page.viewport(1280, 850);
+    const host = document.createElement('div');
+    host.style.cssText = `width:${width}px;height:600px`;
+    document.body.append(host);
+    const onRootSelect = vi.fn();
+    cleanups.push(render(() => <FloeConfigProvider config={{ layout: { mobileQuery: 'not all' } }}><LayoutProvider>
+      <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={[]}
+        roots={[
+          { id: 'home', pathAbs: '/workspace', label: 'Home', kind: 'home', permissions: { read: true, write: true }, system: true },
+          { id: 'computer', pathAbs: '/', label: 'Computer', kind: 'computer', permissions: { read: true, write: true }, system: true },
+          { id: 'shared', pathAbs: '/shared', label: 'Shared', kind: 'custom', permissions: { read: true, write: false } },
+        ]}
+        currentPath="/workspace" initialPath="/workspace" instanceId="root-navigation" resetKey={0} width={240} open onRootSelect={onRootSelect} />
+    </LayoutProvider></FloeConfigProvider>, host));
+    await paint();
+    await expect.poll(() => host.querySelector('[data-browser-sidebar-presentation]')?.getAttribute('data-browser-sidebar-presentation'))
+      .toBe(width === 1000 ? 'inline' : 'overlay');
+    if (width === 640) {
+      await userEvent.click(host.querySelector<HTMLButtonElement>('button[aria-label="Toggle browser sidebar"]')!);
+      await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeTruthy();
+    }
+    expect(host.querySelector('[data-filesystem-root-write-toggle]')).toBeNull();
+    for (const [id, mode, path] of [['home', 'RW', '/workspace'], ['computer', 'RW', '/'], ['shared', 'RO', '/shared']]) {
+      const row = host.querySelector<HTMLElement>(`[data-filesystem-root-id="${id}"]`)!;
+      expect(row.checkVisibility({ visibilityProperty: true })).toBe(true);
+      expect(row.querySelectorAll('button')).toHaveLength(1);
+      expect(row.querySelector('[data-filesystem-root-write-badge]')?.textContent).toBe(mode);
+      const button = row.querySelector('button')!;
+      expect(getComputedStyle(button).cursor).toBe('pointer');
+      await userEvent.click(button);
+      expect(onRootSelect).toHaveBeenLastCalledWith(path);
+    }
+  });
+
   it.each(['Grid', 'List'])('leaves %s content blank until the first directory arrives without shifting workspace chrome', async mode => {
     const host = document.createElement('div');
     document.body.append(host);

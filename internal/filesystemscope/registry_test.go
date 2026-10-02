@@ -22,7 +22,12 @@ func TestDefaultRegistryExposesHomeAndComputer(t *testing.T) {
 	if len(ctx.Roots) != 2 {
 		t.Fatalf("roots len = %d, want 2", len(ctx.Roots))
 	}
-	if got, err := reg.Resolve("/", ResolveOptions{RequireExisting: true, RequireDir: true}); err != nil || got.RootID != "computer" {
+	for _, root := range ctx.Roots {
+		if !root.Permissions.Read || !root.Permissions.Write {
+			t.Fatalf("default root %s must allow read/write: %#v", root.ID, root.Permissions)
+		}
+	}
+	if got, err := reg.Resolve("/", ResolveOptions{RequireExisting: true, RequireDir: true, ForWrite: true}); err != nil || got.RootID != "computer" {
 		t.Fatalf("Resolve(/) = %#v, %v; want computer", got, err)
 	}
 }
@@ -86,6 +91,22 @@ func TestRegistryUsesLongestRootMatch(t *testing.T) {
 	}
 	if resolved.RootID != "project" {
 		t.Fatalf("RootID = %q, want project", resolved.RootID)
+	}
+}
+
+func TestRegistryPreservesExplicitReadOnlyComputer(t *testing.T) {
+	home := t.TempDir()
+	scope := defaultScope(home)
+	scope.Roots[1].Permissions.Write = false
+	reg, err := NewRegistry(&config.Config{AgentHomeDir: home, FilesystemScope: scope})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Resolve(computerRootPath(), ResolveOptions{ForWrite: true, RequireExisting: true, RequireDir: true}); !errors.Is(err, ErrWriteDenied) {
+		t.Fatalf("explicit read-only Computer write error = %v, want %v", err, ErrWriteDenied)
+	}
+	if _, err := reg.Resolve(home, ResolveOptions{ForWrite: true, RequireExisting: true, RequireDir: true}); err != nil {
+		t.Fatalf("writable Home must remain writable: %v", err)
 	}
 }
 
