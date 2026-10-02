@@ -58,7 +58,10 @@ repeated three times. Statistics are actual client canvas draws.
 
 There were no decoder flushes, recoveries, protocol errors or failed requests.
 Separate 100-input runs passed at P95 68.4ms/68.7ms for 1080p/1440p. Chinese and
-emoji paste, pointer, clipboard, full screen, view-only and takeover also passed.
+emoji paste, pointer, drag selection, scrolling, bidirectional clipboard, full
+screen, view-only and takeover also passed. The unlocked supplemental Electron
+run also passed the current-version office flow, shortcut handoff and media
+continuity.
 
 Ten-minute interaction completed 600.5 seconds/637 physical-key protocol samples at
 overall input-to-post-render-receipt P95 69.5ms. Decoder queue samples were zero.
@@ -160,10 +163,12 @@ reference failures without PNG snapshots remain unattributed. All records surviv
 v0.22.5 lock/resume passed on both hosts: product confirmation locked the host,
 media/input stopped, and local unlock resumed only after fresh paint. Neither
 host is qualified for remote unlock. v0.22.6 initial-lock rejection on macOS
-also passed with zero frames/draws and disabled input. Its supplemental office/
-restart test stopped before input because the host was locked; unlock is pending.
-Earlier macOS Runtime restart, Electron office and application/desktop takeover
-checks passed, preserving the owned application and text.
+also passed with zero frames/draws and disabled input. The first v0.22.6
+supplemental run was stopped before input because the host was locked; after the
+host was normally unlocked, the replacement run passed office interaction and
+Runtime restart: old sessions and tickets returned 404, fresh paint was required,
+the fixture text was preserved, and no input was replayed. Physical remote unlock
+remains unqualified.
 
 `udesk24` GNOME 46 Wayland passed authorization, input, clipboard, audio handoff
 and grant restoration. Dynamic 1080p was about 37.6 FPS, capture alone 38-41 FPS.
@@ -173,7 +178,6 @@ security, driver or hardware configuration was changed.
 
 # Remaining Qualification
 
-- Complete supplemental macOS office/restart checks after normal local unlock.
 - Verify physical display hotplug and affected lifecycle recovery.
 - Confirm physical audio output; retain destination-clock measurement limits.
 - Qualify an accelerated 1440p Wayland desktop; udesk24 remains blocked by capture and display limits.
@@ -198,3 +202,4 @@ Screen/clipboard content is not committed. Representative records:
 - `server-xcb-candidate-matrix-summary.json`: native Linux matrix.
 - `linux-capture-stage-comparisons.json` and `linux-v0226-sampling-comparison.json`: acquisition diagnostics and rejected approaches.
 - `product-performance-linux-v0226-1080-moving-clock.json` and `product-performance-linux-v0226-1440-moving-clock.json`: corrected motion-clock repetitions.
+- `product-macos-restart-macos-v0226-office-restart-unlocked.json` and `product-shortcut-macos-v0226-office-restart-unlocked.json`: unlocked macOS Runtime restart and shortcut/media continuity.
