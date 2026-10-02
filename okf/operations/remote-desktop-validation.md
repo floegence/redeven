@@ -3,7 +3,7 @@ type: Validation Guide
 title: Current-desktop acceptance method
 description: Qualify remote desktop contracts, office interaction and actual painted performance without substituting synthetic checks.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-02T03:00:00Z
+timestamp: 2026-10-02T14:32:09Z
 ---
 # Summary
 
@@ -80,6 +80,10 @@ clipboard cleanup. Declined takeover stays view-only. Initial `LOCKED` rejection
 exposes reconnect without prior paint authority. Electron also checks native
 full screen, Files and all ten locales at narrow width. These contract checks
 cannot replace real-host or performance evidence.
+The reconnect regression preserves the real running AudioContext, sends a fresh
+Opus packet through the successor media channel, and requires decoded samples at
+its AudioWorklet. Explicit Disconnect must then close the context. This proves
+generation-scoped playback delivery, not acoustic output.
 
 # Evidence
 

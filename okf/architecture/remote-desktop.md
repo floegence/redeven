@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Human remote desktop sessions
 description: Share the host's current graphical desktop with an authenticated viewer, exclusive remote input, and bounded media.
 tags: [runtime, desktop, applications, security, media]
-timestamp: 2026-10-01T17:30:00Z
+timestamp: 2026-10-02T14:32:09Z
 ---
 # Summary
 
@@ -141,6 +141,10 @@ a fresh confirmation after recovery.
 Sound initialization also fences competing settings and control actions before
 its asynchronous browser work begins. Only the same active attachment may apply
 the result; successful reconfiguration still waits for a fresh painted frame.
+Transport reconnect resets the existing window's player and retires old-generation
+media while preserving its user-enabled audio device and sound preference. Fresh
+audio must use the successor generation. Explicit Disconnect closes that device;
+an enabled sound toggle must never hide a closed audio context after reconnect.
 
 # Boundaries
 

@@ -160,7 +160,7 @@ async function connect() {
   clearTimeout(retry); if (stopped) return;
   const current = ++epoch; revoke(); state = 'connecting'; generation = 0; sequence = 0; awaitingMedia = []; awaitingState = false; audioRequest = undefined;
   updateTransitionControls();
-  player?.close(); control?.close(); media?.close(); status('connecting'); $('reconnect').hidden = true;
+  player?.reset(0); control?.close(); media?.close(); status('connecting'); $('reconnect').hidden = true;
   if (!HostDesktopPlayer.supported()) { status('unsupported', 'unsupportedHint'); return; }
   try {
     const response = await fetch(base + 'ticket', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
@@ -178,7 +178,7 @@ async function connect() {
     control = new WebSocket(address('control'), ['redeven-desktop-v1', result.data.token]);
     media = new WebSocket(address('media'), ['redeven-desktop-v1', result.data.token]);
     media.binaryType = 'arraybuffer';
-    player = new HostDesktopPlayer(canvas, {
+    player ??= new HostDesktopPlayer(canvas, {
       acknowledge(g, frame) { if (!awaitingState && state === 'active' && g === generation) command('frame_ack', { frame_id: frame }); },
       painted(g) { if (awaitingState || g !== generation || state !== 'active') return; painted = true; input.bindTarget(active(g) ? g : null); updateTransitionControls(); reconnectAttempts = 0; },
       recover() { revoke(); if (state === 'active') changeDesktop('keyframe'); },
@@ -232,7 +232,7 @@ async function connect() {
     };
     const lost = () => {
       if (current !== epoch || stopped) return;
-      epoch++; revoke(); state = 'disconnected'; player.close(); control.close(); media.close();
+      epoch++; revoke(); state = 'disconnected'; player.reset(0); control.close(); media.close();
       updateTransitionControls();
       clipboardSync = false; clipboardText = ''; awaitingMedia = []; status('disconnected'); $('reconnect').hidden = false;
       retryConnection();
