@@ -368,7 +368,7 @@ func defaultScope(homeAbs string) *config.FilesystemScope {
 				Kind:  config.FilesystemRootComputer,
 				Permissions: config.FilesystemPermissionSet{
 					Read:  true,
-					Write: false,
+					Write: true,
 				},
 				System: true,
 			},

@@ -67,7 +67,6 @@ export interface FileBrowserWorkspaceProps {
   onToggleSidebar?: () => void;
   onNavigate?: (path: string) => void;
   onRootSelect?: (path: string) => void;
-  onRootWritePermissionChange?: (root: NormalizedFilesystemRoot, write: boolean) => Promise<void> | void;
   onPathChange?: (path: string, source: 'user' | 'programmatic') => void;
   onPathSubmit?: (path: string) => Promise<FileBrowserPathSubmitResult>;
   onOpen?: (item: FileItem) => void;
@@ -503,7 +502,6 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
                 roots={props.roots}
                 currentPath={props.currentPath}
                 onRootSelect={props.onRootSelect}
-                onRootWritePermissionChange={props.onRootWritePermissionChange}
                 class="min-h-full"
               />
             </Show>
@@ -617,7 +615,6 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           showMobileSidebarButton={props.showMobileSidebarButton}
           onToggleSidebar={props.onToggleSidebar}
           onRootSelect={props.onRootSelect}
-          onRootWritePermissionChange={props.onRootWritePermissionChange}
           instanceId={props.instanceId}
           onPathSubmit={props.onPathSubmit}
           pathEditRequestKey={props.pathEditRequestKey}

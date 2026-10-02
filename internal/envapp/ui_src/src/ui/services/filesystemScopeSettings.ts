@@ -1,14 +1,4 @@
-import type { AgentSettingsResponse, FilesystemRootPolicy, FilesystemScope, SettingsUpdateResponse } from '../pages/settings/types';
-import { fetchLocalApiJSON } from './localApi';
-
-export type FilesystemRootWriteUpdateResult = Readonly<{
-  settings: AgentSettingsResponse;
-  filesystemScope: FilesystemScope;
-}>;
-
-export async function fetchFilesystemSettings(): Promise<AgentSettingsResponse> {
-  return fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
-}
+import type { FilesystemRootPolicy, FilesystemScope } from '../pages/settings/types';
 
 function runtimeFilesystemRoots(agentHomeDir: string, scope: FilesystemScope | null | undefined): readonly FilesystemRootPolicy[] {
   if (scope?.roots?.length) return scope.roots;
@@ -27,7 +17,7 @@ function runtimeFilesystemRoots(agentHomeDir: string, scope: FilesystemScope | n
       label: 'Computer',
       path: '/',
       kind: 'computer',
-      permissions: { read: true, write: false },
+      permissions: { read: true, write: true },
       system: true,
     },
   ];
@@ -59,59 +49,5 @@ export function normalizeFilesystemScopeDraft(agentHomeDir: string, scope: Files
     schema_version: Number(scope?.schema_version ?? 1) || 1,
     default_root_id: defaultRootID,
     roots,
-  };
-}
-
-export function updateFilesystemRootWritePermission(
-  scope: FilesystemScope,
-  rootId: string,
-  write: boolean,
-): FilesystemScope {
-  const id = String(rootId ?? '').trim();
-  if (!id) throw new Error('Missing filesystem root id.');
-  let matched = false;
-  const roots = scope.roots.map((root) => {
-    if (root.id !== id) return cloneFilesystemRoot(root);
-    matched = true;
-    return {
-      ...cloneFilesystemRoot(root),
-      permissions: {
-        read: true,
-        write,
-      },
-    };
-  });
-  if (!matched) throw new Error(`Filesystem root not found: ${id}`);
-  return {
-    ...scope,
-    roots,
-  };
-}
-
-function normalizeSettingsUpdateResponse(raw: AgentSettingsResponse | SettingsUpdateResponse): AgentSettingsResponse {
-  const maybeSettings = (raw as SettingsUpdateResponse)?.settings;
-  return (maybeSettings ?? raw) as AgentSettingsResponse;
-}
-
-export async function saveFilesystemRootWritePermission(
-  currentSettings: AgentSettingsResponse,
-  rootId: string,
-  write: boolean,
-): Promise<FilesystemRootWriteUpdateResult> {
-  const agentHomeDir = String(currentSettings.runtime?.agent_home_dir ?? '').trim();
-  const baseScope = normalizeFilesystemScopeDraft(agentHomeDir, currentSettings.runtime?.filesystem_scope ?? null);
-  const filesystemScope = updateFilesystemRootWritePermission(baseScope, rootId, write);
-  const data = await fetchLocalApiJSON<AgentSettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
-    method: 'PUT',
-    body: JSON.stringify({
-      agent_home_dir: agentHomeDir,
-      shell: String(currentSettings.runtime?.shell ?? ''),
-      filesystem_scope: filesystemScope,
-    }),
-  });
-  const settings = normalizeSettingsUpdateResponse(data);
-  return {
-    settings,
-    filesystemScope: settings.runtime?.filesystem_scope ?? filesystemScope,
   };
 }

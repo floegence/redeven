@@ -140,6 +140,31 @@ func TestMutationRPCsFailClosedWithoutCoordinator(t *testing.T) {
 	}
 }
 
+func TestDefaultComputerWriteAccessPreservesSessionWriteDenial(t *testing.T) {
+	svc := NewService(t.TempDir())
+	coordinator := &recordingMutationCoordinator{}
+	svc.coordinator = coordinator
+	router := sessionrpc.NewRouter()
+	svc.Register(router, &session.Meta{CanRead: true, CanWrite: false})
+	target := filepath.Join(t.TempDir(), "denied")
+	payload, err := json.Marshal(fsMkdirReq{Path: target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response json.RawMessage
+	callErr := router.Call(context.Background(), TypeID_FS_MKDIR, json.RawMessage(payload), &response)
+	var rpcErr *sessionrpc.Error
+	if !errors.As(callErr, &rpcErr) || rpcErr.Code != 403 {
+		t.Fatalf("mkdir RPC error = %#v, want permission denied", callErr)
+	}
+	if coordinator.calls != 0 {
+		t.Fatal("denied session reached the mutation coordinator")
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("denied session created a directory: %v", err)
+	}
+}
+
 func TestFilesystemWriteEffectAlwaysChangesTopology(t *testing.T) {
 	for _, target := range []string{
 		filepath.Join("repo", "src", "app.go"),
@@ -463,11 +488,14 @@ func TestServiceMkdirTarget(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects read-only computer root target", func(t *testing.T) {
-		_, err := s.mkdirTarget("/../../outside", false)
-		rpcErr, ok := err.(*sessionrpc.Error)
-		if !ok || rpcErr.Code != 403 {
-			t.Fatalf("expected rpc 403 error, got %#v", err)
+	t.Run("creates directory outside Home with default Computer write access", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "outside-home")
+		created, err := s.mkdirTarget(target, false)
+		if err != nil {
+			t.Fatalf("mkdirTarget(outside Home): %v", err)
+		}
+		if mustEvalPath(t, created) != mustEvalPath(t, target) {
+			t.Fatalf("created path = %q, want %q", created, target)
 		}
 	})
 

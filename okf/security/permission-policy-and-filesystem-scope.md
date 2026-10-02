@@ -3,7 +3,7 @@ type: Security Contract
 title: Permission policy and filesystem scope
 description: Runtime permissions are clamped by local policy and file features are scoped by directory root policy.
 tags: [security, permissions, filesystem, runtime]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-10-02T00:00:00Z
 ---
 # Summary
 
@@ -16,6 +16,8 @@ Runtime permissions are clamped by local policy and file features are scoped by 
 ## Mechanism
 
 The local permission policy is a three-bit read/write/execute cap. It starts from `local_max`, optionally intersects by user and by floe app, and supports presets for read-only, execute+read, and full read/write/execute. Session startup intersects the control-plane grant with the local cap before the runtime stores effective permission flags. The execute+read preset permits explicitly modeled execute-like operations, but general-purpose shell access and arbitrary process launch require both effective write and execute permission. Filesystem scope validates explicit root ids, labels, paths, kinds, default root references, and the invariant that write implies read.
+
+When filesystem scope is unconfigured, the runtime supplies read/write Home and Computer roots, with Home selected by default. Runtime Settings uses the same defaults when preparing an initial scope draft. Explicitly configured read-only roots remain read-only; session caps, canonical path boundaries, and host filesystem permissions still constrain every operation. Files sidebars show root access as non-interactive status badges and provide directory navigation only. They do not toggle root permissions, open write-enablement dialogs, or save runtime settings. Administrators manage explicit root policy in Runtime Settings.
 
 The reusable runtime filesystem service owns path context and directory listing over the configured filesystem scope. `fs.getPathContext()` is the authority for the complete root set, default root, and root permissions. Home paths supplied by Git, Terminal, Flower, Workbench, or floating surfaces are display hints for rendering `~`; they cannot replace roots, change the default root, widen scope, or create authorization. A directed file-browser request refreshes path context and validates the requested directory with the existing `fs.list` operation, so session read permission, root read permission, canonical and symlink boundaries, and the host filesystem read all remain part of one authoritative decision. Code App Local API exposes read-only `GET /_redeven_proxy/api/fs/path_context` and `POST /_redeven_proxy/api/fs/list` for browser-facing directory pickers; both routes require read permission before calling the filesystem service, and list errors preserve scope, root or session read denial, host permission denial, missing paths, non-directory paths, and invalid paths without bypassing `filesystemscope.Registry`.
 
@@ -43,6 +45,10 @@ Permission effects, resource kinds, tool names, arguments, file paths, shell tex
 
 - `redeven:internal/config/permission_policy.go:11` - PermissionPolicy is the local endpoint cap for session metadata.
 - `redeven:internal/agent/agent.go:485` - Runtime session handling intersects granted permissions with the local cap.
+- `redeven:internal/filesystemscope/registry.go` and `redeven:internal/filesystemscope/registry_test.go` - Default read/write roots and preservation of explicit read-only policy.
+- `redeven:internal/fs/service_test.go` - Default writes outside Home, explicit root write denial, and session write denial.
+- `redeven:internal/envapp/ui_src/src/ui/services/filesystemScopeSettings.ts` - Settings drafts match runtime defaults and retain explicit policy.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Wide and drawer sidebars expose status and navigation without permission controls.
 - `redeven:internal/config/filesystem_scope.go:11` - FilesystemScope stores versioned root policy.
 - `redeven:internal/fs/service.go:101` - The filesystem service preserves stable directory-list error categories at the RPC boundary.
 - `redeven:internal/fs/service.go:493` - The filesystem service exposes path context for consumers without duplicating scope logic.
