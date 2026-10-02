@@ -136,6 +136,9 @@ Lock is available only after the current control generation has painted. Its
 confirmation belongs to that attachment and generation; losing authority disables
 it permanently, even if a successor becomes active. The user can cancel and open
 a fresh confirmation after recovery.
+Sound initialization also fences competing settings and control actions before
+its asynchronous browser work begins. Only the same active attachment may apply
+the result; successful reconfiguration still waits for a fresh painted frame.
 
 # Boundaries
 

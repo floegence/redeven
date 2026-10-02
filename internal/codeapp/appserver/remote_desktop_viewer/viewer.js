@@ -13,6 +13,7 @@ let original = false, quality = 'smooth', audio = false, volume = .7, pinned = f
 let textInput = 'host';
 let awaitingMedia = [], reconnectAttempts = 0, noticeTimer, awaitingState = false;
 let nativeFullscreen = false, pendingFullscreen;
+let audioRequest;
 const windowBridge = window.redevenHostApplicationWindow;
 const fullscreen = () => windowBridge ? nativeFullscreen : !!document.fullscreenElement;
 for (const element of document.querySelectorAll('[data-icon]')) remoteDesktopIcons.mount(element, element.dataset.icon);
@@ -37,7 +38,7 @@ localize();
 new MutationObserver(localize).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
 
 function notice(key) { $('notice').textContent = copy(key); clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('notice').textContent = ''; }, 6000); }
-function authorized(target) { return !awaitingState && target === generation && painted && state === 'active' && session.mode === 'control' && control?.readyState === WebSocket.OPEN; }
+function authorized(target) { return !audioRequest && !awaitingState && target === generation && painted && state === 'active' && session.mode === 'control' && control?.readyState === WebSocket.OPEN; }
 function active(target) { return !panel.open && authorized(target); }
 function command(method, values = {}, takeover = false) {
   if (control?.readyState !== WebSocket.OPEN) return false;
@@ -81,20 +82,38 @@ const pointer = hostApplicationPointer.createRemotePointer({
 function revoke() { painted = false; pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'enable-sound', 'sound']) {
-    if ($(id)) $(id).disabled = awaitingState || state !== 'active';
+    if ($(id)) $(id).disabled = !!audioRequest || awaitingState || state !== 'active';
   }
   if ($('lock-host')) $('lock-host').disabled = !authorized(generation);
   const confirm = $('confirm-lock');
   if (confirm) confirm.disabled ||= !authorized(Number(confirm.dataset.generation)) || epoch !== Number(confirm.dataset.epoch);
 }
 function changeDesktop(method, values, takeover = false) {
-  if (awaitingState) return;
+  if (audioRequest || awaitingState) return;
   revoke(); awaitingState = true; player?.reset(generation);
   updateTransitionControls();
   command(method, values, takeover);
 }
 function picture() { return { mode: quality, max_dimension: quality === 'data' ? 1920 : 2560, frame_rate: quality === 'data' ? 30 : 60, audio, native_pixels: original }; }
 function configure() { if (state !== 'active') return; changeDesktop('configure', { picture: picture() }); }
+async function setAudio(enabled) {
+  if (audioRequest || awaitingState || state !== 'active') return;
+  const request = audioRequest = { epoch, generation, player };
+  pointer.reset(); input.bindTarget(null); updateTransitionControls();
+  try {
+    const ready = enabled && await request.player.enableAudio();
+    if (audioRequest !== request || request.epoch !== epoch || request.generation !== generation || state !== 'active' || awaitingState) return;
+    const changed = audio !== ready;
+    audioRequest = undefined; audio = ready; player.setVolume(volume, !audio);
+    if (changed) configure();
+  } finally {
+    if (audioRequest === request) audioRequest = undefined;
+    if ($('sound')) $('sound').checked = audio;
+    if ($('enable-sound')) $('enable-sound').textContent = copy(audio ? 'sound' : 'enableSound');
+    updateTransitionControls();
+    input.bindTarget(active(generation) ? generation : null);
+  }
+}
 function status(key, hint = '') { $('connection').hidden = key === ''; $('status').textContent = key ? copy(key) : ''; $('hint').textContent = hint ? copy(hint) : ''; }
 function updateDisplays(displays) {
   $('display').replaceChildren(...displays.map((display, index) => {
@@ -139,7 +158,7 @@ function retryConnection() {
 }
 async function connect() {
   clearTimeout(retry); if (stopped) return;
-  const current = ++epoch; revoke(); state = 'connecting'; generation = 0; sequence = 0; awaitingMedia = []; awaitingState = false;
+  const current = ++epoch; revoke(); state = 'connecting'; generation = 0; sequence = 0; awaitingMedia = []; awaitingState = false; audioRequest = undefined;
   updateTransitionControls();
   player?.close(); control?.close(); media?.close(); status('connecting'); $('reconnect').hidden = true;
   if (!HostDesktopPlayer.supported()) { status('unsupported', 'unsupportedHint'); return; }
@@ -303,13 +322,13 @@ $('settings').onclick = () => {
     textInput = textMode.value; textMode.title = copy(textInput === 'host' ? 'hostInput' : 'pasteInput');
   };
   const textLabel = element('label', copy('textInput')); textLabel.append(textMode);
-  const sound = button('enableSound', async () => { if (await player.enableAudio()) { audio = true; player.setVolume(volume); configure(); sound.textContent = copy('sound'); } });
+  const sound = button(audio ? 'sound' : 'enableSound', () => void setAudio(true));
   sound.id = 'enable-sound';
   const slider = element('input', '', { type: 'range', min: '0', max: '1', step: '.05', value: String(volume) });
   slider.oninput = () => { volume = Number(slider.value); player.setVolume(volume, !audio); };
   const volumeLabel = element('label', copy('volume')); volumeLabel.append(slider);
   const mute = element('input', '', { id: 'sound', type: 'checkbox', checked: audio });
-  mute.onchange = async () => { audio = mute.checked && await player.enableAudio(); mute.checked = audio; player.setVolume(volume, !audio); configure(); };
+  mute.onchange = () => void setAudio(mute.checked);
   const muteLabel = element('label', copy('sound')); muteLabel.append(mute);
   const lock = button('lock', async () => {
     const authority = { epoch, generation };

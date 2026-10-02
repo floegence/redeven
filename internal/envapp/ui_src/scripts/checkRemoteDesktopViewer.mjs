@@ -22,9 +22,11 @@ let messages = [], controls = [], sockets = [], generation = 0, frame = 0, selec
 let control, media, display = 'one', connectionCount = 0, disconnects = 0, ticketFailures = 0;
 let conflictNextConnect = false;
 let lockedNextConnect = false;
+let delayAudio = false, audioResponse;
 const configuration = { session: { id: 'qualification', host_name: 'Task desktop', locale: 'en-US', mode: 'control', display_id: '' }, base: '/_redeven_desktop/' };
 const names = { 'input.js': 'remote-input.generated.js', 'pointer.js': 'remote-pointer.generated.js', 'floe.css': 'appearance.generated.css' };
 const server = http.createServer((request, response) => {
+  if (delayAudio && request.url.endsWith('/host_desktop_audio.mjs')) { audioResponse = response; return; }
   if (request.url === '/_redeven_desktop/ticket') {
     connectionCount++;
     if (ticketFailures > 0) { ticketFailures--; response.writeHead(503).end(); return; }
@@ -124,6 +126,21 @@ try {
   assert.equal(messages.filter(item => item.command.method === 'input').length, 0, 'input before first paint');
   paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  delayAudio = true;
+  await page.locator('#settings').click();
+  await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
+  try {
+    for (let attempt = 0; !audioResponse && attempt < 100; attempt++) await page.waitForTimeout(20);
+    assert(audioResponse, 'audio setup did not request its worklet');
+    assert(await page.getByRole('button', { name: 'Lock host', exact: true }).isDisabled(), 'lock remained available during asynchronous audio setup');
+    assert(await page.locator('#quality').isDisabled(), 'configuration competed with asynchronous audio setup');
+  } finally {
+    delayAudio = false;
+    if (audioResponse) { audioResponse.setHeader('Content-Type', 'text/javascript'); audioResponse.end(readFileSync(path.join(native, 'host_desktop_audio.mjs'))); }
+  }
+  await page.waitForFunction(() => !document.querySelector('#quality').disabled && document.querySelector('#sound').checked);
+  await page.waitForFunction(() => !document.querySelector('#lock-host').disabled);
+  await page.keyboard.press('Escape');
   await page.locator('#settings').click();
   assert.deepEqual(await page.evaluate(() => {
     document.querySelector('#quality').value = 'clarity';
