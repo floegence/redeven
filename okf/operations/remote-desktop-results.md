@@ -144,6 +144,14 @@ macOS separates pixel comparison from encoding with a bounded latest-sample
 mailbox. Callback-queue wait P95 fell from about 8.6ms to 0.02ms; cancellation
 and concurrent owned application/desktop capture passed. Both platforms have
 red/green coverage for last-display-return defects. Physical hotplug is pending.
+During a user-confirmed Mac display unplug/reconnect, the published product
+reported `generation 1 active → generation 2 connecting → generation 2 active`
+while macOS retained the same stable display identifier and catalog. The initial
+hotplug harness required a catalog change and therefore did not record its final
+client paint receipt; the corrected harness accepts this native generation
+recovery, but a second physical action was not observed before the session was
+stopped. The native recovery evidence remains retained and the client hotplug
+qualification stays open.
 
 Current published checks pass Go race/vet for desktop, host applications and
 appserver, 32 Swift helper tests, both browser viewer variants, Electron 41.10.5
@@ -203,3 +211,4 @@ Screen/clipboard content is not committed. Representative records:
 - `linux-capture-stage-comparisons.json` and `linux-v0226-sampling-comparison.json`: acquisition diagnostics and rejected approaches.
 - `product-performance-linux-v0226-1080-moving-clock.json` and `product-performance-linux-v0226-1440-moving-clock.json`: corrected motion-clock repetitions.
 - `product-macos-restart-macos-v0226-office-restart-unlocked.json` and `product-shortcut-macos-v0226-office-restart-unlocked.json`: unlocked macOS Runtime restart and shortcut/media continuity.
+- `hotplug-macos-v0226-hotplug.json`: first user-confirmed macOS unplug/reconnect, retained with the generation recovery and harness limitation.
