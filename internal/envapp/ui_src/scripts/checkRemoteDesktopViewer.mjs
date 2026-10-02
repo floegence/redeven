@@ -117,6 +117,22 @@ try {
   }
   const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('Viewer error:', error.stack); });
   await page.addInitScript(() => {
+    window.qualificationAudioSamples = [];
+    const Context = window.AudioContext;
+    window.AudioContext = class extends Context {
+      constructor(...args) { super(...args); window.qualificationAudioContext = this; }
+    };
+    const Worklet = window.AudioWorkletNode;
+    window.AudioWorkletNode = class extends Worklet {
+      constructor(...args) {
+        super(...args);
+        const send = this.port.postMessage.bind(this.port);
+        this.port.postMessage = (message, ...transfer) => {
+          if (message.type === 'samples') window.qualificationAudioSamples.push({ generation: message.generation, frames: message.planes[0].length });
+          return send(message, ...transfer);
+        };
+      }
+    };
     const denied = async () => { throw new DOMException('Fixture clipboard permission denied', 'NotAllowedError'); };
     Object.defineProperty(navigator, 'clipboard', { value: { readText: denied, writeText: denied } });
   });
@@ -266,6 +282,22 @@ try {
   assert(connectionCount >= 4, 'temporary ticket failures stopped automatic reconnect');
   assert(await page.locator('.floe-remote-input').isDisabled(), 'reconnect reused prior paint');
   paint(); await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'running', 'reconnect closed enabled sound while the product still advertised it');
+  await page.locator('#settings').click();
+  assert(await page.locator('#sound').isChecked(), 'reconnect lost the sound preference');
+  await page.keyboard.press('Escape');
+  const opus = Buffer.from(await page.evaluate(async () => {
+    const chunks = [];
+    const encoder = new window.AudioEncoder({ output: chunk => { const bytes = new Uint8Array(chunk.byteLength); chunk.copyTo(bytes); chunks.push([...bytes]); }, error: error => { throw error; } });
+    encoder.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 });
+    const data = new window.AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: 960, numberOfChannels: 2, timestamp: 0, data: new Float32Array(1920).fill(.1) });
+    encoder.encode(data); data.close(); await encoder.flush(); encoder.close();
+    return chunks[0];
+  }));
+  const audioHeader = Buffer.from(JSON.stringify({ version: 1, type: 'audio', codec: 'opus', generation, sample_rate: 48000, channels: 2, timestamp: 0, bytes: opus.length }));
+  const audioPrefix = Buffer.alloc(4); audioPrefix.writeUInt32BE(audioHeader.length);
+  media.send(Buffer.concat([audioPrefix, audioHeader, opus]));
+  await page.waitForFunction(current => window.qualificationAudioSamples.some(sample => sample.generation === current && sample.frames > 0), generation);
   lockedNextConnect = true; controls.at(-1).close();
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host is locked', null, { timeout: 3000 });
   assert(await page.locator('.floe-remote-input').isDisabled(), 'initially locked host retained input');
@@ -335,8 +367,9 @@ try {
     await page.keyboard.press('Escape');
   }
   await page.locator('#disconnect').click(); await page.waitForTimeout(100);
+  assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'closed', 'explicit disconnect retained the audio device');
   assert.equal(disconnects, 1); assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ passed: true, checks: ['paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'narrow localized settings', 'dialog keyboard', 'disconnect'] }));
+  console.log(JSON.stringify({ passed: true, checks: ['paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'disconnect'] }));
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));
   if (directory) await rm(directory, { recursive: true, force: true });
