@@ -21,6 +21,47 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func TestDesktopAttachmentBackpressure(t *testing.T) {
+	_, app, _, _ := desktopTransportFixture(t)
+	conn, _, err := nativeapps.DialDesktop(t.Context(), *app.record.Endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attachment := &desktopAttachment{conn: conn, events: make(chan nativeapps.DesktopEvent, 1), done: make(chan struct{})}
+	defer attachment.close()
+	if !attachment.emit(nativeapps.DesktopEvent{ID: 1}) {
+		t.Fatal("initial event was rejected")
+	}
+	completed := make(chan bool, 1)
+	go func() { completed <- attachment.emit(nativeapps.DesktopEvent{ID: 2}) }()
+	select {
+	case result := <-completed:
+		t.Fatalf("a bounded reply burst must wait for the viewer, returned %v", result)
+	case <-time.After(20 * time.Millisecond):
+	}
+	if event := <-attachment.events; event.ID != 1 {
+		t.Fatal("event order changed")
+	}
+	select {
+	case result := <-completed:
+		if !result {
+			t.Fatal("draining the queue closed the attachment")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("event did not resume after the viewer drained its queue")
+	}
+	go func() { completed <- attachment.emit(nativeapps.DesktopEvent{ID: 3}) }()
+	attachment.close()
+	select {
+	case result := <-completed:
+		if result {
+			t.Fatal("a closed attachment accepted a queued event")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("closing the attachment did not release the blocked reader")
+	}
+}
+
 // This wire peer tests product authentication and attachment ownership, not the
 // native input implementation. Installed acceptance asserts real widget results.
 func desktopTransportFixture(t *testing.T) (*Manager, *linuxApplication, Session, *atomic.Uint64) {

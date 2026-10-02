@@ -26,6 +26,11 @@ Linux and retained Xpra host application viewers use the same transport owner.
 Runtime-to-helper pipes and Runtime-to-backend loopback sockets remain internal
 adapters; they are not independently exposed client transports.
 
+The product's native application attachment keeps a bounded event queue. A burst
+of input acknowledgements waits for the viewer to drain that queue; fullness
+alone must not disconnect an otherwise healthy attachment. Socket write deadlines
+bound a stalled viewer, and attachment shutdown releases a blocked event reader.
+
 Direct windows acquire a resource-bound session through
 `/pf/<forward_id>/_redeven_window/connect` and `/spend`. Public HTTP, public HTTPS
 and Desktop's numeric-loopback private bridge each use their matching published

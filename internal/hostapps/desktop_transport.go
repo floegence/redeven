@@ -49,8 +49,7 @@ func (a *desktopAttachment) emit(event nativeapps.DesktopEvent) bool {
 	select {
 	case a.events <- event:
 		return true
-	default:
-		a.close()
+	case <-a.done:
 		return false
 	}
 }
