@@ -1620,18 +1620,12 @@ SOFTWARE.
 | @floegence/floe-webapp-protocol | 0.81.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.81.3 |  |
 | @floegence/floebrowser | 0.1.27 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.27 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
-| @floegence/flowersec-core | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.2 |  |
-| @floegence/flowersec-core | 5.4.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.4.1 |  |
-| @floegence/flowersec-node-native-darwin-arm64 | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.2.2 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-darwin-arm64 | 5.4.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.4.1 |  |
-| @floegence/flowersec-node-native-darwin-x64 | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.2.2 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-darwin-x64 | 5.4.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.4.1 |  |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.2.2 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 5.4.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.4.1 |  |
-| @floegence/flowersec-node-native-linux-x64-gnu | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.2.2 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-linux-x64-gnu | 5.4.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.4.1 |  |
-| @floegence/flowersec-node-native | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.2.2 |  |
-| @floegence/flowersec-node-native | 5.4.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.4.1 |  |
+| @floegence/flowersec-core | 5.7.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.7.0 |  |
+| @floegence/flowersec-node-native-darwin-arm64 | 5.7.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.7.0 |  |
+| @floegence/flowersec-node-native-darwin-x64 | 5.7.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.7.0 |  |
+| @floegence/flowersec-node-native-linux-arm64-gnu | 5.7.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.7.0 |  |
+| @floegence/flowersec-node-native-linux-x64-gnu | 5.7.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.7.0 |  |
+| @floegence/flowersec-node-native | 5.7.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.7.0 |  |
 | @floegence/redeven-service-templates | 0.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fredeven-service-templates/v/0.6.0 | Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.6.0 source release. The SDK manifest omits its license field. |
 | @floegence/redevplugin-contracts | 3.0.33 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.33 |  |
 | @floegence/redevplugin-ui | 3.0.33 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.33 | License inherited from floegence/redevplugin root LICENSE. |
@@ -1864,7 +1858,7 @@ SOFTWARE.
 | @types/node | 24.12.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.0 |  |
 | @types/node | 24.12.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.4 | License verified from the exact registry package manifest. |
 | @types/node | 26.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/26.2.0 | License verified from the exact registry package manifest. |
-| @types/node | 26.4.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/26.4.0 |  |
+| @types/node | 26.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/26.4.0 |  |
 | @types/responselike | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fresponselike/v/1.0.3 |  |
 | @types/semver | 7.7.1 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fsemver/v/7.7.1 |  |
 | @types/trusted-types | 2.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Ftrusted-types/v/2.0.7 |  |
@@ -2388,7 +2382,6 @@ SOFTWARE.
 | react-dom | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react-dom/v/18.3.1 |  |
 | react | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react/v/18.3.1 |  |
 | react | 19.2.8 | MIT | Desktop shell | https://www.npmjs.com/package/react/v/19.2.8 | License verified from the exact registry package manifest. |
-| react | 19.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/react/v/19.3.0 |  |
 | read-binary-file-arch | 1.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/read-binary-file-arch/v/1.0.6 |  |
 | readable-stream | 2.3.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/readable-stream/v/2.3.8 |  |
 | readable-stream | 3.6.2 | MIT | Env App UI | https://www.npmjs.com/package/readable-stream/v/3.6.2 |  |
@@ -2515,7 +2508,7 @@ SOFTWARE.
 | typescript | 5.9.3 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/typescript/v/5.9.3 |  |
 | ufo | 1.6.3 | MIT | Env App UI | https://www.npmjs.com/package/ufo/v/1.6.3 |  |
 | undici-types | 7.16.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici-types/v/7.16.0 |  |
-| undici-types | 8.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/8.3.0 |  |
+| undici-types | 8.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/8.3.0 |  |
 | undici | 7.29.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.29.0 |  |
 | unist-util-is | 6.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-is/v/6.0.1 |  |
 | unist-util-position | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-position/v/5.0.0 |  |
