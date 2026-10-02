@@ -131,5 +131,8 @@ handlers on an isolated test state directory, with a fixture certificate pinned
 only in the test browser. Its Node readiness transport also verifies rejection
 of the untrusted certificate. The transport unit fixture uses an unresolvable
 Desktop target hostname while Gateway reaches the fixture over TCP. These
-checks verify routing independence, but do not qualify a physical firewall,
-reverse-proxy deployment, or cross-platform packaged Desktop installation.
+checks verify routing independence. The separate
+[deployment qualification](gateway-deployment-qualification.md) exercises real
+TCP isolation and the maintained HTTPS Nginx configuration, including idle lease
+expiry and log redaction. Physical firewall appliances are not required for that
+network contract. Cross-platform installed packages remain release qualification.

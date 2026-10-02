@@ -8,19 +8,13 @@ timestamp: 2026-10-02T15:30:00Z
 # Summary
 
 The agreed host scope passes the tested [desktop contract](../architecture/remote-desktop.md).
-Published v0.22.6 passes macOS and Linux X11 performance repetitions, office
-interaction and ten-minute input/queue checks. The implementation was integrated
-into local `main`. The user subsequently designated `udesk24` for functional
-validation only; its [Wayland performance failures](remote-desktop-wayland-results.md)
-are retained and do not block this delivery. Preserve the
-[thresholds and measurement boundaries](remote-desktop-validation.md) and failed
-measurements. Passing retries neither erase failures nor establish their causes.
-No Redeven push, push gate or full integration gate is authorized.
-Source integration does not substitute for real-host qualification or establish
-release acceptance.
-The [reconnect record](remote-desktop-recovery-results.md) separately qualifies
-the published v0.22.7 sound fix, Mac physical hotplug, locked reconnect and
-Wayland display recovery. These results do not claim passing Wayland performance
+Published v0.22.6 passes macOS/X11 performance, office interaction and ten-minute
+input/queue checks. The user designated `udesk24` for functional validation only;
+its [Wayland failures](remote-desktop-wayland-results.md) remain outside that scope.
+Preserve the [measurement boundaries](remote-desktop-validation.md) and failures;
+passing retries do not establish causes. The [reconnect record](remote-desktop-recovery-results.md)
+qualifies v0.22.7 sound, Mac hotplug, locked reconnect and Wayland mode recovery.
+Integration does not establish release acceptance, passing Wayland performance
 or hardware encoding.
 
 # Contract

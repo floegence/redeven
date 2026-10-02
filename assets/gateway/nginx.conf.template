@@ -1,0 +1,41 @@
+# Render the placeholders before use. Keep the upstream listener private.
+# The qualification runner executes this same standalone configuration.
+worker_processes 1;
+pid "@PID@";
+# Nginx error messages can include unredacted request URIs. Access tokens must
+# never enter that log; use the safe access log and Gateway audit events instead.
+error_log /dev/null;
+events { worker_connections 1024; }
+http {
+    log_format gateway_safe '$time_iso8601 method=$request_method status=$status bytes=$body_bytes_sent duration=$request_time';
+    access_log "@ACCESS_LOG@" gateway_safe;
+    map $http_upgrade $gateway_connection {
+        default upgrade;
+        '' close;
+    }
+    server {
+        listen @LISTEN@ ssl;
+        server_name @SERVER_NAME@;
+        ssl_certificate "@CERTIFICATE@";
+        ssl_certificate_key "@CERTIFICATE_KEY@";
+        ssl_protocols TLSv1.2 TLSv1.3;
+        client_max_body_size 0;
+        location /gateway/v3/ {
+            proxy_pass http://@UPSTREAM@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $gateway_connection;
+            proxy_set_header Forwarded "";
+            proxy_set_header X-Forwarded-For "";
+            proxy_set_header X-Forwarded-Host "";
+            proxy_set_header X-Forwarded-Proto "";
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_read_timeout 660s;
+            proxy_send_timeout 660s;
+            proxy_redirect off;
+        }
+        location / { return 404; }
+    }
+}

@@ -7,21 +7,20 @@ timestamp: 2026-10-02T15:30:00Z
 ---
 # Summary
 
-The actual Linux X11 and macOS product viewers pass reconnect regression with
-published `floe-native-apps` v0.22.7 and clean Redeven source `69cd04988970`.
-A transport replacement retains
-the window's running audio device; fresh remote system-output samples reach its
-production AudioWorklet, and input resumes after current paint. This closes the
-tested sound-reconnect defect. Physical Mac hotplug, locked transport replacement
-and actual Wayland display-mode changes also pass fresh-paint recovery. These
-lifecycle results do not certify
-[Wayland performance](remote-desktop-wayland-results.md); the user designated
-`udesk24` for functional validation only.
-The [session contract](../architecture/remote-desktop.md) owns normative behavior;
-the [overall record](remote-desktop-results.md) owns original performance and
-local delivery.
+Published `floe-native-apps` v0.22.7 passes Linux X11 and macOS product reconnect:
+the running audio device survives replacement, new samples reach its AudioWorklet,
+and input waits for current paint. Mac physical hotplug, locked replacement and
+Wayland mode changes also pass fresh-paint recovery. These results do not certify
+[Wayland performance](remote-desktop-wayland-results.md); `udesk24` is designated
+for functional validation only. The [session contract](../architecture/remote-desktop.md)
+owns normative behavior; the [overall record](remote-desktop-results.md) owns
+performance and delivery boundaries.
 
-# Deterministic Regression
+# Contract
+
+Published product qualification uses clean Redeven source `69cd04988970`.
+
+## Deterministic Regression
 
 The previous viewer closed its player on transport loss while retaining an
 enabled sound preference. Reconnection reused that closed player, so the sound
@@ -37,7 +36,7 @@ enabled sound setting, then checks that explicit disconnect closes the context.
 Both host-platform browser variants and Electron 41.10.5 passed. This controlled
 codec check is separate from the real-host evidence below.
 
-# Real X11 Product Reconnect
+## Real X11 Product Reconnect
 
 The task Runtime on `server` used source `cb2fd0c6c`, published native v0.22.6,
 native Floeterm, `GOWORK=off` and no dependency overrides. The binary SHA-256 was
@@ -66,7 +65,7 @@ original 1920x1080@60 setting, confirmed by `xrandr`. This new run has no additi
 human listening claim; physical Linux-to-Mac playback is separately confirmed
 in the Wayland record.
 
-# Real macOS Product Reconnect
+## Real macOS Product Reconnect
 
 Clean Redeven source `07337d30981561ffd9b72ecfdb5c80b68af67dae` contains the
 same product fix and an evidence-only follow-up. Its native-Floeterm build uses
@@ -89,7 +88,7 @@ occurred. The fixture's frontmost ownership was checked before every input;
 the task fixture exited normally. This regression did not repeat the full
 performance matrix or certify physical hotplug.
 
-# Published v0.22.7 Qualification
+## Published v0.22.7 Qualification
 
 Upstream commit `29ed2f3f71b429f18cbea19811522931ce97cf0c` has an immutable
 v0.22.7 tag. Its Release qualification run `37016208383` and final Release gate
@@ -136,7 +135,9 @@ RemoteDesktop portal attachment and require new paint. Both transitions preserve
 the fixture with zero injected input or authority violations. This is mode-change
 evidence, not physical Linux monitor hotplug. The original 1440p mode is restored.
 
-# Earlier Native Candidate Evidence
+# Boundaries
+
+## Earlier Native Candidate Evidence
 
 A real Wayland native candidate recognized Mutter's retired PipeWire node after
 a supported mode change as `DISPLAY_STREAM_LOST`. It retired held input and old

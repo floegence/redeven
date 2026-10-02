@@ -8,20 +8,17 @@ timestamp: 2026-10-02T15:34:00Z
 # Summary
 
 The real `udesk24` GNOME 46 Wayland desktop passes the tested office workflow
-against published `floe-native-apps` v0.22.7, including actual display-mode
-recovery. The user explicitly designated this host for functional validation
-only on 2026-10-02; its graphics performance does not block this delivery.
-It does not meet the
-[remote desktop performance contract](remote-desktop-validation.md). Authorized
-virtual graphics provisioning added an actual 2560x1440 mode but did not resolve
-the capture limit: subsequent 1080p and 1440p scrolling failed at 26.43 and
-22.14 FPS on v0.22.6. Current v0.22.7 retries fail at 27.46 and 23.46 FPS.
-Keep failed measurements and the environment boundary explicit;
-X11 or synthetic results cannot replace Wayland evidence. The
-[overall acceptance record](remote-desktop-results.md) owns local delivery and
-the other hosts.
+and display-mode recovery with published `floe-native-apps` v0.22.7. The user
+designated this host for functional validation only on 2026-10-02; its graphics
+performance does not block delivery. It still fails the
+[performance contract](remote-desktop-validation.md): current 1080p/1440p
+scrolling reaches 27.46/23.46 FPS despite authorized virtual graphics provisioning.
+Preserve the failures; X11 or synthetic results cannot replace Wayland evidence.
+The [overall record](remote-desktop-results.md) owns delivery and the other hosts.
 
-# Verified Deployment And Desktop
+# Contract
+
+## Verified Deployment And Desktop
 
 The earlier accepted v0.22.6 build used clean source `6caee6df1da1` and native
 Floeterm. No sibling wiring, dependency overrides or production system-package
@@ -34,7 +31,7 @@ card used `bochs-drm`, with no render device or 2560x1440 mode. Temporary modes
 use Mutter `DisplayConfig`; the initial mode was 1280x800@74.994. Guest settings
 alone do not certify GPU encoding. No independent virtual desktop was substituted.
 
-# Product Interaction
+## Product Interaction
 
 The task uses an isolated Runtime on port 24864, private state and an
 authenticated SSH forward. The existing task's OS-authorized restore grant
@@ -58,7 +55,7 @@ errors. The user explicitly confirmed hearing them from the Mac output. This
 qualifies physical playback for that Linux-to-Mac path; destination-clock progress
 alone is not acoustic proof or a calibrated latency measurement.
 
-# Performance And Diagnostics
+## Performance And Diagnostics
 
 Each reported product scroll cell ran at least 60 seconds. The first cell
 failed the unchanged FPS threshold, so the matrix stopped and retained its
@@ -89,7 +86,7 @@ cause or identify an exact Mutter/virtual-display scheduling defect. Changing
 bitrate cannot repair a raw 36-37 FPS source. The software-mode observations
 must not be relabeled as passing hardware tests.
 
-# Authorized Virtual Graphics Comparison
+## Authorized Virtual Graphics Comparison
 
 The user explicitly approved provisioning the hypervisor's GL/EGL/Mesa userspace
 dependencies and normally shutting down and starting only VM 106. The guest now
@@ -132,7 +129,7 @@ The 1440p display prerequisite is now resolved. The unchanged FPS and frame-time
 thresholds remain unmet on this host; neither virtual GPU presence nor successful
 office input closes that qualification boundary.
 
-# Published v0.22.7 Follow-up
+## Published v0.22.7 Follow-up
 
 Clean Redeven source `69cd04988970c8b456f751838523e61625531d3c` uses the official
 v0.22.7 module and Linux component digest
@@ -168,7 +165,9 @@ path without identifying one causal component. Neither a complete performance
 matrix nor Wayland ten-minute qualification is passed. The preferred
 2560x1440@74.998 mode was restored and read back after the 1080p tests.
 
-# Cleanup Boundary
+# Boundaries
+
+## Cleanup
 
 Restore temporary display selections to the provisioned desktop's mode, stop only
 the task Runtime and its fixtures, close its SSH forward and remove its temporary
