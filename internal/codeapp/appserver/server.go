@@ -224,7 +224,8 @@ func codeRuntimeSetupChunkIndexFromPath(rawPath string) (int64, bool) {
 }
 
 type Server struct {
-	log *slog.Logger
+	log         *slog.Logger
+	lifecycleMu sync.Mutex
 
 	backend        Backend
 	pf             PortForwardBackend
@@ -490,6 +491,8 @@ func (g *Server) Start(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	g.lifecycleMu.Lock()
+	defer g.lifecycleMu.Unlock()
 	if g.ln != nil {
 		return nil
 	}
@@ -500,18 +503,24 @@ func (g *Server) Start(ctx context.Context) error {
 	}
 	g.ln = ln
 
-	g.srv = &http.Server{
+	srv := &http.Server{
 		Handler:           http.HandlerFunc(g.serveHTTP),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	g.srv = srv
+	done := make(chan struct{})
 
 	go func() {
-		<-ctx.Done()
-		_ = g.Close()
+		select {
+		case <-ctx.Done():
+			_ = g.closeServer(srv)
+		case <-done:
+		}
 	}()
 
 	go func() {
-		if err := g.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		defer close(done)
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			g.log.Warn("code app server stopped", "error", err)
 		}
 	}()
@@ -521,7 +530,17 @@ func (g *Server) Start(ctx context.Context) error {
 }
 
 func (g *Server) Close() error {
+	return g.closeServer(nil)
+}
+
+// A retired context must never shut down a replacement listener.
+func (g *Server) closeServer(expected *http.Server) error {
 	if g == nil {
+		return nil
+	}
+	g.lifecycleMu.Lock()
+	defer g.lifecycleMu.Unlock()
+	if expected != nil && g.srv != expected {
 		return nil
 	}
 	g.closePluginConnections()
@@ -534,11 +553,17 @@ func (g *Server) Close() error {
 		_ = g.ln.Close()
 	}
 	g.ln = nil
+	g.srv = nil
 	return nil
 }
 
 func (g *Server) URL() string {
-	if g == nil || g.ln == nil {
+	if g == nil {
+		return ""
+	}
+	g.lifecycleMu.Lock()
+	defer g.lifecycleMu.Unlock()
+	if g.ln == nil {
 		return ""
 	}
 	return "http://" + g.ln.Addr().String()
