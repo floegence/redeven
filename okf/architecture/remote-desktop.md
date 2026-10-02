@@ -89,6 +89,8 @@ connection suspended by locking follows the native observer's recovery events.
 host configuration. The launcher and viewer select that display when it still
 exists, otherwise the primary display. This preference is shared by authorized
 users of the host; it contains no connection credential.
+Capability normalization also applies to a retried connection after accepting or
+declining takeover, so a removed display cannot return through the stored request.
 
 ## Media and office interaction
 

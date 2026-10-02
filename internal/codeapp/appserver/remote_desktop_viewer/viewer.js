@@ -197,6 +197,7 @@ async function connect() {
         backend = message.capabilities.backend;
         const displays = message.capabilities.displays;
         const display = displays.length && !displays.some(item => item.id === session.display_id) ? '' : session.display_id;
+        session.display_id = display;
         command('connect', { mode: session.mode, display_id: display, picture: picture() });
       } else if (message.type === 'state') updateState(message);
       else if (message.type === 'displays') updateDisplays(message.displays);
