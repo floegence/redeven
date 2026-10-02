@@ -271,7 +271,7 @@
               "runtime",
               "security"
             ],
-            "summary": "Redeven owns remote desktop authorization, ephemeral sessions, window placement,\nconfiguration and audit. Published `floe-native-apps` v0.22.5 owns current-desktop\nselection, OS authorization, native input, capture, codecs and bounded playback.\nA desktop session shares the existing signed-in macOS or Linux desktop. It never\ncreates an application-private desktop, changes system security policy or grants\naccess to a lower-permission user. Disconnect releases remote input and media;\nhost applications and unsaved work survive. Platform unavailability revokes\ninput and requires a fresh active frame before recovery.",
+            "summary": "Redeven owns remote desktop authorization, ephemeral sessions, window placement,\nconfiguration and audit. Published `floe-native-apps` v0.22.6 owns current-desktop\nselection, OS authorization, native input, capture, codecs and bounded playback.\nA desktop session shares the existing signed-in macOS or Linux desktop. It never\ncreates an application-private desktop, changes system security policy or grants\naccess to a lower-permission user. Disconnect releases remote input and media;\nhost applications and unsaved work survive. Platform unavailability revokes\ninput and requires a fresh active frame before recovery.",
             "section_count": 2
           },
           {
@@ -14525,7 +14525,7 @@
         "type": "Runtime Contract"
       },
       "body_length": 10286,
-      "summary": "Redeven owns remote desktop authorization, ephemeral sessions, window placement,\nconfiguration and audit. Published `floe-native-apps` v0.22.5 owns current-desktop\nselection, OS authorization, native input, capture, codecs and bounded playback.\nA desktop session shares the existing signed-in macOS or Linux desktop. It never\ncreates an application-private desktop, changes system security policy or grants\naccess to a lower-permission user. Disconnect releases remote input and media;\nhost applications and unsaved work survive. Platform unavailability revokes\ninput and requires a fresh active frame before recovery.",
+      "summary": "Redeven owns remote desktop authorization, ephemeral sessions, window placement,\nconfiguration and audit. Published `floe-native-apps` v0.22.6 owns current-desktop\nselection, OS authorization, native input, capture, codecs and bounded playback.\nA desktop session shares the existing signed-in macOS or Linux desktop. It never\ncreates an application-private desktop, changes system security policy or grants\naccess to a lower-permission user. Disconnect releases remote input and media;\nhost applications and unsaved work survive. Platform unavailability revokes\ninput and requires a fresh active frame before recovery.",
       "sections": [
         {
           "id": "contract",
@@ -14542,7 +14542,7 @@
           "char_count": 372
         }
       ],
-      "snippet": "Redeven owns remote desktop authorization, ephemeral sessions, window placement, configuration and audit. Published `floe-native-apps` v0.22.5 owns current-desktop selection, OS authorization, native input, capture, codecs and bounded playb",
+      "snippet": "Redeven owns remote desktop authorization, ephemeral sessions, window placement, configuration and audit. Published `floe-native-apps` v0.22.6 owns current-desktop selection, OS authorization, native input, capture, codecs and bounded playb",
       "links": [
         {
           "label": "capture ownership",
@@ -20175,7 +20175,7 @@
         "performance",
         "validation"
       ],
-      "timestamp": "2026-10-02T07:40:00Z",
+      "timestamp": "2026-10-02T08:35:00Z",
       "frontmatter": {
         "description": "Assess published remote desktop measurements, retained failures and outstanding real-host qualification.",
         "tags": [
@@ -20185,11 +20185,11 @@
           "performance",
           "validation"
         ],
-        "timestamp": "2026-10-02T07:40:00Z",
+        "timestamp": "2026-10-02T08:35:00Z",
         "title": "Current-desktop qualification results",
         "type": "Acceptance Record"
       },
-      "body_length": 10332,
+      "body_length": 11149,
       "summary": "Acceptance remains incomplete for the [desktop contract](../architecture/remote-desktop.md).\nPublished dependencies pass office checks, the macOS 1080p matrix and Linux\nten-minute input stability. Failed or unfinished performance and real-host checks\nprevent integration. Preserve the [acceptance thresholds](remote-desktop-validation.md);\na passing retry neither erases a failure nor establishes its cause. Current\nmacOS foreground/performance work has resumed while unrelated workloads continue. No Redeven push, push gate or full integration gate is authorized.",
       "sections": [
         {
@@ -20207,11 +20207,11 @@
           "char_count": 3165
         },
         {
-          "id": "native-capture-candidate",
-          "title": "Native Capture Candidate",
+          "id": "released-capture-update",
+          "title": "Released Capture Update",
           "level": 1,
-          "body": "Unpublished upstream commits `8b57d73` and `dec4e3f` change acquisition and\nreconnection. These results do not qualify the Redeven product or an unpublished\ndependency override.\n\nThe Linux XCB candidate passed all twelve 60-second cells: 1080p/1440p scroll\nand window motion, each repeated three times. Minimum painted FPS was 55.416,\nmaximum interval P95 32.6ms and maximum refinement 249.3ms. It uses software\nx264, the original publisher's installed libraries and the diagnostic WebSocket\nbridge. XCB avoids per-frame server grabs; cached XFixes shapes and batched\npointer queries preserve the cursor without repeatedly copying its bitmap.\n\nAn authenticated, isolated Xvfb fixture passed raw-pixel reference equality,\nten mapping lifecycles without file-descriptor growth, protocol-error isolation,\ncursor shape/hotspot/position, Chinese paste, keys, clipboard, pointer and encoder\nrecovery. Fixture failures and corrected results are retained. No system package was installed.\n\nOn macOS, separating pixel comparison from encoder completion reduced measured\ncallback-queue wait P95 from about 8.6ms to 0.02ms. A bounded pending-sample mailbox\npassed cancellation/concurrency tests. Real close-during-start/reconfigure and\nconcurrent owned-window JPEG/H.264 plus desktop H.264 checks passed. The candidate\n1440p matrix passed three scroll cells and one window cell; its second window\ncell failed at 46.678 FPS/50.8ms. Unrelated Simulator tests and shared system load\nwere observed; attribution is unproven. Further format/codec diagnostics are not\nproduction changes or acceptance evidence.\n\nBoth platforms had reproducible last-display-return defects: Linux stopped\nobserving outputs while suspended, and macOS retained an empty selection after\nall outputs disappeared. Focused tests failed before the candidate fix and pass\nafter it. Physical hotplug still requires real-host qualification.",
-          "char_count": 1894
+          "body": "Upstream v0.22.6 publishes `8b57d73` and `dec4e3f` for acquisition and\nreconnection. Source, CodeQL, both native architectures, private applications,\nhost-desktop media and macOS Swift checks passed. The unchanged amd64 private\napplication job passed on rerun after a host-systemd initialization failure.\nThe official module/checksum readback passed; Redeven now pins this release in\nGo and Swift. Product rebuild and qualification remain pending. Native-candidate\nresults below do not substitute for authenticated product acceptance.\n\nThe Linux XCB candidate passed all twelve 60-second cells: 1080p/1440p scroll\nand window motion, each repeated three times. Minimum painted FPS was 55.416,\nmaximum interval P95 32.6ms and maximum refinement 249.3ms. It uses software\nx264, the original publisher's installed libraries and the diagnostic WebSocket\nbridge. XCB avoids per-frame server grabs; cached XFixes shapes and batched\npointer queries preserve the cursor without repeatedly copying its bitmap.\n\nAn authenticated, isolated Xvfb fixture passed raw-pixel reference equality,\nten mapping lifecycles without file-descriptor growth, protocol-error isolation,\ncursor shape/hotspot/position, Chinese paste, keys, clipboard, pointer and encoder\nrecovery. Fixture failures and corrected results are retained. No system package was installed.\n\nOn macOS, separating pixel comparison from encoder completion reduced measured\ncallback-queue wait P95 from about 8.6ms to 0.02ms. A bounded pending-sample mailbox\npassed cancellation/concurrency tests. Real close-during-start/reconfigure and\nconcurrent owned-window JPEG/H.264 plus desktop H.264 checks passed. The candidate\n1440p matrix passed three scroll cells and one window cell; its second window\ncell failed at 46.678 FPS/50.8ms. Unrelated Simulator tests and shared system load\nwere observed; attribution is unproven. Further format/codec diagnostics are not\nproduction changes or acceptance evidence.\n\nBoth platforms had reproducible last-display-return defects: Linux stopped\nobserving outputs while suspended, and macOS retained an empty selection after\nall outputs disappeared. Focused tests failed before the candidate fix and pass\nafter it. Physical hotplug still requires real-host qualification.\n\nThe final native 1440p matrix passed all six 60-second cells with continuously\nverified fixture focus: minimum 57.060 FPS, maximum interval P95 30.1ms and\nrefinement 364.4ms. Prior runs retain an unobserved-visibility 44.781 FPS failure\nand a foreground-verified 54.852 FPS run with `KEYFRAME_REQUIRED`. Later drain\ninstrumentation recorded no flushes or errors; it does not establish the earlier\nrecovery cause. An intervening scroll attempt stopped on actual foreground loss.",
+          "char_count": 2730
         },
         {
           "id": "lifecycle-and-diagnostic-limits",
@@ -20224,8 +20224,8 @@
           "id": "remaining-qualification",
           "title": "Remaining Qualification",
           "level": 1,
-          "body": "- Publish qualified upstream fixes and repeat both Linux product dynamic matrices.\n- Resolve macOS performance and complete 1440p and ten-minute interaction.\n- Verify physical hotplug and rerun affected lifecycle checks after dependency upgrades.\n- Qualify physical audio output and accumulated audiovisual delay.\n- Preserve unresolved reference failures; regenerate OKF and run affected checks.\n- Integrate and clean task worktrees only after acceptance; do not push Redeven.\n\nThe v0.22.5 Electron viewer regression passed input/paint authority, composition\ncancellation, clipboard, display selection, takeover, reconnect, narrow locales,\ndialog keyboard and disconnect. Synthetic contracts do not replace these pending\nreal-host checks.",
-          "char_count": 738
+          "body": "- Deploy v0.22.6 and repeat both Linux product dynamic matrices.\n- Resolve macOS performance and complete 1440p and ten-minute interaction.\n- Verify physical hotplug and rerun affected lifecycle checks after dependency upgrades.\n- Qualify physical audio output and accumulated audiovisual delay.\n- Preserve unresolved reference failures; regenerate OKF and run affected checks.\n- Integrate and clean task worktrees only after acceptance; do not push Redeven.\n\nThe v0.22.5 Electron viewer regression passed input/paint authority, composition\ncancellation, clipboard, display selection, takeover, reconnect, narrow locales,\ndialog keyboard and disconnect. Synthetic contracts do not replace these pending\nreal-host checks.",
+          "char_count": 720
         }
       ],
       "snippet": "Acceptance remains incomplete for the [desktop contract](../architecture/remote-desktop.md). Published dependencies pass office checks, the macOS 1080p matrix and Linux ten-minute input stability. Failed or unfinished performance and real-h",
@@ -29881,5 +29881,5 @@
       ]
     }
   ],
-  "source_sha256": "d6fc342d93c4edc2d897862be62a7d55852c9f325365fbbadfa27f2d5d3d67b5"
+  "source_sha256": "1e00654cf1f652b486086776258d57c5b435ccfc70faf439ed2305bdab5733bc"
 }
