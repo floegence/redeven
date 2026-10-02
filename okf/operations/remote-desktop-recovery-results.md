@@ -3,13 +3,14 @@ type: Acceptance Record
 title: Desktop reconnect qualification results
 description: Verify retained sound and fresh-paint authority after transport replacement, and distinguish native recovery candidates from published product acceptance.
 tags: [desktop, validation, lifecycle, audio]
-timestamp: 2026-10-02T14:50:00Z
+timestamp: 2026-10-02T15:08:00Z
 ---
 # Summary
 
-The actual Linux X11 product viewer passes reconnect regression at 1920x1080
-and 2560x1440 with published `floe-native-apps` v0.22.6 and clean Redeven source
-`cb2fd0c6c7d15d609426449f17df77998b1eaa23`. A transport replacement retains
+The actual Linux X11 and macOS product viewers pass reconnect regression with
+published `floe-native-apps` v0.22.6. Linux tested 1920x1080 and 2560x1440 with
+clean source `cb2fd0c6c7d15d609426449f17df77998b1eaa23`; macOS tested the
+1440p office workflow and original pixels with source `07337d309`. A transport replacement retains
 the window's running audio device; fresh remote system-output samples reach its
 production AudioWorklet, and input resumes after current paint. This closes the
 tested sound-reconnect defect. It does not certify the unreleased v0.22.7 product,
@@ -64,6 +65,29 @@ original 1920x1080@60 setting, confirmed by `xrandr`. This new run has no additi
 human listening claim; physical Linux-to-Mac playback is separately confirmed
 in the Wayland record.
 
+# Real macOS Product Reconnect
+
+Clean Redeven source `07337d30981561ffd9b72ecfdb5c80b68af67dae` contains the
+same product fix and an evidence-only follow-up. Its native-Floeterm build uses
+published native v0.22.6 with SHA-256
+`16893767aa11a06ceec9a8539640d23875ee2ffc02293b044cc46c5791d8c972`.
+The helper retained its previously qualified published Swift build.
+
+The actual product's 2560x1440 office flow passed Chinese/emoji paste, pointer,
+drag, scrolling, bidirectional clipboard, full screen, view-only and takeover.
+Original-pixel mode captured 4608x2592; its 800x120 text-region refinement matched
+the independent ScreenCaptureKit screenshot. The same running AudioContext
+survived transport replacement and received a second system-output tone through
+the production worklet. At most two handoffs were pending, with zero at the
+sampled completion. Client volume remained zero to prevent same-host feedback;
+this is decoded-sample evidence, not physical listening.
+
+After returning to 2560x1440, 100 input samples measured P95 68.4ms using the
+same DOM-to-post-render boundary. No page, protocol or failed-request error
+occurred. The fixture's frontmost ownership was checked before every input;
+the task fixture exited normally. This regression did not repeat the full
+performance matrix or certify physical hotplug.
+
 # Native Recovery Candidate
 
 Upstream commit `29ed2f3f71b429f18cbea19811522931ce97cf0c` has an immutable
@@ -92,5 +116,6 @@ Private task records are under `task-evidence/remote-desktop-20261001/`:
 - `viewer-reconnect-audio-sample-green.log`, `viewer-reconnect-linux-audio-sample-green.log` and `viewer-reconnect-electron-audio-sample-green.log`: controlled browser/Electron codec regressions.
 - `server-product-reconnect-regression-v0226.json`: exact build identity, both actual capture sizes, sound readback and input measurements.
 - `server-v0226-audio-reconnect-product.log` and `server-v0226-audio-reconnect-product-1440.log`: office, reference, reconnect and cleanup observations.
+- `macos-v0226-audio-reconnect-product.log` and `macos-deployment-v0.22.6-07337d309815.json`: exact Mac build, retained output context, reference equality and input results.
 - `udesk24-candidate-display-recovery.log` and `macos-candidate-lock-recovery.json`: native candidates and their limits.
 - `native-v0227-attempt3-summary.json` and the individual `native-v0227-*-attempt*.log` files: retained release failures; earlier graphical failures remain unattributed, while later fixed-snapshot downloads recorded closed connections or HTTP errors.
