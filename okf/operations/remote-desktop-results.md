@@ -17,6 +17,8 @@ measurements. Passing retries neither erase failures nor establish their causes.
 No Redeven push, push gate or full integration gate is authorized.
 Source integration does not substitute for real-host qualification or establish
 release acceptance.
+The [reconnect record](remote-desktop-recovery-results.md) separately qualifies
+the follow-up sound fix and tracks native recovery candidates.
 
 # Contract
 

@@ -28,6 +28,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Remote desktop sessions](architecture/remote-desktop.md) - Share the current host desktop with exclusive remote control, private media and explicit OS authorization.
 - [Remote desktop validation](operations/remote-desktop-validation.md) - Qualify office interaction, lifecycle and actual painted performance with published dependencies.
 - [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 measurements, local delivery and remaining physical-host qualification.
+- [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify retained sound after real transport replacement and distinguish native recovery candidates from released product evidence.
 - [Wayland desktop qualification](operations/remote-desktop-wayland-results.md) - Verify real GNOME office interaction and distinguish software capture failures from accelerated 1440p qualification.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.
 - [Cross-platform application behavior](architecture/host-application-behavior.md) - Compare common operations and the OS limits that prevent identical behavior.
