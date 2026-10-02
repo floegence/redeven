@@ -122,6 +122,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [Gateway service](gateway/gateway-service.md) - Run the optional standalone identity, catalog, open-session, and access forwarding service.
 - [Gateway access sessions](gateway/gateway-access-sessions.md) - Choose Direct URL or Gateway proxy access while preserving Runtime login, target isolation, and session revocation.
+- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md) - Verify isolated-network access through HTTPS Nginx and keep installer checks with the release workflow.
 
 ## Code
 

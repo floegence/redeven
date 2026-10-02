@@ -6,7 +6,9 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -91,6 +93,7 @@ func TestGatewayAccessBrowserSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := t.TempDir()
+	deploymentDir := os.Getenv("REDEVEN_GATEWAY_DEPLOYMENT_FIXTURE")
 	gateway, err := gatewayservice.New(gatewayservice.Options{
 		StateRoot: filepath.Join(state, "gateway"), PairingCode: "qualification-code",
 		ProfileWriteEnabled: true, AllowPrivateProfileTargets: true,
@@ -100,7 +103,11 @@ func TestGatewayAccessBrowserSession(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	server, listeners, err := gateway.Start(ctx, "127.0.0.1:0")
+	listen := "127.0.0.1:0"
+	if deploymentDir != "" {
+		listen = "0.0.0.0:19400"
+	}
+	server, listeners, err := gateway.Start(ctx, listen)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,12 +117,17 @@ func TestGatewayAccessBrowserSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	certificateHash := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
-	configuration, err := json.Marshal(map[string]any{
+	fixture := map[string]any{
 		"gateway": "http://" + listeners[0].Addr().String() + "/", "plain": plain,
 		"secure": secure, "recoveryCodes": verified.RecoveryCodes,
 		"certificateSPKI": base64.StdEncoding.EncodeToString(certificateHash[:]),
 		"state":           state, "goPID": os.Getpid(),
-	})
+	}
+	if deploymentDir != "" {
+		fixture["transport"] = startGatewayTransportFixture(t, host)
+		fixture["deployment"] = true
+	}
+	configuration, err := json.Marshal(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,9 +135,71 @@ func TestGatewayAccessBrowserSession(t *testing.T) {
 	if err := os.WriteFile(configPath, configuration, 0600); err != nil {
 		t.Fatal(err)
 	}
+	if deploymentDir != "" {
+		// The host runner owns the only published port and the Electron process.
+		// No Runtime port is published outside this container's network namespace.
+		configPath = filepath.Join(deploymentDir, "fixture.json")
+		if err := os.WriteFile(configPath, configuration, 0600); err != nil {
+			t.Fatal(err)
+		}
+		gatewayStopped := false
+		for {
+			if _, err := os.Stat(filepath.Join(deploymentDir, "finish")); err == nil {
+				return
+			}
+			if _, err := os.Stat(filepath.Join(deploymentDir, "stop-gateway")); err == nil && !gatewayStopped {
+				cancel()
+				_ = server.Close()
+				gatewayStopped = true
+				if err := os.WriteFile(filepath.Join(deploymentDir, "gateway-stopped"), nil, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			select {
+			case <-t.Context().Done():
+				t.Fatal("deployment fixture exceeded its lifetime")
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+	}
 	command := exec.CommandContext(t.Context(), "node", "../../desktop/scripts/check-gateway-access-electron.mjs", configPath)
 	command.Stdout, command.Stderr = os.Stdout, os.Stderr
 	if err := command.Run(); err != nil {
 		t.Fatalf("Gateway Electron qualification: %v", err)
 	}
+}
+
+// A separate transport fixture exercises large bodies, redirects and flushing
+// without adding test routes to the production Runtime.
+func startGatewayTransportFixture(t *testing.T, host string) string {
+	t.Helper()
+	listener, err := net.Listen("tcp4", net.JoinHostPort(host, "0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin := "http://" + listener.Addr().String()
+	server := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/echo":
+			body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<20))
+			if err != nil {
+				http.Error(w, "Invalid fixture body", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(body)
+		case "/redirect":
+			http.Redirect(w, r, origin+"/echo", http.StatusFound)
+		case "/stream":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "data: ready\n\n")
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+		default:
+			http.NotFound(w, r)
+		}
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
+	return origin
 }

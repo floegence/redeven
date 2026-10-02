@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import https from 'node:https';
-import { GatewayURLClient } from '../../src/main/gatewayClient';
+import { verifyGatewayDeployment } from './gateway-deployment';
+import { GatewayURLClient, redactGatewayDiagnosticValue } from '../../src/main/gatewayClient';
 import { createGatewayProxyTransport, type GatewayProxyTransport } from '../../src/main/gatewayProxyTransport';
 import { createGatewayPairingMaterial, pairingChallengeRequestWithCode, buildPairingCompleteRequest,
   assertGatewayPairingCompleteResponse, completeGatewayPairing } from '../../src/main/gatewayTrust';
@@ -63,7 +64,7 @@ void app.whenReady().then(async () => {
     return { window, webSession, proxy, response };
   };
   type View = Awaited<ReturnType<typeof open>>;
-  const call = (view: View, route: string, body?: unknown) => view.window.webContents.executeJavaScript(`(async () => {
+  const call = (view: Pick<View, 'window'>, route: string, body?: unknown) => view.window.webContents.executeJavaScript(`(async () => {
     const response = await fetch(${JSON.stringify(route)}, ${JSON.stringify(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })});
     return { status: response.status, body: await response.json() };
   })()`);
@@ -79,13 +80,14 @@ void app.whenReady().then(async () => {
     assert.equal(await unlocked(first), true);
     cases.push('Runtime password, protected API and reload through Gateway');
     const second = await open('env_http', 'gateway_proxy');
-    const direct = await open('env_http', 'direct_url');
-    assert.equal(await unlocked(second), false); assert.equal(await unlocked(direct), false);
-    cases.push('two Gateway sessions and Direct URL have independent cookie stores');
+    const direct = fixture.deployment ? undefined : await open('env_http', 'direct_url');
+    assert.equal(await unlocked(second), false);
+    if (direct) assert.equal(await unlocked(direct), false);
+    cases.push(direct ? 'two Gateway sessions and Direct URL have independent cookie stores' : 'two isolated Gateway sessions have independent Runtime cookie stores');
     await call(first, '/api/local/access/logout', {});
     assert.equal(await unlocked(first), false);
-    assert.equal((await call(direct, '/api/local/access/unlock', password)).body.data.unlocked, true);
-    cases.push('Runtime logout remains authoritative and Direct URL remains usable');
+    if (direct) assert.equal((await call(direct, '/api/local/access/unlock', password)).body.data.unlocked, true);
+    cases.push(direct ? 'Runtime logout remains authoritative and Direct URL remains usable' : 'Runtime logout remains authoritative through the HTTPS reverse proxy');
     const secure = await open('env_tls', 'gateway_proxy');
     await assert.rejects(new Promise<void>((resolve, reject) => {
       const request = https.get(`${fixture.secure}/api/local/access/status`, { agent: secure.proxy!.agent }, response => {
@@ -114,17 +116,21 @@ void app.whenReady().then(async () => {
     await client.deleteEnvironmentProfile(record, { gateway_env_id: 'env_http' });
     await assert.rejects(second.proxy!.openConnection(), (error: unknown) => (error as { code: string }).code === 'GATEWAY_SESSION_EXPIRED');
     assert.equal(await failure, 'GATEWAY_SESSION_EXPIRED');
-    assert.equal(await unlocked(direct), true);
+    if (direct) assert.equal(await unlocked(direct), true);
     assert.equal((await client.catalog(record)).environments.length, 1);
-    cases.push('profile deletion revokes proxy access while direct Runtime authorization is independent');
+    cases.push(direct ? 'profile deletion revokes proxy access while direct Runtime authorization is independent' : 'profile deletion revokes proxy access and updates the catalog');
     await client.closeSession(record, secure.response.gateway_session_id);
     await client.closeSession(record, secure.response.gateway_session_id);
     await assert.rejects(secure.proxy!.openConnection());
     cases.push('signed close-session is idempotent and revokes established access');
+    if (fixture.deployment) {
+      console.log(`PASS production Runtime through HTTPS reverse proxy (${cases.length} cases)`);
+      cases.push(...await verifyGatewayDeployment({ fixture, client, record, proxies, open, call }));
+    }
     await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'passed', cases }, null, 2));
   } finally {
     for (const window of windows) if (!window.isDestroyed()) window.destroy();
     await Promise.all([...proxies.values()].map(proxy => proxy.close()));
   }
   app.exit(0);
-}).catch(error => { console.error('Gateway qualification failed:', error); app.exit(1); });
+}).catch(error => { console.error('Gateway qualification failed:', redactGatewayDiagnosticValue(error instanceof Error ? error.stack : String(error))); app.exit(1); });
