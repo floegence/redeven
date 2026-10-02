@@ -27,9 +27,9 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Managed host application preparation](architecture/host-application-preparation.md) - Prepare native graphical support and recover interrupted setup without host configuration.
 - [Remote desktop sessions](architecture/remote-desktop.md) - Share the current host desktop with exclusive remote control, private media and explicit OS authorization.
 - [Remote desktop validation](operations/remote-desktop-validation.md) - Qualify office interaction, lifecycle and actual painted performance with published dependencies.
-- [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 measurements, local delivery and remaining physical-host qualification.
-- [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify retained sound after real transport replacement and distinguish native recovery candidates from released product evidence.
-- [Wayland desktop qualification](operations/remote-desktop-wayland-results.md) - Verify real GNOME office interaction and distinguish software capture failures from accelerated 1440p qualification.
+- [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 performance, local delivery and remaining acceptance limits.
+- [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.
+- [Wayland desktop qualification](operations/remote-desktop-wayland-results.md) - Assess real GNOME office interaction and retained capture limits after virtual graphics provisioning.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.
 - [Cross-platform application behavior](architecture/host-application-behavior.md) - Compare common operations and the OS limits that prevent identical behavior.
 - [Linux application lifecycle](architecture/linux-application-lifecycle.md) - Recover surviving application instances and separate sharing, normal window closure and explicit force quit.

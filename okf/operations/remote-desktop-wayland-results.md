@@ -3,43 +3,36 @@ type: Acceptance Record
 title: Wayland desktop qualification results
 description: Assess real GNOME Wayland office behavior and retained capture failures before and after authorized virtual graphics provisioning.
 tags: [desktop, linux, wayland, validation, performance]
-timestamp: 2026-10-02T14:32:09Z
+timestamp: 2026-10-02T15:34:00Z
 ---
 # Summary
 
 The real `udesk24` GNOME 46 Wayland desktop passes the tested office workflow
-against published `floe-native-apps` v0.22.6. It does not meet the
+against published `floe-native-apps` v0.22.7, including actual display-mode
+recovery. The user explicitly designated this host for functional validation
+only on 2026-10-02; its graphics performance does not block this delivery.
+It does not meet the
 [remote desktop performance contract](remote-desktop-validation.md). Authorized
 virtual graphics provisioning added an actual 2560x1440 mode but did not resolve
 the capture limit: subsequent 1080p and 1440p scrolling failed at 26.43 and
-22.14 FPS. Keep failed measurements and the environment boundary explicit;
+22.14 FPS on v0.22.6. Current v0.22.7 retries fail at 27.46 and 23.46 FPS.
+Keep failed measurements and the environment boundary explicit;
 X11 or synthetic results cannot replace Wayland evidence. The
 [overall acceptance record](remote-desktop-results.md) owns local delivery and
 the other hosts.
 
 # Verified Deployment And Desktop
 
-The accepted binary has clean source
-`6caee6df1da1eabdd5d9f4670d6eedcb578de1a3`, native v0.22.6, native Floeterm,
-and SHA-256 `0b7d5c0e818fc8ad732956c1e59a4df26cce3ccf3b5b48386f75bd7c432505f5`.
-The product setup API prepared the official host-desktop artifact with digest
-`d206fd1864ceebf9170501480ccdfa25f4801e9e48867ee047f0d0744cc1eb6c`.
-No sibling wiring, dependency overrides or production system-package installation
-were used.
-
-The initial final-stage deployment was mistakenly an older v0.22.2 binary.
-Its missing text-input selector stopped the test. Binary/module inspection
-identified the mismatch; only the task Runtime was replaced, and the current
-tests were repeated. Preserve that failed run without labeling it v0.22.6
-acceptance.
+The earlier accepted v0.22.6 build used clean source `6caee6df1da1` and native
+Floeterm. No sibling wiring, dependency overrides or production system-package
+installation were used. An initial older-v0.22.2 deployment failed before text
+input and was replaced only in the task Runtime; retain that failure with its
+original version. The published v0.22.7 identity is recorded below.
 
 The host is KVM with 16 guest CPUs on an AMD Ryzen 9 7950X. Initially its only DRM
-card used `bochs-drm`, with no `/dev/dri/renderD*`. Mutter advertised
-1920x1080@60 and 1920x1440@60, but no 2560x1440. Temporary supported-mode
-changes use Mutter `DisplayConfig`; the original mode is 1280x800@74.994.
-Guest configuration alone cannot create a passed-through GPU or make this
-software path evidence of hardware encoding. No driver or security policy was
-changed, and no independent virtual desktop was substituted.
+card used `bochs-drm`, with no render device or 2560x1440 mode. Temporary modes
+use Mutter `DisplayConfig`; the initial mode was 1280x800@74.994. Guest settings
+alone do not certify GPU encoding. No independent virtual desktop was substituted.
 
 # Product Interaction
 
@@ -139,6 +132,42 @@ The 1440p display prerequisite is now resolved. The unchanged FPS and frame-time
 thresholds remain unmet on this host; neither virtual GPU presence nor successful
 office input closes that qualification boundary.
 
+# Published v0.22.7 Follow-up
+
+Clean Redeven source `69cd04988970c8b456f751838523e61625531d3c` uses the official
+v0.22.7 module and Linux component digest
+`09bfc6f9061997c43166ff7810092bf5e79ffaac0112d14a0a0711808e1709bc`.
+The isolated Runtime remains on port 24864; no dependency override is used.
+An initial deploy attempted a second Runtime while the task's old PID still held
+its state lock and failed with `agent.lock`. The deployment harness was corrected
+to verify the exact listener, executable and state before replacing that task
+Runtime. The successful retry is retained separately.
+
+The published product passes Chinese/emoji paste, pointer, drag selection,
+scrolling, clipboard, full screen, view-only and takeover. GTK focus initially
+selected all text and caused native drag-and-drop during a selection test; the
+harness now sends ArrowRight and observes collapsed selection before dragging.
+The corrected office run passes without a production change. Actual
+1440p -> 1080p -> 1440p recovery also passes; the
+[reconnect record](remote-desktop-recovery-results.md) owns that lifecycle proof.
+
+A 100-input 1440p run failed P95 at 95.9ms. The smallest corresponding retry
+passed at 66.8ms; a separate 1080p run passed at 34.5ms. Preserve the failure;
+the passing retry alone does not establish its cause. New first scrolling cells
+each ran 60 seconds and again failed the unchanged thresholds:
+
+| Capture | Painted FPS | Interval P95 | Refinement |
+| --- | --- | --- | --- |
+| 1920x1080 | 27.458 | 47.1ms | 303.7ms |
+| 2560x1440 | 23.458 | 57.1ms | 335.1ms |
+
+Both selected x264; sampled client decode queue depth remained zero. The fixture
+updated at 28.02/s and 23.47/s during those captures. Together with earlier raw
+capture comparisons, this places the sustained limit in the host graphics/capture
+path without identifying one causal component. Neither a complete performance
+matrix nor Wayland ten-minute qualification is passed. The preferred
+2560x1440@74.998 mode was restored and read back after the 1080p tests.
+
 # Cleanup Boundary
 
 Restore temporary display selections to the provisioned desktop's mode, stop only
@@ -162,3 +191,7 @@ Private records live in `task-evidence/remote-desktop-20261001/`:
 - `udesk24-v0226-audio-listening-virtio-gl-replay.json`: separate replay with explicit human listening confirmation.
 - `udesk24-virtio-gl-configuration-results.json`: authorized configuration, actual dimensions, failed product cells and diagnostic comparisons.
 - `hypervisor-vm106-1440-mode.log` and `hypervisor-vm106-gpu-profile-comparison.log`: display provisioning and bounded profile observation.
+- `udesk24-v0227-deployment.log` and `udesk24-v0227-deployment-green.log`: retained state-lock failure and verified task-only replacement.
+- `udesk24-v0227-drag-selection-observed.log` and `udesk24-v0227-published-mode-restoration-display-recovery.json`: corrected office selection and actual display recovery.
+- `product-input-1440-udesk24-v0227-published-1440-observed.json`, `product-input-1440-udesk24-v0227-input-minimal-retry.json` and `product-input-1080-udesk24-v0227-input-1080-retry.json`: failed input observation and focused retries.
+- `product-performance-udesk24-v0227-scroll-1080-retry.json`, `product-performance-udesk24-v0227-scroll-1440-retry.json` and `udesk24-v0227-1080-mode-restoration.json`: current failed cells and original-mode readback.

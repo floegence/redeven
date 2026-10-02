@@ -1,21 +1,22 @@
 ---
 type: Acceptance Record
 title: Desktop reconnect qualification results
-description: Verify retained sound and fresh-paint authority after transport replacement, and distinguish native recovery candidates from published product acceptance.
+description: Verify published desktop transport, locked reconnect, physical Mac hotplug and Wayland display recovery with fresh-paint authority.
 tags: [desktop, validation, lifecycle, audio]
-timestamp: 2026-10-02T15:08:00Z
+timestamp: 2026-10-02T15:30:00Z
 ---
 # Summary
 
 The actual Linux X11 and macOS product viewers pass reconnect regression with
-published `floe-native-apps` v0.22.6. Linux tested 1920x1080 and 2560x1440 with
-clean source `cb2fd0c6c7d15d609426449f17df77998b1eaa23`; macOS tested the
-1440p office workflow and original pixels with source `07337d309`. A transport replacement retains
+published `floe-native-apps` v0.22.7 and clean Redeven source `69cd04988970`.
+A transport replacement retains
 the window's running audio device; fresh remote system-output samples reach its
 production AudioWorklet, and input resumes after current paint. This closes the
-tested sound-reconnect defect. It does not certify the v0.22.7 product recovery path,
-physical display hotplug or the outstanding
-[Wayland performance boundary](remote-desktop-wayland-results.md).
+tested sound-reconnect defect. Physical Mac hotplug, locked transport replacement
+and actual Wayland display-mode changes also pass fresh-paint recovery. These
+lifecycle results do not certify
+[Wayland performance](remote-desktop-wayland-results.md); the user designated
+`udesk24` for functional validation only.
 The [session contract](../architecture/remote-desktop.md) owns normative behavior;
 the [overall record](remote-desktop-results.md) owns original performance and
 local delivery.
@@ -88,15 +89,54 @@ occurred. The fixture's frontmost ownership was checked before every input;
 the task fixture exited normally. This regression did not repeat the full
 performance matrix or certify physical hotplug.
 
-# Native Recovery Candidate
+# Published v0.22.7 Qualification
 
 Upstream commit `29ed2f3f71b429f18cbea19811522931ce97cf0c` has an immutable
 v0.22.7 tag. Its Release qualification run `37016208383` and final Release gate
 passed, and the GitHub release was published on 2026-10-02 at 15:10:02 UTC.
 The official Go proxy and checksum database returned the tagged source and
 module checksum `h1:MJLggW9f34s8gDXhleRxlSWYr24YAQ3aMxHKEE4mBcI=`.
-Redeven's Go and exact Swift pins now reference this release. Candidate evidence
-below remains distinct from the still-pending published-product recovery checks.
+Redeven's Go and exact Swift pins reference this release. Formal builds use
+`GOWORK=off` and no overrides. The Linux binary SHA-256 is
+`113b03dc17bbcd5c3ca6b4e2389016289a35fda172af446cac40c48baa789cca`;
+the Mac binary SHA-256 is
+`c364c60f2476836c0390e520f0f33cb5c8b02dfd2a7f74eeb8b855a535f94f86`.
+The Mac helper resolves the exact official Swift package. Both browser variants,
+Electron 41.10.5, desktop/appserver race tests, vet, module verification, 32 Swift
+tests and the helper release build pass against the published dependency.
+
+The final 2560x1440 product runs on `server` and macOS pass office interactions,
+three decoder recoveries, original-pixel reference equality and sound continuity
+after actual control-transport replacement. Their 100-input DOM-to-post-render
+P95 values are 68.2ms and 69.3ms. Runtime restart invalidates old sessions and
+media tickets with HTTP 404, preserves host fixture text, waits for fresh paint
+and replays no input. Neither run records page, protocol or failed-request errors.
+The X11 display lease restores 1920x1080@60. Full performance matrices retain
+their v0.22.6 provenance; this lifecycle change does not alter capture cadence.
+
+The user-confirmed Mac physical unplug/replug passes on v0.22.7. The stable
+display catalog does not change, but recovery is observable through socket and
+generation transitions: socket 1/generation 3 connecting, replacement socket
+3/generation 1 locked, then generation 2 connecting and active. The replacement
+requires its own fresh paint before input; no input is injected and no authority
+violation occurs. Catalog identity alone is not the hotplug recovery oracle.
+
+A separate product test locks the Mac, closes its control attachment and creates
+a replacement while locked. During a two-second quiet period it has no media,
+paint or input. Normal local unlock advances that replacement from generation
+1 to 2; new H.264 and paint precede input enablement. A late locked-generation
+receipt is ignored by the product without reconnecting or granting authority.
+This does not claim remote unlock. Native direct calls reject stale receipts
+with `STALE_DESKTOP`; the product's pre-dispatch ignore has the same authority
+boundary but a different observable response.
+
+On `udesk24`, actual supported 2560x1440 -> 1920x1080 -> 2560x1440 changes
+produce `DISPLAY_STREAM_LOST`, replace the transport, restore the authorized
+RemoteDesktop portal attachment and require new paint. Both transitions preserve
+the fixture with zero injected input or authority violations. This is mode-change
+evidence, not physical Linux monitor hotplug. The original 1440p mode is restored.
+
+# Earlier Native Candidate Evidence
 
 A real Wayland native candidate recognized Mutter's retired PipeWire node after
 a supported mode change as `DISPLAY_STREAM_LOST`. It retired held input and old
@@ -109,7 +149,7 @@ A real macOS native candidate created a new connection while the authorized
 desktop was locked. It produced zero locked video frames, injected no input,
 and resumed generation 2 with fresh H.264 only after the user's normal local
 unlock. An old paint receipt returned `STALE_DESKTOP`. It does not qualify remote
-unlock or the still-pending product physical-hotplug check.
+unlock. Its direct native behavior remains separate from the product tests above.
 
 # Evidence
 
@@ -121,4 +161,8 @@ Private task records are under `task-evidence/remote-desktop-20261001/`:
 - `server-v0226-audio-reconnect-product.log` and `server-v0226-audio-reconnect-product-1440.log`: office, reference, reconnect and cleanup observations.
 - `macos-v0226-audio-reconnect-product.log` and `macos-deployment-v0.22.6-07337d309815.json`: exact Mac build, retained output context, reference equality and input results.
 - `udesk24-candidate-display-recovery.log` and `macos-candidate-lock-recovery.json`: native candidates and their limits.
+- `server-v0227-published-product.log` and `macos-v0227-published-product.log`: final published office, media, transport and Runtime-restart results.
+- `hotplug-macos-v0227-published-hotplug.json`: confirmed physical action and socket/generation paint gating.
+- `macos-locked-reconnect-v0227-published-locked-reconnect.json`: paused replacement, local unlock and stale-receipt boundary.
+- `udesk24-v0227-published-mode-restoration-display-recovery.json`: both actual mode transitions and restored original mode.
 - `native-v0227-attempt3-summary.json` and the individual `native-v0227-*-attempt*.log` files: retained release failures; earlier graphical failures remain unattributed, while later fixed-snapshot downloads recorded closed connections or HTTP errors.
