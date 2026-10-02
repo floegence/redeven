@@ -14,8 +14,11 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Redeven consumes published Floret v7.18.3, including its overflow-safe fallback
-title selection. The dependency gate requires the released dynamic tool surface
+Redeven consumes published Floret v7.18.4, preserving graceful-stop ownership
+when a projection write is canceled. The stop owner settles pending approvals,
+tool results, and the terminal together; a canceled write must not enter competing
+failure finalization. Genuine storage and unknown-effect failures retain their
+existing classification. The dependency gate requires the released dynamic tool surface
 and preservation of its initial provider surface; live permission ownership is
 defined in [Tool permission runtime](tool-permission-runtime.md).
 
