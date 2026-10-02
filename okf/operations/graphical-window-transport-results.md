@@ -106,6 +106,16 @@ touch operation. That request now uses the active Env Flowersec HTTP carrier,
 like session creation and resource management. The test rejects raw network fetch
 and verifies the native request before viewer navigation.
 
+After rebasing onto the current browser-origin and shutdown fixes, source
+`e907b960042dc4eb0577ccfb38c19a95b49caf38` passes the complete affected Agent,
+AppServer, session, access-proxy, host-application and remote-desktop Go packages.
+The direct browser, Electron private carrier and real tunnel fixtures pass again.
+An isolated Runtime built from that clean source opens the actual launcher from
+Workbench, reports `MacBook-Pro.local` and the real locked state, disables Connect,
+and makes zero raw desktop API requests. Its locked viewer again establishes one
+Flowersec network socket, paints no frames and grants no input. This verifies the
+launcher and locked-host boundary; the unlocked macOS limits above still apply.
+
 # Evidence
 
 - `internal/localui/window_transport_e2e_test.go` and `internal/codeapp/ui_src/scripts/checkWindowTransport.mjs`: direct browser and Electron resource-scoped acquisition.
