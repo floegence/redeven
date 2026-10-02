@@ -113,7 +113,7 @@ func New(options Options) (*Server, error) {
 	}
 	server.auth = gatewayauth.NewVerifier(server.trust)
 	if _, err := server.profile.List(context.Background()); err != nil {
-		return nil, fmt.Errorf("Gateway profiles could not be loaded: %w", err)
+		return nil, fmt.Errorf("gateway profiles could not be loaded: %w", err)
 	}
 	return server, nil
 }
@@ -576,7 +576,7 @@ func (i artifactIssuer) IssueGatewayConnectArtifact(ctx context.Context, req gat
 	i.server.profileSessionsMu.Lock()
 	defer i.server.profileSessionsMu.Unlock()
 	if i.server.closed {
-		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("Gateway service is stopping")
+		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("gateway service is stopping")
 	}
 	profile, ok, err := i.server.profileStore().Get(ctx, req.GatewayEnvID)
 	if err != nil {

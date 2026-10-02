@@ -65,8 +65,12 @@ func TestRemoteDesktopSocketsBindBothChannelsAndRetireTogether(t *testing.T) {
 	native.media <- nativeapps.HostDesktopMessage{Version: 1, Type: "frame", Codec: "png", Generation: 2, FrameID: 1, Width: 2, Height: 2, Data: []byte{1, 2, 3}}
 	native.control <- nativeapps.HostDesktopMessage{Version: 1, Type: "state", State: "authorizing", Mode: "view"}
 	native.control <- nativeapps.HostDesktopMessage{Version: 1, Type: "state", State: "active", Mode: "control", Generation: 2}
-	control.SetReadDeadline(time.Now().Add(time.Second))
-	media.SetReadDeadline(time.Now().Add(time.Second))
+	if err := control.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := media.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	var state nativeapps.HostDesktopMessage
 	if err = control.ReadJSON(&state); err != nil || state.State != "authorizing" {
 		t.Fatal(state, err)
@@ -133,5 +137,7 @@ func TestRemoteDesktopSocketsBindBothChannelsAndRetireTogether(t *testing.T) {
 	if bytes.Contains(raw, []byte(next.Token)) {
 		t.Fatal("session metadata leaked the attachment secret")
 	}
-	m.Disconnect("alice", s.view.ID)
+	if err := m.Disconnect("alice", s.view.ID); err != nil {
+		t.Fatal(err)
+	}
 }

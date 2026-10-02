@@ -80,9 +80,10 @@ type Manager struct {
 
 func New(state string, forwards *portforward.Service, mac Factory) *Manager {
 	m := &Manager{sessions: map[string]*ownedSession{}, state: state, forwards: forwards, stop: make(chan struct{})}
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		m.factory = mac
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		m.factory = m.openLinux
 	}
 	go m.expire()

@@ -589,10 +589,10 @@ func (s *Store) loadState() (fileState, error) {
 		return fileState{}, err
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return fileState{}, errors.New("Gateway profile state contains trailing JSON; original state was kept")
+		return fileState{}, errors.New("gateway profile state contains trailing JSON; original state was kept")
 	}
 	if state.SchemaVersion != 1 && state.SchemaVersion != schemaVersion {
-		return fileState{}, fmt.Errorf("Gateway profile schema %d is unsupported; original state was kept", state.SchemaVersion)
+		return fileState{}, fmt.Errorf("gateway profile schema %d is unsupported; original state was kept", state.SchemaVersion)
 	}
 	oldVersion := state.SchemaVersion
 	profiles := make([]EnvironmentProfile, 0, len(state.Profiles))
@@ -600,7 +600,7 @@ func (s *Store) loadState() (fileState, error) {
 	for _, profile := range state.Profiles {
 		if oldVersion == 1 {
 			if profile.AccessMode != "" {
-				return fileState{}, errors.New("Gateway v1 profile contains access_mode; original state was kept")
+				return fileState{}, errors.New("gateway v1 profile contains access_mode; original state was kept")
 			}
 			profile.AccessMode = protocol.AccessModeDirectURL
 		}
@@ -608,7 +608,7 @@ func (s *Store) loadState() (fileState, error) {
 		originalFields, originalErr := json.Marshal(profile)
 		normalizedFields, normalizedErr := json.Marshal(normalized)
 		if err != nil || originalErr != nil || normalizedErr != nil || seen[normalized.GatewayEnvID] || !bytes.Equal(originalFields, normalizedFields) {
-			return fileState{}, fmt.Errorf("Gateway profile state is invalid; original state was kept")
+			return fileState{}, fmt.Errorf("gateway profile state is invalid; original state was kept")
 		}
 		seen[normalized.GatewayEnvID] = true
 		profiles = append(profiles, normalized)
@@ -637,7 +637,7 @@ func normalizeProfile(profile EnvironmentProfile, policy URLTargetPolicy) (Envir
 		return EnvironmentProfile{}, protocol.ErrInvalidAccessMode
 	}
 	if profile.CreatedAtUnixMS <= 0 || profile.UpdatedAtUnixMS <= 0 {
-		return EnvironmentProfile{}, errors.New("Gateway profile timestamps are invalid")
+		return EnvironmentProfile{}, errors.New("gateway profile timestamps are invalid")
 	}
 	if err := protocol.ValidateEnvProfileUpsertRequest(input); err != nil {
 		return EnvironmentProfile{}, err
