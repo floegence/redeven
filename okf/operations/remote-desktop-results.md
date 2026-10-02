@@ -11,12 +11,15 @@ Acceptance remains incomplete for the [desktop contract](../architecture/remote-
 Published v0.22.6 passes macOS and Linux X11 performance repetitions and ten-minute
 input/queue checks. Linux motion required a fixture clock correction; its initial
 failure and narrow first-run margin remain recorded. Physical-host checks and
-Wayland performance conditions still prevent final acceptance and integration.
+Wayland performance conditions still prevent final remote-desktop acceptance.
 Preserve the [thresholds](remote-desktop-validation.md) and failed measurements;
-a passing retry neither erases a failure nor establishes its cause. Integrate
-only after acceptance. No Redeven push, push gate or full integration gate is authorized.
+a passing retry neither erases a failure nor establishes its cause. Source
+integration does not complete the outstanding real-host qualification or establish
+release acceptance.
 
-# Published Dependency And Conditions
+# Contract
+
+## Published Dependency And Conditions
 
 Both product binaries use source `6caee6df1da1eabdd5d9f4670d6eedcb578de1a3`
 and published `floe-native-apps` v0.22.6
@@ -44,9 +47,9 @@ readback has no loss and 4.285/4.832/5.279ms minimum/average/maximum RTT.
 restore 1920x1080@60Hz. Native 1440p is 30Hz; a task 59.95Hz mode was rejected
 and removed without changing driver policy. Alternative scanout is labeled.
 
-# Current Product Results
+## Current Product Results
 
-## macOS v0.22.6
+### macOS v0.22.6
 
 Both matrices passed all six cells: scrolling and window motion, each 60 seconds
 repeated three times. Statistics are actual client canvas draws.
@@ -84,7 +87,7 @@ frame matched. Requiring a newer generation's paint receipt and matching snapsho
 dimensions fixed the harness; production code was unchanged. This does not explain
 older mismatches without equivalent snapshots.
 
-## Linux v0.22.6
+### Linux v0.22.6
 
 The 1440p matrix passed all six 60-second cells with system audio enabled:
 minimum 55.952 FPS, maximum interval P95 32.5ms, refinement 240.5ms and bandwidth
@@ -128,7 +131,7 @@ restart returned 404 for old sessions/tickets, required fresh paint, preserved
 fixture text and replayed no input. Linux-target race checks pass nine desktop
 and three shared application-transport tests.
 
-# Capture Release And Regression
+## Capture Release And Regression
 
 v0.22.6 source CI, CodeQL, both native architectures, private applications,
 host-desktop media and macOS Swift checks passed. The amd64 private-application
@@ -159,7 +162,9 @@ viewer/preload interaction, module sums, generated appearance, affected dependen
 boundaries and localization. Electron covers all ten narrow locales, dialog
 keyboard, input authority, composition, clipboard, display selection and reconnect.
 
-# Retained Earlier Evidence And Limits
+# Boundaries
+
+## Retained Earlier Evidence And Limits
 
 Earlier macOS runs retain 38.323 FPS, 33.3ms interval P95 and 82.2ms input P95
 failures; one native run reported `KEYFRAME_REQUIRED` despite verified foreground.
@@ -184,12 +189,12 @@ It remains KVM/`bochs-drm` with no render device or 2560x1440 mode. X11 results
 neither repair this capture limit nor qualify Wayland performance. No system
 security, driver or hardware configuration was changed.
 
-# Remaining Qualification
+## Remaining Qualification
 
 - Verify physical display hotplug and affected lifecycle recovery.
 - Confirm physical audio output; retain destination-clock measurement limits.
 - Qualify an accelerated 1440p Wayland desktop; udesk24 remains blocked by capture and display limits.
-- Regenerate OKF, run affected checks and integrate locally only after acceptance.
+- Complete the remaining checks before declaring remote-desktop release acceptance.
 
 # Evidence
 

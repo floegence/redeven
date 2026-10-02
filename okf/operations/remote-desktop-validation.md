@@ -9,12 +9,15 @@ timestamp: 2026-10-02T03:00:00Z
 
 This guide defines acceptance for the [desktop contract](../architecture/remote-desktop.md).
 Use published dependencies with `GOWORK=off`, preserve failed measurements and
-resolve unmet thresholds before integration. A connected picture, native input
+resolve unmet thresholds before declaring remote-desktop acceptance. Source
+integration does not substitute for this qualification. A connected picture, native input
 admission or a synthetic fixture does not certify real desktop performance.
 The [acceptance record](remote-desktop-results.md) owns measured results and
 remaining qualification.
 
-# Performance Contract
+# Contract
+
+## Performance
 
 At both 1920x1080 and 2560x1440, measure scrolling and task-owned window motion
 for at least 60 seconds, three times each, on a documented low-latency connection.
@@ -38,7 +41,9 @@ CPU/GPU attribution, bandwidth and failures. Whole-device GPU counters cannot
 be attributed to the remote desktop process. 4K does not substitute for either
 required resolution.
 
-# Real-Host Boundaries
+# Boundaries
+
+## Real-Host Qualification
 
 The host user completes OS authorization. Fixtures operate only their own
 applications and stop input on foreground loss. Before each physical-input
@@ -58,7 +63,7 @@ handoff. They do not prove that a physical output device played the samples or
 that audiovisual delay remained bounded. Preserve that distinction in results.
 Credentials and raw captures remain outside the repository and audit payloads.
 
-# Focused Verification
+## Focused Verification
 
 Run affected `GOWORK=off go test -race` checks for `internal/remotedesktop`,
 `internal/codeapp/appserver`, `internal/hostapps`, `internal/config` and Local UI
