@@ -21,13 +21,12 @@ import (
 )
 
 const (
-	flowersecGoModule       = "github.com/floegence/flowersec/flowersec-go/v5"
-	flowersecGoVersion      = "v5.7.0"
-	flowersecCorePackage    = "@floegence/flowersec-core"
-	flowersecCoreVersion    = "5.4.1"
-	flowersecCodeAppVersion = "5.2.2"
-	floeWebappVersion       = "0.81.3"
-	floeEnvCoreVersion      = "0.81.3"
+	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v5"
+	flowersecGoVersion   = "v5.7.0"
+	flowersecCorePackage = "@floegence/flowersec-core"
+	flowersecCoreVersion = "5.7.0"
+	floeWebappVersion    = "0.81.3"
+	floeEnvCoreVersion   = "0.81.3"
 )
 
 var flowersecNPMPackages = []string{
@@ -138,8 +137,7 @@ func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 		flowersecGoVersion: "https://pkg.go.dev/" + flowersecGoModule + "@" + flowersecGoVersion,
 	})
 	assertNoticeDependencies(t, notices, flowersecCorePackage, map[string]string{
-		flowersecCoreVersion:    "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/" + flowersecCoreVersion,
-		flowersecCodeAppVersion: "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/" + flowersecCodeAppVersion,
+		flowersecCoreVersion: "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/" + flowersecCoreVersion,
 	})
 }
 
@@ -418,27 +416,27 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"\"@floegence/floe-webapp-core\": \"" + floeEnvCoreVersion + "\"",
 			"\"@floegence/floe-webapp-protocol\": \"" + floeWebappVersion + "\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.19.2\"",
-			"\"@floegence/flowersec-core\": \"5.4.1\"",
+			"\"@floegence/flowersec-core\": \"5.7.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
 			"floe-webapp-boot-" + floeWebappVersion + ".tgz",
 			"floe-webapp-core-" + floeEnvCoreVersion + ".tgz",
 			"floe-webapp-protocol-" + floeWebappVersion + ".tgz",
 			"floeterm-terminal-web-0.19.2.tgz",
-			"flowersec-core-5.4.1.tgz",
+			"flowersec-core-5.7.0.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@" + floeWebappVersion,
 			"@floegence/floe-webapp-core@" + floeEnvCoreVersion,
 			"@floegence/floe-webapp-protocol@" + floeWebappVersion,
 			"@floegence/floeterm-terminal-web@0.19.2",
-			"@floegence/flowersec-core@5.4.1",
+			"@floegence/flowersec-core@5.7.0",
 		},
 		"internal/codeapp/ui_src/package.json": {
-			"\"@floegence/flowersec-core\": \"5.2.2\"",
+			"\"@floegence/flowersec-core\": \"5.7.0\"",
 		},
 		"internal/codeapp/ui_src/package-lock.json": {
-			"flowersec-core-5.2.2.tgz",
+			"flowersec-core-5.7.0.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
 			"@floegence/floe-webapp-boot | " + floeWebappVersion,
@@ -446,19 +444,19 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"@floegence/floe-webapp-core | " + floeEnvCoreVersion,
 			"@floegence/floe-webapp-protocol | " + floeWebappVersion,
 			"@floegence/floeterm-terminal-web | 0.19.2",
-			"@floegence/flowersec-core | 5.4.1",
+			"@floegence/flowersec-core | 5.7.0",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.19.2",
-			"Flowersec Go v5.4.1",
-			"Env App and Desktop consume Flowersec TypeScript v5.4.1",
+			"Flowersec Go v5.7.0",
+			"Env App and Desktop consume Flowersec TypeScript v5.7.0",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.19.2",
 			"semantic Presentation",
 			"Floe Webapp Boot, Core, and Protocol v" + floeWebappVersion,
 			"Env App Core v" + floeEnvCoreVersion,
-			"Flowersec Core v5.4.1",
+			"Flowersec Core v5.7.0",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -668,7 +666,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Published Floret v7.18.2",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go v5.4.1, Core v5.4.1 for Env App and Desktop, and Floe Webapp v" + floeWebappVersion,
+			"published Flowersec Go v5.7.0 and Core v5.7.0 for Env App, Code App, and Desktop, and Floe Webapp v" + floeWebappVersion,
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
@@ -1642,9 +1640,6 @@ func assertOnlyCurrentFlowersecNPMDependency(t *testing.T, root string, file str
 		packages = []string{flowersecCorePackage}
 	}
 	version := flowersecCoreVersion
-	if strings.HasPrefix(filepath.ToSlash(file), "internal/codeapp/ui_src/") {
-		version = flowersecCodeAppVersion
-	}
 	for _, packageName := range packages {
 		assertOnlyCurrentNPMDependency(t, root, file, packageName, version)
 	}
