@@ -75,7 +75,7 @@ server.on('upgrade', (request, socket, head) => {
             connection.send(JSON.stringify({ version: 1, type: 'error', code: 'CONTROL_IN_USE' }));
             return;
           }
-          generation++; selectedMode = command.mode; display = command.display_id || display; state();
+          generation++; selectedMode = command.mode; display = command.display_id || displays.find(item => item.primary).id; state();
         }
         if (['select_display', 'configure', 'set_mode'].includes(command.method)) {
           assert.equal(command.generation, generation, 'overlapping transition used a stale generation');
@@ -288,17 +288,17 @@ try {
   await page.locator('#fullscreen').click();
   await page.waitForFunction(() => !document.documentElement.classList.contains('desktop-fullscreen') && !document.querySelector('#fullscreen').disabled, null, { timeout: 10000 });
   if (desktop) assert(!await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen()), 'native fullscreen did not exit');
-  configuration.session.display_id = 'two';
-  for (const accept of [false, true]) {
+  for (const savedDisplay of ['two', 'removed']) for (const accept of [false, true]) {
+    configuration.session.display_id = savedDisplay;
     selectedMode = 'control'; conflictNextConnect = true; controls.at(-1).close();
     await page.getByRole('button', { name: accept ? 'Take control' : 'Cancel', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('#connection').hidden);
     const connect = messages.findLast(item => item.command.method === 'connect');
     assert.equal(connect.command.mode, accept ? 'control' : 'view', 'native control conflict did not apply the choice');
-    assert.equal(connect.command.display_id, 'two', 'native control conflict lost the requested display');
+    assert.equal(connect.command.display_id, savedDisplay === 'removed' ? '' : savedDisplay, 'native control conflict reused an unavailable display or lost the requested display');
     assert.equal(connect.takeover, accept, 'native control conflict inferred takeover consent');
     paint();
-    await page.waitForFunction(() => document.querySelector('#desktop').width === 640);
+    await page.waitForFunction(width => document.querySelector('#desktop').width === width, savedDisplay === 'removed' ? 320 : 640);
     if (accept) await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
     else assert(await page.locator('.floe-remote-input').isDisabled(), 'declining takeover enabled input');
   }
