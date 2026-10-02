@@ -30,6 +30,7 @@ type platformGatewayRunRequest struct {
 	LogicalRequestID   string          `json:"logical_request_id"`
 	AttemptID          string          `json:"attempt_id"`
 	AttemptEpoch       int             `json:"attempt_epoch"`
+	Step               int             `json:"step"`
 	EntitlementVersion int64           `json:"entitlement_version"`
 	Protocol           string          `json:"protocol"`
 	Payload            json.RawMessage `json:"payload"`
@@ -122,7 +123,7 @@ func (t platformRequestTransport) RoundTrip(native *http.Request) (*http.Respons
 		protocol = "chat"
 	}
 	in := t.request
-	body, err := json.Marshal(platformGatewayRunRequest{ThreadID: string(in.ThreadID), RunID: string(in.RunID), TurnID: string(in.TurnID), TraceID: string(in.TraceID), PromptScopeID: string(in.PromptScopeID), LogicalRequestID: string(in.LogicalRequestID), AttemptID: in.AttemptID, AttemptEpoch: in.AttemptEpoch, EntitlementVersion: t.provider.entitlementVersion, Protocol: protocol, Payload: payload})
+	body, err := json.Marshal(platformGatewayRunRequest{ThreadID: string(in.ThreadID), RunID: string(in.RunID), TurnID: string(in.TurnID), TraceID: string(in.TraceID), PromptScopeID: string(in.PromptScopeID), LogicalRequestID: string(in.LogicalRequestID), AttemptID: in.AttemptID, AttemptEpoch: in.AttemptEpoch, Step: in.Step, EntitlementVersion: t.provider.entitlementVersion, Protocol: protocol, Payload: payload})
 	if err != nil {
 		return nil, errors.New("platform AI request unavailable")
 	}
