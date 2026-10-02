@@ -75,10 +75,6 @@ type macMessage struct {
 	Generation          int                  `json:"generation,omitempty"`
 }
 
-func macCommand(helper string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, error) {
-	return macCommandMedia(helper, nil)
-}
-
 func macCommandMedia(helper string, media *os.File) (*exec.Cmd, io.WriteCloser, io.ReadCloser, error) {
 	if helper == "" {
 		return nil, nil, nil, ErrUnavailable

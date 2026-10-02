@@ -343,9 +343,10 @@ func (m *Manager) Change(owner, id, method, value string, takeover bool) error {
 	a.mu.Unlock()
 	m.mu.Unlock()
 	command := nativeapps.HostDesktopCommand{Version: 1, ID: 1, Method: method, Generation: generation}
-	if method == "set_mode" {
+	switch method {
+	case "set_mode":
 		command.Mode = value
-	} else if method == "select_display" {
+	case "select_display":
 		command.DisplayID = value
 	}
 	if !command.Valid() {

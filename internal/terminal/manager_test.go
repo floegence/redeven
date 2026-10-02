@@ -80,15 +80,6 @@ func TestResolveWorkingDir(t *testing.T) {
 	}
 }
 
-func mustTestFilesystemScope(t *testing.T, root string) *filesystemscope.Registry {
-	t.Helper()
-	scope, err := filesystemscope.NewDefaultRegistry(root)
-	if err != nil {
-		t.Fatalf("NewDefaultRegistry(%q): %v", root, err)
-	}
-	return scope
-}
-
 func TestCreateSessionStartsDormantWithoutColsRows(t *testing.T) {
 	root := t.TempDir()
 	m := newQuietTestManager(t, root)
