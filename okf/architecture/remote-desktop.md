@@ -128,6 +128,11 @@ Window closure and Disconnect end sharing only. New copy is explicit in every
 shipped locale, and standalone controls consume released Floe appearance/input
 assets.
 
+Lock host replaces the settings content inside the same modal and focuses
+Cancel. Only explicit confirmation sends the lock command; Cancel and Escape
+send nothing. Closing the confirmation restores focus to the settings trigger.
+A queued settings-close event must never dismiss or resolve its replacement.
+
 # Boundaries
 
 There is no Windows host, virtual-desktop provisioning, pre-login service,
