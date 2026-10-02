@@ -24,7 +24,10 @@ admission and packet arrival are not visible response.
 
 Refinement must finish within 500ms and match a lossless text reference at the
 same dimensions after host motion stops. Verify original-pixel coordinates and
-text separately. Ten-minute interaction requires bounded queues, released keys
+text separately. Compare the actual PNG draw after its paint receipt with the
+independent reference; retain later video draws separately so asynchronous
+screenshot timing cannot substitute a lossy frame for the refinement.
+Ten-minute interaction requires bounded queues, released keys
 and no accumulated audiovisual delay. Record encoder, decoder preference,
 CPU/GPU attribution, bandwidth and failures. Whole-device GPU counters cannot
 be attributed to the remote desktop process. 4K does not substitute for either
@@ -33,7 +36,9 @@ required resolution.
 # Real-Host Boundaries
 
 The host user completes OS authorization. Fixtures operate only their own
-applications and stop input on foreground loss. Display leases restore the
+applications and stop input on foreground loss. Before each physical-input
+sample, wait for current paint authority and focus; record recovery transitions
+and never replay a key whose delivery is unknown. Display leases restore the
 original mode; cleanup preserves user applications and unsaved work.
 
 Verify office text, Chinese input, explicit paste, pointer drag, scrolling,

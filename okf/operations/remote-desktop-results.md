@@ -3,163 +3,164 @@ type: Acceptance Record
 title: Current-desktop qualification results
 description: Assess published remote desktop measurements, retained failures and outstanding real-host qualification.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-01T21:00:00Z
+timestamp: 2026-10-02T04:00:00Z
 ---
 # Summary
 
 Acceptance remains incomplete for the [desktop contract](../architecture/remote-desktop.md).
-Published v0.22.4 passes the macOS 1080p dynamic matrix and office/input checks
-on both tested hosts. Linux dynamic failures and unfinished real-host checks
-prevent integration. Preserve the thresholds in the
-[acceptance method](remote-desktop-validation.md); passing retries do not erase
-earlier failures or establish their cause.
+Published dependencies pass office checks, the macOS 1080p matrix and Linux
+ten-minute input stability. Failed or unfinished performance and real-host checks
+prevent integration. Preserve the [acceptance thresholds](remote-desktop-validation.md);
+a passing retry neither erases a failure nor establishes its cause. Current
+macOS foreground/performance work is deferred at the user's request while other
+workloads continue. No Redeven push, push gate or full integration gate is authorized.
 
 # Published Dependency And Conditions
 
-Redeven commit `314718e5765e1193db225f5dc2ab8b32e224dfe7` consumes published
-`floe-native-apps` v0.22.4 Go and Swift packages at
-`32e7efbce4d3ba9581f7606204eb4768630acc84` for the results below. The feature
-now adopts published v0.22.5 at `a2c11dabc0c5d4860887f075e79a577ba82447a0`.
-Its release gate and module-proxy/checksum readback passed. Redeven commit
-`a0ab99cb3f4fe725de039321d72fc22f42ba4492` binaries use `GOWORK=off` and the
-published native Floeterm build, without sibling overrides.
+Redeven binary `a0ab99cb3f4fe725de039321d72fc22f42ba4492` uses published
+`floe-native-apps` v0.22.5 (`a2c11dabc0c5d4860887f075e79a577ba82447a0`).
+Release qualification/checksum readback passed. Builds use `GOWORK=off`, native
+Floeterm and no overrides. Earlier v0.22.4 evidence is labeled.
 
-Apple Silicon uses VideoToolbox hardware H.264 at 1080p/1440p. Chromium's
-`no-preference` does not prove hardware decoding. The Runtime uses task loopback.
-Foreground tests stop on focus loss and record shared system load.
+Apple Silicon uses VideoToolbox H.264 and task loopback. Chromium's
+`no-preference` does not prove hardware decoding. Shared CPU/GPU observations
+are not process attribution; foreground tests stop on focus loss.
 
-`server` runs Ubuntu 24.04 GNOME X11, RTX 4090 D and driver 550.90.07. The
-musl media stack cannot load the host's glibc CUDA library and selects software
-`x264enc`; GPU encoding is unqualified. System FFmpeg NVENC encoded a 1440p test
-pattern; this does not certify the production stack. The client uses
-authenticated Redeven WebSockets through an owned SSH forward on the local LAN.
-Ten ping samples had no loss and 4.242/5.985/9.329ms minimum/average/maximum RTT.
+`server` is Ubuntu 24.04/GNOME X11, RTX 4090 D/driver 550.90.07. Its glibc CUDA
+library cannot load into the isolated musl stack, which selects `x264enc`.
+System FFmpeg NVENC test-pattern success does not qualify production GPU
+encoding. Authenticated WebSockets use a task LAN SSH forward; ten pings had
+no loss and 4.242/5.985/9.329ms minimum/average/maximum RTT.
 
-The 1440p display lease uses a 2560x1440 framebuffer scaled to physical
-3840x2160@59.94Hz scanout because the native 1440p mode is only 30Hz. It restores
-1920x1080@60Hz. The driver rejected a task-only CVT 1440p/59.95Hz mode with
-RandR `BadMatch`; the mode was removed without switching the display or changing
-driver policy. The scaling arrangement must remain explicit in results.
+1440p leases scale a 2560x1440 framebuffer to physical 3840x2160@59.94Hz and
+restore 1920x1080@60Hz. Native 1440p is 30Hz; a task 59.95Hz mode was rejected
+and removed without changing driver policy. Alternative scanout is labeled.
 
-# Current Published Results
+# Published Product Results
 
 ## macOS
 
-The complete v0.22.4 1080p matrix contains six 60-second runs: three scrolling
-and three window-motion runs. All passed, with minimum 57.321 FPS, maximum
-interval P95 29ms and maximum refinement 341.9ms. There were no client errors.
-Bandwidth was 14.70-14.86Mbps. Resource evidence records owned CPU processes and
-labels GPU counters as shared whole-device observations.
+The v0.22.4 1080p matrix passed all six 60-second runs: minimum 57.321 FPS,
+maximum interval P95 29ms, refinement 341.9ms and bandwidth 14.70-14.86Mbps.
+The Electron office workflow passed Chinese/emoji paste, drag, wheel, clipboard,
+native full screen, view-only and takeover. One hundred physical inputs measured
+P95 70.1ms to the changed marker's post-render receipt.
 
-The real Electron office run passed Chinese/emoji client paste, drag-selection,
-wheel scrolling, bidirectional clipboard, native full screen, view-only and
-explicit takeover. One hundred physical inputs at 1080p measured P95 70.1ms to
-the published player's post-render receipt of the changed task marker.
+The incomplete v0.22.4 1440p matrix includes a passing scroll cell
+(57.523 FPS/24.2ms/321.1ms), office/reference checks and 100-key P95 54.5ms.
+v0.22.5 scrolling failed at 38.323 FPS/33ms/359.2ms. Xcode compilation was
+observed, but attribution to load remains unproven.
 
-The first published 1440p scroll run passed at 57.523 FPS, interval P95 24.2ms
-and refinement 321.1ms. The matrix was interrupted; a later attempt stopped on
-foreground loss. Neither is a complete matrix. Separate published 1440p office,
-original-pixel reference and 100-key P95 54.5ms checks passed. Published-product
-ten-minute stability and the rest of the matrix remain pending.
+A v0.22.5 stability attempt stopped after 12 keys on decoder recovery. The
+driver now waits for authority and focus before every key without replay. Its
+100-key retry failed P95 at 82.2ms; another stability run lost foreground. The
+1440p matrix and ten-minute stability remain unqualified and deferred.
+
+The v0.22.5 Runtime restart passed: both channels closed, old session/ticket
+returned 404, fresh paint was required, and fixture/text survived without replay.
+Expected connection-refused messages during the stopped interval are retained.
+Toolbar switching between two owned applications passed; application-mode/desktop
+control-ownership takeover is a separate outstanding check.
 
 ## Linux
 
-The v0.22.4 office run passed Chinese/emoji composition through explicit paste,
-drag-selection, wheel scrolling, bidirectional clipboard, full screen, view-only
-and takeover. One hundred physical inputs at 1080p measured P95 68.4ms. The
-original-pixel 800x120 text crop matched an independent lossless reference.
-Task system-output audio reached the production decoder and AudioWorklet, with
-206 accepted blocks and at most one pending handoff. This is not output-device
-qualification.
+The v0.22.4 office workflow passed Chinese/emoji paste, pointer, clipboard,
+full screen, view-only and takeover. Input P95 was 68.4ms/67.3ms at 1080p/1440p;
+an 800x120 original-pixel crop matched its independent reference. v0.22.5
+toolbar application switching also passed with current X server timestamps.
 
-The latest 1080p scrolling matrix recorded 58.847, 58.954 and 52.398 FPS with
-interval P95 24.2, 22.5 and 35.4ms. The third run failed and stopped the matrix.
-Refinement was 245.2-262.6ms; sampled decoder depth was zero and bandwidth
-5.35-5.72Mbps. The host was lightly loaded, while client system load was high.
-Client scheduling interference is plausible but unproven.
+The v0.22.4 1080p third scroll cell failed at 52.398 FPS/35.4ms; a 1440p window
+cell failed at 52.77 FPS/34.5ms. All 3,183 received frames decoded, 3,176 drew,
+and decode P95 was 2.1ms. Fixture updates reached 60.02/s but media only 52.89/s.
+v0.22.5 1080p scrolling failed at 44.325 FPS/37.4ms/237.8ms refinement; media
+was 44.34/s and decode P95 1.7ms. Loss precedes decoding. Neither matrix passes.
 
-A later 100-key 1440p run passed with P95 67.3ms. Its 60-second window-motion
-test failed at 52.77 FPS, interval P95 34.5ms and refinement 260.4ms. Of 3,183
-received H.264 frames, all decoded and 3,176 drew; decode P95 was 2.1ms. The
-fixture requested 60.02 updates/s, but transmitted media reached only 52.89
-frames/s. This run loses cadence before client decoding. Shared client system
-load was high and is retained with the evidence.
+A v0.22.4 stability attempt stopped around 510s when a seatless SSH login
+vanished between logind enumeration and lookup. Published v0.22.5 excludes
+seatless logins before lookup; missing graphical properties still fail closed.
+During 100 SSH exits, a 30s comparison found 27 failures in 2,208 v0.22.4 checks
+and none in v0.22.5. The latter product completed 600.1s/670 inputs at P95 62.8ms,
+with decoder depth zero, 30,226 audio blocks and at most one pending handoff.
+All 136 resource-monitor SSH exits completed without revocation.
 
-The published ten-minute input/audio attempt stopped after about 510 seconds
-with `session_unavailable` despite a focused fixture and active, unlocked login.
-A deterministic regression reproduced a seatless SSH login disappearing between
-logind enumeration and property lookup. Published v0.22.5 excludes seatless
-logins before lookup; missing graphical-session properties still fail closed.
-Its published product rerun completed 600.1s and 670 physical inputs at P95
-62.8ms. Decoder queue depth stayed zero; 30,226 audio blocks reached the worklet
-with at most one pending handoff. Resource sampling opened 136 SSH sessions
-without revocation. Physical audio output and audiovisual delay remain unqualified.
+Runtime restart passed on both releases: channels closed, old credentials
+returned 404 and fresh paint was required; fixture/text survived. The initial
+v0.22.5 stale 669-key baseline failure is retained alongside the passing
+correlated retry for all 670 delivered keys.
 
-A read-only 30s comparison made 2,208 checks/version during 100 SSH exits:
-v0.22.4 returned 27 `UnknownObject` errors, v0.22.5 none.
+Intermittent original-pixel comparisons failed on Linux v0.22.4 and macOS
+v0.22.5. The driver now snapshots the actual PNG draw and awaits its paint
+receipt; focused comparisons pass. Earlier PNG snapshots were not retained,
+so their cause remains unconfirmed. Later H.264 draws are compared separately;
+full-frame copies occur only during reference checks.
 
-Runtime restart passed on v0.22.4 and v0.22.5: channels closed, old session and
-ticket returned 404, and a new session required fresh paint while the fixture
-and text survived. The first v0.22.5 restart assertion used a pre-key snapshot
-(669 characters versus 670 delivered keys). A focused retry with correlated
-pre/post snapshots passed; retain the original harness failure.
+Six Linux system-output tones reached the unmuted Mac AudioContext destination
+with advancing clocks. Human listening and accumulated audiovisual delay remain
+unqualified; worklet acceptance is not physical speaker evidence.
 
-A v0.22.4 1440p original-pixel hash failed after wheel scrolling. A focused retry
-and v0.22.5 1080p check matched the reference exactly. The initial 1440p cause
-remains unresolved; retain both results.
+# Capture Diagnostics And Limits
 
-# Diagnostics And Retained Failures
+Instrumented v0.22.5 X11 1440p drew 54.70 FPS/32.4ms. Capture reached 60
+callbacks/s but 53-59 changed pictures/s, with codec P95 usually 3-4ms and
+0-2 pending credits. Removing encoder pacing still failed at 53.77 FPS/32.7ms.
+Consented portal comparisons drew 26.71-27.70 FPS despite negotiated 59.94 FPS;
+copying PipeWire buffers did not help. No production backend switch followed.
 
-An intrusive v0.22.5 1440p window diagnostic drew 54.70 FPS/32.4ms over 30s.
-Capture averaged 60 callbacks/s but only 53-59 changed pictures/s in several
-intervals. Typical codec P95 was 3-4ms, submission-to-publication P95 6-8ms and
-frame credits 0-2. The fixture requested 59.84 updates/s. This locates lost
-cadence before encoding without distinguishing capture timing from compositor
-presentation. Short instrumented runs do not replace product matrices. Earlier
-1080p diagnostics drew about 56.3 FPS; client load cannot explain every failure.
+Independent FFmpeg X11 capture observed 52.13 changed images/s at 60Hz sampling
+and 55.4 at 120Hz. The latter's first interval calculation used the wrong
+timebase; discard that interval result. Subsequent probes parse the reported
+timebase. 1080p scrolling reached 57.73 changed images/s/P95 16.76ms, but GTK
+reported no usable presentation timestamps. Downsampled change hashes and
+alternate display scaling do not qualify product rendering.
 
-Retained v0.22.2 Linux 1440p matrices failed at 52.48-53.86 FPS/33.3-33.5ms.
-Input runs failed at 83.8/84.3ms, and ten-minute input failed at 80.4ms. Reference
-crops matched; observed media handoff was bounded without physical-output proof.
-Faster X11 polling, format/cursor changes, extra queues and XDamage did not resolve
-cadence and were not adopted.
+GStreamer grabs the X Server per frame. An external interceptor raised capture
+from about 69 to 120 callbacks/s; the original fixture still drew only
+54.73 FPS/33.2ms. With the system GTK product fixture, 1080p drew 57.53 FPS
+without grabs and 59.07 with grabs; 1440p drew 55.89 and 49.39 respectively.
+The published 60Hz capture comparison drew 50.29 FPS. These results show an
+acquisition cost, not a sufficient fix. No interceptor or altered library ships.
+System-FFmpeg/GStreamer capture failed at 54.77 FPS/34.8ms and, after increasing
+pipe read size, 54.52 FPS/33.5ms. That binary is not a published dependency. Fixture/compositor cadence,
+sampling and client load remain unresolved in the detailed diagnostic ledger.
 
-`udesk24` GNOME 46 Wayland completed user authorization, native input, clipboard,
-audio and grant restoration. Its 1080p dynamic result was about 37.6 FPS; capture
-alone reached 38-41 FPS. It exposes neither 1440p nor usable hardware encoding.
-No Linux GPU qualification follows from this host. A view-only public portal
-comparison on `server` still requires host consent. Previous requests timed out,
-including a request with the fixture hidden; no request is kept active.
+Earlier Linux dynamic failures (52.48-53.86 FPS/33.3-33.5ms), input failures
+(83.8/84.3ms) and rejected polling, format, cursor, queue and XDamage experiments
+remain in the ledger. Native macOS candidate matrices and 611.1s stability are
+not published-product acceptance.
 
-Native macOS candidates passed twelve matrix runs and 611.1-second stability;
-these do not qualify published-product behavior.
+`udesk24` GNOME 46 Wayland passed authorization, input, clipboard, audio handoff
+and grant restoration. Dynamic 1080p was about 37.6 FPS and capture alone
+38-41 FPS; it exposes neither 1440p nor usable hardware encoding.
 
 # Remaining Qualification
 
-- Resolve Linux cadence and the intermittent reference mismatch; complete both published product matrices.
-- Complete the macOS 1440p matrix and published ten-minute interaction checks.
-- Coordinate real Linux/macOS lock and host-side unlock; distinguish refusal from remote-unlock success.
-- Verify shortcuts, display hotplug, application/desktop takeover and macOS Runtime restart/reconnect.
+- Resolve Linux cadence and complete both published dynamic matrices.
+- Complete macOS 1440p and ten-minute interaction when foreground is available.
+- Verify real lock/unlock, physical hotplug and application-mode/desktop takeover.
 - Qualify physical audio output and accumulated audiovisual delay.
-- Regenerate OKF, rerun affected checks and integrate locally only after acceptance.
+- Preserve unresolved reference failures; regenerate OKF and run affected checks.
+- Integrate and clean task worktrees only after acceptance; do not push Redeven.
+
+The v0.22.5 Electron viewer regression passed input/paint authority, composition
+cancellation, clipboard, display selection, takeover, reconnect, narrow locales,
+dialog keyboard and disconnect. Synthetic contracts do not replace these pending
+real-host checks.
 
 # Evidence
 
-Task evidence is retained outside the repository under
-`task-evidence/remote-desktop-20261001`; screen and clipboard content is not
-committed. Representative records are:
+Detailed results, binary identities and historical failures remain outside the
+repository in `task-evidence/remote-desktop-20261001/product-progress.json`.
+Screen/clipboard content is not committed. Representative records:
 
-- `product-performance-macos-v0224-1080-retest.json` and `macos-resources-macos-v0224-1080-retest.jsonl`: published matrix and resource observations.
-- `product-macos-v0224-electron-1080.log`: real Electron office and physical input.
-- `product-linux-v0224-office-entry.log`: Linux office, reference, audio and physical input.
-- `product-performance-linux-v0224-1080-frameclock.json`: passing cells and retained failed cell.
-- `product-linux-v0224-1440-stage-window.log` and `product-linux-v0224-1440-refinement-trace.log`: reference failure and focused retry.
-- `product-linux-v0224-1440-input-window.log`: passing input and failed dynamic cadence.
-- `product-linux-v0224-ten-minute.log` and `product-linux-restart-linux-v0224-runtime-restart.json`: identity suspension and real restart behavior.
-- `identity-churn-probe-server.log`: real login enumeration race and candidate comparison.
-- `server-v0224-native-stage-scroll-server.log` and `server-v0224-native-stage-window-server.log`: intrusive native stage timings.
-- `server-v0225-detailed-1440-window-server.log`: capture, change, submission, codec and credit observations.
-- `product-audiovisual-stability-1080-linux-v0225-stability-native-runtime.json` and `linux-resources-linux-v0225-stability-native-runtime.jsonl`: published stability and SSH sampling.
-- `product-failure-linux-v0225-stability-native-runtime.json` and `product-linux-restart-linux-v0225-restart-correlated.json`: stale harness snapshot and corrected restart.
-- `product-v0225-*-build-metadata.log` and focused Go/Swift/browser logs: published artifacts, native build and platform contracts.
-- `product-progress.json`: task state, Runtime identities and historical observations.
+- `product-performance-macos-v0224-1080-retest.json`: complete macOS matrix.
+- `product-performance-*-v0225-*.json`: current published performance failures.
+- `product-macos-input-1440-macos-v0225-recovery-input-focus.json`: input failure.
+- `product-failure-macos-v0225-stability-*.json`: interrupted stability attempts.
+- `product-audiovisual-stability-1080-linux-v0225-stability-native-runtime.json`: Linux stability.
+- `product-*-restart-*-v0225-*.json`: correlated Runtime restart evidence.
+- `product-shortcut-*-v0225-*.json` and `product-v0225-electron-viewer.log`: interaction regression.
+- `product-audio-destination-linux-v0225-audio-destination.json`: destination clocks, listening unconfirmed.
+- `identity-churn-probe-server.log`: disappearing seatless login comparison.
+- `linux-capture-stage-comparisons.json`: acquisition/encoding diagnostics, including rejected interceptors.
+- `server-v0225-portal-*.log` and `server-independent-*.log`: consented portal and host capture comparisons.
+- `product-v0225-*-build-metadata.log`: published binary provenance.
