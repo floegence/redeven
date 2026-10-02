@@ -220,7 +220,12 @@ async function connect() {
 
 function element(tag, text, properties = {}) { const node = document.createElement(tag); if (text) node.textContent = text; Object.assign(node, properties); return node; }
 function button(key, onClick) { const node = element('button', copy(key), { type: 'button' }); node.onclick = onClick; return node; }
-function openPanel(title, children) { pointer.reset(); input.bindTarget(null); $('panel-title').textContent = copy(title); $('panel-body').replaceChildren(...children); panel.showModal(); }
+function openPanel(title, children) {
+  pointer.reset(); input.bindTarget(null);
+  $('panel-title').textContent = copy(title); $('panel-body').replaceChildren(...children);
+  if (panel.open) $('panel-body').querySelector('button, input, select, textarea')?.focus();
+  else panel.showModal();
+}
 panel.addEventListener('close', () => { if (active(generation)) input.bindTarget(generation); });
 async function confirmation(title, hint) {
   return new Promise(resolve => {
@@ -297,7 +302,7 @@ $('settings').onclick = () => {
   const mute = element('input', '', { id: 'sound', type: 'checkbox', checked: audio });
   mute.onchange = async () => { audio = mute.checked && await player.enableAudio(); mute.checked = audio; player.setVolume(volume, !audio); configure(); };
   const muteLabel = element('label', copy('sound')); muteLabel.append(mute);
-  const lock = button('lock', async () => { panel.close(); if (await confirmation('lock', 'lockHint')) command('lock'); }); lock.disabled = session.mode !== 'control';
+  const lock = button('lock', async () => { if (await confirmation('lock', 'lockHint')) command('lock'); }); lock.disabled = session.mode !== 'control';
   openPanel('settings', [qualityLabel, textLabel, element('p', copy('textInputHint'), { id: 'text-input-hint' }), sound, muteLabel, volumeLabel, lock, element('output', '', { id: 'statistics' })]); updateTransitionControls(); refreshStats();
 };
 async function localClipboard(target, paste = false) {
