@@ -57,7 +57,7 @@ export function RemoteDesktopPanel() {
       if (!desktop && !popup) throw new Error('POPUP_BLOCKED');
       const session = await createRemoteDesktop({ mode: mode(), display_id: display(), locale: i18n.locale(), theme: document.documentElement.dataset.floeShellTheme ?? '', host_name: env.env()?.name ?? env.env_id(), takeover: claim });
       created = session.id;
-      const route = resolveWebServiceOpenRoute({ forwardID: session.forward_id, localRuntime: env.localRuntime(), desktopContext: readDesktopSessionContextSnapshot(), appPath: '/_redeven_desktop/', desktopWindowAvailable: desktop });
+      const route = resolveWebServiceOpenRoute({ forwardID: session.forward_id, localRuntime: env.localRuntime(), desktopContext: readDesktopSessionContextSnapshot(), appPath: '/_redeven_desktop/', desktopWindowAvailable: desktop, presentation: 'desktop' });
       await openWebServiceRoute(route, session.forward_id, session.target_url, 'unified_proxy', '/_redeven_desktop/', desktop, () => {}, {
         missingEnvContext: i18n.t('webServices.errors.missingEnvContext'), opening: i18n.t('remoteDesktop.connecting'),
         openingLocalProxy: i18n.t('webServices.status.openingLocalProxy'), requestingEntryTicket: i18n.t('webServices.status.requestingEntryTicket'),

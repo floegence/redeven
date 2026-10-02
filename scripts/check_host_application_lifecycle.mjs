@@ -19,6 +19,7 @@ const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3)
 const css = (await Promise.all(['appearance.generated.css','remote-input.generated.css','remote-pointer.generated.css','viewer.css'].map(asset))).join('\n');
 const js = (await Promise.all(['catalog.generated.js','viewport.generated.js','remote-input.generated.js','remote-pointer.generated.js','appearance.js','connection.js','toolbar.js','canvas.js','macos.js'].map(asset))).join('\n');
 const html = (await asset('viewer.html')).replaceAll('{{.Locale}}','en-US').replaceAll('{{.Theme}}','porcelain-light')
+  .replace('<script src="{{.TransportScript}}"></script>', '<script>window.RedevenWindowTransport={create:()=>({fetch:window.fetch.bind(window),WebSocket:window.WebSocket})};</script>')
   .replaceAll('{{.Name}}','Lifecycle fixture').replaceAll('{{.Nonce}}','fixture').replace('{{.Style}}',css)
   .replace('{{.Config}}',JSON.stringify({base:'/fixture',backend:'macos',icon:'',copy:catalog.locales['en-US']})).replace('{{.Script}}',js);
 let state = {state:'running',password:'fixture'};

@@ -21,6 +21,10 @@ class FakeElement {
     this.attributes.set(name, value);
   }
 
+  hasAttribute(name: string): boolean {
+    return this.attributes.has(name);
+  }
+
   append(...children: FakeElement[]): void {
     this.children.push(...children);
   }
@@ -55,6 +59,22 @@ describe("Code App injection entry", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  test.each(["data-redeven-window", "data-floe-host-transport"])("preserves the graphical transport owner for %s documents", async marker => {
+    const document = new FakeDocument();
+    document.documentElement.setAttribute(marker, "required");
+    const targetWindow = { document, stop: vi.fn(), WebSocket: class {} };
+    const ownedSocket = targetWindow.WebSocket;
+    vi.stubGlobal("window", targetWindow);
+    vi.stubGlobal("document", document);
+
+    await import("./inject");
+
+    expect(registerProxyAppWindowWithServiceWorkerRuntimeMock).not.toHaveBeenCalled();
+    expect(installWebSocketPatchMock).not.toHaveBeenCalled();
+    expect(targetWindow.stop).not.toHaveBeenCalled();
+    expect(targetWindow.WebSocket).toBe(ownedSocket);
   });
 
   test("fails closed before Code App starts when bridge bootstrap is missing", async () => {

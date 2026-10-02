@@ -30,6 +30,12 @@ A helper/window generation mismatch discards late pixels and inputs.
 
 The remaining snapshot rules in this concept apply to Xpra sessions.
 
+Redeven requests the published required-host-transport document option. Its
+pre-client script inherits the owning viewer's Flowersec constructor, and missing
+transport fails closed. The [graphical window transport](graphical-window-transport.md)
+contract owns this data path and iframe authority; the upstream retains decoder
+workers and all prepared resource integrity rules.
+
 A new share prepares current SDK resources from the current installed original
 HTML5 v20/v21 distribution. One reviewed upstream preparation pipeline produces the
 entry document and resource snapshot. Existing shares retain their exact bytes;

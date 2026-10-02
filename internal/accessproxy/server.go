@@ -27,6 +27,9 @@ type Options struct {
 	Meta           session.Meta
 	Upstream       string
 	ExternalOrigin string
+	// SessionReady is closed when product activation settles. The request still
+	// passes the normal channel and owner checks after this barrier.
+	SessionReady <-chan struct{}
 }
 
 type Server struct {
@@ -35,6 +38,7 @@ type Server struct {
 	meta     session.Meta
 	upstream *url.URL
 	proxy    *httputil.ReverseProxy
+	ready    <-chan struct{}
 
 	mu   sync.Mutex
 	ln   net.Listener
@@ -144,7 +148,7 @@ func New(opts Options) (*Server, error) {
 			http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		},
 	}
-	return &Server{log: logger, gate: opts.Gate, meta: opts.Meta, upstream: upstreamURL, proxy: proxy}, nil
+	return &Server{log: logger, gate: opts.Gate, meta: opts.Meta, upstream: upstreamURL, proxy: proxy, ready: opts.SessionReady}, nil
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -231,6 +235,13 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if s == nil || r == nil {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
 		return
+	}
+	if s.ready != nil {
+		select {
+		case <-s.ready:
+		case <-r.Context().Done():
+			return
+		}
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	if strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/_redeven_proxy/api/access/") {

@@ -291,11 +291,12 @@ const (
 )
 
 type localUIRoute struct {
-	kind            localUIRouteKind
-	codeSpaceID     string
-	forwardID       string
-	proxyBasePath   string
-	pluginChannelID string
+	privateWindowTransport bool
+	kind                   localUIRouteKind
+	codeSpaceID            string
+	forwardID              string
+	proxyBasePath          string
+	pluginChannelID        string
 }
 
 type localUIRouteContextKey struct{}
@@ -618,8 +619,14 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		channelID := strings.TrimSpace(r.Header.Get(sessionhop.HeaderChannelID))
 		if channelID != "" {
 			meta, ok := g.resolveSessionMeta(channelID)
-			if ok && meta != nil && meta.EndpointID == localEnvPublicID && meta.CodeSpaceID == "env-ui" && meta.FloeApp == localFloeAppAgent {
-				originRole = originRoleEnv
+			if ok && meta != nil && meta.EndpointID == localEnvPublicID {
+				if meta.CodeSpaceID == "env-ui" && meta.FloeApp == localFloeAppAgent {
+					originRole = originRoleEnv
+				}
+				if meta.FloeApp == localFloeAppPortForward && meta.CodeSpaceID != "" {
+					originRole = originRolePortForward
+					r = withWindowSessionRoute(r, meta.CodeSpaceID)
+				}
 			}
 		}
 	}
@@ -678,6 +685,11 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
+		case p == windowTransportScript:
+			if originRole != originRolePortForward && !localUI {
+				http.NotFound(w, r)
+				return
+			}
 		case p == "/_redeven_proxy/inject.js":
 			// inject.js installs the current Flowersec app bridge in untrusted
 			// codespace and port-forward pages. Plugin and Env origins must not
@@ -694,6 +706,8 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(p, "/_redeven_proxy/env"):
 			g.serveEnvAppDist(w, r)
+		case p == windowTransportScript:
+			g.serveDistFile(w, r, "window-transport.js")
 		case p == "/_redeven_proxy/inject.js":
 			g.serveDistFile(w, r, "inject.js")
 		default:
@@ -6536,6 +6550,9 @@ func localCodeSpaceBasePath(r *http.Request) string {
 }
 
 func portForwardIDFromRequest(r *http.Request) (string, bool) {
+	if id := windowSessionRoute(r); id != "" {
+		return id, true
+	}
 	if route, ok := localUIRouteFromRequest(r); ok && route.kind == localUIRoutePortForward {
 		id := strings.TrimSpace(route.forwardID)
 		if id == "" {

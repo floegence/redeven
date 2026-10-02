@@ -204,6 +204,13 @@ func (g *Server) guardHostApplicationSession(w http.ResponseWriter, r *http.Requ
 		return true
 	}
 	path := strings.TrimPrefix(r.URL.Path, base)
+	if !requireWindowSessionTransport(w, r, path) {
+		return true
+	}
+	if path == windowTransportScript {
+		g.serveDistFile(w, r, "window-transport.js")
+		return true
+	}
 	if path == hostApplicationBoot+"state" {
 		w.Header().Set("Cache-Control", "no-store")
 		password := ""
@@ -224,15 +231,16 @@ func (g *Server) guardHostApplicationSession(w http.ResponseWriter, r *http.Requ
 	return false
 }
 
-func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request, s hostapps.Session, base string) {
+func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, r *http.Request, s hostapps.Session, base string) {
 	var random [18]byte
 	_, _ = rand.Read(random[:])
 	nonce := base64.RawStdEncoding.EncodeToString(random[:])
-	config, _ := json.Marshal(map[string]any{"base": base, "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend, "initial": map[string]string{"state": s.State, "end_reason": s.EndReason, "error_code": s.ErrorCode}})
+	forwardID, _ := portForwardIDFromRequest(r)
+	config, _ := json.Marshal(map[string]any{"base": base, "transport": graphicalWindowTransport(r, forwardID, base), "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend, "initial": map[string]string{"state": s.State, "end_reason": s.EndReason, "error_code": s.ErrorCode}})
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data: blob:; connect-src 'self'; frame-src 'self'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data: blob:; connect-src 'self'; frame-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; base-uri 'none'; frame-ancestors 'none'")
 	var script string
 	switch s.Backend {
 	case "linux":
@@ -246,10 +254,10 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 		return
 	}
 	_ = hostApplicationBootTemplate.Execute(w, struct {
-		Name, Nonce, Locale, Theme string
-		Config, Script             template.JS
-		Style                      template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationPointerJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + hostApplicationCanvasJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationPointerCSS + "\n" + hostApplicationCSS)})
+		Name, Nonce, Locale, Theme, TransportScript string
+		Config, Script                              template.JS
+		Style                                       template.CSS
+	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, base + windowTransportScript, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationPointerJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + hostApplicationCanvasJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationPointerCSS + "\n" + hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html

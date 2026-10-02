@@ -403,6 +403,19 @@ describe('web service route helpers', () => {
       label: 'Secure tunnel',
     });
   });
+
+  it.each(['desktop', 'application'] as const)('keeps %s windows on the numeric private Flowersec origin', (presentation) => {
+    expect(resolveWebServiceOpenRoute({
+      forwardID: 'forward-1', appPath: '/_redeven_desktop/', localRuntime, presentation,
+      desktopContext: {
+        local_environment_id: 'ssh:devbox', renderer_storage_scope_id: 'ssh:devbox',
+        target_kind: 'ssh_environment', target_route: 'remote_desktop',
+        document_transport: 'desktop_private_bridge_v2',
+      },
+      browserLocation: new URL('http://127.0.0.1:43123/_redeven_proxy/env') as any,
+      desktopWindowAvailable: true,
+    })).toMatchObject({ kind: 'local_proxy', url: 'http://127.0.0.1:43123/pf/forward-1/_redeven_desktop/' });
+  });
 });
 
 describe('web service metadata and template validation', () => {

@@ -1,5 +1,4 @@
-import { readSessionEvents } from './sessionHTTP';
-import { fetchLocalApi, fetchLocalApiJSON } from './localApi';
+import { fetchSessionHTTP, fetchSessionJSON, readSessionEvents } from './sessionHTTP';
 import type { HostApplicationTransferPlan } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 export type { HostApplicationTransferPlan };
 
@@ -153,61 +152,61 @@ export type HostApplicationPresentation = Readonly<{
 const base = '/_redeven_proxy/api/host-applications';
 
 export function listHostApplications(locale: string, signal?: AbortSignal) {
-  return fetchLocalApiJSON<HostApplicationCatalog>(`${base}?locale=${encodeURIComponent(locale)}`, { method: 'GET', signal });
+  return fetchSessionJSON<HostApplicationCatalog>(`${base}?locale=${encodeURIComponent(locale)}`, { method: 'GET', signal });
 }
 
 export function launchHostApplication(applicationID: string, locale: string, presentation: HostApplicationPresentation, mode: 'native' | 'stream' = 'stream') {
-  return fetchLocalApiJSON<HostApplicationSession>(`${base}/sessions`, {
+  return fetchSessionJSON<HostApplicationSession>(`${base}/sessions`, {
     method: 'POST', body: JSON.stringify({ application_id: applicationID, locale, presentation, mode }),
   });
 }
 
 export function stopHostApplication(sessionID: string) {
-  return fetchLocalApiJSON(`${base}/sessions/${encodeURIComponent(sessionID)}`, { method: 'DELETE' });
+  return fetchSessionJSON(`${base}/sessions/${encodeURIComponent(sessionID)}`, { method: 'DELETE' });
 }
 
 export function listRunningHostApplications(signal?: AbortSignal) {
-  return fetchLocalApiJSON<RunningHostApplication[]>(`${base}/running`, { method: 'GET', signal });
+  return fetchSessionJSON<RunningHostApplication[]>(`${base}/running`, { method: 'GET', signal });
 }
 
 export function quitHostApplication(applicationID: string, instances: string[]) {
-  return fetchLocalApiJSON(`${base}/quit`, { method: 'POST', body: JSON.stringify({ application_id: applicationID, instances }) });
+  return fetchSessionJSON(`${base}/quit`, { method: 'POST', body: JSON.stringify({ application_id: applicationID, instances }) });
 }
 
 export function terminateHostApplication(applicationID: string, instances: string[]) {
-  return fetchLocalApiJSON(`${base}/terminate`, { method: 'POST', body: JSON.stringify({ application_id: applicationID, instances }) });
+  return fetchSessionJSON(`${base}/terminate`, { method: 'POST', body: JSON.stringify({ application_id: applicationID, instances }) });
 }
 
 export function detachHostApplication(sessionID: string) {
-  return fetchLocalApiJSON(`${base}/sessions/${encodeURIComponent(sessionID)}/detach`, { method: 'POST' });
+  return fetchSessionJSON(`${base}/sessions/${encodeURIComponent(sessionID)}/detach`, { method: 'POST' });
 }
 
 export function addHostApplication(request: { name: string; executable: string; arguments: string }) {
-  return fetchLocalApiJSON(base, { method: 'POST', body: JSON.stringify(request) });
+  return fetchSessionJSON(base, { method: 'POST', body: JSON.stringify(request) });
 }
 
 export function listHostApplicationSessions(signal?: AbortSignal) {
- return fetchLocalApiJSON<HostApplicationSession[]>(`${base}/sessions`, { method: 'GET', signal });
+ return fetchSessionJSON<HostApplicationSession[]>(`${base}/sessions`, { method: 'GET', signal });
 }
 
 export function requestHostApplicationPermission(permission: 'screen_recording' | 'accessibility') {
-  return fetchLocalApiJSON(`${base}/permissions`, {method: 'POST', body: JSON.stringify({permission})});
+  return fetchSessionJSON(`${base}/permissions`, {method: 'POST', body: JSON.stringify({permission})});
 }
 
 export function getHostApplicationSetup(signal?: AbortSignal) {
-  return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup`, { method: 'GET', signal });
+  return fetchSessionJSON<HostApplicationSetup>(`${base}/setup`, { method: 'GET', signal });
 }
 
 export function getHostApplicationTransferPlan(signal?: AbortSignal) {
-  return fetchLocalApiJSON<HostApplicationTransferPlan>(`${base}/setup/plan`, { method: 'GET', signal });
+  return fetchSessionJSON<HostApplicationTransferPlan>(`${base}/setup/plan`, { method: 'GET', signal });
 }
 
 export function startHostApplicationSetup(requestID: string, source: 'download' | 'upload' | 'cache' = 'download', sizeBytes = 0, packageDigest?: string) {
-  return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup`, { method: 'POST', body: JSON.stringify({ request_id: requestID, source, size_bytes: sizeBytes, package_digest: packageDigest }) });
+  return fetchSessionJSON<HostApplicationSetup>(`${base}/setup`, { method: 'POST', body: JSON.stringify({ request_id: requestID, source, size_bytes: sizeBytes, package_digest: packageDigest }) });
 }
 
 export function cancelHostApplicationSetup(operationID: string) {
-  return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup/${encodeURIComponent(operationID)}`, { method: 'DELETE' });
+  return fetchSessionJSON<HostApplicationSetup>(`${base}/setup/${encodeURIComponent(operationID)}`, { method: 'DELETE' });
 }
 
 export async function observeHostApplicationSetup(onUpdate: (setup: HostApplicationSetup) => void, signal: AbortSignal) {
@@ -224,11 +223,11 @@ export async function uploadHostApplicationSetup(operationID: string, file: Blob
   const url = `${base}/setup/${encodeURIComponent(operationID)}`;
   const chunkSize = 256 * 1024;
   for (let offset = 0; offset < file.size; offset += chunkSize) {
-    const response = await fetchLocalApi(`${url}/content?offset=${offset}`, {
+    const response = await fetchSessionHTTP(`${url}/content?offset=${offset}`, {
       method: 'PUT', body: 'read' in file ? await file.read(offset) : file.slice(offset, offset + chunkSize), signal,
       headers: { 'Content-Type': 'application/octet-stream' },
     });
     if (!response.ok) throw new Error('Host application component transfer failed.');
   }
-  return fetchLocalApiJSON<HostApplicationSetup>(`${url}/complete`, { method: 'POST', signal });
+  return fetchSessionJSON<HostApplicationSetup>(`${url}/complete`, { method: 'POST', signal });
 }

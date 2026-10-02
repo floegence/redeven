@@ -527,7 +527,15 @@ func (s *Server) configureAcceptor() error {
 			if !ok {
 				return nil, errors.New("local session authorization is unavailable")
 			}
-			handlers, cleanup, err := s.a.NewLocalSessionHandlers(&pending.meta, pending.externalOrigin)
+			// Authority comes from the store; only the in-memory lifecycle owns
+			// the settlement signal shared with OnSession. It is not persisted.
+			s.pendingMu.Lock()
+			ready := s.pending[channelID].settled
+			s.pendingMu.Unlock()
+			if ready == nil {
+				return nil, errors.New("local session lifecycle is unavailable")
+			}
+			handlers, cleanup, err := s.a.NewLocalSessionHandlers(&pending.meta, pending.externalOrigin, ready)
 			if err != nil {
 				if cleanupErr := s.authStore.burnLeased(lookupKey); cleanupErr != nil && s.log != nil {
 					s.log.Error("terminate local authorization after handler failure", "error", cleanupErr)
@@ -1484,6 +1492,9 @@ func (s *Server) handlePortForward(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if s.handleWindowTransport(w, r, forwardID, basePath) {
+		return
+	}
 	if strings.HasPrefix(strings.TrimPrefix(r.URL.Path, basePath), "/_redeven_desktop/") {
 		accessID, _, active := s.activeLocalAccessSession(r)
 		if !active {
@@ -1498,7 +1509,11 @@ func (s *Server) handlePortForward(w http.ResponseWriter, r *http.Request) {
 		}
 		r = r.WithContext(lifetime)
 	}
-	s.appServer.ServeHTTP(w, appserver.WithLocalUIPortForwardRoute(r, forwardID))
+	request := appserver.WithLocalUIPortForwardRoute(r, forwardID)
+	if isTrustedLocalUIBridge(r) {
+		request = appserver.WithPrivateWindowTransport(request)
+	}
+	s.appServer.ServeHTTP(w, request)
 }
 
 func localCodeSpaceRoute(path string) (codeSpaceID string, basePath string, ok bool) {
@@ -2026,8 +2041,9 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 	if err != nil || endpointURL == nil || strings.TrimSpace(endpointURL.Host) == "" {
 		return localIssuedPending{}, errors.New("invalid direct endpoint authority")
 	}
+	payload, projection, target := localSessionProxyScope(meta, spendOrigin)
 	metadata := controlplane.ArtifactMetadata{Scopes: []controlplane.Scope{{
-		Name: "proxy.runtime", Version: 2, Critical: true, Payload: json.RawMessage(localProxyRuntimePayloadJSON()),
+		Name: "proxy.runtime", Version: 2, Critical: true, Payload: json.RawMessage(payload),
 	}}}
 	if trace := strings.TrimSpace(traceID); trace != "" {
 		metadata.CorrelationTags = map[string]string{"trace_id": trace}
@@ -2086,10 +2102,9 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 		artifact = json.RawMessage(issued.ArtifactJSON())
 		authorizationRecord = issued.AuthorizationRecord()
 	}
-	projection := localProjectionJSON()
 	receipt, err := s.authStore.issue(
 		authorizationRecord, pending, channelID, accessSessionID, expiresAt,
-		digestB64u(artifact), digestB64u([]byte(projection)), spendOrigin, localTargetBindingJSON(),
+		digestB64u(artifact), digestB64u([]byte(projection)), spendOrigin, target,
 	)
 	if err != nil {
 		return localIssuedPending{}, err
@@ -2116,6 +2131,10 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 }
 
 func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
+	s.handleConnectArtifactWithMeta(w, r, nil)
+}
+
+func (s *Server) handleConnectArtifactWithMeta(w http.ResponseWriter, r *http.Request, windowMeta *session.Meta) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
@@ -2167,6 +2186,10 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 	meta.CanExecute = cap.Execute
 	meta.CanAdmin = true
 	meta.CreatedAtUnixMs = time.Now().UnixMilli()
+	if windowMeta != nil {
+		meta = *windowMeta
+		meta.ChannelID = ""
+	}
 
 	traceID := localUITraceID(r)
 	accessSessionID, accessExpiresAt, ok := s.activeLocalAccessSession(r)
@@ -2211,7 +2234,8 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, connectArtifactEnvelope{
+	_, _, target := localSessionProxyScope(meta, spendOrigin)
+	envelope := connectArtifactEnvelope{
 		Version:                     1,
 		ConnectArtifact:             acquisition.Artifact,
 		CriticalScopeProjectionJSON: acquisition.ProjectionJSON,
@@ -2220,12 +2244,23 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 			ArtifactDigestB64u:   digestB64u(acquisition.Artifact),
 			ProjectionDigestB64u: digestB64u([]byte(acquisition.ProjectionJSON)),
 			LauncherOrigin:       acquisition.SpendOrigin, RuntimeOrigin: acquisition.SpendOrigin, AppOrigin: acquisition.SpendOrigin,
-			Consumer: "trusted", TargetBinding: json.RawMessage(localTargetBindingJSON()),
+			Consumer: "trusted", TargetBinding: json.RawMessage(target),
 			ExpiresAt: acquisition.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		},
 		ChannelID:               acquisition.ChannelID,
 		PluginSessionCredential: acquisition.PluginCredential,
-	})
+	}
+	if windowMeta != nil {
+		// The published acquisition contract is exact. Window viewers receive
+		// neither Env metadata nor a plugin-management credential.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"v": envelope.Version, "connect_artifact": string(envelope.ConnectArtifact),
+			"critical_scope_projection_json": envelope.CriticalScopeProjectionJSON,
+			"spend_scope":                    envelope.SpendScope,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, envelope)
 }
 
 func (s *Server) localSpendOriginFromRequest(r *http.Request) (string, error) {

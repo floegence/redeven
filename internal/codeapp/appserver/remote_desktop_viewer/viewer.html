@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{.Locale}}" data-floe-shell-theme="{{.Theme}}">
+<html data-redeven-window lang="{{.Locale}}" data-floe-shell-theme="{{.Theme}}">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <link rel="stylesheet" href="{{.Base}}assets/floe.css"><link rel="stylesheet" href="{{.Base}}assets/viewer.css">
@@ -28,5 +28,6 @@
   <dialog id="panel" aria-labelledby="panel-title"><form method="dialog"><header><h2 id="panel-title"></h2><button data-copy="close" value="close"></button></header></form><div id="panel-body"></div></dialog>
   <script nonce="{{.Nonce}}">window.remoteDesktopConfig={{.Configuration}};</script>
   <script src="{{.Base}}assets/catalog.generated.js"></script><script src="{{.Base}}assets/icons.generated.js"></script><script src="{{.Base}}assets/input.js"></script><script src="{{.Base}}assets/pointer.js"></script>
+  <script src="{{.TransportScript}}"></script>
   <script type="module" src="{{.Base}}assets/viewer.js"></script>
 </body></html>

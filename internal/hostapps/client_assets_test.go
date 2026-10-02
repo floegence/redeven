@@ -116,6 +116,9 @@ func TestApplicationShareServesMatchingCurrentDocumentWithoutReadingLegacyTree(t
 		}
 		switch path {
 		case "/", "/index.html":
+			if !strings.Contains(string(data), `data-floe-host-transport="required"`) || !strings.Contains(string(data), `src="/_redeven_proxy/window-transport.js"`) {
+				t.Fatal("prepared viewer can bypass the host-owned transport")
+			}
 			if response.StatusCode != 200 || !strings.Contains(string(data), ClientAssetsPath+viewer.Assets().Digest()+"/js/FloeViewer.js") {
 				t.Fatal("document and resources differ")
 			}

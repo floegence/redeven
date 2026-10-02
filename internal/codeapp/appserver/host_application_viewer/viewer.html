@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{.Locale}}" data-floe-shell-theme="{{.Theme}}">
+<html data-redeven-window lang="{{.Locale}}" data-floe-shell-theme="{{.Theme}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -20,7 +20,9 @@
     <button id="dismiss" type="button" hidden></button>
     <button id="retry" type="button" hidden><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 4v5h-5M16 9a6 6 0 1 0-.6 4"/></svg><span></span></button>
   </main>
+  <script src="{{.TransportScript}}"></script>
   <script nonce="{{.Nonce}}">const config = {{.Config}};
+const windowTransport = RedevenWindowTransport.create(config.transport);
 {{.Script}}
   </script>
 </body>

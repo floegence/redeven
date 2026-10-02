@@ -2,7 +2,7 @@ import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { observeHostApplicationSetup, uploadHostApplicationSetup, quitHostApplication, terminateHostApplication, detachHostApplication, listRunningHostApplications } from './hostApplicationsApi';
 const api = vi.hoisted(() => ({ raw: vi.fn(), json: vi.fn() }));
-vi.mock('./localApi', () => ({ fetchLocalApi: api.raw, fetchLocalApiJSON: api.json }));
+vi.mock('./sessionHTTP', async importOriginal => ({...await importOriginal<object>(), fetchSessionHTTP:api.raw, fetchSessionJSON:api.json}));
 
 describe('host component transfer', () => {
  it('sends bounded ordered chunks and admits validation only after the last acknowledgement', async () => {

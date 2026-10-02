@@ -8,7 +8,7 @@ timestamp: 2026-10-02T14:32:09Z
 # Summary
 
 Redeven owns remote desktop authorization, ephemeral sessions, window placement,
-configuration and audit. Published `floe-native-apps` v0.22.7 owns current-desktop
+configuration and audit. Published `floe-native-apps` v0.22.8 owns current-desktop
 selection, OS authorization, native input, capture, codecs and bounded playback.
 A desktop session shares the existing signed-in macOS or Linux desktop. It never
 creates an application-private desktop, changes system security policy or grants
@@ -103,8 +103,10 @@ declining takeover, so a removed display cannot return through the stored reques
 
 ## Media and office interaction
 
-Control and media travel through separately authenticated WebSockets bound to the
-same product attachment. Video uses low-latency H.264 and static PNG refinement;
+Control and media travel through separate Flowersec native proxy streams bound
+to the same product attachment. The [graphical window transport](graphical-window-transport.md)
+contract owns direct/tunnel composition, resource authority and raw-route rejection.
+Video uses low-latency H.264 and static PNG refinement;
 system-output audio uses Opus. The published browser player negotiates available
 WebCodecs configurations, bounds encoded/decoded/audio queues, and confirms paint
 on a subsequent animation frame. Decoder preference is displayed as preference,

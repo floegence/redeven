@@ -1447,7 +1447,7 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess flowersec.Session,
 		return errors.New("code app server not ready")
 	}
 
-	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up, origin)
+	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up, origin, nil)
 	if err != nil {
 		return err
 	}
@@ -1511,7 +1511,7 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess flowersec.Sess
 		return errors.New("code app server not ready")
 	}
 
-	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up, origin)
+	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up, origin, nil)
 	if err != nil {
 		return err
 	}
@@ -1582,9 +1582,20 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 // Flowersec Acceptor. Flowersec owns admission, session establishment, RPC
 // framing, stream dispatch, and session lifetime; the returned cleanup only
 // releases Redeven service state captured by the handlers.
-func (a *Agent) NewLocalSessionHandlers(meta *session.Meta, externalOrigin string) (*flowersec.SessionHandlers, func(), error) {
+func (a *Agent) NewLocalSessionHandlers(meta *session.Meta, externalOrigin string, windowReady <-chan struct{}) (*flowersec.SessionHandlers, func(), error) {
 	if a == nil || meta == nil {
 		return nil, nil, errors.New("invalid args")
+	}
+	if meta.FloeApp == FloeAppRedevenPortForward {
+		handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{})
+		if err != nil {
+			return nil, nil, err
+		}
+		cleanup, err := a.registerWindowSessionProxy(handlers, meta, externalOrigin, windowReady)
+		if err != nil {
+			return nil, nil, err
+		}
+		return handlers, cleanup, nil
 	}
 	fsSvc := fs.NewServiceWithCoordinator(a.filesystemScope, a.gitRuntime)
 	gitRepoSvc := gitrepo.NewServiceWithScopeAndRuntime(a.filesystemScope, a.gitRuntime)
@@ -1652,7 +1663,7 @@ func (a *Agent) registerEnvSessionProxy(handlers flowersec.StreamHandlerRegistra
 	if upstream == "" {
 		return nil, errors.New("code app server not ready")
 	}
-	upstream, closeUpstream, err := a.prepareAccessProxyUpstream(context.Background(), meta, upstream, origin)
+	upstream, closeUpstream, err := a.prepareAccessProxyUpstream(context.Background(), meta, upstream, origin, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1689,7 +1700,7 @@ func (a *Agent) terminalLiveStreamHandler(meta *session.Meta) flowersec.StreamHa
 	}
 }
 
-func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Meta, upstream string, externalOrigin string) (string, func(), error) {
+func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Meta, upstream string, externalOrigin string, ready <-chan struct{}) (string, func(), error) {
 	if a == nil {
 		return upstream, func() {}, nil
 	}
@@ -1699,6 +1710,7 @@ func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Me
 		Meta:           *meta,
 		Upstream:       upstream,
 		ExternalOrigin: externalOrigin,
+		SessionReady:   ready,
 	})
 	if err != nil {
 		return "", nil, err

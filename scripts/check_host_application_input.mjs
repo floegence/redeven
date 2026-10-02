@@ -63,6 +63,7 @@ const js = (await Promise.all(['catalog.generated.js', 'viewport.generated.js', 
 // Use a real PNG fixture so loading also exercises exclusive icon presentation.
 const icon = metadata.kind?.startsWith('stream-') ? 'data:image/png;base64,' + (await readFile(path.join(repository,'assets/brand/redeven/png/app-icon-128.png'))).toString('base64') : '';
 const html = (await asset('viewer.html')).replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'porcelain-light')
+  .replace('<script src="{{.TransportScript}}"></script>', '<script>window.RedevenWindowTransport={create:()=>({fetch:window.fetch.bind(window),WebSocket:window.WebSocket})};</script>')
   .replaceAll('{{.Name}}', 'Client input acceptance').replaceAll('{{.Nonce}}', 'fixture')
   .replace('<script nonce=', (metadata.backend==='wayland' ? '<script src="/fixture/cursor.js"></script>' : '') + '<script nonce=').replace('{{.Style}}', css).replace('{{.Config}}', JSON.stringify({base:'/fixture',backend:metadata.backend,icon,copy:catalog.locales['en-US']})).replace('{{.Script}}', js);
 const server = createServer((req, res) => {

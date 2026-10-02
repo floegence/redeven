@@ -28,6 +28,7 @@ export type DesktopRequestHeaders = Record<string, string | string[]>;
 
 export type DesktopPrivateBridgeRequestScope = Readonly<{
   webServiceForwardID?: string;
+  graphicalWindow?: boolean;
 }>;
 
 export function desktopPrivateBridgeRequestHeaders(
@@ -49,7 +50,13 @@ export function desktopPrivateBridgeRequestHeaders(
     const allowed = new URL(transport.allowedBaseURL);
     const privateProtocol = request.protocol === 'http:' || request.protocol === 'ws:';
     const webServiceForwardID = String(scope.webServiceForwardID ?? '').trim().toLowerCase();
-    const expectedHostname = webServiceForwardID ? `pf-${webServiceForwardID}.localhost` : allowed.hostname;
+    const expectedHostname = webServiceForwardID && !scope.graphicalWindow ? `pf-${webServiceForwardID}.localhost` : allowed.hostname;
+    if (scope.graphicalWindow && webServiceForwardID && !(
+      request.pathname.startsWith(`/pf/${webServiceForwardID}/`)
+      || request.pathname === '/flowersec/v3/direct'
+      || request.pathname === '/_redeven_proxy/window-transport.js'
+      || request.pathname.startsWith('/_redeven_proxy/host-application-assets/')
+    )) return requestHeaders;
     if (allowed.protocol !== 'http:' || !privateProtocol || request.hostname !== expectedHostname || request.port !== allowed.port) {
       return requestHeaders;
     }

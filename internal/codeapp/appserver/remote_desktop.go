@@ -192,10 +192,17 @@ func (g *Server) guardRemoteDesktopSession(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	path := strings.TrimPrefix(r.URL.Path, base)
+	if !requireWindowSessionTransport(w, r, path) {
+		return true
+	}
+	if path == windowTransportScript {
+		g.serveDistFile(w, r, "window-transport.js")
+		return true
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	switch {
 	case path == remotedesktop.ViewerPath && r.Method == http.MethodGet:
-		g.serveRemoteDesktop(w, s, base)
+		g.serveRemoteDesktop(w, r, s, base)
 		return true
 	case path == remotedesktop.ViewerPath+"ticket" && r.Method == http.MethodPost:
 		ticket, err := g.remoteDesktop.Ticket(owner, s.ID)

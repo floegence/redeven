@@ -34,7 +34,24 @@ const server = http.createServer((request, response) => {
   }
   if (request.url === '/_redeven_desktop/disconnect') { disconnects++; response.end('{}'); return; }
   if (request.url === '/_redeven_desktop/') {
-    const html = readFileSync(path.join(assets, 'viewer.html'), 'utf8').replaceAll('{{.Base}}', '/_redeven_desktop/').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'dark').replaceAll('{{.Nonce}}', 'qualification').replaceAll('{{.Configuration}}', JSON.stringify(configuration));
+    // This fixture owns media/input behavior. Native carrier qualification is
+    // TestWindowBrowserE2E and TestWindowTunnelBrowserE2E.
+    const html = readFileSync(path.join(assets, 'viewer.html'), 'utf8').replaceAll('{{.Base}}', '/_redeven_desktop/').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'dark').replaceAll('{{.Nonce}}', 'qualification').replaceAll('{{.Configuration}}', JSON.stringify(configuration))
+      .replace('<script src="{{.TransportScript}}"></script>', `<script>
+        const fixtureFetch = window.fetch.bind(window);
+        window.transportEvents = [];
+        window.RedevenWindowTransport = { create: () => ({
+          fetch: async (...args) => {
+            window.transportEvents.push(String(args[0]));
+            const response = await fixtureFetch(...args);
+            window.transportEvents.push('response:' + String(args[0]));
+            return response;
+          },
+          WebSocket: window.WebSocket,
+          dispose: () => window.transportEvents.push('disposed'),
+        }) };
+        window.fetch = () => { throw new Error('Viewer bypassed the native transport'); };
+      </script>`);
     response.setHeader('Content-Type', 'text/html'); response.end(html); return;
   }
   const name = request.url?.split('/').at(-1);
@@ -369,6 +386,9 @@ try {
   await page.locator('#disconnect').click(); await page.waitForTimeout(100);
   assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'closed', 'explicit disconnect retained the audio device');
   assert.equal(disconnects, 1); assert.deepEqual(errors, []);
+  assert.deepEqual(await page.evaluate(() => window.transportEvents.slice(-3)), [
+    '/_redeven_desktop/disconnect', 'response:/_redeven_desktop/disconnect', 'disposed',
+  ], 'disconnect must finish through the native transport before disposal');
   console.log(JSON.stringify({ passed: true, checks: ['paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'disconnect'] }));
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));
