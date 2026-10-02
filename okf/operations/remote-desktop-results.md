@@ -1,24 +1,27 @@
 ---
 type: Acceptance Record
 title: Current-desktop qualification results
-description: Assess published macOS and X11 measurements, local delivery and outstanding real-host qualification.
+description: Assess published macOS and X11 performance, functional-only Wayland validation and local delivery limits.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-02T14:32:09Z
+timestamp: 2026-10-02T15:30:00Z
 ---
 # Summary
 
-Acceptance remains incomplete for the [desktop contract](../architecture/remote-desktop.md).
+The agreed host scope passes the tested [desktop contract](../architecture/remote-desktop.md).
 Published v0.22.6 passes macOS and Linux X11 performance repetitions, office
 interaction and ten-minute input/queue checks. The implementation was integrated
-into local `main`; this does not close outstanding physical-host checks or
-[Wayland qualification](remote-desktop-wayland-results.md). Preserve the
+into local `main`. The user subsequently designated `udesk24` for functional
+validation only; its [Wayland performance failures](remote-desktop-wayland-results.md)
+are retained and do not block this delivery. Preserve the
 [thresholds and measurement boundaries](remote-desktop-validation.md) and failed
 measurements. Passing retries neither erase failures nor establish their causes.
 No Redeven push, push gate or full integration gate is authorized.
 Source integration does not substitute for real-host qualification or establish
 release acceptance.
 The [reconnect record](remote-desktop-recovery-results.md) separately qualifies
-the follow-up sound fix and tracks native recovery candidates.
+the published v0.22.7 sound fix, Mac physical hotplug, locked reconnect and
+Wayland display recovery. These results do not claim passing Wayland performance
+or hardware encoding.
 
 # Contract
 
@@ -145,7 +148,9 @@ and missed the final paint receipt. A later physical run observed
 client recovery. Read-only probe subsequently returned `ready` and the original
 display. These failures do not certify client hotplug recovery. The revised
 harness identifies each socket and generation and preserves client state on
-failure; a new physical run remains pending.
+failure. The subsequent user-confirmed v0.22.7 physical run passes socket and
+generation recovery with fresh paint before input; the
+[reconnect record](remote-desktop-recovery-results.md) owns that result.
 
 Published checks pass Go race/vet for desktop, host applications and appserver,
 32 Swift helper tests, both browser variants, Electron 41.10.5, module sums,
@@ -170,18 +175,24 @@ draws and input. Its first supplemental run stopped before input on a locked
 host; the normally unlocked retry passed office and Runtime restart, preserving
 text and invalidating old tickets. Neither host is qualified for remote unlock.
 
-## Local Delivery And Remaining Qualification
+## Local Delivery And Qualification Limits
 
 The implementation and subsequent records were fast-forwarded into local
 `main` through `2945183a90e46f382410fa7ae23d4b35d8b63998`, preserving existing
 unpublished commits. The original feature worktrees/branches were removed.
-Redeven was not pushed and neither excluded gate ran. Follow-up evidence uses
-its own feature worktree and must be merged and cleaned separately.
+Redeven was not pushed and neither excluded gate ran. Follow-up implementation
+source `69cd04988970c8b456f751838523e61625531d3c` consumes published v0.22.7.
+Its product checks are owned by the reconnect and Wayland records. Delivery uses
+another fast-forward preserving every prior local-main commit; private
+`final-local-delivery.json` records the final documentation tip, clean-main
+readback, excluded gates and task-only cleanup. Local main may remain ahead of
+origin by explicit user instruction. Integration preserves the user's
+functional-only Wayland scope and does not relabel its failed FPS results.
 
-- Complete the macOS client physical hotplug receipt.
+- The published v0.22.7 Mac physical hotplug and locked reconnect checks pass; see the reconnect record for their authority and local-unlock boundaries.
 - Linux-to-Mac physical output was subsequently confirmed in the [Wayland record](remote-desktop-wayland-results.md); the earlier same-host Mac and X11 clock measurements retain their limits.
-- Resolve the [Wayland capture and display conditions](remote-desktop-wayland-results.md).
-- Complete the remaining checks before declaring remote-desktop release acceptance.
+- `udesk24` passes the tested Wayland office and display-recovery flow. Its performance is outside this delivery's acceptance scope by explicit user instruction; no 55 FPS Wayland claim is made.
+- Any broader release claim requires its own host qualification; source integration alone is not release acceptance.
 
 # Evidence
 

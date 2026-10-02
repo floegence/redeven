@@ -3,14 +3,15 @@ type: Validation Guide
 title: Current-desktop acceptance method
 description: Qualify remote desktop contracts, office interaction and actual painted performance without substituting synthetic checks.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-02T14:32:09Z
+timestamp: 2026-10-02T15:36:00Z
 ---
 # Summary
 
 This guide defines acceptance for the [desktop contract](../architecture/remote-desktop.md).
 Use published dependencies with `GOWORK=off`, preserve failed measurements and
-resolve unmet thresholds before declaring remote-desktop acceptance. Source
-integration does not substitute for this qualification. A connected picture, native input
+resolve unmet thresholds for the agreed performance hosts before declaring
+remote-desktop acceptance. Source integration does not substitute for this
+qualification. A connected picture, native input
 admission or a synthetic fixture does not certify real desktop performance.
 The [acceptance record](remote-desktop-results.md) owns measured results and
 remaining qualification.
@@ -44,6 +45,13 @@ required resolution.
 # Boundaries
 
 ## Real-Host Qualification
+
+For this delivery, the user explicitly designated `udesk24` as a functional-only
+GNOME Wayland environment on 2026-10-02 after its graphics limitations were
+measured. Its retained FPS failures do not block integration and do not qualify
+Wayland performance. The performance hosts are Apple Silicon macOS and `server`
+X11, with the unchanged thresholds above. Do not generalize their results to
+Linux Wayland hardware encoding or to other hosts.
 
 The host user completes OS authorization. Fixtures operate only their own
 applications and stop input on foreground loss. Before each physical-input
