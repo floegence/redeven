@@ -447,6 +447,7 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	}
 	turn := ModelGatewayRequest{
 		ThreadID: req.ThreadID, TurnID: req.TurnID, TraceID: req.TraceID, LogicalRequestID: req.LogicalRequestID, AttemptID: req.AttemptID, AttemptEpoch: req.AttemptEpoch,
+		Step:  req.Step,
 		RunID: req.RunID, PromptScopeID: req.PromptScopeID, PreviousState: previousState,
 		Model:            p.modelName,
 		Messages:         messages,

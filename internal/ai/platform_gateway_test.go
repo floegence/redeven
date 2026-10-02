@@ -14,7 +14,7 @@ import (
 )
 
 func platformTestRequest() ModelGatewayRequest {
-	return ModelGatewayRequest{RunID: "run-a", ThreadID: "thread-a", TurnID: "turn-a", PromptScopeID: "scope-a", LogicalRequestID: "logical-a", AttemptID: "attempt-a", AttemptEpoch: 1, Model: "test-model", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hello"}}}}, Budgets: TurnBudgets{MaxOutputToken: 32}}
+	return ModelGatewayRequest{RunID: "run-a", ThreadID: "thread-a", TurnID: "turn-a", PromptScopeID: "scope-a", LogicalRequestID: "logical-a", AttemptID: "attempt-a", AttemptEpoch: 1, Step: 7, Model: "test-model", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hello"}}}}, Budgets: TurnBudgets{MaxOutputToken: 32}}
 }
 
 func TestPlatformGatewayRejectsUntrustedTransportOrigins(t *testing.T) {
@@ -87,7 +87,7 @@ func TestPlatformGatewayNativeStreamingAndLease(t *testing.T) {
 				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 					t.Error(err)
 				}
-				if request.LogicalRequestID != "logical-a" || request.AttemptID != "attempt-a" || request.ThreadID != "thread-a" || request.AttemptEpoch != 1 {
+				if request.LogicalRequestID != "logical-a" || request.AttemptID != "attempt-a" || request.ThreadID != "thread-a" || request.AttemptEpoch != 1 || request.Step != 7 {
 					t.Errorf("identity lost: %+v", request)
 				}
 				var native map[string]any

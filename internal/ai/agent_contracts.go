@@ -92,6 +92,7 @@ type ModelGatewayRequest struct {
 	LogicalRequestID flidentity.LogicalRequestID `json:"logical_request_id,omitempty"`
 	AttemptID        string                      `json:"attempt_id,omitempty"`
 	AttemptEpoch     int                         `json:"attempt_epoch,omitempty"`
+	Step             int                         `json:"step"`
 	Protocol         string                      `json:"protocol,omitempty"`
 	RunID            flidentity.RunID            `json:"run_id,omitempty"`
 	PromptScopeID    flidentity.PromptScopeID    `json:"prompt_scope_id,omitempty"`

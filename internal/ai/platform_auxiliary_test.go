@@ -31,9 +31,9 @@ func TestPlatformAuxiliaryIdentityIsStableAndRequestScoped(t *testing.T) {
 	if err != nil || c.AttemptID == a.AttemptID {
 		t.Fatalf("different request reused identity: %v", err)
 	}
-	req.LogicalRequestID, req.AttemptID, req.AttemptEpoch = "floret-logical", "floret-attempt", 3
+	req.LogicalRequestID, req.AttemptID, req.AttemptEpoch, req.Step = "floret-logical", "floret-attempt", 3, 7
 	d, err := p.turnRequest(t.Context(), req)
-	if err != nil || d.AttemptID != req.AttemptID || d.LogicalRequestID != req.LogicalRequestID || d.AttemptEpoch != 3 {
+	if err != nil || d.AttemptID != req.AttemptID || d.LogicalRequestID != req.LogicalRequestID || d.AttemptEpoch != 3 || d.Step != 7 {
 		t.Fatalf("overrode Floret identity: %v", err)
 	}
 	req.MaxOutputTokens = 4096
