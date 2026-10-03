@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-03: Refresh official provider models and endpoint compatibility
+
+- Add public GPT-6 Sol/Luna and GPT-6.1 Sol, Claude Opus/Sonnet 5.5, GLM FlashX, Qwen Flash/Omni, and Grok 4.7 entries with reviewed reasoning, limits, and search status.
+- Correct the Anthropic SDK base URL while accepting previously saved versioned bases and proxy prefixes; align Z.ai display branding with iOS.
+- Record Qwen workspace-domain migration and the published Floret blocker for the new DeepSeek Flash identity; preserve callable legacy aliases within existing engine capabilities.
+- Keep native clients on the runtime-owned directory and expose official documentation and preview status without embedding another model inventory.
+
 ## 2026-09-29: Improve personal browser responsiveness with FloeBrowser v0.1.27
 
 - Consume the published FloeBrowser v0.1.27 archive and npm package with matching bytes, integrity and provenance. Projection protocol advances to 26; media wire remains at 1.

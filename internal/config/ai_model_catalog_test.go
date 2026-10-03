@@ -57,7 +57,8 @@ func TestModelSelectionMigrationPreservesUserIntentAndRestarts(t *testing.T) {
 	if !ok || m.ContextWindow != 800000 {
 		t.Fatal("custom context override lost")
 	}
-	if m.ReasoningCapability.SourceCheckedAt != "2026-09-09" {
+	current, _ := AIModelCatalogEntry("openai", "gpt-5.5")
+	if m.ReasoningCapability.SourceCheckedAt != current.ReasoningCapability.SourceCheckedAt {
 		t.Fatal("old preset reasoning remained pinned")
 	}
 	if !next.AI.IsAllowedModelID("brand/gpt-6-astra") || !next.AI.IsAllowedModelID("brand/my-model") {
