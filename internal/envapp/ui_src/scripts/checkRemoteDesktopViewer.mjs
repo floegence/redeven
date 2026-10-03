@@ -160,6 +160,8 @@ try {
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/_redeven_desktop/`);
   await page.waitForFunction(() => document.querySelector('#connection').hidden);
+  const canvasCursor = () => page.locator('#desktop').evaluate(element => getComputedStyle(element).cursor);
+  assert.notEqual(await canvasCursor(), 'none', 'waiting for the first picture must retain the local cursor');
   if (desktop) {
     const layout = await page.evaluate(() => {
       const root = document.documentElement, bar = document.querySelector('#toolbar');
@@ -185,6 +187,8 @@ try {
   assert.equal(messages.filter(item => item.command.method === 'input').length, 0, 'input before first paint');
   paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  assert.equal(await canvasCursor(), 'none', 'the captured desktop cursor must not be doubled by the local cursor');
+  assert.equal(await page.locator('#settings').evaluate(element => getComputedStyle(element).cursor), 'pointer', 'desktop cursor policy must not hide toolbar cursors');
   assert.deepEqual(await page.locator('.floe-remote-input').evaluate(input => {
     const style = getComputedStyle(input);
     return { position: style.position, opacity: style.opacity };
@@ -208,6 +212,7 @@ try {
   if (process.env.REDEVEN_DESKTOP_EVIDENCE_DIR) await page.screenshot({ path: path.join(process.env.REDEVEN_DESKTOP_EVIDENCE_DIR, `toolbar-${desktop ? 'electron' : 'browser'}.png`) });
   delayAudio = true;
   await page.locator('#settings').click();
+  assert.notEqual(await page.locator('#panel-body').evaluate(element => getComputedStyle(element).cursor), 'none', 'local dialogs must retain their cursor');
   await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
   try {
     for (let attempt = 0; !audioResponse && attempt < 100; attempt++) await page.waitForTimeout(20);
@@ -311,8 +316,10 @@ try {
   assert.equal(messages.filter(item => item.command.method === 'configure').length, beforeRapid + 1, 'rapid clicks issued competing configurations');
   await page.locator('#display').selectOption('two');
   await page.waitForFunction(() => document.querySelector('#desktop').width === 640);
+  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  assert.equal(await canvasCursor(), 'none', 'display replacement must retain only the captured cursor');
   await page.locator('#mode').selectOption('view');
-  await page.waitForTimeout(100);
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor === 'none');
   await page.locator('#clipboard').click();
   assert.equal(await page.locator('#clipboard-text').inputValue(), '', 'view-only retained the previous controller clipboard');
   assert(!await page.locator('#clipboard-sync').isChecked(), 'view-only still advertised clipboard synchronization');
@@ -324,10 +331,12 @@ try {
   assert(await page.getByRole('dialog').isVisible(), 'takeover missing confirmation');
   await page.getByRole('button', { name: 'Take control', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  assert.equal(await canvasCursor(), 'none', 'taking control must retain only the captured cursor');
   assert(messages.some(item => item.command.method === 'set_mode' && item.takeover), 'takeover missing explicit flag');
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'locked', generation: ++generation }));
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host is locked');
   assert(await page.locator('.floe-remote-input').isDisabled(), 'locked host retained input');
+  assert.notEqual(await canvasCursor(), 'none', 'suspending capture must restore the local cursor');
   state(); paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'permission_revoked', generation: ++generation }));
@@ -345,7 +354,9 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection').hidden, null, { timeout: 10000 });
   assert(connectionCount >= 4, 'temporary ticket failures stopped automatic reconnect');
   assert(await page.locator('.floe-remote-input').isDisabled(), 'reconnect reused prior paint');
+  assert.notEqual(await canvasCursor(), 'none', 'reconnect must wait for fresh paint before hiding the local cursor');
   paint(); await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  assert.equal(await canvasCursor(), 'none', 'reconnect must hide the duplicate cursor after fresh paint');
   assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'running', 'reconnect closed enabled sound while the product still advertised it');
   await page.locator('#settings').click();
   assert(await page.locator('#sound').isChecked(), 'reconnect lost the sound preference');
@@ -381,6 +392,7 @@ try {
     throw error;
   }
   if (desktop) assert(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen()), 'fullscreen did not reach the native window');
+  assert.equal(await canvasCursor(), 'none', 'fullscreen must retain only the captured cursor');
   await page.locator('#fullscreen').click();
   await page.waitForFunction(() => !document.documentElement.classList.contains('desktop-fullscreen') && !document.querySelector('#fullscreen').disabled, null, { timeout: 10000 });
   if (desktop) assert(!await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen()), 'native fullscreen did not exit');
@@ -431,12 +443,13 @@ try {
     await page.keyboard.press('Escape');
   }
   await page.locator('#disconnect').click(); await page.waitForTimeout(100);
+  assert.notEqual(await canvasCursor(), 'none', 'disconnect must restore the local cursor');
   assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'closed', 'explicit disconnect retained the audio device');
   assert.equal(disconnects, 1); assert.deepEqual(errors, []);
   assert.deepEqual(await page.evaluate(() => window.transportEvents.slice(-3)), [
     '/_redeven_desktop/disconnect', 'response:/_redeven_desktop/disconnect', 'disposed',
   ], 'disconnect must finish through the native transport before disposal');
-  console.log(JSON.stringify({ passed: true, checks: ['paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'disconnect'] }));
+  console.log(JSON.stringify({ passed: true, checks: ['single desktop cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'disconnect'] }));
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));
   if (directory) await rm(directory, { recursive: true, force: true });

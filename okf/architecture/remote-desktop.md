@@ -131,6 +131,14 @@ is text-only and tied to the active controller. A manual text panel remains
 available when browser clipboard permission is unavailable. Clipboard contents,
 keys, passwords and pixels never enter audit records.
 
+The published macOS, Wayland and X11 desktop captures embed the host cursor in
+the picture. After a current-generation frame is painted, the viewer hides its
+local cursor over the desktop canvas in both control and view-only modes. It
+restores that cursor when painted authority is revoked, including disconnect,
+lock, display replacement and reconnect awaiting a fresh frame. Toolbar and
+dialog cursors remain local. This desktop-only policy does not apply to host
+application windows, which use their own upstream cursor contract.
+
 ## Viewer window
 
 The [connection launcher](remote-desktop-launcher.md) owns target identity,

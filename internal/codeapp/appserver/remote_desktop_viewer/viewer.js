@@ -80,7 +80,7 @@ const pointer = hostApplicationPointer.createRemotePointer({
       shiftKey: !!packet.shiftKey, ctrlKey: !!packet.ctrlKey, altKey: !!packet.altKey, metaKey: !!packet.metaKey } });
   },
 });
-function revoke() { painted = false; pointer.reset(); input.bindTarget(null); }
+function revoke() { painted = false; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'enable-sound', 'sound']) {
     if ($(id)) $(id).disabled = !!audioRequest || awaitingState || state !== 'active';
@@ -187,7 +187,7 @@ async function connect() {
     media.binaryType = 'arraybuffer';
     player ??= new HostDesktopPlayer(canvas, {
       acknowledge(g, frame) { if (!awaitingState && state === 'active' && g === generation) command('frame_ack', { frame_id: frame }); },
-      painted(g) { if (awaitingState || g !== generation || state !== 'active') return; painted = true; input.bindTarget(active(g) ? g : null); updateTransitionControls(); reconnectAttempts = 0; },
+      painted(g) { if (awaitingState || g !== generation || state !== 'active') return; painted = true; canvas.setAttribute('data-painted', ''); input.bindTarget(active(g) ? g : null); updateTransitionControls(); reconnectAttempts = 0; },
       recover() { revoke(); if (state === 'active') changeDesktop('keyframe'); },
       statistics(value) { stats = value; refreshStats(); },
       audioState(value) { if (value === 'unavailable' || value === 'unsupported') notice('failure'); },
