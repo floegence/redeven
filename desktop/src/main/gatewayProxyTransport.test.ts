@@ -32,7 +32,7 @@ async function fixture(options: { stallTLS?: boolean } = {}) {
   const gatewayWS = new WebSocketServer({ noServer: true });
   let expired = false;
   gateway.on('upgrade', (request, socket, head) => {
-    if (expired || request.url !== `${accessPath}_tunnel`) { socket.end('HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n'); return; }
+    if (expired || request.url !== `${accessPath}_tunnel`) { socket.end('HTTP/1.1 401 Unauthorized\r\nX-Redeven-Gateway-Error: SESSION_EXPIRED\r\nContent-Length: 0\r\n\r\n'); return; }
     gatewayWS.handleUpgrade(request, socket, head, ws => {
       const tunnel = createWebSocketStream(ws);
       const upstream = net.connect(port, '127.0.0.1');
@@ -63,6 +63,28 @@ async function request(options: http.RequestOptions, body = Buffer.alloc(0)) {
 }
 
 describe('Gateway proxy network transport', () => {
+  it.each([
+    [502, undefined, 'GATEWAY_UNREACHABLE'],
+    [401, undefined, 'GATEWAY_UNREACHABLE'],
+    [404, undefined, 'GATEWAY_UNREACHABLE'],
+    [401, 'SESSION_EXPIRED', 'GATEWAY_SESSION_EXPIRED'],
+    [502, 'TARGET_UNAVAILABLE', 'GATEWAY_TARGET_UNAVAILABLE'],
+    [502, 'SESSION_EXPIRED', 'GATEWAY_UNREACHABLE'],
+  ])('classifies a %s handshake with Gateway marker %s at the correct owner', async (status, marker, code) => {
+    const gateway = http.createServer((_request, response) => {
+      response.writeHead(status as number, marker ? { 'X-Redeven-Gateway-Error': marker } : {});
+      response.end();
+    });
+    gateway.listen(0, '127.0.0.1'); await once(gateway, 'listening');
+    cleanup.push(() => new Promise<void>(resolve => gateway.close(() => resolve())));
+    const transport = await createGatewayProxyTransport(
+      `http://127.0.0.1:${(gateway.address() as net.AddressInfo).port}/gateway/v3/access/${'a'.repeat(43)}/`,
+      'http://runtime.invalid:4567/',
+    );
+    cleanup.push(transport.close);
+    await expect(transport.openConnection()).rejects.toMatchObject({ code });
+  });
+
   it('streams large binary data through Gateway without resolving the Runtime on Desktop', async () => {
     const { transport, received, accessToken } = await fixture();
     const body = randomBytes(2 * 1024 * 1024);

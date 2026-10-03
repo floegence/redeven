@@ -377,14 +377,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("setActiveCenterTab('gateways')");
     expect(appSrc).toContain('<GatewaySetupDialog');
     expect(appSrc).toContain("kind: 'upsert_gateway'");
-    expect(appSrc).toContain('Standalone Gateways are URL endpoints.');
+    expect(appSrc).toContain('gatewayAccess.managedServiceHelp');
     const gatewayDialogStart = appSrc.indexOf('function GatewaySetupDialog');
     const gatewayDialogEnd = appSrc.indexOf('function ControlPlaneDialog');
     const gatewayDialogSrc = appSrc.slice(gatewayDialogStart, gatewayDialogEnd);
     expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayUrl')");
     expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayPairingCode')");
-    expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.gatewayTransportSshHost')");
-    expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.gatewayTransportSshContainer')");
+    expect(gatewayDialogSrc).toContain("connectionDialog.gatewayTransportSshHost");
+    expect(gatewayDialogSrc).toContain("connectionDialog.gatewayTransportSshContainer");
     expect(appSrc).toContain("performLauncherAction(action, 'gateway_dialog');");
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
     expect(appSrc).toContain("from './gatewaySourceActionRunner';");
@@ -455,7 +455,7 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain(
-      "if (environment.kind === 'gateway_environment') {\n      return openGatewayEnvironment(environment, errorTarget);\n    }",
+      "if (environment.kind === 'gateway_environment') {\n      return openGatewayEnvironment(environment, errorTarget, accessMode);\n    }",
     );
     expect(appSrc).toContain("kind: 'open_gateway_environment'");
     expect(appSrc).toContain('gateway_id: gatewayID');
@@ -968,10 +968,10 @@ describe('DesktopWelcomeShell', () => {
     const recoveryEnd = appSrc.indexOf('function gatewaySourceActionForLauncherRequest', recoveryStart);
     const recoverySrc = appSrc.slice(recoveryStart, recoveryEnd);
     expect(recoverySrc).toContain("case 'refresh_gateway':");
-    expect(recoverySrc).not.toContain("case 'start_gateway':");
-    expect(recoverySrc).not.toContain("case 'stop_gateway':");
-    expect(recoverySrc).not.toContain("case 'restart_gateway':");
-    expect(recoverySrc).not.toContain("case 'update_gateway':");
+    expect(recoverySrc).toContain("case 'start_gateway':");
+    expect(recoverySrc).toContain("case 'stop_gateway':");
+    expect(recoverySrc).toContain("case 'restart_gateway':");
+    expect(recoverySrc).toContain("case 'update_gateway':");
     expect(recoverySrc).not.toContain("case 'sync_gateway':");
     expect(appSrc).not.toContain('GATEWAY_FOREGROUND_PENDING_MIN_VISIBLE_MS');
     expect(appSrc).toContain('pending_progress?: DesktopLauncherActionProgress;');
@@ -1140,7 +1140,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Start Gateway & Pair');
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).toContain("case 'refresh_status':");
-    expect(appSrc).not.toContain("case 'update_gateway':");
+    expect(appSrc).toContain("case 'update_gateway':");
     expect(appSrc).toContain('<MoreHorizontal class="h-3.5 w-3.5" />');
     expect(appSrc).toContain('ariaLabel={moreActionsForLabel()}');
     expect(appSrc).toContain(
@@ -1166,10 +1166,10 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewaySourceActionIconSrc).toContain(
       "case 'refresh_gateway':\n      return <Refresh class={iconClass()} />;",
     );
-    expect(gatewaySourceActionIconSrc).not.toContain("case 'start_gateway':");
-    expect(gatewaySourceActionIconSrc).not.toContain("case 'stop_gateway':");
-    expect(gatewaySourceActionIconSrc).not.toContain("case 'restart_gateway':");
-    expect(gatewaySourceActionIconSrc).not.toContain("case 'update_gateway':");
+    expect(gatewaySourceActionIconSrc).toContain("case 'start_gateway':");
+    expect(gatewaySourceActionIconSrc).toContain("case 'stop_gateway':");
+    expect(gatewaySourceActionIconSrc).toContain("case 'restart_gateway':");
+    expect(gatewaySourceActionIconSrc).toContain("case 'update_gateway':");
     expect(gatewaySourceActionIconSrc).not.toContain("case 'disable_gateway':\n      return <Stop");
     expect(gatewaySourceActionIconSrc).not.toContain("case 'update_gateway':\n      return <Save");
     expect(gatewayCardSrc).not.toContain('<div class="p-1">');
@@ -2303,7 +2303,7 @@ describe('DesktopWelcomeShell', () => {
   it('uses a settings affordance for every editable environment card', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("props.i18n.t('common.settings')");
+    expect(appSrc).toContain("'common.settings'");
     expect(appSrc).not.toContain("case 'manage_gateway':");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.environmentSettings')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.settingsForLabel'");
@@ -2395,7 +2395,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Owner</label>');
     expect(appSrc).not.toContain("label: 'External'");
     expect(appSrc).not.toContain("label: 'Desktop'");
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.bootstrapDelivery')");
+    const sshSettingsSrc = fs.readFileSync(path.join(__dirname, 'SSHEnvironmentSettingsForm.tsx'), 'utf8');
+    expect(sshSettingsSrc).toContain("t('sshSettings.delivery')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.authentication')");
     expect(appSrc).toContain("label: props.i18n.t('connectionDialog.keyAgent')");
     expect(appSrc).toContain("label: props.i18n.t('connectionDialog.passwordPrompt')");
@@ -2411,11 +2412,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('<Show when={showCreateConnectAction()}>');
     expect(appSrc).not.toContain('async function saveAndConnectURLFromDialog()');
     expect(appSrc).not.toContain('async function ' + 'connectFrom' + 'Dialog()');
-    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.automatic')");
-    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.desktopUpload')");
-    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.remoteDownloadInstall')");
+    expect(sshSettingsSrc).toContain("'connectionDialog.automatic'");
+    expect(sshSettingsSrc).toContain("'connectionDialog.desktopUpload'");
+    expect(sshSettingsSrc).toContain("'connectionDialog.remoteDownloadInstall'");
     expect(appSrc).not.toContain('remoteFallback');
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.bootstrapHelp')");
+    expect(sshSettingsSrc).toContain("'connectionDialog.bootstrapHelp'");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.sshDestination')");
     expect(appSrc).toContain("import { SSHDestinationCombobox } from './SSHDestinationCombobox';");
     expect(sshComboboxSrc).toContain('export function SSHDestinationCombobox');

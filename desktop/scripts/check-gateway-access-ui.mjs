@@ -49,15 +49,29 @@ try {
       await card.getByRole('button', { name: i18n.t('environmentCenter.settingsForLabel', { label: 'Gateway workspace' }), exact: true }).click();
       const select = page.locator('#gateway-environment-access-mode');
       await select.waitFor();
-      assert.equal(await select.inputValue(), 'gateway_proxy');
-      await select.selectOption('direct_url');
-      assert.equal(await select.inputValue(), 'direct_url');
+      assert.equal(await select.getByRole('radio', { name: i18n.t('gatewayAccess.proxy'), exact: true }).getAttribute('aria-checked'), 'true');
+      await select.getByRole('radio', { name: i18n.t('gatewayAccess.direct'), exact: true }).click();
+      assert.equal(await select.getByRole('radio', { name: i18n.t('gatewayAccess.direct'), exact: true }).getAttribute('aria-checked'), 'true');
       const dialog = page.getByRole('dialog');
       assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
       assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
       if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-profile-${dark ? 'dark-narrow' : 'light'}.png` });
       await page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'detached' });
+      await page.getByRole('button', { name: i18n.t('environmentCenter.gatewaysSection'), exact: true }).click();
+      await page.getByRole('button', { name: i18n.t('environmentCenter.addGateway'), exact: true }).first().click();
+      const setup = page.getByRole('dialog');
+      await setup.getByRole('button', { name: i18n.t('connectionDialog.gatewayTransportSshHost'), exact: true }).click();
+      await setup.locator('#gateway-ssh-destination').fill('dev@bastion');
+      assert.ok((await setup.innerText()).includes(i18n.t('gatewayAccess.managedServiceHelp')));
+      assert.equal(await setup.locator('[data-floe-dialog-header] p').count(), 0);
+      assert.equal(await setup.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
+      for (const control of await setup.getByRole('button').all()) {
+        if (await control.isVisible()) assert.notEqual(await control.evaluate(element => getComputedStyle(element).cursor), 'default');
+      }
+      if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-service-${dark ? 'dark-narrow' : 'light'}.png` });
+      await page.keyboard.press('Escape');
+      await setup.waitFor({ state: 'detached' });
       report.cases.push({ locale, width, dark, largeText });
       await context.close();
     }

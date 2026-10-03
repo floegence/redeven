@@ -2002,6 +2002,8 @@
     "cloudAwaitingSyncDetail": "Обновите, чтобы загрузить окружения Redeven Cloud."
   },
   "gatewayAccess": {
+    "localService": "Локальный хост",
+    "managedServiceHelp": "Desktop управляет только службой Gateway на этом хосте. Службы среды выполнения управляются отдельно.",
     "checkingAccess": "Проверка доступа к Gateway",
     "checkingAccessDetail": "Проверка доверия к Gateway и доступа к окружению.",
     "lastCheckProxy": "Последняя проверка через прокси",

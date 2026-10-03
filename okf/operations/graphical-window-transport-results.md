@@ -71,18 +71,6 @@ consumer and exits on attachment shutdown. Five repetitions of that test, eight
 Linux desktop test cases and the live application/desktop flow passed after the
 fix. The queue was not enlarged and the failure evidence is retained.
 
-## macOS Boundary And Outstanding Work
-
-The Apple Silicon helper reports authorized screen and input access but a locked
-host. The real product viewer establishes Flowersec, displays the locked state,
-paints zero frames and keeps input disabled. No system policy or authorization
-was bypassed. The native Electron carrier passes independently of desktop capture.
-
-The wider Electron viewer fixture stopped at native fullscreen while the host was
-locked. Active host application input, live desktop capture and this fullscreen
-step require normal host unlock before they can be recorded as passed. Prior
-desktop acceptance results are not substituted for this transport build.
-
 ## Connection Launcher Refinement
 
 The launcher now names the actual Desktop connection or reported local hostname,
@@ -115,6 +103,20 @@ Workbench, reports `MacBook-Pro.local` and the real locked state, disables Conne
 and makes zero raw desktop API requests. Its locked viewer again establishes one
 Flowersec network socket, paints no frames and grants no input. This verifies the
 launcher and locked-host boundary; the unlocked macOS limits above still apply.
+
+# Boundaries
+
+## macOS Boundary And Outstanding Work
+
+The Apple Silicon helper reports authorized screen and input access but a locked
+host. The real product viewer establishes Flowersec, displays the locked state,
+paints zero frames and keeps input disabled. No system policy or authorization
+was bypassed. The native Electron carrier passes independently of desktop capture.
+
+The wider Electron viewer fixture stopped at native fullscreen while the host was
+locked. Active host application input, live desktop capture and this fullscreen
+step require normal host unlock before they can be recorded as passed. Prior
+desktop acceptance results are not substituted for this transport build.
 
 # Evidence
 

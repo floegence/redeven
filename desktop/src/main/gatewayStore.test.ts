@@ -8,6 +8,7 @@ import {
   GatewayStore,
   defaultGatewayStorePath,
   gatewayBindingAudience,
+  gatewayRecordSSHPasswordRef,
   gatewayRecordToSource,
   gatewayRecordToSourceWithCatalog,
   gatewayRecordToSourceWithError,
@@ -29,6 +30,13 @@ describe('GatewayStore', () => {
       await fs.rm(root, { recursive: true, force: true });
       cleanupRoots.delete(root);
     }));
+  });
+
+  it('does not reuse a retained secret after the user clears the configured credential', () => {
+    const record = normalizeGatewayStoreSnapshot({ gateways: [{ gateway_id: 'ssh', display_name: 'SSH',
+      connection: { kind: 'ssh_host', ssh_destination: 'bastion', runtime_root: '/data/gateway', auth_mode: 'password', ssh_password_configured: false },
+    }] }).gateways[0];
+    expect(gatewayRecordSSHPasswordRef(record)).toBe('');
   });
 
   it('persists URL Gateway records without writing private keys or pairing secrets', async () => {
@@ -105,25 +113,50 @@ describe('GatewayStore', () => {
     });
   });
 
-  it('rejects direct Runtime coordinates from the standalone Gateway store', async () => {
+  it('keeps explicitly registered managed Gateways reachable without treating them as Runtime targets', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     const store = new GatewayStore(filePath);
 
-    await expect(store.upsert({
+    await store.upsert({
       gateway_id: 'gw_direct',
       display_name: 'Devbox Runtime management',
       connection: { kind: 'ssh_host', ssh_destination: 'devbox', auth_mode: 'key_agent', runtime_root: '~/.redeven' },
       now_ms: 10,
-    })).rejects.toMatchObject({ code: 'GATEWAY_STANDALONE_URL_REQUIRED' });
-    await expect(store.upsert({
+    });
+    await store.upsert({
       gateway_id: 'gw_container',
       display_name: 'Container Runtime management',
       connection: { kind: 'local_container', container_engine: 'docker', container_id: 'container', runtime_root: '/workspace/.redeven' },
       now_ms: 20,
-    })).rejects.toMatchObject({ code: 'GATEWAY_STANDALONE_URL_REQUIRED' });
-    expect(await new GatewayStore(filePath).list()).toEqual([]);
+    });
+    const reopened = new GatewayStore(filePath);
+    expect((await reopened.list()).map(record => record.gateway_id).sort()).toEqual(['gw_container', 'gw_direct']);
+    expect(await reopened.get('gw_direct')).toMatchObject({ connection: { kind: 'ssh_host' } });
+    expect(await reopened.listLegacyDirectEnvironmentRecords()).toEqual([]);
+  });
+
+  it.each([1, 2, 3])('preserves pending direct migration records across v%s reads and unrelated writes', async (version) => {
+    const root = await createTempRoot(); cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const legacy = { schema_version: version, gateway_id: 'gw_old', display_name: 'My Runtime',
+      runtime_environment_id: 'env_preserved', local_enabled: true,
+      connection: { kind: 'ssh_host', ssh_destination: 'devbox', runtime_root: '~/.redeven' },
+      created_at_ms: 10, updated_at_ms: 20 };
+    await fs.writeFile(filePath, JSON.stringify({ schema_version: version, gateways: [legacy] }));
+    const store = new GatewayStore(filePath);
+    // Background sync can read first, before the launcher asks for a snapshot.
+    expect(await store.list()).toEqual([]);
+    await store.upsert({ gateway_id: 'gw_other', connection: { kind: 'url', base_url: 'https://gateway.example/' } });
+    const reopened = new GatewayStore(filePath);
+    expect(await reopened.get('gw_old')).toBeNull();
+    expect(await reopened.listLegacyDirectEnvironmentRecords()).toMatchObject([
+      { runtime_environment_id: 'env_preserved', record: { gateway_id: 'gw_old', display_name: 'My Runtime', created_at_ms: 10, updated_at_ms: 20 } },
+    ]);
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8')).gateways.find((record: GatewayRecord) => record.gateway_id === 'gw_old'))
+      .toMatchObject({ runtime_environment_id: 'env_preserved' });
   });
 
   it('migrates the exact v1 store to v3 and preserves user records', async () => {
@@ -198,7 +231,7 @@ describe('GatewayStore', () => {
     const legacy = { ...expected, schema_version: 2, gateways: expected.gateways.map(record => ({ ...record, schema_version: 2 })) };
     const original = JSON.stringify(legacy);
     await fs.writeFile(filePath, original);
-    const failing = new GatewayStore(filePath, async () => { throw new Error('atomic migration failure'); });
+    const failing = new GatewayStore(filePath, async () => { throw Object.assign(new Error('atomic migration failure'), { code: 'ENOENT' }); });
     await expect(failing.load()).rejects.toThrow('atomic migration failure');
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
     expect(await new GatewayStore(filePath).load()).toEqual(expected);

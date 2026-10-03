@@ -285,7 +285,7 @@ export class GatewayLifecycleManager {
         stateRoot: gatewayServiceStateRoot(record),
         gatewayID: record.gateway_id,
         releaseTag: this.gatewayReleaseTag(),
-        releaseBaseURL: this.options.release_base_url,
+        releaseBaseURL: this.gatewayReleaseBaseURL(record),
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
         localUIBind: this.options.local_ui_bind,
@@ -350,7 +350,7 @@ export class GatewayLifecycleManager {
       stateRoot: gatewayServiceStateRoot(record),
       gatewayID: record.gateway_id,
       releaseTag: this.gatewayReleaseTag(),
-      releaseBaseURL: this.options.release_base_url,
+      releaseBaseURL: this.gatewayReleaseBaseURL(record),
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
       localUIBind: this.options.local_ui_bind,
@@ -489,7 +489,7 @@ export class GatewayLifecycleManager {
       stateRoot: gatewayServiceStateRoot(record),
       gatewayID: record.gateway_id,
       releaseTag: this.gatewayReleaseTag(),
-      releaseBaseURL: this.options.release_base_url,
+      releaseBaseURL: this.gatewayReleaseBaseURL(record),
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
       localUIBind: this.options.local_ui_bind,
@@ -513,7 +513,7 @@ export class GatewayLifecycleManager {
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
       releaseTag: this.gatewayReleaseTag(),
-      releaseBaseURL: this.options.release_base_url,
+      releaseBaseURL: this.gatewayReleaseBaseURL(record),
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
       localUIBind: this.options.local_ui_bind,
@@ -537,7 +537,7 @@ export class GatewayLifecycleManager {
       placement,
       stateRoot: gatewayServiceStateRoot(record),
       releaseTag: this.gatewayReleaseTag(),
-      releaseBaseURL: this.options.release_base_url,
+      releaseBaseURL: this.gatewayReleaseBaseURL(record),
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
       localUIBind: this.options.local_ui_bind,
@@ -675,7 +675,7 @@ export class GatewayLifecycleManager {
         stateRoot: gatewayServiceStateRoot(record),
         gatewayID: record.gateway_id,
         releaseTag: this.gatewayReleaseTag(),
-        releaseBaseURL: this.options.release_base_url,
+        releaseBaseURL: this.gatewayReleaseBaseURL(record),
         assetCacheRoot: this.options.asset_cache_root,
         // A development Desktop may not have a published Gateway artifact for the
         // remote platform. Keep the source tree available so a missing or stale
@@ -710,6 +710,12 @@ export class GatewayLifecycleManager {
 
   private gatewayExecutablePath(record: GatewayRecord): string {
     return gatewayServiceBinaryPath(gatewayServiceStateRoot(record));
+  }
+
+  private gatewayReleaseBaseURL(record: GatewayRecord): string {
+    return record.connection.kind === 'ssh_host'
+      ? record.connection.release_base_url || this.options.release_base_url
+      : this.options.release_base_url;
   }
 
   private gatewayReleaseTag(): string {

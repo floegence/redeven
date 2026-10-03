@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway access sessions
 description: Select Direct URL or Gateway proxy access and preserve Runtime authentication, transport identity, and revocation.
 tags: [gateway, desktop, access, security, sessions]
-timestamp: 2026-10-02T00:00:00Z
+timestamp: 2026-10-03T00:00:00Z
 ---
 # Summary
 
@@ -83,7 +83,11 @@ Gateway shutdown ends all sessions, and a restart cannot recover old tokens.
 
 Desktop closes every local connection and listener with its session. Remote
 revocation failure is recorded with nonsecret IDs and never blocks window
-closure. An open proxy window receives distinct Gateway unavailable, target
+closure. Tunnel setup recognizes session expiry only from HTTP 401 with
+`X-Redeven-Gateway-Error: SESSION_EXPIRED`, and target failure only from HTTP 502
+with `X-Redeven-Gateway-Error: TARGET_UNAVAILABLE`. An unmarked reverse-proxy
+401, 404, or 502 is a Gateway connection failure, not evidence about Runtime
+health or lease expiry. An open proxy window receives distinct Gateway unavailable, target
 unavailable, or session-expired recovery state. It can return to the connection
 center and explicitly reopen. Runtime login/MFA and Runtime session expiry stay
 inside Runtime's access gate. A failed proxy open may offer Direct URL, and a
@@ -114,6 +118,25 @@ password, or MFA-management privileges. Audit events contain Gateway,
 Environment, session IDs and error classes; they exclude tokens, Cookie,
 passwords, MFA values, proofs and complete signed requests.
 
+## Desktop registration migration
+
+Gateway Store is the single reader of persisted Gateway records. Its atomic
+v1/v2-to-v3 normalization retains the migration-only `runtime_environment_id`
+marker alongside identity, trust, coordinates, names, and timestamps. Only
+marked records are old direct Runtime registrations; an unmarked managed
+Gateway remains an independent Gateway, including SSH and container transports.
+
+One startup migration runs before catalog synchronization and startup Runtime
+selection. It uses the existing journal, writes canonical saved Runtime targets,
+reads them back with matching coordinates and credentials, then atomically
+removes the marked source records. Runtime placement uses the original Runtime
+root and never the Gateway service state subdirectory. Repeated startup callers
+share one migration. Prepared and target-written journal phases resume after
+interruption; an existing target is not overwritten. Missing credentials,
+ambiguous coordinates, unknown journals, or write/readback failures retain the
+source and stop migration. No branch, file deletion, or state reset repairs an
+unrecognized input.
+
 # Evidence
 
 - `redeven:internal/gatewayservice/access.go` - Fixed access handler, Cookie jar boundary and target-bound byte stream.
@@ -121,6 +144,7 @@ passwords, MFA values, proofs and complete signed requests.
 - `redeven:internal/runtimegateway/envprofiles/migration_test.go` - Preserved profile fields and read-only migration failures.
 - `redeven:desktop/src/main/gatewayEnvironmentAccess.ts` - Explicit access owner, typed artifacts, scoped probing and cleanup.
 - `redeven:desktop/src/main/gatewayProxyTransport.test.ts` - Real proxy transport, destination restriction, streaming and secret isolation.
+- `redeven:desktop/src/main/gatewayEnvironmentMigration.test.ts` - Startup ordering, interrupted journal recovery, credential preservation, and readback before source removal.
 - `redeven:desktop/src/main/gatewayStore.test.ts` - Preserved paired Gateway configuration and atomic migration failures.
 - `redeven:internal/localui/gateway_access_browser_test.go` - Production Runtime, Gateway and Electron login, MFA, WSS, files, terminal and Flower stream qualification.
 - `redeven:desktop/scripts/check-gateway-access-ui.mjs` - Real Desktop components across ten locales, explicit routes, keyboard actions and narrow dark layouts.

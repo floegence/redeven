@@ -63,6 +63,22 @@ function expectNoLegacyGatewayActions(value: unknown): void {
 }
 
 describe('buildGatewayActionPresentation', () => {
+  it.each(['stop_gateway', 'restart_gateway', 'update_gateway'] as const)('confirms %s with explicit Gateway-only session impact', intent => {
+    const source = gateway({ connection_kind: 'ssh_host', management_capability: 'managed_ssh_host' });
+    const panel = buildGatewayActionPresentation({ gateway: source, clicked_action: action(intent),
+      affected_sessions: [{ session_key: 'gateway-session', label: 'Private environment' }] });
+    expect(panel.execution_mode).toBe('confirm');
+    expect(panel.continuation_action).toEqual({ kind: intent, gateway_id: source.gateway_id, impact_acknowledged: true });
+    expect(panel.affected_sessions).toHaveLength(1);
+  });
+
+  it('offers explicit start after a managed Gateway stopped diagnosis', () => {
+    const source = gateway({ connection_kind: 'ssh_host', management_capability: 'managed_ssh_host',
+      service_state: { status: 'not_started', can_start: true, can_stop: false, can_restart: false, can_update: false, can_pair_after_start: true } });
+    const panel = buildGatewayActionPresentation({ gateway: source, clicked_action: action('refresh_gateway') });
+    expect(panel.primary_action?.intent).toBe('start_gateway');
+  });
+
   it('opens Refresh as one guide without exposing Check, Sync, or Pair actions', () => {
     const model = buildGatewayActionPresentation({
       gateway: gateway(),

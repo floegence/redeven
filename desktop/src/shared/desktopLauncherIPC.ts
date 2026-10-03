@@ -440,6 +440,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   runtime_operations: DesktopRuntimeOperationPlans;
   auto_runtime_probe_enabled?: boolean;
   auto_runtime_probe_configurable?: boolean;
+  gateway_open_access_mode?: 'direct_url' | 'gateway_proxy';
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_action: DesktopEnvironmentOpenAction;
@@ -787,6 +788,17 @@ export type DesktopLauncherActionRequest = Readonly<
       pairing_code?: string;
       profile_write?: boolean;
       allow_loopback_http: boolean;
+    }
+  | {
+      kind: 'upsert_gateway';
+      gateway_id?: string;
+      display_name: string;
+      connection_kind: Exclude<DesktopGatewayConnectionKind, 'url'>;
+    profile_write?: boolean;
+      host_access: DesktopRuntimeHostAccess;
+      placement: DesktopRuntimePlacement;
+      ssh_password?: string;
+      ssh_password_mode?: 'keep' | 'replace' | 'clear';
     }
   | {
       kind: 'refresh_gateway';
@@ -1394,9 +1406,27 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           allow_loopback_http: (candidate as { allow_loopback_http?: unknown }).allow_loopback_http === true,
         };
       }
-      // SSH and container coordinates are Managed Environment targets. They
-      // must never be accepted as standalone Gateway records.
-      return null;
+      if (!['local_host', 'local_container', 'ssh_host', 'ssh_container'].includes(connectionKind)) return null;
+      try {
+        const raw = candidate as Record<string, unknown>;
+        if (!raw.host_access || !raw.placement
+          || !['local_host', 'ssh_host'].includes(String((raw.host_access as { kind?: unknown }).kind))
+          || !['host_process', 'container_process'].includes(String((raw.placement as { kind?: unknown }).kind))
+          || (raw.placement as { runtime_state_root?: unknown }).runtime_state_root !== undefined) return null;
+        const hostAccess = normalizeDesktopRuntimeHostAccess(raw.host_access);
+        const placement = normalizeDesktopRuntimePlacement(raw.placement);
+        if (hostAccess.kind === 'wsl_host') return null;
+        const expected = hostAccess.kind === 'ssh_host'
+          ? placement.kind === 'container_process' ? 'ssh_container' : 'ssh_host'
+          : placement.kind === 'container_process' ? 'local_container' : 'local_host';
+        if (connectionKind !== expected) return null;
+        const passwordMode = compact(raw.ssh_password_mode);
+        if (passwordMode && !['keep', 'replace', 'clear'].includes(passwordMode)) return null;
+        return { kind, gateway_id: gatewayID, display_name: displayName, connection_kind: expected,
+          host_access: hostAccess, placement, profile_write: raw.profile_write === true,
+          ssh_password: typeof raw.ssh_password === 'string' ? raw.ssh_password : undefined,
+          ssh_password_mode: (passwordMode || 'keep') as 'keep' | 'replace' | 'clear' };
+      } catch { return null; }
     }
     case 'refresh_gateway':
     case 'check_gateway':
@@ -1464,10 +1494,12 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
-    case 'update_gateway':
-      // Standalone Gateways are access/catalog sources. Runtime lifecycle is
-      // owned by Managed Environment targets and is never accepted here.
-      return null;
+    case 'update_gateway': {
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      if (!gatewayID) return null;
+      if (kind === 'start_gateway') return { kind, gateway_id: gatewayID };
+      return { kind, gateway_id: gatewayID, impact_acknowledged: (candidate as { impact_acknowledged?: unknown }).impact_acknowledged === true };
+    }
     case 'preview_reinstall_target': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {

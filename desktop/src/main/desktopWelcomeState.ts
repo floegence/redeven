@@ -1609,6 +1609,7 @@ function buildEnvironmentEntries(
         gateway_env_id: target.gateway_env_id,
         gateway_status: 'online' as const,
         gateway_connection_kind: undefined,
+        gateway_open_access_mode: session.gateway_access_mode,
         gateway_trust_state: 'paired' as const,
         gateway_environment_state: 'available' as const,
         gateway_environment_capabilities: ['open'] as const,
@@ -1890,10 +1891,9 @@ export function buildDesktopWelcomeSnapshot(
     platformCapabilities,
     redevenCloudOriginPolicy,
   );
-  // Only explicit URL records are Standalone Gateways. Direct host/container
-  // targets belong to Environment storage and must never reach either the
-  // Gateway page or the Gateway-backed Environment projection.
-  const gatewaySources = (args.gatewaySources ?? []).filter((gateway) => gateway.connection_kind === 'url');
+  // GatewayStore excludes legacy Runtime registrations before this projection.
+  // Standalone Gateways retain their explicit URL or managed service transport.
+  const gatewaySources = args.gatewaySources ?? [];
   const environments = sortEnvironmentEntriesByStableOrder(aggregateDesktopEnvironmentEntries({
     entries: baseEnvironments,
     controlPlanes,

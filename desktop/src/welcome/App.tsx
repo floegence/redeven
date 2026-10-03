@@ -909,6 +909,10 @@ function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySou
       return i18n.t('environmentCenter.gatewayActionEnable');
     case 'disable_gateway':
       return i18n.t('environmentCenter.gatewayActionDisable');
+    case 'start_gateway': return i18n.t('environmentCenter.gatewayActionStart');
+    case 'stop_gateway': return i18n.t('environmentCenter.gatewayActionStop');
+    case 'restart_gateway': return i18n.t('environmentCenter.gatewayActionRestart');
+    case 'update_gateway': return i18n.t('environmentCenter.gatewayActionUpdate');
     case 'refresh_gateway':
       return i18n.t('common.refresh');
     case 'pair_gateway':
@@ -946,6 +950,14 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
   return localizedStringByValue(i18n, clean, {
     Running: 'progress.running',
     Gateway: 'environmentCenter.gatewaysSection',
+    'Start Gateway': 'environmentCenter.gatewayActionStart',
+    'Stop Gateway': 'environmentCenter.gatewayActionStop',
+    'Restart Gateway': 'environmentCenter.gatewayActionRestart',
+    'Update Gateway': 'environmentCenter.gatewayActionUpdate',
+    'Pair Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
+    'Desktop will stop the Gateway service on the configured target.': 'environmentCenter.gatewayPanelStopDetail',
+    'Desktop will restart the Gateway service on the configured target.': 'environmentCenter.gatewayPanelRestartDetail',
+    'Desktop will update the Gateway service on the configured target.': 'environmentCenter.gatewayPanelUpdateDetail',
     'Gateway status': 'environmentCenter.gatewayPanelStatusSection',
     'Gateway service': 'environmentCenter.gatewayPanelFactGatewayService',
     'Gateway trust': 'environmentCenter.gatewayPanelTrustSection',
@@ -1017,6 +1029,11 @@ function localizedGatewayActionPanelDetail(
   model: GatewayActionPanelModel,
 ): string {
   switch (model.kind) {
+    case 'service_confirmation': {
+      const count = model.affected_sessions.length + model.overflow_session_count;
+      return localizedGatewayActionPanelText(i18n, model.detail) + (count ? ' ' + i18n.t(count === 1
+        ? 'environmentCenter.gatewayPanelConfirmSessionsOne' : 'environmentCenter.gatewayPanelConfirmSessionsMany', { count }) : '');
+    }
     default:
       return localizedGatewayActionPanelText(i18n, model.detail);
   }
@@ -1699,9 +1716,9 @@ function formatIssueToastMessage(i18n: DesktopI18n, issue: DesktopWelcomeIssue):
 }
 
 function runtimeContainerHostAccessFromDialogState(
-  state: RuntimeContainerConnectionDialogState,
+  state: RuntimeContainerConnectionDialogState | GatewaySetupDialogState,
 ): DesktopRuntimeHostAccess | null {
-  if (state.connection_kind === 'local_container_runtime') {
+  if (state.connection_kind === 'local_container_runtime' || state.connection_kind === 'local_container') {
     return { kind: 'local_host' };
   }
   const sshDestination = trimString(state.ssh_destination);
@@ -1722,8 +1739,9 @@ function runtimeContainerHostAccessFromDialogState(
   };
 }
 
-function runtimeContainerOptionsRequestKey(state: ConnectionDialogState): string {
-  if (state?.connection_kind !== 'local_container_runtime' && state?.connection_kind !== 'ssh_container_runtime') {
+function runtimeContainerOptionsRequestKey(state: ConnectionDialogState | GatewaySetupDialogState): string {
+  if (state?.connection_kind !== 'local_container_runtime' && state?.connection_kind !== 'ssh_container_runtime'
+    && state?.connection_kind !== 'local_container' && state?.connection_kind !== 'ssh_container') {
     return '';
   }
   const hostAccess = runtimeContainerHostAccessFromDialogState(state);
@@ -1920,15 +1938,15 @@ function suggestGatewayDisplayName(state: GatewaySetupDialogState | null): strin
   if (!state) {
     return null;
   }
-  const seed = normalizeGatewayDisplayNameSeed(state.gateway_url);
+  const seed = normalizeGatewayDisplayNameSeed(state.connection_kind === 'url' ? state.gateway_url
+    : state.connection_kind.includes('container') ? state.container_label || state.container_ref
+      : state.connection_kind === 'local_host' ? 'local' : state.ssh_destination);
   return seed === '' ? null : `Gateway-${seed}`;
 }
 
 function createGatewaySetupDialogState(
   overrides: Partial<GatewaySetupDialogState> = {},
 ): GatewaySetupDialogState {
-  // Standalone Gateways are URL endpoints. SSH and container targets are
-  // Managed Environments and must be registered through the Environment flow.
   const connectionKind: DesktopGatewayConnectionKind = overrides.connection_kind ?? 'url';
   const displayName = trimString(overrides.display_name);
   const sshDestination = trimString(overrides.ssh_destination);
@@ -1936,6 +1954,7 @@ function createGatewaySetupDialogState(
   const authMode = (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE;
   const state: GatewaySetupDialogState = {
     mode: overrides.mode ?? 'create',
+    focus_section: overrides.focus_section,
     gateway_id: trimString(overrides.gateway_id),
     display_name: displayName,
     display_name_touched: overrides.display_name_touched === true
@@ -3230,9 +3249,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function refreshRuntimeContainerOptions(force = false): Promise<void> {
     const connectionState = connectionDialogState();
+    const gatewayState = gatewaySetupDialogState();
     const state = connectionState?.connection_kind === 'local_container_runtime' || connectionState?.connection_kind === 'ssh_container_runtime'
       ? connectionState
-      : null;
+      : gatewayState?.connection_kind === 'local_container' || gatewayState?.connection_kind === 'ssh_container' ? gatewayState : null;
     if (!state) {
       setRuntimeContainerOptions([]);
       setRuntimeContainerOptionsError('');
@@ -3345,7 +3365,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (connectionState?.connection_kind === 'local_container_runtime' || connectionState?.connection_kind === 'ssh_container_runtime') {
         return runtimeContainerOptionsRequestKey(connectionState);
       }
-      return '';
+      return runtimeContainerOptionsRequestKey(gatewaySetupDialogState());
     },
     () => {
       void refreshRuntimeContainerOptions();
@@ -3731,10 +3751,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     resetMessages();
-    if (gateway && gateway.connection_kind !== 'url') {
-      showActionToast(i18n().t('connectionDialog.gatewayUrlHelp'), 'warning');
-      return;
-    }
     setActiveCenterTab('gateways');
     setConnectionDialogState(null);
     setControlPlaneDialogState(null);
@@ -3744,7 +3760,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           mode: 'edit',
           gateway_id: gateway.gateway_id,
           display_name: gateway.display_name,
-          connection_kind: 'url',
+          connection_kind: gateway.connection_kind,
+          ssh_destination: gateway.ssh_details?.ssh_destination,
+          ssh_port: gateway.ssh_details?.ssh_port ? String(gateway.ssh_details.ssh_port) : '',
+          auth_mode: gateway.ssh_details?.auth_mode,
+          connect_timeout_seconds: gateway.ssh_details?.connect_timeout_seconds ? String(gateway.ssh_details.connect_timeout_seconds) : '',
+          bootstrap_strategy: gateway.ssh_details?.bootstrap_strategy,
+          release_base_url: gateway.ssh_details?.release_base_url,
+          ssh_password_configured: gateway.ssh_password_configured,
+          runtime_root: gateway.runtime_root,
+          container_engine: gateway.container_engine,
+          container_id: gateway.container_id,
+          container_ref: gateway.container_ref,
+          container_label: gateway.container_label,
           gateway_url: gateway.gateway_url ?? '',
           allow_loopback_http: gateway.allow_loopback_http === true,
           focus_section: gatewaySetupFocusForGateway(gateway, focusSection),
@@ -3975,13 +4003,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!current) {
         return current;
       }
-      const nextValue = typeof value === 'boolean' ? value : trimString(value);
+      const nextValue = typeof value === 'boolean' || name === 'ssh_password' ? value : trimString(value);
       let base: GatewaySetupDialogState = {
         ...current,
         ...(name === 'display_name' ? { display_name_touched: true } : {}),
         [name]: nextValue,
       };
-      if (name === 'gateway_url') {
+      if (isSSHPasswordDraftState(base)) base = reconcileSSHPasswordDraft(base, name);
+      if (['connection_kind', 'ssh_destination', 'ssh_port', 'container_engine'].includes(name)) {
+        base = { ...base, container_id: '', container_ref: '', container_label: '' };
+      }
+      if (['gateway_url', 'connection_kind', 'ssh_destination', 'container_label', 'container_ref'].includes(name)) {
         const nextSuggested = suggestGatewayDisplayName(base);
         if (!base.display_name_touched && nextSuggested !== null) {
           return {
@@ -4042,8 +4074,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function removeSSHPasswordFromGatewaySetupDialog(): void {
-    // Standalone Gateways are URL-only. This callback remains for the legacy
-    // dialog shape while persisted non-URL records are migrated or rejected.
+    setGatewaySetupDialogState(current => current ? { ...current, ssh_password: '', ssh_password_mode: 'clear' } : current);
   }
 
   function setErrorMessage(target: LauncherActionErrorTarget, message: string): void {
@@ -5624,9 +5655,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function validateGatewaySetupDialogFields(state: GatewaySetupDialogState): Partial<Record<string, string>> {
     const errors: Partial<Record<string, string>> = {};
-    if (state.connection_kind !== 'url') {
-      errors.connection_kind = i18n().t('connectionDialog.gatewayUrlHelp');
-      return errors;
+    if (state.connection_kind === 'ssh_host' || state.connection_kind === 'ssh_container') {
+      if (!trimString(state.ssh_destination)) errors.ssh_destination = i18n().t('connectionDialog.validationSshDestinationRequired');
+      const port = Number(state.ssh_port);
+      if (state.ssh_port && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+        errors.ssh_port = i18n().t('connectionDialog.validationPortRange');
+      }
+    }
+    if (state.connection_kind.includes('container') && !trimString(state.container_id)) {
+      errors.container_id = i18n().t('connectionDialog.validationChooseContainer');
     }
     if (!trimString(state.display_name) && !suggestGatewayDisplayName(state)) {
       errors.display_name = i18n().t('connectionDialog.validationGatewayNameRequired');
@@ -5654,13 +5691,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       gateway_id: trimString(state.gateway_id) || undefined,
       display_name: displayName,
     } as const;
-    const action: DesktopLauncherActionRequest = {
-      ...base,
-      connection_kind: 'url',
-      gateway_url: trimString(state.gateway_url),
-      pairing_code: trimString(state.pairing_code) || undefined,
-      profile_write: state.profile_write,
+    const action: DesktopLauncherActionRequest = state.connection_kind === 'url' ? {
+      ...base, connection_kind: 'url', gateway_url: trimString(state.gateway_url),
+      pairing_code: trimString(state.pairing_code) || undefined, profile_write: state.profile_write,
       allow_loopback_http: state.allow_loopback_http,
+    } : {
+      ...base, connection_kind: state.connection_kind, profile_write: state.profile_write,
+      host_access: state.connection_kind.startsWith('ssh_') ? {
+        kind: 'ssh_host', ssh: {
+          ssh_destination: state.ssh_destination, ssh_port: state.ssh_port ? Number(state.ssh_port) : null,
+          auth_mode: state.auth_mode, connect_timeout_seconds: Number(state.connect_timeout_seconds) || DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
+        },
+      } : { kind: 'local_host' },
+      placement: state.connection_kind.includes('container') ? {
+        kind: 'container_process', runtime_root: state.runtime_root || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+        container_engine: state.container_engine, container_id: state.container_id,
+        container_ref: state.container_ref, container_label: state.container_label, bridge_strategy: 'exec_stream',
+      } : {
+        kind: 'host_process', runtime_root: state.runtime_root || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+        bootstrap_strategy: state.bootstrap_strategy, release_base_url: state.release_base_url || DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL,
+      },
+      ssh_password: state.ssh_password, ssh_password_mode: state.ssh_password_mode,
     };
     const result = await performLauncherAction(action, 'gateway_dialog');
     if (result?.outcome === 'saved_gateway') {
@@ -6663,6 +6714,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <ConnectionDialog {...connectionFormProps} state={newConnectionState()} />
 
       <GatewaySetupDialog
+        nativeHostSupported={snapshot().platform_capabilities.native_host_runtime}
         i18n={i18n()}
         state={gatewaySetupDialogState()}
         sshConfigHosts={sshConfigHosts()}
@@ -10407,6 +10459,11 @@ function gatewayOperationKeyForAction(gateway: DesktopGatewaySource, action: Gat
     case 'refresh_gateway':
     case 'pair_gateway':
       return `${gateway.gateway_id}:refresh`;
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
+      return `${gateway.gateway_id}:${action.intent}`;
     default:
       return undefined;
   }
@@ -10555,6 +10612,10 @@ function gatewayBusyStateBelongsToForegroundAction(
 function gatewayActionShowsWorkflowProgress(action: GatewaySourceActionModel): boolean {
   switch (action.intent) {
     case 'open_gateway_environment':
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
     case 'refresh_gateway':
       return true;
     default:
@@ -10564,6 +10625,10 @@ function gatewayActionShowsWorkflowProgress(action: GatewaySourceActionModel): b
 
 function gatewayProgressCanRecoverForegroundAction(progress: DesktopLauncherActionProgress): boolean {
   switch (progress.action) {
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
     case 'refresh_gateway':
       return true;
     default:
@@ -10672,6 +10737,11 @@ function buildGatewayDiagnosisResultSnapshot(input: Readonly<{
 
 function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionRequest): GatewaySourceActionModel | null {
   switch (request.kind) {
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
+      return { intent: request.kind, label: request.kind, enabled: true, variant: 'default' };
     case 'refresh_gateway':
     case 'check_gateway':
     case 'sync_gateway':
@@ -10705,14 +10775,12 @@ function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionReq
 function gatewaySourceActionForLifecycleProgress(
   progress: DesktopLauncherActionProgress | null | undefined,
 ): GatewaySourceActionModel | null {
-  return progress?.action === 'refresh_gateway'
-    ? {
-        intent: 'refresh_gateway',
-        label: 'Refresh',
-        enabled: true,
-        variant: 'default',
-      }
-    : null;
+  if (!progress) return null;
+  switch (progress.action) {
+    case 'refresh_gateway': case 'start_gateway': case 'stop_gateway': case 'restart_gateway': case 'update_gateway':
+      return { intent: progress.action, label: progress.title, enabled: true, variant: 'default' };
+    default: return null;
+  }
 }
 
 function GatewaySourceCard(props: Readonly<{
@@ -10841,8 +10909,7 @@ function GatewaySourceCard(props: Readonly<{
   const foregroundDiagnosisBelongsToRefresh = createMemo(() => gatewayForegroundDiagnosisBelongsToRefresh(props.gateway, foregroundAction()));
   const affectedSessions = createMemo<readonly GatewayActionAffectedSession[]>(() => (
     props.gatewayEntries
-      .filter((entry) => entry.is_open && trimString(entry.open_session_key) !== '')
-      .slice(0, 5)
+      .filter((entry) => entry.is_open && entry.gateway_open_access_mode !== 'direct_url' && trimString(entry.open_session_key) !== '')
       .map((entry) => ({
         session_key: entry.open_session_key,
         label: entry.label,
@@ -11381,6 +11448,11 @@ function GatewaySourceCard(props: Readonly<{
   };
   const launcherRequestForGatewayAction = (action: GatewaySourceActionModel): DesktopLauncherActionRequest | null => {
     switch (action.intent) {
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
+        return { kind: action.intent, gateway_id: props.gateway.gateway_id };
       case 'refresh_gateway':
         return {
           kind: 'refresh_gateway',
@@ -11440,7 +11512,7 @@ function GatewaySourceCard(props: Readonly<{
       props.openCreateGatewayEnvironment(props.gateway);
       return;
     }
-    if (action.intent === 'setup_gateway') {
+    if (action.intent === 'setup_gateway' || (action.intent === 'pair_gateway' && props.gateway.connection_kind === 'url')) {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
       clearForegroundPendingProgress();
@@ -11523,7 +11595,7 @@ function GatewaySourceCard(props: Readonly<{
       props.openCreateGatewayEnvironment(props.gateway);
       return;
     }
-    if (action.intent === 'setup_gateway') {
+    if (action.intent === 'setup_gateway' || (action.intent === 'pair_gateway' && props.gateway.connection_kind === 'url')) {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
       clearForegroundPendingProgress();
@@ -12011,10 +12083,15 @@ function GatewayActionPanel(props: Readonly<{
 
 function gatewaySourceLauncherActionKind(
   action: GatewaySourceActionModel,
-): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'refresh_gateway' | 'set_gateway_enabled'> | null {
+): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'refresh_gateway' | 'set_gateway_enabled' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway'> | null {
   switch (action.intent) {
     case 'open_gateway_environment':
       return 'open_gateway_environment';
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
+      return action.intent;
     case 'refresh_gateway':
       return 'refresh_gateway';
     case 'pair_gateway':
@@ -12069,6 +12146,10 @@ function GatewaySourceActionIcon(
       return <Check class={iconClass()} />;
     case 'disable_gateway':
       return <GatewayDisabledIcon class={iconClass()} />;
+    case 'start_gateway': return <Play class={iconClass()} />;
+    case 'stop_gateway': return <Stop class={iconClass()} />;
+    case 'restart_gateway':
+    case 'update_gateway':
     case 'refresh_gateway':
       return <Refresh class={iconClass()} />;
     case 'setup_gateway':
@@ -13238,12 +13319,13 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     <label for="gateway-environment-access-mode" class="block text-xs font-medium text-foreground">
                       {props.i18n.t('gatewayAccess.mode')}
                     </label>
-                    <select id="gateway-environment-access-mode" class="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                    <SegmentedControl id="gateway-environment-access-mode" aria-label={props.i18n.t('gatewayAccess.mode')}
                       value={props.state?.connection_kind === 'gateway_url_profile' ? props.state.access_mode : 'gateway_proxy'}
-                      onChange={(event) => props.updateField('access_mode', event.currentTarget.value)}>
-                      <option value="gateway_proxy">{props.i18n.t('gatewayAccess.proxy')}</option>
-                      <option value="direct_url">{props.i18n.t('gatewayAccess.direct')}</option>
-                    </select>
+                      onChange={value => props.updateField('access_mode', value)} size="sm"
+                      options={[
+                        { value: 'gateway_proxy', label: props.i18n.t('gatewayAccess.proxy') },
+                        { value: 'direct_url', label: props.i18n.t('gatewayAccess.direct') },
+                      ]} />
                   </div>
                   <div class="environment-connection-field">
                     <label for="gateway-environment-origin-label" class="block text-xs font-medium text-foreground">
@@ -13531,6 +13613,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
 }
 
 function GatewaySetupDialog(props: Readonly<{
+  nativeHostSupported: boolean;
   i18n: DesktopI18n;
   state: GatewaySetupDialogState | null;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
@@ -13558,29 +13641,6 @@ function GatewaySetupDialog(props: Readonly<{
     initialized_for_state_key: 'closed',
   });
   const showSSHAdvanced = createMemo(() => isSSHBacked() && advancedState().open);
-  const gatewayBootstrapStrategy = createMemo(() => (
-    props.state?.connection_kind === 'ssh_host'
-      ? props.state.bootstrap_strategy
-      : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
-  ));
-  const gatewayReleaseBaseURLLabel = createMemo(() => (
-    trimString(props.state?.connection_kind === 'ssh_host' ? props.state.release_base_url : '') === ''
-      ? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL
-      : props.i18n.t('connectionDialog.customMirror')
-  ));
-  const gatewayBootstrapSummaryLabel = createMemo(() => {
-    switch (gatewayBootstrapStrategy()) {
-      case 'desktop_upload': return gatewayReleaseBaseURLLabel();
-      case 'remote_install': return props.i18n.t('connectionDialog.remoteDownloadInstall');
-      default: return props.i18n.t('connectionDialog.automatic');
-    }
-  });
-  const gatewayAdvancedDescription = createMemo(() => (
-    connectionKind() === 'ssh_host'
-      ? props.i18n.t('connectionDialog.advancedDescription')
-      : props.i18n.t('connectionDialog.gatewayContainerAdvancedDescription')
-  ));
-
   createEffect(() => {
     const section = props.state?.focus_section;
     if (!section) {
@@ -13602,7 +13662,7 @@ function GatewaySetupDialog(props: Readonly<{
     <Dialog
       open={isOpen()}
       onOpenChange={props.onOpenChange}
-      title={props.i18n.t('connectionDialog.addGatewayTitle')}
+      title={props.i18n.t(props.state?.mode === 'edit' ? 'environmentCenter.gatewayActionEditSettings' : 'connectionDialog.addGatewayTitle')}
       class={CONNECTION_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
@@ -13628,12 +13688,25 @@ function GatewaySetupDialog(props: Readonly<{
           <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             {props.i18n.t('connectionDialog.gatewayTransport')}
           </div>
+          <div class="flex flex-wrap gap-2" role="group" aria-label={props.i18n.t('connectionDialog.gatewayTransport')}>
+            <For each={[
+              { kind: 'url', key: 'connectionDialog.gatewayTransportUrl' },
+              ...(props.nativeHostSupported ? [{ kind: 'local_host', key: 'gatewayAccess.localService' }] : []),
+              { kind: 'ssh_host', key: 'connectionDialog.gatewayTransportSshHost' },
+              { kind: 'local_container', key: 'connectionDialog.localContainer' },
+              { kind: 'ssh_container', key: 'connectionDialog.gatewayTransportSshContainer' },
+            ] as readonly { kind: DesktopGatewayConnectionKind; key: DesktopTranslationKey }[]}>
+              {option => <Button size="sm" variant={connectionKind() === option.kind ? 'default' : 'outline'}
+                aria-pressed={connectionKind() === option.kind} disabled={props.state?.mode === 'edit'}
+                onClick={() => props.updateField('connection_kind', option.kind)}>{props.i18n.t(option.key)}</Button>}
+            </For>
+          </div>
           <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
-            {props.i18n.t('connectionDialog.gatewayUrlHelp')}
+            {props.i18n.t(connectionKind() === 'url' ? 'connectionDialog.gatewayUrlHelp' : 'gatewayAccess.managedServiceHelp')}
           </div>
         </div>
 
-        <Show when={true}>
+        <Show when={connectionKind() === 'url'}>
           <div class="redeven-dialog-section">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               {props.i18n.t('connectionDialog.connectionUrl')}
@@ -13690,7 +13763,7 @@ function GatewaySetupDialog(props: Readonly<{
           </div>
         </Show>
 
-        <Show when={false}>
+        <Show when={isSSHBacked()}>
           <div class="redeven-dialog-section">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               {props.i18n.t('connectionDialog.sshHostSection')}
@@ -13709,7 +13782,7 @@ function GatewaySetupDialog(props: Readonly<{
                     loading={props.sshConfigHostsLoading}
                     loadError={props.sshConfigHostsLoadError}
                     autofocus={connectionKind() !== 'url' && props.state?.mode === 'create'}
-                    class={props.fieldErrors.ssh_destination && 'border-destructive ring-1 ring-destructive/20'}
+                    class={props.fieldErrors.ssh_destination && 'border-destructive'}
                     onInput={(value) => {
                       props.updateField('ssh_destination', value);
                       props.clearFieldErrors();
@@ -13807,7 +13880,7 @@ function GatewaySetupDialog(props: Readonly<{
                   <div>
                     <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.advanced')}</div>
                     <div class="mt-1 text-[11px] text-muted-foreground">
-                      {gatewayAdvancedDescription()}
+                      {props.i18n.t('connectionDialog.gatewayDataRoot')} · {props.i18n.t('connectionDialog.connectTimeout')}
                     </div>
                   </div>
                   <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
@@ -13821,25 +13894,6 @@ function GatewaySetupDialog(props: Readonly<{
                   <div>
                     <div class="border-t border-border/70 px-3 py-3">
                       <div class="space-y-3">
-                        <Show when={connectionKind() === 'ssh_host'}>
-                          <div class="space-y-1.5">
-                            <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.bootstrapDelivery')}</label>
-                            <SegmentedControl
-                              value={gatewayBootstrapStrategy()}
-                              onChange={(value) => props.updateField('bootstrap_strategy', value)}
-                              options={[
-                                { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
-                                { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
-                                { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteDownloadInstall') },
-                              ]}
-                              size="sm"
-                            />
-                            <div class="text-[11px] text-muted-foreground">
-                              {props.i18n.t('connectionDialog.bootstrapHelp')}{' '}
-                              <span class="font-medium text-foreground">{props.i18n.t('connectionDialog.source', { source: gatewayBootstrapSummaryLabel() })}</span>
-                            </div>
-                          </div>
-                        </Show>
                         <div class="space-y-1.5">
                           <label for="gateway-data-root" class="block text-xs font-medium text-foreground">
                             {props.i18n.t('connectionDialog.gatewayDataRoot')}
@@ -13905,7 +13959,7 @@ function GatewaySetupDialog(props: Readonly<{
           </div>
         </Show>
 
-        <Show when={false}>
+        <Show when={connectionKind() === 'local_container' || connectionKind() === 'ssh_container'}>
           <div class="redeven-dialog-section">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               {props.i18n.t('connectionDialog.container')}
@@ -13936,9 +13990,9 @@ function GatewaySetupDialog(props: Readonly<{
                   selectedContainerLabel={props.state?.container_label ?? ''}
                   containers={props.containerOptions}
                   loading={props.containerOptionsLoading}
-                  disabled={trimString(props.state?.ssh_destination) === ''}
+                  disabled={connectionKind() === 'ssh_container' && trimString(props.state?.ssh_destination) === ''}
                   error={props.containerOptionsError}
-                  emptyMessage={trimString(props.state?.ssh_destination) === ''
+                  emptyMessage={connectionKind() === 'ssh_container' && trimString(props.state?.ssh_destination) === ''
                     ? props.i18n.t('connectionDialog.chooseSshBeforeContainers')
                     : props.i18n.t('connectionDialog.noRunningContainers')}
                   fieldError={props.fieldErrors.container_id}
@@ -13953,6 +14007,20 @@ function GatewaySetupDialog(props: Readonly<{
               </div>
             </div>
           </div>
+        </Show>
+
+        <Show when={connectionKind() === 'local_host' || connectionKind() === 'local_container'}>
+          <div class="space-y-1.5">
+            <label for="gateway-data-root" class="block text-xs font-medium">{props.i18n.t('connectionDialog.gatewayDataRoot')}</label>
+            <Input id="gateway-data-root" value={props.state?.runtime_root ?? ''} size="sm"
+              placeholder={DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL} spellcheck={false}
+              onInput={event => props.updateField('runtime_root', event.currentTarget.value)} />
+            <p class="text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.gatewayRuntimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}</p>
+          </div>
+        </Show>
+        <Show when={connectionKind() !== 'url' && props.state?.mode === 'edit'}>
+          <Checkbox checked={props.state?.profile_write === true} label={props.i18n.t('gatewayAccess.grantWrite')}
+            onChange={enabled => props.updateField('profile_write', enabled)} size="sm" />
         </Show>
 
         <div class="space-y-1.5 rounded-md border border-dashed border-border/30 bg-background/40 px-3 py-3">
@@ -13976,7 +14044,7 @@ function GatewaySetupDialog(props: Readonly<{
           </Show>
         </div>
 
-        <Show when={true}>
+        <Show when={connectionKind() === 'url'}>
           <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0">

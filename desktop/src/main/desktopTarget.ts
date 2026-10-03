@@ -82,6 +82,7 @@ export type GatewayDesktopTarget = Readonly<{
 export type DesktopSessionTarget = LocalEnvironmentDesktopTarget | WSLDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget | GatewayDesktopTarget;
 
 export type DesktopSessionSummary = Readonly<{
+  gateway_access_mode?: 'direct_url' | 'gateway_proxy';
   session_key: DesktopSessionKey;
   target: DesktopSessionTarget;
   lifecycle: DesktopSessionLifecycle;

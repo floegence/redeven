@@ -1993,6 +1993,8 @@
     "cloudAwaitingSyncDetail": "Aktualisieren Sie, um Ihre Redeven Cloud-Umgebungen zu laden."
   },
   "gatewayAccess": {
+    "localService": "Lokaler Host",
+    "managedServiceHelp": "Desktop verwaltet nur den Gateway-Dienst auf diesem Host. Laufzeitdienste werden unabhängig verwaltet.",
     "checkingAccess": "Gateway-Zugriff wird geprüft",
     "checkingAccessDetail": "Gateway-Vertrauen und Umgebungszugriff werden geprüft.",
     "lastCheckProxy": "Letzte Proxy-Zugriffsprüfung",

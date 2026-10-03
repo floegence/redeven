@@ -1993,6 +1993,8 @@
     "cloudAwaitingSyncDetail": "Redeven Cloud 환경을 불러오려면 새로 고치세요."
   },
   "gatewayAccess": {
+    "localService": "로컬 호스트",
+    "managedServiceHelp": "Desktop은 이 호스트의 Gateway 서비스만 관리합니다. 런타임 서비스는 별도로 관리됩니다.",
     "checkingAccess": "Gateway 접근 확인 중",
     "checkingAccessDetail": "Gateway 신뢰 및 환경 접근 권한을 확인하고 있습니다.",
     "lastCheckProxy": "최근 프록시 접근 확인",

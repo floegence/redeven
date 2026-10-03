@@ -39,6 +39,8 @@ opt-in to **Remember sharing approval**. This is the existing host-wide OS-grant
 reuse setting, not permission to unlock or a promise of unattended availability.
 Saving is pending until the host accepts it; failure restores the actual setting.
 
+# Boundaries
+
 ## Failure and window ownership
 
 Status refreshes never erase a connection failure. Feedback names the failed
