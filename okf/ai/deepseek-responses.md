@@ -3,12 +3,12 @@ type: AI Provider Contract
 title: DeepSeek Responses
 description: Flower consumes Floret stateless Responses transport with explicit web tool limits.
 tags: [ai, provider, deepseek]
-timestamp: 2026-09-10T00:00:00Z
+timestamp: 2026-10-03T00:00:00Z
 ---
 
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret v7.12.2 Responses gateway.
+Flower routes the DeepSeek provider to the published Floret v7.19.0 Responses gateway.
 Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
 function-call validation, and opaque provider history. Redeven only maps its
 model DTOs and canonical dotted tool names to provider-safe aliases.
@@ -17,8 +17,12 @@ model DTOs and canonical dotted tool names to provider-safe aliases.
 
 Each request sends full input history. The route never sends `messages`,
 `enable_search`, `previous_response_id`, `store`, or `include`. Reasoning off maps
-to `reasoning.effort: none`; the selectable high and max levels keep their
-existing model-catalog contract.
+to `reasoning.effort: none`; the selectable low, high, and max levels use the current model-catalog
+contract, with high as the provider default. `deepseek-flash` and the official
+`deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` aliases accept images;
+`deepseek-v4-pro` remains text-only. All have a 1,000,000-token context ceiling
+and 393,216-token output ceiling. Existing selections retain their exact IDs;
+provider limits do not override user request budgets.
 
 The official Responses tool compatibility table marks `web_search` and other
 built-in tools as ignored. Responses format compatibility does not provide

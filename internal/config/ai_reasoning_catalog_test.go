@@ -26,7 +26,7 @@ func TestAIReasoningCatalogRowsHaveProvenance(t *testing.T) {
 		{name: "gemini3", providerType: "google", modelName: "gemini-3.8-flash", wantWire: "openai_chat_reasoning_effort", wantLevels: []string{"low", "medium", "high"}},
 		{name: "kimi_toggle", providerType: "moonshot", modelName: "kimi-k2.6", wantWire: "kimi_thinking_type", wantDisable: true},
 		{name: "glm_effort", providerType: "chatglm", modelName: "glm-5.2", wantWire: "glm_reasoning_effort", wantLevels: []string{"high", "max"}},
-		{name: "deepseek", providerType: "deepseek", modelName: "deepseek-v4-pro", wantWire: "deepseek_responses_reasoning_effort", wantLevels: []string{"high", "max"}, wantDisable: true},
+		{name: "deepseek", providerType: "deepseek", modelName: "deepseek-v4-pro", wantWire: "deepseek_responses_reasoning_effort", wantLevels: []string{"low", "high", "max"}, wantDisable: true},
 		{name: "qwen", providerType: "qwen", modelName: "qwen3.6-plus", wantWire: "qwen_enable_thinking", wantDisable: true},
 		{name: "openrouter", providerType: "openrouter", modelName: "gpt-oss-120b", wantWire: "openrouter_reasoning_metadata"},
 		{name: "xai", providerType: "xai", modelName: "grok-4.3", wantWire: "openai_chat_reasoning_effort", wantLevels: []string{"off", "low", "medium", "high"}, wantDisable: true},
@@ -122,8 +122,8 @@ func TestValidateAIReasoningSelectionRejectsUnsupportedLevel(t *testing.T) {
 	t.Parallel()
 
 	capability := AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro")
-	if err := ValidateAIReasoningSelection(capability, AIReasoningSelection{Level: AIReasoningLevelLow}); err == nil {
-		t.Fatalf("low accepted for DeepSeek V4, want unsupported level error")
+	if err := ValidateAIReasoningSelection(capability, AIReasoningSelection{Level: AIReasoningLevelMedium}); err == nil {
+		t.Fatalf("medium accepted for DeepSeek V4, want unsupported level error")
 	}
 }
 

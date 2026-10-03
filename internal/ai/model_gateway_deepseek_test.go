@@ -130,102 +130,124 @@ func TestDeepSeekShortRequestDoesNotEnableSearch(t *testing.T) {
 }
 
 func TestDeepSeekVisionReasoningSelectionWireContract(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		level config.AIReasoningLevel
-		want  string
-	}{
-		{name: "unspecified"},
-		{name: "default", level: config.AIReasoningLevelDefault},
-		{name: "off", level: config.AIReasoningLevelOff, want: `{"effort":"none"}`},
-		{name: "low", level: config.AIReasoningLevelLow, want: `{"effort":"low"}`},
-		{name: "high", level: config.AIReasoningLevelHigh, want: `{"effort":"high"}`},
-		{name: "max", level: config.AIReasoningLevelMax, want: `{"effort":"max"}`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var body map[string]json.RawMessage
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-					t.Error(err)
-				}
-				w.Header().Set("Content-Type", "text/event-stream")
-				fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp\",\"status\":\"completed\",\"output\":[]}}\n\n")
-			}))
-			defer server.Close()
-			base, err := newProviderAdapter("deepseek", server.URL, "test-key", nil)
-			if err != nil {
-				t.Fatal(err)
+	for _, model := range []string{"deepseek-flash", "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"} {
+		t.Run(model, func(t *testing.T) {
+			for _, tc := range []struct {
+				name  string
+				level config.AIReasoningLevel
+				want  string
+			}{
+				{name: "unspecified"},
+				{name: "default", level: config.AIReasoningLevelDefault},
+				{name: "off", level: config.AIReasoningLevelOff, want: `{"effort":"none"}`},
+				{name: "low", level: config.AIReasoningLevelLow, want: `{"effort":"low"}`},
+				{name: "high", level: config.AIReasoningLevelHigh, want: `{"effort":"high"}`},
+				{name: "max", level: config.AIReasoningLevelMax, want: `{"effort":"max"}`},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					var body map[string]json.RawMessage
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.URL.Path != "/responses" {
+							t.Errorf("route = %s", r.URL.Path)
+						}
+						if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+							t.Error(err)
+						}
+						w.Header().Set("Content-Type", "text/event-stream")
+						fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp\",\"status\":\"completed\",\"output\":[]}}\n\n")
+					}))
+					defer server.Close()
+					base, err := newProviderAdapter("deepseek", server.URL, "test-key", nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					selection := config.AIReasoningSelection{Level: tc.level}
+					capability := config.AIReasoningCapabilityForModel("deepseek", model)
+					if !capability.SupportsLevel(tc.level) {
+						t.Fatalf("catalog rejects %q", tc.level)
+					}
+					adapter := newFloretProviderAdapter(base, "deepseek", model, ProviderControls{ReasoningSelection: selection, ReasoningCapability: capability}, TurnBudgets{}, providerWebSearchModeDisabled)
+					stream, err := adapter.Stream(context.Background(), flprovider.Request{
+						RunID: "run", PromptScopeID: "scope", Reasoning: selection,
+						Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "hello"}},
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					for event := range stream {
+						if event.Err != nil {
+							t.Fatal(event.Err)
+						}
+					}
+					if string(body["model"]) != `"`+model+`"` {
+						t.Fatalf("model = %s", body["model"])
+					}
+					if body == nil {
+						t.Fatal("provider request was not sent")
+					}
+					if got := string(body["reasoning"]); got != tc.want {
+						t.Fatalf("reasoning = %s, want %s", got, tc.want)
+					}
+				})
 			}
-			selection := config.AIReasoningSelection{Level: tc.level}
-			capability := config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-flash-vision-exp")
-			if !capability.SupportsLevel(tc.level) {
-				t.Fatalf("catalog rejects %q", tc.level)
-			}
-			adapter := newFloretProviderAdapter(base, "deepseek", "deepseek-v4-flash-vision-exp", ProviderControls{ReasoningSelection: selection, ReasoningCapability: capability}, TurnBudgets{}, providerWebSearchModeDisabled)
-			stream, err := adapter.Stream(context.Background(), flprovider.Request{
-				RunID: "run", PromptScopeID: "scope", Reasoning: selection,
-				Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "hello"}},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			for event := range stream {
-				if event.Err != nil {
-					t.Fatal(event.Err)
-				}
-			}
-			if body == nil {
-				t.Fatal("provider request was not sent")
-			}
-			if got := string(body["reasoning"]); got != tc.want {
-				t.Fatalf("reasoning = %s, want %s", got, tc.want)
-			}
+
 		})
 	}
 }
 
 func TestDeepSeekVisionUsesPreparedImageAndPreservesToolContinuation(t *testing.T) {
-	var bodies []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body json.RawMessage
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Error(err)
-		}
-		bodies = append(bodies, string(body))
-		output := `[{"type":"function_call","id":"vision-item","call_id":"vision-call","name":"inspect","arguments":"{}"}]`
-		if len(bodies) > 1 {
-			output = `[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"image inspected"}]}]`
-		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"vision\",\"status\":\"completed\",\"output\":%s}}\n\n", output)
-	}))
-	defer server.Close()
-	gateway, err := newProviderAdapter("deepseek", server.URL, "test", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := ModelGatewayRequest{Model: "deepseek-v4-flash-vision-exp", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "Inspect this image"}, {Type: "image", FileURI: "data:image/png;base64,AQID", MimeType: "image/png"}}}}, Tools: []ToolDef{{Name: "inspect", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`)}}}
-	first, err := gateway.StreamTurn(context.Background(), request, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(first.ToolCalls) != 1 || first.ProviderState == nil || !strings.Contains(bodies[0], `"type":"input_image"`) || !strings.Contains(bodies[0], "data:image/png;base64,AQID") {
-		t.Fatalf("missing vision/tool response: %+v %v", first, bodies)
-	}
-	state, _ := json.Marshal(first.ProviderState)
-	if strings.Contains(string(state), "base64") {
-		t.Fatal("image bytes leaked into opaque state")
-	}
-	request.PreviousState = first.ProviderState
-	request.Messages = append(request.Messages, Message{Role: "assistant", Content: []ContentPart{{Type: "tool_call", ToolName: "inspect", ToolCallID: "vision-call", ArgsJSON: "{}"}}}, Message{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: "vision-call", Text: "ready"}}})
-	result, err := gateway.StreamTurn(context.Background(), request, nil)
-	if err != nil || result.Text != "image inspected" {
-		t.Fatalf("vision continuation failed: %+v %v", result, err)
-	}
-	request.Model = "deepseek-v4-pro"
-	request.PreviousState = nil
-	if _, err = gateway.StreamTurn(context.Background(), request, nil); err == nil {
-		t.Fatal("pure text DeepSeek model accepted an image")
+	for _, model := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"} {
+		t.Run(model, func(t *testing.T) {
+			var bodies []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body json.RawMessage
+				if r.URL.Path != "/responses" {
+					t.Errorf("route = %s", r.URL.Path)
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if !strings.Contains(string(body), `"model":"`+model+`"`) {
+					t.Errorf("model changed: %s", body)
+				}
+				bodies = append(bodies, string(body))
+				output := `[{"type":"function_call","id":"vision-item","call_id":"vision-call","name":"inspect","arguments":"{}"}]`
+				if len(bodies) > 1 {
+					output = `[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"image inspected"}]}]`
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"vision\",\"status\":\"completed\",\"output\":%s}}\n\n", output)
+			}))
+			defer server.Close()
+			gateway, err := newProviderAdapter("deepseek", server.URL, "test", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := ModelGatewayRequest{Model: model, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "Inspect this image"}, {Type: "image", FileURI: "data:image/png;base64,AQID", MimeType: "image/png"}}}}, Tools: []ToolDef{{Name: "inspect", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`)}}}
+			first, err := gateway.StreamTurn(context.Background(), request, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(first.ToolCalls) != 1 || first.ProviderState == nil || !strings.Contains(bodies[0], `"type":"input_image"`) || !strings.Contains(bodies[0], "data:image/png;base64,AQID") {
+				t.Fatalf("missing vision/tool response: %+v %v", first, bodies)
+			}
+			state, _ := json.Marshal(first.ProviderState)
+			if strings.Contains(string(state), "base64") {
+				t.Fatal("image bytes leaked into opaque state")
+			}
+			request.PreviousState = first.ProviderState
+			request.Messages = append(request.Messages, Message{Role: "assistant", Content: []ContentPart{{Type: "tool_call", ToolName: "inspect", ToolCallID: "vision-call", ArgsJSON: "{}"}}}, Message{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: "vision-call", Text: "ready"}}})
+			result, err := gateway.StreamTurn(context.Background(), request, nil)
+			if err != nil || result.Text != "image inspected" {
+				t.Fatalf("vision continuation failed: %+v %v", result, err)
+			}
+			request.Model = "deepseek-v4-pro"
+			request.PreviousState = nil
+			if _, err = gateway.StreamTurn(context.Background(), request, nil); err == nil {
+				t.Fatal("pure text DeepSeek model accepted an image")
+			}
+
+		})
 	}
 }
 
