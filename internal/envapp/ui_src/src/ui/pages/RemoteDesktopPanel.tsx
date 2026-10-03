@@ -97,6 +97,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (!full()) return i18n.t('remoteDesktop.accessTitle');
     if (capabilities()?.state === 'locked') return i18n.t('remoteDesktop.locked');
     if (capabilities()?.state === 'setup_required') return i18n.t('remoteDesktop.setupRequired');
+    if (authorization() && status()?.unattended) return i18n.t('remoteDesktop.awaitingConnection');
     if (macPermission() || authorization()) return i18n.t('remoteDesktop.permissionRequired');
     return i18n.t(available() ? 'remoteDesktop.ready' : 'remoteDesktop.unsupported');
   };
@@ -106,7 +107,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (!status() || preparing() || capabilities()?.state === 'setup_required') return undefined;
     if (capabilities()?.state === 'locked') return 'remoteDesktop.lockedHint';
     if (macPermission()) return 'remoteDesktop.permissionHint';
-    if (authorization()) return 'remoteDesktop.authorizationHint';
+    if (authorization() && !status()?.unattended) return 'remoteDesktop.authorizationHint';
     if (capabilities()?.state === 'session_unavailable') return 'remoteDesktop.sessionHint';
     if (capabilities()?.state === 'unsupported') return 'remoteDesktop.unsupportedHostHint';
     if (!available() && !loadError()) return 'remoteDesktop.connectionHint';
@@ -199,10 +200,10 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
         <For each={displays()}>{(item, index) => <option value={item.id}>{item.name || `${i18n.t('remoteDesktop.display')} ${index() + 1}`} · {item.width} × {item.height}</option>}</For>
       </select></label>
     </Show>
+    <Show when={capabilities()?.backend === 'wayland' && capabilities()?.unattended}><div class="remote-desktop-option remote-desktop-sharing"><Switch checked={pendingApproval() ?? status()?.unattended ?? false} disabled={!full() || !!busy() || refreshing()} onChange={rememberApproval} label={i18n.t('remoteDesktop.unattended')} description={i18n.t('remoteDesktop.unattendedHint')} /></div></Show>
     <details class="remote-desktop-options">
       <summary><ChevronRight size={14} aria-hidden="true" /><span>{i18n.t('remoteDesktop.options')}</span><span class="remote-desktop-mode">{i18n.t(mode() === 'view' ? 'remoteDesktop.view' : 'remoteDesktop.control')}</span></summary>
       <div class="remote-desktop-option"><Switch checked={mode() === 'view'} disabled={!!busy()} onChange={value => setMode(value ? 'view' : 'control')} label={i18n.t('remoteDesktop.view')} description={i18n.t('remoteDesktop.viewHint')} /></div>
-      <Show when={capabilities()?.unattended}><div class="remote-desktop-option"><Switch checked={pendingApproval() ?? status()?.unattended ?? false} disabled={!full() || !!busy() || refreshing()} onChange={rememberApproval} label={i18n.t('remoteDesktop.unattended')} description={i18n.t('remoteDesktop.unattendedHint')} /></div></Show>
     </details>
     <Show when={failure()}>{problem => <div class="remote-desktop-error" role="alert">
       <AlertCircle size={16} aria-hidden="true" />

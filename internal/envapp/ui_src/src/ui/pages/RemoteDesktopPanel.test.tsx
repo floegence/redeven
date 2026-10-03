@@ -72,7 +72,7 @@ it('permits the connection that triggers Wayland system authorization', async ()
 it('keeps advanced settings out of the initial connection flow and avoids a single-display selector', async () => {
   await mount(); expect(host.querySelector('select')).toBeNull();
   const options = host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!;
-  expect(options.open).toBe(false); expect(options.textContent).toContain('Remember sharing approval');
+  expect(options.open).toBe(false); expect(host.textContent).not.toContain('Remember sharing approval');
   expect(host.textContent).not.toContain('Unattended reconnection'); expect(state.save).not.toHaveBeenCalled();
 });
 
@@ -136,4 +136,25 @@ it('requires an explicit takeover instead of replacing an existing controller', 
   const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role=dialog] button')].find(item => controlText(item) === 'Take control')!;
   expect(confirm).toBeTruthy(); confirm.click();
   await vi.waitFor(() => expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ takeover: true })));
+});
+
+
+it('exposes Wayland approval reuse before connecting and waits for the saved setting', async () => {
+  let saved!: () => void;
+  const wayland = { ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required' } };
+  state.status.mockResolvedValue(wayland);
+  state.save.mockImplementation(() => new Promise<void>(resolve => { saved = resolve; }));
+  await mount();
+  const sharing = host.querySelector<HTMLInputElement>('.remote-desktop-sharing [role=switch]')!;
+  expect(sharing).toBeTruthy(); expect(sharing.closest('details')).toBeNull();
+  expect(sharing.checked).toBe(false); expect(state.save).not.toHaveBeenCalled();
+  sharing.click();
+  await vi.waitFor(() => expect(state.save).toHaveBeenCalledWith(true));
+  expect(button('Connect to desktop').disabled).toBe(true);
+  state.status.mockResolvedValue({ ...wayland, unattended: true }); saved();
+  await vi.waitFor(() => expect(button('Connect to desktop').disabled).toBe(false));
+  expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('Awaiting connection');
+  expect(host.querySelector('.remote-desktop-guidance')).toBeNull();
+  button('Connect to desktop').click();
+  await vi.waitFor(() => expect(state.create).toHaveBeenCalledOnce());
 });

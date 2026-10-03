@@ -7,7 +7,29 @@ dialog{width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);border
 .desktop-fullscreen #toolbar{position:absolute;left:0;right:0;top:0;max-height:50vh;overflow:auto}.desktop-fullscreen #toolbar.hidden-toolbar{transform:translateY(calc(-100% + 4px))}.desktop-fullscreen #toolbar:focus-within,.desktop-fullscreen #toolbar:hover{transform:none}.desktop-fullscreen #stage{height:100dvh}#pin{display:none}.desktop-fullscreen #pin{display:block}[hidden]{display:none!important}
 @media(prefers-reduced-motion:reduce){#toolbar{transition:none}}
 
-.window-actions{display:none}[data-redeven-host-application-chrome=true] .window-actions{display:flex}[data-redeven-host-application-chrome=true] #toolbar{padding-top:32px;-webkit-app-region:drag}[data-redeven-host-application-chrome=true] button,[data-redeven-host-application-chrome=true] select{-webkit-app-region:no-drag}.desktop-fullscreen #toolbar{padding-top:10px}
 #toolbar{padding:8px 12px;gap:8px}.identity{font-size:13px;min-width:150px;max-width:210px}.identity span{font-size:11px}.actions{flex:1;font-size:12px}.actions button,.actions select{padding:6px 8px}
 #panel-body label{flex-wrap:wrap}#text-input{width:200px;min-width:0}
 [data-icon]{width:32px;height:32px;flex:0 0 32px;display:inline-grid;place-items:center;padding:0!important}[data-icon] svg{display:block;pointer-events:none}
+
+/* The viewer toolbar is the Desktop titlebar. Native controls retain the insets
+   supplied by the window preload, including fullscreen changes. */
+:root[data-redeven-host-application-chrome=true] #toolbar {
+  min-height:var(--redeven-desktop-titlebar-height,40px);
+  padding:3px var(--redeven-desktop-titlebar-end-inset,16px) 3px var(--redeven-desktop-titlebar-start-inset,84px);
+  gap:8px 12px; app-region:drag; user-select:none;
+}
+:root[data-redeven-host-application-chrome=true] .identity { min-width:0; max-width:180px; flex:0 1 auto; }
+:root[data-redeven-host-application-chrome=true] .identity strong { display:none; }
+:root[data-redeven-host-application-chrome=true] .identity span { color:var(--foreground); font-size:12px; font-weight:600; }
+:root[data-redeven-host-application-chrome=true] .actions { min-width:0; gap:4px; }
+:root[data-redeven-host-application-chrome=true] .actions button,
+:root[data-redeven-host-application-chrome=true] .actions select { height:28px; padding:3px 7px; border-radius:var(--floe-radius-control,6px); }
+:root[data-redeven-host-application-chrome=true] [data-icon] { width:28px; flex-basis:28px; }
+:root[data-redeven-host-application-chrome=true] button,
+:root[data-redeven-host-application-chrome=true] select,
+:root[data-redeven-host-application-chrome=true] dialog { app-region:no-drag; }
+:root[data-redeven-host-application-chrome=true]:has(dialog[open]) #toolbar { app-region:no-drag; }
+@media(max-width:680px) {
+  :root[data-redeven-host-application-chrome=true] .identity { max-width:100px; }
+  :root[data-redeven-host-application-chrome=true] #display { max-width:140px; }
+}

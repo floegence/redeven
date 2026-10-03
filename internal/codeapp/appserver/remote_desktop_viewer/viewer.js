@@ -376,7 +376,6 @@ async function disconnect() {
   finally { windowTransport.dispose(); }
 }
 $('disconnect').onclick = disconnect;
-$('window-close').onclick = () => window.redevenHostApplicationWindow?.request('close');
 // Page unload cannot await a request. Closing the native streams immediately
 // releases input and capture; the server expires its bounded reconnect lease.
 window.addEventListener('pagehide', () => { stopViewer(); windowTransport.dispose(); });

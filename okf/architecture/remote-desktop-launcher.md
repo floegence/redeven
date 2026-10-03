@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Remote desktop connection launcher
 description: Identify the target host, explain connection readiness and open its desktop through one concise, localized flow.
 tags: [desktop, applications, interaction, accessibility]
-timestamp: 2026-10-03T03:30:00Z
+timestamp: 2026-10-03T07:42:00Z
 ---
 # Summary
 
@@ -34,10 +34,20 @@ can omit input permission but never omits full environment authorization.
 
 The initial dialog presents host identity, readiness and one connect action. A
 display selector appears only when multiple displays are known. Connection options
-are collapsed by default and contain view-only mode and, where supported, explicit
-opt-in to **Remember sharing approval**. This is the existing host-wide OS-grant
-reuse setting, not permission to unlock or a promise of unattended availability.
-Saving is pending until the host accepts it; failure restores the actual setting.
+are collapsed by default and contain view-only mode. Wayland hosts that support
+persistent portal grants expose **Remember sharing approval** directly in the
+initial flow. It requires explicit opt-in; simply opening the launcher never
+changes host settings. A first connection still needs the host user's system
+confirmation. Later connections request reuse while the Runtime is running;
+expired or revoked approval can require a new confirmation. This is the existing
+host-wide OS-grant reuse setting, not permission to unlock or install a service.
+macOS and X11 do not display this portal-specific option.
+
+Saving disables connection until the host accepts the setting; failure restores
+the actual value. When reuse is enabled, the pre-connect status reads **Awaiting
+connection** rather than falsely asserting another prompt is necessary. The
+setting alone does not prove a usable saved grant; native connection determines
+whether the system can restore access.
 
 # Boundaries
 

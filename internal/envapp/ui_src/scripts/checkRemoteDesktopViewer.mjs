@@ -1,4 +1,4 @@
-/* global document, window, innerWidth, CompositionEvent */
+/* global document, window, innerWidth, CompositionEvent, getComputedStyle */
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -24,7 +24,7 @@ let conflictNextConnect = false;
 let lockedNextConnect = false;
 let delayAudio = false, audioResponse;
 const configuration = { session: { id: 'qualification', host_name: 'Task desktop', locale: 'en-US', mode: 'control', display_id: '' }, base: '/_redeven_desktop/' };
-const names = { 'input.js': 'remote-input.generated.js', 'pointer.js': 'remote-pointer.generated.js', 'floe.css': 'appearance.generated.css' };
+const names = { 'input.js': 'remote-input.generated.js', 'pointer.js': 'remote-pointer.generated.js' };
 const server = http.createServer((request, response) => {
   if (delayAudio && request.url.endsWith('/host_desktop_audio.mjs')) { audioResponse = response; return; }
   if (request.url === '/_redeven_desktop/ticket') {
@@ -56,6 +56,11 @@ const server = http.createServer((request, response) => {
   }
   const name = request.url?.split('/').at(-1);
   if (!/^[a-zA-Z_.-]+$/.test(name ?? '')) { response.writeHead(404).end(); return; }
+  if (name === 'floe.css') {
+    response.setHeader('Content-Type', 'text/css');
+    response.end(['appearance.generated.css', 'remote-input.generated.css', 'remote-pointer.generated.css'].map(file => readFileSync(path.join(shared, file), 'utf8')).join('\n'));
+    return;
+  }
   const source = names[name] ? path.join(shared, names[name]) : name.startsWith('host_desktop_') ? path.join(native, name) : path.join(assets, name);
   try { response.setHeader('Content-Type', name.endsWith('.css') ? 'text/css' : 'text/javascript'); response.end(readFileSync(source)); } catch { response.writeHead(404).end(); }
 });
@@ -125,7 +130,7 @@ try {
       await build({ entryPoints: [path.join(root, 'desktop', source)], outfile: path.join(directory, name), bundle: true, platform: 'node', format: 'cjs', external: ['electron'] });
     }
     const marker = randomUUID();
-    application = await _electron.launch({ executablePath: requireDesktop('electron'), args: [path.join(directory, 'fixture.cjs'), `--user-data-dir=${directory}/profile`, `--redeven-remote-desktop-run=${marker}`], env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, REDEVEN_DESKTOP_FIXTURE_URL: `http://127.0.0.1:${server.address().port}/_redeven_desktop/`, REDEVEN_DESKTOP_FIXTURE_PRELOAD: path.join(directory, 'preload.cjs') } });
+    application = await _electron.launch({ cwd: directory, executablePath: requireDesktop('electron'), args: [path.join(directory, 'fixture.cjs'), `--user-data-dir=${directory}/profile`, `--redeven-remote-desktop-run=${marker}`], env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, REDEVEN_DESKTOP_FIXTURE_URL: `http://127.0.0.1:${server.address().port}/_redeven_desktop/`, REDEVEN_DESKTOP_FIXTURE_PRELOAD: path.join(directory, 'preload.cjs') } });
     console.log('Owned desktop fixture:', JSON.stringify({ commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), pid: application.process().pid, state: directory, marker }));
     page = await application.firstWindow();
   } else {
@@ -155,10 +160,36 @@ try {
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/_redeven_desktop/`);
   await page.waitForFunction(() => document.querySelector('#connection').hidden);
+  if (desktop) {
+    const layout = await page.evaluate(() => {
+      const root = document.documentElement, bar = document.querySelector('#toolbar');
+      const bounds = bar.getBoundingClientRect();
+      const start = parseFloat(getComputedStyle(root).getPropertyValue('--redeven-desktop-titlebar-start-inset'));
+      const end = parseFloat(getComputedStyle(root).getPropertyValue('--redeven-desktop-titlebar-end-inset'));
+      return { height: bounds.height, expected: parseFloat(getComputedStyle(root).getPropertyValue('--redeven-desktop-titlebar-height')),
+        hostLeft: document.querySelector('.identity').getBoundingClientRect().left, start,
+        lastRight: document.querySelector('#disconnect').getBoundingClientRect().right, availableRight: innerWidth - end,
+        stageTop: document.querySelector('#stage').getBoundingClientRect().top,
+        duplicateClose: !!document.querySelector('#window-close'),
+        drag: getComputedStyle(bar).getPropertyValue('-webkit-app-region'),
+        buttonDrag: getComputedStyle(document.querySelector('#fullscreen')).getPropertyValue('-webkit-app-region') };
+    });
+    assert.equal(layout.height, layout.expected, 'Desktop titlebar and toolbar must share one row');
+    assert.equal(layout.stageTop, layout.height, 'remote picture must start directly below the shared row');
+    assert(layout.hostLeft >= layout.start && layout.lastRight <= layout.availableRight, 'toolbar overlapped native window buttons');
+    assert.equal(layout.duplicateClose, false, 'native window buttons must not have a duplicate close control');
+    assert.equal(layout.drag, 'drag'); assert.equal(layout.buttonDrag, 'no-drag');
+    console.log('Unified toolbar:', JSON.stringify(layout));
+  }
   await page.locator('#desktop').click(); await page.keyboard.press('a');
   assert.equal(messages.filter(item => item.command.method === 'input').length, 0, 'input before first paint');
   paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  assert.deepEqual(await page.locator('.floe-remote-input').evaluate(input => {
+    const style = getComputedStyle(input);
+    return { position: style.position, opacity: style.opacity };
+  }), { position: 'fixed', opacity: '0' }, 'idle remote input must not consume space below the desktop');
+  if (process.env.REDEVEN_DESKTOP_EVIDENCE_DIR) await page.screenshot({ path: path.join(process.env.REDEVEN_DESKTOP_EVIDENCE_DIR, `toolbar-${desktop ? 'electron' : 'browser'}.png`) });
   delayAudio = true;
   await page.locator('#settings').click();
   await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
