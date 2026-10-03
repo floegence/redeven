@@ -193,8 +193,43 @@ try {
   assert.equal(messages.filter(item => item.command.method === 'input').length, 0, 'input before first paint');
   paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-  assert.equal(await canvasCursor(), 'none', 'the captured desktop cursor must not be doubled by the local cursor');
+  assert.equal(await canvasCursor(), 'default', 'control must present the local system pointer without waiting for another remote frame');
   assert.equal(await page.locator('#settings').evaluate(element => getComputedStyle(element).cursor), 'pointer', 'desktop cursor policy must not hide toolbar cursors');
+  // Leave the remote picture unchanged and hold client animation frames. Real
+  // mouse movement and drag must still send before any presentation resumes.
+  for (let attempt = 0; !messages.some(item => item.command.method === 'frame_ack' && item.command.frame_id === frame) && attempt < 100; attempt++) await page.waitForTimeout(20);
+  assert(messages.some(item => item.command.method === 'frame_ack' && item.command.frame_id === frame), 'initial picture was not acknowledged');
+  const stationaryFrame = frame, movementStart = messages.length;
+  const pictureBounds = await page.locator('#desktop').evaluate(canvas => {
+    const rect = canvas.getBoundingClientRect();
+    const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
+    const width = canvas.width * scale, height = canvas.height * scale;
+    return { x: rect.left + (rect.width - width) / 2, y: rect.top + (rect.height - height) / 2, width, height };
+  });
+  await page.evaluate(() => {
+    window.qualificationAnimationFrame = window.requestAnimationFrame;
+    window.qualificationHeldFrames = [];
+    window.requestAnimationFrame = callback => -window.qualificationHeldFrames.push(callback);
+  });
+  try {
+    for (const [x, y, dragging] of [[.25, .5, false], [.75, .65, true]]) {
+      if (dragging) await page.mouse.down();
+      await page.mouse.move(pictureBounds.x + pictureBounds.width * x, pictureBounds.y + pictureBounds.height * y);
+      const received = () => messages.slice(movementStart).find(item => item.command.method === 'input' && item.command.input.kind === 'move' && Math.abs(item.command.input.x - x) < .005 && Math.abs(item.command.input.y - y) < .005);
+      for (let attempt = 0; !received() && attempt < 100; attempt++) await page.waitForTimeout(20);
+      assert(received(), `${dragging ? 'drag' : 'hover'} waited for another remote picture or local animation frame`);
+      assert.equal(await canvasCursor(), 'default', 'the local cursor disappeared while remote media was stationary');
+    }
+    await page.mouse.up();
+    assert.equal(frame, stationaryFrame, 'pointer responsiveness check unexpectedly received new media');
+  } finally {
+    await page.mouse.up();
+    await page.evaluate(() => {
+      window.requestAnimationFrame = window.qualificationAnimationFrame;
+      for (const callback of window.qualificationHeldFrames) window.requestAnimationFrame(callback);
+      delete window.qualificationAnimationFrame; delete window.qualificationHeldFrames;
+    });
+  }
   assert.deepEqual(await page.locator('.floe-remote-input').evaluate(input => {
     const style = getComputedStyle(input);
     return { position: style.position, opacity: style.opacity };
@@ -381,7 +416,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#desktop').width === 640);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-  assert.equal(await canvasCursor(), 'none', 'display replacement must retain only the captured cursor');
+  assert.equal(await canvasCursor(), 'default', 'display replacement must retain the local control cursor');
   await page.locator('#mode').selectOption('view');
   await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor === 'none');
   assert(await page.locator('#shortcuts').isDisabled(), 'view-only shortcuts remained interactive');
@@ -397,7 +432,7 @@ try {
   assert(await page.getByRole('dialog').isVisible(), 'takeover missing confirmation');
   await page.getByRole('button', { name: 'Take control', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-  assert.equal(await canvasCursor(), 'none', 'taking control must retain only the captured cursor');
+  assert.equal(await canvasCursor(), 'default', 'taking control must show the local control cursor');
   assert(messages.some(item => item.command.method === 'set_mode' && item.takeover), 'takeover missing explicit flag');
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'locked', generation: ++generation }));
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host is locked');
@@ -420,9 +455,9 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection').hidden, null, { timeout: 10000 });
   assert(connectionCount >= 4, 'temporary ticket failures stopped automatic reconnect');
   assert(await page.locator('.floe-remote-input').isDisabled(), 'reconnect reused prior paint');
-  assert.notEqual(await canvasCursor(), 'none', 'reconnect must wait for fresh paint before hiding the local cursor');
+  assert.notEqual(await canvasCursor(), 'none', 'reconnect must retain the local cursor while awaiting fresh paint');
   paint(); await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-  assert.equal(await canvasCursor(), 'none', 'reconnect must hide the duplicate cursor after fresh paint');
+  assert.equal(await canvasCursor(), 'default', 'reconnect must retain the local control cursor after fresh paint');
   assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'running', 'reconnect closed enabled sound while the product still advertised it');
   await page.locator('#settings').click();
   assert(await page.locator('#sound').isChecked(), 'reconnect lost the sound preference');
@@ -458,7 +493,7 @@ try {
     throw error;
   }
   if (desktop) assert(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen()), 'fullscreen did not reach the native window');
-  assert.equal(await canvasCursor(), 'none', 'fullscreen must retain only the captured cursor');
+  assert.equal(await canvasCursor(), 'default', 'fullscreen must retain the local control cursor');
   await page.locator('#desktop').click();
   await page.mouse.move(500, 400);
   await page.waitForFunction(() => document.querySelector('#toolbar').classList.contains('hidden-toolbar'), null, {timeout:4000});
@@ -549,7 +584,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.transportEvents.slice(-3)), [
     '/_redeven_desktop/disconnect', 'response:/_redeven_desktop/disconnect', 'disposed',
   ], 'disconnect must finish through the native transport before disposal');
-  console.log(JSON.stringify({ passed: true, checks: ['single desktop cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'shortcut receipts', 'browser and Desktop files', 'clipboard epoch fencing', 'fullscreen hide and pin', 'disconnect retry and cleared pixels'] }));
+  console.log(JSON.stringify({ passed: true, checks: ['local control cursor', 'pointer and drag without media or animation frames', 'captured view-only cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'shortcut receipts', 'browser and Desktop files', 'clipboard epoch fencing', 'fullscreen hide and pin', 'disconnect retry and cleared pixels'] }));
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));
   if (directory) await rm(directory, { recursive: true, force: true });

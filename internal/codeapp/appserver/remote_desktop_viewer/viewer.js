@@ -84,6 +84,7 @@ const pointer = hostApplicationPointer.createRemotePointer({
 });
 function revoke() { stats = undefined; refreshStats(); painted = false; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
+  canvas.dataset.mode = session.mode;
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'sound', 'text-input', 'volume']) {
     if ($(id)) $(id).disabled = !!audioRequest || awaitingState || state !== 'active';
   }
