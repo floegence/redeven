@@ -213,13 +213,13 @@ export class GatewayLifecycleManager {
   async upsertEnvironmentProfile(
     record: GatewayRecord,
     request: GatewayEnvProfileUpsertRequest,
-    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
+    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
   ): Promise<GatewayEnvProfileUpsertResponse> {
     if (record.connection.kind === 'url') {
       return new GatewayURLClient(this.options.secret_store).upsertEnvironmentProfile(record, request, options);
     }
     const session = await this.ensureGatewayReady(record, {
-      startPolicy: options.startPolicy ?? 'start_if_needed',
+      startPolicy: 'require_ready',
       signal: options.signal,
       onProgress: options.onProgress,
     });
@@ -229,13 +229,13 @@ export class GatewayLifecycleManager {
   async deleteEnvironmentProfile(
     record: GatewayRecord,
     request: GatewayEnvProfileDeleteRequest,
-    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
+    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
   ): Promise<GatewayEnvProfileDeleteResponse> {
     if (record.connection.kind === 'url') {
       return new GatewayURLClient(this.options.secret_store).deleteEnvironmentProfile(record, request, options);
     }
     const session = await this.ensureGatewayReady(record, {
-      startPolicy: options.startPolicy ?? 'start_if_needed',
+      startPolicy: 'require_ready',
       signal: options.signal,
       onProgress: options.onProgress,
     });

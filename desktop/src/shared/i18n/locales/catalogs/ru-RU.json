@@ -2002,6 +2002,8 @@
     "cloudAwaitingSyncDetail": "Обновите, чтобы загрузить окружения Redeven Cloud."
   },
   "gatewayAccess": {
+    "profileServiceRequired": "Запустите или обновите этот Gateway, прежде чем изменять профили окружений, затем повторите попытку.",
+    "profileServiceReady": "Gateway запущен. Проверьте изменения и повторите попытку.",
     "localService": "Локальный хост",
     "managedServiceHelp": "Desktop управляет только службой Gateway на этом хосте. Службы среды выполнения управляются отдельно.",
     "checkingAccess": "Проверка доступа к Gateway",

@@ -1993,6 +1993,8 @@
     "cloudAwaitingSyncDetail": "更新して Redeven Cloud の環境を読み込んでください。"
   },
   "gatewayAccess": {
+    "profileServiceRequired": "環境プロファイルを変更するには、この Gateway を起動または更新してから再試行してください。",
+    "profileServiceReady": "Gateway を起動しました。変更内容を確認してから再試行してください。",
     "localService": "ローカルホスト",
     "managedServiceHelp": "Desktop が管理するのは、このホストの Gateway サービスのみです。ランタイムサービスは個別に管理されます。",
     "checkingAccess": "Gateway アクセスを確認中",

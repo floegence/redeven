@@ -198,6 +198,18 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.startRuntimePlacementBridgeSession.mockResolvedValue(fakeBridgeSession());
   });
 
+  it.each(['save', 'delete'] as const)('requires a ready Gateway for profile %s without mutating its service', async action => {
+    const lifecycle = manager();
+    const record = sshGateway();
+    const request = action === 'save'
+      ? lifecycle.upsertEnvironmentProfile(record, { display_name: 'Runtime', access_route: { kind: 'url', url: 'https://runtime.example' } })
+      : lifecycle.deleteEnvironmentProfile(record, { gateway_env_id: 'env_fixture' });
+    await expect(request).rejects.toBeInstanceOf(GatewayServiceStartRequiredError);
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
+    expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
+  });
+
   it('starts SSH host Gateways through the managed Gateway service before opening one bridge session', async () => {
     const progress: string[] = [];
     const record = sshGateway();

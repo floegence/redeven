@@ -508,6 +508,12 @@ type ProviderRuntimeLinkConfirmationState = Readonly<{
 }>;
 
 
+type GatewayProfileRecovery = Readonly<{
+  gateway_id: string;
+  message: string;
+  start_action?: Extract<DesktopLauncherActionRequest, { kind: 'start_gateway' }>;
+}>;
+
 type LauncherActionErrorTarget = 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' | 'gateway_dialog';
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
@@ -2588,6 +2594,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [retainedGatewayFailures, setRetainedGatewayFailures] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
   const [settingsError, setSettingsError] = createSignal('');
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
+  const [connectionGatewayRecovery, setConnectionGatewayRecovery] = createSignal<GatewayProfileRecovery | null>(null);
+  const [deleteGatewayRecovery, setDeleteGatewayRecovery] = createSignal<GatewayProfileRecovery | null>(null);
   const [connectionDialogFieldErrors, setConnectionDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
   const [controlPlaneDialogError, setControlPlaneDialogError] = createSignal('');
   const [busyState, setBusyState] = createSignal<DesktopLauncherBusyState>(IDLE_LAUNCHER_BUSY_STATE);
@@ -2647,6 +2655,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function setConnectionDialogState(value: ConnectionDialogState | ((current: ConnectionDialogState) => ConnectionDialogState)) {
     if (settingsSession()?.saving) return connectionDialogState();
     const next = typeof value === 'function' ? value(connectionDialogState()) : value;
+    const current = connectionDialogState();
+    if (!next || current?.connection_kind !== next.connection_kind
+      || (current?.connection_kind === 'gateway_url_profile' && next.connection_kind === 'gateway_url_profile' && current.gateway_id !== next.gateway_id)) {
+      setConnectionGatewayRecovery(null);
+    }
     if (settingsSession()) settingsController.update({ connection: next });
     else setNewConnectionState(next);
     return next;
@@ -3644,6 +3657,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function resetMessages(): void {
+    setConnectionGatewayRecovery(null);
+    setDeleteGatewayRecovery(null);
     setSettingsError('');
     setConnectionDialogError('');
     setGatewaySetupDialogError('');
@@ -3700,6 +3715,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     settingsController.close();
+    setConnectionGatewayRecovery(null);
     setActiveCenterTab('environments');
     setLibrarySourceFilter('');
     if (trimString(message) !== '') {
@@ -5461,6 +5477,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function cancelSettings(): void {
     settingsController.close();
+    setConnectionGatewayRecovery(null);
     setSettingsError('');
     setConnectionDialogError('');
   }
@@ -5611,6 +5628,33 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  function profileRecovery(gatewayID: string, failure: SilentLauncherActionFailure): GatewayProfileRecovery {
+    const continuation = failure.raw_failure?.continuation_action;
+    return { gateway_id: gatewayID, message: failure.message,
+      ...(continuation?.kind === 'start_gateway' && continuation.gateway_id === gatewayID ? { start_action: continuation } : {}) };
+  }
+
+  async function startGatewayForProfile(owner: 'connection' | 'delete'): Promise<void> {
+    const read = owner === 'connection' ? connectionGatewayRecovery : deleteGatewayRecovery;
+    const write = owner === 'connection' ? setConnectionGatewayRecovery : setDeleteGatewayRecovery;
+    const recovery = read();
+    if (!recovery?.start_action || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action) return;
+    const opening = settingsSession();
+    const target = deleteTarget();
+    const result = await performLauncherActionSilently(recovery.start_action);
+    const draft = connectionDialogState();
+    const current = owner === 'delete' ? deleteTarget() === target
+      : opening ? settingsController.current(opening) : !settingsSession()
+        && draft?.connection_kind === 'gateway_url_profile' && draft.gateway_id === recovery.gateway_id;
+    if (!current || read() !== recovery) return;
+    if (!result.ok) { write({ ...recovery, message: result.message }); return; }
+    if (result.outcome !== 'started_gateway') {
+      write({ ...recovery, message: i18n().t('toast.unexpectedLauncherResult') }); return;
+    }
+    write({ gateway_id: recovery.gateway_id, message: i18n().t('gatewayAccess.profileServiceReady') });
+    await refreshSnapshot().catch(error => showActionToast(getErrorMessage(error), 'error'));
+  }
+
   async function upsertGatewayEnvironmentProfile(
     request: Readonly<{
       gateway_id: string;
@@ -5628,7 +5672,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return false;
     }
     setConnectionDialogError('');
-    const result = await performLauncherAction({
+    setConnectionGatewayRecovery(null);
+    const opening = settingsSession();
+    const draft = connectionDialogState();
+    const result = await performLauncherActionSilently({
       kind: 'upsert_environment_registration',
       registration: {
         registration_ref: {
@@ -5640,10 +5687,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         access_route: request.access_route,
         access_mode: request.access_mode,
       },
-    }, request.errorTarget);
-    if (result?.outcome !== 'saved_gateway_environment') {
-      return false;
-    }
+    });
+    if (opening ? !settingsController.current(opening) : connectionDialogState() !== draft) return false;
+    if (!result.ok) { setConnectionGatewayRecovery(profileRecovery(gatewayID, result)); return false; }
+    if (result.outcome !== 'saved_gateway_environment') return false;
     await refreshSnapshot();
     showActionToast(request.successMessage);
     if (!result.environment_id) {
@@ -5907,7 +5954,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function saveConnectionFromDialog(): Promise<void> {
     const state = connectionDialogState();
-    if (!state) {
+    if (!state || (state.connection_kind === 'gateway_url_profile' && busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action)) {
       return;
     }
     const errors = state.connection_kind === 'ssh_environment'
@@ -6029,7 +6076,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function deleteEnvironment(): Promise<void> {
     const target = deleteTarget();
-    if (!target) {
+    if (!target || (target.registration_ref?.kind === 'gateway_environment' && busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action)) {
       return;
     }
     const hadBackgroundOperation = deleteTargetOperation() !== null;
@@ -6046,20 +6093,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
+    setDeleteGatewayRecovery(null);
     try {
       let deleteResult: Awaited<ReturnType<typeof props.runtime.launcher.performAction>> | null = null;
       if (!registrationRef || registrationRef.kind === 'local_environment') {
         throw new Error(i18n().t('environmentCenter.environmentRegistrationUnavailable'));
       }
-      deleteResult = await props.runtime.launcher.performAction({
-        kind: 'delete_environment_registration',
-        registration_ref: registrationRef,
-      });
+      if (registrationRef.kind === 'gateway_environment') {
+        const result = await performLauncherActionSilently({ kind: 'delete_environment_registration', registration_ref: registrationRef });
+        if (deleteTarget() !== target) return;
+        if (!result.ok) { setDeleteGatewayRecovery(profileRecovery(registrationRef.gateway_id, result)); return; }
+        deleteResult = result;
+      } else {
+        deleteResult = await props.runtime.launcher.performAction({ kind: 'delete_environment_registration', registration_ref: registrationRef });
+      }
       if (!deleteResult || !deleteResult.ok || (deleteResult.outcome !== 'deleted_environment' && deleteResult.outcome !== 'deleted_gateway_environment')) {
         throw new Error(deleteResult && !deleteResult.ok ? deleteResult.message : i18n().t('environmentCenter.environmentRegistrationUnavailable'));
       }
       await refreshSnapshot();
       setDeleteTarget(null);
+      setDeleteGatewayRecovery(null);
       showActionToast(
         registrationRef.kind === 'gateway_environment'
           ? i18n().t('environmentCenter.gatewayEnvironmentRemoved')
@@ -6209,6 +6262,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     get sshConfigHostsLoadError() { return sshConfigHostsLoadError(); },
     get containerOptions() { return runtimeContainerOptions(); }, get containerOptionsLoading() { return runtimeContainerOptionsLoading(); },
     get containerOptionsError() { return runtimeContainerOptionsError(); },
+    get gatewayRecovery() { const state = connectionDialogState(); return state?.connection_kind === 'gateway_url_profile' && state.gateway_id === connectionGatewayRecovery()?.gateway_id ? connectionGatewayRecovery() : null; },
+    startGateway: () => { void startGatewayForProfile('connection'); },
     get error() { return connectionDialogError(); }, get fieldErrors() { return connectionDialogFieldErrors(); },
     get busyState() { return busyState(); }, get gatewayProfileSources() { return writableGatewayProfileSources(); },
     onOpenChange(open) { if (!open) { if (settingsSession()) cancelSettings(); else closeConnectionDialog(); } },
@@ -6764,6 +6819,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onOpenChange={(open) => {
           if (!open) {
             setDeleteTarget(null);
+            setDeleteGatewayRecovery(null);
           }
         }}
         title={deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentTitle') : i18n().t('confirm.removeEnvironmentTitle')}
@@ -6791,6 +6847,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               <>{deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentBusyDescription') : i18n().t('confirm.removeEnvironmentBusyDescription')}</>
             </Show>
           </p>
+          <Show when={deleteTarget()?.registration_ref?.kind === 'gateway_environment' && deleteGatewayRecovery()}>
+            <GatewayProfileRecoveryNotice i18n={i18n()} recovery={deleteGatewayRecovery()!} busy={busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action}
+              onStart={() => { void startGatewayForProfile('delete'); }} />
+          </Show>
         </div>
       </ConfirmDialog>
 
@@ -13111,6 +13171,8 @@ type ConnectionDialogProps = Readonly<{
   fieldErrors: Partial<Record<string, string>>;
   busyState: DesktopLauncherBusyState;
   gatewayProfileSources: readonly DesktopGatewaySource[];
+  gatewayRecovery?: GatewayProfileRecovery | null;
+  startGateway?: () => void;
   onOpenChange: (open: boolean) => void;
   updateField: (
     name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label' | 'profile_route_kind' | 'access_mode',
@@ -13225,7 +13287,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
           <Button
             size="sm"
             variant="default"
-            disabled={props.saveBlocked}
+            disabled={props.saveBlocked || (props.state?.connection_kind === 'gateway_url_profile' && props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action)}
             loading={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
             onClick={() => {
               void props.onSave();
@@ -13602,6 +13664,10 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
         </Show>
 
 
+        <Show when={props.gatewayRecovery}>{recovery => (
+          <GatewayProfileRecoveryNotice i18n={props.i18n} recovery={recovery()} busy={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action}
+            onStart={() => props.startGateway?.()} />
+        )}</Show>
         <Show when={props.error}>
           <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {props.error}
@@ -13610,6 +13676,19 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
       </div>
     </EnvironmentSettingsPanel>
   );
+}
+
+function GatewayProfileRecoveryNotice(props: Readonly<{
+  i18n: DesktopI18n; recovery: GatewayProfileRecovery; busy: boolean; onStart: () => void;
+}>) {
+  return <div role="status" class="space-y-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+    <p>{props.recovery.message}</p>
+    <Show when={props.recovery.start_action}>
+      <Button size="sm" variant="outline" disabled={props.busy} loading={props.busy} onClick={props.onStart}>
+        {props.i18n.t('environmentCenter.gatewayActionStart')}
+      </Button>
+    </Show>
+  </div>;
 }
 
 function GatewaySetupDialog(props: Readonly<{
