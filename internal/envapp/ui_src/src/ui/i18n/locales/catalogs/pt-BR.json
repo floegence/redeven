@@ -7185,8 +7185,8 @@
     "cancel": "Cancelar",
     "reconnect": "Reconectar",
     "awaitingConnection": "Aguardando conexão",
-    "unattended": "Lembrar autorização de compartilhamento",
-    "unattendedHint": "Confirme o compartilhamento uma vez no host para salvar a autorização para as próximas conexões. Mantenha o ambiente de execução do Redeven em funcionamento. O sistema pode pedir confirmação novamente se a autorização expirar ou for revogada.",
+    "unattended": "Conectar automaticamente após a primeira autorização",
+    "unattendedHint": "Confirme o compartilhamento uma vez no host para salvar a autorização. Mantenha o ambiente de execução do Redeven em funcionamento. A revogação da autorização ou mudanças na área de trabalho podem exigir nova confirmação. Desative para confirmar cada conexão.",
     "components": "Componentes da área de trabalho",
     "prepare": "Preparar componentes",
     "preparing": "Preparando componentes…",
@@ -7220,6 +7220,20 @@
     "sessionExpired": "Sua conexão com o ambiente expirou. Reconecte o ambiente e tente novamente.",
     "requestInvalid": "As configurações de conexão foram rejeitadas. Atualize e escolha uma tela disponível antes de tentar novamente.",
     "setupBusy": "A preparação da área de trabalho já está em andamento. Aguarde a conclusão e atualize o status.",
-    "errorDetails": "Detalhes do erro"
+    "errorDetails": "Detalhes do erro",
+    "approvalSaved": "Autorização de compartilhamento salva",
+    "approvalRestoring": "Restaurando autorização…",
+    "approvalNeeded": "A primeira conexão exige autorização no host",
+    "approvalRevoked": "A autorização de compartilhamento foi revogada",
+    "approvalUnknown": "A recuperação anterior não foi concluída",
+    "approvalUnsupported": "Recuperação automática indisponível",
+    "approvalSession": "Cada conexão exige autorização no host",
+    "approvalBusy": "Já há uma solicitação de compartilhamento em andamento. Conclua ou cancele no host e tente novamente.",
+    "approvalForget": "Solicitar autorização novamente",
+    "approvalForgetHint": "Remover do Redeven a autorização salva para este host? A próxima conexão pedirá confirmação. Isso não revoga permissões do sistema nem encerra conexões ativas.",
+    "approvalForgetConfirm": "Remover autorização salva",
+    "approvalForgetFailed": "Não foi possível remover a autorização salva",
+    "approvalRestoreFailed": "Não foi possível restaurar a autorização. Reconecte para solicitar acesso novamente.",
+    "approvalWaitingHint": "Solicitando acesso à área de trabalho. Se uma janela de compartilhamento aparecer no host, confirme para continuar."
   }
 }

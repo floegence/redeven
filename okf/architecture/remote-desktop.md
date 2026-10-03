@@ -8,7 +8,7 @@ timestamp: 2026-10-03T07:42:00Z
 # Summary
 
 Redeven owns remote desktop authorization, ephemeral sessions, window placement,
-configuration and audit. Published `floe-native-apps` v0.22.8 owns current-desktop
+configuration and audit. Published `floe-native-apps` v0.22.9 owns current-desktop
 selection, OS authorization, native input, capture, codecs and bounded playback.
 A desktop session shares the existing signed-in macOS or Linux desktop. It never
 creates an application-private desktop, changes system security policy or grants
@@ -73,13 +73,13 @@ RemoteDesktop/ScreenCast portals and PipeWire; X11 uses verified login credentia
 Failure never selects an application-private display or silently changes backend.
 Preparation does not install system packages, modify drivers or use a container.
 
-`remote_desktop.unattended` defaults to false in existing configuration. Enabling
-it permits reuse of completed OS grants and does not grant permission. Disabling
-it closes current attachments. The Runtime must remain running; this feature does
-not install a system service. Locking is an explicit operation. Locked, switched
-or uncapturable sessions cannot retain input, clipboard or audio authority. Remote
-unlock is supported only where the actual OS permits it; disk unlock and a login
-without a graphical user session are outside this contract.
+The [persistent authorization contract](remote-desktop-authorization.md) owns
+first approval, saved-grant recovery, explicit per-connection consent, and local
+credential reset. Product sessions remain ephemeral even when system approval
+is saved. Locking is an explicit operation. Locked, switched or uncapturable
+sessions cannot retain input, clipboard or audio authority. Remote unlock is
+supported only where the actual OS permits it; disk unlock and a login without
+a graphical user session are outside this contract.
 
 An authorized macOS connection created while locked remains suspended with its
 native observer running. It captures no video or audio and accepts no input until

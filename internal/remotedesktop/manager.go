@@ -21,11 +21,12 @@ import (
 const ViewerPath = "/_redeven_desktop/"
 
 var (
-	ErrUnavailable  = errors.New("remote desktop unavailable")
-	ErrInvalid      = errors.New("invalid remote desktop request")
-	ErrForbidden    = errors.New("remote desktop owner required")
-	ErrNotFound     = errors.New("remote desktop session not found")
-	ErrControlInUse = errors.New("remote desktop control requires takeover")
+	ErrAuthorizationBusy = errors.New("desktop authorization is in use")
+	ErrUnavailable       = errors.New("remote desktop unavailable")
+	ErrInvalid           = errors.New("invalid remote desktop request")
+	ErrForbidden         = errors.New("remote desktop owner required")
+	ErrNotFound          = errors.New("remote desktop session not found")
+	ErrControlInUse      = errors.New("remote desktop control requires takeover")
 )
 
 type CreateRequest struct {
@@ -47,11 +48,12 @@ type Session struct {
 	HostName  string `json:"host_name"`
 }
 type Status struct {
-	Capabilities  nativeapps.HostDesktopCapabilities `json:"capabilities"`
-	Setup         *nativeapps.Status                 `json:"setup,omitempty"`
-	Unattended    bool                               `json:"unattended"`
-	ControlInUse  bool                               `json:"control_in_use"`
-	LastDisplayID string                             `json:"last_display_id"`
+	ApprovalPolicy string                             `json:"approval_policy"`
+	Capabilities   nativeapps.HostDesktopCapabilities `json:"capabilities"`
+	Setup          *nativeapps.Status                 `json:"setup,omitempty"`
+	Unattended     bool                               `json:"unattended"`
+	ControlInUse   bool                               `json:"control_in_use"`
+	LastDisplayID  string                             `json:"last_display_id"`
 }
 type ownedSession struct {
 	view       Session

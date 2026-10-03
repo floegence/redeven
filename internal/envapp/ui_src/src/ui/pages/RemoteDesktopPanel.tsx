@@ -5,7 +5,7 @@ import { Dialog, ConfirmDialog } from '../primitives/EnvAppModal';
 import { useI18n } from '../i18n';
 import type { EnvAppTranslationKey } from '../i18n/locales/en-US';
 import { useEnvContext } from './EnvContext';
-import { cancelRemoteDesktopPreparation, createRemoteDesktop, disconnectRemoteDesktop, getRemoteDesktopStatus, prepareRemoteDesktop, setRemoteDesktopUnattended, type RemoteDesktopStatus } from '../services/remoteDesktopApi';
+import { cancelRemoteDesktopPreparation, forgetRemoteDesktopAuthorization, createRemoteDesktop, disconnectRemoteDesktop, getRemoteDesktopStatus, prepareRemoteDesktop, setRemoteDesktopUnattended, type RemoteDesktopStatus } from '../services/remoteDesktopApi';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
 import { openWebServiceRoute, resolveWebServiceOpenRoute, WebServiceWindowOpenError } from '../services/webServiceWindows';
@@ -14,7 +14,7 @@ import { LocalApiError } from '../services/localApi';
 import './remote-desktop.css';
 
 type Failure = { title: EnvAppTranslationKey; hint: EnvAppTranslationKey; diagnostic?: string };
-type Action = 'connect' | 'prepare' | 'settings' | 'permission' | 'cancel';
+type Action = 'connect' | 'prepare' | 'settings' | 'permission' | 'cancel' | 'forget';
 
 function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: EnvAppTranslationKey = 'remoteDesktop.connectionHint'): Failure {
   if (failure instanceof WebServiceWindowOpenError) {
@@ -24,6 +24,7 @@ function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: Env
     if (failure.status === 403) hint = 'remoteDesktop.accessRequired';
     else if (failure.status === 401) hint = 'remoteDesktop.sessionExpired';
     else if (failure.code === 'DESKTOP_INVALID') hint = 'remoteDesktop.requestInvalid';
+    else if (failure.code === 'DESKTOP_AUTHORIZATION_BUSY') hint = 'remoteDesktop.approvalBusy';
     else if (failure.code === 'DESKTOP_SETUP_BUSY') hint = 'remoteDesktop.setupBusy';
     return { title, hint, diagnostic: `${failure.code} · HTTP ${failure.status}` };
   }
@@ -53,6 +54,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const [mode, setMode] = createSignal<'view' | 'control'>('control');
   const [display, setDisplay] = createSignal('');
   const [takeover, setTakeover] = createSignal(false);
+  const [forgetApproval, setForgetApproval] = createSignal(false);
   const [opened, setOpened] = createSignal(false);
   const [pendingApproval, setPendingApproval] = createSignal<boolean>();
   let disposed = false, refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -91,13 +93,25 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   onMount(() => { void refresh(); window.addEventListener('focus', refresh); });
   onCleanup(() => { disposed = true; clearTimeout(refreshTimer); window.removeEventListener('focus', refresh); });
 
+  const approvalCopy = (): EnvAppTranslationKey | undefined => {
+    if (capabilities()?.backend !== 'wayland') return undefined;
+    if (!capabilities()?.unattended) return 'remoteDesktop.approvalUnsupported';
+    if (!status()?.unattended) return 'remoteDesktop.approvalSession';
+    switch (capabilities()?.authorization) {
+      case 'saved': return 'remoteDesktop.approvalSaved';
+      case 'restoring': return 'remoteDesktop.approvalRestoring';
+      case 'revoked': return 'remoteDesktop.approvalRevoked';
+      case 'unknown': return 'remoteDesktop.approvalUnknown';
+      default: return 'remoteDesktop.approvalNeeded';
+    }
+  };
   const stateCopy = () => {
     if (!status()) return i18n.t(loadError() ? 'remoteDesktop.unsupported' : 'remoteDesktop.checking');
     if (preparing()) return i18n.t('remoteDesktop.preparing');
     if (!full()) return i18n.t('remoteDesktop.accessTitle');
     if (capabilities()?.state === 'locked') return i18n.t('remoteDesktop.locked');
     if (capabilities()?.state === 'setup_required') return i18n.t('remoteDesktop.setupRequired');
-    if (authorization() && status()?.unattended) return i18n.t('remoteDesktop.awaitingConnection');
+    if (available() && approvalCopy()) return i18n.t(approvalCopy()!);
     if (macPermission() || authorization()) return i18n.t('remoteDesktop.permissionRequired');
     return i18n.t(available() ? 'remoteDesktop.ready' : 'remoteDesktop.unsupported');
   };
@@ -107,7 +121,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (!status() || preparing() || capabilities()?.state === 'setup_required') return undefined;
     if (capabilities()?.state === 'locked') return 'remoteDesktop.lockedHint';
     if (macPermission()) return 'remoteDesktop.permissionHint';
-    if (authorization() && !status()?.unattended) return 'remoteDesktop.authorizationHint';
+    if (available() && capabilities()?.backend === 'wayland' && (!status()?.unattended || !capabilities()?.unattended || capabilities()?.authorization === 'needs_consent')) return 'remoteDesktop.authorizationHint';
     if (capabilities()?.state === 'session_unavailable') return 'remoteDesktop.sessionHint';
     if (capabilities()?.state === 'unsupported') return 'remoteDesktop.unsupportedHostHint';
     if (!available() && !loadError()) return 'remoteDesktop.connectionHint';
@@ -174,7 +188,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       <div class="remote-desktop-host-icon" aria-hidden="true"><MonitorPointer size={24} /></div>
       <div class="remote-desktop-identity">
         <h3 title={hostName()}>{hostName()}</h3>
-        <p class="remote-desktop-state" role="status"><span class="remote-desktop-state-dot" data-ready={capabilities()?.state === 'ready' && available() && full() && !preparing()} aria-hidden="true" />{stateCopy()}</p>
+        <p class="remote-desktop-state" role="status"><span class="remote-desktop-state-dot" data-ready={capabilities()?.state === 'ready' && available() && full() && !preparing() && (capabilities()?.backend !== 'wayland' || capabilities()?.authorization === 'saved' && status()?.unattended)} aria-hidden="true" />{stateCopy()}</p>
       </div>
       <Button size="icon" variant="ghost" disabled={refreshing() || !!busy()} aria-label={i18n.t('remoteDesktop.refresh')} title={i18n.t('remoteDesktop.refresh')} onClick={() => void refresh()}><Refresh size={16} class={refreshing() ? 'animate-spin motion-reduce:animate-none' : ''} /></Button>
     </div>
@@ -204,6 +218,9 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     <details class="remote-desktop-options">
       <summary><ChevronRight size={14} aria-hidden="true" /><span>{i18n.t('remoteDesktop.options')}</span><span class="remote-desktop-mode">{i18n.t(mode() === 'view' ? 'remoteDesktop.view' : 'remoteDesktop.control')}</span></summary>
       <div class="remote-desktop-option"><Switch checked={mode() === 'view'} disabled={!!busy()} onChange={value => setMode(value ? 'view' : 'control')} label={i18n.t('remoteDesktop.view')} description={i18n.t('remoteDesktop.viewHint')} /></div>
+      <Show when={capabilities()?.backend === 'wayland' && capabilities()?.unattended && ['saved', 'unknown', 'revoked'].includes(capabilities()?.authorization ?? '')}>
+        <div class="remote-desktop-option"><Button variant="outline" disabled={!full() || !!busy() || refreshing()} onClick={() => setForgetApproval(true)}>{i18n.t('remoteDesktop.approvalForget')}</Button></div>
+      </Show>
     </details>
     <Show when={failure()}>{problem => <div class="remote-desktop-error" role="alert">
       <AlertCircle size={16} aria-hidden="true" />
@@ -217,6 +234,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       </Button>
       <p id={descriptionID} role={opened() ? 'status' : undefined}>{i18n.t(opened() ? 'remoteDesktop.windowOpened' : 'remoteDesktop.openHint')}</p>
     </div>
+    <ConfirmDialog open={forgetApproval()} onOpenChange={setForgetApproval} title={i18n.t('remoteDesktop.approvalForget')} bodyDescription={i18n.t('remoteDesktop.approvalForgetHint')} confirmText={i18n.t('remoteDesktop.approvalForgetConfirm')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => { setForgetApproval(false); void runAction('forget', 'remoteDesktop.approvalForgetFailed', forgetRemoteDesktopAuthorization); }} />
     <ConfirmDialog open={takeover()} onOpenChange={setTakeover} title={i18n.t('remoteDesktop.takeover')} bodyDescription={i18n.t('remoteDesktop.takeoverHint')} confirmText={i18n.t('remoteDesktop.takeover')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => void open(true)} />
   </section>;
 }

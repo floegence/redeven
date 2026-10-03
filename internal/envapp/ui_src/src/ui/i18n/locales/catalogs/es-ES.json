@@ -7185,8 +7185,8 @@
     "cancel": "Cancelar",
     "reconnect": "Reconectar",
     "awaitingConnection": "Esperando conexión",
-    "unattended": "Recordar la autorización para compartir",
-    "unattendedHint": "Confirma una vez el uso compartido en el equipo remoto para guardar la autorización para futuras conexiones. Mantén el entorno de ejecución de Redeven en marcha. El sistema puede volver a pedir confirmación si la autorización caduca o se revoca.",
+    "unattended": "Conectar automáticamente tras la primera autorización",
+    "unattendedHint": "Confirma una vez el uso compartido en el equipo remoto para guardar la autorización. Mantén el entorno de ejecución de Redeven en marcha. Si se revoca la autorización o cambia el escritorio, puede pedirse otra confirmación. Desactívalo para confirmar cada conexión.",
     "components": "Componentes del escritorio",
     "prepare": "Preparar componentes",
     "preparing": "Preparando componentes…",
@@ -7220,6 +7220,20 @@
     "sessionExpired": "La conexión al entorno ha caducado. Vuelve a conectarte al entorno e inténtalo de nuevo.",
     "requestInvalid": "Se rechazaron los ajustes de conexión. Actualiza y elige una pantalla disponible antes de volver a intentarlo.",
     "setupBusy": "La preparación del escritorio ya está en curso. Espera a que termine y actualiza el estado.",
-    "errorDetails": "Detalles del error"
+    "errorDetails": "Detalles del error",
+    "approvalSaved": "Autorización de uso compartido guardada",
+    "approvalRestoring": "Restaurando la autorización…",
+    "approvalNeeded": "La primera conexión requiere autorización del equipo remoto",
+    "approvalRevoked": "Se ha revocado la autorización",
+    "approvalUnknown": "La recuperación anterior no terminó",
+    "approvalUnsupported": "La recuperación automática no está disponible",
+    "approvalSession": "Cada conexión requiere autorización del equipo remoto",
+    "approvalBusy": "Ya hay una solicitud de uso compartido en curso. Complétala o cancélala en el equipo remoto y vuelve a intentarlo.",
+    "approvalForget": "Volver a solicitar autorización",
+    "approvalForgetHint": "¿Eliminar de Redeven la autorización guardada para este equipo? La próxima conexión pedirá confirmación. No se revocarán permisos del sistema ni se cerrará ninguna conexión activa.",
+    "approvalForgetConfirm": "Eliminar autorización guardada",
+    "approvalForgetFailed": "No se pudo eliminar la autorización guardada",
+    "approvalRestoreFailed": "No se pudo restaurar la autorización. Vuelve a conectarte para solicitar acceso.",
+    "approvalWaitingHint": "Solicitando acceso al escritorio. Si aparece un diálogo de uso compartido en el equipo remoto, confírmalo para continuar."
   }
 }

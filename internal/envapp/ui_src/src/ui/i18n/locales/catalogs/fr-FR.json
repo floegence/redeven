@@ -7185,8 +7185,8 @@
     "cancel": "Annuler",
     "reconnect": "Reconnecter",
     "awaitingConnection": "En attente de connexion",
-    "unattended": "Mémoriser l’autorisation de partage",
-    "unattendedHint": "Confirmez une fois le partage sur l’hôte pour enregistrer l’autorisation des prochaines connexions. Laissez le moteur Redeven en cours d’exécution. Le système peut redemander confirmation si l’autorisation expire ou est révoquée.",
+    "unattended": "Connexion automatique après la première autorisation",
+    "unattendedHint": "Confirmez une fois le partage sur l’hôte pour enregistrer l’autorisation. Laissez le moteur Redeven en cours d’exécution. Une révocation ou un changement du bureau peut exiger une nouvelle confirmation. Désactivez cette option pour confirmer chaque connexion.",
     "components": "Composants du bureau",
     "prepare": "Préparer les composants",
     "preparing": "Préparation des composants…",
@@ -7220,6 +7220,20 @@
     "sessionExpired": "Votre connexion à l’environnement a expiré. Reconnectez-vous à l’environnement et réessayez.",
     "requestInvalid": "Les paramètres de connexion ont été refusés. Actualisez et choisissez un écran disponible avant de réessayer.",
     "setupBusy": "La préparation du bureau est déjà en cours. Attendez la fin, puis actualisez.",
-    "errorDetails": "Détails de l’erreur"
+    "errorDetails": "Détails de l’erreur",
+    "approvalSaved": "Autorisation de partage enregistrée",
+    "approvalRestoring": "Restauration de l’autorisation…",
+    "approvalNeeded": "La première connexion nécessite l’accord de l’hôte",
+    "approvalRevoked": "L’autorisation de partage a été révoquée",
+    "approvalUnknown": "La restauration précédente n’a pas abouti",
+    "approvalUnsupported": "Restauration automatique indisponible",
+    "approvalSession": "Accord de l’hôte requis à chaque connexion",
+    "approvalBusy": "Une demande de partage est déjà en cours. Terminez-la ou annulez-la sur l’hôte, puis réessayez.",
+    "approvalForget": "Redemander l’autorisation",
+    "approvalForgetHint": "Supprimer de Redeven l’autorisation enregistrée pour cet hôte ? La prochaine connexion demandera confirmation. Les permissions système et les connexions actives seront conservées.",
+    "approvalForgetConfirm": "Supprimer l’autorisation",
+    "approvalForgetFailed": "Impossible de supprimer l’autorisation enregistrée",
+    "approvalRestoreFailed": "Impossible de restaurer l’autorisation de partage. Reconnectez-vous pour demander à nouveau l’accès.",
+    "approvalWaitingHint": "Demande d’accès au bureau en cours. Si une boîte de dialogue de partage apparaît sur l’hôte, confirmez-la pour continuer."
   }
 }

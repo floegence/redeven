@@ -34,7 +34,7 @@ func TestRemoteDesktopSettingsPreserveRememberedDisplayAcrossRestart(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reloaded.RemoteDesktop == nil || !reloaded.RemoteDesktop.Unattended || reloaded.RemoteDesktop.LastDisplayID != "fixture-monitor" {
+	if reloaded.RemoteDesktop == nil || !reloaded.RemoteDesktop.RememberApproval() || !reloaded.RemoteDesktop.ApprovalPreferenceSet || reloaded.RemoteDesktop.LastDisplayID != "fixture-monitor" {
 		t.Fatal("settings lost saved desktop preference")
 	}
 }
@@ -42,7 +42,7 @@ func TestRemoteDesktopSettingsPreserveRememberedDisplayAcrossRestart(t *testing.
 func TestRemoteDesktopRequiresFullPermissionForEverySessionRoute(t *testing.T) {
 	server := &Server{resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true})}
 	for _, route := range []struct{ method, path string }{
-		{"POST", "/sessions"}, {"GET", "/sessions/one"}, {"POST", "/sessions/one/takeover"}, {"POST", "/sessions/one/display"}, {"POST", "/sessions/one/mode"}, {"POST", "/sessions/one/lock"}, {"DELETE", "/sessions/one"}, {"PUT", "/settings"}, {"POST", "/setup"},
+		{"POST", "/sessions"}, {"GET", "/sessions/one"}, {"POST", "/sessions/one/takeover"}, {"POST", "/sessions/one/display"}, {"POST", "/sessions/one/mode"}, {"POST", "/sessions/one/lock"}, {"DELETE", "/sessions/one"}, {"PUT", "/settings"}, {"DELETE", "/authorization"}, {"POST", "/setup"},
 	} {
 		r := httptest.NewRequest(route.method, remoteDesktopAPI+route.path, strings.NewReader(`{}`))
 		r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))
@@ -92,5 +92,73 @@ func TestRemoteDesktopDocumentKeepsCredentialsOutOfURLAndEscapesIdentity(t *test
 	}
 	if strings.Contains(html, `"token"`) || !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") {
 		t.Fatal("bootstrap leaked credentials or allowed framing")
+	}
+}
+
+func TestRemoteDesktopApprovalSettingsRequireExplicitChoiceAndSurviveReload(t *testing.T) {
+	path := writeTestConfig(t)
+	for _, choice := range []struct {
+		body, policy string
+		status       int
+		remember     bool
+	}{
+		{`{}`, "", 400, true},
+		{`{"unattended":null}`, "", 400, true},
+		{`{"unattended":false}`, "session", 200, false},
+		{`{}`, "", 400, false},
+		{`{"unattended":true}`, "persistent", 200, true},
+	} {
+		// Each request uses a fresh manager/server and reads the persisted file.
+		manager := remotedesktop.New(t.TempDir(), nil, nil)
+		server := &Server{configPath: path, remoteDesktop: manager, resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+		r := httptest.NewRequest("PUT", remoteDesktopAPI+"/settings", strings.NewReader(choice.body))
+		r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))
+		w := httptest.NewRecorder()
+		server.handleRemoteDesktopAPI(w, r)
+		manager.Close()
+		if w.Code != choice.status {
+			t.Fatalf("%s: %d %s", choice.body, w.Code, w.Body.String())
+		}
+		if choice.status == 200 && !strings.Contains(w.Body.String(), `"approval_policy":"`+choice.policy+`"`) {
+			t.Fatal(w.Body.String())
+		}
+		cfg, err := config.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.RemoteDesktop.RememberApproval() != choice.remember {
+			t.Fatal("effective policy did not survive reload")
+		}
+		if choice.status == 200 && !cfg.RemoteDesktop.ApprovalPreferenceSet {
+			t.Fatal("explicit choice was not recorded")
+		}
+	}
+}
+
+func TestRemoteDesktopStatusReportsEffectivePolicyFromLegacyConfiguration(t *testing.T) {
+	for _, setting := range []*config.RemoteDesktopConfig{nil, {}, {Unattended: false}, {Unattended: true}, {Unattended: false, ApprovalPreferenceSet: true}} {
+		path := writeTestConfig(t)
+		cfg, err := config.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.RemoteDesktop = setting
+		if err = config.Save(path, cfg); err != nil {
+			t.Fatal(err)
+		}
+		manager := remotedesktop.New(t.TempDir(), nil, nil)
+		server := &Server{configPath: path, remoteDesktop: manager, resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true})}
+		r := httptest.NewRequest("GET", remoteDesktopAPI, nil)
+		r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))
+		w := httptest.NewRecorder()
+		server.handleRemoteDesktopAPI(w, r)
+		manager.Close()
+		policy := "session"
+		if setting.RememberApproval() {
+			policy = "persistent"
+		}
+		if w.Code != 200 || !strings.Contains(w.Body.String(), `"approval_policy":"`+policy+`"`) {
+			t.Fatal(w.Code, w.Body.String())
+		}
 	}
 }
