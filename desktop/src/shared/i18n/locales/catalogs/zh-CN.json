@@ -1993,6 +1993,8 @@
     "cloudAwaitingSyncDetail": "请刷新以加载 Redeven Cloud 环境。"
   },
   "gatewayAccess": {
+    "localService": "本机",
+    "managedServiceHelp": "Desktop 仅管理此主机上的 Gateway 服务。运行时服务仍独立管理。",
     "checkingAccess": "正在检查 Gateway 访问",
     "checkingAccessDetail": "正在验证 Gateway 信任关系和环境访问权限。",
     "lastCheckProxy": "最近代理访问检查",
@@ -2101,7 +2103,7 @@
     "gatewayRuntimeRootHelp": "留空可将网关数据保留在 {root} 下，并具有隔离的网关配置文件。",
     "releaseBaseUrl": "发布基础 URL",
     "releaseBaseUrlHelp": "留空时使用 {url}。当此 Desktop 不能直接访问 GitHub 时，可设置内部 release mirror。",
-    "connectTimeout": "Connect Timeout（秒）",
+    "connectTimeout": "连接超时（秒）",
     "connectTimeoutShort": "超时",
     "connectTimeoutHelp": "SSH connection timeout，单位秒。默认 {seconds}s。",
     "container": "容器",

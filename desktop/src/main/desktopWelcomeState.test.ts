@@ -435,7 +435,7 @@ describe('desktopWelcomeState', () => {
     }));
   });
 
-  it('keeps direct host and container targets out of Gateway sources', () => {
+  it('keeps explicitly configured managed Gateways visible without inventing Runtime entries', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       gatewaySources: [gatewaySource({
@@ -444,7 +444,7 @@ describe('desktopWelcomeState', () => {
       })],
     });
 
-    expect(snapshot.gateway_sources).toEqual([]);
+    expect(snapshot.gateway_sources).toMatchObject([{ connection_kind: 'ssh_container' }]);
     expect(snapshot.environments.some((entry) => entry.kind === 'gateway_environment')).toBe(false);
   });
   it('orders environment entries by pinned state and stable creation time', () => {

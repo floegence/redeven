@@ -31,12 +31,18 @@ export function runGatewaySourceAction(
     case 'setup_gateway':
       openCreateGatewaySetup(gateway);
       return;
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
+      return runGatewayLauncherAction({ kind: action.intent, gateway_id: gateway.gateway_id });
     case 'refresh_gateway':
       return runGatewayLauncherAction({
         kind: 'refresh_gateway',
         gateway_id: gateway.gateway_id,
       });
     case 'pair_gateway':
+      if (gateway.connection_kind === 'url') { openCreateGatewaySetup(gateway); return; }
       return runGatewayLauncherAction({
         kind: 'pair_gateway',
         gateway_id: gateway.gateway_id,

@@ -13,6 +13,7 @@ export type GatewayActionExecutionMode = 'direct' | 'guide' | 'confirm' | 'progr
 
 export type GatewayActionPanelKind =
   | 'none'
+  | 'service_confirmation'
   | 'diagnosis_result'
   | 'disabled_gateway'
   | 'start_and_refresh_catalog'
@@ -203,6 +204,11 @@ function continuationActionFor(
   action: BuildGatewayActionPresentationInput['clicked_action'],
 ): DesktopLauncherActionRequest | undefined {
   switch (action.intent) {
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
+      return { kind: action.intent, gateway_id: gateway.gateway_id };
     case 'refresh_gateway':
       return {
         kind: 'refresh_gateway',
@@ -378,15 +384,14 @@ function gatewayRefreshRecoveryPlan(
     };
   }
 
-  // Gateway records are access-only URL endpoints. Any legacy managed
-  // connection reaching this presenter is invalid and must not expose the
-  // old Gateway service lifecycle actions.
-  if (gateway.connection_kind !== 'url') {
-    return {
-      title: 'Gateway requires host maintenance',
-      detail: 'Repair this Standalone Gateway on its own host, then refresh it here.',
-      aria_label: 'Standalone Gateway requires host maintenance',
-    };
+  const service = gateway.service_state;
+  if (gateway.connection_kind !== 'url' && (service?.can_start || service?.status === 'service_needs_update')) {
+    const action = service.can_start ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true)
+      : gatewaySourceAction('update_gateway', 'Update Gateway', 'default', true);
+    return { title: action.label, detail: service.can_start
+      ? 'Desktop can start this Gateway service. Use Refresh again after it is ready to refresh environments.'
+      : 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
+      aria_label: action.label, primary_action: action };
   }
 
   const diagnosis = options.useDiagnosis ? gateway.diagnosis : undefined;
@@ -509,6 +514,11 @@ function buildPanel(
 
 function actionLabel(action: string): string {
   switch (action) {
+    case 'start_gateway': return 'Start Gateway';
+    case 'stop_gateway': return 'Stop Gateway';
+    case 'restart_gateway': return 'Restart Gateway';
+    case 'update_gateway': return 'Update Gateway';
+    case 'pair_gateway': return 'Pair Gateway';
     case 'refresh_gateway':
       return 'Refresh Gateway';
     default:
@@ -569,6 +579,19 @@ export function buildGatewayActionPresentation(
       continuation_action: continuationActionFor(gateway, gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default', true)),
       primary_action: gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default', true),
     });
+  }
+
+  if (action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway') {
+    const details = {
+      stop_gateway: 'Desktop will stop the Gateway service on the configured target.',
+      restart_gateway: 'Desktop will restart the Gateway service on the configured target.',
+      update_gateway: 'Desktop will update the Gateway service on the configured target.',
+    };
+    return buildPanel({ gateway, kind: 'service_confirmation', execution_mode: 'confirm', tone: 'warning',
+      eyebrow: 'Gateway service', title: actionLabel(action.intent), aria_label: actionLabel(action.intent),
+      detail: details[action.intent], affected_sessions: input.affected_sessions,
+      continuation_action: { kind: action.intent, gateway_id: gateway.gateway_id, impact_acknowledged: true },
+      primary_action: action });
   }
 
   if (action.intent === 'refresh_gateway') {

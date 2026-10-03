@@ -95,7 +95,11 @@ export async function createGatewayProxyTransport(accessURL: string, targetURL: 
       ws.once('close', () => fail(new GatewayProxyError('GATEWAY_UNREACHABLE')));
       ws.once('unexpected-response', (_request, response) => {
         response.resume();
-        fail(new GatewayProxyError(response.statusCode === 401 ? 'GATEWAY_SESSION_EXPIRED' : 'GATEWAY_TARGET_UNAVAILABLE'));
+        const marker = response.headers['x-redeven-gateway-error'];
+        const code = response.statusCode === 401 && marker === 'SESSION_EXPIRED' ? 'GATEWAY_SESSION_EXPIRED'
+          : response.statusCode === 502 && marker === 'TARGET_UNAVAILABLE' ? 'GATEWAY_TARGET_UNAVAILABLE'
+          : 'GATEWAY_UNREACHABLE';
+        fail(new GatewayProxyError(code));
       });
       if (signal?.aborted || lifetime.signal.aborted) abort();
     });

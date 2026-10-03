@@ -722,7 +722,7 @@ describe('desktopLauncherIPC', () => {
         kind,
         gateway_id: ' gw-demo ',
         start_policy: 'start_if_needed',
-      })).toBeNull();
+      })).toEqual({ kind, gateway_id: 'gw-demo', ...(kind === 'start_gateway' ? {} : { impact_acknowledged: false }) });
     }
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'preview_reinstall_target',
@@ -750,9 +750,9 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', gateway_id: 'gw-demo' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'check_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: '   ' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: 'gw-demo' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'restart_gateway', gateway_id: 'gw-demo', impact_acknowledged: true })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: 'gw-demo' })).toEqual({ kind: 'start_gateway', gateway_id: 'gw-demo' });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'restart_gateway', gateway_id: 'gw-demo', impact_acknowledged: true })).toEqual({ kind: 'restart_gateway', gateway_id: 'gw-demo', impact_acknowledged: true });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true })).toEqual({ kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_environment_registration',

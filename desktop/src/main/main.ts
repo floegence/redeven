@@ -1,3 +1,5 @@
+import { gatewayConnectionFromSetup } from './gatewayRegistration';
+import { GatewayEnvironmentMigration, legacyGatewayRuntimeTargetInput } from './gatewayEnvironmentMigration';
 import { DesktopWelcomeRuntimePoller } from './desktopWelcomeRuntimePoller';
 import { RuntimeSessionHandoff, runtimeSessionMatchesTarget } from './runtimeSessionHandoff';
 import { sessionRestartDocumentURL, SESSION_RESTART_REOPEN_URL, SESSION_RESTART_CENTER_URL } from './sessionRestartDocument';
@@ -193,7 +195,6 @@ import {
   gatewayRecordToSourceWithCatalog,
   gatewayRecordToSourceWithError,
   gatewayRecordSSHPasswordRef,
-  normalizeGatewayBaseURL,
   stableGatewayID,
   type GatewayRecord,
 } from './gatewayStore';
@@ -218,10 +219,8 @@ import {
   GatewayReinstallRequiredError,
   GatewayServiceStartRequiredError,
   GatewayServiceUnavailableError,
-  gatewayServiceTargetDescriptor,
   type GatewayLifecycleProgressSink,
   type GatewayStartPolicy,
-  type GatewayServiceTargetDescriptor,
 } from './gatewayLifecycleManager';
 import type { GatewayServiceDeepProbe } from './gatewayServiceHost';
 import { DesktopThemeState } from './desktopThemeState';
@@ -4466,6 +4465,7 @@ function openSessionSummaries(): readonly DesktopSessionSummary[] {
       startup: rendererSafeStartupReport(session.startup),
       runtime_launch_mode: session.runtime_handle?.launch_mode,
       transport_kind: session.transport.kind,
+      gateway_access_mode: session.gateway_access_mode,
     }));
 }
 
@@ -5293,13 +5293,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
 
 async function loadGatewaySourcesForWelcome(): Promise<readonly DesktopGatewaySource[]> {
   await migrateLegacyDirectGatewayRecords();
-  // Gateway Store contains standalone Gateways only. Managed Environment
-  // targets are owned by Environment preferences and never projected here.
-  const legacyIDs = new Set((await gatewayStore().listLegacyDirectEnvironmentRecords()).map((item) => item.record.gateway_id));
-  const records = (await gatewayStore().list()).filter((record) => (
-    !legacyIDs.has(record.gateway_id)
-    && record.connection.kind === 'url'
-  ));
+  const records = await gatewayStore().list();
   const recordIDs = new Set(records.map((record) => record.gateway_id));
   for (const gatewayID of gatewaySyncStateByID.keys()) {
     if (!recordIDs.has(gatewayID)) {
@@ -5318,133 +5312,21 @@ async function loadGatewaySourcesForWelcome(): Promise<readonly DesktopGatewaySo
   }));
 }
 
-type LegacyGatewayMigrationJournal = Readonly<{
-  schema_version: 1;
-  phase: 'prepared' | 'target_written' | 'gateway_removed';
-  entries: readonly Readonly<{
-    gateway_id: string;
-    environment_id: string;
-    target_id: string;
-  }>[];
-  updated_at_unix_ms: number;
-}>;
+let gatewayEnvironmentMigration: GatewayEnvironmentMigration | undefined;
 
 async function migrateLegacyDirectGatewayRecords(): Promise<void> {
-  const journalPath = path.join(preferencesPaths().stateRoot, 'maintenance', 'gateway-environment-migration.json');
-  const writeJournal = async (journal: LegacyGatewayMigrationJournal): Promise<void> => {
-    await fs.mkdir(path.dirname(journalPath), { recursive: true, mode: 0o700 });
-    const temporary = `${journalPath}.${crypto.randomUUID()}.tmp`;
-    await fs.writeFile(temporary, `${JSON.stringify(journal, null, 2)}\n`, {
-      mode: 0o600,
-    });
-    await fs.rename(temporary, journalPath);
-  };
-  let existingJournal: LegacyGatewayMigrationJournal | null = null;
-  try {
-    existingJournal = JSON.parse(await fs.readFile(journalPath, 'utf8')) as LegacyGatewayMigrationJournal;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw new Error('Gateway migration journal is invalid; refusing to guess the old record role.');
-    }
-  }
-  if (existingJournal?.schema_version === 1 && existingJournal.phase === 'prepared') {
-    throw new Error('Gateway migration is incomplete; refusing to delete or recreate records automatically.');
-  }
-  if (existingJournal?.schema_version === 1 && existingJournal.phase === 'target_written') {
-    const recoveredPreferences = await loadDesktopPreferencesCached();
-    const missingTargets = existingJournal.entries.filter((entry) => (
-      !recoveredPreferences.saved_runtime_targets.some((target) => target.id === entry.target_id)
-    ));
-    if (missingTargets.length > 0) {
-      throw new Error('Gateway migration journal has no matching Environment Target; the legacy Gateway records were kept for manual recovery.');
-    }
-    for (const entry of existingJournal.entries) {
-      await gatewayStore().delete(entry.gateway_id);
-    }
-    await writeJournal({
-      ...existingJournal,
-      phase: 'gateway_removed',
-      updated_at_unix_ms: Date.now(),
-    });
-    await fs.rm(journalPath, { force: true });
-  } else if (existingJournal?.schema_version === 1 && existingJournal.phase === 'gateway_removed') {
-    await fs.rm(journalPath, { force: true });
-  }
-  const legacyRecords = await gatewayStore().listLegacyDirectEnvironmentRecords();
-  if (legacyRecords.length === 0) {
-    return;
-  }
-  const entries: Array<{
-    gateway_id: string;
-    environment_id: string;
-    target_id: string;
-  }> = [];
-  for (const item of legacyRecords) {
-    if (item.record.connection.kind === 'url') {
-      // A URL Gateway record cannot be safely interpreted as a direct target.
-      // Keep it hidden and require explicit re-registration instead.
-      continue;
-    }
-    let target: GatewayServiceTargetDescriptor;
-    try {
-      target = gatewayServiceTargetDescriptor(item.record);
-    } catch {
-      continue;
-    }
-    const targetID = desktopRuntimeTargetID(
-      target.host_access,
-      target.placement,
-      item.runtime_environment_id,
-    );
-    entries.push({
-      gateway_id: item.record.gateway_id,
-      environment_id: item.runtime_environment_id,
-      target_id: targetID,
-    });
-  }
-  if (entries.length === 0) {
-    return;
-  }
-  await writeJournal({
-    schema_version: 1,
-    phase: 'prepared',
-    entries,
-    updated_at_unix_ms: Date.now(),
+  gatewayEnvironmentMigration ??= new GatewayEnvironmentMigration({
+    journalPath: path.join(preferencesPaths().stateRoot, 'maintenance', 'gateway-environment-migration.json'),
+    store: gatewayStore(),
+    targetInput: legacy => legacyGatewayRuntimeTargetInput(legacy, reference => gatewaySecretStore().readSecret(reference)),
+    readTargets: async () => (await loadDesktopPreferences(preferencesPaths(), preferencesCodec())).saved_runtime_targets,
+    writeTargets: async inputs => (await mutateDesktopPreferences(current => inputs.reduce((preferences, input) => {
+      const targetID = desktopRuntimeTargetID(input.host_access, input.placement);
+      return preferences.saved_runtime_targets.some(target => target.id === targetID)
+        ? preferences : upsertSavedRuntimeTarget(preferences, input);
+    }, current))).saved_runtime_targets,
   });
-  const writtenPreferences = await mutateDesktopPreferences((current) => entries.reduce((preferences, entry) => {
-    const legacy = legacyRecords.find((item) => item.record.gateway_id === entry.gateway_id);
-    if (!legacy) {
-      return preferences;
-    }
-    const target = gatewayServiceTargetDescriptor(legacy.record);
-    return upsertSavedRuntimeTarget(preferences, {
-      id: entry.target_id,
-      label: legacy.record.display_name,
-      host_access: target.host_access,
-      placement: target.placement,
-      auto_runtime_probe_enabled: true,
-      last_used_at_ms: Date.now(),
-    });
-  }, current));
-  if (entries.some((entry) => !writtenPreferences.saved_runtime_targets.some((target) => target.id === entry.target_id))) {
-    throw new Error('Gateway migration did not persist every Environment Target; legacy Gateway records were kept.');
-  }
-  await writeJournal({
-    schema_version: 1,
-    phase: 'target_written',
-    entries,
-    updated_at_unix_ms: Date.now(),
-  });
-  for (const entry of entries) {
-    await gatewayStore().delete(entry.gateway_id);
-  }
-  await writeJournal({
-    schema_version: 1,
-    phase: 'gateway_removed',
-    entries,
-    updated_at_unix_ms: Date.now(),
-  });
-  await fs.rm(journalPath, { force: true });
+  await gatewayEnvironmentMigration.ensureComplete();
 }
 
 function defaultGatewaySyncRecord(record: GatewayRecord): GatewaySyncRecord {
@@ -5808,7 +5690,7 @@ async function pairGatewayWithClient(
     expected_pairing_code: record.connection.kind === 'url' ? options.pairingCode : undefined,
   });
   options.onStage?.('saving_trust_profile');
-  const pairingOptions = { profileWrite: options.profileWrite ?? record.connection.kind !== 'url' };
+  const pairingOptions = { profileWrite: options.profileWrite === true };
   const completionRequest = buildPairingCompleteRequest(material, challenge, pairingOptions);
   const completion = await client.completePairing(record, completionRequest, {
     signal: options.signal,
@@ -6032,6 +5914,7 @@ async function syncGatewayRecord(
 }
 
 async function syncGatewayIfNeeded(record: GatewayRecord, options: Readonly<{ force?: boolean }> = {}): Promise<void> {
+  if (gatewayLifecycleManager().activeLifecycle(record)) return;
   const syncRecord = gatewaySyncStateByID.get(record.gateway_id);
   if (!options.force && !gatewayNeedsAutoSync(record, syncRecord)) {
     return;
@@ -6045,7 +5928,8 @@ async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }
     updateGatewaySyncPoller();
     return;
   }
-  const records = (await gatewayStore().list()).filter((record) => record.connection.kind === 'url');
+  await migrateLegacyDirectGatewayRecords();
+  const records = await gatewayStore().list();
   await Promise.all(records.map(async (record) => {
     if (!record.local_enabled) {
       return;
@@ -6060,44 +5944,57 @@ async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }
 async function upsertGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway' }>,
 ): Promise<GatewayRecord> {
-  if (request.connection_kind === 'url') {
-    const nextConnection: GatewayRecord['connection'] = {
-      kind: 'url',
-      base_url: normalizeGatewayBaseURL(request.gateway_url),
-      allow_loopback_http: request.allow_loopback_http,
-    };
-    const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(nextConnection));
-    const existing = await gatewayStore().get(gatewayID);
-    const record = await upsertGatewayConnectionRecord(gatewayID, request.display_name, nextConnection, existing);
-    if (compact(request.pairing_code) !== '') {
-      return pairGatewayWithClient(
-        record,
-        new GatewayURLClient(gatewaySecretStore()),
-        gatewaySecretStore(),
-        { pairingCode: request.pairing_code, profileWrite: request.profile_write },
-      );
+  await migrateLegacyDirectGatewayRecords();
+  let connection = gatewayConnectionFromSetup(request);
+  const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(connection));
+  const existing = await gatewayStore().get(gatewayID);
+  if (existing && gatewayLifecycleManager().activeLifecycle(existing)) {
+    throw new Error('Wait for the current Gateway service action before editing its connection.');
+  }
+  const oldSecretRef = existing ? gatewayRecordSSHPasswordRef(existing) : '';
+  let newSecretRef = '';
+  if (request.connection_kind !== 'url' && (connection.kind === 'ssh_host' || connection.kind === 'ssh_container')) {
+    const old = existing?.connection;
+    const sameSSHIdentity = old && (old.kind === 'ssh_host' || old.kind === 'ssh_container')
+      && old.ssh_destination === connection.ssh_destination && (old.ssh_port ?? 22) === (connection.ssh_port ?? 22)
+      && old.auth_mode === connection.auth_mode;
+    if (connection.auth_mode === 'password' && request.ssh_password_mode !== 'clear') {
+      if (request.ssh_password_mode === 'replace' && request.ssh_password) {
+        newSecretRef = `gateway-ssh-password:${gatewayID}:${crypto.randomUUID()}`;
+        await gatewaySecretStore().writeSecret(newSecretRef, request.ssh_password);
+        connection = { ...connection, ssh_password_ref: newSecretRef, ssh_password_configured: true };
+      } else if (sameSSHIdentity && oldSecretRef && request.ssh_password_mode !== 'replace') {
+        connection = { ...connection, ssh_password_ref: oldSecretRef, ssh_password_configured: true };
+      }
     }
-    return record;
   }
-
-  throw new Error('Standalone Gateway setup requires an explicit URL endpoint. Register SSH or container targets as Managed Environments.');
-
-}
-
-async function upsertGatewayConnectionRecord(
-  gatewayID: string,
-  displayName: string,
-  nextConnection: GatewayRecord['connection'],
-  existing: GatewayRecord | null,
-): Promise<GatewayRecord> {
-  if (existing?.trust_profile && gatewayBindingAudience(existing.connection) !== gatewayBindingAudience(nextConnection)) {
-    await gatewaySecretStore().deleteSecret(existing.trust_profile.paired_client_private_key_ref);
+  let record: GatewayRecord;
+  try {
+    record = await gatewayStore().upsert({ gateway_id: gatewayID, display_name: request.display_name, connection });
+  } catch (error) {
+    if (newSecretRef) await Promise.resolve(gatewaySecretStore().deleteSecret(newSecretRef)).catch(() => undefined);
+    throw error;
   }
-  return gatewayStore().upsert({
-    gateway_id: gatewayID,
-    display_name: displayName,
-    connection: nextConnection,
-  });
+  if (oldSecretRef && oldSecretRef !== gatewayRecordSSHPasswordRef(record)) {
+    await gatewaySecretStore().deleteSecret(oldSecretRef);
+  }
+  if (existing && gatewayBindingAudience(existing.connection) !== gatewayBindingAudience(connection)) {
+    supersedeGatewaySyncTask(gatewayID);
+    await gatewayLifecycleManager().clear(existing);
+    gatewaySyncStateByID.delete(gatewayID);
+    gatewayDiagnosisByID.delete(gatewayID);
+    if (existing.trust_profile) await gatewaySecretStore().deleteSecret(existing.trust_profile.paired_client_private_key_ref);
+  }
+  if (request.connection_kind === 'url' && compact(request.pairing_code)) {
+    return pairGatewayWithClient(record, new GatewayURLClient(gatewaySecretStore()), gatewaySecretStore(), {
+      pairingCode: request.pairing_code, profileWrite: request.profile_write,
+    });
+  }
+  if (request.connection_kind !== 'url' && request.profile_write) {
+    const client = await gatewayLifecycleManager().bridgeClient(record, { startPolicy: 'require_ready' });
+    return pairGatewayWithClient(record, client, gatewaySecretStore(), { profileWrite: true });
+  }
+  return record;
 }
 
 
@@ -7220,6 +7117,86 @@ async function refreshGatewayStatusFromLauncher(
   });
 }
 
+async function runGatewayServiceActionFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' }>,
+): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record || record.connection.kind === 'url') {
+    return launcherActionFailure('action_invalid', 'gateway', 'This Gateway has no configured service management transport.', {
+      gatewayID: request.gateway_id, shouldRefreshSnapshot: true,
+    });
+  }
+  const activeService = gatewayLifecycleManager().activeLifecycle(record);
+  if (activeService) {
+    return launcherActionFailure('action_invalid', 'gateway', 'Another Gateway service action is already running.', {
+      gatewayID: record.gateway_id, operationKey: activeService.operation_key, shouldRefreshSnapshot: true,
+    });
+  }
+  const operationKey = `${record.gateway_id}:${request.kind}`;
+  const active = launcherOperations.get(operationKey);
+  if (launcherOperationIsActive(active)) {
+    rebroadcastLauncherOperationProgress(active);
+    return launcherActionSuccess('gateway_sync_in_progress');
+  }
+  const affected = [...sessionsByKey.values()].filter(session => session.target.kind === 'gateway_environment'
+    && session.target.gateway_id === record.gateway_id && session.gateway_access_mode !== 'direct_url'
+    && session.lifecycle !== 'closing');
+  if (request.kind !== 'start_gateway' && affected.length && !request.impact_acknowledged) {
+    return launcherActionFailure('action_invalid', 'gateway', 'This action disconnects sessions opened through this Gateway.', {
+      gatewayID: record.gateway_id, gatewayLabel: record.display_name,
+      continuationAction: { ...request, impact_acknowledged: true }, shouldRefreshSnapshot: true,
+    });
+  }
+  const presentation = {
+    start_gateway: { title: 'Start Gateway', key: 'environmentCenter.gatewayActionStart', outcome: 'started_gateway' },
+    stop_gateway: { title: 'Stop Gateway', key: 'environmentCenter.gatewayActionStop', outcome: 'stopped_gateway' },
+    restart_gateway: { title: 'Restart Gateway', key: 'environmentCenter.gatewayActionRestart', outcome: 'restarted_gateway' },
+    update_gateway: { title: 'Update Gateway', key: 'environmentCenter.gatewayActionUpdate', outcome: 'updated_gateway' },
+  } as const;
+  const selected = presentation[request.kind];
+  const operation = launcherOperations.create({
+    operation_key: operationKey, action: request.kind, subject_kind: 'gateway', subject_id: record.gateway_id,
+    gateway_id: record.gateway_id, active_progress_surface: 'gateway', phase: 'checking_gateway_service',
+    title: selected.title, title_key: selected.key, detail: '', cancelable: true,
+  });
+  const owner = { action: operation.action, started_at_unix_ms: operation.started_at_unix_ms };
+  const signal = launcherOperations.operationSignal(operationKey) ?? undefined;
+  supersedeGatewaySyncTask(record.gateway_id);
+  try {
+    let sessionsInvalidated = false;
+    const manager = gatewayLifecycleManager();
+    const methods = { start_gateway: manager.startGateway, stop_gateway: manager.stopGateway,
+      restart_gateway: manager.restartGateway, update_gateway: manager.updateGateway };
+    const execute: (record: GatewayRecord, options: { signal?: AbortSignal; operationKey: string; onProgress: GatewayLifecycleProgressSink }) => Promise<unknown> = methods[request.kind].bind(manager);
+    await execute(record, { signal, operationKey, onProgress: progress => {
+      if (request.kind !== 'start_gateway' && progress.phase === 'stopping_gateway' && !sessionsInvalidated) {
+        sessionsInvalidated = true;
+        for (const session of affected) failGatewaySessionTransport(session, new GatewayProxyError('GATEWAY_SESSION_EXPIRED'));
+      }
+      launcherOperations.updateCurrentAttempt(operationKey, owner, { phase: progress.phase, detail: progress.detail });
+    } });
+    gatewayDiagnosisByID.delete(record.gateway_id);
+    await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
+    launcherOperations.finishCurrentAttempt(operationKey, owner, 'succeeded', {
+      phase: request.kind, title: selected.title, title_key: selected.key, detail: '',
+    });
+    scheduleCurrentLauncherOperationRemoval(operationKey, owner);
+    return launcherActionSuccess(selected.outcome);
+  } catch (error) {
+    const canceled = isAbortLikeError(error) || signal?.aborted;
+    const failure = desktopFailureFromError(error, { code: 'operation_failed', title: selected.title,
+      summary: error instanceof Error ? error.message : String(error), targetLabel: record.display_name });
+    launcherOperations.finishCurrentAttempt(operationKey, owner, canceled ? 'canceled' : 'failed', {
+      phase: request.kind, title: selected.title, title_key: selected.key, detail: failure.summary, failure,
+    });
+    return launcherActionFailure(gatewayServiceFailureCode(error), 'gateway', failure.summary, {
+      gatewayID: record.gateway_id, gatewayLabel: record.display_name, operationKey, failure, shouldRefreshSnapshot: true,
+    });
+  } finally {
+    broadcastDesktopWelcomeSnapshots();
+  }
+}
+
 async function pairGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'pair_gateway' | 'sync_gateway' }>,
 ): Promise<DesktopLauncherActionResult> {
@@ -7229,18 +7206,6 @@ async function pairGatewayFromLauncher(
       gatewayID: request.gateway_id,
       shouldRefreshSnapshot: true,
     });
-  }
-  if (record.connection.kind !== 'url') {
-    return launcherActionFailure(
-      'action_invalid',
-      'gateway',
-      'Only a standalone URL Gateway can be paired from Desktop.',
-      {
-        gatewayID: record.gateway_id,
-        gatewayLabel: record.display_name,
-        shouldRefreshSnapshot: true,
-      },
-    );
   }
   return refreshGatewayFromLauncher({
     kind: 'refresh_gateway',
@@ -18035,12 +18000,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-      return launcherActionFailure(
-        'action_invalid',
-        'gateway',
-        'Standalone Gateways expose access and catalog operations only. Manage the Gateway service on its own host.',
-        { gatewayID: request.gateway_id, shouldRefreshSnapshot: true },
-      );
+      return runGatewayServiceActionFromLauncher(request);
     case 'preview_reinstall_target':
       return previewReinstallTargetFromLauncher(request);
     case 'reinstall_target':
@@ -19390,6 +19350,7 @@ if (!app.requestSingleInstanceLock()) {
         await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
         return;
       }
+      await migrateLegacyDirectGatewayRecords();
       const startupPreferences = await loadDesktopPreferencesCached();
       if (redevenCloudCleanupIssue) {
         setLauncherViewState({

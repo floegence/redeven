@@ -1908,7 +1908,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('placementBridge: options.transportRecovery != null');
     expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport, options.gatewayProxy);');
     expect(mainSrc).toContain("await webSession.setProxy({ mode: 'direct' });");
-    expect(mainSrc).toContain('loopbackGateway?: WebServiceLoopbackGateway,\n): void');
+    expect(mainSrc).toContain('loopbackGateway?: WebServiceLoopbackGateway,\n  graphicalWindow = false,\n): void');
     expect(mainSrc).toContain('desktopDiagnosticsHookSessions.has(webSession)');
     expect(mainSrc).toContain('shouldFailDesktopSessionMainDocument({');
     expect(mainSrc).toContain('details.resourceType');
@@ -2020,7 +2020,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('assertGatewayPairingChallenge({');
     expect(pairSrc).not.toContain('confirmDesktopImpact({');
     expect(pairSrc).not.toContain("phase: 'waiting_for_identity_confirmation'");
-    expect(helperSrc).toContain("const pairingOptions = { profileWrite: options.profileWrite ?? record.connection.kind !== 'url' };");
+    expect(helperSrc).toContain("const pairingOptions = { profileWrite: options.profileWrite === true };");
     expect(helperSrc).not.toContain('runtimeGrants');
     expect(helperSrc).not.toContain('runtime_grants');
     expect(helperSrc).toContain(
@@ -2295,7 +2295,7 @@ describe('main routing', () => {
     expect(syncSrc).toContain("classification: 'pairing_required'");
     expect(syncSrc).not.toContain('gatewayReinstallPairingRequired');
 
-    expect(mainSrc).not.toContain('runGatewayServiceActionFromLauncher');
+    expect(mainSrc).toContain('return runGatewayServiceActionFromLauncher(request);');
 
     const refreshStart = mainSrc.indexOf('async function refreshGatewayFromLauncher(');
     const refreshEnd = mainSrc.indexOf('async function checkGatewayFromLauncher(', refreshStart);
@@ -2332,9 +2332,15 @@ describe('main routing', () => {
     );
   });
 
-  it('keeps Standalone Gateway lifecycle actions host-managed and unavailable in Desktop', () => {
+  it('routes explicit Gateway service actions only to the Gateway lifecycle owner', () => {
     const mainSrc = readMainSource();
-    expect(mainSrc).not.toContain('runGatewayServiceActionFromLauncher');
+    const serviceSrc = mainSrc.slice(mainSrc.indexOf('async function runGatewayServiceActionFromLauncher('), mainSrc.indexOf('async function pairGatewayFromLauncher('));
+    expect(serviceSrc).toContain("record.connection.kind === 'url'");
+    expect(serviceSrc).toContain('manager.startGateway');
+    expect(serviceSrc).toContain('manager.stopGateway');
+    expect(serviceSrc).not.toContain('executeDirectManagedEnvironmentLifecycle');
+    expect(serviceSrc).not.toContain('runtimeLifecycleSession');
+    expect(serviceSrc).toContain("session.gateway_access_mode !== 'direct_url'");
   });
 
   it('opens Gateway-backed Environments only through explicit access endpoints', () => {

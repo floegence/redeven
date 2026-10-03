@@ -32,7 +32,7 @@ export type GatewayURLConnection = Readonly<{
   allow_loopback_http?: boolean;
 }>;
 
-/** Legacy direct-Environment shape retained only for migration input. */
+/** Host coordinates for the standalone Gateway service, never a Runtime grant. */
 export type GatewaySSHHostConnection = Readonly<{
   kind: 'ssh_host';
   ssh_destination: string;
@@ -47,7 +47,7 @@ export type GatewaySSHHostConnection = Readonly<{
   runtime_root: string;
 }>;
 
-/** Legacy direct-Environment shape retained only for migration input. */
+/** Host coordinates for the standalone Gateway service, never a Runtime grant. */
 export type GatewaySSHContainerConnection = Readonly<{
   kind: 'ssh_container';
   ssh_destination: string;
@@ -64,13 +64,13 @@ export type GatewaySSHContainerConnection = Readonly<{
   runtime_root: string;
 }>;
 
-/** Legacy direct-Environment shape retained only for migration input. */
+/** Host coordinates for the standalone Gateway service, never a Runtime grant. */
 export type GatewayLocalHostConnection = Readonly<{
   kind: 'local_host';
   runtime_root: string;
 }>;
 
-/** Legacy direct-Environment shape retained only for migration input. */
+/** Host coordinates for the standalone Gateway service, never a Runtime grant. */
 export type GatewayLocalContainerConnection = Readonly<{
   kind: 'local_container';
   container_engine: DesktopContainerEngine;
@@ -87,8 +87,8 @@ export type GatewayConnection =
   | GatewaySSHHostConnection
   | GatewaySSHContainerConnection;
 
-// New Gateway records are URL-only. Non-URL variants are parsed solely so the
-// startup migration can move legacy direct-Environment records to target storage.
+// A connection locates the Gateway service. Only the explicit legacy Runtime
+// marker below identifies an old direct-Environment registration.
 
 export type GatewayTrustProfile = Readonly<{
   trust_profile_id: string;
@@ -113,6 +113,8 @@ export type GatewayRecord = Readonly<{
   created_at_ms: number;
   updated_at_ms: number;
   last_catalog_sync_at_ms?: number;
+  /** Migration input only; retained until the Runtime target journal commits. */
+  runtime_environment_id?: string;
 }>;
 
 export type GatewayStoreSnapshot = Readonly<{
@@ -220,6 +222,7 @@ export function gatewayRecordSSHPasswordRef(record: GatewayRecord): string {
     || connection.kind === 'local_host'
     || connection.kind === 'local_container'
     || connection.auth_mode !== 'password'
+    || connection.ssh_password_configured !== true
   ) {
     return '';
   }
@@ -480,6 +483,7 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
     ...(trustProfile ? { trust_profile: trustProfile } : {}),
     created_at_ms: timestampMS(candidate.created_at_ms, now),
     updated_at_ms: timestampMS(candidate.updated_at_ms, now),
+    ...(compact(candidate.runtime_environment_id) ? { runtime_environment_id: compact(candidate.runtime_environment_id) } : {}),
     ...(positiveInteger(candidate.last_catalog_sync_at_ms) ? { last_catalog_sync_at_ms: positiveInteger(candidate.last_catalog_sync_at_ms) } : {}),
   };
 }
@@ -673,6 +677,10 @@ function migrateGatewayStoreFile(value: unknown, now = Date.now()): Readonly<{
       || !positiveInteger(persisted.updated_at_ms)) {
       throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store record shape does not match its schema version.');
     }
+    if (persisted.runtime_environment_id !== undefined
+      && (typeof persisted.runtime_environment_id !== 'string' || !persisted.runtime_environment_id.trim())) {
+      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway legacy Runtime mapping is invalid.');
+    }
     const rawConnection = persisted.connection && typeof persisted.connection === 'object'
       ? persisted.connection as Record<string, unknown>
       : null;
@@ -747,6 +755,7 @@ function replaceGatewayRecord(snapshot: GatewayStoreSnapshot, record: GatewayRec
 
 export class GatewayStore {
   private snapshot: GatewayStoreSnapshot | null = null;
+  private loadTask: Promise<GatewayStoreSnapshot> | null = null;
   private mutationQueue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -758,31 +767,35 @@ export class GatewayStore {
     if (this.snapshot) {
       return this.snapshot;
     }
+    return this.loadTask ??= this.loadFromDisk().finally(() => { this.loadTask = null; });
+  }
+
+  private async loadFromDisk(): Promise<GatewayStoreSnapshot> {
+    let raw: string;
     try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
-      const migration = migrateGatewayStoreFile(JSON.parse(raw));
-      if (migration.migrated) {
-        await this.persistSnapshot(this.filePath, migration.snapshot);
-      }
-      this.snapshot = migration.snapshot;
-      return this.snapshot;
+      raw = await fs.readFile(this.filePath, 'utf8');
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        this.snapshot = normalizeGatewayStoreSnapshot(null);
-        return this.snapshot;
-      }
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      return this.snapshot = normalizeGatewayStoreSnapshot(null);
+    }
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); }
+    catch (error) {
       if (error instanceof SyntaxError) {
         throw new GatewayStoreError('GATEWAY_STORE_INVALID_JSON', 'Gateway store contains invalid JSON.', this.filePath);
       }
       throw error;
     }
+    const migration = migrateGatewayStoreFile(parsed);
+    if (migration.migrated) await this.persistSnapshot(this.filePath, migration.snapshot);
+    return this.snapshot = migration.snapshot;
   }
 
   async list(): Promise<readonly GatewayRecord[]> {
     // Gateway Store owns standalone Gateways only. Legacy direct Environment
     // records remain readable through listLegacyDirectEnvironmentRecords()
     // until the startup migration can move them to Runtime Target storage.
-    return (await this.load()).gateways.filter((record) => record.connection.kind === 'url');
+    return (await this.load()).gateways.filter((record) => !record.runtime_environment_id);
   }
 
   /**
@@ -791,34 +804,8 @@ export class GatewayStore {
    * deleting the old record; an incomplete mapping is left untouched.
    */
   async listLegacyDirectEnvironmentRecords(): Promise<readonly LegacyDirectGatewayRecord[]> {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(await fs.readFile(this.filePath, 'utf8'));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return [];
-      }
-      if (error instanceof SyntaxError) {
-        throw new GatewayStoreError('GATEWAY_STORE_INVALID_JSON', 'Gateway store contains invalid JSON.', this.filePath);
-      }
-      throw error;
-    }
-    const candidates = raw && typeof raw === 'object' && Array.isArray((raw as { gateways?: unknown }).gateways)
-      ? (raw as { gateways: readonly unknown[] }).gateways
-      : [];
-    const out: LegacyDirectGatewayRecord[] = [];
-    for (const value of candidates) {
-      if (!value || typeof value !== 'object') {
-        continue;
-      }
-      const candidate = value as Record<string, unknown>;
-      const legacyID = compact(candidate.runtime_environment_id);
-      const record = normalizeGatewayRecord(candidate);
-      if (legacyID && record) {
-        out.push({ record, runtime_environment_id: legacyID });
-      }
-    }
-    return out;
+    return (await this.load()).gateways.flatMap(record => record.runtime_environment_id
+      ? [{ record, runtime_environment_id: record.runtime_environment_id }] : []);
   }
 
   async get(gatewayID: string): Promise<GatewayRecord | null> {
@@ -837,13 +824,6 @@ export class GatewayStore {
     now_ms?: number;
   }>): Promise<GatewayRecord> {
     return this.mutate(async () => {
-      if (input.connection.kind !== 'url') {
-        throw new GatewayStoreError(
-          'GATEWAY_STANDALONE_URL_REQUIRED',
-          'Standalone Gateway records require an explicit URL endpoint. Save SSH or container targets as Managed Environments.',
-          this.filePath,
-        );
-      }
       const now = timestampMS(input.now_ms, Date.now());
       const gatewayID = normalizeGatewayID(input.gateway_id);
       if (!gatewayID) {
@@ -851,6 +831,9 @@ export class GatewayStore {
       }
       const snapshot = await this.load();
       const existing = snapshot.gateways.find((record) => record.gateway_id === gatewayID);
+      if (existing?.runtime_environment_id) {
+        throw new GatewayStoreError('GATEWAY_MIGRATION_PENDING', 'This legacy Runtime registration must finish migration before its identity can be reused.');
+      }
       const nextBindingAudience = gatewayBindingAudience(input.connection);
       const connectionIdentityUnchanged = existing ? gatewayBindingAudience(existing.connection) === nextBindingAudience : false;
       const existingTrustProfile = existing?.trust_profile?.binding_audience === nextBindingAudience
@@ -955,6 +938,20 @@ export class GatewayStore {
       };
       await this.commitSnapshot(nextSnapshot);
       return existing;
+    });
+  }
+
+  async removeMigratedDirectRecords(entries: readonly Readonly<{ gateway_id: string; environment_id: string }>[]): Promise<void> {
+    return this.mutate(async () => {
+      const snapshot = await this.load();
+      const ids = new Set(entries.map(entry => entry.gateway_id));
+      for (const entry of entries) {
+        const existing = snapshot.gateways.find(record => record.gateway_id === entry.gateway_id);
+        if (existing && existing.runtime_environment_id !== entry.environment_id) {
+          throw new GatewayStoreError('GATEWAY_MIGRATION_SOURCE_CHANGED', 'Gateway migration source changed; no records were removed.');
+        }
+      }
+      await this.commitSnapshot({ ...snapshot, gateways: snapshot.gateways.filter(record => !ids.has(record.gateway_id)) });
     });
   }
 

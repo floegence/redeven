@@ -37,6 +37,14 @@ Address presentation groups this-device, network and internal listeners by their
 
 ## Gateway connection facts
 
+Independent Gateway source cards retain their explicit URL, local, SSH, or
+container transport. Service actions manage only the Gateway process, as defined
+by the [Gateway service contract](../gateway/gateway-service.md). They never
+appear as Runtime lifecycle actions on catalog Environment cards. Setup keeps
+credentials local, and editing a saved SSH password preserves it unless the
+user replaces, clears, or changes its SSH identity. URL pairing opens the code
+form; profile write consent is independent of the transport.
+
 Gateway Environment cards show source, Gateway connection, trust, catalog sync,
 default access mode and the latest attempted access result separately. No access
 attempt means target not checked, even when the catalog is available. Explicit

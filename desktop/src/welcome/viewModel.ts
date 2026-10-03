@@ -2486,6 +2486,7 @@ export type GatewayRowModel = Readonly<{
 }>;
 
 export type GatewaySourceActionIntent =
+  | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway'
   | 'add_gateway_environment'
   | 'refresh_gateway'
   | 'pair_gateway'
@@ -2564,6 +2565,12 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   if (gateway.local_enabled === false) {
     return gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default');
   }
+  if (desktopGatewayCanManageService(gateway) && gateway.service_state?.can_start) {
+    return gatewaySourceAction('start_gateway', 'Start Gateway', 'default');
+  }
+  if (desktopGatewayCanManageService(gateway) && gateway.service_state?.status === 'service_needs_update') {
+    return gatewaySourceAction('update_gateway', 'Update Gateway', 'default');
+  }
   if (gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired') {
     return gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default');
   }
@@ -2585,6 +2592,14 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly 
     return actions;
   }
 
+  if (desktopGatewayCanManageService(gateway) && gateway.service_state?.status !== 'needs_reinstall') {
+    const state = gateway.service_state;
+    if (state?.can_start) add(gatewaySourceAction('start_gateway', 'Start Gateway'));
+    if (state?.can_stop) add(gatewaySourceAction('stop_gateway', 'Stop Gateway'));
+    if (state?.can_restart) add(gatewaySourceAction('restart_gateway', 'Restart Gateway'));
+    if (state?.can_update) add(gatewaySourceAction('update_gateway', 'Update Gateway'));
+  }
+  add(gatewaySourceAction('refresh_gateway', 'Refresh'));
   if (gateway.status !== 'needs_setup') {
     add(gatewaySourceAction('disable_gateway', 'Disable', 'outline'));
   }

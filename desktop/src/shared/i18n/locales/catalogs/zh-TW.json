@@ -1993,6 +1993,8 @@
     "cloudAwaitingSyncDetail": "請重新整理以載入 Redeven Cloud 環境。"
   },
   "gatewayAccess": {
+    "localService": "本機",
+    "managedServiceHelp": "Desktop 僅管理此主機上的 Gateway 服務。執行階段服務仍獨立管理。",
     "checkingAccess": "正在檢查 Gateway 存取",
     "checkingAccessDetail": "正在驗證 Gateway 信任關係與環境存取權限。",
     "lastCheckProxy": "最近代理存取檢查",

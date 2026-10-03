@@ -1993,6 +1993,8 @@
     "cloudAwaitingSyncDetail": "Atualize para carregar seus ambientes do Redeven Cloud."
   },
   "gatewayAccess": {
+    "localService": "Host local",
+    "managedServiceHelp": "O Desktop gerencia apenas o serviço Gateway neste host. Os serviços de execução continuam sendo gerenciados separadamente.",
     "checkingAccess": "Verificando o acesso ao Gateway",
     "checkingAccessDetail": "Verificando a confiança do Gateway e o acesso ao ambiente.",
     "lastCheckProxy": "Última verificação via proxy",

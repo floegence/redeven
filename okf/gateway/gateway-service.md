@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway service
 description: Standalone optional Gateway identity, catalog, session, and access forwarding service.
 tags: [gateway, desktop, release, access]
-timestamp: 2026-10-02T00:00:00Z
+timestamp: 2026-10-03T00:00:00Z
 ---
 # Summary
 
@@ -42,11 +42,32 @@ Removing Runtime lifecycle authority must not delete pairing, trust, profiles, c
 
 Desktop owns Runtime lifecycle only for targets with an authorized direct management channel. Provider owns discovery and access authorization. Runtime owns business execution. Gateway owns only its process and the access plane described above. A Gateway-only Environment is access-only and exposes no Runtime lifecycle action.
 
+## Desktop management of the Gateway process
+
+An explicit Gateway registration may use URL, local host, SSH host, local
+container, or SSH container transport. URL registrations expose access and
+catalog actions only. Desktop manages the other registrations through their
+configured host channel and `GatewayLifecycleManager`, with an independent
+Gateway binary and state directory. Gateway cards offer Start, Stop, Restart,
+and Update according to the observed Gateway service capability. These actions
+never invoke Runtime lifecycle management or grant management of catalog targets.
+
+Saving a registration does not install or start a process. Start is explicit;
+background refresh requires an already ready Gateway. Stop, Restart, and Update
+use the existing confirmation/progress/cancellation surface and explain proxy
+session interruption; independently opened Direct URL sessions remain live.
+URL pairing requests a pairing code. Managed pairing uses the authenticated
+Gateway bridge. Both grant profile write only after separate explicit consent;
+transport selection does not imply that permission. Managed package installation
+uses Desktop upload of the independent Gateway archive, not Runtime bootstrap.
+
 # Evidence
 
 - `redeven:cmd/redeven-gateway/main.go:1` - Standalone Gateway CLI and Gateway-only service commands.
 - `redeven:internal/gatewayservice/server.go:1` - Pairing, catalog, profile, open-session, and access forwarding routes.
 - `redeven:internal/gatewayservice/server_test.go:1` - Verifies Runtime lifecycle routes and state are absent.
 - `redeven:spec/openapi/gateway-v3.yaml:1` - Access-only Gateway HTTP contract.
+- `redeven:desktop/src/welcome/GatewaySetup.client.test.tsx` - Explicit managed registration, URL pairing input, and own-service start interactions.
+- `redeven:desktop/src/main/gatewayLifecycleManager.test.ts` - Gateway-only service operations, target isolation, and URL management rejection.
 - `redeven:desktop/src/main/gatewayServiceHost.ts:1` - Explicit standalone Gateway installation under the Gateway state root.
 - `redeven:.github/workflows/release.yml:1` - Independent Gateway archive build and publication.

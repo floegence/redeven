@@ -61,6 +61,8 @@ graphics decoder workers remain enabled. A missing injected constructor stops
 connection setup. Generic Code App injection must not install a second transport
 on these marked graphical documents.
 
+# Boundaries
+
 ## Resource authority
 
 Acquisition requires read, write and execute permissions and an active resource
