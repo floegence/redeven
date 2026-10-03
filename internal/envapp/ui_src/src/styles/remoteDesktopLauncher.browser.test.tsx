@@ -18,8 +18,8 @@ vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
   env_id: () => 'fixture', localRuntime: () => ({}),
 }) }));
 vi.mock('../ui/services/desktopSessionContext', async importOriginal => ({ ...await importOriginal<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'server' }) }));
-vi.mock('../ui/services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => true }));
-vi.mock('../ui/services/webServiceWindows', () => ({ resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
+vi.mock('../ui/services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellWebServiceWindowOpenAvailable: () => true }));
+vi.mock('../ui/services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
 vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: vi.fn(), cancelRemoteDesktopPreparation: vi.fn() }));
 vi.mock('../ui/services/hostApplicationsApi', () => ({ requestHostApplicationPermission: state.permission }));
 
@@ -27,7 +27,7 @@ const ready: RemoteDesktopStatus = { capabilities: { backend: 'macos', state: 'r
 let dispose: (() => void) | undefined;
 beforeEach(() => {
   vi.resetAllMocks(); state.locale = 'zh-CN'; state.full = true;
-  state.status.mockResolvedValue(structuredClone(ready)); state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: '/desktop' }); state.open.mockResolvedValue(undefined);
+  state.status.mockResolvedValue(structuredClone(ready)); state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' }); state.open.mockResolvedValue(undefined);
   document.documentElement.dataset.floeShellTheme = 'porcelain-dark'; document.documentElement.classList.add('dark');
 });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark', 'light'); delete document.documentElement.dataset.floeShellTheme; });

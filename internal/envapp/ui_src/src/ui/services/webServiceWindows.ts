@@ -8,6 +8,8 @@ import { openWebServiceWindowInDesktopShell } from './desktopShellBridge';
 import type { ForwardWindowPresentation } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
 
+export class WebServiceWindowOpenError extends Error {}
+
 export type WebServiceOpenRoute =
   | Readonly<{ kind: 'local_proxy'; url: string; label: 'Local proxy' }>
   | Readonly<{ kind: 'e2ee_tunnel'; forward_id: string; label: 'Secure tunnel' }>;
@@ -159,7 +161,7 @@ export async function openWebServiceRoute(
       presentation,
       ...(preparationID ? { preparation_id: preparationID } : {}),
     });
-    if (!response?.ok) throw new Error(response?.message || copy.desktopWindowFailed);
+    if (!response?.ok) throw new WebServiceWindowOpenError(response?.message || copy.desktopWindowFailed);
     return;
   }
   if (!win) throw new Error(copy.popupBlocked);

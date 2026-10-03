@@ -3,6 +3,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { controlText } from '../../testSupport/controlText';
 import { RemoteDesktopPanel } from './RemoteDesktopPanel';
+import { WebServiceWindowOpenError } from '../services/webServiceWindows';
 import { LocalApiError } from '../services/localApi';
 import type { RemoteDesktopStatus } from '../services/remoteDesktopApi';
 
@@ -16,7 +17,7 @@ vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
 }) }));
 vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.label ? { label: state.label } : null }));
 vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => state.desktop }));
-vi.mock('../services/webServiceWindows', () => ({ resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
+vi.mock('../services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
 vi.mock('../services/remoteDesktopApi', async original => ({ ...await original<object>(), getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, disconnectRemoteDesktop: state.disconnect, setRemoteDesktopUnattended: state.save }));
 vi.mock('../services/hostApplicationsApi', async original => ({ ...await original<object>(), requestHostApplicationPermission: state.permission }));
 
@@ -28,7 +29,7 @@ let host: HTMLElement, dispose: (() => void) | undefined;
 beforeEach(() => {
   vi.resetAllMocks(); state.label = 'server'; state.hostname = 'server.example'; state.local = true; state.full = true; state.desktop = true;
   state.status.mockResolvedValue(structuredClone(ready));
-  state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: '/desktop' });
+  state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' });
   state.open.mockResolvedValue(undefined); state.disconnect.mockResolvedValue(undefined); state.save.mockResolvedValue({ unattended: true });
   host = document.createElement('main'); document.body.append(host);
 });
@@ -83,17 +84,20 @@ it('reports a blocked popup without creating a server session', async () => {
 });
 
 it('releases a session when the viewer window cannot open and explains the failure', async () => {
-  state.open.mockRejectedValue(new Error('fixture window failure'));
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required' } });
+  state.open.mockRejectedValue(new WebServiceWindowOpenError('Invalid Web Service window request.'));
   await mount(); button('Connect to desktop').click();
   await vi.waitFor(() => expect(state.disconnect).toHaveBeenCalledWith('one'));
   expect(host.querySelector('[role=alert]')?.textContent).toContain('The desktop window could not open');
+  expect(host.querySelector('[role=alert]')?.textContent).toContain('Invalid Web Service window request.');
+  expect(host.querySelector('.remote-desktop-guidance')).toBeNull();
 });
 
 it('cleans up an unfinished connection if the panel is dismissed before creation returns', async () => {
   let complete!: (value: object) => void;
   state.create.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
   await mount(); button('Connect to desktop').click(); dispose?.(); dispose = undefined;
-  complete({ id: 'one', forward_id: 'pf-one', target_url: '/desktop' });
+  complete({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' });
   await vi.waitFor(() => expect(state.disconnect).toHaveBeenCalledWith('one'));
   expect(state.open).not.toHaveBeenCalled();
 });

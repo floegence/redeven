@@ -7215,7 +7215,7 @@
     "settingsFailed": "Não foi possível salvar a opção de conexão",
     "prepareFailed": "A preparação da área de trabalho não foi concluída",
     "permissionFailed": "Não foi possível abrir as configurações de permissões do host",
-    "windowFailed": "Não foi possível abrir a janela da área de trabalho. Tente novamente; se o problema persistir no Redeven Desktop, reconecte o ambiente primeiro.",
+    "windowFailed": "Não foi possível abrir a janela da área de trabalho. Por isso, o compartilhamento de tela ainda não foi solicitado no host. Tente se conectar novamente.",
     "sessionExpired": "Sua conexão com o ambiente expirou. Reconecte o ambiente e tente novamente.",
     "requestInvalid": "As configurações de conexão foram rejeitadas. Atualize e escolha uma tela disponível antes de tentar novamente.",
     "setupBusy": "A preparação da área de trabalho já está em andamento. Aguarde a conclusão e atualize o status.",

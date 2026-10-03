@@ -3,12 +3,57 @@ package remotedesktop
 import (
 	"context"
 	"errors"
+	"net/url"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	nativeapps "github.com/floegence/floe-native-apps"
+	"github.com/floegence/redeven/internal/portforward"
+	"github.com/floegence/redeven/internal/portforward/registry"
 )
+
+func TestCreatedSessionUsesRegisteredForwardOrigin(t *testing.T) {
+	reg, err := registry.Open(filepath.Join(t.TempDir(), "forwards.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reg.Close() })
+	forwards, err := portforward.New(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{sessions: map[string]*ownedSession{}, forwards: forwards, stop: make(chan struct{}), factory: func(context.Context) (Transport, error) {
+		t.Fatal("creating the session must not request native authorization before viewer attachment")
+		return nil, ErrUnavailable
+	}}
+	t.Cleanup(func() { _ = m.Close() })
+	s, err := m.Create(context.Background(), "alice", CreateRequest{Mode: "control"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forward, err := forwards.GetForward(context.Background(), s.ForwardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := url.Parse(s.TargetURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Path != "" || target.RawQuery != "" || target.Fragment != "" || s.TargetURL != forward.TargetURL {
+		t.Fatalf("Desktop window requires the registered origin and separate viewer path: session=%+v forward=%+v", s, forward)
+	}
+	for _, origin := range []string{forward.TargetURL, forward.TargetURL + "/"} {
+		found, owner, ok := m.ForTarget(origin)
+		if !ok || owner != "alice" || found.ID != s.ID {
+			t.Fatal("canonical target lost desktop ownership", origin)
+		}
+	}
+	if _, _, ok := m.ForTarget("http://127.0.0.1:1"); ok {
+		t.Fatal("unrelated target claimed")
+	}
+}
 
 type fakeTransport struct {
 	mu       sync.Mutex

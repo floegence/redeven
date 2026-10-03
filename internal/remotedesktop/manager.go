@@ -166,7 +166,9 @@ func (m *Manager) Create(ctx context.Context, owner string, req CreateRequest, u
 		_ = listener.Close()
 		return Session{}, err
 	}
-	session := &ownedSession{view: Session{ID: randomID(), ForwardID: forward.Forward.ForwardID, TargetURL: target, Mode: req.Mode, DisplayID: req.DisplayID, Locale: req.Locale, Theme: req.Theme, HostName: req.HostName}, owner: owner, unattended: unattended, takeover: req.Takeover, expires: time.Now().Add(2 * time.Minute)}
+	// Desktop window admission and target ownership use the registered origin;
+	// the viewer path belongs to navigation, not to the service identity.
+	session := &ownedSession{view: Session{ID: randomID(), ForwardID: forward.Forward.ForwardID, TargetURL: forward.Forward.TargetURL, Mode: req.Mode, DisplayID: req.DisplayID, Locale: req.Locale, Theme: req.Theme, HostName: req.HostName}, owner: owner, unattended: unattended, takeover: req.Takeover, expires: time.Now().Add(2 * time.Minute)}
 	m.sessions[session.view.ID] = session
 	if req.Mode == "control" {
 		if err := m.claimLocked(session); err != nil {

@@ -7211,7 +7211,7 @@
     "settingsFailed": "未能保存连接选项",
     "prepareFailed": "桌面组件准备未完成",
     "permissionFailed": "未能打开主机的权限设置",
-    "windowFailed": "未能打开桌面窗口。请重试；如果 Redeven Desktop 中仍出现此问题，请先重新连接环境。",
+    "windowFailed": "未能打开桌面窗口，因此尚未向主机请求共享。请重新连接。",
     "sessionExpired": "环境连接已过期，请重新连接环境后重试。",
     "requestInvalid": "连接设置未被接受。请刷新并选择可用的显示器后重试。",
     "setupBusy": "桌面组件正在准备中，请等待完成后刷新。",

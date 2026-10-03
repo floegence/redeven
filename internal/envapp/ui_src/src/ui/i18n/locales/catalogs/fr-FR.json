@@ -7215,7 +7215,7 @@
     "settingsFailed": "Impossible d’enregistrer l’option de connexion",
     "prepareFailed": "La préparation du bureau n’a pas abouti",
     "permissionFailed": "Impossible d’ouvrir les réglages d’autorisation de l’hôte",
-    "windowFailed": "La fenêtre du bureau n’a pas pu s’ouvrir. Réessayez. Si le problème persiste dans Redeven Desktop, reconnectez-vous d’abord à l’environnement.",
+    "windowFailed": "La fenêtre du bureau n’a pas pu s’ouvrir. Le partage d’écran n’a donc pas encore été demandé sur l’hôte. Réessayez de vous connecter.",
     "sessionExpired": "Votre connexion à l’environnement a expiré. Reconnectez-vous à l’environnement et réessayez.",
     "requestInvalid": "Les paramètres de connexion ont été refusés. Actualisez et choisissez un écran disponible avant de réessayer.",
     "setupBusy": "La préparation du bureau est déjà en cours. Attendez la fin, puis actualisez.",

@@ -7211,7 +7211,7 @@
     "settingsFailed": "無法儲存連線選項",
     "prepareFailed": "桌面元件準備未完成",
     "permissionFailed": "無法開啟主機的權限設定",
-    "windowFailed": "無法開啟桌面視窗。請再試一次；若 Redeven Desktop 仍出現此問題，請先重新連線至環境。",
+    "windowFailed": "無法開啟桌面視窗，因此尚未向主機要求共享。請重新連線。",
     "sessionExpired": "環境連線已到期，請重新連線至環境後再試。",
     "requestInvalid": "連線設定未被接受。請重新整理並選擇可用的顯示器後再試。",
     "setupBusy": "桌面元件正在準備中，請等候完成後重新整理。",

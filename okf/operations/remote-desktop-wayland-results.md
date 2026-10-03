@@ -3,7 +3,7 @@ type: Acceptance Record
 title: Wayland desktop qualification results
 description: Assess real GNOME Wayland office behavior and retained capture failures before and after authorized virtual graphics provisioning.
 tags: [desktop, linux, wayland, validation, performance]
-timestamp: 2026-10-02T15:34:00Z
+timestamp: 2026-10-03T03:35:00Z
 ---
 # Summary
 
@@ -54,6 +54,30 @@ flag removed, a running AudioContext, advancing output timestamps and no page
 errors. The user explicitly confirmed hearing them from the Mac output. This
 qualifies physical playback for that Linux-to-Mac path; destination-clock progress
 alone is not acoustic proof or a calibrated latency measurement.
+
+## Desktop Launcher Admission Regression
+
+On 2026-10-03, the real Desktop launcher exposed a product contract bug: desktop
+session `target_url` included `/_redeven_desktop/`, while Desktop window admission
+requires the registered loopback origin. The window was rejected before native
+attachment, so no host authorization prompt could appear. Earlier direct-viewer
+and mocked-window tests did not exercise that boundary.
+
+The fix returns the port-forward service's canonical origin, retains Desktop's
+strict validation, preserves IPC rejection diagnostics and removes misleading
+host-confirmation guidance after a failed launch. Deterministic tests cover the
+actual Go manager/forward result and the TypeScript API-client-to-window-validator
+flow, including rejection and cleanup of malformed targets.
+
+A task Runtime on `udesk24` port 24929 with an isolated state directory and
+published native components v0.22.8 was opened from the production Electron
+41.10.5 shell through an SSH-forwarded local URL. The actual Host Applications
+**Connect to desktop** button opened the independent viewer and its native
+Flowersec resource session. GNOME exported a pending RemoteDesktop portal request
+and the native helper remained active waiting for the host user. No restore grant
+was copied into this task; system approval was requested normally. This proves
+window admission through host authorization request, not approval or frame delivery.
+The already-running user Runtime and Desktop were not restarted or replaced.
 
 ## Performance And Diagnostics
 
