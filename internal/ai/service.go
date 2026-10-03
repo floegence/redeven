@@ -1579,6 +1579,11 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	} else {
 		model = requestedModel
 	}
+	if model == "" && s != nil && r != nil {
+		if selected := s.sessionSelectedModel(r.sessionMeta, cfg); strings.HasPrefix(selected, "platform/") {
+			model = selected
+		}
+	}
 	if model == "" && s != nil {
 		if id, ok := s.resolvedDesktopModelSourceOverrideModel(ctx); ok {
 			model = id

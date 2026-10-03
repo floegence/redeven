@@ -35,10 +35,10 @@ describe('Flower platform model availability', () => {
     expect(surface.querySelector('[role="alert"] button')).not.toBeNull();
   });
 
-  it('keeps an unavailable selected platform model visible when local alternatives are ready', async () => {
+  it.each([false, true])('keeps an unavailable selection when replacement platform models exist: %s', async (hasReplacement) => {
     const surface = renderUnavailablePlatform({
       ...settingsSnapshot(true),
-      platform_model_source: { models: [], current_model_id: 'platform/selected', error: unavailable },
+      platform_model_source: { models: hasReplacement ? [{ id: 'platform/replacement', label: 'Replacement', input_modalities: ['text'] }] : [], current_model_id: 'platform/selected', error: unavailable },
     });
 
     await waitFor(() => surface.querySelector('[role="alert"]')?.textContent?.includes(unavailable) ?? false);

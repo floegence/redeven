@@ -3,8 +3,10 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -176,5 +178,136 @@ func TestExplicitModelThreadOperationsStayIndependentOfPlatform(t *testing.T) {
 				t.Fatalf("explicit model operations contacted platform %d times", calls.Load())
 			}
 		})
+	}
+}
+
+func TestRemovedPlatformSelectionRequiresExplicitReplacement(t *testing.T) {
+	for _, local := range []bool{false, true} {
+		for _, replacement := range []bool{false, true} {
+			t.Run(fmt.Sprintf("local=%v/replacement=%v", local, replacement), func(t *testing.T) {
+				var removed atomic.Bool
+				edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path == "/api/ai/v1/leases/renew" {
+						_ = json.NewEncoder(w).Encode(platformGatewayLease{Token: "token", RenewalToken: "renewal", ExpiresAtUnix: time.Now().Add(time.Minute).Unix(), EntitlementVersion: 1})
+						return
+					}
+					catalog := platformModelCatalog{}
+					aliases := []string{"selected"}
+					if removed.Load() {
+						aliases = nil
+					}
+					if replacement {
+						aliases = append(aliases, "replacement")
+					}
+					for _, alias := range aliases {
+						catalog.Models = append(catalog.Models, platformCatalogModel{ModelID: alias, Available: true, Capabilities: []string{"text", "chat"}, ContextWindow: 32000, MaxOutputTokens: 1024})
+					}
+					_ = json.NewEncoder(w).Encode(catalog)
+				}))
+				t.Cleanup(edge.Close)
+				var cfg *config.AIConfig
+				if local {
+					cfg = &config.AIConfig{CurrentModelID: "local/local-model", Providers: []config.AIProvider{{ID: "local", Type: "openai_compatible", BaseURL: "http://127.0.0.1:19001/v1", Models: []config.AIProviderModel{{ModelName: "local-model", ContextWindow: 32000, MaxOutputTokens: 1024}}}}}
+				}
+				svc := newTestService(t, cfg)
+				meta := testSendTurnMeta()
+				meta.PlatformAIGrant, meta.PlatformAIGatewayURL, meta.PlatformAIEntitlementVersion = "grant", edge.URL, 1
+				if err := svc.SetCurrentModelForSession(t.Context(), meta, "platform/selected", nil); err != nil {
+					t.Fatal(err)
+				}
+				thread, err := svc.CreateThread(t.Context(), meta, "Original selection", "", "", "")
+				if err != nil || thread.ModelID != "platform/selected" {
+					t.Fatalf("create baseline: %+v %v", thread, err)
+				}
+				removed.Store(true)
+				listed, err := svc.ListModelsForSession(t.Context(), meta)
+				if err != nil || listed.CurrentModel != "platform/selected" || listed.Runtime.PlatformError == "" {
+					t.Fatalf("unavailable selection was lost: %+v %v", listed, err)
+				}
+				if replacement && !slices.ContainsFunc(listed.Models, func(m Model) bool { return m.ID == "platform/replacement" }) {
+					t.Fatal("replacement missing from catalog")
+				}
+				for _, threadModel := range []string{"", thread.ModelID} {
+					if got, err := svc.resolveRunModel(t.Context(), cfg, "", threadModel, &run{cfg: cfg, sessionMeta: meta}); err == nil {
+						t.Fatalf("unavailable selection resolved to %+v", got)
+					}
+				}
+				if created, err := svc.CreateThread(t.Context(), meta, "Unavailable default", "", "", ""); err == nil {
+					t.Fatalf("created with unavailable default: %+v", created)
+				}
+				next := ""
+				if local {
+					next = "local/local-model"
+				}
+				if replacement {
+					next = "platform/replacement"
+				}
+				if next != "" {
+					if err := svc.SetCurrentModelForSession(t.Context(), meta, next, func(*config.AIConfig) error { return nil }); err != nil {
+						t.Fatal(err)
+					}
+					listed, err = svc.ListModelsForSession(t.Context(), meta)
+					if err != nil || listed.CurrentModel != next || listed.Runtime.PlatformError != "" {
+						t.Fatalf("explicit replacement failed: %+v %v", listed, err)
+					}
+					created, err := svc.CreateThread(t.Context(), meta, "New selection", "", "", "")
+					if err != nil || created.ModelID != next {
+						t.Fatalf("create with replacement: %+v %v", created, err)
+					}
+					if got, err := svc.resolveRunModel(t.Context(), cfg, "", "", &run{cfg: cfg, sessionMeta: meta}); err != nil || got.ID != next {
+						t.Fatalf("replacement resolution: %+v %v", got, err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestPlatformPreferenceTakesPrecedenceOverDesktopDefault(t *testing.T) {
+	var removed atomic.Bool
+	edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/ai/v1/leases/renew" {
+			_ = json.NewEncoder(w).Encode(platformGatewayLease{Token: "token", RenewalToken: "renewal", ExpiresAtUnix: time.Now().Add(time.Minute).Unix(), EntitlementVersion: 1})
+			return
+		}
+		catalog := platformModelCatalog{}
+		if !removed.Load() {
+			catalog.Models = []platformCatalogModel{{ModelID: "selected", Available: true, Capabilities: []string{"text", "chat"}, ContextWindow: 32000, MaxOutputTokens: 1024}}
+		}
+		_ = json.NewEncoder(w).Encode(catalog)
+	}))
+	t.Cleanup(edge.Close)
+	svc := newTestService(t, nil)
+	meta := testSendTurnMeta()
+	meta.PlatformAIGrant, meta.PlatformAIGatewayURL, meta.PlatformAIEntitlementVersion = "grant", edge.URL, 1
+	desktopID := desktopModelSourceModelIDPrefix + "default"
+	source, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+		return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceModelSnapshot{Configured: true, CurrentModel: desktopID, Models: []DesktopModelSourceModel{{ID: desktopID, ContextWindow: 32000, MaxOutputTokens: 1024}}})
+	})
+	t.Cleanup(cleanup)
+	source.SetCurrentModelID(desktopID)
+	svc.desktopModelSource = source
+	if err := svc.SetCurrentModelForSession(t.Context(), meta, "platform/selected", nil); err != nil {
+		t.Fatal(err)
+	}
+	thread, err := svc.CreateThread(t.Context(), meta, "Platform preference", "", "", "")
+	if err != nil || thread.ModelID != "platform/selected" {
+		t.Fatalf("desktop overrode platform preference: %+v %v", thread, err)
+	}
+	if got, err := svc.resolveRunModel(t.Context(), nil, "", "", &run{sessionMeta: meta}); err != nil || got.ID != "platform/selected" {
+		t.Fatalf("desktop overrode platform run: %+v %v", got, err)
+	}
+	removed.Store(true)
+	if _, err := svc.CreateThread(t.Context(), meta, "Unavailable preference", "", "", ""); err == nil {
+		t.Fatal("unavailable platform selection silently switched to Desktop")
+	}
+	if _, err := svc.resolveRunModel(t.Context(), nil, "", "", &run{sessionMeta: meta}); err == nil {
+		t.Fatal("unavailable platform run silently switched to Desktop")
+	}
+	if err := svc.SetCurrentModelForSession(t.Context(), meta, desktopID, func(*config.AIConfig) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := svc.resolveRunModel(t.Context(), nil, "", "", &run{sessionMeta: meta}); err != nil || got.ID != desktopID {
+		t.Fatalf("explicit Desktop switch did not recover: %+v %v", got, err)
 	}
 }

@@ -73,7 +73,16 @@ func (s *Service) sessionConfigForModel(ctx context.Context, meta *session.Meta,
 	if model != "" && !strings.HasPrefix(model, "platform/") {
 		return localModelConfig(cfg)
 	}
-	return s.sessionModelConfig(ctx, meta, cfg)
+	projected, err := s.sessionModelConfig(ctx, meta, cfg)
+	if err != nil {
+		return nil, err
+	}
+	// A preference is not authorization. Its removal must block implicit work
+	// until the user explicitly selects an available replacement.
+	if strings.HasPrefix(model, "platform/") && !projected.IsAllowedModelID(model) {
+		return nil, errors.New("selected Redeven AI model is no longer available; select another model or try again")
+	}
+	return projected, nil
 }
 
 // sessionModelConfig projects the live entitlement catalog into a request-local
@@ -105,7 +114,7 @@ func (s *Service) sessionModelConfig(ctx context.Context, meta *session.Meta, cf
 		if !entry.Available {
 			continue
 		}
-		if entry.ModelID == "" || len(entry.ModelID) > 128 || seen[entry.ModelID] || entry.ContextWindow <= 0 || entry.ContextWindow > 2_000_000 || entry.MaxOutputTokens <= 0 || entry.MaxOutputTokens > 200_000 || slices.Contains(entry.Capabilities, "chat") == slices.Contains(entry.Capabilities, "responses") {
+		if !validPlatformModelAlias(entry.ModelID) || seen[entry.ModelID] || entry.ContextWindow <= 0 || entry.ContextWindow > 2_000_000 || entry.MaxOutputTokens <= 0 || entry.MaxOutputTokens > 200_000 || slices.Contains(entry.Capabilities, "chat") == slices.Contains(entry.Capabilities, "responses") {
 			return nil, errors.New("invalid authorized model catalog")
 		}
 		seen[entry.ModelID] = true
@@ -166,7 +175,8 @@ func (s *Service) ListModelsForSession(ctx context.Context, meta *session.Meta) 
 		}
 	}
 	models, err := s.listModels(ctx, projected)
-	if platformErr != nil && errors.Is(err, ErrNotConfigured) {
+	selected := s.sessionSelectedModel(meta, cfg)
+	if (platformErr != nil || platformSessionAvailable(meta) || strings.HasPrefix(selected, "platform/")) && errors.Is(err, ErrNotConfigured) {
 		models, err = NewModelsResponse(s.RuntimeStatus(ctx)), nil
 	}
 	if err != nil {
@@ -175,12 +185,33 @@ func (s *Service) ListModelsForSession(ctx context.Context, meta *session.Meta) 
 	models.Runtime.PlatformAvailable = platformSessionAvailable(meta)
 	if platformErr != nil {
 		models.Runtime.PlatformError = "Redeven AI is currently unavailable. Select another model or try again."
-		// Preserve the user's selected platform source even while its catalog is unavailable.
-		if selected := s.sessionSelectedModel(meta, cfg); strings.HasPrefix(selected, "platform/") {
-			models.CurrentModel = selected
+	}
+	// Keep the selection separate from the live catalog, including successful
+	// refreshes which remove a model. Alternatives must remain selectable.
+	if strings.HasPrefix(selected, "platform/") {
+		models.CurrentModel = selected
+		if platformErr == nil && !slices.ContainsFunc(models.Models, func(m Model) bool { return m.ID == selected }) {
+			models.Runtime.PlatformError = "The selected Redeven AI model is no longer available. Select another model or try again."
 		}
 	}
 	return models, nil
+}
+
+// Version 1 uses 1–255 ASCII alias characters. The external Edge wire test
+// checks this boundary against the independently released control plane.
+func validPlatformModelAlias(alias string) bool {
+	if len(alias) == 0 || len(alias) > 255 {
+		return false
+	}
+	for _, c := range alias {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '-', c == '.', c == '/':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) PlatformAvailableForSession(meta *session.Meta) bool {

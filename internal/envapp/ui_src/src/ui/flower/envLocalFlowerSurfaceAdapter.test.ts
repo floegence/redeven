@@ -90,15 +90,16 @@ it('retries a platform outage immediately instead of reusing the cached error', 
   expect(modelReads).toBe(2);
 });
 
-it('preserves an unavailable platform selection without silently choosing a local model', async () => {
+it.each([false, true])('preserves an unavailable selection with replacement platform models: %s', async (hasReplacement) => {
+  const models = hasReplacement ? [{ id: 'platform/replacement', label: 'Replacement', input_modalities: ['text'] }] : [];
   fetchMock.mockImplementation(async (url: string) => {
     if (url === '/_redeven_proxy/api/settings') return jsonResponse({ ai: null, ai_runtime: { platform_available: true } });
-    if (url === '/_redeven_proxy/api/ai/models') return jsonResponse({ current_model: 'platform/selected', models: [], runtime: { platform_error: 'Redeven AI unavailable' } });
+    if (url === '/_redeven_proxy/api/ai/models') return jsonResponse({ current_model: 'platform/selected', models, runtime: { platform_error: 'Redeven AI unavailable' } });
     throw new Error(`Unexpected request: ${url}`);
   });
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
   const snapshot = await adapter.loadSettings();
-  expect(snapshot.platform_model_source).toEqual({ current_model_id: 'platform/selected', models: [], error: 'Redeven AI unavailable' });
+  expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/selected', models, error: 'Redeven AI unavailable' });
 });
 
 function stagingScope(targetID: string): FlowerAttachmentStagingScope {

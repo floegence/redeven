@@ -606,6 +606,11 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 		return threadstore.ThreadSettings{}, err
 	}
 	if modelID == "" {
+		if selected := s.sessionSelectedModel(meta, cfg); strings.HasPrefix(selected, "platform/") {
+			modelID = selected
+		}
+	}
+	if modelID == "" {
 		if candidate, ok := s.resolvedDesktopModelSourceOverrideModel(ctx); ok {
 			modelID = candidate
 		}
