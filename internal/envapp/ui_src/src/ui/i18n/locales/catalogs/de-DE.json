@@ -7215,7 +7215,7 @@
     "settingsFailed": "Verbindungsoption konnte nicht gespeichert werden",
     "prepareFailed": "Desktop-Einrichtung nicht abgeschlossen",
     "permissionFailed": "Berechtigungseinstellungen des Hosts konnten nicht geöffnet werden",
-    "windowFailed": "Das Desktopfenster konnte nicht geöffnet werden. Versuchen Sie es erneut. Besteht das Problem in Redeven Desktop weiter, verbinden Sie sich zuerst erneut mit der Umgebung.",
+    "windowFailed": "Das Desktop-Fenster konnte nicht geöffnet werden. Daher wurde auf dem Host noch keine Bildschirmfreigabe angefordert. Versuchen Sie erneut, eine Verbindung herzustellen.",
     "sessionExpired": "Die Verbindung zur Umgebung ist abgelaufen. Verbinden Sie sich erneut und versuchen Sie es noch einmal.",
     "requestInvalid": "Die Verbindungseinstellungen wurden abgelehnt. Aktualisieren Sie den Status und wählen Sie einen verfügbaren Bildschirm, bevor Sie es erneut versuchen.",
     "setupBusy": "Die Desktop-Einrichtung läuft bereits. Warten Sie auf den Abschluss und aktualisieren Sie dann den Status.",

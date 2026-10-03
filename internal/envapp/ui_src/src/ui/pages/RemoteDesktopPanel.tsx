@@ -8,7 +8,7 @@ import { useEnvContext } from './EnvContext';
 import { cancelRemoteDesktopPreparation, createRemoteDesktop, disconnectRemoteDesktop, getRemoteDesktopStatus, prepareRemoteDesktop, setRemoteDesktopUnattended, type RemoteDesktopStatus } from '../services/remoteDesktopApi';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
-import { openWebServiceRoute, resolveWebServiceOpenRoute } from '../services/webServiceWindows';
+import { openWebServiceRoute, resolveWebServiceOpenRoute, WebServiceWindowOpenError } from '../services/webServiceWindows';
 import { requestHostApplicationPermission } from '../services/hostApplicationsApi';
 import { LocalApiError } from '../services/localApi';
 import './remote-desktop.css';
@@ -17,6 +17,9 @@ type Failure = { title: EnvAppTranslationKey; hint: EnvAppTranslationKey; diagno
 type Action = 'connect' | 'prepare' | 'settings' | 'permission' | 'cancel';
 
 function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: EnvAppTranslationKey = 'remoteDesktop.connectionHint'): Failure {
+  if (failure instanceof WebServiceWindowOpenError) {
+    return { title, hint: 'remoteDesktop.windowFailed', diagnostic: failure.message };
+  }
   if (failure instanceof LocalApiError) {
     if (failure.status === 403) hint = 'remoteDesktop.accessRequired';
     else if (failure.status === 401) hint = 'remoteDesktop.sessionExpired';
@@ -98,6 +101,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     return i18n.t(available() ? 'remoteDesktop.ready' : 'remoteDesktop.unsupported');
   };
   const stateHint = (): EnvAppTranslationKey | undefined => {
+    if (failure()) return undefined;
     if (!full()) return 'remoteDesktop.accessRequired';
     if (!status() || preparing() || capabilities()?.state === 'setup_required') return undefined;
     if (capabilities()?.state === 'locked') return 'remoteDesktop.lockedHint';

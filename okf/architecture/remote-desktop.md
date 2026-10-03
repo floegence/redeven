@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Human remote desktop sessions
 description: Share the host's current graphical desktop with an authenticated viewer, exclusive remote input, and bounded media.
 tags: [runtime, desktop, applications, security, media]
-timestamp: 2026-10-02T19:08:00Z
+timestamp: 2026-10-03T03:30:00Z
 ---
 # Summary
 
@@ -28,7 +28,9 @@ permission exception. Every session and forward belongs to the authenticated
 user; renderer-supplied identity never authorizes a route.
 
 The Runtime holds at most eight ephemeral desktop sessions. It registers an
-owned port forward per session and requires a separate 90-second attachment
+owned port forward per session. The returned `target_url` is its canonical
+loopback origin, also used for target ownership; the viewer path stays separate
+under the [launcher contract](remote-desktop-launcher.md). Each session requires a separate 90-second attachment
 secret on both WebSocket subprotocols. A secret does not appear in a URL, page
 source or audit. A new ticket waits for the old native attachment to release its
 input and authorization lease. Each ticket admits one

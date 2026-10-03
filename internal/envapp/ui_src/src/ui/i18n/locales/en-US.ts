@@ -27,7 +27,7 @@ export const enUS = defineDictionary({
     "settingsFailed": "Could not save the connection option",
     "prepareFailed": "Desktop setup did not complete",
     "permissionFailed": "Could not open the host’s permission settings",
-    "windowFailed": "The desktop window could not open. Try again; if this continues in Redeven Desktop, reconnect to the environment first.",
+    "windowFailed": "The desktop window could not open, so sharing has not been requested on the host. Try connecting again.",
     "sessionExpired": "Your environment connection has expired. Reconnect to the environment and try again.",
     "requestInvalid": "The connection settings were rejected. Refresh and choose an available display before retrying.",
     "setupBusy": "Desktop setup is already running. Wait for it to finish, then refresh.",

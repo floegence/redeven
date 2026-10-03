@@ -7215,7 +7215,7 @@
     "settingsFailed": "No se pudo guardar la opción de conexión",
     "prepareFailed": "No se completó la preparación del escritorio",
     "permissionFailed": "No se pudieron abrir los ajustes de permisos del host",
-    "windowFailed": "No se pudo abrir la ventana del escritorio. Vuelve a intentarlo; si el problema persiste en Redeven Desktop, reconecta primero el entorno.",
+    "windowFailed": "No se pudo abrir la ventana del escritorio, por lo que aún no se ha solicitado compartir la pantalla en el equipo remoto. Intenta conectarte de nuevo.",
     "sessionExpired": "La conexión al entorno ha caducado. Vuelve a conectarte al entorno e inténtalo de nuevo.",
     "requestInvalid": "Se rechazaron los ajustes de conexión. Actualiza y elige una pantalla disponible antes de volver a intentarlo.",
     "setupBusy": "La preparación del escritorio ya está en curso. Espera a que termine y actualiza el estado.",
