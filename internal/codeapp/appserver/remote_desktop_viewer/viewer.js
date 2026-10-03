@@ -14,8 +14,10 @@ let original = false, quality = 'smooth', audio = false, volume = .7, pinned = f
 let textInput = 'host';
 let awaitingMedia = [], reconnectAttempts = 0, noticeTimer, awaitingState = false;
 let nativeFullscreen = false, pendingFullscreen;
-let audioRequest;
+let audioRequest, disconnectBusy = false, panelTrigger;
 const windowBridge = window.redevenHostApplicationWindow;
+const displayOptions = $('display-options');
+$('files').hidden = !windowBridge && !window.opener;
 const fullscreen = () => windowBridge ? nativeFullscreen : !!document.fullscreenElement;
 for (const element of document.querySelectorAll('[data-icon]')) remoteDesktopIcons.mount(element, element.dataset.icon);
 
@@ -80,11 +82,18 @@ const pointer = hostApplicationPointer.createRemotePointer({
       shiftKey: !!packet.shiftKey, ctrlKey: !!packet.ctrlKey, altKey: !!packet.altKey, metaKey: !!packet.metaKey } });
   },
 });
-function revoke() { painted = false; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
+function revoke() { stats = undefined; refreshStats(); painted = false; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
-  for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'enable-sound', 'sound']) {
+  for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'sound', 'text-input', 'volume']) {
     if ($(id)) $(id).disabled = !!audioRequest || awaitingState || state !== 'active';
   }
+  $('clipboard').disabled = stopped || state !== 'active' || !painted;
+  $('shortcuts').disabled = !authorized(generation);
+  $('disconnect').disabled = stopped;
+  $('retry-disconnect').disabled = disconnectBusy;
+  toolbar.dataset.state = stopped ? 'ended' : state;
+  $('session-state').textContent = copy(stopped ? 'disconnected' : state === 'active' ? session.mode : 'connecting');
+  for (const item of document.querySelectorAll('[data-remote-control]')) item.disabled = !authorized(generation);
   if ($('lock-host')) $('lock-host').disabled = !authorized(generation);
   const confirm = $('confirm-lock');
   if (confirm) confirm.disabled ||= !authorized(Number(confirm.dataset.generation)) || epoch !== Number(confirm.dataset.epoch);
@@ -110,7 +119,6 @@ async function setAudio(enabled) {
   } finally {
     if (audioRequest === request) audioRequest = undefined;
     if ($('sound')) $('sound').checked = audio;
-    if ($('enable-sound')) $('enable-sound').textContent = copy(audio ? 'sound' : 'enableSound');
     updateTransitionControls();
     input.bindTarget(active(generation) ? generation : null);
   }
@@ -136,7 +144,8 @@ function updateState(message) {
   if (state === 'active') session.mode = message.mode ?? session.mode;
   $('mode').value = session.mode;
   if (changed || state !== 'active') { revoke(); player.reset(generation); }
-  if (state !== 'active' || session.mode !== 'control') { clipboardSync = false; clipboardText = ''; if ($('clipboard-text')) $('clipboard-text').value = ''; if ($('clipboard-sync')) $('clipboard-sync').checked = false; }
+  if ($('view-hint')) $('view-hint').hidden = session.mode === 'control';
+  if (state !== 'active' || session.mode !== 'control') clearClipboard();
   const permission = /permission|authorization|host_action/i.test(state + ' ' + reason);
   const locked = ['locked', 'locking'].includes(state) || ['locked', 'locking'].includes(reason);
   const connecting = ['connecting', 'authorizing'].includes(state);
@@ -173,7 +182,7 @@ async function connect() {
     const response = await windowTransport.fetch(base + 'ticket', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok) {
       if (current !== epoch || stopped) return;
-      state = 'disconnected'; status('disconnected'); $('reconnect').hidden = false;
+      state = 'disconnected'; status('disconnected', response.status === 404 || response.status === 403 ? 'endedHint' : ''); $('reconnect').hidden = response.status === 404 || response.status === 403; updateTransitionControls();
       // Retry temporary transport/service failures, while expired sessions and
       // revoked access require an explicit action from the authenticated host UI.
       if (response.status >= 500 || response.status === 408 || response.status === 429) retryConnection();
@@ -213,7 +222,10 @@ async function connect() {
         clipboardText = message.text ?? ''; if ($('clipboard-text')) $('clipboard-text').value = clipboardText;
         if (clipboardSync && authorized(generation) && document.hasFocus()) {
           if (!navigator.clipboard?.writeText) disableClipboardSync();
-          else void navigator.clipboard.writeText(clipboardText).catch(disableClipboardSync);
+          else {
+            const currentGeneration = generation;
+            void navigator.clipboard.writeText(clipboardText).catch(() => { if (current === epoch && authorized(currentGeneration)) disableClipboardSync(); });
+          }
         }
       } else if (message.type === 'error') {
         awaitingState = false;
@@ -246,7 +258,7 @@ async function connect() {
       if (current !== epoch || stopped) return;
       epoch++; revoke(); state = 'disconnected'; player.reset(0); control.close(); media.close();
       updateTransitionControls();
-      clipboardSync = false; clipboardText = ''; awaitingMedia = []; status('disconnected'); $('reconnect').hidden = false;
+      clearClipboard(); awaitingMedia = []; status('disconnected'); $('reconnect').hidden = false;
       retryConnection();
     };
     control.onclose = media.onclose = lost;
@@ -256,12 +268,23 @@ async function connect() {
 function element(tag, text, properties = {}) { const node = document.createElement(tag); if (text) node.textContent = text; Object.assign(node, properties); return node; }
 function button(key, onClick) { const node = element('button', copy(key), { type: 'button' }); node.onclick = onClick; return node; }
 function openPanel(title, children) {
+  if (!panel.open) { panelTrigger = document.activeElement; panelTrigger?.setAttribute('aria-expanded', 'true'); }
+  if (panel.contains(displayOptions)) $('panel-storage').append(displayOptions);
+  wakeToolbar();
   pointer.reset(); input.bindTarget(null);
   $('panel-title').textContent = copy(title); $('panel-body').replaceChildren(...children);
   if (panel.open) $('panel-body').querySelector('button, input, select, textarea')?.focus();
   else panel.showModal();
 }
-panel.addEventListener('close', () => { if (active(generation)) input.bindTarget(generation); });
+panel.addEventListener('close', () => {
+  if (panel.contains(displayOptions)) $('panel-storage').append(displayOptions);
+  panelTrigger?.setAttribute('aria-expanded', 'false');
+  if (panelTrigger?.isConnected && !panelTrigger.disabled) panelTrigger.focus();
+  if (active(generation)) input.bindTarget(generation);
+  wakeToolbar();
+});
+$('display-settings').onclick = () => { openPanel('display', [displayOptions]); updateTransitionControls(); };
+
 async function confirmation(title, hint, authority) {
   return new Promise(resolve => {
     const row = element('div', '', { className: 'row' });
@@ -279,7 +302,7 @@ async function confirmation(title, hint, authority) {
 }
 async function confirmControl(reconnect = false) {
   const current = epoch;
-  const accepted = await confirmation('takeover', 'takeoverHint');
+  const accepted = await confirmation('takeover', reconnect ? 'takeoverHint' : 'controlHint');
   if (current !== epoch || stopped) return;
   if (reconnect) command('connect', { mode: accepted ? 'control' : 'view', display_id: session.display_id, picture: picture() }, accepted);
   else if (accepted) changeDesktop('set_mode', { mode: 'control' }, true);
@@ -313,12 +336,21 @@ document.addEventListener('keydown', event => {
     event.preventDefault(); event.stopImmediatePropagation(); release(generation); setFullscreen(false);
   }
 }, true);
-function wakeToolbar() { clearTimeout(hideTimer); toolbar.classList.remove('hidden-toolbar'); if (!pinned && fullscreen()) hideTimer = setTimeout(() => toolbar.classList.add('hidden-toolbar'), 2200); }
-document.addEventListener('pointermove', wakeToolbar, { passive: true });
+function wakeToolbar() {
+  clearTimeout(hideTimer); toolbar.classList.remove('hidden-toolbar');
+  if (!pinned && fullscreen() && !panel.open && !stopped) hideTimer = setTimeout(() => {
+    if (!toolbar.matches(':hover, :focus-within') && !panel.open) toolbar.classList.add('hidden-toolbar');
+  }, 2200);
+}
+document.addEventListener('pointermove', event => { if (event.clientY <= 8) wakeToolbar(); }, { passive: true });
+toolbar.addEventListener('pointerleave', wakeToolbar);
+toolbar.addEventListener('focusout', wakeToolbar);
 $('pin').onclick = () => { pinned = !pinned; $('pin').setAttribute('aria-pressed', String(pinned)); wakeToolbar(); };
 
 function refreshStats() {
-  if (!$('statistics') || !stats) return;
+  if (!$('statistics')) return;
+  $('statistics').parentElement.hidden = !stats;
+  if (!stats) return;
   $('statistics').textContent = `${stats.width} × ${stats.height}\n${copy('frameRate')}: ${stats.fps.toFixed(1)} FPS\n${copy('bandwidth')}: ${(stats.bitsPerSecond / 1e6).toFixed(2)} Mbps\n${stats.encoder} · ${stats.codec}\n${copy('decoder')}: ${stats.decoderPreference}`;
 }
 $('settings').onclick = () => {
@@ -335,9 +367,7 @@ $('settings').onclick = () => {
     textInput = textMode.value; textMode.title = copy(textInput === 'host' ? 'hostInput' : 'pasteInput');
   };
   const textLabel = element('label', copy('textInput')); textLabel.append(textMode);
-  const sound = button(audio ? 'sound' : 'enableSound', () => void setAudio(true));
-  sound.id = 'enable-sound';
-  const slider = element('input', '', { type: 'range', min: '0', max: '1', step: '.05', value: String(volume) });
+  const slider = element('input', '', { id: 'volume', type: 'range', min: '0', max: '1', step: '.05', value: String(volume) });
   slider.oninput = () => { volume = Number(slider.value); player.setVolume(volume, !audio); };
   const volumeLabel = element('label', copy('volume')); volumeLabel.append(slider);
   const mute = element('input', '', { id: 'sound', type: 'checkbox', checked: audio });
@@ -348,17 +378,28 @@ $('settings').onclick = () => {
     if (!authorized(authority.generation)) return;
     if (await confirmation('lock', 'lockHint', authority) && authority.epoch === epoch && authorized(authority.generation)) command('lock');
   }); lock.id = 'lock-host';
-  openPanel('settings', [qualityLabel, textLabel, element('p', copy('textInputHint'), { id: 'text-input-hint' }), sound, muteLabel, volumeLabel, lock, element('output', '', { id: 'statistics' })]); updateTransitionControls(); refreshStats();
+  openPanel('settings', [section('', [qualityLabel]), section('', [textLabel, element('p', copy('textInputHint'), { id: 'text-input-hint' })]), section('', [muteLabel, volumeLabel]), section('statistics', [element('output', '', { id: 'statistics' })]), lock]); updateTransitionControls(); refreshStats();
 };
+function section(title, children) {
+  const section = element('section', '', { className: 'settings-section' });
+  if (title) section.append(element('h3', copy(title)));
+  section.append(...children); return section;
+}
 async function localClipboard(target, paste = false) {
   if (!authorized(target) || clipboardBusy) return;
   clipboardBusy = true;
+  const current = epoch;
   try {
     const text = await navigator.clipboard.readText();
-    if (!authorized(target)) return;
+    if (current !== epoch || !authorized(target)) return;
     if (paste) pasteClipboard(text);
     else if (text !== clipboardText) { clipboardText = text; command('set_clipboard', { text }); }
-  } catch { disableClipboardSync(); } finally { clipboardBusy = false; }
+  } catch { if (current === epoch && authorized(target)) disableClipboardSync(); } finally { clipboardBusy = false; }
+}
+function clearClipboard() {
+  clipboardSync = false; clipboardText = '';
+  if ($('clipboard-text')) $('clipboard-text').value = '';
+  if ($('clipboard-sync')) $('clipboard-sync').checked = false;
 }
 function disableClipboardSync() { clipboardSync = false; if ($('clipboard-sync')) $('clipboard-sync').checked = false; command('set_clipboard_sync', { enabled: false }); notice('clipboardFailed'); }
 function pasteClipboard(text) { if (!authorized(generation)) return; if (new TextEncoder().encode(text).length > (1 << 20)) { notice('clipboardFailed'); return; } clipboardText = text; command('set_clipboard', { text }); chord([backend === 'macos' ? 'MetaLeft' : 'ControlLeft', 'KeyV']); }
@@ -368,24 +409,49 @@ $('clipboard').onclick = () => {
   row.append(button('copyRemote', () => { if (authorized(generation)) command('get_clipboard'); }), button('pasteRemote', () => pasteClipboard(text.value)));
   const sync = element('input', '', { id: 'clipboard-sync', type: 'checkbox', checked: clipboardSync }); sync.onchange = () => { clipboardSync = sync.checked; command('set_clipboard_sync', { enabled: clipboardSync }); if (clipboardSync) void localClipboard(generation); };
   const label = element('label', copy('clipboardSync')); label.append(sync);
-  for (const control of [...row.children, sync]) control.disabled = session.mode !== 'control';
-  openPanel('clipboard', [element('p', copy('clipboardHint')), text, row, label]);
+  for (const control of [...row.children, sync]) control.dataset.remoteControl = '';
+  openPanel('clipboard', [element('p', copy('clipboardHint')), element('p', copy('viewHint'), {id: 'view-hint', hidden: session.mode === 'control', className: 'inline-hint'}), text, row, label]);
+  updateTransitionControls();
 };
 window.addEventListener('focus', () => { if (clipboardSync) void localClipboard(generation); });
 function chord(codes) { if (!authorized(generation)) return; for (const code of codes) command('input', { input: { kind: 'key', key: code, code, pressed: true, metaKey: codes.includes('MetaLeft'), altKey: codes.includes('AltLeft'), ctrlKey: codes.includes('ControlLeft'), shiftKey: codes.includes('ShiftLeft') } }); for (const code of [...codes].reverse()) command('input', { input: { kind: 'key', key: code, code, pressed: false } }); }
-$('shortcuts').onclick = () => openPanel('shortcuts', [button('switchApp', () => chord([backend === 'macos' ? 'MetaLeft' : 'AltLeft', 'Tab'])), button('systemMenu', () => chord(backend === 'macos' ? ['ControlLeft', 'F2'] : ['MetaLeft']))]);
+$('shortcuts').onclick = () => {
+  const shortcuts = [
+    ['switchApp', backend === 'macos' ? ['MetaLeft', 'Tab'] : ['AltLeft', 'Tab'], backend === 'macos' ? '⌘ Tab' : 'Alt + Tab'],
+    ['systemMenu', backend === 'macos' ? ['ControlLeft', 'F2'] : ['MetaLeft'], backend === 'macos' ? '⌃ F2' : 'Super'],
+  ].map(([key, codes, label]) => {
+    const action = button(key, () => { chord(codes); panel.close(); });
+    action.className = 'shortcut'; action.dataset.remoteControl = '';
+    action.append(element('kbd', label)); return action;
+  });
+  openPanel('shortcuts', [element('p', copy('shortcutsHint')), ...shortcuts]); updateTransitionControls();
+};
 $('files').onclick = () => { window.redevenHostApplicationWindow?.request('files'); window.opener?.postMessage({ type: 'redeven:remote-desktop:files', session_id: session.id }, '*'); window.dispatchEvent(new CustomEvent('redeven:remote-desktop:files')); };
 $('reconnect').onclick = () => { reconnectAttempts = 0; void connect(); };
-function stopViewer() { stopped = true; clearTimeout(retry); epoch++; revoke(); player?.close(); control?.close(); media?.close(); state = 'disconnected'; status('disconnected'); }
+function stopViewer() {
+  stopped = true; clearTimeout(retry); clearTimeout(hideTimer); epoch++;
+  revoke(); player?.close(); control?.close(); media?.close();
+  canvas.width = canvas.width; // Erase retained pixels, including screenshots after disconnect.
+  state = 'disconnected'; audioRequest = undefined; awaitingState = false;
+  awaitingMedia = []; clearClipboard(); audio = false;
+  if (panel.open) panel.close();
+  $('reconnect').hidden = true; toolbar.classList.remove('hidden-toolbar');
+  status('disconnected', 'endedHint'); updateTransitionControls();
+}
 async function disconnect() {
-  if (stopped) return;
-  stopViewer();
+  if (disconnectBusy) return;
+  if (!stopped) stopViewer();
+  disconnectBusy = true; $('retry-disconnect').hidden = true;
+  status('disconnecting'); updateTransitionControls();
   try {
     const response = await windowTransport.fetch(base + 'disconnect', { method: 'POST', signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw new Error('Desktop disconnect failed');
-  } catch { notice('failure'); }
-  finally { windowTransport.dispose(); }
+    if (!response.ok && response.status !== 404 && response.status !== 410) throw new Error('Desktop disconnect failed');
+    status('disconnected', 'endedHint'); windowTransport.dispose();
+  } catch {
+    status('disconnected', 'disconnectFailed'); $('retry-disconnect').hidden = false;
+  } finally { disconnectBusy = false; updateTransitionControls(); }
 }
+$('retry-disconnect').onclick = disconnect;
 $('disconnect').onclick = disconnect;
 // Page unload cannot await a request. Closing the native streams immediately
 // releases input and capture; the server expires its bounded reconnect lease.

@@ -7230,6 +7230,11 @@
     "approvalForgetConfirm": "清除已保存授权",
     "approvalForgetFailed": "未能清除已保存的授权",
     "approvalRestoreFailed": "未能恢复共享授权，请重新连接以再次请求访问。",
-    "approvalWaitingHint": "正在请求桌面访问。如果主机出现共享授权框，请确认后继续。"
+    "approvalWaitingHint": "正在请求桌面访问。如果主机出现共享授权框，请确认后继续。",
+    "endedHint": "本次会话已结束。请关闭此窗口，然后从“远程桌面”重新连接。",
+    "disconnecting": "正在断开连接…",
+    "disconnectFailed": "远程输入和画面传输已停止，但尚未确认会话已结束。请再次点击“断开连接”。",
+    "controlHint": "允许此连接使用主机的鼠标、键盘和文本剪贴板吗？如果其他连接正在控制主机，该连接将切换为仅查看模式。",
+    "shortcutsHint": "向主机发送快捷键。组合键与主机操作系统保持一致。"
   }
 }

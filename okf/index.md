@@ -30,6 +30,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Remote desktop connection launcher](architecture/remote-desktop-launcher.md) - Identify the host, explain readiness and recover from connection failures in a concise desktop or Workbench flow.
 - [Graphical window transport](architecture/graphical-window-transport.md) - Route every desktop and host application data channel through resource-scoped Flowersec direct or tunnel sessions.
 - [Graphical window transport qualification](operations/graphical-window-transport-results.md) - Assess native direct/tunnel integrity, live Linux behavior and the remaining unlocked macOS checks.
+- [Remote desktop viewer interaction](architecture/remote-desktop-viewer.md) - Operate display, input, clipboard and fullscreen controls and recover from an unconfirmed disconnect.
 - [Remote desktop validation](operations/remote-desktop-validation.md) - Qualify office interaction, lifecycle and actual painted performance with published dependencies.
 - [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 performance, local delivery and remaining acceptance limits.
 - [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.

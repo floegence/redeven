@@ -7234,6 +7234,11 @@
     "approvalForgetConfirm": "Gespeicherte Freigabe entfernen",
     "approvalForgetFailed": "Gespeicherte Freigabe konnte nicht entfernt werden",
     "approvalRestoreFailed": "Die Freigabe konnte nicht wiederhergestellt werden. Verbinden Sie sich erneut, um Zugriff anzufordern.",
-    "approvalWaitingHint": "Desktop-Zugriff wird angefordert. Falls auf dem Host ein Freigabedialog erscheint, bestätigen Sie ihn, um fortzufahren."
+    "approvalWaitingHint": "Desktop-Zugriff wird angefordert. Falls auf dem Host ein Freigabedialog erscheint, bestätigen Sie ihn, um fortzufahren.",
+    "endedHint": "Diese Sitzung wurde beendet. Schließen Sie dieses Fenster und stellen Sie über „Remote-Desktop“ eine neue Verbindung her.",
+    "disconnecting": "Verbindung wird getrennt…",
+    "disconnectFailed": "Eingabe und Bildschirmübertragung wurden gestoppt. Das Sitzungsende konnte nicht bestätigt werden. Versuchen Sie erneut, die Verbindung zu trennen.",
+    "controlHint": "Darf diese Verbindung Maus, Tastatur und Textzwischenablage des Hosts verwenden? Falls eine andere Verbindung den Host steuert, wechselt sie in den Ansichtsmodus.",
+    "shortcutsHint": "Senden Sie einen Kurzbefehl an den Host. Die Tastenkombinationen entsprechen dem Betriebssystem des Hosts."
   }
 }

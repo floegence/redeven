@@ -1382,6 +1382,11 @@ type localProxyResponse struct {
 
 func localSessionProxyRequest(t *testing.T, ctx context.Context, current flowersec.Session, path string, events bool) localProxyResponse {
 	t.Helper()
+	return localSessionProxyMethod(t, ctx, current, "GET", path, events)
+}
+
+func localSessionProxyMethod(t *testing.T, ctx context.Context, current flowersec.Session, method, path string, events bool) localProxyResponse {
+	t.Helper()
 	stream, err := current.OpenStream(ctx, "flowersec-proxy/http1", flowersec.EmptyStreamMetadata())
 	if err != nil {
 		t.Fatal(err)
@@ -1392,7 +1397,7 @@ func localSessionProxyRequest(t *testing.T, ctx context.Context, current flowers
 	if events {
 		accept = "text/event-stream"
 	}
-	meta, err := json.Marshal(map[string]any{"v": 1, "request_id": "session-probe", "method": "GET", "path": path, "headers": []map[string]string{{"name": "accept", "value": accept}}})
+	meta, err := json.Marshal(map[string]any{"v": 1, "request_id": "session-probe", "method": method, "path": path, "headers": []map[string]string{{"name": "accept", "value": accept}}})
 	if err != nil {
 		t.Fatal(err)
 	}

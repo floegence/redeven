@@ -7234,6 +7234,11 @@
     "approvalForgetConfirm": "Eliminar autorización guardada",
     "approvalForgetFailed": "No se pudo eliminar la autorización guardada",
     "approvalRestoreFailed": "No se pudo restaurar la autorización. Vuelve a conectarte para solicitar acceso.",
-    "approvalWaitingHint": "Solicitando acceso al escritorio. Si aparece un diálogo de uso compartido en el equipo remoto, confírmalo para continuar."
+    "approvalWaitingHint": "Solicitando acceso al escritorio. Si aparece un diálogo de uso compartido en el equipo remoto, confírmalo para continuar.",
+    "endedHint": "Esta sesión ha finalizado. Cierra esta ventana y vuelve a conectarte desde Escritorio remoto.",
+    "disconnecting": "Desconectando…",
+    "disconnectFailed": "La entrada y la transmisión de pantalla se han detenido, pero no se pudo confirmar el cierre de la sesión. Pulsa Desconectar de nuevo.",
+    "controlHint": "¿Permitir que esta conexión utilice el ratón, el teclado y el portapapeles de texto del host? Si otra conexión tiene el control, pasará al modo de solo visualización.",
+    "shortcutsHint": "Envía un atajo de teclado al host. Las combinaciones corresponden al sistema operativo del host."
   }
 }

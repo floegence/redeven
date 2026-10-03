@@ -1,4 +1,4 @@
-/* global document, window, innerWidth, CompositionEvent, getComputedStyle */
+/* global document, window, innerWidth, CompositionEvent, MouseEvent, getComputedStyle */
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -21,22 +21,24 @@ const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includ
 let messages = [], controls = [], sockets = [], generation = 0, frame = 0, selectedMode = 'control';
 let control, media, display = 'one', connectionCount = 0, disconnects = 0, ticketFailures = 0;
 let conflictNextConnect = false;
+let failDisconnect = true;
 let lockedNextConnect = false;
 let delayAudio = false, audioResponse;
 const configuration = { session: { id: 'qualification', host_name: 'Task desktop', locale: 'en-US', mode: 'control', display_id: '' }, base: '/_redeven_desktop/' };
 const names = { 'input.js': 'remote-input.generated.js', 'pointer.js': 'remote-pointer.generated.js' };
 const server = http.createServer((request, response) => {
   if (delayAudio && request.url.endsWith('/host_desktop_audio.mjs')) { audioResponse = response; return; }
+  if (request.url === '/launcher') { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><title>Viewer owner fixture</title>'); return; }
   if (request.url === '/_redeven_desktop/ticket') {
     connectionCount++;
     if (ticketFailures > 0) { ticketFailures--; response.writeHead(503).end(); return; }
     response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ ok: true, data: { token, session: { ...configuration.session, mode: selectedMode } } })); return;
   }
-  if (request.url === '/_redeven_desktop/disconnect') { disconnects++; response.end('{}'); return; }
+  if (request.url === '/_redeven_desktop/disconnect') { disconnects++; response.writeHead(failDisconnect ? 503 : 200).end('{}'); return; }
   if (request.url === '/_redeven_desktop/') {
     // This fixture owns media/input behavior. Native carrier qualification is
     // TestWindowBrowserE2E and TestWindowTunnelBrowserE2E.
-    const html = readFileSync(path.join(assets, 'viewer.html'), 'utf8').replaceAll('{{.Base}}', '/_redeven_desktop/').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'dark').replaceAll('{{.Nonce}}', 'qualification').replaceAll('{{.Configuration}}', JSON.stringify(configuration))
+    const html = readFileSync(path.join(assets, 'viewer.html'), 'utf8').replaceAll('{{.Base}}', '/_redeven_desktop/').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'porcelain-dark').replaceAll('{{.Nonce}}', 'qualification').replaceAll('{{.Configuration}}', JSON.stringify(configuration))
       .replace('<script src="{{.TransportScript}}"></script>', `<script>
         const fixtureFetch = window.fetch.bind(window);
         window.transportEvents = [];
@@ -120,7 +122,7 @@ const desktop = process.argv.includes('--electron');
 let directory, application;
 let browser;
 try {
-  let page;
+  let page, opener;
   if (desktop) {
     const requireDesktop = createRequire(path.join(root, 'desktop/package.json'));
     execFileSync(path.join(root, 'scripts/check_desktop_electron_test_runtime.sh'), [path.join(root, 'desktop')], { stdio: 'inherit' });
@@ -135,7 +137,11 @@ try {
     page = await application.firstWindow();
   } else {
     browser = await chromium.launch({ headless: true });
-    page = await browser.newPage({ viewport: { width: 1000, height: 720 } });
+    opener = await browser.newPage({ viewport: { width: 1000, height: 720 } });
+    await opener.goto(`http://127.0.0.1:${server.address().port}/launcher`);
+    const popup = opener.waitForEvent('popup');
+    await opener.evaluate(() => { window.addEventListener('message', event => { window.filesMessage = event.data; }); window.open('about:blank', '_blank'); });
+    page = await popup;
   }
   const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('Viewer error:', error.stack); });
   await page.addInitScript(() => {
@@ -183,7 +189,7 @@ try {
     assert.equal(layout.drag, 'drag'); assert.equal(layout.buttonDrag, 'no-drag');
     console.log('Unified toolbar:', JSON.stringify(layout));
   }
-  await page.locator('#desktop').click(); await page.keyboard.press('a');
+  await page.locator('#desktop').evaluate(canvas => canvas.dispatchEvent(new MouseEvent('pointerdown', {bubbles:true}))); await page.keyboard.press('a');
   assert.equal(messages.filter(item => item.command.method === 'input').length, 0, 'input before first paint');
   paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
@@ -210,10 +216,33 @@ try {
     await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
   }
   if (process.env.REDEVEN_DESKTOP_EVIDENCE_DIR) await page.screenshot({ path: path.join(process.env.REDEVEN_DESKTOP_EVIDENCE_DIR, `toolbar-${desktop ? 'electron' : 'browser'}.png`) });
+  if (process.env.REDEVEN_DESKTOP_VISUAL_MATRIX === '1') {
+    const evidence = process.env.REDEVEN_DESKTOP_EVIDENCE_DIR;
+    assert(evidence, 'visual matrix requires an evidence directory');
+    for (const theme of ['porcelain-light', 'porcelain-dark']) for (const width of [1280, 860, 360]) for (const locale of ['en-US', 'zh-CN']) {
+      await page.setViewportSize({width, height:width === 360 ? 740 : 820});
+      await page.evaluate(({theme,locale}) => { document.documentElement.dataset.floeShellTheme = theme; document.documentElement.lang = locale; }, {theme,locale});
+      const prefix = `${desktop ? 'electron' : 'browser'}-${theme}-${width}-${locale}`;
+      await page.screenshot({path:path.join(evidence, `${prefix}-toolbar.png`)});
+      for (const id of ['display-settings','clipboard','shortcuts','settings']) {
+        await page.locator('#'+id).click();
+        assert.equal(await page.locator('#'+id).getAttribute('aria-expanded'), 'true');
+        await page.keyboard.press('Tab');
+        assert(await page.locator('#panel').evaluate(panel => panel.contains(document.activeElement)), 'dialog lost keyboard focus');
+        const bounds = await page.locator('#panel').evaluate(panel => ({width:panel.clientWidth,content:panel.scrollWidth,top:panel.getBoundingClientRect().top,bottom:panel.getBoundingClientRect().bottom}));
+        assert(bounds.content <= bounds.width && bounds.top >= 0 && bounds.bottom <= (width === 360 ? 740 : 820), `${prefix} ${id} clipped: ${JSON.stringify(bounds)}`);
+        await page.screenshot({path:path.join(evidence, `${prefix}-${id}.png`)});
+        await page.keyboard.press('Escape');
+        assert(await page.locator('#'+id).evaluate(element => element === document.activeElement), `${id} did not restore keyboard focus`);
+      }
+    }
+    await page.setViewportSize({width:1000,height:720});
+    await page.evaluate(() => { document.documentElement.dataset.floeShellTheme = 'porcelain-dark'; document.documentElement.lang = 'en-US'; });
+  }
   delayAudio = true;
   await page.locator('#settings').click();
   assert.notEqual(await page.locator('#panel-body').evaluate(element => getComputedStyle(element).cursor), 'none', 'local dialogs must retain their cursor');
-  await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
+  await page.getByLabel('System sound', { exact: true }).check();
   try {
     for (let attempt = 0; !audioResponse && attempt < 100; attempt++) await page.waitForTimeout(20);
     assert(audioResponse, 'audio setup did not request its worklet');
@@ -305,6 +334,40 @@ try {
   await page.waitForFunction(() => !document.querySelector('#clipboard-sync').checked);
   assert(await page.locator('#notice').textContent(), 'denied browser clipboard must explain manual fallback');
   await page.keyboard.press('Escape');
+  await page.locator('#display-settings').click();
+  await page.keyboard.press('Escape');
+  for (const [name, expected] of [
+    ['Switch application', backend === 'macos' ? ['MetaLeft','Tab'] : ['AltLeft','Tab']],
+    ['System menu', backend === 'macos' ? ['ControlLeft','F2'] : ['MetaLeft']],
+  ]) {
+    const start = messages.length;
+    await page.locator('#shortcuts').click();
+    await page.getByRole('button', {name:new RegExp(name)}).click();
+    await page.waitForFunction(() => !document.querySelector('#panel').open);
+    await page.waitForTimeout(60);
+    const keys = messages.slice(start).filter(item=>item.command.input?.kind==='key').map(item=>[item.command.input.code,item.command.input.pressed]);
+    assert.deepEqual(keys, [...expected.map(code=>[code,true]), ...[...expected].reverse().map(code=>[code,false])]);
+  }
+  // Native generations may repeat after a new attachment. Clipboard permission
+  // promises must still belong to the exact connection that requested them.
+  await page.locator('#clipboard').click();
+  await page.evaluate(() => { navigator.clipboard.readText = () => new Promise(resolve => {window.finishClipboard = resolve;}); });
+  await page.getByLabel('Sync text clipboard', {exact:true}).check();
+  await page.waitForFunction(() => !!window.finishClipboard);
+  const previousConnections = connectionCount;
+  generation--; controls.at(-1).close();
+  for (let attempt=0; connectionCount===previousConnections && attempt<150; attempt++) await page.waitForTimeout(20);
+  assert(connectionCount>previousConnections);
+  await page.waitForFunction(() => document.querySelector('#connection').hidden);
+  paint();
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted'));
+  await page.evaluate(() => { window.finishClipboard('clipboard from retired connection'); navigator.clipboard.readText = async () => {throw new DOMException('Denied','NotAllowedError');}; });
+  await page.waitForTimeout(80);
+  assert(!messages.some(item => item.command.text === 'clipboard from retired connection'), 'late clipboard escaped its connection');
+  assert.equal(await page.locator('#clipboard-text').inputValue(), '', 'reconnect retained the old clipboard panel text');
+  assert(!await page.locator('#clipboard-sync').isChecked());
+  await page.keyboard.press('Escape');
+  await page.locator('#display-settings').click();
   const beforeRapid = messages.filter(item => item.command.method === 'configure').length;
   assert.deepEqual(await page.evaluate(() => {
     document.querySelector('#pixels').click();
@@ -312,15 +375,18 @@ try {
     document.querySelector('#fit').click();
     return disabled;
   }), [true, true, true, true], 'transition controls remained interactive before the successor state');
-  await page.waitForFunction(() => !document.querySelector('#fit').disabled && !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => !document.querySelector('#fit').disabled && document.querySelector('#desktop').hasAttribute('data-painted'));
   assert.equal(messages.filter(item => item.command.method === 'configure').length, beforeRapid + 1, 'rapid clicks issued competing configurations');
   await page.locator('#display').selectOption('two');
   await page.waitForFunction(() => document.querySelector('#desktop').width === 640);
+  await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
   assert.equal(await canvasCursor(), 'none', 'display replacement must retain only the captured cursor');
   await page.locator('#mode').selectOption('view');
   await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor === 'none');
+  assert(await page.locator('#shortcuts').isDisabled(), 'view-only shortcuts remained interactive');
   await page.locator('#clipboard').click();
+  assert(await page.getByRole('button', {name:'Paste to host',exact:true}).isDisabled());
   assert.equal(await page.locator('#clipboard-text').inputValue(), '', 'view-only retained the previous controller clipboard');
   assert(!await page.locator('#clipboard-sync').isChecked(), 'view-only still advertised clipboard synchronization');
   await page.keyboard.press('Escape');
@@ -393,6 +459,17 @@ try {
   }
   if (desktop) assert(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen()), 'fullscreen did not reach the native window');
   assert.equal(await canvasCursor(), 'none', 'fullscreen must retain only the captured cursor');
+  await page.locator('#desktop').click();
+  await page.mouse.move(500, 400);
+  await page.waitForFunction(() => document.querySelector('#toolbar').classList.contains('hidden-toolbar'), null, {timeout:4000});
+  await page.mouse.move(500, 2);
+  await page.waitForFunction(() => !document.querySelector('#toolbar').classList.contains('hidden-toolbar'));
+  await page.locator('#pin').click();
+  assert.equal(await page.locator('#pin').getAttribute('aria-pressed'), 'true');
+  await page.locator('#desktop').click(); await page.mouse.move(500, 400);
+  await page.waitForTimeout(2400);
+  assert(!await page.locator('#toolbar').evaluate(bar => bar.classList.contains('hidden-toolbar')), 'pinned toolbar disappeared');
+  await page.locator('#pin').click();
   await page.locator('#fullscreen').click();
   await page.waitForFunction(() => !document.documentElement.classList.contains('desktop-fullscreen') && !document.querySelector('#fullscreen').disabled, null, { timeout: 10000 });
   if (desktop) assert(!await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen()), 'native fullscreen did not exit');
@@ -418,6 +495,10 @@ try {
     assert.equal(await page.evaluate(() => typeof window.redevenDesktop), 'undefined');
     await page.locator('#files').click();
     await page.waitForFunction(() => document.documentElement.dataset.fixtureFiles === '1');
+  } else {
+    await page.locator('#files').click();
+    await opener.waitForFunction(() => window.filesMessage?.type === 'redeven:remote-desktop:files' && window.filesMessage.session_id === 'qualification');
+    await page.bringToFront();
   }
   const catalogs = await page.evaluate(() => window.remoteDesktopCatalog);
   for (const [locale, catalog] of Object.entries(catalogs)) {
@@ -442,14 +523,33 @@ try {
     }
     await page.keyboard.press('Escape');
   }
-  await page.locator('#disconnect').click(); await page.waitForTimeout(100);
+  await page.locator('#disconnect').click();
+  await page.locator('#retry-disconnect').waitFor({state:'visible'});
+  assert(!await page.evaluate(() => window.transportEvents.includes('disposed')), 'failed disconnect discarded the only retry transport');
+  assert(await page.locator('#desktop').evaluate(element => getComputedStyle(element).visibility === 'hidden'), 'failed disconnect retained a frozen picture');
+  failDisconnect = false;
+  await page.locator('#retry-disconnect').click();
+  await page.waitForFunction(() => window.transportEvents.includes('disposed'));
+
   assert.notEqual(await canvasCursor(), 'none', 'disconnect must restore the local cursor');
   assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'closed', 'explicit disconnect retained the audio device');
-  assert.equal(disconnects, 1); assert.deepEqual(errors, []);
+  assert.equal(disconnects, 2); assert.deepEqual(errors, []);
+  assert(await page.locator('#desktop').evaluate(element => getComputedStyle(element).visibility === 'hidden'), 'disconnected desktop must not retain a visible frozen picture');
+  assert(await page.locator('#clipboard').isDisabled(), 'disconnected clipboard still appears usable');
+  assert(await page.locator('#reconnect').isHidden(), 'ended session exposes an ineffective reconnect');
+  assert(await page.locator('#shortcuts').isDisabled(), 'ended session exposes remote shortcuts');
+  assert(await page.locator('#disconnect').isDisabled(), 'ended session exposes duplicate disconnect');
+  assert(await page.locator('#retry-disconnect').isHidden(), 'confirmed disconnect retained a retry');
+  assert(await page.locator('#desktop').evaluate(canvas => [...canvas.getContext('2d').getImageData(0, 0, 1, 1).data.slice(0, 3)].every(value => value === 0)), 'disconnect retained captured pixels');
+  const endedTickets = connectionCount;
+  await page.waitForTimeout(1200);
+  assert.equal(connectionCount, endedTickets, 'explicit disconnect restarted the session');
+  if (process.env.REDEVEN_DESKTOP_EVIDENCE_DIR) await page.screenshot({path:path.join(process.env.REDEVEN_DESKTOP_EVIDENCE_DIR, `disconnected-${desktop ? 'electron' : 'browser'}.png`)});
+
   assert.deepEqual(await page.evaluate(() => window.transportEvents.slice(-3)), [
     '/_redeven_desktop/disconnect', 'response:/_redeven_desktop/disconnect', 'disposed',
   ], 'disconnect must finish through the native transport before disposal');
-  console.log(JSON.stringify({ passed: true, checks: ['single desktop cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'disconnect'] }));
+  console.log(JSON.stringify({ passed: true, checks: ['single desktop cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'shortcut receipts', 'browser and Desktop files', 'clipboard epoch fencing', 'fullscreen hide and pin', 'disconnect retry and cleared pixels'] }));
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));
   if (directory) await rm(directory, { recursive: true, force: true });
