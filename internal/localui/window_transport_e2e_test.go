@@ -160,10 +160,18 @@ func TestWindowSessionE2E(t *testing.T) {
 	if response := localSessionProxyRequest(t, ctx, reconnected, "/_redeven_desktop/", false); response.Status != http.StatusOK {
 		t.Fatal("reconnect lost resource", response)
 	}
-	w := httptest.NewRecorder()
-	s.appServer.ServeHTTP(w, appserver.WithLocalUIEnvRoute(httptest.NewRequest("DELETE", "/_redeven_proxy/api/remote-desktop/sessions/"+owned.ID, nil)))
-	if w.Code != http.StatusOK {
-		t.Fatal(w.Code, w.Body.String())
+	if response := localSessionProxyMethod(t, ctx, reconnected, "POST", "/_redeven_desktop/disconnect", false); response.Status != http.StatusOK {
+		t.Fatal("viewer disconnect did not return its confirmation", response)
+	}
+	for _, item := range []struct {
+		id     string
+		status int
+	}{{owned.ID, http.StatusNotFound}, {other.ID, http.StatusOK}} {
+		w := httptest.NewRecorder()
+		s.appServer.ServeHTTP(w, appserver.WithLocalUIEnvRoute(httptest.NewRequest("GET", "/_redeven_proxy/api/remote-desktop/sessions/"+item.id, nil)))
+		if w.Code != item.status {
+			t.Fatalf("disconnect session ownership: %s returned %d, want %d", item.id, w.Code, item.status)
+		}
 	}
 	if response := localSessionProxyRequest(t, ctx, reconnected, "/_redeven_desktop/", false); response.Status == http.StatusOK {
 		t.Fatal("removed share retained access")

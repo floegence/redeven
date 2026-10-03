@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@floegence/flowersec-core": "5.7.1",
-    "@floegence/floe-webapp-boot": "0.81.3"
+    "@floegence/floe-webapp-boot": "0.81.5"
   },
   "overrides": {
     "brace-expansion": "^5.0.9",

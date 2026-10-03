@@ -31,7 +31,7 @@ async function viewer() {
       send(raw){
         const message=JSON.parse(raw);window.requests.push(message);
         if(message.action!=='resume')return;
-        this.onmessage({data:JSON.stringify({type:'window',input_version:1,window:'one',generation:1,width:640,height:480})});
+        this.onmessage({data:JSON.stringify({type:'window',input_version:1,control:true,window:'one',generation:1,width:640,height:480})});
         const header=new TextEncoder().encode(JSON.stringify({codec:'png',generation:1,frame_id:1}));
         const image=document.createElement('canvas');image.width=640;image.height=480;
         const ctx=image.getContext('2d');ctx.fillStyle='#abc';ctx.fillRect(0,0,640,480);
@@ -47,7 +47,8 @@ async function viewer() {
   frame.srcdoc=viewerHTML.replaceAll('{{.Locale}}','en-US').replaceAll('{{.Theme}}','porcelain-light').replaceAll('{{.Name}}','Pointer fixture')
     .replaceAll('{{.Nonce}}','fixture').replace('{{.Style}}',[appearanceCSS,inputCSS,pointerCSS,viewerCSS].join('\n'))
     .replace('{{.Config}}',JSON.stringify({base:location.origin+'/fixture',backend:'macos',copy}))
-    .replace('{{.Script}}',[fixture,catalogJS,viewportJS,inputJS,pointerJS,appearanceJS,connectionJS,toolbarJS,canvasJS,macosJS].join('\n'));
+    .replace('<script src="{{.TransportScript}}"></script>', `<script>${fixture};window.RedevenWindowTransport={create:()=>({fetch:window.fetch,WebSocket:window.WebSocket,dispose(){}})};</script>`)
+    .replace('{{.Script}}',[catalogJS,viewportJS,inputJS,pointerJS,appearanceJS,connectionJS,toolbarJS,canvasJS,macosJS].join('\n'));
   document.body.append(frame);
   await expect.poll(()=>frame.contentDocument?.body.dataset.state).toBe('active');
   const doc=frame.contentDocument!;

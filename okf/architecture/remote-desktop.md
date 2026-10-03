@@ -115,64 +115,9 @@ on a subsequent animation frame. Decoder preference is displayed as preference,
 not proof of the physical decoder. Dependent H.264 frames cannot be dropped as
 independent images; recovery requires a fresh keyframe boundary.
 
-The published Floe input and pointer controllers own client composition, physical
-keys, pointer gestures and release. The viewer defaults to the host input method,
-using physical keys from a direct-input client keyboard. Client-composed text is
-sent only after explicitly selecting Paste client text. That operation replaces
-the host text clipboard and uses the published native paste command on both
-platforms. The settings describe this effect and require users to finish or cancel
-host composition before switching. Changing the mode cancels the client's pending
-composition; no text is replayed and no Escape/Enter is guessed on the host.
-Advertised accessibility insertion does not guarantee Electron text insertion,
-and simultaneous unfinished host/client composition is outside this input path.
-This does not claim arbitrary Unicode can be represented as synthetic key presses.
-Clipboard access
-is text-only and tied to the active controller. A manual text panel remains
-available when browser clipboard permission is unavailable. Clipboard contents,
-keys, passwords and pixels never enter audit records.
-
-The published macOS, Wayland and X11 desktop captures embed the host cursor in
-the picture. After a current-generation frame is painted, the viewer hides its
-local cursor over the desktop canvas in both control and view-only modes. It
-restores that cursor when painted authority is revoked, including disconnect,
-lock, display replacement and reconnect awaiting a fresh frame. Toolbar and
-dialog cursors remain local. This desktop-only policy does not apply to host
-application windows, which use their own upstream cursor contract.
-
-## Viewer window
-
-The [connection launcher](remote-desktop-launcher.md) owns target identity,
-readiness, preparation, grant-reuse settings and launch feedback. Desktop opens an isolated owned window; browsers open a separate
-viewer. Desktop's toolbar is its native titlebar: one 40px row at ordinary widths,
-with window-control insets owned by the existing chrome snapshot. Fullscreen
-updates those insets. The host name is the visible identity; there is no duplicate
-close button below the native controls. Narrow windows may wrap whole controls
-without covering native buttons or remote content. Interactive controls remain
-outside native drag regions. Each window presents one selected display. Fit and original-pixel modes
-change local rendering/capture settings without resizing the host desktop.
-Fullscreen offers a hideable, pinnable toolbar and an explicit exit. Desktop
-uses the exact owning native window and waits for its fullscreen event before
-accepting the next toggle; browsers use the document fullscreen API. Files opens
-the existing environment file surface through the owning window/shell bridge.
-Window closure and Disconnect end sharing only. New copy is explicit in every
-shipped locale, and standalone controls consume released Floe appearance/input
-assets.
-
-Lock host replaces the settings content inside the same modal and focuses
-Cancel. Only explicit confirmation sends the lock command; Cancel and Escape
-send nothing. Closing the confirmation restores focus to the settings trigger.
-A queued settings-close event must never dismiss or resolve its replacement.
-Lock is available only after the current control generation has painted. Its
-confirmation belongs to that attachment and generation; losing authority disables
-it permanently, even if a successor becomes active. The user can cancel and open
-a fresh confirmation after recovery.
-Sound initialization also fences competing settings and control actions before
-its asynchronous browser work begins. Only the same active attachment may apply
-the result; successful reconfiguration still waits for a fresh painted frame.
-Transport reconnect resets the existing window's player and retires old-generation
-media while preserving its user-enabled audio device and sound preference. Fresh
-audio must use the successor generation. Explicit Disconnect closes that device;
-an enabled sound toggle must never hide a closed audio context after reconnect.
+The [viewer interaction contract](remote-desktop-viewer.md) owns toolbar layout,
+input modes, clipboard, local cursor presentation, fullscreen and disconnect
+feedback. Native session and frame authority remain governed by this concept.
 
 # Boundaries
 

@@ -7234,6 +7234,11 @@
     "approvalForgetConfirm": "Supprimer l’autorisation",
     "approvalForgetFailed": "Impossible de supprimer l’autorisation enregistrée",
     "approvalRestoreFailed": "Impossible de restaurer l’autorisation de partage. Reconnectez-vous pour demander à nouveau l’accès.",
-    "approvalWaitingHint": "Demande d’accès au bureau en cours. Si une boîte de dialogue de partage apparaît sur l’hôte, confirmez-la pour continuer."
+    "approvalWaitingHint": "Demande d’accès au bureau en cours. Si une boîte de dialogue de partage apparaît sur l’hôte, confirmez-la pour continuer.",
+    "endedHint": "Cette session est terminée. Fermez cette fenêtre, puis reconnectez-vous depuis Bureau à distance.",
+    "disconnecting": "Déconnexion…",
+    "disconnectFailed": "La saisie et la diffusion de l’écran sont arrêtées, mais la fin de la session n’a pas pu être confirmée. Cliquez à nouveau sur Déconnecter.",
+    "controlHint": "Autoriser cette connexion à utiliser la souris, le clavier et le presse-papiers texte de l’hôte ? Si une autre connexion contrôle l’hôte, elle passera en mode lecture seule.",
+    "shortcutsHint": "Envoyez un raccourci clavier à l’hôte. Les combinaisons correspondent au système d’exploitation de l’hôte."
   }
 }

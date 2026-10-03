@@ -72,8 +72,8 @@ if (process.argv.includes('--check')) {
 
 const desktopIcons = await build({
   stdin: { contents: `import {render} from 'solid-js/web'; import {createComponent} from 'solid-js';
-    import {Maximize,Restore,Grid3x3,Settings,Copy,Key,Folder,PowerIcon,Pin,X} from '@floegence/floe-webapp-core/icons';
-    const icons={fit:Maximize,pixels:Grid3x3,fullscreen:Maximize,exitFullscreen:Restore,settings:Settings,clipboard:Copy,shortcuts:Key,files:Folder,disconnect:PowerIcon,pin:Pin,close:X};
+    import {Monitor,Scan,ActualSize,Fullscreen,ExitFullscreen,SlidersHorizontal,Clipboard,Keyboard,FolderOpen,Unplug,Pin,X} from '@floegence/floe-webapp-core/icons';
+    const icons={display:Monitor,fit:Scan,pixels:ActualSize,fullscreen:Fullscreen,exitFullscreen:ExitFullscreen,settings:SlidersHorizontal,clipboard:Clipboard,shortcuts:Keyboard,files:FolderOpen,disconnect:Unplug,pin:Pin,close:X};
     const disposers=new WeakMap();
     export function mount(element,key){disposers.get(element)?.();element.replaceChildren();disposers.set(element,render(()=>createComponent(icons[key],{size:16}),element));element.querySelector('svg').setAttribute('aria-hidden','true');}
   `, resolveDir: root },

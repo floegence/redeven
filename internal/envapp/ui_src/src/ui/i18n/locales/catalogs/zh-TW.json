@@ -7230,6 +7230,11 @@
     "approvalForgetConfirm": "清除已儲存授權",
     "approvalForgetFailed": "無法清除已儲存的授權",
     "approvalRestoreFailed": "無法恢復共享授權，請重新連線以再次請求存取。",
-    "approvalWaitingHint": "正在請求桌面存取。如果主機出現共享授權視窗，請確認後繼續。"
+    "approvalWaitingHint": "正在請求桌面存取。如果主機出現共享授權視窗，請確認後繼續。",
+    "endedHint": "本次工作階段已結束。請關閉此視窗，再從「遠端桌面」重新連線。",
+    "disconnecting": "正在中斷連線…",
+    "disconnectFailed": "遠端輸入與畫面傳輸已停止，但尚未確認工作階段已結束。請再次點選「中斷連線」。",
+    "controlHint": "允許此連線使用主機的滑鼠、鍵盤及文字剪貼簿嗎？若其他連線正在控制主機，該連線將切換為僅檢視模式。",
+    "shortcutsHint": "傳送快速鍵至主機。組合鍵與主機的作業系統一致。"
   }
 }

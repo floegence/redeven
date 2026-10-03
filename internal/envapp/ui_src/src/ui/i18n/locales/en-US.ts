@@ -7,6 +7,11 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   remoteDesktop: {
+    "endedHint": "This session has ended. Close this window, then connect again from Remote desktop.",
+    "disconnecting": "Disconnecting…",
+    "disconnectFailed": "Input and streaming have stopped. Ending the session could not be confirmed. Try Disconnect again.",
+    "controlHint": "Allow this connection to use the host’s mouse, keyboard, and text clipboard? If another connection has control, it will switch to view only.",
+    "shortcutsHint": "Send a shortcut to the host. Key combinations match the host’s operating system.",
     "title": "Remote desktop",
     "description": "See and control this host’s screen in a separate window.",
     "connect": "Connect to desktop",

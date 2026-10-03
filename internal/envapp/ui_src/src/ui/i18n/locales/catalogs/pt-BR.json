@@ -7234,6 +7234,11 @@
     "approvalForgetConfirm": "Remover autorização salva",
     "approvalForgetFailed": "Não foi possível remover a autorização salva",
     "approvalRestoreFailed": "Não foi possível restaurar a autorização. Reconecte para solicitar acesso novamente.",
-    "approvalWaitingHint": "Solicitando acesso à área de trabalho. Se uma janela de compartilhamento aparecer no host, confirme para continuar."
+    "approvalWaitingHint": "Solicitando acesso à área de trabalho. Se uma janela de compartilhamento aparecer no host, confirme para continuar.",
+    "endedHint": "Esta sessão foi encerrada. Feche esta janela e conecte-se novamente pela Área de trabalho remota.",
+    "disconnecting": "Desconectando…",
+    "disconnectFailed": "A entrada remota e a transmissão da tela foram interrompidas, mas não foi possível confirmar o encerramento da sessão. Clique em Desconectar novamente.",
+    "controlHint": "Permitir que esta conexão use o mouse, o teclado e a área de transferência de texto do host? Se outra conexão estiver no controle, ela passará para o modo somente visualização.",
+    "shortcutsHint": "Envie um atalho de teclado ao host. As combinações correspondem ao sistema operacional do host."
   }
 }
