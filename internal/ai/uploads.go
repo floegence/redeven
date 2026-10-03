@@ -329,7 +329,7 @@ func (s *Service) AttachmentCapabilitiesForSession(ctx context.Context, meta *se
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
-	cfg, err := s.sessionModelConfig(ctxOrBackground(ctx), meta, cfg)
+	cfg, err := s.sessionConfigForModel(ctxOrBackground(ctx), meta, cfg, modelID)
 	if err != nil || cfg == nil {
 		return attachmentCapabilitiesForModel(modelID, config.AIProvider{}, contextmodel.ModelCapability{})
 	}

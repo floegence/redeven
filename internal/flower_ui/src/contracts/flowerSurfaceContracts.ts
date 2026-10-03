@@ -167,6 +167,7 @@ export type FlowerSettingsSnapshot = Readonly<{
   provider_secrets: readonly FlowerProviderSecretState[];
   model_source?: FlowerModelSourceStatus;
   platform_model_source?: Readonly<{
+    error?: string;
     models: readonly FlowerModelSourceModel[];
     current_model_id?: string;
   }>;

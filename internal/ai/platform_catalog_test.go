@@ -66,7 +66,8 @@ func TestPlatformCatalogIsSessionScopedWithoutLocalConfiguration(t *testing.T) {
 		t.Fatal("unscoped request inherited a platform catalog")
 	}
 	revoked.Store(true)
-	if _, err := svc.ListModelsForSession(t.Context(), meta); err == nil {
-		t.Fatal("revoked catalog remained accessible")
+	blocked, err := svc.ListModelsForSession(t.Context(), meta)
+	if err != nil || len(blocked.Models) != 0 || blocked.Runtime.PlatformError == "" || blocked.CurrentModel != first.CurrentModel {
+		t.Fatalf("revoked catalog must preserve selection without authorizing models: %+v %v", blocked, err)
 	}
 }
