@@ -67,7 +67,7 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   expect(state.save).not.toHaveBeenCalled();
   if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-ready-${width}.png` });
   options.querySelector('summary')!.focus(); await userEvent.keyboard('{Enter}'); expect(options.open).toBe(true);
-  expect(options.textContent).toContain(copy.t('remoteDesktop.unattendedHint'));
+  expect(options.textContent).toContain(copy.t('remoteDesktop.viewHint'));
   const view = options.querySelector<HTMLInputElement>('[role=switch]')!;
   view.focus(); await userEvent.keyboard(' '); expect(view.checked).toBe(true);
   expect(options.querySelector('summary')?.textContent).toContain(copy.t('remoteDesktop.view'));
@@ -114,10 +114,11 @@ it.each(['locked', 'session_unavailable', 'unsupported', 'screen_permission_requ
 });
 
 it('does not report permission reuse as enabled when saving fails', async () => {
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required' } });
   state.save.mockRejectedValue(new LocalApiError({ status: 403, code: 'DESKTOP_FORBIDDEN', message: 'Permission required' }));
   const { dialog, copy } = await launch(390);
   await userEvent.click(dialog.querySelector('summary')!);
-  const input = dialog.querySelectorAll<HTMLInputElement>('[role=switch]')[1];
+  const input = dialog.querySelector<HTMLInputElement>('.remote-desktop-sharing [role=switch]')!;
   input.focus(); await userEvent.keyboard(' ');
   await expect.poll(() => dialog.querySelector('[role=alert]')?.textContent).toContain(copy.t('remoteDesktop.settingsFailed'));
   expect(input.checked).toBe(false); expect(input.getAttribute('aria-checked')).toBe('false');
@@ -132,4 +133,26 @@ it('keeps controls within a scaled narrow Workbench panel', async () => {
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
   expectSingleLineButtonLabels(host);
   await page.screenshot({ element: host, path: '__screenshots__/remote-desktop-workbench.png' });
+});
+
+it.each(SUPPORTED_LOCALES)('offers persistent Wayland approval before connecting in %s', async locale => {
+  state.locale = locale;
+  const wayland = { ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required' } };
+  state.status.mockResolvedValue(wayland);
+  const { dialog, copy } = await launch(320);
+  const sharing = page.elementLocator(dialog).getByRole('switch', { name: copy.t('remoteDesktop.unattended') });
+  await expect.element(sharing).toBeVisible();
+  expect(dialog.querySelector('.remote-desktop-sharing')?.closest('details')).toBeNull();
+  expect(state.save).not.toHaveBeenCalled();
+  expectSingleLineButtonLabels(dialog);
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+  expect(dialog.getBoundingClientRect().height).toBeLessThan(800);
+  if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-remember-approval.png' });
+  state.save.mockResolvedValue({ unattended: true });
+  state.status.mockResolvedValue({ ...wayland, unattended: true });
+  dialog.querySelector<HTMLInputElement>('.remote-desktop-sharing [role=switch]')!.focus();
+  await userEvent.keyboard(' ');
+  await expect.poll(() => state.save.mock.calls).toEqual([[true]]);
+  await expect.poll(() => dialog.querySelector('.remote-desktop-state')?.textContent).toContain(copy.t('remoteDesktop.awaitingConnection'));
+  expect(dialog.querySelector('.remote-desktop-guidance')).toBeNull();
 });

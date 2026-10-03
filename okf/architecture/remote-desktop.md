@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Human remote desktop sessions
 description: Share the host's current graphical desktop with an authenticated viewer, exclusive remote input, and bounded media.
 tags: [runtime, desktop, applications, security, media]
-timestamp: 2026-10-03T03:30:00Z
+timestamp: 2026-10-03T07:42:00Z
 ---
 # Summary
 
@@ -135,7 +135,12 @@ keys, passwords and pixels never enter audit records.
 
 The [connection launcher](remote-desktop-launcher.md) owns target identity,
 readiness, preparation, grant-reuse settings and launch feedback. Desktop opens an isolated owned window; browsers open a separate
-viewer. Each window presents one selected display. Fit and original-pixel modes
+viewer. Desktop's toolbar is its native titlebar: one 40px row at ordinary widths,
+with window-control insets owned by the existing chrome snapshot. Fullscreen
+updates those insets. The host name is the visible identity; there is no duplicate
+close button below the native controls. Narrow windows may wrap whole controls
+without covering native buttons or remote content. Interactive controls remain
+outside native drag regions. Each window presents one selected display. Fit and original-pixel modes
 change local rendering/capture settings without resizing the host desktop.
 Fullscreen offers a hideable, pinnable toolbar and an explicit exit. Desktop
 uses the exact owning native window and waits for its fullscreen event before

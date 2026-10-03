@@ -27,6 +27,7 @@
 .remote-desktop-options[open] > summary > svg { transform: rotate(90deg); }
 .remote-desktop-mode { margin-inline-start: auto; font-size: 11px; }
 .remote-desktop-option { padding: 0 0 16px; }
+.remote-desktop-sharing { margin-top: 18px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; }
 .remote-desktop-option label { width: 100%; align-items: flex-start; }
 .remote-desktop-option label > div.relative { flex-shrink: 0; margin-top: 3px; }
 .remote-desktop-option label > div.flex { flex: 1; min-width: 0; }

@@ -293,3 +293,17 @@ func TestDelayedPaintReceiptCannotAuthorizeOrDisconnectNewDisplay(t *testing.T) 
 		t.Fatal("retired picture authorized the successor")
 	}
 }
+
+func TestConnectionUsesHostApprovalPreferenceNotViewerInput(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		m := &Manager{sessions: map[string]*ownedSession{}}
+		s, native := testSession(m, "desktop", "control")
+		s.unattended = enabled
+		if err := m.send(s, s.pair, nativeapps.HostDesktopCommand{Version: 1, ID: 1, Method: "connect", Mode: "control", Unattended: !enabled}, false); err != nil {
+			t.Fatal(err)
+		}
+		if native.commands[0].Unattended != enabled {
+			t.Fatal("viewer replaced the host's explicit approval preference")
+		}
+	}
+}
