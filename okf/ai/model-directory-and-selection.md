@@ -3,7 +3,7 @@ type: AI Configuration Contract
 title: Model directory and selection
 description: Maintain an offline Agent catalog, model-specific capabilities, and user selection preferences without duplicate inventories.
 tags: [ai, models, providers, settings]
-timestamp: 2026-09-10T00:00:00Z
+timestamp: 2026-10-03T00:00:00Z
 ---
 
 # Summary
@@ -83,7 +83,7 @@ The configuration owner atomically saves the converted file before publishing it
 
 ## Directory maintenance
 
-Run `python3 scripts/model-catalog/generate.py --update` only for an intentional online update. Review `upstream.json`, official-source corrections in `overrides.json`, and the resulting `internal/config/model_catalog.generated.json` diff together. Normal generation and `--check` use only committed inputs, including in CI and startup. The snapshot records the original models.dev response SHA-256; the 2026-09-09 baseline matches Floret's independently generated engine catalog. models.dev attribution is included in the distributed third-party notices.
+Run `python3 scripts/model-catalog/generate.py --update` only for an intentional online update. Review `upstream.json`, official-source corrections in `overrides.json`, and the resulting `internal/config/model_catalog.generated.json` diff together. Normal generation and `--check` use only committed inputs, including in CI and startup. The snapshot records the original models.dev response SHA-256. The [provider compatibility review](provider-api-catalog-review.md) records current official APIs and released-engine constraints; a newer supplier catalog does not imply support in Floret's independent catalog. Explicit official status overrides take precedence over experimental-name inference. models.dev attribution is included in the distributed third-party notices.
 
 Include publicly callable Preview and Experimental models when the adapter supports their Agent protocol; mark their status explicitly. Exclude deprecated, non-tool, and specialized audio, video, embedding, or non-text-output models. Review regional endpoints, token limits, image modalities, reasoning wire controls, response fields, and tool-result replay against official documentation. A newly introduced reasoning option or model search capability must fail generation until reviewed. Run `python3 -B scripts/model-catalog/test_generate.py` and `python3 scripts/model-catalog/generate.py --check` before committing catalog changes. `model_catalog_legacy.json` exists solely to recognize the one-time configuration source; it is never a live model source.
 

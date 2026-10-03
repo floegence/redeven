@@ -44,7 +44,7 @@ func (m *anthropicMock) handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/messages") {
+	if r.URL.Path != "/v1/messages" {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

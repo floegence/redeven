@@ -109,7 +109,8 @@ def generate(data, rules):
         output = []
         for mid, original in models.items():
             model = dict(original)
-            model.update(rules.get('models', {}).get(pid + '/' + mid, {}).get('metadata', {}))
+            metadata = rules.get('models', {}).get(pid + '/' + mid, {}).get('metadata', {})
+            model.update(metadata)
             if mid in rules.get('exclude', {}).get(pid, []):
                 continue
             if re.search(rules['exclude_pattern'], mid) or model.get('status') == 'deprecated':
@@ -128,10 +129,11 @@ def generate(data, rules):
             cap = reasoning(pid, model, rules)
             cap.update(rules.get('models', {}).get(pid + '/' + mid, {}).get('reasoning', {}))
             status = model.get('status', '')
-            if re.search(r'experimental|(?:^|-)exp(?:-|$)', mid):
-                status = 'experimental'
-            elif not status and 'preview' in mid:
-                status = 'beta'
+            if 'status' not in metadata:
+                if re.search(r'experimental|(?:^|-)exp(?:-|$)', mid):
+                    status = 'experimental'
+                elif not status and 'preview' in mid:
+                    status = 'beta'
             cost = model.get('cost', {})
             output.append({'id': mid, 'name': model['name'], 'status': status,
                            'context_window': limits['context'], 'max_tokens': limits['output'],

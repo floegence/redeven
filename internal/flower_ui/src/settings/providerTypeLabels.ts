@@ -7,7 +7,7 @@ const EN_US_PROVIDER_TYPE_LABELS: FlowerProviderTypeLabels = {
   anthropic: 'Anthropic',
   google: 'Gemini',
   moonshot: 'Moonshot',
-  chatglm: 'ChatGLM',
+  chatglm: 'Z.ai',
   deepseek: 'DeepSeek',
   qwen: 'Qwen',
   openrouter: 'OpenRouter',

@@ -2365,7 +2365,14 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 	case "anthropic":
 		opts := []aoption.RequestOption{aoption.WithAPIKey(strings.TrimSpace(apiKey))}
 		if strings.TrimSpace(baseURL) != "" {
-			opts = append(opts, aoption.WithBaseURL(strings.TrimSpace(baseURL)))
+			// The Messages SDK appends v1/messages. Accept the versioned base
+			// previously saved by Flower without duplicating the API version.
+			baseURL = strings.TrimSpace(baseURL)
+			if endpoint, err := url.Parse(baseURL); err == nil {
+				endpoint.Path = strings.TrimSuffix(strings.TrimRight(endpoint.Path, "/"), "/v1")
+				baseURL = endpoint.String()
+			}
+			opts = append(opts, aoption.WithBaseURL(baseURL))
 		}
 		return &anthropicProvider{client: anthropic.NewClient(opts...)}, nil
 	default:

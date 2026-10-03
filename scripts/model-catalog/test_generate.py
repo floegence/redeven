@@ -18,7 +18,7 @@ class SearchDeclarationTests(unittest.TestCase):
         self.rules = json.loads((DIRECTORY / 'overrides.json').read_text())
 
     def test_new_model_requires_search_review(self):
-        model = copy.deepcopy(self.data['providers']['deepseek']['deepseek-v4-flash'])
+        model = copy.deepcopy(self.data['providers']['deepseek']['deepseek-v4-pro'])
         model['id'] = 'future-agent'
         self.data['providers']['deepseek']['future-agent'] = model
         with self.assertRaisesRegex(ValueError, 'missing reviewed web search declaration'):

@@ -19,7 +19,7 @@ export const FLOWER_PROVIDER_TYPES: readonly { value: FlowerProviderType; label:
   { value: 'anthropic', label: 'Anthropic', hint: 'Native connection' },
   { value: 'google', label: 'Gemini', hint: 'Native connection' },
   { value: 'moonshot', label: 'Moonshot', hint: 'Native connection' },
-  { value: 'chatglm', label: 'ChatGLM', hint: 'Native connection' },
+  { value: 'chatglm', label: 'Z.ai', hint: 'Native connection' },
   { value: 'deepseek', label: 'DeepSeek', hint: 'Native connection' },
   { value: 'qwen', label: 'Qwen', hint: 'Native connection' },
   { value: 'openrouter', label: 'OpenRouter', hint: 'Dynamic model metadata' },
@@ -35,10 +35,10 @@ export function flowerProviderTypeLabel(type: FlowerProviderType): string {
 
 export const FLOWER_PROVIDER_PRESETS: Record<FlowerProviderType, FlowerProviderPreset> = {
   openai: { type: 'openai', name: 'OpenAI', default_base_url: 'https://api.openai.com/v1', models: generatedModels.openai ?? [] },
-  anthropic: { type: 'anthropic', name: 'Anthropic', default_base_url: 'https://api.anthropic.com/v1', models: generatedModels.anthropic ?? [] },
+  anthropic: { type: 'anthropic', name: 'Anthropic', default_base_url: 'https://api.anthropic.com', models: generatedModels.anthropic ?? [] },
   google: { type: 'google', name: 'Gemini', default_base_url: 'https://generativelanguage.googleapis.com/v1beta/openai', models: generatedModels.google ?? [] },
   moonshot: { type: 'moonshot', name: 'Moonshot', default_base_url: 'https://api.moonshot.cn/v1', models: generatedModels.moonshot ?? [] },
-  chatglm: { type: 'chatglm', name: 'ChatGLM', default_base_url: 'https://api.z.ai/api/paas/v4/', models: generatedModels.chatglm ?? [] },
+  chatglm: { type: 'chatglm', name: 'Z.ai', default_base_url: 'https://api.z.ai/api/paas/v4/', models: generatedModels.chatglm ?? [] },
   deepseek: { type: 'deepseek', name: 'DeepSeek', default_base_url: 'https://api.deepseek.com', models: generatedModels.deepseek ?? [] },
   qwen: { type: 'qwen', name: 'Qwen', default_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', models: generatedModels.qwen ?? [] },
   openrouter: { type: 'openrouter', name: 'OpenRouter', default_base_url: 'https://openrouter.ai/api/v1', models: generatedModels.openrouter ?? [] },
