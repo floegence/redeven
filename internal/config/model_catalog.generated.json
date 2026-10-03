@@ -1051,9 +1051,10 @@
           "text",
           "image"
         ],
-        "max_output_tokens": 384000,
+        "max_output_tokens": 393216,
         "model_name": "deepseek-v4-flash-vision-exp",
         "reasoning_capability": {
+          "default_level": "high",
           "disable_supported": true,
           "fixture": "deepseek_responses_reasoning_effort",
           "history_replay_requirements": [
@@ -1063,7 +1064,8 @@
           "source_checked_at": "2026-10-03",
           "source_urls": [
             "https://api-docs.deepseek.com/guides/responses_api/",
-            "https://api-docs.deepseek.com/guides/thinking_mode"
+            "https://api-docs.deepseek.com/guides/thinking_mode",
+            "https://api-docs.deepseek.com/quick_start/pricing"
           ],
           "supported_levels": [
             "low",
@@ -1079,9 +1081,10 @@
         "context_window": 1000000,
         "display_name": "DeepSeek Flash (legacy alias)",
         "input_modalities": [
-          "text"
+          "text",
+          "image"
         ],
-        "max_output_tokens": 384000,
+        "max_output_tokens": 393216,
         "model_name": "deepseek-v4-flash",
         "reasoning_capability": {
           "default_level": "high",
@@ -1094,7 +1097,41 @@
           "source_checked_at": "2026-10-03",
           "source_urls": [
             "https://api-docs.deepseek.com/guides/responses_api/",
-            "https://api-docs.deepseek.com/guides/thinking_mode"
+            "https://api-docs.deepseek.com/guides/thinking_mode",
+            "https://api-docs.deepseek.com/quick_start/pricing"
+          ],
+          "supported_levels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "wire_shape": "deepseek_responses_reasoning_effort"
+        },
+        "release_date": "2026-09-10",
+        "status": ""
+      },
+      {
+        "context_window": 1000000,
+        "display_name": "DeepSeek V4.1 Flash",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "max_output_tokens": 393216,
+        "model_name": "deepseek-flash",
+        "reasoning_capability": {
+          "default_level": "high",
+          "disable_supported": true,
+          "fixture": "deepseek_responses_reasoning_effort",
+          "history_replay_requirements": [
+            "reasoning.content"
+          ],
+          "kind": "effort",
+          "source_checked_at": "2026-10-03",
+          "source_urls": [
+            "https://api-docs.deepseek.com/guides/responses_api/",
+            "https://api-docs.deepseek.com/guides/thinking_mode",
+            "https://api-docs.deepseek.com/quick_start/pricing"
           ],
           "supported_levels": [
             "low",
@@ -1112,7 +1149,7 @@
         "input_modalities": [
           "text"
         ],
-        "max_output_tokens": 384000,
+        "max_output_tokens": 393216,
         "model_name": "deepseek-v4-pro",
         "reasoning_capability": {
           "default_level": "high",
@@ -1125,9 +1162,11 @@
           "source_checked_at": "2026-10-03",
           "source_urls": [
             "https://api-docs.deepseek.com/guides/responses_api/",
-            "https://api-docs.deepseek.com/guides/thinking_mode"
+            "https://api-docs.deepseek.com/guides/thinking_mode",
+            "https://api-docs.deepseek.com/quick_start/pricing"
           ],
           "supported_levels": [
+            "low",
             "high",
             "max"
           ],

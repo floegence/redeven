@@ -16,9 +16,6 @@
     "groq": [
       "llama-3.1-8b-instant",
       "llama-3.3-70b-versatile"
-    ],
-    "deepseek": [
-      "deepseek-flash"
     ]
   },
   "sources": {
@@ -51,7 +48,8 @@
     ],
     "deepseek": [
       "https://api-docs.deepseek.com/guides/responses_api/",
-      "https://api-docs.deepseek.com/guides/thinking_mode"
+      "https://api-docs.deepseek.com/guides/thinking_mode",
+      "https://api-docs.deepseek.com/quick_start/pricing"
     ],
     "qwen": [
       "https://www.alibabacloud.com/help/en/model-studio/models",
@@ -92,17 +90,7 @@
     },
     "deepseek/deepseek-v4-pro": {
       "reasoning": {
-        "default_level": "high",
-        "supported_levels": [
-          "high",
-          "max"
-        ]
-      },
-      "metadata": {
-        "limit": {
-          "context": 1000000,
-          "output": 384000
-        }
+        "default_level": "high"
       }
     },
     "deepseek/deepseek-v4-flash": {
@@ -113,7 +101,7 @@
         "status": "",
         "limit": {
           "context": 1000000,
-          "output": 384000
+          "output": 393216
         },
         "name": "DeepSeek Flash (legacy alias)",
         "reasoning_options": [
@@ -131,7 +119,8 @@
         ],
         "modalities": {
           "input": [
-            "text"
+            "text",
+            "image"
           ],
           "output": [
             "text"
@@ -194,7 +183,7 @@
         "status": "",
         "limit": {
           "context": 1000000,
-          "output": 384000
+          "output": 393216
         },
         "name": "DeepSeek Flash (legacy Vision alias)",
         "reasoning_options": [
@@ -220,7 +209,9 @@
           ]
         }
       },
-      "reasoning": {}
+      "reasoning": {
+        "default_level": "high"
+      }
     }
   },
   "web_search": [
@@ -507,7 +498,6 @@
   ],
   "exclusion_notes": {
     "openai/gpt-daybreak-blue-latest": "Separate Daybreak approval and provisioning required; not part of the public default catalog.",
-    "openai/gpt-daybreak-red-latest": "Separate Daybreak approval and provisioning required; not part of the public default catalog.",
-    "deepseek/deepseek-flash": "Blocked by released Floret v7.18.4: NewDeepSeek rejects this model. Update and release the upstream catalog before enabling this entry."
+    "openai/gpt-daybreak-red-latest": "Separate Daybreak approval and provisioning required; not part of the public default catalog."
   }
 }

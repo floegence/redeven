@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-03: Adopt published DeepSeek Flash support
+
+- Adopt Floret v7.19.0 after upstream publication and blank-module checksum verification; enable `deepseek-flash`, Pro low effort, and current Flash alias image/output capabilities.
+- Preserve model identity and unsupported native search. Keep provider-native replay and image preparation in the released upstream gateway; see [the provider review](ai/provider-api-catalog-review.md).
+
 ## 2026-10-03: Refresh official provider models and endpoint compatibility
 
 - Add public GPT-6 Sol/Luna and GPT-6.1 Sol, Claude Opus/Sonnet 5.5, GLM FlashX, Qwen Flash/Omni, and Grok 4.7 entries with reviewed reasoning, limits, and search status.

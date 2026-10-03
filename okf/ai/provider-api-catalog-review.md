@@ -19,7 +19,7 @@ The 2026-10-03 review covers all existing provider types. Token ceilings describ
 | OpenAI | GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna | `/v1/responses`; function tools for GPT-6.1 Sol require Responses. Sol/Luna permit `none`; 6.1 Sol and Astra do not. 1,050,000 context and 128,000 output tokens. |
 | Anthropic | Claude Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 4.5 | `/v1/messages`, API version `2023-06-01`; SDK base is the origin without `/v1`. Opus/Sonnet 5.5 use adaptive thinking with effort, reject manual budgets and `disabled`, and expose 1M context / 128K output. |
 | Google | Gemini 3.8 Flash | Supported `/v1beta/openai/chat/completions` with model-specific effort/budget settings and opaque tool thought signatures. Existing directory already includes the current model. |
-| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | Official `/responses` accepts the new model and vision. Published Floret v7.18.4 rejects `deepseek-flash`; see the release blocker below. Built-in search remains ignored by the provider. |
+| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | Published Floret v7.19.0 accepts the new name through `/responses`; Flash and both official aliases support images, while Pro is text-only. All support off/low/high/max and a 393,216-token output ceiling. Built-in search remains ignored by the provider. |
 | Qwen | Qwen3.8 Max, Flash, Omni Flash | `/compatible-mode/v1/chat/completions`; existing qualified search models use Responses. New Omni Flash is text output with tools and text/image input in Redeven. Qwen3.7 Max/Plus output ceilings rise to 131,072. |
 | Moonshot | Kimi K3, K2.7 Code, K2.6 | `/v1/chat/completions`; K3 requires thinking, supports low/high/max, and accepts `max_completion_tokens` up to 1,048,576 (provider default 131,072). Search for K3 remains unintegrated. |
 | Z.ai | GLM-5.3, GLM-5.3-Flash/FlashX | `/api/paas/v4/chat/completions`; FlashX has 1M context and 128K output, forced thinking with low/high/max. The persisted provider type stays `chatglm`; display branding is Z.ai. |
@@ -39,11 +39,20 @@ Anthropic's SDK appends `v1/messages`. New presets use `https://api.anthropic.co
 
 Qwen now recommends workspace-specific regional domains, for example `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1` for Singapore and `{WorkspaceId}.cn-beijing.maas.aliyuncs.com` for Beijing. Workspace identity and the API key's region are user-owned inputs. Preserve existing configured bases; never save the literal template or silently move a key between regions. The documented legacy Singapore base remains the existing preset while users can supply the new workspace URL. Native iOS settings link to official provider documentation for this choice.
 
-## Released-engine blocker
+## Published-engine adoption
 
-Floret v7.18.4 is the latest published version checked on 2026-10-03. Its `provider.NewDeepSeek` resolves models against its own pinned catalog and rejects `deepseek-flash`. Redeven must not bypass that boundary, copy the upstream transport, or wire a sibling checkout into production. A released Floret catalog update is required before enabling the new name and the expanded Pro reasoning/output capabilities.
+Floret v7.19.0 was released before Redeven adopted it, with independent blank-module
+adoption and module checksums verified. Its `provider.NewDeepSeek` accepts
+`deepseek-flash` and the expanded Pro reasoning/output capabilities. Redeven uses
+the published module with `GOWORK=off`; no sibling dependency or transport copy
+bypasses the upstream boundary.
 
-The supplier still accepts `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` as aliases for V4.1 Flash. Until upstream support is released, explicit overrides retain these callable identities and their already-supported image, effort, and output capabilities. They are labeled as legacy aliases; no automatic model substitution occurs. `deepseek-flash` stays explicitly excluded with the blocker recorded in `overrides.json`.
+The supplier still accepts `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp`
+as aliases for V4.1 Flash. Explicit overrides retain those identities, label
+them as legacy aliases, and align image/effort/output capabilities with the
+published engine. Existing conversations keep their selected ID and opaque
+state identity. No automatic model substitution occurs. All four models keep
+native search unsupported.
 
 Daybreak Blue/Red require separate OpenAI approval and provisioning and therefore remain outside the public default catalog. New catalog entries receive an explicit search review; supplier search support does not imply an implemented or qualified Redeven search adapter.
 
@@ -56,6 +65,8 @@ Runtime owns provider routing and the catalog projection. Floret owns provider-n
 - `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev response projection and original response SHA-256.
 - `redeven:scripts/model-catalog/overrides.json` - Official-source corrections, search declarations, exclusions, and review dates.
 - `redeven:internal/ai/model_gateway.go` - Provider routing and Anthropic base normalization.
+- [Floret v7.19.0](https://github.com/floegence/floret/releases/tag/v7.19.0) - Published upstream catalog and DeepSeek support.
+- `redeven:internal/ai/model_gateway_deepseek_test.go` - New Flash, aliases, Pro reasoning, image continuation, and historical search replay against the released gateway.
 - `redeven:internal/ai/model_gateway_anthropic_integration_test.go` - Exact Messages path assertion for saved versioned bases.
 - [OpenAI models](https://developers.openai.com/api/docs/models) and [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 - [Claude model overview](https://platform.claude.com/docs/en/models/overview) and [thinking configuration](https://platform.claude.com/docs/en/build-with-claude/thinking).

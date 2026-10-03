@@ -3103,7 +3103,7 @@
               "deepseek",
               "provider"
             ],
-            "summary": "Flower routes the DeepSeek provider to the published Floret v7.12.2 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
+            "summary": "Flower routes the DeepSeek provider to the published Floret v7.19.0 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
             "section_count": 2
           },
           {
@@ -6947,7 +6947,7 @@
         "deepseek",
         "provider"
       ],
-      "timestamp": "2026-09-10T00:00:00Z",
+      "timestamp": "2026-10-03T00:00:00Z",
       "frontmatter": {
         "description": "Flower consumes Floret stateless Responses transport with explicit web tool limits.",
         "tags": [
@@ -6955,19 +6955,19 @@
           "deepseek",
           "provider"
         ],
-        "timestamp": "2026-09-10T00:00:00Z",
+        "timestamp": "2026-10-03T00:00:00Z",
         "title": "DeepSeek Responses",
         "type": "AI Provider Contract"
       },
-      "body_length": 5804,
-      "summary": "Flower routes the DeepSeek provider to the published Floret v7.12.2 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
+      "body_length": 6163,
+      "summary": "Flower routes the DeepSeek provider to the published Floret v7.19.0 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Each request sends full input history. The route never sends `messages`,\n`enable_search`, `previous_response_id`, `store`, or `include`. Reasoning off maps\nto `reasoning.effort: none`; the selectable high and max levels keep their\nexisting model-catalog contract.\n\nThe official Responses tool compatibility table marks `web_search` and other\nbuilt-in tools as ignored. Responses format compatibility does not provide\nhosted execution. The reviewed directory therefore marks Flash, Pro, and Vision\nsearch as `unsupported`, without a search protocol. The shared resolver exposes\nthat fact to model APIs, UI, prompts, and normal Turn requests. New requests have\nno native search declaration; this does not disable Responses, image input, or\nlocal function tools such as `web_fetch` for a known public URL.\n\nUnsupported hosted search configurations, including a frozen declaration from\nan earlier Flower version, fail explicitly before dispatch. They are not silently\nsent to an endpoint that ignores them, replaced with another search service, or\nremoved from an admitted Turn. A new Turn resolves the corrected declaration.\nAutomatic titles remain on Responses without search tools.\n\n## Model-specific image input\n\nDeepSeek Vision is enabled by the selected model's `input_modalities`, just like\nvision models on other providers. Redeven authorizes and prepares staged image\nbytes, then supplies them to Floret through `DeepSeekOptions.ResolveAttachment`.\nFloret freezes native `input_image` data for estimation and dispatch. Text-only\nmodels reject images. PNG, JPEG, GIF, and WebP use the same host attachment\nlimits and authorization checks as other native image routes.\n\nProvider continuation state contains attachment descriptors and content hashes,\nnever image data URLs. A later preparation reauthorizes the current bytes and\nrejects changed content. Prepared dispatch does not resolve the image again.\nRedeven passes opaque state through without interpreting it or maintaining an\nimage/history mirror.",
-          "char_count": 2007
+          "body": "Each request sends full input history. The route never sends `messages`,\n`enable_search`, `previous_response_id`, `store`, or `include`. Reasoning off maps\nto `reasoning.effort: none`; the selectable low, high, and max levels use the current model-catalog\ncontract, with high as the provider default. `deepseek-flash` and the official\n`deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` aliases accept images;\n`deepseek-v4-pro` remains text-only. All have a 1,000,000-token context ceiling\nand 393,216-token output ceiling. Existing selections retain their exact IDs;\nprovider limits do not override user request budgets.\n\nThe official Responses tool compatibility table marks `web_search` and other\nbuilt-in tools as ignored. Responses format compatibility does not provide\nhosted execution. The reviewed directory therefore marks Flash, Pro, and Vision\nsearch as `unsupported`, without a search protocol. The shared resolver exposes\nthat fact to model APIs, UI, prompts, and normal Turn requests. New requests have\nno native search declaration; this does not disable Responses, image input, or\nlocal function tools such as `web_fetch` for a known public URL.\n\nUnsupported hosted search configurations, including a frozen declaration from\nan earlier Flower version, fail explicitly before dispatch. They are not silently\nsent to an endpoint that ignores them, replaced with another search service, or\nremoved from an admitted Turn. A new Turn resolves the corrected declaration.\nAutomatic titles remain on Responses without search tools.\n\n## Model-specific image input\n\nDeepSeek Vision is enabled by the selected model's `input_modalities`, just like\nvision models on other providers. Redeven authorizes and prepares staged image\nbytes, then supplies them to Floret through `DeepSeekOptions.ResolveAttachment`.\nFloret freezes native `input_image` data for estimation and dispatch. Text-only\nmodels reject images. PNG, JPEG, GIF, and WebP use the same host attachment\nlimits and authorization checks as other native image routes.\n\nProvider continuation state contains attachment descriptors and content hashes,\nnever image data URLs. A later preparation reauthorizes the current bytes and\nrejects changed content. Prepared dispatch does not resolve the image again.\nRedeven passes opaque state through without interpreting it or maintaining an\nimage/history mirror.",
+          "char_count": 2366
         },
         {
           "id": "boundaries",
@@ -7009,7 +7009,7 @@
           "description": "Rejection of ignored hosted tools."
         }
       ],
-      "snippet": "Flower routes the DeepSeek provider to the published Floret v7.12.2 Responses gateway. Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization, function-call validation, and opaque provider history. Redeven only maps",
+      "snippet": "Flower routes the DeepSeek provider to the published Floret v7.19.0 Responses gateway. Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization, function-call validation, and opaque provider history. Redeven only maps",
       "links": [
         {
           "label": "Model and context runtime",
@@ -8519,7 +8519,7 @@
         "title": "Model directory and selection",
         "type": "AI Configuration Contract"
       },
-      "body_length": 11474,
+      "body_length": 11511,
       "summary": "Redeven owns the model directory, user selection preferences, credentials, and the one-time configuration conversion. A checked-in models.dev snapshot generates the exact catalog consumed by Go and both Flower settings surfaces. Brand catalogs default to all Agent models; users persist exclusions and parameter overrides. Image input is a variable model capability for every provider, including DeepSeek Vision. Current and default conversation models never change merely because the selectable catalog changes. Floret remains the published engine dependency and owns its own provider transport and opaque state.",
       "sections": [
         {
@@ -8533,8 +8533,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Gemini uses the supported OpenAI-compatible endpoint with model-specific effort or budget controls. Its tool thought signatures stay in the existing opaque provider state, bound to exact tool identity and arguments, and are pruned with projected history. DeepSeek uses published Floret v7.12.2, including prepared-image support, as described in [DeepSeek Responses](deepseek-responses.md). No public Floret catalog API, host credential contract, or domain schema is added by this change.",
-          "char_count": 487
+          "body": "Gemini uses the supported OpenAI-compatible endpoint with model-specific effort or budget controls. Its tool thought signatures stay in the existing opaque provider state, bound to exact tool identity and arguments, and are pruned with projected history. DeepSeek uses published Floret v7.19.0, including current Flash/alias capabilities and prepared-image support, as described in [DeepSeek Responses](deepseek-responses.md). No public Floret catalog API, host credential contract, or domain schema is added by this change.",
+          "char_count": 524
         }
       ],
       "evidence": [
@@ -8937,22 +8937,22 @@
         "title": "Provider API and catalog review",
         "type": "Provider Compatibility Review"
       },
-      "body_length": 8554,
+      "body_length": 8847,
       "summary": "Redeven owns one model catalog shared by Runtime, Web, Desktop, and the native iOS client through the authenticated catalog API. Official provider documentation establishes model identities, API contracts, and capability corrections; the pinned models.dev snapshot supplies reproducible inventory metadata. A model must be supported by the released adapter before it becomes selectable. Catalog refreshes preserve user selections and never replace a conversation's stored model. Unsupported engine capabilities remain explicit integration blockers.",
       "sections": [
         {
           "id": "reviewed-apis",
           "title": "Reviewed APIs",
           "level": 1,
-          "body": "The 2026-10-03 review covers all existing provider types. Token ceilings describe provider capacity, not a request to increase user budgets. Audio, video, embeddings, and restricted-access specialized models are outside the default Agent directory.\n\n| Provider | Current public Agent models reviewed | Runtime route and constraints |\n| --- | --- | --- |\n| OpenAI | GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna | `/v1/responses`; function tools for GPT-6.1 Sol require Responses. Sol/Luna permit `none`; 6.1 Sol and Astra do not. 1,050,000 context and 128,000 output tokens. |\n| Anthropic | Claude Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 4.5 | `/v1/messages`, API version `2023-06-01`; SDK base is the origin without `/v1`. Opus/Sonnet 5.5 use adaptive thinking with effort, reject manual budgets and `disabled`, and expose 1M context / 128K output. |\n| Google | Gemini 3.8 Flash | Supported `/v1beta/openai/chat/completions` with model-specific effort/budget settings and opaque tool thought signatures. Existing directory already includes the current model. |\n| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | Official `/responses` accepts the new model and vision. Published Floret v7.18.4 rejects `deepseek-flash`; see the release blocker below. Built-in search remains ignored by the provider. |\n| Qwen | Qwen3.8 Max, Flash, Omni Flash | `/compatible-mode/v1/chat/completions`; existing qualified search models use Responses. New Omni Flash is text output with tools and text/image input in Redeven. Qwen3.7 Max/Plus output ceilings rise to 131,072. |\n| Moonshot | Kimi K3, K2.7 Code, K2.6 | `/v1/chat/completions`; K3 requires thinking, supports low/high/max, and accepts `max_completion_tokens` up to 1,048,576 (provider default 131,072). Search for K3 remains unintegrated. |\n| Z.ai | GLM-5.3, GLM-5.3-Flash/FlashX | `/api/paas/v4/chat/completions`; FlashX has 1M context and 128K output, forced thinking with low/high/max. The persisted provider type stays `chatglm`; display branding is Z.ai. |\n| xAI | Grok 4.7 | Existing `/v1/chat/completions` is still supported but marked legacy. Responses is the supplier's preferred API for new features. 4.7 supports low/medium/high/xhigh, defaults to high, and cannot disable thinking. |\n| Groq | GPT-OSS 120B/20B and Qwen3.8-27B | `/openai/v1/chat/completions`; preview status stays explicit. Existing catalog is current. |\n| OpenRouter | Dynamic provider inventory | Discover tool-capable models from `/api/v1/models`; preserve explicit user selection. |\n| Ollama | Installed local inventory | `/api/tags`, `/api/ps`, `/api/show`, then `/v1/chat/completions`; serving context and tools must be discovered. |\n| Custom compatible | User-defined models | Retain explicit endpoint, token limits, and capability configuration. |",
-          "char_count": 2791
+          "body": "The 2026-10-03 review covers all existing provider types. Token ceilings describe provider capacity, not a request to increase user budgets. Audio, video, embeddings, and restricted-access specialized models are outside the default Agent directory.\n\n| Provider | Current public Agent models reviewed | Runtime route and constraints |\n| --- | --- | --- |\n| OpenAI | GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna | `/v1/responses`; function tools for GPT-6.1 Sol require Responses. Sol/Luna permit `none`; 6.1 Sol and Astra do not. 1,050,000 context and 128,000 output tokens. |\n| Anthropic | Claude Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 4.5 | `/v1/messages`, API version `2023-06-01`; SDK base is the origin without `/v1`. Opus/Sonnet 5.5 use adaptive thinking with effort, reject manual budgets and `disabled`, and expose 1M context / 128K output. |\n| Google | Gemini 3.8 Flash | Supported `/v1beta/openai/chat/completions` with model-specific effort/budget settings and opaque tool thought signatures. Existing directory already includes the current model. |\n| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | Published Floret v7.19.0 accepts the new name through `/responses`; Flash and both official aliases support images, while Pro is text-only. All support off/low/high/max and a 393,216-token output ceiling. Built-in search remains ignored by the provider. |\n| Qwen | Qwen3.8 Max, Flash, Omni Flash | `/compatible-mode/v1/chat/completions`; existing qualified search models use Responses. New Omni Flash is text output with tools and text/image input in Redeven. Qwen3.7 Max/Plus output ceilings rise to 131,072. |\n| Moonshot | Kimi K3, K2.7 Code, K2.6 | `/v1/chat/completions`; K3 requires thinking, supports low/high/max, and accepts `max_completion_tokens` up to 1,048,576 (provider default 131,072). Search for K3 remains unintegrated. |\n| Z.ai | GLM-5.3, GLM-5.3-Flash/FlashX | `/api/paas/v4/chat/completions`; FlashX has 1M context and 128K output, forced thinking with low/high/max. The persisted provider type stays `chatglm`; display branding is Z.ai. |\n| xAI | Grok 4.7 | Existing `/v1/chat/completions` is still supported but marked legacy. Responses is the supplier's preferred API for new features. 4.7 supports low/medium/high/xhigh, defaults to high, and cannot disable thinking. |\n| Groq | GPT-OSS 120B/20B and Qwen3.8-27B | `/openai/v1/chat/completions`; preview status stays explicit. Existing catalog is current. |\n| OpenRouter | Dynamic provider inventory | Discover tool-capable models from `/api/v1/models`; preserve explicit user selection. |\n| Ollama | Installed local inventory | `/api/tags`, `/api/ps`, `/api/show`, then `/v1/chat/completions`; serving context and tools must be discovered. |\n| Custom compatible | User-defined models | Retain explicit endpoint, token limits, and capability configuration. |",
+          "char_count": 2858
         },
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The generated catalog must include only models that have a released adapter, a reviewed endpoint and capability contract, positive provider limits, and a web-search declaration. Catalog metadata is authoritative for selectable model identity and user-visible status. Provider credentials, workspace IDs, regional endpoint choice, and per-thread model selection remain user-owned state. A new supplier model remains unavailable until the released upstream adapter and its replay, tool, image, and reasoning contracts are qualified.\n\n## Endpoint compatibility\n\nAnthropic's SDK appends `v1/messages`. New presets use `https://api.anthropic.com`. The adapter accepts previously saved bases ending in `/v1` or `/v1/` by removing only that terminal version before SDK construction, preserving any proxy path prefix. The original configuration is not rewritten. This prevents `/v1/v1/messages` without changing credential or host selection.\n\nQwen now recommends workspace-specific regional domains, for example `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1` for Singapore and `{WorkspaceId}.cn-beijing.maas.aliyuncs.com` for Beijing. Workspace identity and the API key's region are user-owned inputs. Preserve existing configured bases; never save the literal template or silently move a key between regions. The documented legacy Singapore base remains the existing preset while users can supply the new workspace URL. Native iOS settings link to official provider documentation for this choice.\n\n## Released-engine blocker\n\nFloret v7.18.4 is the latest published version checked on 2026-10-03. Its `provider.NewDeepSeek` resolves models against its own pinned catalog and rejects `deepseek-flash`. Redeven must not bypass that boundary, copy the upstream transport, or wire a sibling checkout into production. A released Floret catalog update is required before enabling the new name and the expanded Pro reasoning/output capabilities.\n\nThe supplier still accepts `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` as aliases for V4.1 Flash. Until upstream support is released, explicit overrides retain these callable identities and their already-supported image, effort, and output capabilities. They are labeled as legacy aliases; no automatic model substitution occurs. `deepseek-flash` stays explicitly excluded with the blocker recorded in `overrides.json`.\n\nDaybreak Blue/Red require separate OpenAI approval and provisioning and therefore remain outside the public default catalog. New catalog entries receive an explicit search review; supplier search support does not imply an implemented or qualified Redeven search adapter.",
-          "char_count": 2663
+          "body": "The generated catalog must include only models that have a released adapter, a reviewed endpoint and capability contract, positive provider limits, and a web-search declaration. Catalog metadata is authoritative for selectable model identity and user-visible status. Provider credentials, workspace IDs, regional endpoint choice, and per-thread model selection remain user-owned state. A new supplier model remains unavailable until the released upstream adapter and its replay, tool, image, and reasoning contracts are qualified.\n\n## Endpoint compatibility\n\nAnthropic's SDK appends `v1/messages`. New presets use `https://api.anthropic.com`. The adapter accepts previously saved bases ending in `/v1` or `/v1/` by removing only that terminal version before SDK construction, preserving any proxy path prefix. The original configuration is not rewritten. This prevents `/v1/v1/messages` without changing credential or host selection.\n\nQwen now recommends workspace-specific regional domains, for example `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1` for Singapore and `{WorkspaceId}.cn-beijing.maas.aliyuncs.com` for Beijing. Workspace identity and the API key's region are user-owned inputs. Preserve existing configured bases; never save the literal template or silently move a key between regions. The documented legacy Singapore base remains the existing preset while users can supply the new workspace URL. Native iOS settings link to official provider documentation for this choice.\n\n## Published-engine adoption\n\nFloret v7.19.0 was released before Redeven adopted it, with independent blank-module\nadoption and module checksums verified. Its `provider.NewDeepSeek` accepts\n`deepseek-flash` and the expanded Pro reasoning/output capabilities. Redeven uses\nthe published module with `GOWORK=off`; no sibling dependency or transport copy\nbypasses the upstream boundary.\n\nThe supplier still accepts `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp`\nas aliases for V4.1 Flash. Explicit overrides retain those identities, label\nthem as legacy aliases, and align image/effort/output capabilities with the\npublished engine. Existing conversations keep their selected ID and opaque\nstate identity. No automatic model substitution occurs. All four models keep\nnative search unsupported.\n\nDaybreak Blue/Red require separate OpenAI approval and provisioning and therefore remain outside the public default catalog. New catalog entries receive an explicit search review; supplier search support does not imply an implemented or qualified Redeven search adapter.",
+          "char_count": 2590
         },
         {
           "id": "boundaries",
@@ -8977,6 +8977,11 @@
           "id": "redeven:internal/ai/model_gateway.go:0:provider routing and anthropic base normalization.",
           "source": "redeven:internal/ai/model_gateway.go",
           "description": "Provider routing and Anthropic base normalization."
+        },
+        {
+          "id": "redeven:internal/ai/model_gateway_deepseek_test.go:0:new flash, aliases, pro reasoning, image continuation, and historical search replay against the released gateway.",
+          "source": "redeven:internal/ai/model_gateway_deepseek_test.go",
+          "description": "New Flash, aliases, Pro reasoning, image continuation, and historical search replay against the released gateway."
         },
         {
           "id": "redeven:internal/ai/model_gateway_anthropic_integration_test.go:0:exact messages path assertion for saved versioned bases.",
@@ -31005,5 +31010,5 @@
       ]
     }
   ],
-  "source_sha256": "9a7085d8e1b4920b7bb32a0355bf01c2e3a1ae4def9e73ecd09aff3f03db9e3c"
+  "source_sha256": "1ada0acc308c3e18977cb67ca9e57c2aeb9360679bd6b7f0f96c54c6d2729c6a"
 }
