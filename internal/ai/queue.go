@@ -66,6 +66,31 @@ func (s *Service) PromoteQueuedInput(ctx context.Context, meta *session.Meta, th
 	return result, err
 }
 
+// SendQueuedInputNow ends the active response gracefully and starts the selected
+// queued input through Floret; the product layer does not copy or resubmit it.
+func (s *Service) SendQueuedInputNow(ctx context.Context, meta *session.Meta, threadID, queueID string) (flruntime.ThreadView, error) {
+	if s == nil {
+		return flruntime.ThreadView{}, errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	threadID, queueID = strings.TrimSpace(threadID), strings.TrimSpace(queueID)
+	if threadID == "" || queueID == "" || s.threadRuntime == nil {
+		return flruntime.ThreadView{}, errors.New("invalid request")
+	}
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	controller, ok := s.threadRuntime.(flruntime.ThreadQueueController)
+	if !ok {
+		return flruntime.ThreadView{}, errors.New("queue sending is unavailable")
+	}
+	return controller.SendQueuedNow(ctxOrBackground(ctx), flruntime.PromoteQueuedInput{
+		ThreadID: identity.ThreadID(threadID), QueueItemID: queueID, RequestKey: flruntime.RequestKey("send-queue-now:" + queueID),
+	})
+}
+
 func (s *Service) ReorderQueue(ctx context.Context, meta *session.Meta, threadID string, req ReorderQueueRequest) error {
 	if s == nil {
 		return errors.New("nil service")
@@ -87,4 +112,39 @@ func (s *Service) ReorderQueue(ctx context.Context, meta *session.Meta, threadID
 	_, err = s.threadRuntime.ReorderQueue(ctxOrBackground(ctx), flruntime.ReorderQueueInput{ThreadID: identity.ThreadID(threadID),
 		OrderedItemIDs: append([]string(nil), req.OrderedQueueIDs...), RequestKey: flruntime.RequestKey(requestID)})
 	return err
+}
+
+// EditQueuedInput updates pending text through Floret's canonical queue owner.
+// Resource references and accepted runtime context are never reconstructed here.
+func (s *Service) EditQueuedInput(ctx context.Context, meta *session.Meta, threadID, queueID string, req EditQueuedInputRequest) (flruntime.ThreadView, error) {
+	if s == nil {
+		return flruntime.ThreadView{}, errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	threadID, queueID = strings.TrimSpace(threadID), strings.TrimSpace(queueID)
+	if threadID == "" || queueID == "" || s.threadRuntime == nil {
+		return flruntime.ThreadView{}, errors.New("invalid request")
+	}
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	if err := validateInlineTurnText(req.Text); err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	if req.ExpectedText == nil {
+		return flruntime.ThreadView{}, errors.New("expected_text is required")
+	}
+	if !validClientRequestID(req.ClientRequestID) {
+		return flruntime.ThreadView{}, errors.New("invalid client_request_id")
+	}
+	editor, ok := s.threadRuntime.(flruntime.ThreadQueueController)
+	if !ok {
+		return flruntime.ThreadView{}, errors.New("queue editing is unavailable")
+	}
+	return editor.EditQueued(ctxOrBackground(ctx), flruntime.EditQueuedInput{
+		ThreadID: identity.ThreadID(threadID), QueueItemID: queueID, ExpectedText: *req.ExpectedText,
+		Text: req.Text, RequestKey: flruntime.RequestKey("edit-queue:" + req.ClientRequestID),
+	})
 }

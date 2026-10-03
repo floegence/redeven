@@ -90,6 +90,14 @@ func TestForeignEndpointCannotMutateCanonicalThread(t *testing.T) {
 			_, err := svc.PromoteQueuedInput(t.Context(), foreign, thread.ThreadID, "foreign-queue")
 			return err
 		}},
+		{name: "edit queued", call: func() error {
+			_, err := svc.EditQueuedInput(t.Context(), foreign, thread.ThreadID, "foreign-queue", EditQueuedInputRequest{})
+			return err
+		}},
+		{name: "send queued now", call: func() error {
+			_, err := svc.SendQueuedInputNow(t.Context(), foreign, thread.ThreadID, "foreign-queue")
+			return err
+		}},
 		{name: "reorder queue", call: func() error { return svc.ReorderQueue(t.Context(), foreign, thread.ThreadID, ReorderQueueRequest{}) }},
 		{name: "approval", call: func() error {
 			_, err := svc.SubmitFlowerApproval(foreign, SubmitFlowerApprovalRequest{ThreadID: thread.ThreadID, RejectAll: true})

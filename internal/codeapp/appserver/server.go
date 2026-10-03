@@ -5527,7 +5527,39 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 
-		case action == "queue" && r.Method == http.MethodPost && len(parts) == 4 && strings.TrimSpace(parts[3]) == "promote":
+		case action == "queue" && r.Method == http.MethodPatch && len(parts) == 3:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if !g.requireAIService(w, aiSvc) {
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.EditQueuedInputRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			view, err := aiSvc.EditQueuedInput(r.Context(), meta, threadID, parts[2], body)
+			if err != nil {
+				status := http.StatusBadRequest
+				message := err.Error()
+				if errors.Is(err, flruntime.ErrRequestConflict) {
+					status, message = http.StatusConflict, "This message has changed or already started. Refresh the queue and try again."
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: message})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			return
+
+		case action == "queue" && r.Method == http.MethodPost && len(parts) == 4 && (strings.TrimSpace(parts[3]) == "promote" || strings.TrimSpace(parts[3]) == "send-now"):
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -5540,7 +5572,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-			view, err := aiSvc.PromoteQueuedInput(r.Context(), meta, threadID, queueID)
+			var view flruntime.ThreadView
+			var err error
+			if strings.TrimSpace(parts[3]) == "send-now" {
+				view, err = aiSvc.SendQueuedInputNow(r.Context(), meta, threadID, queueID)
+			} else {
+				view, err = aiSvc.PromoteQueuedInput(r.Context(), meta, threadID, queueID)
+			}
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
