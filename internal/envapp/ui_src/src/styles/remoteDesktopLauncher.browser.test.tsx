@@ -1,5 +1,6 @@
 import '../index.css';
 import { render } from 'solid-js/web';
+import { ErrorBoundary } from 'solid-js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import axe from 'axe-core';
@@ -11,7 +12,7 @@ import { LocalApiError } from '../ui/services/localApi';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import type { RemoteDesktopStatus } from '../ui/services/remoteDesktopApi';
 
-const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), forget: vi.fn(), permission: vi.fn(), full: true }));
+const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), forget: vi.fn(), prepare: vi.fn(), cancel: vi.fn(), permission: vi.fn(), full: true }));
 vi.mock('../ui/i18n', () => ({ useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) }));
 vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: 'Local Environment', agent: { hostname: 'server.local' }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
@@ -20,22 +21,24 @@ vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
 vi.mock('../ui/services/desktopSessionContext', async importOriginal => ({ ...await importOriginal<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'server' }) }));
 vi.mock('../ui/services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellWebServiceWindowOpenAvailable: () => true }));
 vi.mock('../ui/services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
-vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: vi.fn(), cancelRemoteDesktopPreparation: vi.fn() }));
+vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: state.prepare, cancelRemoteDesktopPreparation: state.cancel }));
 vi.mock('../ui/services/hostApplicationsApi', () => ({ requestHostApplicationPermission: state.permission }));
 
 const ready: RemoteDesktopStatus = { capabilities: { backend: 'macos', state: 'ready', screen: true, input: true, audio: true, clipboard: true, unattended: true, displays: [{ id: 'one', name: 'Studio Display', width: 2560, height: 1440, scale: 1, primary: true }] }, unattended: false, control_in_use: false, last_display_id: '' };
 let dispose: (() => void) | undefined;
+let renderErrors: string[] = [];
 beforeEach(() => {
+  renderErrors = [];
   vi.resetAllMocks(); state.locale = 'zh-CN'; state.full = true;
   state.status.mockResolvedValue(structuredClone(ready)); state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' }); state.open.mockResolvedValue(undefined);
   document.documentElement.dataset.floeShellTheme = 'porcelain-dark'; document.documentElement.classList.add('dark');
 });
-afterEach(() => { dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark', 'light'); delete document.documentElement.dataset.floeShellTheme; });
+afterEach(() => { dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark', 'light'); delete document.documentElement.dataset.floeShellTheme; expect(renderErrors).toEqual([]); });
 
 async function launch(width = 1000) {
   await page.viewport(width, 850);
   const host = document.createElement('main'); host.style.cssText = 'min-height:800px;background:var(--background);color:var(--foreground);padding:20px'; document.body.append(host);
-  dispose = render(() => <RemoteDesktopLauncher />, host);
+  dispose = render(() => <ErrorBoundary fallback={error => { renderErrors.push(String(error)); return <p role="alert">{String(error)}</p>; }}><RemoteDesktopLauncher /></ErrorBoundary>, host);
   const copy = createTestI18nHelpers(state.locale);
   const trigger = host.querySelector('button')!;
   trigger.focus(); await userEvent.keyboard('{Enter}');
@@ -111,6 +114,68 @@ it.each(['locked', 'session_unavailable', 'unsupported', 'screen_permission_requ
   expectSingleLineButtonLabels(dialog);
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   if (value === 'locked' || value === 'authorization_required') await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-${value}.png` });
+});
+
+it.each([0, 167058723])('prepares desktop components without losing the page when expected bytes are %s', async expected => {
+  const setupRequired: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: '', state: 'setup_required', screen: false, input: false, displays: [] }, setup: { state: 'available', expected_bytes: 0, received_bytes: 0, can_cancel: false } };
+  state.status.mockResolvedValue(setupRequired);
+  state.prepare.mockImplementation(async () => {
+    const setup = { state: expected ? 'downloading' : 'checking', operation_id: 'task-preparation', expected_bytes: expected, received_bytes: 0, can_cancel: true };
+    state.status.mockResolvedValue({ ...setupRequired, setup });
+    return setup;
+  });
+  const { dialog, copy } = await launch(320);
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.prepare'), exact: true }));
+  await expect.poll(() => dialog.querySelector('progress')).not.toBeNull();
+  expect(renderErrors).toEqual([]);
+  expect(state.prepare).toHaveBeenCalledTimes(1);
+  const progress = dialog.querySelector('progress')!;
+  expect(progress.position).toBe(expected ? 0 : -1);
+  expect(progress.getAttribute('aria-label')).toBe(copy.t('remoteDesktop.preparing'));
+  expect(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')?.disabled).toBe(true);
+  expectSingleLineButtonLabels(dialog);
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+  // Real preparation switches from an unknown total to byte progress and may
+  // return to an unknown total while cached components are checked or installed.
+  state.status.mockResolvedValue({ ...setupRequired, setup: { state: 'downloading', operation_id: 'task-preparation', expected_bytes: 100, received_bytes: 25, can_cancel: true } });
+  await expect.poll(() => dialog.querySelector('progress')?.position, { timeout: 5000 }).toBe(.25);
+  state.status.mockResolvedValue({ ...setupRequired, setup: { state: 'installing', operation_id: 'task-preparation', expected_bytes: 0, received_bytes: 0, can_cancel: true } });
+  await expect.poll(() => dialog.querySelector('progress')?.position, { timeout: 5000 }).toBe(-1);
+  expect(dialog.querySelector('progress')?.hasAttribute('value')).toBe(false);
+  expect(renderErrors).toEqual([]);
+  state.status.mockResolvedValue(ready);
+  await expect.poll(() => dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')?.disabled, { timeout: 5000 }).toBe(false);
+  expect(dialog.querySelector('progress')).toBeNull();
+});
+
+it.each(['failed', 'cancelled'])('allows another preparation after components are %s without reloading the page', async outcome => {
+  const setupRequired: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: '', state: 'setup_required', screen: false, input: false, displays: [] } };
+  const setup = { state: 'checking', operation_id: 'task-preparation', expected_bytes: 0, received_bytes: 0, can_cancel: true };
+  state.status.mockResolvedValue(setupRequired);
+  state.prepare.mockImplementation(async () => {
+    state.status.mockResolvedValue({ ...setupRequired, setup });
+    return setup;
+  });
+  const { dialog, copy } = await launch(390);
+  const prepare = () => page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.prepare'), exact: true });
+  await userEvent.click(prepare());
+  await expect.poll(() => dialog.querySelector('progress')).not.toBeNull();
+  expect(renderErrors).toEqual([]);
+  const finished = { ...setup, state: outcome, can_cancel: false, error_code: outcome === 'failed' ? 'download_failed' : undefined };
+  if (outcome === 'cancelled') {
+    state.cancel.mockImplementation(async () => {
+      state.status.mockResolvedValue({ ...setupRequired, setup: finished });
+      return finished;
+    });
+    await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.cancel'), exact: true }));
+    expect(state.cancel).toHaveBeenCalledWith('task-preparation');
+  } else state.status.mockResolvedValue({ ...setupRequired, setup: finished });
+  await expect.poll(() => dialog.querySelector('progress'), { timeout: 5000 }).toBeNull();
+  if (outcome === 'failed') expect(dialog.querySelector('[role=alert]')?.textContent).toContain('download_failed');
+  await userEvent.click(prepare());
+  await expect.poll(() => dialog.querySelector('progress')).not.toBeNull();
+  expect(state.prepare).toHaveBeenCalledTimes(2);
+  expect(dialog.querySelector('[role=alert]')).toBeNull();
 });
 
 it('does not report permission reuse as enabled when saving fails', async () => {

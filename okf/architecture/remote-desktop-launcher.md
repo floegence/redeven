@@ -30,6 +30,15 @@ failure must not continue instructing the user to confirm a nonexistent prompt.
 Missing macOS screen/input grants expose only the relevant permission actions. View-only mode
 can omit input permission but never omits full environment authorization.
 
+Component preparation stays inside the launcher through checking, download,
+installation and validation. Unknown byte totals render an indeterminate native
+progress bar by omitting its numeric value attribute; known totals show byte
+progress. Moving between these states must not throw a rendering exception or
+replace the host application page with its error boundary. Status polling makes
+connection available after preparation succeeds. Failure retains its diagnostic
+and retry action, while cancellation stops only the selected setup operation;
+neither requires reloading the application.
+
 ## Connection options
 
 The initial dialog presents host identity, readiness and one connect action. A

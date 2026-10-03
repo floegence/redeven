@@ -197,7 +197,12 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     <Show when={status()?.capabilities.state === 'setup_required' || preparing()}>
       <div class="remote-desktop-setup">
         <p>{i18n.t('remoteDesktop.setupHint')}</p>
-        <Show when={preparing()}><progress aria-label={i18n.t('remoteDesktop.preparing')} max={status()?.setup?.expected_bytes || undefined} value={status()?.setup?.expected_bytes ? status()?.setup?.received_bytes : undefined} /></Show>
+        <Show when={preparing()}>
+          {/* The indeterminate bar has no value binding: native numeric setters reject undefined. */}
+          <Show when={status()?.setup?.expected_bytes} fallback={<progress aria-label={i18n.t('remoteDesktop.preparing')} />}>
+            {total => <progress aria-label={i18n.t('remoteDesktop.preparing')} max={total()} value={status()?.setup?.received_bytes ?? 0} />}
+          </Show>
+        </Show>
         <Show when={status()?.setup?.error_code}><p role="alert">{i18n.t('remoteDesktop.prepareFailed')} <code>{status()?.setup?.error_code}</code></p></Show>
         <div class="remote-desktop-actions">
           <Button variant="outline" disabled={!full() || !!busy() || preparing()} onClick={() => void runAction('prepare', 'remoteDesktop.prepareFailed', prepareRemoteDesktop)}><StableText reserve={[i18n.t('remoteDesktop.preparing'), i18n.t('remoteDesktop.prepare')]}>{i18n.t(preparing() ? 'remoteDesktop.preparing' : 'remoteDesktop.prepare')}</StableText></Button>
