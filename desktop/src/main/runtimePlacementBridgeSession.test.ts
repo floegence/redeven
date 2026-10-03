@@ -116,37 +116,20 @@ describe('runtimePlacementBridgeSession', () => {
     expect(events[1]).toBe('data:POST /v1/provider-link/connect HTTP/1.1');
   });
 
-  it('routes Gateway protocol paths to the Gateway bridge surface', async () => {
+  it('rejects Gateway protocol routes on the public Runtime loopback listener', async () => {
     const events: string[] = [];
-    const bridge: RuntimePlacementBridgeSessionHandle = {
-      openStream: (surface) => {
-        events.push(`open:${surface}`);
-        return {
-          id: `${surface}-1`,
-          onData: () => undefined,
-          onClose: () => undefined,
-          onError: () => undefined,
-          write: async (chunk) => {
-            events.push(`data:${chunk.toString('latin1').split('\r\n', 1)[0]}`);
-          },
-          close: async () => undefined,
-        };
-      },
-    };
+    const bridge: RuntimePlacementBridgeSessionHandle = { openStream: surface => {
+      events.push(surface);
+      throw new Error('Gateway authority must stay in the owned bridge');
+    } };
     const proxy = await startRuntimePlacementLoopbackProxy(bridge);
     const socket = net.createConnection(proxy.port, '127.0.0.1');
-    socket.on('error', () => undefined);
     try {
-      await new Promise<void>((resolve) => socket.once('connect', resolve));
-      socket.write('POST /__redeven_runtime_gateway/gateway/v3/catalog HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n');
-      await waitForEventCount(events, 2);
-    } finally {
-      socket.destroy();
-      await proxy.close();
-    }
-
-    expect(events[0]).toBe('open:gateway_protocol');
-    expect(events[1]).toBe('data:POST /gateway/v3/catalog HTTP/1.1');
+      const response = readSocketUntilClose(socket);
+      socket.write('POST /__redeven_runtime_gateway/gateway/v3/pairing/challenge HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Redeven-Gateway-Transport: desktop_bridge\r\nContent-Length: 0\r\n\r\n');
+      expect((await response).toString()).toContain('403 Forbidden');
+      expect(events).toEqual([]);
+    } finally { socket.destroy(); await proxy.close(); }
   });
 
   it('rewrites every runtime-control request on a reused loopback keep-alive connection', async () => {

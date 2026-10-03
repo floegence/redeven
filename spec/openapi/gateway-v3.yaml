@@ -594,6 +594,7 @@ components:
         client_capability:
           type: string
           enum: [env_profile_write]
+          description: Optional independent grant. Whitespace is trimmed before validation, policy checks, and proof verification. Granting env_profile_write requires profile writes to be enabled on the Gateway.
         proof:
           type: string
     PairingCompleteEnvelope:

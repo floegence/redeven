@@ -1,10 +1,14 @@
 package trust
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/floegence/redeven/internal/runtimegateway/protocol"
@@ -171,4 +175,146 @@ func readTestState(t *testing.T, path string) fileState {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
 	return state
+}
+
+func TestConcurrentPairingAndAuthorization(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "trust.json"))
+	audience := "https://gateway.example.internal"
+	id, _ := pairTrustTestClient(t, store, audience)
+	stop, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				store.ClientPublicKey(id, audience)
+				store.ClientCanWriteProfiles(id, audience)
+			}
+		}
+	}()
+	defer func() { close(stop); <-done }()
+	var writers sync.WaitGroup
+	ids := make(chan string, 30)
+	for i := 0; i < 30; i++ {
+		writers.Add(1)
+		go func() { defer writers.Done(); id, _ := pairTrustTestClient(t, store, audience); ids <- id }()
+	}
+	writers.Wait()
+	close(ids)
+	reloaded := NewStore(store.filePath)
+	for id := range ids {
+		if !store.IsPaired(id, audience) || !reloaded.IsPaired(id, audience) {
+			t.Fatalf("lost concurrent pairing %q", id)
+		}
+	}
+}
+
+func TestFailedPairingDoesNotPublishTrust(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "trust.json")
+	store := NewStore(statePath)
+	audience := "https://gateway.example.internal"
+	existingID, _ := pairTrustTestClient(t, store, audience)
+	before, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := security.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge, err := store.PairingChallenge(protocol.PairingChallengeRequest{
+		ProtocolVersion: protocol.Version, ClientNonce: "review-client",
+		ClientPublicKey: keys.PublicKeyPEM, BindingAudience: audience,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientID := security.ClientKeyID(strings.TrimSpace(keys.PublicKeyPEM))
+	payload, err := security.CanonicalJSON(map[string]any{
+		"protocol_version": protocol.Version, "client_nonce": "review-client",
+		"gateway_nonce": challenge.GatewayNonce, "gateway_id": challenge.GatewayID,
+		"binding_audience": audience, "client_key_id": clientID,
+		"client_capability": "env_profile_write",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof, err := security.SignPayload(keys.PrivateKeyPEM, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(statePath, statePath+".retained"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(statePath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.CompletePairing(protocol.PairingCompleteRequest{
+		ProtocolVersion: protocol.Version, ClientNonce: "review-client",
+		GatewayNonce: challenge.GatewayNonce, GatewayID: challenge.GatewayID,
+		BindingAudience: audience, ClientKeyID: clientID, ClientCapability: "env_profile_write", Proof: proof,
+	})
+	if err == nil {
+		t.Fatal("expected injected persistence failure")
+	}
+	if store.IsPaired(clientID, audience) || store.ClientCanWriteProfiles(clientID, audience) {
+		t.Fatal("failed pairing published client trust and profile-write permission in memory")
+	}
+	retained, err := os.ReadFile(statePath + ".retained")
+	if err != nil || !bytes.Equal(before, retained) {
+		t.Fatal("failed write changed retained trust")
+	}
+	if !store.IsPaired(existingID, audience) {
+		t.Fatal("failed write removed existing in-memory trust")
+	}
+	if err := os.Remove(statePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(statePath+".retained", statePath); err != nil {
+		t.Fatal(err)
+	}
+	if !NewStore(statePath).IsPaired(existingID, audience) {
+		t.Fatal("existing trust was not reloadable")
+	}
+	temporary, err := filepath.Glob(filepath.Join(filepath.Dir(statePath), ".gateway-trust-*"))
+	if err != nil || len(temporary) != 0 {
+		t.Fatalf("temporary trust files leaked: %v, %v", temporary, err)
+	}
+}
+
+func TestPairingReplacesTrustFileAtomically(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "trust.json")
+	store := NewStore(statePath)
+	audience := "https://gateway.example.internal"
+	first, _ := pairTrustTestClient(t, store, audience)
+	original, err := os.Open(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer original.Close()
+	before, err := io.ReadAll(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _ := pairTrustTestClient(t, store, audience)
+	if _, err := original.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	oldBytes, err := io.ReadAll(original)
+	if err != nil || !bytes.Equal(before, oldBytes) {
+		t.Fatal("pairing overwrote the committed trust file in place")
+	}
+	reloaded := NewStore(statePath)
+	if !reloaded.IsPaired(first, audience) || !reloaded.IsPaired(second, audience) {
+		t.Fatal("pairing lost persisted clients")
+	}
+	info, err := os.Stat(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Fatalf("trust permissions = %v", info.Mode().Perm())
+	}
 }

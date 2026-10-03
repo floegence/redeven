@@ -26,7 +26,7 @@ function localForwardURL(port: number): string {
 }
 
 type RuntimePlacementLoopbackRoute = Readonly<{
-  surface: 'local_ui' | 'runtime_control' | 'gateway_protocol';
+  surface: 'local_ui' | 'runtime_control';
   prefix: string;
 }>;
 
@@ -37,13 +37,10 @@ class LoopbackHeaderTooLargeError extends Error {
   }
 }
 
-function routeForLoopbackFirstChunk(firstChunk: Buffer): RuntimePlacementLoopbackRoute {
+function routeForLoopbackFirstChunk(firstChunk: Buffer): RuntimePlacementLoopbackRoute | null {
   const requestHead = firstChunk.toString('latin1', 0, Math.min(firstChunk.length, 256));
   if (requestHead.includes(' /__redeven_runtime_gateway')) {
-    return {
-      surface: 'gateway_protocol',
-      prefix: '/__redeven_runtime_gateway',
-    };
+    return null;
   }
   if (requestHead.includes(' /__redeven_runtime_control')) {
     return {
@@ -209,6 +206,10 @@ export async function startRuntimePlacementLoopbackProxy(
 
     const openStream = (firstChunk: Buffer) => {
       const route = routeForLoopbackFirstChunk(firstChunk);
+      if (!route) {
+        socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+        return;
+      }
       let stream: ReturnType<RuntimePlacementBridgeSessionHandle['openStream']>;
       try {
         stream = bridge.openStream(route.surface);

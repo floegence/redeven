@@ -94,7 +94,10 @@ describe('Gateway environment access owner', () => {
   });
 
   it('carries proxy access through the managed Gateway bridge and closes only its session streams', async () => {
-    const runtime = http.createServer((_request, response) => response.end('Runtime through managed bridge'));
+    const runtime = http.createServer((request, response) => {
+      if (request.method === 'POST') request.pipe(response);
+      else response.end('Runtime through managed bridge');
+    });
     runtime.listen(0, '127.0.0.1'); await once(runtime, 'listening');
     const runtimePort = (runtime.address() as net.AddressInfo).port;
     const gateway = http.createServer();
@@ -137,6 +140,7 @@ describe('Gateway environment access owner', () => {
         url: `/gateway/v3/access/${'a'.repeat(43)}/`, bridge_session_id: bridge.placement_target_id, route_id: 'env_app:gw_one' } };
     const closeSession = vi.fn(async () => undefined);
     let access: Awaited<ReturnType<typeof prepareGatewayEnvironmentAccess>> | undefined;
+    const listen = vi.spyOn(net.Server.prototype, 'listen');
     try {
       access = await prepareGatewayEnvironmentAccess(managedRecord, { ...environment, access_endpoint: { kind: 'url', url: 'http://runtime.invalid:4567/' } }, 'gateway_proxy', {
         openSession: async () => ({ response: managedResponse, bridge_session: bridge }), closeSession,
@@ -152,10 +156,33 @@ describe('Gateway environment access owner', () => {
         },
       });
       expect(surfaces).toEqual(['gateway_protocol']);
+      // Only the authenticated renderer proxy may listen; bridge authority stays in main.
+      expect(listen).toHaveBeenCalledTimes(1);
+      const status = await new Promise<number | undefined>((resolve, reject) => {
+        const request = http.get(`${access!.proxy!.proxyURL}/__redeven_runtime_gateway/gateway/v3/pairing/challenge`, response => {
+          response.resume(); response.once('end', () => resolve(response.statusCode));
+        });
+        request.once('error', reject);
+      });
+      expect(status).toBe(407);
+      expect(surfaces).toEqual(['gateway_protocol']);
+      const payload = Buffer.alloc(2 * 1024 * 1024, 0xa5);
+      const echoed = await new Promise<Buffer>((resolve, reject) => {
+        const request = http.request('http://runtime.invalid:4567/upload', { method: 'POST', agent: access!.proxy!.agent }, response => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk: Buffer) => chunks.push(chunk));
+          response.once('end', () => resolve(Buffer.concat(chunks)));
+          response.once('error', reject);
+        });
+        request.once('error', reject);
+        request.end(payload);
+      });
+      expect(echoed.equals(payload)).toBe(true);
       await access.close();
       expect(closeSession).toHaveBeenCalledExactlyOnceWith(managedRecord, 'gws_one');
       await expect(access.proxy!.openConnection()).rejects.toMatchObject({ code: 'GATEWAY_CANCELED' });
     } finally {
+      listen.mockRestore();
       await access?.close();
       for (const socket of bridgeSockets) socket.destroy();
       for (const ws of wsServer.clients) ws.terminate();

@@ -534,3 +534,41 @@ func TestTargetTunnelStreamsLargeWebSocketMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestPaddedCapabilityCannotBypassDisabledWrites(t *testing.T) {
+	s, err := New(Options{StateRoot: t.TempDir(), ProfileWriteEnabled: false, PairingCode: "test-code"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := httptest.NewServer(s.Handler())
+	defer gateway.Close()
+	f := &accessTestFixture{server: s, http: gateway}
+	keys, err := security.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	audience := gateway.URL + "/"
+	var challenge protocol.PairingChallengeResponse
+	f.post(t, accessTestClient{}, "/gateway/v3/pairing/challenge", protocol.PairingChallengeRequest{
+		ProtocolVersion: protocol.Version, ClientNonce: "review-client", ClientPublicKey: keys.PublicKeyPEM,
+		BindingAudience: audience, PairingCode: "test-code",
+	}, http.StatusOK, &challenge)
+	id := security.ClientKeyID(strings.TrimSpace(keys.PublicKeyPEM))
+	payload, err := security.CanonicalJSON(map[string]any{
+		"protocol_version": protocol.Version, "client_nonce": "review-client",
+		"gateway_nonce": challenge.GatewayNonce, "gateway_id": challenge.GatewayID,
+		"binding_audience": audience, "client_key_id": id, "client_capability": "env_profile_write",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof, err := security.SignPayload(keys.PrivateKeyPEM, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.post(t, accessTestClient{}, "/gateway/v3/pairing/complete", protocol.PairingCompleteRequest{
+		ProtocolVersion: protocol.Version, ClientNonce: "review-client", GatewayNonce: challenge.GatewayNonce,
+		GatewayID: challenge.GatewayID, BindingAudience: audience, ClientKeyID: id,
+		ClientCapability: " env_profile_write ", Proof: proof,
+	}, http.StatusUnauthorized, nil)
+}

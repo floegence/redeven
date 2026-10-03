@@ -57,9 +57,12 @@ address from the client. An authenticated per-session listener on `127.0.0.1`
 provides an HTTP/CONNECT proxy, configured on an isolated Electron partition.
 The renderer navigates to the original Runtime URL; all traffic to it passes
 through Gateway. There is no DIRECT proxy rule or automatic route fallback.
-Other destinations are rejected. A managed Gateway carries the same access path
-over its existing `gateway_protocol` bridge surface, retaining
-`desktop_bridge_artifact` and `gateway_bridge` identities.
+Other destinations are rejected. Managed Gateway access uses main-process
+`gateway_protocol` streams, retaining `desktop_bridge_artifact` and
+`gateway_bridge` identities. No bridge TCP listener exposes pairing, catalog,
+or profile writes; Runtime loopback listeners reject Gateway routes. Each
+adapter closes only its owned stream. JSON framing and decoding preserve
+Unicode and reject incomplete responses.
 
 Preserving the original origin and HTTPS is intentional: Runtime secure-session
 artifacts bind Host/Origin, and MFA requires the original HTTPS context. HTML
@@ -113,6 +116,10 @@ tunnel follows the same dial policy.
 Pairing authorizes metadata/catalog reads and opening published targets.
 Profile writes additionally require `env_profile_write` consent and
 `--enable-profile-write`, identically for URL and managed bridge transports.
+Pairing completion is normalized before both policy checks and proof validation.
+Trust readers observe immutable snapshots. Serialized writers atomically replace
+the private trust file before publishing the latest snapshot. Failed persistence
+grants no trust or write permission and preserves existing clients.
 No access artifact grants Runtime installation, lifecycle, configuration,
 password, or MFA-management privileges. Audit events contain Gateway,
 Environment, session IDs and error classes; they exclude tokens, Cookie,
@@ -144,6 +151,8 @@ unrecognized input.
 - `redeven:internal/runtimegateway/envprofiles/migration_test.go` - Preserved profile fields and read-only migration failures.
 - `redeven:desktop/src/main/gatewayEnvironmentAccess.ts` - Explicit access owner, typed artifacts, scoped probing and cleanup.
 - `redeven:desktop/src/main/gatewayProxyTransport.test.ts` - Real proxy transport, destination restriction, streaming and secret isolation.
+- `redeven:desktop/src/main/gatewayClient.test.ts` - Unicode and chunked bridge responses, cancellation and stream cleanup.
+- `redeven:internal/runtimegateway/trust/store_test.go` - Concurrent pairing/read isolation, atomic replacement and failed-write rollback.
 - `redeven:desktop/src/main/gatewayEnvironmentMigration.test.ts` - Startup ordering, interrupted journal recovery, credential preservation, and readback before source removal.
 - `redeven:desktop/src/main/gatewayStore.test.ts` - Preserved paired Gateway configuration and atomic migration failures.
 - `redeven:internal/localui/gateway_access_browser_test.go` - Production Runtime, Gateway and Electron login, MFA, WSS, files, terminal and Flower stream qualification.

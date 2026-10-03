@@ -238,6 +238,7 @@ func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	req = gatewayprotocol.NormalizePairingCompleteRequest(req)
 	if err := gatewayprotocol.ValidatePairingCompleteRequest(req); err != nil {
 		writePairingCompleteRequestError(w, err)
 		return

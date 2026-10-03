@@ -24,6 +24,10 @@ The protocol contains these route groups:
 
 Signed requests bind the protocol, HTTP method, route, body digest, Gateway identity, binding audience, nonce, and timestamp. Pairing credentials authorize only the declared Gateway access operations. There is no Runtime management grant or implicit process authority in a paired client.
 
+Pairing completion uses one normalized request for validation, capability policy,
+and signature verification. A disabled profile-write policy rejects that grant
+before any trust update, including equivalent whitespace-padded inputs.
+
 Catalog entries describe how an Environment can be accessed. Access capabilities do not imply Start, Stop, Restart, Update, or Reinstall. Open-session creates a short-lived, scoped access artifact for an explicit profile and route; it does not inspect or mutate Runtime installation state.
 
 Gateway capabilities are `env_catalog`, `env_direct_open`, `env_proxy_open`, and

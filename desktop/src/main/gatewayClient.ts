@@ -1,5 +1,7 @@
 import http from 'node:http';
 import https from 'node:https';
+import type net from 'node:net';
+import { openGatewayBridgeSocket } from './gatewayBridgeSocket';
 
 import {
   normalizeGatewayBaseURL,
@@ -228,88 +230,6 @@ function parseGatewayHTTPResponse(raw: string, statusCode: number): unknown {
   return Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed;
 }
 
-function responseStatusCode(raw: string): number {
-  const match = /^HTTP\/1\.[01]\s+(\d{3})\b/u.exec(raw);
-  const statusCode = Number(match?.[1]);
-  return Number.isInteger(statusCode) ? statusCode : 500;
-}
-
-function responseBody(raw: string): string {
-  const splitAt = raw.indexOf('\r\n\r\n');
-  if (splitAt < 0) {
-    return raw;
-  }
-  const header = raw.slice(0, splitAt).toLowerCase();
-  const body = raw.slice(splitAt + 4);
-  if (!/\r\ntransfer-encoding:\s*chunked\b/u.test(header)) {
-    return body;
-  }
-  return decodeChunkedResponseBody(body);
-}
-
-function completeGatewayHTTPResponse(raw: string): boolean {
-  const splitAt = raw.indexOf('\r\n\r\n');
-  if (splitAt < 0 || !/^HTTP\/1\.[01]\s+\d{3}\b/u.test(raw)) {
-    return false;
-  }
-  const header = raw.slice(0, splitAt);
-  const body = raw.slice(splitAt + 4);
-  const contentLengthMatch = /(?:^|\r\n)content-length:\s*(\d+)\s*(?:\r\n|$)/iu.exec(header);
-  if (contentLengthMatch) {
-    const expectedBytes = Number(contentLengthMatch[1]);
-    return Number.isSafeInteger(expectedBytes) && Buffer.byteLength(body, 'utf8') >= expectedBytes;
-  }
-  if (/(?:^|\r\n)transfer-encoding:\s*chunked\b/iu.test(header)) {
-    return completeChunkedResponseBody(body);
-  }
-  const statusCode = responseStatusCode(raw);
-  return (statusCode >= 100 && statusCode < 200) || statusCode === 204 || statusCode === 304;
-}
-
-function completeChunkedResponseBody(body: string): boolean {
-  let offset = 0;
-  while (offset < body.length) {
-    const lineEnd = body.indexOf('\r\n', offset);
-    if (lineEnd < 0) return false;
-    const sizeText = body.slice(offset, lineEnd).split(';', 1)[0]?.trim() ?? '';
-    const size = Number.parseInt(sizeText, 16);
-    if (!Number.isFinite(size) || size < 0) return false;
-    offset = lineEnd + 2;
-    if (size === 0) {
-      const trailerEnd = body.indexOf('\r\n\r\n', offset);
-      return body.startsWith('\r\n', offset) || trailerEnd >= offset;
-    }
-    if (body.length < offset + size + 2 || body.slice(offset + size, offset + size + 2) !== '\r\n') {
-      return false;
-    }
-    offset += size + 2;
-  }
-  return false;
-}
-
-function decodeChunkedResponseBody(body: string): string {
-  let offset = 0;
-  let decoded = '';
-  while (offset < body.length) {
-    const lineEnd = body.indexOf('\r\n', offset);
-    if (lineEnd < 0) {
-      return body;
-    }
-    const sizeText = body.slice(offset, lineEnd).split(';', 1)[0]?.trim() ?? '';
-    const size = Number.parseInt(sizeText, 16);
-    if (!Number.isFinite(size) || size < 0) {
-      return body;
-    }
-    offset = lineEnd + 2;
-    if (size === 0) {
-      return decoded;
-    }
-    decoded += body.slice(offset, offset + size);
-    offset += size + 2;
-  }
-  return decoded;
-}
-
 function isLoopbackHost(hostname: string): boolean {
   const host = compact(hostname).toLowerCase();
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
@@ -462,7 +382,7 @@ function requestGatewayPairingJSON(
   });
 }
 
-function requestGatewayBridgeJSON(
+async function requestGatewayBridgeJSON(
   bridge: RuntimePlacementBridgeSessionHandle,
   record: GatewayRecord,
   route: GatewayRoute,
@@ -470,115 +390,54 @@ function requestGatewayBridgeJSON(
   options: GatewayTransportCallOptions,
   method: GatewayHTTPMethod = 'POST',
 ): Promise<GatewayHTTPDataResult> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let raw = '';
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let stream: ReturnType<RuntimePlacementBridgeSessionHandle['openStream']> | null = null;
-    const settle = (fn: () => void) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      options.signal?.removeEventListener('abort', onAbort);
-      fn();
-    };
-    const closeStream = () => {
-      void stream?.close().catch(() => undefined);
-    };
-    const onAbort = () => {
-      settle(() => {
-        closeStream();
-        reject(abortError());
-      });
-    };
-    try {
-      throwIfCanceled(options.signal);
-      stream = bridge.openStream('gateway_protocol');
-    } catch (error) {
-      reject(error instanceof GatewayClientError
-        ? error
-        : new GatewayClientError('GATEWAY_BRIDGE_UNAVAILABLE', error instanceof Error ? error.message : 'Gateway bridge is unavailable.', null, true));
-      return;
-    }
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-    timer = setTimeout(() => {
-      settle(() => {
-        closeStream();
-        reject(new GatewayClientError('GATEWAY_TIMEOUT', 'Gateway request timed out.', null, true));
-      });
-    }, gatewayTimeoutMs(options.timeoutMs));
-    stream.onData((chunk) => {
-      raw += chunk.toString('utf8');
-    });
-    stream.onClose(() => {
-      settle(() => {
-        try {
-          resolve({
-            data: parseGatewayHTTPResponse(responseBody(raw), responseStatusCode(raw)),
-          });
-        } catch (error) {
-          reject(error);
-        }
-      });
-    });
-    stream.onError((error) => {
-      settle(() => {
-        if (completeGatewayHTTPResponse(raw)) {
-          try {
-            resolve({
-              data: parseGatewayHTTPResponse(responseBody(raw), responseStatusCode(raw)),
-            });
-          } catch (responseError) {
-            reject(responseError);
-          }
-          return;
-        }
-        reject(new GatewayClientError('GATEWAY_BRIDGE_FAILED', error.message || 'Gateway bridge stream failed.', null, true));
-      });
-    });
-    void (async () => {
-      try {
-        const authHeaders = options.authenticated === false
-          ? {}
-          : await createGatewayAuthHeaders({
-              record,
-              method,
-              route: `/${route}`,
-              body,
-              secret_store: options.secretStore,
-            });
-        const payload = body == null ? '' : JSON.stringify(body);
-        const request = [
-          `${method} /${route} HTTP/1.1`,
-          'Host: redeven-gateway.local',
-          'Accept: application/json',
-          'X-Redeven-Gateway-Transport: desktop_bridge',
-          ...Object.entries(authHeaders).map(([key, value]) => `${key}: ${value}`),
-          ...(payload ? [`Content-Length: ${Buffer.byteLength(payload, 'utf8')}`] : []),
-          'Connection: close',
-          '',
-          payload,
-        ].join('\r\n');
-        await stream!.write(Buffer.from(request, 'utf8'));
-        await stream!.closeWrite?.();
-      } catch (error) {
-        settle(() => {
-          closeStream();
-          reject(error instanceof GatewayClientError ? error : new GatewayClientError(
-            'GATEWAY_BRIDGE_WRITE_FAILED',
-            error instanceof Error ? error.message : 'Gateway bridge request failed.',
-            null,
-            true,
-          ));
-        });
-      }
-    })();
+  throwIfCanceled(options.signal);
+  const authHeaders = options.authenticated === false ? {} : await createGatewayAuthHeaders({
+    record, method, route: `/${route}`, body, secret_store: options.secretStore,
   });
+  throwIfCanceled(options.signal);
+  const payload = body == null ? '' : JSON.stringify(body);
+  const agent = new http.Agent({ keepAlive: false });
+  agent.createConnection = () => {
+    try { return openGatewayBridgeSocket(bridge) as net.Socket; }
+    catch (error) {
+      throw error instanceof GatewayClientError ? error
+        : new GatewayClientError('GATEWAY_BRIDGE_UNAVAILABLE', 'Gateway bridge is unavailable.', null, true);
+    }
+  };
+  try {
+    return await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: unknown, data?: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        options.signal?.removeEventListener('abort', abort);
+        if (error) reject(error); else resolve({ data });
+      };
+      const fail = (error: Error) => finish(error instanceof GatewayClientError ? error
+        : new GatewayClientError('GATEWAY_BRIDGE_FAILED', 'Gateway bridge request failed.', null, true));
+      const req = http.request('http://redeven-gateway.local', {
+        agent, method, path: `/${route}`, headers: {
+          Accept: 'application/json', 'X-Redeven-Gateway-Transport': 'desktop_bridge',
+          ...authHeaders, 'Content-Length': Buffer.byteLength(payload), Connection: 'close',
+        },
+      }, response => {
+        response.setEncoding('utf8');
+        let raw = '';
+        response.on('data', (chunk: string) => { raw += chunk; });
+        response.once('error', fail);
+        response.once('end', () => {
+          try { finish(undefined, parseGatewayHTTPResponse(raw, response.statusCode ?? 500)); }
+          catch (error) { finish(error); }
+        });
+      });
+      const abort = () => req.destroy(abortError());
+      const timer = setTimeout(() => req.destroy(new GatewayClientError('GATEWAY_TIMEOUT', 'Gateway request timed out.', null, true)), gatewayTimeoutMs(options.timeoutMs));
+      req.once('error', fail);
+      options.signal?.addEventListener('abort', abort, { once: true });
+      if (options.signal?.aborted) abort(); else req.end(payload);
+    });
+  } finally { agent.destroy(); }
 }
 
 function normalizeProtocolVersion(value: unknown): typeof GATEWAY_PROTOCOL_VERSION {

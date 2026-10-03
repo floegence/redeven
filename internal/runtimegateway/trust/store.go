@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -204,17 +205,14 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		return protocol.PairingCompleteResponse{}, errors.New("pairing completion proof is invalid")
 	}
 	pairedAt := time.Now().UnixMilli()
-	if state.Clients == nil {
-		state.Clients = map[string]clientKey{}
-	}
-	state.Clients[req.ClientKeyID] = clientKey{
+	client := clientKey{
 		ClientKeyID:     req.ClientKeyID,
 		ClientPublicKey: challenge.ClientPublicKey,
 		BindingAudience: req.BindingAudience,
 		ProfileWrite:    req.ClientCapability == string(protocol.GatewayCapabilityEnvProfileWrite),
 		PairedAtUnixMS:  pairedAt,
 	}
-	if err := s.saveState(state); err != nil {
+	if err := s.saveClient(client); err != nil {
 		return protocol.PairingCompleteResponse{}, err
 	}
 	responseFields := map[string]any{
@@ -425,9 +423,17 @@ func (s *Store) loadState() (fileState, error) {
 	return state, nil
 }
 
-func (s *Store) saveState(state fileState) error {
+// Readers retain immutable snapshots; each writer clones the latest committed
+// map while holding the lock so concurrent pairings cannot lose one another.
+func (s *Store) saveClient(client clientKey) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	state := s.state
+	state.Clients = maps.Clone(state.Clients)
+	if state.Clients == nil {
+		state.Clients = map[string]clientKey{}
+	}
+	state.Clients[client.ClientKeyID] = client
 	return s.saveStateLocked(state)
 }
 
@@ -436,7 +442,14 @@ func (s *Store) saveStateLocked(state fileState) error {
 	if state.Clients == nil {
 		state.Clients = map[string]clientKey{}
 	}
+	if err := s.persistState(state); err != nil {
+		return err
+	}
 	s.state = state
+	return nil
+}
+
+func (s *Store) persistState(state fileState) error {
 	if strings.TrimSpace(s.filePath) == "" {
 		return nil
 	}
@@ -447,7 +460,24 @@ func (s *Store) saveStateLocked(state fileState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath, append(body, '\n'), 0o600)
+	tmp, err := os.CreateTemp(filepath.Dir(s.filePath), ".gateway-trust-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer os.Remove(name)
+	if _, err := tmp.Write(append(body, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, s.filePath)
 }
 
 func newFileState(bindingAudience string) (fileState, error) {
