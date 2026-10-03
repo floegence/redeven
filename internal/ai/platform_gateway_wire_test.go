@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -25,6 +26,7 @@ func TestPlatformGatewayExternalEdgeWireContract(t *testing.T) {
 	var fixture struct {
 		GatewayURL string `json:"gateway_url"`
 		GrantToken string `json:"grant_token"`
+		ModelAlias string `json:"model_alias"`
 	}
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
@@ -43,12 +45,17 @@ func TestPlatformGatewayExternalEdgeWireContract(t *testing.T) {
 	}
 	defer svc.Close()
 	meta := &session.Meta{EndpointID: "env-a", ChannelID: "wire-test", UserPublicID: "user-a", NamespacePublicID: "ns-a", CanRead: true, CanWrite: true, CanExecute: true, PlatformAIGrant: fixture.GrantToken, PlatformAIGatewayURL: fixture.GatewayURL, PlatformAIEntitlementVersion: 1}
-	thread, err := svc.CreateThread(t.Context(), meta, "Cross-process qualification", "platform/test-model", "", "")
+	models, err := svc.ListModelsForSession(t.Context(), meta)
+	modelID := "platform/" + config.AIModelLocalName(fixture.ModelAlias)
+	if err != nil || len(models.Models) != 1 || models.Models[0].ID != modelID || models.Runtime.PlatformError != "" {
+		t.Fatalf("published alias did not reach the runtime catalog: %+v %v", models, err)
+	}
+	thread, err := svc.CreateThread(t.Context(), meta, "Cross-process qualification", modelID, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"wire-first", "wire-continuation"} {
-		_, err := runTypedTurnForTest(t, t.Context(), svc, meta, id, RunStartRequest{ThreadID: thread.ThreadID, Model: "platform/test-model", Input: RunInput{Text: "Respond with the fixture result."}, Options: RunOptions{MaxOutputTokens: 64}})
+		_, err := runTypedTurnForTest(t, t.Context(), svc, meta, id, RunStartRequest{ThreadID: thread.ThreadID, Model: modelID, Input: RunInput{Text: "Respond with the fixture result."}, Options: RunOptions{MaxOutputTokens: 64}})
 		if err != nil {
 			t.Fatal(err)
 		}
