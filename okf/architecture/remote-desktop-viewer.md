@@ -3,14 +3,15 @@ type: Interaction Contract
 title: Remote desktop viewer interaction
 description: Operate the remote desktop toolbar, input modes and ended-session recovery consistently in browsers and Desktop.
 tags: [desktop, viewer, interaction, input]
-timestamp: 2026-10-03T16:35:00Z
+timestamp: 2026-10-04T00:30:00Z
 ---
 # Summary
 
 The Redeven viewer owns product controls and local feedback over published Floe
 input and native playback. The [remote desktop session contract](remote-desktop.md)
 owns authorization, capture generations and native authority. Only current painted
-control permits input; local controls remain usable during recovery. Disconnect
+control permits input. Control mode displays the client system pointer immediately,
+independently of remote frame arrival; local controls remain usable during recovery. Disconnect
 stops local input and playback immediately, then confirms server removal or offers
 an explicit retry. It never presents a frozen desktop as a live connection.
 
@@ -35,13 +36,18 @@ is text-only and tied to the active controller. A manual text panel remains
 available when browser clipboard permission is unavailable. Clipboard contents,
 keys, passwords and pixels never enter audit records.
 
-The published macOS, Wayland and X11 desktop captures embed the host cursor in
-the picture. After a current-generation frame is painted, the viewer hides its
-local cursor over the desktop canvas in both control and view-only modes. It
-restores that cursor when painted authority is revoked, including disconnect,
-lock, display replacement and reconnect awaiting a fresh frame. Toolbar and
-dialog cursors remain local. This desktop-only policy does not apply to host
-application windows, which use their own upstream cursor contract.
+Control mode displays the client system's default pointer over the desktop canvas,
+so local movement does not wait for capture, encoding, transport or playback. The
+published macOS, Wayland and X11 captures still embed the host cursor in the picture;
+it remains visible as feedback about the host's actual position and cursor shape.
+The two cursors can separate while the remote picture catches up. The local pointer
+does not predict host cursor shapes or imply that the host has processed input.
+View-only mode hides the local pointer only over a current painted desktop and
+shows the captured host cursor. Revoking painted authority hides the retired picture
+and restores the local pointer, including disconnect, lock, display replacement
+and reconnect awaiting a fresh frame. Cursor presentation never grants input
+authority. Toolbar and dialog cursors remain local. This desktop-only policy does
+not apply to host application windows, which use their own upstream cursor contract.
 
 # Toolbar and window
 

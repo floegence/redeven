@@ -346,7 +346,7 @@
               "interaction",
               "viewer"
             ],
-            "summary": "The Redeven viewer owns product controls and local feedback over published Floe\ninput and native playback. The [remote desktop session contract](remote-desktop.md)\nowns authorization, capture generations and native authority. Only current painted\ncontrol permits input; local controls remain usable during recovery. Disconnect\nstops local input and playback immediately, then confirms server removal or offers\nan explicit retry. It never presents a frozen desktop as a live connection.",
+            "summary": "The Redeven viewer owns product controls and local feedback over published Floe\ninput and native playback. The [remote desktop session contract](remote-desktop.md)\nowns authorization, capture generations and native authority. Only current painted\ncontrol permits input. Control mode displays the client system pointer immediately,\nindependently of remote frame arrival; local controls remain usable during recovery. Disconnect\nstops local input and playback immediately, then confirms server removal or offers\nan explicit retry. It never presents a frozen desktop as a live connection.",
             "section_count": 2
           },
           {
@@ -15310,7 +15310,7 @@
         "interaction",
         "viewer"
       ],
-      "timestamp": "2026-10-03T16:35:00Z",
+      "timestamp": "2026-10-04T00:30:00Z",
       "frontmatter": {
         "description": "Operate the remote desktop toolbar, input modes and ended-session recovery consistently in browsers and Desktop.",
         "tags": [
@@ -15319,19 +15319,19 @@
           "interaction",
           "viewer"
         ],
-        "timestamp": "2026-10-03T16:35:00Z",
+        "timestamp": "2026-10-04T00:30:00Z",
         "title": "Remote desktop viewer interaction",
         "type": "Interaction Contract"
       },
-      "body_length": 7026,
-      "summary": "The Redeven viewer owns product controls and local feedback over published Floe\ninput and native playback. The [remote desktop session contract](remote-desktop.md)\nowns authorization, capture generations and native authority. Only current painted\ncontrol permits input; local controls remain usable during recovery. Disconnect\nstops local input and playback immediately, then confirms server removal or offers\nan explicit retry. It never presents a frozen desktop as a live connection.",
+      "body_length": 7578,
+      "summary": "The Redeven viewer owns product controls and local feedback over published Floe\ninput and native playback. The [remote desktop session contract](remote-desktop.md)\nowns authorization, capture generations and native authority. Only current painted\ncontrol permits input. Control mode displays the client system pointer immediately,\nindependently of remote frame arrival; local controls remain usable during recovery. Disconnect\nstops local input and playback immediately, then confirms server removal or offers\nan explicit retry. It never presents a frozen desktop as a live connection.",
       "sections": [
         {
           "id": "input-and-clipboard",
           "title": "Input and clipboard",
           "level": 1,
-          "body": "The published Floe input and pointer controllers own client composition, physical\nkeys, pointer gestures and release. Mouse and drag movement coalesces within the\ncurrent JavaScript task and flushes before local paint without another animation-\nframe wait. Scroll remains accumulated per frame. Explicit pointer flushes\npreserve ordering before keys or composed text; reset invalidates pending moves. The viewer defaults to the host input method,\nusing physical keys from a direct-input client keyboard. Client-composed text is\nsent only after explicitly selecting Paste client text. That operation replaces\nthe host text clipboard and uses the published native paste command on both\nplatforms. The settings describe this effect and require users to finish or cancel\nhost composition before switching. Changing the mode cancels the client's pending\ncomposition; no text is replayed and no Escape/Enter is guessed on the host.\nAdvertised accessibility insertion does not guarantee Electron text insertion,\nand simultaneous unfinished host/client composition is outside this input path.\nThis does not claim arbitrary Unicode can be represented as synthetic key presses.\nClipboard access\nis text-only and tied to the active controller. A manual text panel remains\navailable when browser clipboard permission is unavailable. Clipboard contents,\nkeys, passwords and pixels never enter audit records.\n\nThe published macOS, Wayland and X11 desktop captures embed the host cursor in\nthe picture. After a current-generation frame is painted, the viewer hides its\nlocal cursor over the desktop canvas in both control and view-only modes. It\nrestores that cursor when painted authority is revoked, including disconnect,\nlock, display replacement and reconnect awaiting a fresh frame. Toolbar and\ndialog cursors remain local. This desktop-only policy does not apply to host\napplication windows, which use their own upstream cursor contract.",
-          "char_count": 1928
+          "body": "The published Floe input and pointer controllers own client composition, physical\nkeys, pointer gestures and release. Mouse and drag movement coalesces within the\ncurrent JavaScript task and flushes before local paint without another animation-\nframe wait. Scroll remains accumulated per frame. Explicit pointer flushes\npreserve ordering before keys or composed text; reset invalidates pending moves. The viewer defaults to the host input method,\nusing physical keys from a direct-input client keyboard. Client-composed text is\nsent only after explicitly selecting Paste client text. That operation replaces\nthe host text clipboard and uses the published native paste command on both\nplatforms. The settings describe this effect and require users to finish or cancel\nhost composition before switching. Changing the mode cancels the client's pending\ncomposition; no text is replayed and no Escape/Enter is guessed on the host.\nAdvertised accessibility insertion does not guarantee Electron text insertion,\nand simultaneous unfinished host/client composition is outside this input path.\nThis does not claim arbitrary Unicode can be represented as synthetic key presses.\nClipboard access\nis text-only and tied to the active controller. A manual text panel remains\navailable when browser clipboard permission is unavailable. Clipboard contents,\nkeys, passwords and pixels never enter audit records.\n\nControl mode displays the client system's default pointer over the desktop canvas,\nso local movement does not wait for capture, encoding, transport or playback. The\npublished macOS, Wayland and X11 captures still embed the host cursor in the picture;\nit remains visible as feedback about the host's actual position and cursor shape.\nThe two cursors can separate while the remote picture catches up. The local pointer\ndoes not predict host cursor shapes or imply that the host has processed input.\nView-only mode hides the local pointer only over a current painted desktop and\nshows the captured host cursor. Revoking painted authority hides the retired picture\nand restores the local pointer, including disconnect, lock, display replacement\nand reconnect awaiting a fresh frame. Cursor presentation never grants input\nauthority. Toolbar and dialog cursors remain local. This desktop-only policy does\nnot apply to host application windows, which use their own upstream cursor contract.",
+          "char_count": 2380
         },
         {
           "id": "toolbar-and-window",
@@ -31265,5 +31265,5 @@
       ]
     }
   ],
-  "source_sha256": "741b786bd8d7eadf7f25109635fee39b35782db9e54fe511260ea608145d7ce3"
+  "source_sha256": "05e495f5aff3795daf73e2745215fed56520bb11ba94f6283f48f4a5a74fc59d"
 }
