@@ -6,7 +6,7 @@ import type { DesktopGatewayEnvironment } from '../shared/desktopGateway';
 import { probeExternalLocalUIStartup, type RuntimeProbeOptions, type RuntimeProbeResult } from './runtimeState';
 import type { StartupReport } from './startup';
 import type { RuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
-import { startRuntimePlacementLoopbackProxy, type RuntimePlacementLoopbackProxy } from './runtimePlacementLoopbackProxy';
+import { openGatewayBridgeSocket } from './gatewayBridgeSocket';
 import { gatewaySessionArtifactURL } from './gatewaySessionArtifact';
 
 export type GatewayEnvironmentAccess = Readonly<{
@@ -42,10 +42,9 @@ export async function prepareGatewayEnvironmentAccess(
     client_nonce: randomBytes(24).toString('base64url'),
   }, { signal });
   let proxy: GatewayProxyTransport | undefined;
-  let bridgeProxy: RuntimePlacementLoopbackProxy | undefined;
   let closeTask: Promise<void> | undefined;
   const close = () => closeTask ??= (async () => {
-    const local = await Promise.allSettled([proxy?.close(), bridgeProxy?.close()]);
+    const local = await Promise.allSettled([proxy?.close()]);
     try { await dependencies.closeSession(record, response.gateway_session_id); }
     catch (error) {
       dependencies.onRevokeFailure?.(record.gateway_id, environment.gateway_env_id, response.gateway_session_id);
@@ -69,11 +68,10 @@ export async function prepareGatewayEnvironmentAccess(
         if (!bridge || artifact.gateway_session_id !== response.gateway_session_id) {
           throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway bridge artifact is missing its session identity.');
         }
-        bridgeProxy = await startRuntimePlacementLoopbackProxy(bridge);
       }
-      const accessURL = gatewaySessionArtifactURL(record, response,
-        bridge && bridgeProxy ? { ...bridge, local_ui_url: bridgeProxy.url } : undefined);
-      proxy = await (dependencies.createProxy ?? createGatewayProxyTransport)(accessURL, targetURL);
+      const accessURL = gatewaySessionArtifactURL(record, response, bridge);
+      proxy = await (dependencies.createProxy ?? createGatewayProxyTransport)(accessURL, targetURL,
+        bridge ? () => openGatewayBridgeSocket(bridge) : undefined);
     } else if (new URL(artifact.url).href !== new URL(targetURL).href) {
       throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact does not match the catalog endpoint.');
     }

@@ -2,7 +2,7 @@ import { GatewayClientError, type GatewayOpenSessionResponse } from './gatewayCl
 import type { GatewayRecord } from './gatewayStore';
 import type { RuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
 
-type GatewayArtifactBridgeSession = Pick<RuntimePlacementBridgeSession, 'placement_target_id' | 'local_ui_url'>;
+type GatewayArtifactBridgeSession = Pick<RuntimePlacementBridgeSession, 'placement_target_id'>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -40,5 +40,6 @@ export function gatewaySessionArtifactURL(
   ) {
     throw new GatewayClientError('GATEWAY_ARTIFACT_UNSUPPORTED', 'SSH and container Gateways must return a matching bridge environment artifact.');
   }
-  return new URL(`__redeven_runtime_gateway${artifact.url}`, bridgeSession.local_ui_url).href;
+  // This authority is never dialed: the caller supplies the owned bridge socket.
+  return new URL(artifact.url!, 'http://redeven-gateway.local').href;
 }

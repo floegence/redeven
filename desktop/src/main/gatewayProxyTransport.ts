@@ -24,7 +24,7 @@ export type GatewayProxyTransport = Readonly<{
 }>;
 
 /** Preserve Runtime TLS and signed origin claims; the Gateway token stays in main. */
-export async function createGatewayProxyTransport(accessURL: string, targetURL: string): Promise<GatewayProxyTransport> {
+export async function createGatewayProxyTransport(accessURL: string, targetURL: string, bridgeConnection?: () => Duplex): Promise<GatewayProxyTransport> {
   const access = new URL(accessURL);
   const target = new URL(targetURL);
   if (!/^https?:$/u.test(access.protocol) || access.username || access.password || access.search || access.hash
@@ -52,7 +52,8 @@ export async function createGatewayProxyTransport(accessURL: string, targetURL: 
     if (lifetime.signal.aborted || signal?.aborted) throw new GatewayProxyError('GATEWAY_CANCELED');
     const url = new URL('_tunnel', access);
     url.protocol = access.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(url, { handshakeTimeout: 15_000, perMessageDeflate: false, maxPayload: 1 << 20 });
+    const ws = new WebSocket(url, { handshakeTimeout: 15_000, perMessageDeflate: false, maxPayload: 1 << 20,
+      ...(bridgeConnection ? { createConnection: bridgeConnection } : {}) });
     const stream = track(createWebSocketStream(ws));
     // Node HTTP clients require socket idle timeouts even when their carrier is
     // a WebSocket byte stream. HTTP connections are not pooled across requests.

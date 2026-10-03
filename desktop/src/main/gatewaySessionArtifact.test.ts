@@ -65,7 +65,7 @@ describe('gatewaySessionArtifact', () => {
     };
 
     expect(gatewayEnvAppBridgeRouteID(record)).toBe('env_app:gw_demo');
-    expect(gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact()), bridgeSession)).toBe(`http://127.0.0.1:24000/__redeven_runtime_gateway/gateway/v3/access/${'a'.repeat(43)}/`);
+    expect(gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact()), bridgeSession)).toBe(`http://redeven-gateway.local/gateway/v3/access/${'a'.repeat(43)}/`);
     expect(() => gatewaySessionArtifactURL(record, openSessionArtifact(bridgeArtifact({
       bridge_session_id: 'ssh://bridge_other',
     })), bridgeSession)).toThrowError(/matching bridge environment artifact/u);
