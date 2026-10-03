@@ -134,6 +134,11 @@ func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
 			status.Capabilities = *message.Capabilities
 		} else {
 			status.Capabilities.State = "unavailable"
+			status.Capabilities.Reason = message.Code
+			status.Capabilities.Authorization = message.Authorization
+			if message.Code == "DESKTOP_SESSION_UNAVAILABLE" {
+				status.Capabilities.State = "session_unavailable"
+			}
 		}
 	case <-connection.Done():
 		status.Capabilities.State = "unavailable"
