@@ -1568,13 +1568,6 @@ func (s *Service) buildThreadEffectAgent(ctx context.Context, effect *threadEffe
 }
 
 func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, requestedModel string, threadModelID string, r *run) (resolvedRunModel, error) {
-	if r != nil {
-		var err error
-		cfg, err = s.sessionModelConfig(ctx, r.sessionMeta, cfg)
-		if err != nil {
-			return resolvedRunModel{}, err
-		}
-	}
 	model := ""
 	requestedModel = strings.TrimSpace(requestedModel)
 	threadModelID = strings.TrimSpace(threadModelID)
@@ -1594,6 +1587,13 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	if model == "" && s != nil {
 		if id, ok := s.resolvedDesktopModelSourceDefaultModel(ctx); ok {
 			model = id
+		}
+	}
+	if r != nil {
+		var err error
+		cfg, err = s.sessionConfigForModel(ctx, r.sessionMeta, cfg, model)
+		if err != nil {
+			return resolvedRunModel{}, err
 		}
 	}
 	if model == "" && cfg.HasModelProfile() {

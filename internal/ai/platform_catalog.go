@@ -28,6 +28,54 @@ func (s *Service) EnabledForSession(meta *session.Meta) bool {
 	return s != nil && (s.Enabled() || platformSessionAvailable(meta))
 }
 
+// localModelConfig cannot retain a previously projected platform catalog.
+func localModelConfig(cfg *config.AIConfig) (*config.AIConfig, error) {
+	next := config.AIConfig{}
+	if cfg != nil {
+		next = *cfg
+	}
+	next.Providers = nil
+	if cfg != nil {
+		for _, provider := range cfg.Providers {
+			if provider.Type == platformGatewayProviderType {
+				continue
+			}
+			if provider.ID == "platform" {
+				return nil, errors.New("platform is reserved for the authorized platform catalog")
+			}
+			next.Providers = append(next.Providers, provider)
+		}
+	}
+	return &next, nil
+}
+
+func (s *Service) sessionSelectedModel(meta *session.Meta, cfg *config.AIConfig) string {
+	if meta != nil {
+		s.mu.Lock()
+		selected := s.platformModelPreferences[platformPreferenceScope(meta)]
+		s.mu.Unlock()
+		if time.Since(selected.used) < 24*time.Hour {
+			return selected.model
+		}
+	}
+	if cfg != nil {
+		return cfg.CurrentModelID
+	}
+	return ""
+}
+
+// Resolve the chosen source before making any platform network request. Platform
+// failures must never block explicit local/Desktop work or silently change sources.
+func (s *Service) sessionConfigForModel(ctx context.Context, meta *session.Meta, cfg *config.AIConfig, model string) (*config.AIConfig, error) {
+	if model == "" {
+		model = s.sessionSelectedModel(meta, cfg)
+	}
+	if model != "" && !strings.HasPrefix(model, "platform/") {
+		return localModelConfig(cfg)
+	}
+	return s.sessionModelConfig(ctx, meta, cfg)
+}
+
 // sessionModelConfig projects the live entitlement catalog into a request-local
 // profile. It never stores grants, provider credentials, or catalog authority in
 // the environment configuration or another user's model list.
@@ -47,21 +95,9 @@ func (s *Service) sessionModelConfig(ctx context.Context, meta *session.Meta, cf
 	if err != nil {
 		return nil, err
 	}
-	next := config.AIConfig{}
-	if cfg != nil {
-		next = *cfg
-	}
-	next.Providers = nil
-	if cfg != nil {
-		for _, provider := range cfg.Providers {
-			if provider.Type == platformGatewayProviderType {
-				continue
-			}
-			if provider.ID == "platform" {
-				return nil, errors.New("platform is reserved for the authorized platform catalog")
-			}
-			next.Providers = append(next.Providers, provider)
-		}
+	next, err := localModelConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
 	provider := config.AIProvider{ID: "platform", Name: "Redeven AI", Type: platformGatewayProviderType}
 	seen := map[string]bool{}
@@ -111,7 +147,7 @@ func (s *Service) sessionModelConfig(ctx context.Context, meta *session.Meta, cf
 			}
 		}
 	}
-	return &next, nil
+	return next, nil
 }
 
 func (s *Service) ListModelsForSession(ctx context.Context, meta *session.Meta) (*ModelsResponse, error) {
@@ -121,15 +157,30 @@ func (s *Service) ListModelsForSession(ctx context.Context, meta *session.Meta) 
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
-	cfg, err := s.sessionModelConfig(ctx, meta, cfg)
+	projected, platformErr := s.sessionModelConfig(ctx, meta, cfg)
+	if platformErr != nil {
+		var err error
+		projected, err = localModelConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+	models, err := s.listModels(ctx, projected)
+	if platformErr != nil && errors.Is(err, ErrNotConfigured) {
+		models, err = NewModelsResponse(s.RuntimeStatus(ctx)), nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	models, err := s.listModels(ctx, cfg)
-	if err == nil {
-		models.Runtime.PlatformAvailable = platformSessionAvailable(meta)
+	models.Runtime.PlatformAvailable = platformSessionAvailable(meta)
+	if platformErr != nil {
+		models.Runtime.PlatformError = "Redeven AI is currently unavailable. Select another model or try again."
+		// Preserve the user's selected platform source even while its catalog is unavailable.
+		if selected := s.sessionSelectedModel(meta, cfg); strings.HasPrefix(selected, "platform/") {
+			models.CurrentModel = selected
+		}
 	}
-	return models, err
+	return models, nil
 }
 
 func (s *Service) PlatformAvailableForSession(meta *session.Meta) bool {
@@ -139,7 +190,15 @@ func (s *Service) PlatformAvailableForSession(meta *session.Meta) bool {
 func (s *Service) SetCurrentModelForSession(ctx context.Context, meta *session.Meta, modelID string, persist func(*config.AIConfig) error) error {
 	modelID = strings.TrimSpace(modelID)
 	if !strings.HasPrefix(modelID, "platform/") || !platformSessionAvailable(meta) {
-		return s.SetCurrentModelID(modelID, persist)
+		if err := s.SetCurrentModelID(modelID, persist); err != nil {
+			return err
+		}
+		if meta != nil {
+			s.mu.Lock()
+			delete(s.platformModelPreferences, platformPreferenceScope(meta))
+			s.mu.Unlock()
+		}
+		return nil
 	}
 	models, err := s.ListModelsForSession(ctx, meta)
 	if err != nil {

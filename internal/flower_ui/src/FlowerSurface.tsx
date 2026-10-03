@@ -2787,6 +2787,13 @@ webSearch: model.web_search,
   const readyForChat = createMemo(() => modelOptionReady(selectedModelOption()));
   const anyModelReady = createMemo(() => catalogModelOptions().some((option) => modelOptionReady(option)));
   const selectedModelNeedsAttention = createMemo(() => !readyForChat() && anyModelReady());
+  const platformCatalogErrorVisible = createMemo(() => {
+    const source = snapshot()?.platform_model_source;
+    if (!source?.error) return false;
+    const selected = selectedComposerModelID();
+    return selected.startsWith('platform/')
+      || (!selected && catalogModelOptions().length === 0);
+  });
   const unavailableModelSource = createMemo<UnavailableFlowerModelSourceStatus | null>(() => {
     const source = modelSource();
     if (source && (source.state === 'not_configured' || source.state === 'empty') && snapshot()?.model_profile) return null;
@@ -2847,7 +2854,7 @@ webSearch: model.web_search,
   const needsSetup = createMemo(() => !!snapshot() && !anyModelReady());
   const showSetupWelcome = createMemo(() => {
     const source = unavailableModelSource();
-    return needsSetup() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
+    return needsSetup() && !platformCatalogErrorVisible() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
       && (!source || source.state === 'not_configured' || source.state === 'empty');
   });
   const companionCompactComposer = createMemo(() => (
@@ -11770,6 +11777,21 @@ webSearch: model.web_search,
                     onFocusFallback={() => attachmentPickerButtonRef?.focus()}
                   />
                 </Show>
+                <Show when={platformCatalogErrorVisible() && snapshot()?.platform_model_source?.error}>
+                  {(message) => <div class="flower-handler-error-card" role="alert">
+                    <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
+                    <div class="flower-handler-error-copy">{message()}</div>
+                    <button
+                      type="button"
+                      class="flower-handler-retry cursor-pointer disabled:cursor-not-allowed"
+                      disabled={modelSourceRefreshing()}
+                      aria-busy={modelSourceRefreshing()}
+                      onClick={() => void refreshModelSource()}
+                    >
+                      {copy().chat.handlerRetry}
+                    </button>
+                  </div>}
+                </Show>
                 <Show when={composerTextOverLimit()}>
                   <div class="flower-composer-over-limit" role="status">
                     {attachmentCopy().overLimit(FLOWER_INLINE_TEXT_CODE_POINT_LIMIT)}
@@ -11778,7 +11800,7 @@ webSearch: model.web_search,
                 {composerTextEditor()}
                 <div class="flower-composer-footer">
                   <Show
-                    when={!needsSetup()}
+                    when={!needsSetup() || platformCatalogErrorVisible()}
                   fallback={(
                     <Show
                       when={unavailableModelSource()}

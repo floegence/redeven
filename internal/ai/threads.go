@@ -389,7 +389,7 @@ func (s *Service) threadReasoningDefaults(ctx context.Context, meta *session.Met
 	cfg := s.cfg
 	s.mu.Unlock()
 	var catalogErr error
-	cfg, catalogErr = s.sessionModelConfig(ctx, meta, cfg)
+	cfg, catalogErr = s.sessionConfigForModel(ctx, meta, cfg, modelID)
 	if catalogErr != nil {
 		return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false, catalogErr
 	}
@@ -592,10 +592,6 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
-	cfg, catalogErr := s.sessionModelConfig(ctx, meta, cfg)
-	if catalogErr != nil {
-		return threadstore.ThreadSettings{}, catalogErr
-	}
 	modelID := strings.TrimSpace(req.ModelID)
 	defaultPermission := FlowerPermissionApprovalRequired
 	if cfg != nil {
@@ -618,6 +614,10 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 		if candidate, ok := s.resolvedDesktopModelSourceDefaultModel(ctx); ok {
 			modelID = candidate
 		}
+	}
+	cfg, catalogErr := s.sessionConfigForModel(ctx, meta, cfg, modelID)
+	if catalogErr != nil {
+		return threadstore.ThreadSettings{}, catalogErr
 	}
 	if modelID == "" && cfg != nil && cfg.HasModelProfile() {
 		if candidate := strings.TrimSpace(cfg.CurrentModelID); candidate != "" {
@@ -1043,7 +1043,7 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	cfg := s.cfg
 	s.mu.Unlock()
 	var catalogErr error
-	cfg, catalogErr = s.sessionModelConfig(ctx, meta, cfg)
+	cfg, catalogErr = s.sessionConfigForModel(ctx, meta, cfg, modelID)
 	if catalogErr != nil {
 		return catalogErr
 	}

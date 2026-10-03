@@ -104,6 +104,7 @@ export type EnvLocalFlowerSurfaceAdapterCopy = Readonly<{
 }>;
 
 type ModelsResponse = Readonly<{
+  runtime?: Readonly<{ platform_error?: string }>;
   current_model?: string;
   models?: readonly Readonly<{
     id?: string;
@@ -633,7 +634,7 @@ async function loadSettingsSnapshot(
       reasoning_capability: normalizeFlowerReasoningCapability(model.reasoning_capability),
     }));
     snapshot = { ...snapshot, platform_model_source: {
-      models, ...(models.some((model) => model.id === response.current_model) ? { current_model_id: response.current_model } : {}),
+      models, error: response.runtime?.platform_error, ...(trim(response.current_model).startsWith('platform/') ? { current_model_id: response.current_model } : {}),
     } };
     assertAvailable();
   }
@@ -1078,7 +1079,15 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     ...(options.openWorkingDirectoryInTerminal ? { openWorkingDirectoryInTerminal: options.openWorkingDirectoryInTerminal } : {}),
     ...(options.workingDirectoryActionAvailability ? { workingDirectoryActionAvailability: options.workingDirectoryActionAvailability } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
-    ...(options.retryModelSource ? { retryModelSource: options.retryModelSource } : {}),
+    retryModelSource: async () => {
+      invalidateSettingsCache();
+      try {
+        await options.retryModelSource?.();
+      } finally {
+        // Recovery can overlap an existing refresh; discard every pre-recovery result.
+        invalidateSettingsCache();
+      }
+    },
     ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),
   });
 }
