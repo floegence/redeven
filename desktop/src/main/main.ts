@@ -6058,10 +6058,9 @@ function gatewayCapabilityFailure(
 
 async function requireGatewayProfileWriteCapability(
   record: GatewayRecord,
-  options: Readonly<{ startPolicy?: GatewayStartPolicy }> = {},
 ): Promise<DesktopLauncherActionFailure | null> {
   const source = await refreshGatewaySourceForAuthorizedAction(record, {
-    startPolicy: options.startPolicy,
+    startPolicy: 'require_ready',
   });
   if (source.status === 'online' && source.capabilities.includes('env_profile_write')) {
     return null;
@@ -6088,13 +6087,12 @@ function validateGatewayProfileRouteForRecord(
 async function gatewayEnvironmentProfileForAction(
   record: GatewayRecord,
   gatewayEnvID: string,
-  options: Readonly<{ startPolicy?: GatewayStartPolicy }> = {},
 ): Promise<DesktopGatewaySource['environments'][number] | null> {
   const source = await syncGatewayRecord(record, {
     force: true,
     mode: 'refresh_catalog',
-    startPolicy: options.startPolicy,
-  }).catch(() => null);
+    startPolicy: 'require_ready',
+  });
   return source?.environments.find((item) => item.gateway_env_id === gatewayEnvID) ?? null;
 }
 
@@ -6162,10 +6160,7 @@ async function upsertGatewayEnvironmentProfileFromLauncher(
     if (routeFailure) {
       return routeFailure;
     }
-    const actionStartPolicy = record.connection.kind === 'url' ? undefined : 'start_if_needed';
-    const capabilityFailure = await requireGatewayProfileWriteCapability(record, {
-      startPolicy: actionStartPolicy,
-    });
+    const capabilityFailure = await requireGatewayProfileWriteCapability(record);
     if (capabilityFailure) {
       return capabilityFailure;
     }
@@ -6178,34 +6173,17 @@ async function upsertGatewayEnvironmentProfileFromLauncher(
         ...(request.access_route.url ? { url: request.access_route.url } : {}),
         ...(request.access_route.origin_label ? { origin_label: request.access_route.origin_label } : {}),
       },
-    }, {
-      startPolicy: actionStartPolicy,
     });
     await syncGatewayRecord(record, {
       force: true,
       mode: 'refresh_catalog',
-      startPolicy: actionStartPolicy,
+      startPolicy: 'require_ready',
     }).catch(() => undefined);
     return launcherActionSuccess('saved_gateway_environment', {
       environmentID: desktopGatewayEnvironmentEntryID(record.gateway_id, saved.environment.gateway_env_id),
     });
   } catch (error) {
-    return launcherActionFailure(
-      gatewayServiceFailureCode(error),
-      'gateway',
-      error instanceof Error ? error.message : String(error),
-      {
-        gatewayID: record.gateway_id,
-        gatewayLabel: record.display_name,
-        shouldRefreshSnapshot: true,
-        failure: desktopFailureFromError(error, {
-          code: 'operation_failed',
-          title: 'Save Gateway Environment Failed',
-          summary: error instanceof Error ? error.message : String(error),
-          targetLabel: record.display_name,
-        }),
-      },
-    );
+    return gatewayProfileActionFailure(record, error, request.registration_ref.gateway_env_id);
   }
 }
 
@@ -6225,16 +6203,11 @@ async function deleteGatewayEnvironmentProfileFromLauncher(
     );
   }
   try {
-    const actionStartPolicy = record.connection.kind === 'url' ? undefined : 'start_if_needed';
-    const capabilityFailure = await requireGatewayProfileWriteCapability(record, {
-      startPolicy: actionStartPolicy,
-    });
+    const capabilityFailure = await requireGatewayProfileWriteCapability(record);
     if (capabilityFailure) {
       return capabilityFailure;
     }
-    const environment = await gatewayEnvironmentProfileForAction(record, registrationRef.gateway_env_id, {
-      startPolicy: actionStartPolicy,
-    });
+    const environment = await gatewayEnvironmentProfileForAction(record, registrationRef.gateway_env_id);
     if (!environment) {
       return launcherActionFailure(
         'environment_missing',
@@ -6259,14 +6232,12 @@ async function deleteGatewayEnvironmentProfileFromLauncher(
     }
     const response = await gatewayLifecycleManager().deleteEnvironmentProfile(record, {
       gateway_env_id: registrationRef.gateway_env_id,
-    }, {
-      startPolicy: actionStartPolicy,
     });
     if (!response.deleted) {
       await syncGatewayRecord(record, {
         force: true,
         mode: 'refresh_catalog',
-        startPolicy: actionStartPolicy,
+        startPolicy: 'require_ready',
       }).catch(() => undefined);
       return launcherActionFailure(
         'environment_missing',
@@ -6289,22 +6260,30 @@ async function deleteGatewayEnvironmentProfileFromLauncher(
     await syncGatewayRecord(record, {
       force: true,
       mode: 'refresh_catalog',
-      startPolicy: actionStartPolicy,
+      startPolicy: 'require_ready',
     }).catch(() => undefined);
     return launcherActionSuccess('deleted_gateway_environment');
   } catch (error) {
-    return launcherActionFailure(
-      gatewayServiceFailureCode(error),
-      'gateway',
-      error instanceof Error ? error.message : String(error),
-      {
-        gatewayID: record.gateway_id,
-        gatewayLabel: record.display_name,
-        gatewayEnvironmentID: registrationRef.gateway_env_id,
-        shouldRefreshSnapshot: true,
-      },
-    );
+    return gatewayProfileActionFailure(record, error, registrationRef.gateway_env_id);
   }
+}
+
+function gatewayProfileActionFailure(record: GatewayRecord, error: unknown, gatewayEnvironmentID?: string): DesktopLauncherActionFailure {
+  const requiresService = error instanceof GatewayServiceStartRequiredError;
+  return launcherActionFailure(gatewayLauncherActionFailureCode(error), 'dialog',
+    error instanceof Error ? error.message : String(error), {
+      gatewayID: record.gateway_id, gatewayLabel: record.display_name, gatewayEnvironmentID,
+      shouldRefreshSnapshot: true,
+      ...(requiresService && error.service_state.can_start ? {
+        continuationAction: { kind: 'start_gateway' as const, gateway_id: record.gateway_id },
+      } : {}),
+      ...(requiresService ? { failure: desktopOperationFailurePresentation({
+        code: 'operation_failed', title: 'Gateway service required',
+        titleKey: 'environmentCenter.gatewayPanelFactGatewayService',
+        summary: 'Start or update this Gateway before changing its environment profiles, then retry.',
+        summaryKey: 'gatewayAccess.profileServiceRequired', targetLabel: record.display_name,
+      }) } : {}),
+    });
 }
 
 function gatewayServiceFailureCode(error: unknown): DesktopLauncherActionFailureCode {

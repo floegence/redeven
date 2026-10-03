@@ -1993,6 +1993,8 @@
     "cloudAwaitingSyncDetail": "請重新整理以載入 Redeven Cloud 環境。"
   },
   "gatewayAccess": {
+    "profileServiceRequired": "請先啟動或更新此 Gateway，再重試環境設定操作。",
+    "profileServiceReady": "Gateway 已啟動。請確認變更後重試。",
     "localService": "本機",
     "managedServiceHelp": "Desktop 僅管理此主機上的 Gateway 服務。執行階段服務仍獨立管理。",
     "checkingAccess": "正在檢查 Gateway 存取",

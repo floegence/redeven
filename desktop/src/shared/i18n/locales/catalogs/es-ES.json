@@ -1993,6 +1993,8 @@
     "cloudAwaitingSyncDetail": "Actualiza para cargar tus entornos de Redeven Cloud."
   },
   "gatewayAccess": {
+    "profileServiceRequired": "Inicia o actualiza este Gateway antes de modificar sus perfiles de entorno y vuelve a intentarlo.",
+    "profileServiceReady": "Gateway iniciado. Revisa los cambios y vuelve a intentarlo.",
     "localService": "Host local",
     "managedServiceHelp": "Desktop solo administra el servicio Gateway de este host. Los servicios de ejecución se administran por separado.",
     "checkingAccess": "Comprobando el acceso al Gateway",

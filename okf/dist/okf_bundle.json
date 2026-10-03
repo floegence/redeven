@@ -20202,7 +20202,7 @@
         "title": "Gateway service",
         "type": "Gateway Contract"
       },
-      "body_length": 5574,
+      "body_length": 6025,
       "summary": "`redeven-gateway` is an optional standalone access forwarder. It owns Gateway identity, pairing, trust, Environment profiles, catalog responses, open-session artifacts, and request forwarding. It never owns, starts, stops, updates, reinstalls, or observes Runtime lifecycle state. Gateway failure can interrupt access through that Gateway, but it cannot block Desktop from managing a Runtime through an authorized Local, SSH, or container channel.",
       "sections": [
         {
@@ -20216,8 +20216,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Desktop owns Runtime lifecycle only for targets with an authorized direct management channel. Provider owns discovery and access authorization. Runtime owns business execution. Gateway owns only its process and the access plane described above. A Gateway-only Environment is access-only and exposes no Runtime lifecycle action.\n\n## Desktop management of the Gateway process\n\nAn explicit Gateway registration may use URL, local host, SSH host, local\ncontainer, or SSH container transport. URL registrations expose access and\ncatalog actions only. Desktop manages the other registrations through their\nconfigured host channel and `GatewayLifecycleManager`, with an independent\nGateway binary and state directory. Gateway cards offer Start, Stop, Restart,\nand Update according to the observed Gateway service capability. These actions\nnever invoke Runtime lifecycle management or grant management of catalog targets.\n\nSaving a registration does not install or start a process. Start is explicit;\nbackground refresh requires an already ready Gateway. Stop, Restart, and Update\nuse the existing confirmation/progress/cancellation surface and explain proxy\nsession interruption; independently opened Direct URL sessions remain live.\nURL pairing requests a pairing code. Managed pairing uses the authenticated\nGateway bridge. Both grant profile write only after separate explicit consent;\ntransport selection does not imply that permission. Managed package installation\nuses Desktop upload of the independent Gateway archive, not Runtime bootstrap.",
-          "char_count": 1541
+          "body": "Desktop owns Runtime lifecycle only for targets with an authorized direct management channel. Provider owns discovery and access authorization. Runtime owns business execution. Gateway owns only its process and the access plane described above. A Gateway-only Environment is access-only and exposes no Runtime lifecycle action.\n\n## Desktop management of the Gateway process\n\nAn explicit Gateway registration may use URL, local host, SSH host, local\ncontainer, or SSH container transport. URL registrations expose access and\ncatalog actions only. Desktop manages the other registrations through their\nconfigured host channel and `GatewayLifecycleManager`, with an independent\nGateway binary and state directory. Gateway cards offer Start, Stop, Restart,\nand Update according to the observed Gateway service capability. These actions\nnever invoke Runtime lifecycle management or grant management of catalog targets.\n\nSaving a registration does not install or start a process. Start is explicit;\nbackground refresh and profile Save/Delete require an already ready Gateway.\nProfile authorization, catalog lookup, mutation, and post-write refresh cannot\ninstall, start, or update its service. A stopped service leaves the draft or\ndelete confirmation open with an explicit Start Gateway action. Starting does\nnot replay the write: the user reviews and retries Save/Delete, with fresh\nprofile-write authorization. A service that needs an update directs the user to\nthe existing Gateway service controls. Stop, Restart, and Update\nuse the existing confirmation/progress/cancellation surface and explain proxy\nsession interruption; independently opened Direct URL sessions remain live.\nURL pairing requests a pairing code. Managed pairing uses the authenticated\nGateway bridge. Both grant profile write only after separate explicit consent;\ntransport selection does not imply that permission. Managed package installation\nuses Desktop upload of the independent Gateway archive, not Runtime bootstrap.",
+          "char_count": 1992
         }
       ],
       "evidence": [
@@ -31010,5 +31010,5 @@
       ]
     }
   ],
-  "source_sha256": "1ada0acc308c3e18977cb67ca9e57c2aeb9360679bd6b7f0f96c54c6d2729c6a"
+  "source_sha256": "1db5a2c84001d6a0df83b1523b7a1109e3c35375e9f42cb6e4f85cc5ea19822e"
 }

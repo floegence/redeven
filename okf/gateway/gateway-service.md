@@ -53,7 +53,13 @@ and Update according to the observed Gateway service capability. These actions
 never invoke Runtime lifecycle management or grant management of catalog targets.
 
 Saving a registration does not install or start a process. Start is explicit;
-background refresh requires an already ready Gateway. Stop, Restart, and Update
+background refresh and profile Save/Delete require an already ready Gateway.
+Profile authorization, catalog lookup, mutation, and post-write refresh cannot
+install, start, or update its service. A stopped service leaves the draft or
+delete confirmation open with an explicit Start Gateway action. Starting does
+not replay the write: the user reviews and retries Save/Delete, with fresh
+profile-write authorization. A service that needs an update directs the user to
+the existing Gateway service controls. Stop, Restart, and Update
 use the existing confirmation/progress/cancellation surface and explain proxy
 session interruption; independently opened Direct URL sessions remain live.
 URL pairing requests a pairing code. Managed pairing uses the authenticated

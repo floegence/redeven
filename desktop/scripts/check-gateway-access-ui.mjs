@@ -53,6 +53,26 @@ try {
       await select.getByRole('radio', { name: i18n.t('gatewayAccess.direct'), exact: true }).click();
       assert.equal(await select.getByRole('radio', { name: i18n.t('gatewayAccess.direct'), exact: true }).getAttribute('aria-checked'), 'true');
       const dialog = page.getByRole('dialog');
+      await page.evaluate(() => {
+        window.settingsFixture.actionResult = request => {
+          if (request.kind === 'upsert_environment_registration') return {
+            ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Gateway service is stopped.',
+            gateway_id: 'bastion', continuation_action: { kind: 'start_gateway', gateway_id: 'bastion' },
+          };
+          if (request.kind === 'start_gateway') return { ok: true, outcome: 'started_gateway' };
+        };
+      });
+      await dialog.getByRole('button', { name: i18n.t('connectionDialog.save'), exact: true }).click();
+      const start = dialog.getByRole('button', { name: i18n.t('environmentCenter.gatewayActionStart'), exact: true });
+      await start.waitFor();
+      assert.equal(await start.evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap');
+      assert.notEqual(await start.evaluate(element => getComputedStyle(element).cursor), 'default');
+      assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(request => request.kind === 'start_gateway').length), 0);
+      await start.focus();
+      await page.keyboard.press('Enter');
+      await dialog.getByText(i18n.t('gatewayAccess.profileServiceReady'), { exact: true }).waitFor();
+      assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(request => request.kind === 'upsert_environment_registration').length), 1);
+      assert.equal(await select.getByRole('radio', { name: i18n.t('gatewayAccess.direct'), exact: true }).getAttribute('aria-checked'), 'true');
       assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
       assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
       if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-profile-${dark ? 'dark-narrow' : 'light'}.png` });

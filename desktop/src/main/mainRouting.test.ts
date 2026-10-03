@@ -20,6 +20,15 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
+  it('keeps profile authorization and mutations read-only with respect to Gateway service lifecycle', () => {
+    const source = readMainSource();
+    const profileActions = source.slice(source.indexOf('async function requireGatewayProfileWriteCapability('), source.indexOf('function gatewayServiceFailureCode('));
+    expect(profileActions).not.toContain('start_if_needed');
+    expect(profileActions).not.toContain('startGateway(');
+    expect(profileActions).toContain("startPolicy: 'require_ready'");
+    expect(profileActions).toContain("continuationAction: { kind: 'start_gateway'");
+    expect(profileActions).not.toContain('.catch(() => null)');
+  });
   it('stops the exact SSH Runtime when its state and installation directories differ', () => {
     const source = readMainSource();
     const start = source.indexOf('const inventoryArgs = {', source.indexOf('async function executeDirectManagedEnvironmentLifecycle('));

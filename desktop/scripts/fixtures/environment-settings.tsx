@@ -9,7 +9,7 @@ import '../../src/welcome/index.css';
 declare global {
   interface Window {
     settingsFixtureSnapshot: DesktopWelcomeSnapshot;
-    settingsFixture: { requests: DesktopLauncherActionRequest[]; loads: number; resolveOld: () => void; publish: (value: DesktopWelcomeSnapshot) => void; beforeAction?: () => Promise<void>; saves?: number; progress?: (status: 'running' | 'succeeded' | 'failed' | 'canceled') => void; failAdmission?: () => void };
+    settingsFixture: { requests: DesktopLauncherActionRequest[]; loads: number; resolveOld: () => void; publish: (value: DesktopWelcomeSnapshot) => void; beforeAction?: () => Promise<void>; actionResult?: (request: DesktopLauncherActionRequest) => DesktopLauncherActionResult | undefined; saves?: number; progress?: (status: 'running' | 'succeeded' | 'failed' | 'canceled') => void; failAdmission?: () => void };
   }
 }
 document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
@@ -54,6 +54,8 @@ render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launc
   performAction: async request => {
     window.settingsFixture.requests.push(request);
     await window.settingsFixture.beforeAction?.();
+    const actionResult = window.settingsFixture.actionResult?.(request);
+    if (actionResult) return actionResult;
     if (restartHandoff && request.kind === 'restart_environment_runtime') {
       return new Promise<DesktopLauncherActionResult>(resolve => {
         const environment = snapshot.environments.find(entry => entry.id === request.environment_id)!;
