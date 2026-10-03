@@ -255,10 +255,16 @@ func validatePendingControlArtifactTopUp(pending *ControlArtifactPendingTopUp, g
 }
 
 // RemoteDesktopConfig enables reuse of an existing OS desktop grant.
-// Omission keeps unattended authorization reuse disabled.
+// Missing legacy preferences adopt persistent sharing; an explicit choice wins.
 type RemoteDesktopConfig struct {
-	Unattended    bool   `json:"unattended"`
-	LastDisplayID string `json:"last_display_id,omitempty"`
+	ApprovalPreferenceSet bool   `json:"approval_preference_set,omitempty"`
+	Unattended            bool   `json:"unattended"`
+	LastDisplayID         string `json:"last_display_id,omitempty"`
+}
+
+// RememberApproval resolves legacy defaults without mutating configuration on read.
+func (c *RemoteDesktopConfig) RememberApproval() bool {
+	return c == nil || !c.ApprovalPreferenceSet || c.Unattended
 }
 
 // Config is the runtime configuration for Redeven. Runtime-managed one-shot

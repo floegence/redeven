@@ -140,7 +140,13 @@ function updateState(message) {
   const permission = /permission|authorization|host_action/i.test(state + ' ' + reason);
   const locked = ['locked', 'locking'].includes(state) || ['locked', 'locking'].includes(reason);
   const connecting = ['connecting', 'authorizing'].includes(state);
-  status(state === 'active' ? '' : locked ? 'locked' : permission ? 'permissionRequired' : connecting ? 'connecting' : 'disconnected', permission ? 'permissionHint' : '');
+  if (backend === 'wayland' && state === 'authorizing') {
+    status(message.authorization === 'restoring' ? 'approvalRestoring' : 'connecting', 'approvalWaitingHint');
+  } else if (backend === 'wayland' && message.authorization === 'unknown' && state !== 'active') {
+    status('approvalUnknown', 'approvalRestoreFailed');
+  } else {
+    status(state === 'active' ? '' : locked ? 'locked' : permission ? 'permissionRequired' : connecting ? 'connecting' : 'disconnected', permission ? 'permissionHint' : '');
+  }
   $('reconnect').hidden = state === 'active' || connecting || locked;
   if (message.displays) updateDisplays(message.displays);
   if (message.display_id) {
@@ -217,6 +223,11 @@ async function connect() {
           updateState({ ...message, state: 'locked' });
           // A rejected initial connection has no native capture observer yet.
           // Let the user reconnect after unlocking the host locally.
+          $('reconnect').hidden = false;
+        }
+        else if (/RESTORE_TOKEN|PORTAL_|AUTHORIZATION_PENDING/.test(message.code)) {
+          updateState({ ...message, state: 'disconnected' });
+          status(message.code === 'AUTHORIZATION_PENDING' ? 'approvalBusy' : 'approvalUnknown', message.code === 'AUTHORIZATION_PENDING' ? '' : 'approvalRestoreFailed');
           $('reconnect').hidden = false;
         }
         else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });

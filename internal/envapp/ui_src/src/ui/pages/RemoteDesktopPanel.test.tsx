@@ -9,7 +9,7 @@ import type { RemoteDesktopStatus } from '../services/remoteDesktopApi';
 
 const state = vi.hoisted(() => ({
   label: 'server', hostname: 'server.example', local: true, full: true, desktop: true,
-  status: vi.fn(), create: vi.fn(), open: vi.fn(), disconnect: vi.fn(), save: vi.fn(), permission: vi.fn(),
+  status: vi.fn(), create: vi.fn(), open: vi.fn(), disconnect: vi.fn(), save: vi.fn(), forget: vi.fn(), permission: vi.fn(),
 }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: state.local ? 'Local Environment' : 'Research host', agent: { hostname: state.hostname }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
@@ -18,7 +18,7 @@ vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
 vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.label ? { label: state.label } : null }));
 vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => state.desktop }));
 vi.mock('../services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
-vi.mock('../services/remoteDesktopApi', async original => ({ ...await original<object>(), getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, disconnectRemoteDesktop: state.disconnect, setRemoteDesktopUnattended: state.save }));
+vi.mock('../services/remoteDesktopApi', async original => ({ ...await original<object>(), getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, disconnectRemoteDesktop: state.disconnect, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget }));
 vi.mock('../services/hostApplicationsApi', async original => ({ ...await original<object>(), requestHostApplicationPermission: state.permission }));
 
 const ready: RemoteDesktopStatus = {
@@ -64,7 +64,7 @@ it.each(['locked', 'session_unavailable', 'unsupported', 'unavailable', 'setup_r
 });
 
 it('permits the connection that triggers Wayland system authorization', async () => {
-  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required', displays: [] } });
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'ready', authorization: 'needs_consent', displays: [] } });
   await mount(); expect(button('Connect to desktop').disabled).toBe(false);
   expect(host.textContent).toContain('Confirm screen sharing on the host');
 });
@@ -72,7 +72,7 @@ it('permits the connection that triggers Wayland system authorization', async ()
 it('keeps advanced settings out of the initial connection flow and avoids a single-display selector', async () => {
   await mount(); expect(host.querySelector('select')).toBeNull();
   const options = host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!;
-  expect(options.open).toBe(false); expect(host.textContent).not.toContain('Remember sharing approval');
+  expect(options.open).toBe(false); expect(host.textContent).not.toContain('Connect automatically after first approval');
   expect(host.textContent).not.toContain('Unattended reconnection'); expect(state.save).not.toHaveBeenCalled();
 });
 
@@ -84,7 +84,7 @@ it('reports a blocked popup without creating a server session', async () => {
 });
 
 it('releases a session when the viewer window cannot open and explains the failure', async () => {
-  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required' } });
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'ready', authorization: 'needs_consent' } });
   state.open.mockRejectedValue(new WebServiceWindowOpenError('Invalid Web Service window request.'));
   await mount(); button('Connect to desktop').click();
   await vi.waitFor(() => expect(state.disconnect).toHaveBeenCalledWith('one'));
@@ -141,7 +141,7 @@ it('requires an explicit takeover instead of replacing an existing controller', 
 
 it('exposes Wayland approval reuse before connecting and waits for the saved setting', async () => {
   let saved!: () => void;
-  const wayland = { ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required' } };
+  const wayland = { ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'ready', authorization: 'needs_consent' } };
   state.status.mockResolvedValue(wayland);
   state.save.mockImplementation(() => new Promise<void>(resolve => { saved = resolve; }));
   await mount();
@@ -153,8 +153,32 @@ it('exposes Wayland approval reuse before connecting and waits for the saved set
   expect(button('Connect to desktop').disabled).toBe(true);
   state.status.mockResolvedValue({ ...wayland, unattended: true }); saved();
   await vi.waitFor(() => expect(button('Connect to desktop').disabled).toBe(false));
-  expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('Awaiting connection');
-  expect(host.querySelector('.remote-desktop-guidance')).toBeNull();
+  expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('First connection needs host approval');
+  expect(host.querySelector('.remote-desktop-guidance')).not.toBeNull();
   button('Connect to desktop').click();
   await vi.waitFor(() => expect(state.create).toHaveBeenCalledOnce());
+});
+
+
+it('only reports saved authorization from the native state and confirms forgetting it', async () => {
+  const wayland = { ...ready, unattended: true, capabilities: { ...ready.capabilities, backend: 'wayland', authorization: 'saved' } };
+  state.status.mockResolvedValue(wayland);
+  await mount();
+  expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('Sharing approval saved');
+  host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!.open = true;
+  button('Request approval again').click();
+  expect(state.forget).not.toHaveBeenCalled();
+  const confirm = [...document.querySelectorAll('button')].find(item => controlText(item) === 'Remove saved approval')!;
+  state.forget.mockResolvedValue({ authorization: 'needs_consent' });
+  state.status.mockResolvedValue({ ...wayland, capabilities: { ...wayland.capabilities, authorization: 'needs_consent' } });
+  confirm.click();
+  await vi.waitFor(() => expect(state.forget).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('First connection needs host approval'));
+});
+
+it.each(['unknown', 'revoked', 'unsupported'] as const)('does not call %s approval saved', async authorization => {
+  state.status.mockResolvedValue({ ...ready, unattended: true, capabilities: { ...ready.capabilities, backend: 'wayland', authorization, unattended: authorization !== 'unsupported' } });
+  await mount();
+  expect(host.querySelector('.remote-desktop-state')?.textContent).not.toContain('Sharing approval saved');
+  expect(button('Connect to desktop').disabled).toBe(false);
 });

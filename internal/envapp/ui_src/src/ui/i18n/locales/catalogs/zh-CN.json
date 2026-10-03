@@ -7181,8 +7181,8 @@
     "cancel": "取消",
     "reconnect": "重新连接",
     "awaitingConnection": "等待连接",
-    "unattended": "记住共享授权",
-    "unattendedHint": "在主机确认一次共享后，保存授权供后续连接使用。请保持 Redeven 运行时开启；授权过期或被撤销时，系统可能要求重新确认。",
+    "unattended": "首次确认后自动连接",
+    "unattendedHint": "在主机确认一次共享后，保存授权供后续连接使用。请保持 Redeven 运行时开启；授权撤销或桌面环境变化后可能需要再次确认。关闭后，每次连接都需确认。",
     "components": "桌面组件",
     "prepare": "准备组件",
     "preparing": "正在准备组件…",
@@ -7216,6 +7216,20 @@
     "sessionExpired": "环境连接已过期，请重新连接环境后重试。",
     "requestInvalid": "连接设置未被接受。请刷新并选择可用的显示器后重试。",
     "setupBusy": "桌面组件正在准备中，请等待完成后刷新。",
-    "errorDetails": "错误详情"
+    "errorDetails": "错误详情",
+    "approvalSaved": "共享授权已保存",
+    "approvalRestoring": "正在恢复共享授权…",
+    "approvalNeeded": "首次连接需要主机确认",
+    "approvalRevoked": "共享授权已撤销",
+    "approvalUnknown": "上次授权恢复未完成",
+    "approvalUnsupported": "不支持自动恢复授权",
+    "approvalSession": "每次连接需要主机确认",
+    "approvalBusy": "已有共享请求正在进行。请在主机完成或取消该请求后重试。",
+    "approvalForget": "下次重新请求授权",
+    "approvalForgetHint": "清除 Redeven 保存的这台主机的授权？下次连接时将重新请求确认。此操作不会撤销系统权限，也不会结束正在进行的连接。",
+    "approvalForgetConfirm": "清除已保存授权",
+    "approvalForgetFailed": "未能清除已保存的授权",
+    "approvalRestoreFailed": "未能恢复共享授权，请重新连接以再次请求访问。",
+    "approvalWaitingHint": "正在请求桌面访问。如果主机出现共享授权框，请确认后继续。"
   }
 }

@@ -7185,8 +7185,8 @@
     "cancel": "Abbrechen",
     "reconnect": "Erneut verbinden",
     "awaitingConnection": "Warten auf Verbindung",
-    "unattended": "Bildschirmfreigabe merken",
-    "unattendedHint": "Bestätigen Sie die Bildschirmfreigabe einmal auf dem Host, um die Zustimmung für spätere Verbindungen zu speichern. Lassen Sie die Redeven-Laufzeit laufen. Wenn die Zustimmung abläuft oder widerrufen wird, kann das System erneut nachfragen.",
+    "unattended": "Nach erster Freigabe automatisch verbinden",
+    "unattendedHint": "Bestätigen Sie die Freigabe einmal auf dem Host, um sie für weitere Verbindungen zu speichern. Lassen Sie die Redeven-Laufzeit laufen. Ein Widerruf oder Desktop-Änderungen können eine erneute Bestätigung erfordern. Deaktivieren Sie dies für eine Bestätigung bei jeder Verbindung.",
     "components": "Desktop-Komponenten",
     "prepare": "Komponenten vorbereiten",
     "preparing": "Komponenten werden vorbereitet…",
@@ -7220,6 +7220,20 @@
     "sessionExpired": "Die Verbindung zur Umgebung ist abgelaufen. Verbinden Sie sich erneut und versuchen Sie es noch einmal.",
     "requestInvalid": "Die Verbindungseinstellungen wurden abgelehnt. Aktualisieren Sie den Status und wählen Sie einen verfügbaren Bildschirm, bevor Sie es erneut versuchen.",
     "setupBusy": "Die Desktop-Einrichtung läuft bereits. Warten Sie auf den Abschluss und aktualisieren Sie dann den Status.",
-    "errorDetails": "Fehlerdetails"
+    "errorDetails": "Fehlerdetails",
+    "approvalSaved": "Freigabe gespeichert",
+    "approvalRestoring": "Freigabe wird wiederhergestellt…",
+    "approvalNeeded": "Erste Verbindung benötigt Host-Freigabe",
+    "approvalRevoked": "Freigabe wurde widerrufen",
+    "approvalUnknown": "Letzte Wiederherstellung nicht abgeschlossen",
+    "approvalUnsupported": "Automatische Wiederherstellung nicht verfügbar",
+    "approvalSession": "Host-Freigabe bei jeder Verbindung erforderlich",
+    "approvalBusy": "Eine Freigabeanfrage läuft bereits. Schließen Sie diese auf dem Host ab oder brechen Sie sie ab und versuchen Sie es erneut.",
+    "approvalForget": "Freigabe erneut anfordern",
+    "approvalForgetHint": "Die gespeicherte Freigabe dieses Hosts aus Redeven entfernen? Die nächste Verbindung erfordert eine Bestätigung. Systemberechtigungen und aktive Verbindungen bleiben bestehen.",
+    "approvalForgetConfirm": "Gespeicherte Freigabe entfernen",
+    "approvalForgetFailed": "Gespeicherte Freigabe konnte nicht entfernt werden",
+    "approvalRestoreFailed": "Die Freigabe konnte nicht wiederhergestellt werden. Verbinden Sie sich erneut, um Zugriff anzufordern.",
+    "approvalWaitingHint": "Desktop-Zugriff wird angefordert. Falls auf dem Host ein Freigabedialog erscheint, bestätigen Sie ihn, um fortzufahren."
   }
 }

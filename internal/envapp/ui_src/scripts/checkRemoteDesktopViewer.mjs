@@ -17,7 +17,7 @@ const assets = path.join(root, 'internal/codeapp/appserver/remote_desktop_viewer
 const shared = path.join(root, 'internal/codeapp/appserver/host_application_viewer');
 const native = JSON.parse(execFileSync('go', ['list', '-m', '-json', 'github.com/floegence/floe-native-apps'], { cwd: root, env: { ...process.env, GOWORK: 'off' }, encoding: 'utf8' })).Dir;
 const token = 'qualification-private-ticket';
-const backend = process.argv.includes('--macos') ? 'macos' : 'x11';
+const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includes('--wayland') ? 'wayland' : 'x11';
 let messages = [], controls = [], sockets = [], generation = 0, frame = 0, selectedMode = 'control';
 let control, media, display = 'one', connectionCount = 0, disconnects = 0, ticketFailures = 0;
 let conflictNextConnect = false;
@@ -189,6 +189,22 @@ try {
     const style = getComputedStyle(input);
     return { position: style.position, opacity: style.opacity };
   }), { position: 'fixed', opacity: '0' }, 'idle remote input must not consume space below the desktop');
+  if (backend === 'wayland') {
+    for (const [authorization, label] of [['restoring', 'Restoring sharing approval…'], ['needs_consent', 'Connecting to desktop…']]) {
+      control.send(JSON.stringify({ version: 1, type: 'state', state: 'authorizing', authorization, generation: ++generation }));
+      await page.waitForFunction(expected => document.querySelector('#status').textContent === expected, label);
+      assert(await page.locator('.floe-remote-input').isDisabled(), 'authorization enabled input before new paint');
+      assert(await page.locator('#reconnect').isHidden(), 'pending portal request allowed competing reconnect');
+    }
+    for (const [code, label] of [['PORTAL_FAILED', 'Previous approval recovery did not finish'], ['AUTHORIZATION_PENDING', 'A sharing request is already in progress. Finish or cancel it on the host, then retry.']]) {
+      control.send(JSON.stringify({ version: 1, type: 'error', code, authorization: 'unknown', generation }));
+      await page.waitForFunction(expected => document.querySelector('#status').textContent === expected, label);
+      assert(await page.locator('#reconnect').isVisible(), 'failed authorization had no retry action');
+      assert(await page.locator('.floe-remote-input').isDisabled(), 'failed authorization retained input');
+    }
+    generation++; state(); paint();
+    await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  }
   if (process.env.REDEVEN_DESKTOP_EVIDENCE_DIR) await page.screenshot({ path: path.join(process.env.REDEVEN_DESKTOP_EVIDENCE_DIR, `toolbar-${desktop ? 'electron' : 'browser'}.png`) });
   delayAudio = true;
   await page.locator('#settings').click();

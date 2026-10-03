@@ -46,7 +46,11 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 			if loadErr != nil {
 				err = loadErr
 			} else {
-				status.Unattended = cfg.RemoteDesktop != nil && cfg.RemoteDesktop.Unattended
+				status.Unattended = cfg.RemoteDesktop.RememberApproval()
+				status.ApprovalPolicy = "session"
+				if status.Unattended {
+					status.ApprovalPolicy = "persistent"
+				}
 				if cfg.RemoteDesktop != nil {
 					status.LastDisplayID = cfg.RemoteDesktop.LastDisplayID
 				}
@@ -55,9 +59,9 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		}
 	case r.URL.Path == remoteDesktopAPI+"/settings" && r.Method == http.MethodPut:
 		var setting struct {
-			Unattended bool `json:"unattended"`
+			Unattended *bool `json:"unattended"`
 		}
-		if decodeManagedJSON(r, &setting) != nil {
+		if decodeManagedJSON(r, &setting) != nil || setting.Unattended == nil {
 			err = remotedesktop.ErrInvalid
 			break
 		}
@@ -67,14 +71,25 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 			if cfg.RemoteDesktop == nil {
 				cfg.RemoteDesktop = &config.RemoteDesktopConfig{}
 			}
-			cfg.RemoteDesktop.Unattended = setting.Unattended
+			cfg.RemoteDesktop.Unattended = *setting.Unattended
+			cfg.RemoteDesktop.ApprovalPreferenceSet = true
 			return nil
 		})
 		if err == nil {
-			g.remoteDesktop.SetUnattended(setting.Unattended)
+			g.remoteDesktop.SetUnattended(*setting.Unattended)
 		}
-		value = setting
+		policy := "session"
+		if *setting.Unattended {
+			policy = "persistent"
+		}
+		value = map[string]any{"unattended": *setting.Unattended, "approval_policy": policy}
 		action = "remote_desktop_settings"
+	case r.URL.Path == remoteDesktopAPI+"/authorization" && r.Method == http.MethodDelete:
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		err = g.remoteDesktop.ForgetAuthorization(ctx)
+		value = map[string]string{"authorization": "needs_consent"}
+		action = "remote_desktop_forget_authorization"
 	case r.URL.Path == remoteDesktopAPI+"/setup" && r.Method == http.MethodGet:
 		value, err = g.remoteDesktop.SetupStatus(owner)
 	case r.URL.Path == remoteDesktopAPI+"/setup" && r.Method == http.MethodPost:
@@ -104,7 +119,7 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		if req.DisplayID == "" && cfg.RemoteDesktop != nil {
 			req.DisplayID = cfg.RemoteDesktop.LastDisplayID
 		}
-		value, err = g.remoteDesktop.Create(r.Context(), owner, req, cfg.RemoteDesktop != nil && cfg.RemoteDesktop.Unattended)
+		value, err = g.remoteDesktop.Create(r.Context(), owner, req, cfg.RemoteDesktop.RememberApproval())
 		action = "remote_desktop_connect"
 	case strings.HasPrefix(r.URL.Path, remoteDesktopAPI+"/sessions/"):
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, remoteDesktopAPI+"/sessions/"), "/")
@@ -174,6 +189,8 @@ func writeDesktopError(w http.ResponseWriter, err error) {
 		status, code = http.StatusNotFound, "DESKTOP_NOT_FOUND"
 	case errors.Is(err, remotedesktop.ErrControlInUse):
 		status, code = http.StatusConflict, "DESKTOP_CONTROL_IN_USE"
+	case errors.Is(err, remotedesktop.ErrAuthorizationBusy):
+		status, code = http.StatusConflict, "DESKTOP_AUTHORIZATION_BUSY"
 	case errors.Is(err, nativeapps.ErrBusy):
 		status, code = http.StatusConflict, "DESKTOP_SETUP_BUSY"
 	}

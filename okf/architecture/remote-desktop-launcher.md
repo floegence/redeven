@@ -35,19 +35,26 @@ can omit input permission but never omits full environment authorization.
 The initial dialog presents host identity, readiness and one connect action. A
 display selector appears only when multiple displays are known. Connection options
 are collapsed by default and contain view-only mode. Wayland hosts that support
-persistent portal grants expose **Remember sharing approval** directly in the
-initial flow. It requires explicit opt-in; simply opening the launcher never
-changes host settings. A first connection still needs the host user's system
-confirmation. Later connections request reuse while the Runtime is running;
-expired or revoked approval can require a new confirmation. This is the existing
-host-wide OS-grant reuse setting, not permission to unlock or install a service.
-macOS and X11 do not display this portal-specific option.
+persistent portal grants expose **Connect automatically after first approval**.
+The default is enabled under the [authorization policy](remote-desktop-authorization.md).
+Opening the launcher never changes system permission. A first connection still
+needs the host user's confirmation; subsequent connections attempt the saved
+grant. The Runtime must be running in the logged-in desktop. macOS and X11 do
+not display this portal-specific option. Older portals explain that automatic
+recovery is unsupported while keeping temporary sharing available.
 
 Saving disables connection until the host accepts the setting; failure restores
-the actual value. When reuse is enabled, the pre-connect status reads **Awaiting
-connection** rather than falsely asserting another prompt is necessary. The
-setting alone does not prove a usable saved grant; native connection determines
-whether the system can restore access.
+the actual value. Readiness comes from the upstream authorization state: saved,
+restoring, needs consent, revoked or uncertain. Enabling the preference alone
+never claims approval was saved or that a system prompt is visible. A pending
+request explains that any system sharing dialog must be confirmed on the host.
+
+Connection options include **Request approval again** for a saved or uncertain
+Wayland grant. A confirmation explains that this clears only local recovery
+credentials, not system permissions or active sharing. A competing authorization
+request reports that it must finish or be cancelled first. Focus returns to the
+trigger after dismissal. Turning off reuse means each future connection requests
+host confirmation; it does not revoke the system grant.
 
 # Boundaries
 

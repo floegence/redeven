@@ -11,7 +11,7 @@ import { LocalApiError } from '../ui/services/localApi';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import type { RemoteDesktopStatus } from '../ui/services/remoteDesktopApi';
 
-const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), permission: vi.fn(), full: true }));
+const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), forget: vi.fn(), permission: vi.fn(), full: true }));
 vi.mock('../ui/i18n', () => ({ useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) }));
 vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: 'Local Environment', agent: { hostname: 'server.local' }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
@@ -20,7 +20,7 @@ vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
 vi.mock('../ui/services/desktopSessionContext', async importOriginal => ({ ...await importOriginal<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'server' }) }));
 vi.mock('../ui/services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellWebServiceWindowOpenAvailable: () => true }));
 vi.mock('../ui/services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
-vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: vi.fn(), cancelRemoteDesktopPreparation: vi.fn() }));
+vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: vi.fn(), cancelRemoteDesktopPreparation: vi.fn() }));
 vi.mock('../ui/services/hostApplicationsApi', () => ({ requestHostApplicationPermission: state.permission }));
 
 const ready: RemoteDesktopStatus = { capabilities: { backend: 'macos', state: 'ready', screen: true, input: true, audio: true, clipboard: true, unattended: true, displays: [{ id: 'one', name: 'Studio Display', width: 2560, height: 1440, scale: 1, primary: true }] }, unattended: false, control_in_use: false, last_display_id: '' };
@@ -114,7 +114,7 @@ it.each(['locked', 'session_unavailable', 'unsupported', 'screen_permission_requ
 });
 
 it('does not report permission reuse as enabled when saving fails', async () => {
-  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required' } });
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'ready', authorization: 'needs_consent' } });
   state.save.mockRejectedValue(new LocalApiError({ status: 403, code: 'DESKTOP_FORBIDDEN', message: 'Permission required' }));
   const { dialog, copy } = await launch(390);
   await userEvent.click(dialog.querySelector('summary')!);
@@ -137,7 +137,7 @@ it('keeps controls within a scaled narrow Workbench panel', async () => {
 
 it.each(SUPPORTED_LOCALES)('offers persistent Wayland approval before connecting in %s', async locale => {
   state.locale = locale;
-  const wayland = { ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'authorization_required' } };
+  const wayland = { ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'ready', authorization: 'needs_consent' } };
   state.status.mockResolvedValue(wayland);
   const { dialog, copy } = await launch(320);
   const sharing = page.elementLocator(dialog).getByRole('switch', { name: copy.t('remoteDesktop.unattended') });
@@ -153,6 +153,52 @@ it.each(SUPPORTED_LOCALES)('offers persistent Wayland approval before connecting
   dialog.querySelector<HTMLInputElement>('.remote-desktop-sharing [role=switch]')!.focus();
   await userEvent.keyboard(' ');
   await expect.poll(() => state.save.mock.calls).toEqual([[true]]);
-  await expect.poll(() => dialog.querySelector('.remote-desktop-state')?.textContent).toContain(copy.t('remoteDesktop.awaitingConnection'));
-  expect(dialog.querySelector('.remote-desktop-guidance')).toBeNull();
+  await expect.poll(() => dialog.querySelector('.remote-desktop-state')?.textContent).toContain(copy.t('remoteDesktop.approvalNeeded'));
+  expect(dialog.querySelector('.remote-desktop-guidance')).not.toBeNull();
+});
+
+
+it.each(SUPPORTED_LOCALES)('confirms local approval reset and restores keyboard focus in %s', async locale => {
+  state.locale = locale;
+  const wayland = { ...ready, unattended: true, capabilities: { ...ready.capabilities, backend: 'wayland', authorization: 'saved' } };
+  state.status.mockResolvedValue(wayland);
+  const { dialog, copy } = await launch(320);
+  expect(dialog.querySelector<HTMLInputElement>('.remote-desktop-sharing [role=switch]')!.checked).toBe(true);
+  expect(dialog.querySelector('.remote-desktop-state')?.textContent).toContain(copy.t('remoteDesktop.approvalSaved'));
+  await userEvent.click(dialog.querySelector('summary')!);
+  const reset = page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.approvalForget'), exact: true });
+  reset.element().focus(); await userEvent.keyboard('{Enter}');
+  const confirm = page.getByRole('button', { name: copy.t('remoteDesktop.approvalForgetConfirm'), exact: true });
+  await expect.element(confirm).toBeVisible();
+  const modal = confirm.element().closest('[role=dialog]')!;
+  await Promise.allSettled(modal.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+  await expect.poll(() => modal.contains(document.activeElement)).toBe(true);
+  expect(modal.textContent).toContain(copy.t('remoteDesktop.approvalForgetHint'));
+  expect(modal.scrollWidth).toBeLessThanOrEqual(modal.clientWidth);
+  expectSingleLineButtonLabels(modal);
+  expect(state.forget).not.toHaveBeenCalled();
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.activeElement).toBe(reset.element());
+  expect(state.forget).not.toHaveBeenCalled();
+  await reset.click();
+  state.forget.mockResolvedValue({ authorization: 'needs_consent' });
+  state.status.mockResolvedValue({ ...wayland, capabilities: { ...wayland.capabilities, authorization: 'needs_consent' } });
+  await confirm.click();
+  await expect.poll(() => state.forget.mock.calls.length).toBe(1);
+  await expect.poll(() => dialog.querySelector('.remote-desktop-state')?.textContent).toContain(copy.t('remoteDesktop.approvalNeeded'));
+});
+
+it('closes only the ready reset confirmation after a pointer opening', async () => {
+  state.locale = 'en-US';
+  state.status.mockResolvedValue({ ...ready, unattended: true, capabilities: { ...ready.capabilities, backend: 'wayland', authorization: 'saved' } });
+  const { dialog, copy } = await launch(320);
+  await userEvent.click(dialog.querySelector('summary')!);
+  await page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.approvalForget'), exact: true }).click();
+  const modal = page.getByRole('button', { name: copy.t('remoteDesktop.approvalForgetConfirm'), exact: true }).element().closest('[role=dialog]')!;
+  await Promise.allSettled(modal.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+  await expect.poll(() => modal.contains(document.activeElement)).toBe(true);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect(dialog.isConnected).toBe(true);
+  expect(state.forget).not.toHaveBeenCalled();
 });

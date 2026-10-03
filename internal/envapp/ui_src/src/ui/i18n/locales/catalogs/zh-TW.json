@@ -7181,8 +7181,8 @@
     "cancel": "取消",
     "reconnect": "重新連線",
     "awaitingConnection": "等待連線",
-    "unattended": "記住共享授權",
-    "unattendedHint": "在主機確認一次共享後，儲存授權供後續連線使用。請保持 Redeven 執行階段開啟；授權到期或遭撤銷時，系統可能要求重新確認。",
+    "unattended": "首次確認後自動連線",
+    "unattendedHint": "在主機確認一次共享後，儲存授權供後續連線使用。請保持 Redeven 執行階段開啟；授權撤銷或桌面環境變更後可能需要再次確認。關閉後，每次連線都需確認。",
     "components": "桌面元件",
     "prepare": "準備元件",
     "preparing": "正在準備元件…",
@@ -7216,6 +7216,20 @@
     "sessionExpired": "環境連線已到期，請重新連線至環境後再試。",
     "requestInvalid": "連線設定未被接受。請重新整理並選擇可用的顯示器後再試。",
     "setupBusy": "桌面元件正在準備中，請等候完成後重新整理。",
-    "errorDetails": "錯誤詳細資訊"
+    "errorDetails": "錯誤詳細資訊",
+    "approvalSaved": "共享授權已儲存",
+    "approvalRestoring": "正在恢復共享授權…",
+    "approvalNeeded": "首次連線需要主機確認",
+    "approvalRevoked": "共享授權已撤銷",
+    "approvalUnknown": "上次授權恢復未完成",
+    "approvalUnsupported": "不支援自動恢復授權",
+    "approvalSession": "每次連線需要主機確認",
+    "approvalBusy": "已有共享請求正在進行。請在主機完成或取消該請求後重試。",
+    "approvalForget": "下次重新請求授權",
+    "approvalForgetHint": "清除 Redeven 儲存的這台主機的授權？下次連線時將重新請求確認。此操作不會撤銷系統權限，也不會結束進行中的連線。",
+    "approvalForgetConfirm": "清除已儲存授權",
+    "approvalForgetFailed": "無法清除已儲存的授權",
+    "approvalRestoreFailed": "無法恢復共享授權，請重新連線以再次請求存取。",
+    "approvalWaitingHint": "正在請求桌面存取。如果主機出現共享授權視窗，請確認後繼續。"
   }
 }

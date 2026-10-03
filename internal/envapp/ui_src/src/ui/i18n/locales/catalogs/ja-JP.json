@@ -7181,8 +7181,8 @@
     "cancel": "キャンセル",
     "reconnect": "再接続",
     "awaitingConnection": "接続待ち",
-    "unattended": "画面共有の許可を保存",
-    "unattendedHint": "ホストで一度画面共有を許可すると、次回以降の接続にその許可を再利用します。Redeven ランタイムは起動したままにしてください。許可の期限切れや取り消しにより、再確認が必要になる場合があります。",
+    "unattended": "初回の許可後は自動で接続",
+    "unattendedHint": "ホストで一度共有を許可すると、以降の接続用に保存します。Redeven ランタイムは起動したままにしてください。許可の取り消しやデスクトップ環境の変更後は、再確認が必要な場合があります。オフにすると毎回確認します。",
     "components": "デスクトップコンポーネント",
     "prepare": "コンポーネントを準備",
     "preparing": "コンポーネントを準備中…",
@@ -7216,6 +7216,20 @@
     "sessionExpired": "環境への接続が期限切れです。環境に再接続してから再試行してください。",
     "requestInvalid": "接続設定が拒否されました。更新して利用可能なディスプレイを選び、再試行してください。",
     "setupBusy": "デスクトップの準備中です。完了後に更新してください。",
-    "errorDetails": "エラーの詳細"
+    "errorDetails": "エラーの詳細",
+    "approvalSaved": "共有の許可を保存済み",
+    "approvalRestoring": "共有の許可を復元中…",
+    "approvalNeeded": "初回接続にはホストでの許可が必要",
+    "approvalRevoked": "共有の許可が取り消されました",
+    "approvalUnknown": "前回の許可の復元が完了していません",
+    "approvalUnsupported": "許可の自動復元には非対応",
+    "approvalSession": "接続のたびにホストでの許可が必要",
+    "approvalBusy": "共有の要求が進行中です。ホストで許可またはキャンセルしてから再試行してください。",
+    "approvalForget": "次回接続時に許可を再要求",
+    "approvalForgetHint": "Redeven に保存されたこのホストの許可を削除しますか？次回の接続時に再確認を求めます。システムの権限や現在の接続には影響しません。",
+    "approvalForgetConfirm": "保存した許可を削除",
+    "approvalForgetFailed": "保存した許可を削除できませんでした",
+    "approvalRestoreFailed": "共有の許可を復元できませんでした。再接続してアクセスを再要求してください。",
+    "approvalWaitingHint": "デスクトップへのアクセスを要求中です。ホストに共有ダイアログが表示された場合は、許可して続行してください。"
   }
 }
