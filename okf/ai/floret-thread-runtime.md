@@ -82,6 +82,17 @@ One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O ru
 
 `Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch. If an effect outcome cannot be confirmed, Floret atomically closes the Turn with `effect_outcome_unknown`; it never replays or exposes that effect for retry.
 
+Pending text can be edited through `PATCH /_redeven_proxy/api/ai/threads/:id/queue/:queueID`.
+The request carries `client_request_id`, `expected_text` and `text`; authorization
+precedes Floret's optional `ThreadQueueController.EditQueued`. A stale or already
+admitted item returns HTTP 409, without reconstructing attachments or context.
+`POST .../queue/:queueID/send-now` calls `SendQueuedNow`: it gracefully ends the
+current response and starts that chosen input in a new turn, preserving confirmed
+work and unknown-effect boundaries. This is explicit stop-and-send, not injection
+into a current provider request. Existing idle-only `promote` semantics remain.
+The runtime owns the bounded transition after Stop acceptance; a lost client
+connection cannot cancel it. A Host shutdown leaves unadmitted messages queued.
+
 Queue admission and mutation, `Respond`, and `Cancel` commit their minimum
 canonical fact before publishing success. `Respond` resolves the exact pending
 interaction, including one atomic Answers batch for Reject All. `Cancel` is

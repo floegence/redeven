@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-03: Pending message controls
+
+- Adopt published Floret v7.20.0 for atomic queued-text editing and explicit stop-and-send. Keep attachment/context authority in Floret, reject stale text, and preserve existing idle-only promotion. Native clients can manage pending messages without disabling the composer.
+
+
 ## 2026-10-03: Adopt published DeepSeek Flash support
 
 - Adopt Floret v7.19.0 after upstream publication and blank-module checksum verification; enable `deepseek-flash`, Pro low effort, and current Flash alias image/output capabilities.

@@ -593,3 +593,10 @@ type ActiveThreadRun struct {
 	ThreadID string `json:"thread_id"`
 	RunID    string `json:"run_id"`
 }
+
+// EditQueuedInputRequest changes text only, retaining pending attachments and context.
+type EditQueuedInputRequest struct {
+	ClientRequestID string  `json:"client_request_id"`
+	Text            string  `json:"text"`
+	ExpectedText    *string `json:"expected_text"`
+}
