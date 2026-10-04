@@ -3,12 +3,12 @@ type: Runtime Contract
 title: Human remote desktop sessions
 description: Share the host's current graphical desktop with an authenticated viewer, exclusive remote input, and bounded media.
 tags: [runtime, desktop, applications, security, media]
-timestamp: 2026-10-03T07:42:00Z
+timestamp: 2026-10-04T13:20:00Z
 ---
 # Summary
 
 Redeven owns remote desktop authorization, ephemeral sessions, window placement,
-configuration and audit. Published `floe-native-apps` v0.22.9 owns current-desktop
+configuration and audit. Published `floe-native-apps` v0.22.10 owns current-desktop
 selection, OS authorization, native input, capture, codecs and bounded playback.
 A desktop session shares the existing signed-in macOS or Linux desktop. It never
 creates an application-private desktop, changes system security policy or grants
@@ -111,7 +111,7 @@ contract owns direct/tunnel composition, resource authority and raw-route reject
 Video uses low-latency H.264 and static PNG refinement;
 system-output audio uses Opus. The published browser player negotiates available
 WebCodecs configurations, bounds encoded/decoded/audio queues, and confirms paint
-on a subsequent animation frame. Decoder preference is displayed as preference,
+after a rendering opportunity and its following task. Decoder preference is displayed as preference,
 not proof of the physical decoder. Dependent H.264 frames cannot be dropped as
 independent images; recovery requires a fresh keyframe boundary.
 
@@ -126,6 +126,25 @@ microphone/camera/printer redirection, WebRTC negotiation or new public port.
 Browser media requires WebCodecs and HTTPS or a trustworthy local origin. The
 [acceptance record](../operations/remote-desktop-results.md) owns measured
 quality claims; a connected picture is not a 60 FPS certification.
+
+## Low-delay media
+
+The published player draws every current decoded picture immediately. A cumulative
+paint receipt names only the latest picture unchanged across a rendering opportunity
+and its following task. Replaced pictures do not receive individual paint receipts;
+reset cancels retired authority. PNG refinement decoding cannot serialize later
+H.264 decoding. Encoded reference dependencies remain ordered and bounded.
+
+Linux NVIDIA encoding uses the published component's verified glibc 2.31 worker
+and the installed NVIDIA driver, independently of its musl capture/media stack.
+A synthetic encode probe selects the backend; actual dimensions must then encode
+successfully. No system package, host FFmpeg, privileged operation or library-path
+injection is required. The worker uses private bounded pipes, one outstanding
+picture, zero B frames/lookahead and explicit zero-reorder H.264 SPS restrictions.
+An active encoder failure suspends media; it cannot silently replace a reference
+chain. The portable software encoder remains the explicit capability fallback.
+X11 readback, scaling, IPC and GPU upload still copy pixels. This does not claim
+zero-copy capture or certify hardware decode from a browser preference string.
 
 # Evidence
 
