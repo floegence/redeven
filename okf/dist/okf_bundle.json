@@ -8309,7 +8309,7 @@
         "title": "AI model and context runtime",
         "type": "AI Runtime Contract"
       },
-      "body_length": 24662,
+      "body_length": 26680,
       "summary": "Redeven persists product model and reasoning preferences, provider credentials, and model-source selection, while Floret owns provider-visible context and opaque continuation state. Environment and Desktop model sources remain distinct, context and compaction presentation come from typed Floret observations, and input/output token limits preserve their separate meanings. Product configuration updates merge permission and model state without overwriting unrelated settings.",
       "sections": [
         {
@@ -8323,8 +8323,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven owns model preferences, credentials, gateway selection, and the one-shot `/compact` input mapping. Floret owns provider-visible context, canonical compaction identity and result, and opaque continuation. Live context events and UI usage projections are observations, not durable lifecycle or provider-state authority.",
-          "char_count": 325
+          "body": "Redeven owns model preferences, credentials, gateway selection, and the one-shot `/compact` input mapping. Floret owns provider-visible context, canonical compaction identity and result, and opaque continuation. Live context events and UI usage projections are observations, not durable lifecycle or provider-state authority.\n\n## Context capacity failures\n\nPublished Floret v7.21.0 owns the budget guard and canonical failure categories.\nAn output reservation that leaves no input capacity stops before compaction.\nKnown fixed system/tool overhead that cannot fit also stops before automatic\ncompression; compressible history still uses normal compaction. The typed\n`context_budget_invalid`, `context_fixed_overhead`, and\n`context_compaction_limit` failures survive current views, summaries, and restart.\nRedeven maps those codes to localized causes and recovery guidance. The error\ncard offers settings and an explicit retry, keeps the composer available, and\nprevents duplicate retry clicks. Failed retry admission produces a notification.\nNo automatic retry or change to unknown-effect recovery is introduced.\n\nAn optional `run_error_detail` contains only allowlisted integer budget fields\nextracted at the product boundary. Flower exposes it in a collapsed, keyboard\naccessible disclosure with a copy action. Provider bodies, URLs, credentials,\nand unrelated joined errors never enter that detail. Older clients can ignore\nthe optional field and still display the actionable `error`/`run_error` message;\nno Runtime Service compatibility epoch or database schema change is required.\n\nOllama discovery uses the loaded model's served capacity, then explicit\nModelfile `num_ctx`, then the conservative 4K default, capped by the model limit.\nSetting `num_ctx` explicitly makes capacity discoverable even while unloaded;\nserver environment settings alone are absent from model metadata. Model weight\ncontext capacity is not evidence of the active serving window.",
+          "char_count": 1960
         }
       ],
       "evidence": [
@@ -8541,6 +8541,21 @@
           "id": "redeven:internal/flower_ui/src/chat/flowerContextPresentation.ts:0:the tooltip derives the current thread's cache hit rate from canonical cumulative totals without changing the context-pressure ring.",
           "source": "redeven:internal/flower_ui/src/chat/flowerContextPresentation.ts",
           "description": "The tooltip derives the current thread's cache hit rate from canonical cumulative totals without changing the context-pressure ring."
+        },
+        {
+          "id": "redeven:internal/ai/run_error_code_test.go:0:actionable context failures and numeric-only diagnostic projection.",
+          "source": "redeven:internal/ai/run_error_code_test.go",
+          "description": "Actionable context failures and numeric-only diagnostic projection."
+        },
+        {
+          "id": "redeven:internal/ai/flower_current_projection_test.go:0:matching current/summary diagnostics and retry clearing.",
+          "source": "redeven:internal/ai/flower_current_projection_test.go",
+          "description": "Matching current/summary diagnostics and retry clearing."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.contextErrors.test.shared.tsx:0:recovery controls, disclosure, and unknown-effect boundary.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.contextErrors.test.shared.tsx",
+          "description": "Recovery controls, disclosure, and unknown-effect boundary."
         }
       ],
       "snippet": "Redeven persists product model and reasoning preferences, provider credentials, and model-source selection, while Floret owns provider-visible context and opaque continuation state. Environment and Desktop model sources remain distinct, con",
@@ -31547,5 +31562,5 @@
       ]
     }
   ],
-  "source_sha256": "e2d2cb5970b7c1608249d4f6ab194b63fc04bd1177b674434dcb328695a68ad8"
+  "source_sha256": "45e12f7d581fdcfa9365f90f65b39fc571d24e2d56116189a18f194be017736a"
 }

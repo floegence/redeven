@@ -2270,6 +2270,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerModelUnavailable;
       case 'model_gateway_contract_failed':
         return copy().chat.runErrors.modelGatewayContractFailed;
+      case 'context_budget_invalid':
+        return copy().chat.runErrors.contextBudgetInvalid;
+      case 'context_fixed_overhead':
+        return copy().chat.runErrors.contextFixedOverhead;
+      case 'context_compaction_limit':
+        return copy().chat.runErrors.contextCompactionLimit;
       case 'floret_engine_failed':
         return copy().chat.runErrors.floretEngineFailed;
       case 'floret_control_contract_failed':
@@ -6126,12 +6132,13 @@ webSearch: model.web_search,
     }
   };
 
-  const errorNotice = (title: string, message: string, action?: JSX.Element, className = '') => (
+  const errorNotice = (title: string, message: string, action?: JSX.Element, className = '', detail?: JSX.Element) => (
     <div role="alert" class={cn('flower-error-card', className)}>
       <div class="flower-error-icon"><AlertTriangle class="h-4 w-4" /></div>
       <div class="flower-error-copy">
         <div class="flower-error-title">{title}</div>
         <div class="flower-error-message">{message}</div>
+        {detail}
         <Show when={action}>
           {(item) => <div class="flower-error-actions">{item()}</div>}
         </Show>
@@ -6336,6 +6343,9 @@ webSearch: model.web_search,
 
   const runErrorNotice = (error: FlowerThreadSnapshot['error']) => {
     const code = trimString(error?.code);
+    const contextFailure = code === 'context_budget_invalid' || code === 'context_fixed_overhead' || code === 'context_compaction_limit';
+    const [retryPending, setRetryPending] = createSignal(false);
+    const [detailsCopied, setDetailsCopied] = createSignal(false);
     const stoppedUnknown = () => code === 'floret_effect_outcome_unknown' && selectedThread()?.cancellation?.source === 'user_stop';
     const continuationFailure = createMemo(() => (
       code === 'floret_control_contract_failed'
@@ -6353,16 +6363,34 @@ webSearch: model.web_search,
       || code === 'model_gateway_contract_failed';
     const retryContinuation = async () => {
       const threadID = trimString(selectedThreadID());
-      if (!threadID) return;
+      if (!threadID || retryPending()) return;
+      setRetryPending(true);
       try {
         const requestEpoch = liveTransport.connectionEpoch();
         const live = await props.adapter.retryThread(threadID);
         receiveThreadView(live, 'user_action', requestEpoch);
       } catch (error) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
+        notifyThreadActionError(getErrorMessage(error));
+      } finally {
+        setRetryPending(false);
       }
     };
-    const action = () => continuationFailure()
+    const diagnostics = () => contextFailure && trimString(error?.detail) ? (
+      <details class="flower-error-details">
+        <summary>{copy().chat.runErrorDetails}</summary>
+        <pre>{trimString(error?.detail)}</pre>
+        <Button size="sm" variant="ghost" icon={Copy} onClick={() => {
+          void writeTextToClipboard(trimString(error?.detail)).then(() => setDetailsCopied(true)).catch((cause) => notifyThreadActionError(getErrorMessage(cause)));
+        }}><StableText reserve={[copy().chat.messageCopied, copy().chat.runErrorCopyDetails]}>{detailsCopied() ? copy().chat.messageCopied : copy().chat.runErrorCopyDetails}</StableText></Button>
+      </details>
+    ) : undefined;
+    const action = () => contextFailure ? (
+      <>
+        <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>{copy().chat.runErrorActions.openSettings}</Button>
+        <Button size="sm" variant="ghost" icon={Refresh} disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+      </>
+    ) : continuationFailure()
       ? (
         <Button
           size="sm"
@@ -6383,7 +6411,7 @@ webSearch: model.web_search,
     return (
       <Show
         when={continuationFailure()}
-        fallback={errorNotice(stoppedUnknown() ? copy().chat.stopOutcomeUnknownTitle : copy().chat.runErrorTitle, stoppedUnknown() ? copy().chat.stopOutcomeUnknownDescription : presentRunError(error), action())}
+        fallback={errorNotice(stoppedUnknown() ? copy().chat.stopOutcomeUnknownTitle : contextFailure ? copy().chat.runContextErrorTitle : copy().chat.runErrorTitle, stoppedUnknown() ? copy().chat.stopOutcomeUnknownDescription : presentRunError(error), action(), '', diagnostics())}
       >
         {errorNotice(
           copy().chat.runContinuationErrorTitle,

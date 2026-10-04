@@ -467,7 +467,7 @@ export function applyFlowerRuntimeCurrentView(
     restored_inputs: current.restored_inputs ?? [],
     messages,
     error: trim(current.error)
-      ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error) }
+      ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error), ...(trim(current.run_error_detail) ? { detail: trim(current.run_error_detail) } : {}) }
       : undefined,
   };
   return retainThreadPresentation(base, projected);

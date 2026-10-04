@@ -568,7 +568,13 @@
       "toolApprovalExpandCommand": "コマンド全体を表示",
       "toolApprovalHideCommand": "折りたたむ",
       "toolApprovalEligibleCount": "承認可能 · {count} 件",
-      "feedbackClose": "通知の詳細を閉じる"
+      "feedbackClose": "通知の詳細を閉じる",
+      "runContextErrorTitle": "モデルのコンテキスト上限",
+      "runErrorDetails": "技術的な詳細",
+      "runErrorCopyDetails": "詳細をコピー",
+      "runErrorContextBudgetInvalid": "出力用の予約枠でコンテキストが埋まり、入力を収められません。モデルのコンテキストウィンドウを広げるか、出力上限を下げてから再試行してください。Ollama では、Modelfile に num_ctx を設定し、モデルを再読み込みしてください。",
+      "runErrorContextFixedOverhead": "システム指示とツール定義が、モデルで使用できるコンテキスト容量を超えています。サーバー側のコンテキストウィンドウを広げるか、より大きなコンテキストを持つモデルを選んで再試行してください。会話履歴の圧縮では解決できません。",
+      "runErrorContextCompactionLimit": "圧縮後も会話がモデルのコンテキスト上限を超えています。入力を短くするか、より大きなコンテキストを持つモデルを選んで再試行してください。"
     },
     "threadList": {
       "title": "会話",

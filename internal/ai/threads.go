@@ -178,12 +178,16 @@ func applyFlowerThreadRuntimeProjection(view *ThreadView, projection flowerThrea
 	view.QueuedTurnCount = projection.QueueCount
 	view.RunErrorCode = ""
 	view.RunError = ""
+	view.RunErrorDetail = ""
 	approvalCount := projection.Attention.ApprovalCount
 	pending := approvalCount > 0
 	view.ApprovalPending = &pending
 	view.ApprovalPendingCount = approvalCount
 	lifecycle := projectFlowerThreadLifecycle(projection.Activity, projection.Attention, projection.LastOutcome, projection.Failure)
 	view.RunStatus, view.RunErrorCode, view.RunError = lifecycle.RunStatus, lifecycle.RunErrorCode, lifecycle.RunError
+	if view.RunErrorCode != "" {
+		view.RunErrorDetail = contextBudgetFailureDetail(projection.Failure)
+	}
 	if projection.Activity == flruntime.ThreadActivityActive && projection.RunID != "" {
 		view.ActiveRunID = projection.RunID.String()
 	} else {

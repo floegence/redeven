@@ -216,6 +216,7 @@ export type FlowerThreadStatus =
 export type FlowerTitleStatus = 'unset' | 'pending' | 'ready' | 'failed';
 
 export type FlowerThreadError = Readonly<{
+  detail?: string;
   message: string;
   code?: string;
 }>;
@@ -748,6 +749,7 @@ export type FlowerRuntimeCurrentView = Readonly<{
   last_outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   error?: string;
   run_error_code?: string;
+  run_error_detail?: string;
   attention?: Readonly<{ approval_count?: number; input_count?: number }>;
   items?: readonly FlowerRuntimeCurrentItem[];
   queue?: readonly Readonly<{

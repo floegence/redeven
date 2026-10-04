@@ -153,6 +153,7 @@ type ThreadView struct {
 	ReadOnlyReason       string                        `json:"read_only_reason,omitempty"`
 	RunUpdatedAtUnixMs   int64                         `json:"run_updated_at_unix_ms"`
 	RunErrorCode         string                        `json:"run_error_code,omitempty"`
+	RunErrorDetail       string                        `json:"run_error_detail,omitempty"`
 	RunError             string                        `json:"run_error,omitempty"`
 	WaitingPrompt        *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
 	ActiveRunID          string                        `json:"active_run_id,omitempty"`

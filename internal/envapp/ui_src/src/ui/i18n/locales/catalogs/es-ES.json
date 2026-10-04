@@ -5466,7 +5466,13 @@
       "toolApprovalExpandCommand": "Ver el comando completo",
       "toolApprovalHideCommand": "Contraer",
       "toolApprovalEligibleCount": "Se pueden aprobar · {count}",
-      "feedbackClose": "Cerrar detalles del aviso"
+      "feedbackClose": "Cerrar detalles del aviso",
+      "runContextErrorTitle": "Límite de contexto del modelo",
+      "runErrorDetails": "Detalles técnicos",
+      "runErrorCopyDetails": "Copiar detalles",
+      "runErrorContextBudgetInvalid": "La capacidad reservada para la salida no deja espacio para la entrada. Amplíe la ventana de contexto configurada del modelo o reduzca el límite de salida y vuelva a intentarlo. En Ollama, configure num_ctx en el Modelfile y vuelva a cargar el modelo.",
+      "runErrorContextFixedOverhead": "Las instrucciones del sistema y las definiciones de herramientas superan el contexto disponible del modelo. Amplíe la ventana de contexto del servidor o elija un modelo con más contexto y vuelva a intentarlo. Comprimir el historial del chat no resuelve este problema.",
+      "runErrorContextCompactionLimit": "La conversación sigue superando el límite de contexto del modelo después de la compresión. Acorte la entrada o elija un modelo con más contexto y vuelva a intentarlo."
     },
     "threadList": {
       "title": "Conversaciones",

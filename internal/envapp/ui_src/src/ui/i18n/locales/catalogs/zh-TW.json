@@ -5466,7 +5466,13 @@
       "toolApprovalExpandCommand": "檢視完整命令",
       "toolApprovalHideCommand": "收合",
       "toolApprovalEligibleCount": "可處理 {count} 項",
-      "feedbackClose": "關閉回饋詳情"
+      "feedbackClose": "關閉回饋詳情",
+      "runContextErrorTitle": "模型上下文容量受限",
+      "runErrorDetails": "技術詳細資訊",
+      "runErrorCopyDetails": "複製詳細資訊",
+      "runErrorContextBudgetInvalid": "預留的輸出額度已占滿上下文視窗，無法容納輸入。請增加模型設定中的上下文視窗大小，或降低輸出上限後重試。使用 Ollama 時，請在 Modelfile 中設定 num_ctx 並重新載入模型。",
+      "runErrorContextFixedOverhead": "系統指令與工具定義已超出模型可用的上下文容量。請增加伺服器端的上下文視窗大小，或選擇上下文容量更大的模型後重試。壓縮聊天記錄無法解決此問題。",
+      "runErrorContextCompactionLimit": "壓縮後，對話仍超出模型的上下文上限。請縮短輸入內容，或選擇上下文容量更大的模型後重試。"
     },
     "threadList": {
       "title": "對話",

@@ -88,6 +88,7 @@ func TestOllamaCatalogUsesServedContextCapacity(t *testing.T) {
 	}{
 		{"loaded model", 65536, "num_ctx 32768", 65536},
 		{"modelfile", 0, "num_ctx 32768", 32768},
+		{"unloaded explicit 128k", 0, "num_ctx 131072", 131072},
 		{"unloaded default", 0, "", 4096},
 		{"bounded by model", 200000, "", 131072},
 	} {

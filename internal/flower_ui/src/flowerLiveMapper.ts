@@ -1196,7 +1196,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
-    ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
+    ...(errorMessage ? { error: { message: errorMessage, ...(trim(record.run_error_detail) ? { detail: trim(record.run_error_detail) } : {}), ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),
   };
   return thread;
