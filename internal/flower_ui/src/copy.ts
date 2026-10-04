@@ -433,6 +433,9 @@ export type FlowerSurfaceCopy = Readonly<{
     scrollToLatest: string;
     runtimeRestartedDivider: string;
     runErrorTitle: string;
+    runContextErrorTitle: string;
+    runErrorDetails: string;
+    runErrorCopyDetails: string;
     runContinuationErrorTitle: string;
     retryReply: string;
     runErrorActions: Readonly<{
@@ -449,6 +452,9 @@ export type FlowerSurfaceCopy = Readonly<{
       providerStreamInterrupted: string;
       providerModelUnavailable: string;
       modelGatewayContractFailed: string;
+      contextBudgetInvalid: string;
+      contextFixedOverhead: string;
+      contextCompactionLimit: string;
       floretEngineFailed: string;
       floretControlContractFailed: string;
       floretAuthorityConsistencyFailed: string;
@@ -766,6 +772,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     scrollToLatest: 'Scroll to latest',
     runtimeRestartedDivider: 'Redeven runtime restarted',
     runErrorTitle: 'Flower could not finish this reply.',
+    runContextErrorTitle: 'Model context limit',
+    runErrorDetails: 'Technical details',
+    runErrorCopyDetails: 'Copy details',
     runContinuationErrorTitle: 'Reply could not continue.',
     retryReply: 'Retry reply',
     runErrorActions: {
@@ -775,6 +784,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       openSettings: 'Open settings',
     },
     runErrors: {
+      contextBudgetInvalid: "The output allowance leaves no room for input. Increase the model's configured context window or lower its output limit, then retry. For Ollama, set num_ctx in the Modelfile and reload the model.",
+      contextFixedOverhead: "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this.",
+      contextCompactionLimit: "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry.",
       providerAuthFailed: 'The selected AI provider rejected the saved credentials. Open Settings and update the Local AI Profile key.',
       providerMissingKey: 'The selected AI provider is missing an API key. Open Settings and complete the Local AI Profile.',
       providerRateLimited: 'The selected AI provider is rate limiting this request. Try again after the provider limit resets.',

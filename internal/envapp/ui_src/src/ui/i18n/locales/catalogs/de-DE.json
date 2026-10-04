@@ -5466,7 +5466,13 @@
       "toolApprovalExpandCommand": "Vollständigen Befehl anzeigen",
       "toolApprovalHideCommand": "Zuklappen",
       "toolApprovalEligibleCount": "Freigabe möglich · {count}",
-      "feedbackClose": "Rückmeldung schließen"
+      "feedbackClose": "Rückmeldung schließen",
+      "runContextErrorTitle": "Kontextlimit des Modells",
+      "runErrorDetails": "Technische Details",
+      "runErrorCopyDetails": "Details kopieren",
+      "runErrorContextBudgetInvalid": "Der reservierte Ausgabebereich lässt keinen Platz für Eingaben. Vergrößern Sie das konfigurierte Kontextfenster des Modells oder senken Sie das Ausgabelimit und versuchen Sie es erneut. Setzen Sie bei Ollama num_ctx im Modelfile und laden Sie das Modell neu.",
+      "runErrorContextFixedOverhead": "Systemanweisungen und Werkzeugdefinitionen überschreiten den verfügbaren Modellkontext. Vergrößern Sie das serverseitige Kontextfenster oder wählen Sie ein Modell mit größerem Kontext und versuchen Sie es erneut. Das Komprimieren des Chatverlaufs löst dieses Problem nicht.",
+      "runErrorContextCompactionLimit": "Die Unterhaltung überschreitet auch nach der Komprimierung das Kontextlimit des Modells. Kürzen Sie die Eingabe oder wählen Sie ein Modell mit größerem Kontext und versuchen Sie es erneut."
     },
     "threadList": {
       "title": "Unterhaltungen",

@@ -96,6 +96,9 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 		}
 		root["run_error_code"] = code
 		root["error"] = message
+		if detail := contextBudgetFailureDetail(current.Failure); detail != "" {
+			root["run_error_detail"] = detail
+		}
 	}
 	return json.Marshal(root)
 }

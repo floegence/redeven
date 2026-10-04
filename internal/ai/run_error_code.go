@@ -24,6 +24,9 @@ const (
 	runErrorCodeProviderRequestInvalid     = "provider_request_invalid"
 	runErrorCodeProviderRequestRejected    = "provider_request_rejected"
 	runErrorCodeModelGatewayContract       = "model_gateway_contract_failed"
+	runErrorCodeContextBudgetInvalid       = "context_budget_invalid"
+	runErrorCodeContextFixedOverhead       = "context_fixed_overhead"
+	runErrorCodeContextCompactionLimit     = "context_compaction_limit"
 	runErrorCodeFloretEngineFailed         = "floret_engine_failed"
 	runErrorCodeFloretControlContract      = "floret_control_contract_failed"
 	runErrorCodeFloretAdmissionBlocked     = "floret_thread_admission_blocked"
@@ -52,6 +55,12 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected AI provider rejected Flower's request. Check the provider details and retry; no browser action was run."
 	case runErrorCodeModelGatewayContract:
 		return "The model source returned an incomplete tool call. No tool was run. Try again or choose another model."
+	case runErrorCodeContextBudgetInvalid:
+		return "The output allowance leaves no room for input. Increase the model's configured context window or lower its output limit, then retry. For Ollama, set num_ctx in the Modelfile and reload the model."
+	case runErrorCodeContextFixedOverhead:
+		return "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this."
+	case runErrorCodeContextCompactionLimit:
+		return "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry."
 	case runErrorCodeFloretEngineFailed:
 		return "Flower could not finish this turn because the orchestration engine failed."
 	case runErrorCodeFloretControlContract:
@@ -161,6 +170,12 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 	switch failure.Code {
 	case flruntime.ThreadTurnFailureProvider:
 		return projectRunFailure(message, fallbackCode)
+	case flruntime.ThreadTurnFailureContextBudgetInvalid:
+		return runErrorCodeContextBudgetInvalid, userFacingRunError(runErrorCodeContextBudgetInvalid, "")
+	case flruntime.ThreadTurnFailureContextFixedOverhead:
+		return runErrorCodeContextFixedOverhead, userFacingRunError(runErrorCodeContextFixedOverhead, "")
+	case flruntime.ThreadTurnFailureContextCompactionLimit:
+		return runErrorCodeContextCompactionLimit, userFacingRunError(runErrorCodeContextCompactionLimit, "")
 	case flruntime.ThreadTurnFailureControlError:
 		return runErrorCodeFloretControlContract, userFacingRunError(runErrorCodeFloretControlContract, message)
 	case flruntime.ThreadTurnFailureEffectOutcomeUnknown:
@@ -235,4 +250,40 @@ func providerHTTPStatusFromSDKError(text string) (int, bool) {
 		return 0, false
 	}
 	return status, true
+}
+
+// Only Floret's typed budget failures have a numeric, prompt-free diagnostic
+// contract. Arbitrary provider and engine errors remain private.
+func contextBudgetFailureDetail(failure *flruntime.ThreadTurnFailure) string {
+	if failure == nil {
+		return ""
+	}
+	switch failure.Code {
+	case flruntime.ThreadTurnFailureContextBudgetInvalid,
+		flruntime.ThreadTurnFailureContextFixedOverhead,
+		flruntime.ThreadTurnFailureContextCompactionLimit:
+		// Only allow numeric budget fields through the product boundary, even
+		// if a cleanup error was joined to the typed failure upstream.
+		allowed := map[string]bool{
+			"context_window_tokens": true, "reserved_output_tokens": true,
+			"projected_input_tokens": true, "request_safe_limit": true,
+			"fixed_input_tokens": true, "compacted_context_target_tokens": true,
+		}
+		var fields []string
+		for _, field := range strings.Fields(failure.Message) {
+			key, value, ok := strings.Cut(field, "=")
+			if !ok || !allowed[key] {
+				continue
+			}
+			number, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				continue
+			}
+			fields = append(fields, key+"="+strconv.FormatInt(number, 10))
+			delete(allowed, key)
+		}
+		return strings.Join(fields, "\n")
+	default:
+		return ""
+	}
 }

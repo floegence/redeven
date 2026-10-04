@@ -417,3 +417,26 @@ func TestFlowerCancellationFactIsSharedBySummaryCurrentAndPublication(t *testing
 		t.Fatalf("current JSON lost provenance: %s, %v", encoded, err)
 	}
 }
+
+func TestContextBudgetDiagnosticMatchesCurrentAndSummary(t *testing.T) {
+	outcome := flruntime.TurnOutcomeFailed
+	failure := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureContextBudgetInvalid, Message: "context_window_tokens=3891 reserved_output_tokens=4096 request_safe_limit=-205"}
+	current := flruntime.ThreadView{ThreadID: identity.ThreadID("context-budget"), LastOutcome: &outcome, Failure: failure}
+	raw, err := flowerCurrentJSON(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	view := ThreadView{}
+	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjection{LastOutcome: &outcome, Failure: failure})
+	if decoded["run_error_code"] != view.RunErrorCode || decoded["run_error_detail"] != view.RunErrorDetail || view.RunErrorDetail != contextBudgetFailureDetail(failure) {
+		t.Fatalf("current=%s summary=%#v", raw, view)
+	}
+	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjection{Activity: flruntime.ThreadActivityActive})
+	if view.RunErrorDetail != "" || view.RunError != "" {
+		t.Fatal("retry retained obsolete budget failure")
+	}
+}

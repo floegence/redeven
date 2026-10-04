@@ -58,6 +58,32 @@ DeepSeek request preparation is owned upstream. Floret v7.15.1 replaces raw UTF-
 
 Redeven owns model preferences, credentials, gateway selection, and the one-shot `/compact` input mapping. Floret owns provider-visible context, canonical compaction identity and result, and opaque continuation. Live context events and UI usage projections are observations, not durable lifecycle or provider-state authority.
 
+## Context capacity failures
+
+Published Floret v7.21.0 owns the budget guard and canonical failure categories.
+An output reservation that leaves no input capacity stops before compaction.
+Known fixed system/tool overhead that cannot fit also stops before automatic
+compression; compressible history still uses normal compaction. The typed
+`context_budget_invalid`, `context_fixed_overhead`, and
+`context_compaction_limit` failures survive current views, summaries, and restart.
+Redeven maps those codes to localized causes and recovery guidance. The error
+card offers settings and an explicit retry, keeps the composer available, and
+prevents duplicate retry clicks. Failed retry admission produces a notification.
+No automatic retry or change to unknown-effect recovery is introduced.
+
+An optional `run_error_detail` contains only allowlisted integer budget fields
+extracted at the product boundary. Flower exposes it in a collapsed, keyboard
+accessible disclosure with a copy action. Provider bodies, URLs, credentials,
+and unrelated joined errors never enter that detail. Older clients can ignore
+the optional field and still display the actionable `error`/`run_error` message;
+no Runtime Service compatibility epoch or database schema change is required.
+
+Ollama discovery uses the loaded model's served capacity, then explicit
+Modelfile `num_ctx`, then the conservative 4K default, capped by the model limit.
+Setting `num_ctx` explicitly makes capacity discoverable even while unloaded;
+server environment settings alone are absent from model metadata. Model weight
+context capacity is not evidence of the active serving window.
+
 # Evidence
 
 - `redeven:internal/ai/tools/types.go:126` - `ToolPresentationSpec` carries renderer, operation, label, fallback, compact payload, result payload, and activity chip fields.
@@ -97,3 +123,7 @@ Redeven owns model preferences, credentials, gateway selection, and the one-shot
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:1656` - Composer model changes branch on model-source ownership before persisting defaults.
 - `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:97` - Desktop model-source readiness and failure modes are represented as one strict discriminated union.
 - `redeven:internal/flower_ui/src/chat/flowerContextPresentation.ts` - The tooltip derives the current thread's cache hit rate from canonical cumulative totals without changing the context-pressure ring.
+
+- `redeven:internal/ai/run_error_code_test.go` - Actionable context failures and numeric-only diagnostic projection.
+- `redeven:internal/ai/flower_current_projection_test.go` - Matching current/summary diagnostics and retry clearing.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.contextErrors.test.shared.tsx` - Recovery controls, disclosure, and unknown-effect boundary.

@@ -296,7 +296,14 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         switchModel: t(i18n, k('chat.runErrorActionSwitchModel')),
         openSettings: t(i18n, k('chat.runErrorActionOpenSettings')),
       },
+      runContextErrorTitle: t(i18n, k('chat.runContextErrorTitle')),
+      runErrorDetails: t(i18n, k('chat.runErrorDetails')),
+      runErrorCopyDetails: t(i18n, k('chat.runErrorCopyDetails')),
       runErrors: {
+        contextBudgetInvalid: t(i18n, k('chat.runErrorContextBudgetInvalid')),
+        contextFixedOverhead: t(i18n, k('chat.runErrorContextFixedOverhead')),
+        contextCompactionLimit: t(i18n, k('chat.runErrorContextCompactionLimit')),
+
         providerAuthFailed: t(i18n, k('chat.runErrorProviderAuthFailed')),
         providerMissingKey: t(i18n, k('chat.runErrorProviderMissingKey')),
         providerRateLimited: t(i18n, k('chat.runErrorProviderRateLimited')),

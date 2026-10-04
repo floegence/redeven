@@ -5466,7 +5466,13 @@
       "toolApprovalExpandCommand": "전체 명령 보기",
       "toolApprovalHideCommand": "접기",
       "toolApprovalEligibleCount": "승인 가능 · {count}개",
-      "feedbackClose": "알림 세부 정보 닫기"
+      "feedbackClose": "알림 세부 정보 닫기",
+      "runContextErrorTitle": "모델 컨텍스트 한도",
+      "runErrorDetails": "기술 세부 정보",
+      "runErrorCopyDetails": "세부 정보 복사",
+      "runErrorContextBudgetInvalid": "출력용으로 예약된 용량이 컨텍스트 창을 모두 차지하여 입력을 담을 수 없습니다. 모델의 컨텍스트 창을 늘리거나 출력 한도를 낮춘 후 다시 시도하세요. Ollama에서는 Modelfile에 num_ctx를 설정하고 모델을 다시 로드하세요.",
+      "runErrorContextFixedOverhead": "시스템 지침과 도구 정의가 모델의 사용 가능한 컨텍스트 용량을 초과합니다. 서버의 컨텍스트 창을 늘리거나 컨텍스트 용량이 더 큰 모델을 선택한 후 다시 시도하세요. 대화 기록을 압축해도 해결되지 않습니다.",
+      "runErrorContextCompactionLimit": "압축 후에도 대화가 모델의 컨텍스트 한도를 초과합니다. 입력을 줄이거나 컨텍스트 용량이 더 큰 모델을 선택한 후 다시 시도하세요."
     },
     "threadList": {
       "title": "대화",

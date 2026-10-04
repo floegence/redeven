@@ -439,7 +439,13 @@
     "toolApprovalExpandCommand": "View full command",
     "toolApprovalHideCommand": "Collapse",
     "toolApprovalEligibleCount": "Can approve · {count}",
-    "feedbackClose": "Close feedback"
+    "feedbackClose": "Close feedback",
+    "runContextErrorTitle": "Model context limit",
+    "runErrorDetails": "Technical details",
+    "runErrorCopyDetails": "Copy details",
+    "runErrorContextBudgetInvalid": "The output allowance leaves no room for input. Increase the model's configured context window or lower its output limit, then retry. For Ollama, set num_ctx in the Modelfile and reload the model.",
+    "runErrorContextFixedOverhead": "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this.",
+    "runErrorContextCompactionLimit": "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry."
   },
   "threadList": {
     "title": "Conversations",

@@ -12,6 +12,19 @@ const summary = (): FlowerThreadSnapshot => ({
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {
+  it('preserves safe context diagnostics across a current refresh and clears them after retry', () => {
+    const failed = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', run_id: 'run-a',
+      last_outcome: 'failed', error: 'Increase the context window.', run_error_code: 'context_budget_invalid',
+      run_error_detail: 'context_window_tokens=3891\nrequest_safe_limit=-205',
+    });
+    expect(failed.error).toEqual({ code: 'context_budget_invalid', message: 'Increase the context window.', detail: 'context_window_tokens=3891\nrequest_safe_limit=-205' });
+    const retried = applyFlowerRuntimeCurrentView(failed, {
+      thread_id: 'thread-a', view_version: 9, activity: 'active', turn_id: 'turn-b', run_id: 'run-b', run_progress: { phase: 'preparing' },
+    });
+    expect(retried.error).toBeUndefined();
+  });
+
   it('preserves exact approval command whitespace through canonical refreshes', () => {
     const command = '\n  printf "first line"\n  printf "second line"\n';
     const current: FlowerRuntimeCurrentView = {

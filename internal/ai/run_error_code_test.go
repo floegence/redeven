@@ -207,3 +207,36 @@ func TestProjectFloretTurnFailureUsesTypedCanonicalCode(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectContextBudgetFailuresProvidesActionableCopyAndSafeDetails(t *testing.T) {
+	for _, tc := range []struct {
+		code   flruntime.ThreadTurnFailureCode
+		want   string
+		action string
+	}{
+		{flruntime.ThreadTurnFailureContextBudgetInvalid, runErrorCodeContextBudgetInvalid, "num_ctx"},
+		{flruntime.ThreadTurnFailureContextFixedOverhead, runErrorCodeContextFixedOverhead, "tool definitions"},
+		{flruntime.ThreadTurnFailureContextCompactionLimit, runErrorCodeContextCompactionLimit, "Shorten"},
+	} {
+		failure := &flruntime.ThreadTurnFailure{Code: tc.code, Message: "context_window_tokens=3891 reserved_output_tokens=4096 request_safe_limit=-205"}
+		code, message := projectFloretTurnFailure(failure, "floret_turn_failed")
+		if code != tc.want || !strings.Contains(message, tc.action) || strings.Contains(message, "orchestration") {
+			t.Fatalf("code=%q message=%q", code, message)
+		}
+		if strings.ReplaceAll(contextBudgetFailureDetail(failure), "\n", " ") != failure.Message {
+			t.Fatal("numeric budget diagnostic lost")
+		}
+	}
+	for _, code := range []flruntime.ThreadTurnFailureCode{flruntime.ThreadTurnFailureProvider, flruntime.ThreadTurnFailureStorage, flruntime.ThreadTurnFailureEngineContract, flruntime.ThreadTurnFailureEffectOutcomeUnknown} {
+		if detail := contextBudgetFailureDetail(&flruntime.ThreadTurnFailure{Code: code, Message: "private provider data"}); detail != "" {
+			t.Fatalf("private diagnostic exposed: %q", detail)
+		}
+	}
+}
+
+func TestContextBudgetDetailExcludesJoinedPrivateErrors(t *testing.T) {
+	detail := contextBudgetFailureDetail(&flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureContextBudgetInvalid, Message: "invalid context budget: context_window_tokens=3891 reserved_output_tokens=4096 request_safe_limit=-205\nprivate cleanup secret=abc endpoint=https://private.invalid/?key=secret fixed_input_tokens=not-a-number"})
+	if detail != "context_window_tokens=3891\nreserved_output_tokens=4096\nrequest_safe_limit=-205" {
+		t.Fatalf("unsafe diagnostic: %q", detail)
+	}
+}
