@@ -24,6 +24,15 @@ The protocol contains these route groups:
 
 Signed requests bind the protocol, HTTP method, route, body digest, Gateway identity, binding audience, nonce, and timestamp. Pairing credentials authorize only the declared Gateway access operations. There is no Runtime management grant or implicit process authority in a paired client.
 
+The wire Gateway ID is the stable hash of the current binding audience, as
+defined by Gateway security. Desktop's persisted registration ID is a local
+reference and remains stable when its URL, host, container or data root is
+edited. Pairing challenges, catalog identity, signed request headers and artifact
+proofs all use the same audience-derived wire identity. Changing coordinates
+invalidates old trust; it never relaxes fingerprint or signature verification.
+The local trust record remains attached to the registration and separately pins
+the audience and Gateway key. No extra persisted wire-ID projection is needed.
+
 Pairing completion uses one normalized request for validation, capability policy,
 and signature verification. A disabled profile-write policy rejects that grant
 before any trust update, including equivalent whitespace-padded inputs.

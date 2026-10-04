@@ -5,6 +5,7 @@ import { openGatewayBridgeSocket } from './gatewayBridgeSocket';
 
 import {
   normalizeGatewayBaseURL,
+  gatewayProtocolID,
   type GatewayRecord,
   type GatewayTrustProfile,
   type GatewayURLConnection,
@@ -868,6 +869,19 @@ function assertProxyArtifactIdentity(record: GatewayRecord, response: GatewayOpe
   }
 }
 
+function assertGatewayIdentity(record: GatewayRecord, observedGatewayID: string, observedFingerprint: string | undefined): void {
+  const profile: GatewayTrustProfile | undefined = record.trust_profile;
+  if (gatewayProtocolID(record) !== observedGatewayID) {
+    throw new GatewayClientError('GATEWAY_ID_MISMATCH', 'Gateway response does not match the saved Gateway.');
+  }
+  if (profile) {
+    if (!observedFingerprint) {
+      throw new GatewayClientError('GATEWAY_FINGERPRINT_REQUIRED', 'Gateway response did not include the pinned fingerprint.');
+    }
+    assertGatewayFingerprint(profile, observedFingerprint);
+  }
+}
+
 export class GatewayURLClient {
   constructor(private readonly secretStore: GatewaySecretStore) {}
 
@@ -880,7 +894,7 @@ export class GatewayURLClient {
       signal: options.signal,
     });
     const catalog = normalizeGatewayCatalogResponse(data.data);
-    this.assertGatewayIdentity(record, catalog.gateway.gateway_id, catalog.gateway.gateway_public_key_fingerprint);
+    assertGatewayIdentity(record, catalog.gateway.gateway_id, catalog.gateway.gateway_public_key_fingerprint);
     return catalog;
   }
 
@@ -975,19 +989,6 @@ export class GatewayURLClient {
     });
     return normalizeGatewayEnvProfileDeleteResponse(data.data);
   }
-
-  private assertGatewayIdentity(record: GatewayRecord, observedGatewayID: string, observedFingerprint: string | undefined): void {
-    const profile: GatewayTrustProfile | undefined = record.trust_profile;
-    if (record.gateway_id !== observedGatewayID) {
-      throw new GatewayClientError('GATEWAY_ID_MISMATCH', 'Gateway response does not match the saved Gateway.');
-    }
-    if (profile) {
-      if (!observedFingerprint) {
-        throw new GatewayClientError('GATEWAY_FINGERPRINT_REQUIRED', 'Gateway response did not include the pinned fingerprint.');
-      }
-      assertGatewayFingerprint(profile, observedFingerprint);
-    }
-  }
 }
 
 export class GatewayBridgeClient {
@@ -1005,7 +1006,7 @@ export class GatewayBridgeClient {
       signal: options.signal,
     });
     const catalog = normalizeGatewayCatalogResponse(data.data);
-    this.assertGatewayIdentity(record, catalog.gateway.gateway_id, catalog.gateway.gateway_public_key_fingerprint);
+    assertGatewayIdentity(record, catalog.gateway.gateway_id, catalog.gateway.gateway_public_key_fingerprint);
     return catalog;
   }
 
@@ -1110,19 +1111,6 @@ export class GatewayBridgeClient {
       signal: options.signal,
     });
     return normalizeGatewayEnvProfileDeleteResponse(data.data);
-  }
-
-  private assertGatewayIdentity(record: GatewayRecord, observedGatewayID: string, observedFingerprint: string | undefined): void {
-    const profile: GatewayTrustProfile | undefined = record.trust_profile;
-    if (record.gateway_id !== observedGatewayID) {
-      throw new GatewayClientError('GATEWAY_ID_MISMATCH', 'Gateway response does not match the saved Gateway.');
-    }
-    if (profile) {
-      if (!observedFingerprint) {
-        throw new GatewayClientError('GATEWAY_FINGERPRINT_REQUIRED', 'Gateway response did not include the pinned fingerprint.');
-      }
-      assertGatewayFingerprint(profile, observedFingerprint);
-    }
   }
 }
 

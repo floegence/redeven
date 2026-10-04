@@ -2021,7 +2021,9 @@
     "protocolMismatch": "Le protocole Gateway ne correspond pas. Mettez Gateway et Desktop à jour vers des versions compatibles.",
     "unsupported": "Ce profil Gateway ne permet pas encore l’ouverture via Gateway.",
     "targetNotChecked": "Cible non vérifiée",
-    "accessOnly": "Gateway fournit uniquement l’accès. Le cycle de vie de l’environnement d’exécution est géré via une cible enregistrée séparément."
+    "accessOnly": "Gateway fournit uniquement l’accès. Le cycle de vie de l’environnement d’exécution est géré via une cible enregistrée séparément.",
+    "setupServiceRequired": "La connexion à la passerelle a été enregistrée. Démarrez cette passerelle, puis enregistrez à nouveau pour autoriser les modifications des profils d’environnement.",
+    "setupFailed": "La configuration de la passerelle n’a pas pu être terminée. Consultez les détails, corrigez la connexion et réessayez."
   },
   "connectionDialog": {
     "newEnvironmentTitle": "Nouvel environnement",

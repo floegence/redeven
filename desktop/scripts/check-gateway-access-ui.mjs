@@ -83,6 +83,25 @@ try {
       const setup = page.getByRole('dialog');
       await setup.getByRole('button', { name: i18n.t('connectionDialog.gatewayTransportSshHost'), exact: true }).click();
       await setup.locator('#gateway-ssh-destination').fill('dev@bastion');
+      await setup.getByRole('checkbox', { name: i18n.t('gatewayAccess.grantWrite'), exact: true }).focus();
+      await page.keyboard.press('Space');
+      await page.evaluate(() => {
+        window.settingsFixture.actionResult = request => {
+          if (request.kind === 'upsert_gateway') return { ok: false, scope: 'dialog', code: 'gateway_start_required',
+            gateway_id: 'bastion', message: 'Gateway service has not been started.',
+            continuation_action: { kind: 'start_gateway', gateway_id: 'bastion' },
+            failure: { code: 'operation_failed', severity: 'error', title: 'Gateway', summary: 'Gateway connection saved.', summary_key: 'gatewayAccess.setupServiceRequired' } };
+          if (request.kind === 'start_gateway') return { ok: true, outcome: 'started_gateway' };
+        };
+      });
+      await setup.getByRole('button', { name: i18n.t('connectionDialog.saveGateway'), exact: true }).click();
+      await setup.getByText(i18n.t('gatewayAccess.setupServiceRequired'), { exact: true }).waitFor();
+      const setupStart = setup.getByRole('button', { name: i18n.t('environmentCenter.gatewayActionStart'), exact: true });
+      assert.equal(await setupStart.evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap');
+      await setupStart.focus();
+      await page.keyboard.press('Enter');
+      await setup.getByText(i18n.t('gatewayAccess.profileServiceReady'), { exact: true }).waitFor();
+      assert.equal(await setup.locator('#gateway-ssh-destination').inputValue(), 'dev@bastion');
       assert.ok((await setup.innerText()).includes(i18n.t('gatewayAccess.managedServiceHelp')));
       assert.equal(await setup.locator('[data-floe-dialog-header] p').count(), 0);
       assert.equal(await setup.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);

@@ -212,6 +212,7 @@ import {
 import {
   GatewayClientError,
   GatewayURLClient,
+  redactGatewayDiagnosticValue,
 } from './gatewayClient';
 import {
   GatewayLifecycleManager,
@@ -5363,6 +5364,7 @@ function mergeGatewaySourceRecord(
     gateway_url: base.gateway_url,
     allow_loopback_http: base.allow_loopback_http,
     local_enabled: base.local_enabled,
+    runtime_root: base.runtime_root,
     ssh_details: base.ssh_details,
     ssh_password_configured: base.ssh_password_configured,
     container_engine: base.container_engine,
@@ -6294,6 +6296,9 @@ function gatewayServiceFailureCode(error: unknown): DesktopLauncherActionFailure
 }
 
 function gatewayLauncherActionFailureCode(error: unknown): DesktopLauncherActionFailureCode {
+  if (error instanceof GatewayTrustError) {
+    return 'gateway_pairing_required';
+  }
   if (error instanceof GatewayServiceStartRequiredError) {
     return 'gateway_start_required';
   }
@@ -6418,23 +6423,14 @@ function gatewayFailureTitleKeyForDiagnosis(
   }
 }
 
-function gatewayFailureDetailKeyForDiagnosis(
-  diagnosis: DesktopGatewayDiagnosis,
-): DesktopOperationFailurePresentation['detail_key'] | undefined {
-  if (diagnosis.classification === 'not_started') {
-    return 'environmentCenter.gatewayPanelStartToSyncDetail';
-  }
-  return undefined;
-}
-
-function gatewayFailureFromDiagnosis(diagnosis: DesktopGatewayDiagnosis): DesktopOperationFailurePresentation {
+function gatewayFailureFromDiagnosis(diagnosis: DesktopGatewayDiagnosis, error: unknown): DesktopOperationFailurePresentation {
   return desktopOperationFailurePresentation({
     code: diagnosis.classification === 'needs_reinstall' ? 'manual_recovery_required' : 'operation_failed',
     title: compact(diagnosis.summary) || 'Gateway check failed',
     titleKey: gatewayFailureTitleKeyForDiagnosis(diagnosis),
     summary: compact(diagnosis.detail) || compact(diagnosis.summary) || 'Desktop could not diagnose this Gateway.',
-    detail: compact(diagnosis.detail),
-    detailKey: gatewayFailureDetailKeyForDiagnosis(diagnosis),
+    summaryKey: diagnosis.classification === 'not_started' ? 'environmentCenter.gatewayPanelStartToSyncDetail' : undefined,
+    detail: String(redactGatewayDiagnosticValue(error instanceof Error ? error.message : String(error))),
   });
 }
 
@@ -7045,7 +7041,7 @@ async function refreshGatewayFromLauncher(
       onDetail: updateRefreshDetail,
     }).catch(() => gatewayDiagnosisForError(latestRecord, error));
     setGatewayDiagnosis(record, diagnosis);
-    const failure = gatewayFailureFromDiagnosis(diagnosis);
+    const failure = gatewayFailureFromDiagnosis(diagnosis, error);
     const currentOperation = launcherOperations.get(operationKey);
     const phase = launcherOperationMatchesAttempt(currentOperation, operationAttemptOwner)
       ? (currentOperation.phase as GatewayWorkflowStepID)
@@ -17956,14 +17952,39 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return signOutControlPlaneFromLauncher(request);
     case 'upsert_gateway':
       try {
-        await upsertGatewayFromLauncher(request);
+        const record = await upsertGatewayFromLauncher(request);
+        if (record.trust_profile) {
+          await syncGatewayRecord(record, { force: true, priority: 'foreground', mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
+        }
         return launcherActionSuccess('saved_gateway');
       } catch (error) {
+        let saved: GatewayRecord | null = null;
+        try {
+          const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(gatewayConnectionFromSetup(request)));
+          saved = await gatewayStore().get(gatewayID);
+        } catch { /* Invalid coordinates or unavailable storage must retain the original failure. */ }
+        if (saved && error instanceof GatewayServiceStartRequiredError) {
+          const failure = gatewayProfileActionFailure(saved, error);
+          if (!failure.continuation_action) return failure;
+          return { ...failure, failure: desktopOperationFailurePresentation({
+            code: 'operation_failed', title: 'Gateway service required',
+            titleKey: 'environmentCenter.gatewayPanelFactGatewayService',
+            summary: 'Gateway connection saved. Start this Gateway, then save again to authorize environment profile changes.',
+            summaryKey: 'gatewayAccess.setupServiceRequired', targetLabel: saved.display_name,
+          }) };
+        }
         return launcherActionFailure(
           'action_invalid',
           'dialog',
-          error instanceof Error ? error.message : String(error),
-          { shouldRefreshSnapshot: true },
+          String(redactGatewayDiagnosticValue(error instanceof Error ? error.message : String(error))),
+          { shouldRefreshSnapshot: true, gatewayID: saved?.gateway_id,
+            failure: desktopOperationFailurePresentation({ code: 'operation_failed', title: 'Gateway setup failed',
+              titleKey: 'connectionDialog.addGatewayTitle', summary: 'Gateway setup could not finish. Review the details, correct the connection, and retry.',
+              summaryKey: 'gatewayAccess.setupFailed',
+              detail: String(redactGatewayDiagnosticValue(error instanceof Error ? error.message : String(error))),
+              diagnostics: isDesktopOperationFailureError(error)
+                ? (redactGatewayDiagnosticValue(error.presentation) as DesktopOperationFailurePresentation).diagnostics : undefined,
+            }) },
         );
       }
     case 'pair_gateway':

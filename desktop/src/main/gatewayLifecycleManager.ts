@@ -16,6 +16,7 @@ import { type RuntimePlacementBridgeSession, startRuntimePlacementBridgeSession 
 import {
   GatewayBridgeClient,
   GatewayURLClient,
+  redactGatewayDiagnosticValue,
   type GatewayCatalogResponse,
   type GatewayEnvProfileDeleteRequest,
   type GatewayEnvProfileDeleteResponse,
@@ -44,6 +45,8 @@ import {
   type RuntimeLifecycleIntent,
 } from './runtimeLifecycleCoordinator';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
+import { DesktopOperationFailureError, desktopOperationFailurePresentation, operationFailureFromUnknown } from './desktopOperationFailure';
+import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 
 export type GatewayLifecycleSession = Readonly<{
   target_id: string;
@@ -69,7 +72,7 @@ export class GatewayNotManageableError extends Error {
   }
 }
 
-export class GatewayServiceUnavailableError extends Error {
+export class GatewayServiceUnavailableError extends DesktopOperationFailureError {
   constructor(
     readonly code:
       | 'gateway_service_unreachable'
@@ -77,8 +80,11 @@ export class GatewayServiceUnavailableError extends Error {
       | 'gateway_bridge_unavailable'
       | 'gateway_service_start_failed',
     message: string,
+    cause?: unknown,
   ) {
-    super(message);
+    super(redactGatewayDiagnosticValue(operationFailureFromUnknown(cause, desktopOperationFailurePresentation({
+      title: 'Gateway service unavailable', summary: message,
+    }))) as DesktopOperationFailurePresentation, { cause });
     this.name = 'GatewayServiceUnavailableError';
   }
 }
@@ -640,6 +646,7 @@ export class GatewayLifecycleManager {
       throw new GatewayServiceUnavailableError(
         'gateway_bridge_unavailable',
         error instanceof Error ? error.message : String(error),
+        error,
       );
     }
     const session: GatewayLifecycleSession = {
@@ -696,6 +703,7 @@ export class GatewayLifecycleManager {
           ? 'gateway_container_unavailable'
           : 'gateway_service_start_failed',
         error instanceof Error ? error.message : String(error),
+        error,
       );
     }
   }

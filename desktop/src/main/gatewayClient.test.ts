@@ -1,4 +1,4 @@
-import type { GatewayRecord } from './gatewayStore';
+import { gatewayProtocolID, type GatewayRecord } from './gatewayStore';
 import { createGatewayPairingMaterial, gatewayPublicKeyFingerprint } from './gatewayTrust';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
 import { describe, expect, it, vi } from 'vitest';
@@ -122,7 +122,7 @@ describe('Gateway bridge HTTP byte framing', () => {
     } };
     const displayName = '中文环境 café 🚀';
     const body = Buffer.from(JSON.stringify({ ok: true, data: { protocol_version: 'redeven-gateway-v3',
-      gateway: { gateway_id: base.gateway_id, gateway_public_key_fingerprint: fingerprint, display_name: displayName }, environments: [] } }));
+      gateway: { gateway_id: gatewayProtocolID(base), gateway_public_key_fingerprint: fingerprint, display_name: displayName }, environments: [] } }));
     const split = body.indexOf(Buffer.from('中文')) + 1;
     const chunks = framing === 'split-utf8'
       ? [Buffer.from(`HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\n\r\n`), body.subarray(0, split), body.subarray(split)]

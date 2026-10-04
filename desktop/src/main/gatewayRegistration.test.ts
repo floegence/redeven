@@ -7,6 +7,11 @@ const host = { kind: 'host_process', runtime_root: '/data/gateway' };
 const container = { kind: 'container_process', runtime_root: '/data/gateway', container_engine: 'docker', container_id: 'abc', container_ref: 'office', container_label: 'Office' };
 
 describe('explicit Gateway registration boundary', () => {
+  it('rejects URL profile authorization without a pairing code', () => {
+    expect(() => gatewayConnectionFromSetup({ kind: 'upsert_gateway', connection_kind: 'url',
+      display_name: 'Office', gateway_url: 'https://gateway.example/', profile_write: true, allow_loopback_http: false }))
+      .toThrow('pairing code');
+  });
   it.each([
     ['local_host', { kind: 'local_host' }, host], ['local_container', { kind: 'local_host' }, container],
     ['ssh_host', ssh, host], ['ssh_container', ssh, container],

@@ -442,6 +442,7 @@ type GatewayURLProfileConnectionDialogState = Readonly<{
 }>;
 
 type GatewaySetupDialogState = Readonly<{
+  opening_id: number;
   mode: 'create' | 'edit';
   gateway_id: string;
   display_name: string;
@@ -1700,6 +1701,12 @@ type SilentLauncherActionFailure = Readonly<{
   raw_failure?: Extract<DesktopLauncherActionResult, Readonly<{ ok: false }>>;
 }>;
 
+function gatewaySetupFailureDetail(failure: SilentLauncherActionFailure): string {
+  const presentation = failure.raw_failure?.failure;
+  return [presentation?.detail || failure.raw_failure?.message,
+    ...(presentation?.diagnostics ?? []).map(diagnostic => diagnostic.text)].filter(Boolean).join('\n\n');
+}
+
 function launcherFailureSummary(failure: SilentLauncherActionFailure): string {
   return trimString(failure.failure?.summary) || trimString(failure.message);
 }
@@ -1950,6 +1957,8 @@ function suggestGatewayDisplayName(state: GatewaySetupDialogState | null): strin
   return seed === '' ? null : `Gateway-${seed}`;
 }
 
+let gatewaySetupOpeningSequence = 0;
+
 function createGatewaySetupDialogState(
   overrides: Partial<GatewaySetupDialogState> = {},
 ): GatewaySetupDialogState {
@@ -1959,6 +1968,7 @@ function createGatewaySetupDialogState(
   const sshPort = trimString(overrides.ssh_port);
   const authMode = (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE;
   const state: GatewaySetupDialogState = {
+    opening_id: ++gatewaySetupOpeningSequence,
     mode: overrides.mode ?? 'create',
     focus_section: overrides.focus_section,
     gateway_id: trimString(overrides.gateway_id),
@@ -2665,6 +2675,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return next;
   }
   const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
+  const [gatewaySetupRecovery, setGatewaySetupRecovery] = createSignal<GatewayProfileRecovery | null>(null);
+  const [gatewaySetupTechnicalDetail, setGatewaySetupTechnicalDetail] = createSignal('');
   const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
   const [gatewaySetupDialogFieldErrors, setGatewaySetupDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
   const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
@@ -3623,10 +3635,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           try {
             await refreshSnapshot();
           } catch (error) {
-            return {
-              ok: false,
-              message: getErrorMessage(error),
-            };
+            showActionToast(getErrorMessage(error), 'error');
           }
         }
         return {
@@ -3767,6 +3776,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     resetMessages();
+    setGatewaySetupRecovery(null);
+    setGatewaySetupTechnicalDetail('');
     setActiveCenterTab('gateways');
     setConnectionDialogState(null);
     setControlPlaneDialogState(null);
@@ -3878,6 +3889,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function closeGatewaySetupDialog(): void {
     setGatewaySetupDialogState(null);
+    setGatewaySetupRecovery(null);
+    setGatewaySetupTechnicalDetail('');
     setGatewaySetupDialogError('');
     setGatewaySetupDialogFieldErrors({});
   }
@@ -5718,12 +5731,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (state.connection_kind === 'url' && !trimString(state.gateway_url)) {
       errors.gateway_url = i18n().t('connectionDialog.validationGatewayUrlRequired');
     }
+    if (state.connection_kind === 'url' && state.profile_write && !trimString(state.pairing_code)) {
+      errors.pairing_code = i18n().t('connectionDialog.gatewayPairingCodeHelp');
+    }
     return errors;
   }
 
   async function saveGatewayFromDialog(): Promise<void> {
     const state = gatewaySetupDialogState();
-    if (!state) {
+    if (!state || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action) {
       return;
     }
     const errors = validateGatewaySetupDialogFields(state);
@@ -5756,16 +5772,47 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         container_ref: state.container_ref, container_label: state.container_label, bridge_strategy: 'exec_stream',
       } : {
         kind: 'host_process', runtime_root: state.runtime_root || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-        bootstrap_strategy: state.bootstrap_strategy, release_base_url: state.release_base_url || DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL,
+        bootstrap_strategy: state.bootstrap_strategy, release_base_url: trimString(state.release_base_url),
       },
       ssh_password: state.ssh_password, ssh_password_mode: state.ssh_password_mode,
     };
-    const result = await performLauncherAction(action, 'gateway_dialog');
-    if (result?.outcome === 'saved_gateway') {
-      await refreshSnapshot();
+    setGatewaySetupRecovery(null);
+    setGatewaySetupDialogError('');
+    setGatewaySetupTechnicalDetail('');
+    const current = () => gatewaySetupDialogState()?.opening_id === state.opening_id;
+    const result = await performLauncherActionSilently(action);
+    if (!current()) return;
+    if (!result.ok) {
+      setGatewaySetupDialogError(result.message);
+      setGatewaySetupTechnicalDetail(gatewaySetupFailureDetail(result));
+      const gatewayID = result.raw_failure?.gateway_id;
+      if (gatewayID) {
+        setGatewaySetupRecovery(profileRecovery(gatewayID, result));
+        setGatewaySetupDialogState(draft => draft ? { ...draft, gateway_id: gatewayID, mode: 'edit' } : draft);
+      }
+      return;
+    }
+    if (result.outcome === 'saved_gateway') {
       closeGatewaySetupDialog();
       showActionToast(i18n().t('toast.gatewaySaved'));
+      await refreshSnapshot().catch(error => showActionToast(getErrorMessage(error), 'error'));
+    } else {
+      setGatewaySetupDialogError(i18n().t('toast.unexpectedLauncherResult'));
     }
+  }
+
+  async function startGatewayForSetup(): Promise<void> {
+    const recovery = gatewaySetupRecovery();
+    const opening = gatewaySetupDialogState()?.opening_id;
+    if (!recovery?.start_action || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action) return;
+    const result = await performLauncherActionSilently(recovery.start_action);
+    if (gatewaySetupDialogState()?.opening_id !== opening || gatewaySetupRecovery() !== recovery) return;
+    setGatewaySetupDialogError('');
+    setGatewaySetupTechnicalDetail(result.ok ? '' : gatewaySetupFailureDetail(result));
+    setGatewaySetupRecovery(result.ok && result.outcome === 'started_gateway'
+      ? { gateway_id: recovery.gateway_id, message: i18n().t('gatewayAccess.profileServiceReady') }
+      : { ...recovery, message: result.ok ? i18n().t('toast.unexpectedLauncherResult') : result.message });
+    await refreshSnapshot().catch(error => showActionToast(getErrorMessage(error), 'error'));
   }
 
   async function runGatewayLauncherAction(request: DesktopLauncherActionRequest): Promise<void> {
@@ -6779,6 +6826,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         containerOptionsLoading={runtimeContainerOptionsLoading()}
         containerOptionsError={runtimeContainerOptionsError()}
         error={gatewaySetupDialogError()}
+        technicalDetail={gatewaySetupTechnicalDetail()}
+        recovery={gatewaySetupRecovery()}
+        onStart={() => { void startGatewayForSetup(); }}
         fieldErrors={gatewaySetupDialogFieldErrors()}
         busyState={busyState()}
         onOpenChange={(open) => {
@@ -13702,6 +13752,9 @@ function GatewaySetupDialog(props: Readonly<{
   containerOptionsLoading: boolean;
   containerOptionsError: string;
   error: string;
+  technicalDetail: string;
+  recovery: GatewayProfileRecovery | null;
+  onStart: () => void;
   fieldErrors: Partial<Record<string, string>>;
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
@@ -13752,6 +13805,7 @@ function GatewaySetupDialog(props: Readonly<{
             size="sm"
             variant="default"
             loading={busyStateMatchesAction(props.busyState, 'upsert_gateway')}
+            disabled={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action}
             onClick={() => {
               void props.onSave();
             }}
@@ -13819,6 +13873,7 @@ function GatewaySetupDialog(props: Readonly<{
                 </label>
                 <Input
                   id="gateway-pairing-code"
+                  aria-invalid={Boolean(props.fieldErrors.pairing_code) || undefined}
                   value={props.state?.pairing_code ?? ''}
                   onInput={(event) => {
                     props.updateField('pairing_code', event.currentTarget.value);
@@ -13829,14 +13884,9 @@ function GatewaySetupDialog(props: Readonly<{
                   class="w-full"
                   spellcheck={false}
                 />
-                <div class="text-[11px] leading-5 text-muted-foreground">
+                <div class={cn('text-[11px] leading-5', props.fieldErrors.pairing_code ? 'text-destructive' : 'text-muted-foreground')}>
                   {props.i18n.t('connectionDialog.gatewayPairingCodeHelp')}
                 </div>
-                <label class="flex items-center gap-2 text-xs text-foreground">
-                  <input type="checkbox" checked={props.state?.profile_write === true}
-                    onChange={(event) => props.updateField('profile_write', event.currentTarget.checked)} />
-                  {props.i18n.t('gatewayAccess.grantWrite')}
-                </label>
               </div>
             </div>
           </div>
@@ -14097,10 +14147,6 @@ function GatewaySetupDialog(props: Readonly<{
             <p class="text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.gatewayRuntimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}</p>
           </div>
         </Show>
-        <Show when={connectionKind() !== 'url' && props.state?.mode === 'edit'}>
-          <Checkbox checked={props.state?.profile_write === true} label={props.i18n.t('gatewayAccess.grantWrite')}
-            onChange={enabled => props.updateField('profile_write', enabled)} size="sm" />
-        </Show>
 
         <div class="space-y-1.5 rounded-md border border-dashed border-border/30 bg-background/40 px-3 py-3">
           <label for="gateway-name" class="block text-xs font-medium text-foreground">
@@ -14142,10 +14188,23 @@ function GatewaySetupDialog(props: Readonly<{
           </div>
         </Show>
 
-        <Show when={props.error}>
+        <Checkbox checked={props.state?.profile_write === true}
+          onChange={(enabled) => props.updateField('profile_write', enabled)}
+          label={props.i18n.t('gatewayAccess.grantWrite')} size="sm" />
+        <Show when={props.recovery}>
+          {recovery => <GatewayProfileRecoveryNotice i18n={props.i18n} recovery={recovery()}
+            busy={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onStart={props.onStart} />}
+        </Show>
+        <Show when={props.error && !props.recovery}>
           <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {props.error}
           </div>
+        </Show>
+        <Show when={props.technicalDetail && props.technicalDetail !== props.error}>
+          <details class="text-xs">
+            <summary class="cursor-pointer">{props.i18n.t('progress.technicalErrorDetails')}</summary>
+            <pre class="mt-2 whitespace-pre-wrap break-words">{props.technicalDetail}</pre>
+          </details>
         </Show>
       </div>
     </Dialog>

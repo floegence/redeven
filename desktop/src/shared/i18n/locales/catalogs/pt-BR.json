@@ -2021,7 +2021,9 @@
     "protocolMismatch": "O protocolo do Gateway não corresponde. Atualize Gateway e Desktop para versões compatíveis.",
     "unsupported": "Este perfil do Gateway ainda não permite abrir pelo Gateway.",
     "targetNotChecked": "Destino não verificado",
-    "accessOnly": "O Gateway fornece apenas acesso. O ciclo de vida do ambiente de execução é gerenciado por um destino registrado separadamente."
+    "accessOnly": "O Gateway fornece apenas acesso. O ciclo de vida do ambiente de execução é gerenciado por um destino registrado separadamente.",
+    "setupServiceRequired": "A conexão com o gateway foi salva. Inicie este gateway e salve novamente para autorizar alterações nos perfis de ambiente.",
+    "setupFailed": "Não foi possível concluir a configuração do gateway. Confira os detalhes, corrija a conexão e tente novamente."
   },
   "connectionDialog": {
     "newEnvironmentTitle": "Novo ambiente",

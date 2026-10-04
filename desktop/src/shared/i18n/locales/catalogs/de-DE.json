@@ -2021,7 +2021,9 @@
     "protocolMismatch": "Gateway-Protokoll stimmt nicht überein. Gateway und Desktop auf kompatible Versionen aktualisieren.",
     "unsupported": "Dieses Gateway-Profil unterstützt das Öffnen über Gateway noch nicht.",
     "targetNotChecked": "Ziel noch nicht geprüft",
-    "accessOnly": "Gateway stellt nur den Zugriff bereit. Der Lebenszyklus der Laufzeitumgebung wird über ein separat registriertes Laufzeitziel verwaltet."
+    "accessOnly": "Gateway stellt nur den Zugriff bereit. Der Lebenszyklus der Laufzeitumgebung wird über ein separat registriertes Laufzeitziel verwaltet.",
+    "setupServiceRequired": "Die Gateway-Verbindung wurde gespeichert. Starten Sie dieses Gateway und speichern Sie erneut, um Änderungen an Umgebungsprofilen zu erlauben.",
+    "setupFailed": "Die Gateway-Einrichtung konnte nicht abgeschlossen werden. Prüfen Sie die Details, korrigieren Sie die Verbindung und versuchen Sie es erneut."
   },
   "connectionDialog": {
     "newEnvironmentTitle": "Neue Umgebung",

@@ -9,6 +9,7 @@ import {
 import {
   GATEWAY_STORE_SCHEMA_VERSION,
   gatewayBindingAudience,
+  gatewayProtocolID,
   type GatewayRecord,
   type GatewayTrustProfile,
 } from './gatewayStore';
@@ -318,7 +319,7 @@ export function assertGatewayPairingChallenge(input: Readonly<{
 }>): string {
   const now = Math.floor(input.now_unix_ms ?? Date.now());
   const gatewayID = compact(input.challenge.gateway_id);
-  if (!gatewayID || gatewayID !== input.record.gateway_id) {
+  if (!gatewayID || gatewayID !== gatewayProtocolID(input.record)) {
     throw new GatewayTrustError('GATEWAY_PAIRING_ID_MISMATCH', 'Gateway pairing response does not match the saved Gateway.');
   }
   const expiresAt = Number(input.challenge.expires_at_unix_ms);
@@ -389,7 +390,7 @@ export function assertGatewayConnectArtifactProof(input: Readonly<{
 }>): void {
   const profile = assertGatewayTrustForCall(input.record);
   const payload = gatewayConnectArtifactProofPayload({
-    gateway_id: input.record.gateway_id,
+    gateway_id: gatewayProtocolID(input.record),
     gateway_env_id: input.gateway_env_id,
     gateway_session_id: input.gateway_session_id,
     binding_audience: profile.binding_audience,
@@ -500,7 +501,7 @@ export async function createGatewayAuthHeaders(
     method,
     route,
     body_digest: bodyDigest,
-    gateway_id: input.record.gateway_id,
+    gateway_id: gatewayProtocolID(input.record),
     binding_audience: profile.binding_audience,
     nonce,
     timestamp_unix_ms: timestamp,
@@ -508,7 +509,7 @@ export async function createGatewayAuthHeaders(
 
   return {
     'content-type': 'application/json',
-    'x-redeven-gateway-id': input.record.gateway_id,
+    'x-redeven-gateway-id': gatewayProtocolID(input.record),
     'x-redeven-gateway-binding-audience': profile.binding_audience,
     'x-redeven-client-key-id': profile.paired_client_key_id,
     'x-redeven-client-nonce': nonce,

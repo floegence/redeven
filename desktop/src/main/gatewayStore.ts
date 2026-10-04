@@ -430,6 +430,12 @@ export function gatewayEndpointLabel(connection: GatewayConnection): string {
   }
 }
 
+// The local registration ID remains stable when its connection is edited.
+// The wire identity is always bound to the current connection audience.
+export function gatewayProtocolID(record: Pick<GatewayRecord, 'connection'>): string {
+  return stableGatewayID(gatewayBindingAudience(record.connection));
+}
+
 function normalizeTrustProfile(value: unknown, gatewayID: string): GatewayTrustProfile | undefined {
   if (!value || typeof value !== 'object') {
     return undefined;

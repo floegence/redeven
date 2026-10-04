@@ -385,7 +385,6 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayPairingCode')");
     expect(gatewayDialogSrc).toContain("connectionDialog.gatewayTransportSshHost");
     expect(gatewayDialogSrc).toContain("connectionDialog.gatewayTransportSshContainer");
-    expect(appSrc).toContain("performLauncherAction(action, 'gateway_dialog');");
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
     expect(appSrc).toContain("from './gatewaySourceActionRunner';");
     const gatewaySourceActionRunnerSrc = readGatewaySourceActionRunnerSource();
