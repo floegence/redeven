@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/floegence/redeven/internal/config"
 )
 
 type resolvedProviderAdapter struct {
@@ -76,7 +78,7 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Model
 // Ollama may run without authentication, but a configured key still applies to
 // both discovery and execution. Every execution route uses the same decision.
 func resolveModelProviderKey(providerType, providerID string, resolve func(string) (string, bool, error)) (string, bool, error) {
-	optional := strings.EqualFold(strings.TrimSpace(providerType), "ollama")
+	optional := config.AIProviderAPIKeyOptional(providerType)
 	if resolve == nil {
 		if optional {
 			return "", true, nil

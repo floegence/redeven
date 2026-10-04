@@ -2288,7 +2288,7 @@ func (r *run) supportsModelGatewayProvider(provider *config.AIProvider) bool {
 
 func newProviderAdapter(providerType string, baseURL string, apiKey string, strictToolSchemaOverride *bool, parallelToolCallsOverride ...parallelToolCallsWireMode) (ModelGateway, error) {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
-	if strings.TrimSpace(apiKey) == "" && providerType != "ollama" {
+	if strings.TrimSpace(apiKey) == "" && !config.AIProviderAPIKeyOptional(providerType) {
 		return nil, errors.New("missing provider api key")
 	}
 	if providerType == "ollama" && strings.TrimSpace(apiKey) == "" {

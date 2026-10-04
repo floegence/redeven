@@ -1,4 +1,5 @@
 import { ModelCatalogControls } from '../../../../../../flower_ui/src/settings/ModelCatalogControls';
+import { missingFlowerProviderCredential } from '../../../../../../flower_ui/src/providerCredentials';
 import { filterFlowerModels } from '../../../../../../flower_ui/src/settings/modelSelection';
 import { modelCatalogCopy } from '../../../../../../flower_ui/src/settings/modelCatalogCopy';
 import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
@@ -119,6 +120,9 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   );
   const providerTypeDisplayLabel = (providerType: AIProviderType): string => localizedProviderTypeLabel(providerType, i18n.locale());
   const formatTokenCount = (tokenCount: number) => formatTokenCountForLocale(tokenCount, i18n.locale());
+  const missingCredential = () => props.provider
+    ? missingFlowerProviderCredential({ ...props.provider, provider_api_key: props.keyDraft, web_search_api_key: props.webSearchKeyDraft }, props.keySet, props.webSearchKeySet)
+    : null;
 
   return (
     <Dialog
@@ -128,16 +132,21 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
       class="redeven-provider-dialog w-[min(68rem,96vw)] max-w-[96vw]"
       contentClass="min-h-0"
       footer={
-        <div class="flex items-center justify-end gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <Show when={missingCredential()}>
+            <span role="status" class="mr-auto text-sm text-muted-foreground">
+              {missingCredential() === 'provider' ? i18n.t('flowerSettings.needsKey') : i18n.t('flowerSurface.settings.needsBraveKey')}
+            </span>
+          </Show>
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
             {i18n.t('flowerProviderDialog.discard')}
           </Button>
           <Button
             size="sm"
             variant="default"
-            onClick={props.onConfirm}
+            onClick={() => { if (!missingCredential()) props.onConfirm(); }}
             loading={saving()}
-            disabled={!props.canInteract || saving() || !providerHasModels() && !props.provider?.model_selection}
+            disabled={!props.canInteract || saving() || Boolean(missingCredential()) || !providerHasModels() && !props.provider?.model_selection}
           >
             {i18n.t('flowerProviderDialog.saveProvider')}
           </Button>

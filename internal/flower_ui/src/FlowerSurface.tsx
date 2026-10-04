@@ -1,3 +1,4 @@
+import { flowerProviderCredentialsReady } from './providerCredentials';
 import {
   StableText,
   Button,
@@ -2780,9 +2781,9 @@ webSearch: model.web_search,
     if (option.source !== 'model_profile') return false;
     const providerID = option.id.split('/')[0] ?? '';
     const provider = snapshot()?.model_profile?.providers.find((item) => trimString(item.id) === providerID);
+    if (!provider) return false;
     const secrets = snapshot()?.provider_secrets.find((secret) => secret.provider_id === providerID);
-    if (!provider || !secrets?.provider_api_key_configured) return false;
-    return true;
+    return flowerProviderCredentialsReady(provider.type, secrets?.provider_api_key_configured === true);
   };
   const readyForChat = createMemo(() => modelOptionReady(selectedModelOption()));
   const anyModelReady = createMemo(() => catalogModelOptions().some((option) => modelOptionReady(option)));

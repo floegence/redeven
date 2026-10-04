@@ -200,6 +200,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Authorized platform model gateway](ai/platform-model-gateway.md) - Session-scoped catalogs, credential isolation, and stable streamed execution.
 
 - [Model directory and selection](ai/model-directory-and-selection.md) - Update the offline catalog, preserve model preferences, and discover installed Agent models.
+- [Provider configuration validation](ai/provider-configuration-validation.md) - Validate required provider fields and credentials while preserving optional defaults and keyless Ollama chat.
 - [Provider API and catalog review](ai/provider-api-catalog-review.md) - Check current official models, endpoint compatibility, regional configuration, and released-adapter blockers.
 
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.

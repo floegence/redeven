@@ -190,7 +190,7 @@ func TestAllDisabledModelsKeepCurrentSelectionVisible(t *testing.T) {
 }
 
 func TestModelProviderKeysSupportOptionalOllamaAuthentication(t *testing.T) {
-	for _, kind := range []string{"ollama", "google", "deepseek", "openai"} {
+	for _, kind := range []string{"ollama", "google", "deepseek", "openai", "anthropic", "moonshot", "chatglm", "qwen", "openrouter", "xai", "groq", "openai_compatible"} {
 		t.Run(kind, func(t *testing.T) {
 			empty := func(string) (string, bool, error) { return "", false, nil }
 			if _, available, err := resolveModelProviderKey(kind, "provider", empty); err != nil || available != (kind == "ollama") {
