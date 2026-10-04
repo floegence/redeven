@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model reasoning capabilities and transport
 description: Discover verified reasoning controls, preserve explicit intent, and map thinking output and history to provider protocols.
 tags: [ai, models, reasoning, providers]
-timestamp: 2026-10-04T00:00:00Z
+timestamp: 2026-10-05T00:00:00Z
 ---
 # Summary
 
@@ -46,6 +46,24 @@ owns labels, draft intent, remounts, and mutually exclusive UI controls. The
 owns epoch 35 pairing for the additive `on` selection. Existing database
 migration lineages remain unchanged.
 
+# Automatic titles
+
+Published Floret v7.22.1 owns title reasoning and output limits. Title requests
+disable thinking when the resolved capability permits it; otherwise they use
+the supported short-request effort or retain the model default. They never
+change the thread's saved reasoning choice or the main response policy.
+
+Provider output limits count hidden reasoning as well as visible text. Floret
+therefore allows up to 1,024 output tokens when reasoning cannot be disabled or
+its controls are unknown. Explicit non-reasoning and disable-capable models
+retain the 64-token limit. Visible titles still contain at most 48 Unicode
+characters; reasoning fragments never become the title. Truncation leaves title
+generation failed and preserves the initial user-request title. The next
+accepted user turn retries a failed automatic title, including after restart;
+reopening alone does not issue a provider request. The
+[live timeline contract](../ui/flower-live-timeline.md) owns canonical title
+status, persistence, and workspace-summary presentation.
+
 # Evidence
 
 - `redeven:internal/config/ai_reasoning_catalog.go` - Thin published-Floret metadata mapping and explicit OpenRouter metadata contract.
@@ -55,5 +73,6 @@ migration lineages remain unchanged.
 - `redeven:internal/ai/model_gateway_reasoning_test.go` - Boolean, effort, and budget contracts across provider transports.
 - `redeven:internal/ai/desktop_model_source_test.go` - Capability metadata survives Desktop model-source RPC.
 - `redeven:internal/ai/thread_reasoning_restart_test.go` - Saved On and Off survive reopening and immutable continuation.
+- `redeven:internal/ai/thread_title_ollama_test.go` - Capability-aware title output, independent main reasoning, live summaries, restart, failed-title retry, and opt-in real Ollama acceptance.
 - [Ollama thinking metadata](https://docs.ollama.com/capabilities/thinking) and [OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility) - Declared values and Chat wire encoding.
 - [Qwen Responses API](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-responses) - Explicit enable, effort, and unsupported budget boundary.

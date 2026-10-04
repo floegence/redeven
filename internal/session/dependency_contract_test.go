@@ -25,8 +25,8 @@ const (
 	flowersecGoVersion   = "v5.7.1"
 	flowersecCorePackage = "@floegence/flowersec-core"
 	flowersecCoreVersion = "5.7.1"
-	floeWebappVersion    = "0.81.5"
-	floeEnvCoreVersion   = "0.81.5"
+	floeWebappVersion    = "0.81.6"
+	floeEnvCoreVersion   = "0.81.6"
 )
 
 var flowersecNPMPackages = []string{
@@ -575,7 +575,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v7"
-		floretVersion = "v7.18.4"
+		floretVersion = "v7.22.1"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -666,11 +666,12 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Published Floret v7.18.2",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go v5.7.1 and Core v5.7.1 for Env App, Code App, and Desktop, and Floe Webapp v" + floeWebappVersion,
+			// Historical release review records keep the dependency versions reviewed at that time.
+			"published Flowersec Go v5.7.1 and Core v5.7.1 for Env App, Code App, and Desktop, and Floe Webapp v0.81.5",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
-			"\"compatibility_epoch\": 34",
+			"\"compatibility_epoch\": 35",
 			"flower-title-generation-v1",
 			"title_generation",
 			"redeven-runtime-v2",
