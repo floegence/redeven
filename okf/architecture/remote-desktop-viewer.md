@@ -15,7 +15,9 @@ independently of remote frame arrival; local controls remain usable during recov
 stops local input and playback immediately, then confirms server removal or offers
 an explicit retry. It never presents a frozen desktop as a live connection.
 
-# Input and clipboard
+# Contract
+
+## Input and clipboard
 
 The published Floe input and pointer controllers own client composition, physical
 keys, pointer gestures and release. Mouse and drag movement coalesces within the
@@ -49,10 +51,9 @@ and reconnect awaiting a fresh frame. Cursor presentation never grants input
 authority. Toolbar and dialog cursors remain local. This desktop-only policy does
 not apply to host application windows, which use their own upstream cursor contract.
 
-# Toolbar and window
+## Toolbar and window
 
-The [connection launcher](remote-desktop-launcher.md) owns target identity,
-readiness, preparation, grant-reuse settings and launch feedback. Desktop opens an isolated owned window; browsers open a separate
+Desktop opens an isolated owned window; browsers open a separate
 viewer. Desktop's toolbar is its native titlebar: one 40px row at ordinary widths,
 with window-control insets owned by the existing chrome snapshot. Fullscreen
 updates those insets. The host name is the visible identity; there is no duplicate
@@ -99,6 +100,13 @@ Transport reconnect resets the existing window's player and retires old-generati
 media while preserving its user-enabled audio device and sound preference. Fresh
 audio must use the successor generation. Explicit Disconnect closes that device;
 an enabled sound toggle must never hide a closed audio context after reconnect.
+
+# Boundaries
+
+The [connection launcher](remote-desktop-launcher.md) owns target identity,
+readiness, preparation, grant-reuse settings and launch feedback. The
+[session contract](remote-desktop.md) owns authorization, capture generations and
+native authority; viewer controls cannot substitute for painted control authority.
 
 # Evidence
 

@@ -86,6 +86,8 @@ system revocation. Retaining bytes cannot resurrect a single-use token already
 consumed by GNOME. This is an unavoidable distinction between pre-submission
 failure and an uncertain request outcome.
 
+# Boundaries
+
 Session closure, removed displays and invalid media revoke live input, clipboard,
 audio and painted authority under the [desktop session contract](remote-desktop.md).
 The next attachment attempts a saved successor grant. Old connections and
