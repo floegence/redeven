@@ -2037,6 +2037,7 @@
     "profileHelpTitle": "Permissão para gerenciar o diretório do gateway",
     "profileHelpBody": "Permite que este Desktop adicione, edite e exclua nomes de ambientes, URLs de ambientes de execução e métodos de acesso padrão salvos neste gateway. Outros Desktops pareados verão as alterações após atualizar.",
     "profileHelpBoundary": "Não permite instalar, iniciar ou parar um ambiente de execução, nem acessar suas configurações. A senha e a autenticação multifator do ambiente de execução continuam sendo exigidas. Os ambientes publicados podem ser abertos mesmo sem essa permissão.",
+    "directoryHelpLabel": "Sobre os ambientes do gateway",
     "directory": "Diretório de ambientes",
     "directorySaved": "Ambientes registrados",
     "directoryEmpty": "Nenhum ambiente registrado",

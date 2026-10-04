@@ -23,7 +23,7 @@ try {
   const readonly = { ...writable, gateway_id: 'readonly-preview', display_name: 'Shared Gateway', capabilities: ['env_catalog'], environments: [] };
   const snapshot = { ...source, platform_capabilities: { ...source.platform_capabilities, native_host_runtime: true },
     open_windows: [], environments: source.environments.filter(entry => entry.kind === 'gateway_environment'), gateway_sources: [local, writable, readonly] };
-  for (const [width, dark, largeText] of [[1400, true, false], [1280, false, false], [430, true, true]]) {
+  for (const [width, dark, largeText] of [[1824, true, false], [1280, false, false], [430, true, true]]) {
     const context = await browser.newContext({ viewport: { width, height: 1050 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'no-preference' });
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
@@ -49,12 +49,34 @@ try {
     assert.equal(await library.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
     for (const button of await library.getByRole('button').all()) assert.equal(await button.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
     await library.evaluate(async el => { await Promise.all(el.getAnimations({ subtree: true }).filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished)); });
+    assert.equal(await card.locator('[data-gateway-mark]').count(), 1);
+    assert.equal(await card.locator('.redeven-gateway-card__endpoint').count(), 0, 'Local host is identified once');
     await page.screenshot({ path: `${output}/cards-${width}.png`, fullPage: true });
+
+    // Reproduce an update already in flight when a launcher snapshot arrives:
+    // there is no card-local foreground yet, so the default button owns loading.
+    const needsUpdate = { ...local, status: 'needs_update', trust_state: 'paired',
+      service_state: { ...local.service_state, status: 'service_needs_update', can_start: false, can_update: true } };
+    const updateSnapshot = { ...snapshot, gateway_sources: [needsUpdate, writable, readonly] };
+    const backgroundUpdate = { action: 'update_gateway', subject_kind: 'gateway', subject_id: 'local-preview', gateway_id: 'local-preview',
+      operation_key: 'local-preview:update_gateway', started_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
+      status: 'running', phase: 'installing_gateway', title: 'Update Gateway', active_progress_surface: 'gateway',
+      step_progress: gatewayServiceStepProgress(undefined, 'installing_gateway') };
+    await page.evaluate(({ snapshot, progress }) => window.settingsFixture.publish({ ...snapshot, action_progress: [progress] }), { snapshot: updateSnapshot, progress: backgroundUpdate });
+    const primary = card.locator('.redeven-gateway-card__primary-button');
+    await page.waitForFunction(() => document.querySelector('.redeven-gateway-card__primary-button[aria-busy="true"]'));
+    assert.equal(await primary.locator('svg').count(), 1, 'Background update must show one loading icon');
+    assert.equal(await primary.getAttribute('data-floe-progress-shimmer'), 'surface');
+    await page.screenshot({ path: `${output}/updating-${width}.png` });
+    await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), snapshot);
+    await page.waitForFunction(() => !document.querySelector('.redeven-gateway-card__primary-button[aria-busy="true"]'));
 
     // A delayed service event must still open progress; dismissing it must not cancel or resubmit.
     await page.evaluate(() => { window.settingsFixture.beforeAction = () => new Promise(resolve => { window.finishGatewayRequest = resolve; }); });
     await card.getByRole('button', { name: i18n.t('environmentCenter.gatewayActionStart'), exact: true }).click();
     await page.waitForFunction(() => typeof window.finishGatewayRequest === 'function');
+    const trigger = card.locator('.redeven-gateway-card__primary-button');
+    assert.equal(await trigger.locator('svg').count(), 1, 'Admission must have a single icon, including the loading spinner');
     const startedAt = Date.now();
     const progress = { action: 'start_gateway', subject_kind: 'gateway', subject_id: 'local-preview', gateway_id: 'local-preview',
       operation_key: 'local-preview:start_gateway', started_at_unix_ms: startedAt, updated_at_unix_ms: startedAt,
@@ -63,7 +85,7 @@ try {
     await page.evaluate(({ snapshot, progress }) => window.settingsFixture.publish({ ...snapshot, action_progress: [progress] }), { snapshot, progress });
     const popover = page.locator('.redeven-gateway-action-popover-surface');
     await popover.waitFor();
-    const trigger = card.locator('.redeven-gateway-card__primary-button');
+    assert.equal(await trigger.locator('svg').count(), 1, 'Progress must retain one icon');
     assert.equal(await trigger.getAttribute('data-floe-progress-shimmer'), 'surface');
     assert.notEqual(await popover.evaluate(el => getComputedStyle(el).animationName), 'none');
     assert.equal(await popover.locator('.redeven-environment-progress__meter').count(), 0);
@@ -107,7 +129,8 @@ try {
     await menu.waitFor({ state: 'detached' });
     assert.equal(await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: 'Gateway-local' }), exact: true }).evaluate(el => document.activeElement === el), true);
 
-    await card.getByRole('button', { name: i18n.t('environmentCenter.manageGatewayForLabel', { label: 'Gateway-local' }), exact: true }).click();
+    await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: 'Gateway-local' }), exact: true }).click();
+    await page.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
     const setup = page.getByRole('dialog');
     await setup.getByRole('button', { name: i18n.t('gatewayAccess.profileHelpLabel'), exact: true }).click();
     await setup.getByText(i18n.t('gatewayAccess.profileHelpBody'), { exact: true }).waitFor();

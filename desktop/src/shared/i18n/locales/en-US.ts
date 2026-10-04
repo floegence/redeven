@@ -1691,6 +1691,7 @@ export const enUS = {
     profileHelpTitle: "Permission to manage the Gateway directory",
     profileHelpBody: "Allow this Desktop to add, edit and delete environment names, Runtime URLs and default access methods stored on this Gateway. Other paired Desktops see these changes after refreshing.",
     profileHelpBoundary: "This does not install, start or stop a Runtime, or grant access to its settings. Runtime password and MFA checks still apply. Leaving this off still allows you to open published environments.",
+    directoryHelpLabel: "About Gateway environments",
     directory: "Environment directory",
     directorySaved: "Registered environments",
     directoryEmpty: "No environments registered",

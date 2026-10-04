@@ -513,7 +513,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const totalGatewaySourceCount = createMemo(() => props.gatewaySources.length);');
     expect(appSrc).toContain('noMatchingGatewaysTitle');
     expect(styles).toContain('.redeven-gateway-grid');
-    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 24rem));');
+    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 22rem));');
     expect(styles).not.toContain('redeven-card-entrance');
   });
 
@@ -1119,9 +1119,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain(
       'const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));',
     );
-    expect(appSrc).toContain('class="redeven-gateway-card__catalog-summary"');
-    expect(appSrc).toContain('redeven-gateway-card__summary-title');
-    expect(appSrc).toContain('redeven-gateway-card__summary-detail');
+    expect(appSrc).toContain('class="redeven-gateway-card__directory"');
+    expect(appSrc).toContain('redeven-gateway-card__directory-status');
+    expect(appSrc).toContain('redeven-gateway-card__explanation');
     expect(appSrc).toContain("if (action.intent === 'view_gateway_environments')");
     expect(appSrc).toContain("if (action.intent === 'add_gateway_environment')");
     expect(appSrc).toContain('const primaryActionRunning = createMemo(() => (');
@@ -1238,7 +1238,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('gateway_env_id: action.environment_id');
     expect(appSrc).not.toContain('redeven-gateway-row');
     expect(styles).toContain('.redeven-gateway-grid');
-    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 24rem));');
+    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 22rem));');
     expect(styles).toContain('.redeven-gateway-card {');
     expect(styles).toContain('--redeven-action-popover-width: min(19rem, calc(100vw - 1rem));');
     expect(styles).not.toContain('--redeven-action-popover-width: min(28rem');
@@ -1248,9 +1248,9 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-card__primary-anchor');
     expect(styles).toContain('flex: 1 1 auto;');
     expect(styles).not.toContain('.redeven-gateway-card__guidance');
-    expect(styles).toContain('.redeven-gateway-card__summary-title');
-    expect(styles).toContain('.redeven-gateway-card__summary-detail');
-    expect(styles).toContain('.redeven-gateway-card__catalog-summary');
+    expect(styles).toContain('.redeven-gateway-card__directory-status');
+    expect(styles).toContain('.redeven-gateway-card__explanation');
+    expect(styles).toContain('.redeven-gateway-card__directory');
     expect(styles).toContain('.redeven-gateway-action-panel__hero');
     expect(styles).not.toContain(".redeven-action-popover__action-stack[data-subject-kind='gateway']");
     expect(styles).toContain('.redeven-gateway-action-panel__section-label');

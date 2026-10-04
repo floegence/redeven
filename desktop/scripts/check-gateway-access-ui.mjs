@@ -82,7 +82,11 @@ try {
       const gatewayCard = page.locator('[data-gateway-id="bastion"]');
       await gatewayCard.waitFor();
       assert.ok((await gatewayCard.innerText()).includes(i18n.t('gatewayAccess.directory')));
-      assert.ok((await gatewayCard.innerText()).includes(i18n.t('gatewayAccess.directoryAccessHint')));
+      const directoryHelp = gatewayCard.getByRole('button', { name: i18n.t('gatewayAccess.directoryHelpLabel'), exact: true });
+      await directoryHelp.click();
+      await gatewayCard.getByText(i18n.t('gatewayAccess.directoryAccessHint'), { exact: true }).waitFor();
+      await directoryHelp.click();
+      await gatewayCard.locator('.redeven-gateway-card__explanation').waitFor({ state: 'detached' });
       for (const control of await gatewayCard.getByRole('button').all()) {
         assert.equal(await control.evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap');
       }
