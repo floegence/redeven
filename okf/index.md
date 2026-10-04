@@ -233,6 +233,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
 - [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md) - Discover exact thinking controls and preserve selections, streaming output, and provider history.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
+- [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md) - Verify the selected installed model's real compaction, token accounting, live context, and restart recovery in isolated state.
 - [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport and enforce documented web tool limits.
 - [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.
 - [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, bounded status previews, canonical membership, and complete handoffs.
