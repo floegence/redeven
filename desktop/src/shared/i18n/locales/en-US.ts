@@ -1687,6 +1687,8 @@ export const enUS = {
     invalidTimeout: "Enter a number of at least 1 second, or leave empty for 10 seconds.",
   },
   gatewayAccess: {
+    setupServiceRequired: "Gateway connection saved. Start this Gateway, then save again to authorize environment profile changes.",
+    setupFailed: "Gateway setup could not finish. Review the details, correct the connection, and retry.",
     profileServiceRequired: "Start or update this Gateway before changing its environment profiles, then retry.",
     profileServiceReady: "Gateway started. Review your changes, then retry.",
     localService: "Local host",

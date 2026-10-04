@@ -44,6 +44,9 @@ appear as Runtime lifecycle actions on catalog Environment cards. Setup keeps
 credentials local, and editing a saved SSH password preserves it unless the
 user replaces, clears, or changes its SSH identity. URL pairing opens the code
 form; profile write consent is independent of the transport.
+The [setup qualification](../gateway/gateway-deployment-qualification.md)
+exercises these forms through the production IPC and service owners, including
+first installation and explicit recovery after a partially completed save.
 
 Gateway Environment cards show source, Gateway connection, trust, catalog sync,
 default access mode and the latest attempted access result separately. No access

@@ -2021,7 +2021,9 @@
     "protocolMismatch": "Gateway 协议不匹配，请将 Gateway 与 Desktop 更新到匹配版本。",
     "unsupported": "此类 Gateway 配置尚不支持通过 Gateway 打开。",
     "targetNotChecked": "尚未检查目标",
-    "accessOnly": "Gateway 仅负责访问，运行时生命周期通过单独注册的运行时目标管理。"
+    "accessOnly": "Gateway 仅负责访问，运行时生命周期通过单独注册的运行时目标管理。",
+    "setupServiceRequired": "网关连接已保存。请启动此网关，然后再次保存以授权修改环境配置。",
+    "setupFailed": "网关设置未能完成。请查看详细信息，修正连接配置后重试。"
   },
   "connectionDialog": {
     "newEnvironmentTitle": "新环境",

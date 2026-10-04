@@ -2021,7 +2021,9 @@
     "protocolMismatch": "Gateway 協定不相符，請將 Gateway 與 Desktop 更新至相符版本。",
     "unsupported": "此類 Gateway 設定尚不支援透過 Gateway 開啟。",
     "targetNotChecked": "尚未檢查目標",
-    "accessOnly": "Gateway 僅負責存取，執行階段生命週期透過另外註冊的執行階段目標管理。"
+    "accessOnly": "Gateway 僅負責存取，執行階段生命週期透過另外註冊的執行階段目標管理。",
+    "setupServiceRequired": "網關連線已儲存。請啟動此網關，然後再次儲存以授權修改環境設定。",
+    "setupFailed": "網關設定未能完成。請查看詳細資訊，修正連線設定後重試。"
   },
   "connectionDialog": {
     "newEnvironmentTitle": "新環境",

@@ -2021,7 +2021,9 @@
     "protocolMismatch": "Gateway 프로토콜이 일치하지 않습니다. Gateway와 Desktop을 호환되는 버전으로 업데이트하세요.",
     "unsupported": "이 Gateway 프로필은 아직 Gateway를 통한 열기를 지원하지 않습니다.",
     "targetNotChecked": "대상 확인 전",
-    "accessOnly": "Gateway는 접근만 제공합니다. 런타임 수명 주기는 별도로 등록한 런타임 대상에서 관리합니다."
+    "accessOnly": "Gateway는 접근만 제공합니다. 런타임 수명 주기는 별도로 등록한 런타임 대상에서 관리합니다.",
+    "setupServiceRequired": "게이트웨이 연결을 저장했습니다. 이 게이트웨이를 시작한 후 다시 저장하여 환경 프로필 변경을 허용하세요.",
+    "setupFailed": "게이트웨이 설정을 완료하지 못했습니다. 세부 정보를 확인하고 연결 설정을 수정한 후 다시 시도하세요."
   },
   "connectionDialog": {
     "newEnvironmentTitle": "새 환경",

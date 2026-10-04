@@ -6,10 +6,22 @@ import { testDesktopPreferences } from '../testSupport/desktopTestHelpers';
 import { controlText } from '../testSupport/controlText';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionResult, DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
+import { normalizeDesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 import { compactEnvironmentPreviewFixture } from '../testSupport/compactEnvironmentPreviewFixture';
 
 const disposers: (() => void)[] = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
+async function openSetup(transport = 'Local host') {
+  button('Gateways').click(); await settle();
+  button('Add').click(); await settle();
+  button(transport).click(); await settle();
+}
+function grantWrite() {
+  const checkbox = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
+    .find(element => element.closest('label')?.textContent?.includes('Allow environment profile changes')
+      || element.getAttribute('aria-label') === 'Allow environment profile changes');
+  expect(checkbox).toBeTruthy(); checkbox!.click();
+}
 function button(label: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>('button')].find(element =>
     !element.closest('[hidden], [aria-hidden="true"]') && (controlText(element) === label || element.getAttribute('aria-label') === label));
@@ -34,7 +46,9 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
   const performAction = vi.fn<(request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>>(async () => ({ ok: true, outcome: 'saved_gateway' }));
   const host = document.createElement('div'); document.body.append(host);
   disposers.push(render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{
-    launcher: { getSnapshot: getSnapshot ?? (async () => snapshot), performAction, subscribeSnapshot: () => () => {}, getSSHConfigHosts: async () => [] },
+    launcher: { getSnapshot: getSnapshot ?? (async () => snapshot), performAction, subscribeSnapshot: () => () => {}, getSSHConfigHosts: async () => [],
+      listRuntimeContainers: async () => ({ ok: true, containers: [{ engine: 'docker', container_id: 'test-container-id',
+        container_ref: 'qualification', container_label: 'Qualification container', image: 'debian', status_text: 'running' }] }) },
     settings: { requestRuntimeFlower: async () => ({ ok: false, error: { message: 'No Runtime in this Gateway fixture' } }) },
   } as unknown as DesktopWelcomeRuntime} />, host));
   await settle();
@@ -44,6 +58,116 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway setup and own-service actions', () => {
+  it('shows the structured technical cause alongside localized setup guidance', async () => {
+    const perform = await mount();
+    await openSetup();
+    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'action_invalid', message: 'Gateway setup failed',
+      failure: { code: 'operation_failed', severity: 'error', title: 'Gateway setup', summary: 'Gateway setup failed',
+        summary_key: 'gatewayAccess.setupFailed', detail: 'Gateway URL must use HTTP or HTTPS.',
+        diagnostics: [{ channel: 'stderr', label: 'Command stderr', text: 'Fixture diagnostic' }] } });
+    button('Save Gateway').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Gateway setup could not finish.');
+    expect(document.querySelector('details')?.textContent).toContain('Gateway URL must use HTTP or HTTPS.');
+    expect(document.querySelector('details')?.textContent).toContain('Fixture diagnostic');
+  });
+  it('requires a pairing code before claiming to grant URL profile authorization', async () => {
+    const perform = await mount();
+    await openSetup('URL');
+    input('gateway-url', 'https://gateway.example/');
+    grantWrite();
+    button('Save Gateway').click(); await settle();
+    expect(perform).not.toHaveBeenCalled();
+    expect(document.getElementById('gateway-pairing-code')?.getAttribute('aria-invalid')).toBe('true');
+  });
+  it.each(['Local Container', 'SSH Container'])('submits valid %s coordinates from the container picker', async transport => {
+    const perform = await mount();
+    await openSetup(transport);
+    if (transport === 'SSH Container') { input('gateway-ssh-destination', 'dev@bastion'); await settle(); }
+    document.getElementById('environment-container-picker')!.click(); await settle();
+    document.getElementById('environment-container-option-0')!.click(); await settle();
+    input('gateway-name', 'Container Gateway');
+    button('Save Gateway').click(); await settle();
+    expect(perform).toHaveBeenCalledOnce();
+    expect(normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0])).toMatchObject({ kind: 'upsert_gateway',
+      connection_kind: transport === 'Local Container' ? 'local_container' : 'ssh_container',
+      placement: { kind: 'container_process', container_id: 'test-container-id', container_ref: 'qualification', runtime_root: 'remote_default' } });
+  });
+
+  it('submits a URL Gateway with explicit pairing and independent profile consent', async () => {
+    const perform = await mount();
+    await openSetup('URL');
+    input('gateway-url', 'https://gateway.example/');
+    input('gateway-pairing-code', 'test-pairing-code');
+    grantWrite();
+    button('Save Gateway').click(); await settle();
+    expect(normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0])).toMatchObject({ kind: 'upsert_gateway',
+      connection_kind: 'url', gateway_url: 'https://gateway.example/', pairing_code: 'test-pairing-code', profile_write: true });
+  });
+
+  it.each(['Local host', 'SSH Host'])('submits valid default download coordinates for %s', async transport => {
+    const perform = await mount();
+    await openSetup(transport);
+    if (transport === 'SSH Host') input('gateway-ssh-destination', 'dev@bastion');
+    button('Save Gateway').click(); await settle();
+    expect(perform).toHaveBeenCalledOnce();
+    const request = normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0]);
+    expect(request).toMatchObject({ kind: 'upsert_gateway', placement: { runtime_root: 'remote_default', release_base_url: '' } });
+  });
+
+  it('preserves the saved identity and draft when explicit profile authorization needs Start', async () => {
+    const perform = await mount();
+    await openSetup();
+    input('gateway-name', 'Draft Gateway');
+    grantWrite();
+    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Connection saved. Start before granting permission.',
+      gateway_id: 'saved-fixture', continuation_action: { kind: 'start_gateway', gateway_id: 'saved-fixture' } });
+    button('Save Gateway').click(); await settle();
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway', profile_write: true });
+    expect((document.getElementById('gateway-name') as HTMLInputElement).value).toBe('Draft Gateway');
+    perform.mockResolvedValueOnce({ ok: true, outcome: 'started_gateway' });
+    button('Start Gateway').click(); await settle();
+    expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['upsert_gateway', 'start_gateway']);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Review your changes, then retry.');
+    button('Save Gateway').click(); await settle();
+    expect(perform.mock.calls[2]?.[0]).toMatchObject({ kind: 'upsert_gateway', gateway_id: 'saved-fixture', display_name: 'Draft Gateway', profile_write: true });
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  });
+
+  it.each([true, false])('ignores an old save after cancel and reopen, success=%s', async success => {
+    const perform = await mount();
+    await openSetup();
+    let complete!: (result: DesktopLauncherActionResult) => void;
+    perform.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    button('Save Gateway').click(); await settle();
+    button('Save Gateway').click();
+    expect(perform).toHaveBeenCalledOnce();
+    button('Cancel').click(); await settle();
+    button('Add').click(); await settle();
+    input('gateway-name', 'New draft');
+    complete(success ? { ok: true, outcome: 'saved_gateway' }
+      : { ok: false, scope: 'dialog', code: 'action_invalid', message: 'Old save failure' });
+    await settle();
+    expect((document.getElementById('gateway-name') as HTMLInputElement).value).toBe('New draft');
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Old save failure');
+  });
+
+  it('retains the original failure and continuation even if snapshot refresh fails', async () => {
+    const perform = await mount(undefined, undefined, async () => { throw new Error('Snapshot unavailable'); });
+    await openSetup();
+    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Original authorization failure',
+      should_refresh_snapshot: true, gateway_id: 'saved-fixture', continuation_action: { kind: 'start_gateway', gateway_id: 'saved-fixture' } });
+    button('Save Gateway').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Original authorization failure');
+    expect(button('Start Gateway')).toBeTruthy();
+  });
+
+  it('keeps a successful save successful when refreshing the snapshot fails', async () => {
+    const perform = await mount(undefined, undefined, async () => { throw new Error('Snapshot unavailable'); });
+    await openSetup();
+    button('Save Gateway').click(); await settle();
+    expect(perform).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  });
   it('retains a profile draft and starts the Gateway only after an explicit click, then waits for Save', async () => {
     const snapshot = compactEnvironmentPreviewFixture().coverage;
     const perform = await mount(undefined, snapshot);
@@ -149,6 +273,7 @@ describe('Gateway setup and own-service actions', () => {
       host_access: { kind: 'local_host' }, placement: expect.objectContaining({ kind: 'host_process', runtime_root: '/tmp/gateway-fixture' }),
       profile_write: false }));
     expect(perform.mock.calls.every(([request]) => request.kind === 'upsert_gateway')).toBe(true);
+    expect(normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0])).not.toBeNull();
   });
 
   it('preserves SSH password whitespace and uses explicit Gateway coordinates', async () => {
@@ -164,6 +289,7 @@ describe('Gateway setup and own-service actions', () => {
     expect(perform).toHaveBeenCalledWith(expect.objectContaining({ kind: 'upsert_gateway', connection_kind: 'ssh_host',
       host_access: expect.objectContaining({ kind: 'ssh_host', ssh: expect.objectContaining({ ssh_destination: 'dev@bastion', auth_mode: 'password' }) }),
       ssh_password: '  protected password  ', ssh_password_mode: 'replace' }));
+    expect(normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0])).not.toBeNull();
   });
 
   it('opens URL pairing settings instead of sending a pairing request without a code', async () => {

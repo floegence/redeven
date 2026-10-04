@@ -53,6 +53,10 @@ and Update according to the observed Gateway service capability. These actions
 never invoke Runtime lifecycle management or grant management of catalog targets.
 
 Saving a registration does not install or start a process. Start is explicit;
+an absent Gateway package is a first-install Start state, not an Update state.
+Setup submits an empty release-source value for the default public release
+channel; the display label is never a URL or a protocol value. All five setup
+transports must pass the production IPC normalizer before host execution.
 background refresh and profile Save/Delete require an already ready Gateway.
 Profile authorization, catalog lookup, mutation, and post-write refresh cannot
 install, start, or update its service. A stopped service leaves the draft or
@@ -66,6 +70,15 @@ URL pairing requests a pairing code. Managed pairing uses the authenticated
 Gateway bridge. Both grant profile write only after separate explicit consent;
 transport selection does not imply that permission. Managed package installation
 uses Desktop upload of the independent Gateway archive, not Runtime bootstrap.
+
+Profile-write consent is available during both creation and editing. URL consent
+requires a pairing code; an unchecked grant does not revoke existing trust.
+When managed setup persists a registration but cannot grant permission until
+Start, it retains that registration ID and the current form. Explicit Start
+returns to Save without replaying consent. Canceled dialog openings ignore late
+save/start results. A failed snapshot refresh cannot erase the original failure
+or change a successful save into a failed write. Command diagnostics remain
+structured, sanitized and available alongside localized guidance.
 
 # Evidence
 

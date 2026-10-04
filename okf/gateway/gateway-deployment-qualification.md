@@ -17,6 +17,37 @@ the existing release workflow and cannot be inferred from this source fixture.
 
 # Contract
 
+## Desktop setup and managed hosts
+
+Build Desktop from the current checkout before running
+`node desktop/scripts/check-gateway-setup-electron.mjs`, with
+`REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT` pointing to that checkout's verified
+development bundle. The runner launches the production Welcome, preload and
+main process with isolated state and a dedicated process group. It exercises
+default Local Gateway saving, data-root editing, explicit first Start, pairing,
+independent profile-write permission, profile CRUD, access-mode persistence,
+restart, Stop and connection removal. Invalid setup must keep the dialog and
+expose a sanitized actionable failure. Saving never starts a Runtime or Gateway.
+
+Run `node desktop/scripts/check-gateway-managed-hosts.mjs` after the Desktop
+build to qualify real local-container, SSH-host and SSH-container execution.
+The task-owned Docker fixture uses an isolated SSH key and pinned host key;
+it never modifies the user's SSH config or known-hosts file. Its SSH container
+uses the Docker daemon socket to execute only the named qualification target.
+The suite covers empty directories, explicit package installation, bridge
+pairing, independent write permission, signed direct/proxy artifacts, profile
+persistence, deletion and stop. These are qualification jobs, not ordinary CI.
+Reports and cleanup evidence live under Desktop `dist/*-acceptance/`.
+
+Managed service starts retain the default public-target policy. Private-network
+deployments explicitly configure the standalone Gateway with
+`--allow-private-profile-targets`; that flag still denies loopback. The HTTPS
+deployment below owns private-target login and data-path qualification.
+Form tests use the production IPC normalizer for every transport; mocked
+launcher success alone is not deployment evidence. The UI qualification covers
+all ten locales at normal and narrow/dark/large-text layouts, including the
+explicit Start-and-retry setup continuation.
+
 ## One reproducible local deployment
 
 Build the current Env App and Code App assets and install Desktop's frozen
@@ -100,6 +131,10 @@ pair, open the proxy environment, establish a terminal connection and close the
 session; do not repeat all source tests on every platform or expand ordinary CI.
 
 # Evidence
+
+- `redeven:desktop/scripts/check-gateway-setup-electron.mjs` - Production Desktop setup, service lifecycle and profile workflow.
+- `redeven:desktop/scripts/check-gateway-managed-hosts.mjs` - Real SSH and container managed-service qualification with owned cleanup.
+- `redeven:desktop/src/welcome/GatewaySetup.client.test.tsx` - Emitted IPC contracts, dialog lifetime and explicit authorization recovery.
 
 - `redeven:desktop/scripts/check-gateway-deployment.mjs` - Owned Docker/Nginx topology, real TCP isolation, fixture-scoped TLS trust and cleanup.
 - `redeven:desktop/scripts/fixtures/gateway-deployment.ts` - Binary/SSE/redirect, idle lease, shutdown and redacted-log assertions.

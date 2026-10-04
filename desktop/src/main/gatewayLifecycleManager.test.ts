@@ -40,6 +40,7 @@ import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { RuntimeLifecycleCoordinator, RuntimeLifecycleInProgressError } from './runtimeLifecycleCoordinator';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
+import { DesktopOperationFailureError, desktopOperationFailurePresentation } from './desktopOperationFailure';
 
 function fakeSSHTransportManager(): DesktopSSHTransportManager {
   return {
@@ -172,6 +173,17 @@ function localGateway(): GatewayRecord {
 }
 
 describe('GatewayLifecycleManager', () => {
+  it('preserves structured command diagnostics without leaking access tokens when startup fails', async () => {
+    const lifecycle = manager();
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockRejectedValueOnce(new DesktopOperationFailureError(desktopOperationFailurePresentation({
+      code: 'runtime_host_command_failed', title: 'Host command failed', summary: 'Gateway installation failed.',
+      diagnostics: [{ channel: 'stderr', label: 'Command stderr', text: `Missing target directory /gateway/v3/access/${'a'.repeat(43)}/` }],
+    })));
+    await expect(lifecycle.startGateway(localGateway())).rejects.toMatchObject({
+      code: 'gateway_service_start_failed', message: 'Gateway installation failed.',
+      presentation: { diagnostics: [{ channel: 'stderr', text: 'Missing target directory /gateway/v3/access/[redacted]/' }] },
+    });
+  });
   beforeEach(() => {
     lifecycleMocks.ensureManagedGatewayServiceReady.mockReset();
     lifecycleMocks.probeManagedGatewayServiceDeep.mockReset();

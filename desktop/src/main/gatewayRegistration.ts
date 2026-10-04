@@ -5,6 +5,9 @@ export function gatewayConnectionFromSetup(
   request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway' }>,
 ): GatewayConnection {
   if (request.connection_kind === 'url') {
+    if (request.profile_write && !request.pairing_code?.trim()) {
+      throw new Error('A Gateway pairing code is required to authorize environment profile changes.');
+    }
     return { kind: 'url', base_url: normalizeGatewayBaseURL(request.gateway_url), allow_loopback_http: request.allow_loopback_http };
   }
   const host = request.host_access;

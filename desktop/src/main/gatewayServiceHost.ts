@@ -801,7 +801,7 @@ async function probeManagedGatewayServiceStatusWithExecutor(
   const packageProbe = await probeGatewayPackage(options, executor);
   if (packageProbe.status !== 'ready') {
     return {
-      status: 'needs_update',
+      status: packageProbe.status === 'missing_binary' ? 'not_running' : 'needs_update',
       message: describeGatewayPackageProbe(packageProbe),
       binary_path: packageProbe.binary_path,
       state_root: options.stateRoot,

@@ -2021,7 +2021,9 @@
     "protocolMismatch": "Gateway のプロトコルが一致しません。Gateway と Desktop を対応するバージョンに更新してください。",
     "unsupported": "この Gateway プロファイルは Gateway 経由で開く機能にまだ対応していません。",
     "targetNotChecked": "接続先は未確認",
-    "accessOnly": "Gateway はアクセスのみを提供します。ランタイムのライフサイクルは別途登録したランタイムで管理します。"
+    "accessOnly": "Gateway はアクセスのみを提供します。ランタイムのライフサイクルは別途登録したランタイムで管理します。",
+    "setupServiceRequired": "ゲートウェイ接続を保存しました。このゲートウェイを起動し、もう一度保存して環境プロファイルの変更を許可してください。",
+    "setupFailed": "ゲートウェイの設定を完了できませんでした。詳細を確認し、接続設定を修正してから再試行してください。"
   },
   "connectionDialog": {
     "newEnvironmentTitle": "新しい環境",

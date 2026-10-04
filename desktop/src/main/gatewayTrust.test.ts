@@ -19,7 +19,7 @@ import {
   gatewayConnectArtifactProofPayload,
   type GatewaySecretStore,
 } from './gatewayTrust';
-import type { GatewayRecord } from './gatewayStore';
+import { gatewayProtocolID, stableGatewayID, type GatewayRecord } from './gatewayStore';
 
 function memorySecretStore(): GatewaySecretStore & { values: Map<string, string> } {
   const values = new Map<string, string>();
@@ -64,7 +64,7 @@ function signedChallenge(
 ) {
   const challenge = {
     protocol_version: overrides.protocol_version ?? 'redeven-gateway-v3',
-    gateway_id: overrides.gateway_id ?? 'gw_demo',
+    gateway_id: overrides.gateway_id ?? stableGatewayID(material.binding_audience),
     gateway_public_key: gatewayMaterial.client_public_key,
     gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayMaterial.client_public_key),
     gateway_nonce: overrides.gateway_nonce ?? 'gateway-nonce',
@@ -96,7 +96,7 @@ function signedRuntimeStyleChallenge(
   const gatewayPublicKeyWire = `${gatewayPublicKey}\n`;
   const challenge = {
     protocol_version: 'redeven-gateway-v3',
-    gateway_id: 'gw_demo',
+    gateway_id: stableGatewayID(material.binding_audience),
     gateway_public_key: gatewayPublicKeyWire,
     gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayPublicKey),
     gateway_nonce: 'gateway-nonce',
@@ -118,6 +118,37 @@ function signedRuntimeStyleChallenge(
 }
 
 describe('gatewayTrust', () => {
+  it.each<GatewayRecord['connection']>([
+    { kind: 'url', base_url: 'https://edited.example/' },
+    { kind: 'local_host', runtime_root: '/edited/gateway' },
+    { kind: 'ssh_host', ssh_destination: 'edited.example', runtime_root: 'remote_default' },
+    { kind: 'local_container', container_engine: 'docker', container_id: 'edited', runtime_root: '/data' },
+    { kind: 'ssh_container', ssh_destination: 'edited.example', container_engine: 'docker', container_id: 'edited', runtime_root: '/data' },
+  ])('binds pairing, signed calls and artifacts to edited $kind coordinates while retaining the local registration', async connection => {
+    const record = gatewayRecord({ connection });
+    const material = createGatewayPairingMaterial(record);
+    const gatewayMaterial = createGatewayPairingMaterial(record);
+    const challenge = signedChallenge(material, gatewayMaterial);
+    const secretStore = memorySecretStore();
+    const profile = await completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore, now_unix_ms: 1_000 });
+    expect(profile.gateway_id).toBe(record.gateway_id);
+    const paired = { ...record, trust_profile: profile };
+    const headers = await createGatewayAuthHeaders({ record: paired, method: 'POST', route: '/gateway/v3/catalog', body: {}, secret_store: secretStore });
+    expect(headers['x-redeven-gateway-id']).toBe(gatewayProtocolID(record));
+    expect(headers['x-redeven-gateway-id']).not.toBe(record.gateway_id);
+    expect(() => assertGatewayPairingChallenge({ record, material,
+      challenge: signedChallenge(material, gatewayMaterial, { gateway_id: record.gateway_id }), now_unix_ms: 1_000 }))
+      .toThrow('Gateway pairing response does not match');
+    const artifact = { kind: 'local_direct_artifact', url: 'https://runtime.example/', expires_at_unix_ms: 2_000,
+      artifact_nonce: 'artifact-nonce', proof: signGatewayPayload(gatewayMaterial.client_private_key, gatewayConnectArtifactProofPayload({
+        gateway_id: gatewayProtocolID(record), gateway_env_id: 'env', gateway_session_id: 'session', binding_audience: material.binding_audience,
+        requested_capability: 'env_app', client_nonce: 'nonce', artifact_kind: 'local_direct_artifact', artifact_url: 'https://runtime.example/',
+        expires_at_unix_ms: 2_000, artifact_nonce: 'artifact-nonce',
+      })) };
+    expect(() => assertGatewayConnectArtifactProof({ record: paired, gateway_env_id: 'env', requested_capability: 'env_app',
+      client_nonce: 'nonce', gateway_session_id: 'session', artifact })).not.toThrow();
+  });
+
   it('requires an accepted trust decision before saving pairing material', async () => {
     const store = memorySecretStore();
     const record = gatewayRecord();
@@ -277,14 +308,14 @@ describe('gatewayTrust', () => {
     const challenge = signedChallenge(material, gatewayMaterial);
     const response = {
       protocol_version: 'redeven-gateway-v3',
-      gateway_id: record.gateway_id,
+      gateway_id: gatewayProtocolID(record),
       client_key_id: material.client_key_id,
       paired_at_unix_ms: 1_000,
       proof: signGatewayPayload(gatewayMaterial.client_private_key, pairingCompleteResponsePayload({
         protocol_version: 'redeven-gateway-v3',
         client_nonce: material.client_nonce,
         gateway_nonce: challenge.gateway_nonce,
-        gateway_id: record.gateway_id,
+        gateway_id: gatewayProtocolID(record),
         binding_audience: material.binding_audience,
         client_key_id: material.client_key_id,
         paired_at_unix_ms: 1_000,
@@ -407,7 +438,7 @@ describe('gatewayTrust', () => {
     });
 
     expect(headers).toMatchObject({
-      'x-redeven-gateway-id': 'gw_demo',
+      'x-redeven-gateway-id': gatewayProtocolID(record),
       'x-redeven-client-key-id': material.client_key_id,
       'x-redeven-client-nonce': 'nonce',
       'x-redeven-request-ts': '1770000000000',
