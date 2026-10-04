@@ -38,14 +38,14 @@ func TestResolver_Resolve_UsesCuratedNativeModelMetadata(t *testing.T) {
 			provider:   config.AIProvider{ID: "deepseek", Type: "deepseek"},
 			modelID:    "deepseek/deepseek-v4-pro",
 			wantCtx:    1000000,
-			wantOutput: 384000,
+			wantOutput: 393216,
 		},
 		{
 			name:       "deepseek_v4_flash",
 			provider:   config.AIProvider{ID: "deepseek", Type: "deepseek"},
 			modelID:    "deepseek/deepseek-v4-flash",
 			wantCtx:    1000000,
-			wantOutput: 384000,
+			wantOutput: 393216,
 		},
 		{
 			name:       "qwen_3_6_plus",

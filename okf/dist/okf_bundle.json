@@ -3165,7 +3165,7 @@
               "reasoning"
             ],
             "summary": "Published Floret owns the portable reasoning selection contract, Ollama metadata\nparser, and Ollama wire encoding. Redeven maps model metadata, product settings,\nand provider requests to that contract. Only verified capabilities create\ncontrols; Default, Off, On, named effort, and token budget retain distinct\nmeanings. Invalid selections fail before provider dispatch, while unknown\ncontrols retain the model's default behavior. Active Turns keep immutable\nsettings through continuation and restart.",
-            "section_count": 2
+            "section_count": 3
           },
           {
             "concept_id": "ai.model-context-runtime",
@@ -8799,7 +8799,7 @@
         "providers",
         "reasoning"
       ],
-      "timestamp": "2026-10-04T00:00:00Z",
+      "timestamp": "2026-10-05T00:00:00Z",
       "frontmatter": {
         "description": "Discover verified reasoning controls, preserve explicit intent, and map thinking output and history to provider protocols.",
         "tags": [
@@ -8808,11 +8808,11 @@
           "providers",
           "reasoning"
         ],
-        "timestamp": "2026-10-04T00:00:00Z",
+        "timestamp": "2026-10-05T00:00:00Z",
         "title": "Model reasoning capabilities and transport",
         "type": "AI Runtime Contract"
       },
-      "body_length": 5116,
+      "body_length": 6364,
       "summary": "Published Floret owns the portable reasoning selection contract, Ollama metadata\nparser, and Ollama wire encoding. Redeven maps model metadata, product settings,\nand provider requests to that contract. Only verified capabilities create\ncontrols; Default, Off, On, named effort, and token budget retain distinct\nmeanings. Invalid selections fail before provider dispatch, while unknown\ncontrols retain the model's default behavior. Active Turns keep immutable\nsettings through continuation and restart.",
       "sections": [
         {
@@ -8828,6 +8828,13 @@
           "level": 1,
           "body": "Thread model, reasoning and permission settings are Redeven product state. Model and reasoning changes require an idle mutable thread with no queue or unresolved interaction. Permission changes apply at the next tool authorization boundary, including active, queued and resumed work. Execution authority records admission permission for historical attribution only, never as live tool authorization. The atomic v9-to-v10 migration and all earlier edges remain unchanged. `SendUserTurn.Model` and Ask User continuation `Model` may be empty or equal the persisted value; a mismatch is a conflict. The configured `current_model_id` initializes future threads only.\n\nThe same capability and selection reach direct Environment models and Desktop\nmodel-source RPC. A model rename never changes its declared control type.\nThe [Flower reasoning selection contract](../ui/flower-reasoning-selection.md)\nowns labels, draft intent, remounts, and mutually exclusive UI controls. The\n[Runtime snapshot contract](../architecture/runtime-service-snapshot.md)\nowns epoch 35 pairing for the additive `on` selection. Existing database\nmigration lineages remain unchanged.",
           "char_count": 1153
+        },
+        {
+          "id": "automatic-titles",
+          "title": "Automatic titles",
+          "level": 1,
+          "body": "Published Floret v7.22.1 owns title reasoning and output limits. Title requests\ndisable thinking when the resolved capability permits it; otherwise they use\nthe supported short-request effort or retain the model default. They never\nchange the thread's saved reasoning choice or the main response policy.\n\nProvider output limits count hidden reasoning as well as visible text. Floret\ntherefore allows up to 1,024 output tokens when reasoning cannot be disabled or\nits controls are unknown. Explicit non-reasoning and disable-capable models\nretain the 64-token limit. Visible titles still contain at most 48 Unicode\ncharacters; reasoning fragments never become the title. Truncation leaves title\ngeneration failed and preserves the initial user-request title. The next\naccepted user turn retries a failed automatic title, including after restart;\nreopening alone does not issue a provider request. The\n[live timeline contract](../ui/flower-live-timeline.md) owns canonical title\nstatus, persistence, and workspace-summary presentation.",
+          "char_count": 1033
         }
       ],
       "evidence": [
@@ -8865,6 +8872,11 @@
           "id": "redeven:internal/ai/thread_reasoning_restart_test.go:0:saved on and off survive reopening and immutable continuation.",
           "source": "redeven:internal/ai/thread_reasoning_restart_test.go",
           "description": "Saved On and Off survive reopening and immutable continuation."
+        },
+        {
+          "id": "redeven:internal/ai/thread_title_ollama_test.go:0:capability-aware title output, independent main reasoning, live summaries, restart, failed-title retry, and opt-in real ollama acceptance.",
+          "source": "redeven:internal/ai/thread_title_ollama_test.go",
+          "description": "Capability-aware title output, independent main reasoning, live summaries, restart, failed-title retry, and opt-in real Ollama acceptance."
         }
       ],
       "snippet": "Published Floret owns the portable reasoning selection contract, Ollama metadata parser, and Ollama wire encoding. Redeven maps model metadata, product settings, and provider requests to that contract. Only verified capabilities create",
@@ -8880,6 +8892,12 @@
           "path": "architecture/runtime-service-snapshot.md",
           "concept_id": "architecture.runtime-service-snapshot",
           "title": "Runtime Service snapshot"
+        },
+        {
+          "label": "live timeline contract",
+          "path": "ui/flower-live-timeline.md",
+          "concept_id": "ui.flower-live-timeline",
+          "title": "Flower live current state"
         },
         {
           "label": "Flower reasoning selection contract",
@@ -27362,6 +27380,12 @@
           "title": "Floret thread runtime integration"
         },
         {
+          "label": "Model reasoning capabilities and transport",
+          "path": "ai/model-reasoning-runtime.md",
+          "concept_id": "ai.model-reasoning-runtime",
+          "title": "Model reasoning capabilities and transport"
+        },
+        {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
@@ -31861,5 +31885,5 @@
       ]
     }
   ],
-  "source_sha256": "5e19a2e48e89a1dcfe71708f441f15177f3a7ad7587d4ca1eebd2c71a2b7d808"
+  "source_sha256": "cba93d0248ad9fc882cb41021720de797330a189937b54e7566a12d5e388eb0d"
 }
