@@ -27,6 +27,8 @@ including dynamic catalog discovery and current model overrides. It requires
 at least 96,000 tokens of discoverable effective capacity so the manual scenario
 crosses the compaction target before reaching automatic pressure.
 
+Legacy selection preferences are upgraded through the normal startup loader on a temporary configuration copy using the discovered inventory. The source configuration remains byte-for-byte unchanged.
+
 The service runs with read-only tool permission in fresh state and agent-home
 directories. The proxy forwards requests and responses to the selected endpoint
 and records only request classification, model identity, system/tool digests,

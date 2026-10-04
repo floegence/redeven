@@ -87,6 +87,25 @@ func TestE2E_FlowerOllamaContextCompaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Exercise startup conversion on an isolated copy; never rewrite the user's profile.
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := config.LoadForStartup(configPath, func(p config.AIProvider) ([]config.AIProviderModel, error) {
+		if p.ID != providerID {
+			return nil, fmt.Errorf("qualification only resolves the selected provider")
+		}
+		return models, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range upgraded.AI.Providers {
+		if p.ID == providerID {
+			selected = p
+		}
+	}
 	selected = selected.WithDiscoveredModels(models)
 	var model config.AIProviderModel
 	for _, m := range selected.EffectiveModels() {
