@@ -287,7 +287,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   ),
   Dialog: (props: any) => props.presentation ? <Dynamic component={actual.Dialog} {...props} /> : (
     <Show when={props.open}>
-      <div role="dialog">{props.children}</div>
+      <div role="dialog">{props.children}{props.footer}</div>
     </Show>
   ),
   ConfirmDialog: (props: any) => (
@@ -307,6 +307,8 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   DirectoryPicker: actual.DirectoryPicker,
   Input: (props: any) => (
     <input
+      ref={props.ref}
+      aria-label={props['aria-label']}
       class={props.class}
       value={props.value}
       placeholder={props.placeholder}

@@ -3,6 +3,8 @@ package ai
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -120,6 +122,7 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 		var response struct {
 			Models []struct {
 				Name       string `json:"name"`
+				Digest     string `json:"digest"`
 				RemoteHost string `json:"remote_host"`
 			} `json:"models"`
 		}
@@ -154,6 +157,9 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 				RemoteHost   string          `json:"remote_host"`
 				Parameters   string          `json:"parameters"`
 				Thinking     json.RawMessage `json:"thinking"`
+				Details      struct {
+					Quantization string `json:"quantization_level"`
+				} `json:"details"`
 			}
 			if err := catalogJSON(ctx, client, http.MethodPost, base+"/api/show", in.APIKey, map[string]string{"model": m.Name}, &detail); err != nil {
 				return nil, err
@@ -182,7 +188,7 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 					}
 				}
 			}
-			model := config.AIProviderModel{ModelName: config.AIModelLocalName(m.Name), WireModelName: m.Name, DisplayName: m.Name, ContextWindow: contextWindow, InputModalities: []string{"text"}}
+			model := config.AIProviderModel{ModelDigest: m.Digest, Quantization: detail.Details.Quantization, ModelName: config.AIModelLocalName(m.Name), WireModelName: m.Name, DisplayName: m.Name, ContextWindow: contextWindow, InputModalities: []string{"text"}}
 			if slices.Contains(detail.Capabilities, "vision") {
 				model.InputModalities = append(model.InputModalities, "image")
 			}
@@ -259,7 +265,14 @@ func resolveModelCatalogs(ctx context.Context, cfg *config.AIConfig, resolveKey 
 	next.Providers = append([]config.AIProvider(nil), cfg.Providers...)
 	var failures []error
 	for i, p := range next.Providers {
-		if p.Type != "ollama" || p.ModelSelection == nil || (modelID != "" && !strings.HasPrefix(modelID, p.ID+"/")) {
+		if (p.Type != "ollama" && p.Type != "openrouter") || p.ModelSelection == nil || (modelID != "" && !strings.HasPrefix(modelID, p.ID+"/")) {
+			continue
+		}
+		if p.ModelSelection.SelectedModels == nil {
+			failures = append(failures, fmt.Errorf("provider %s requires model selection review in settings", p.ID))
+			continue
+		}
+		if len(p.ModelSelection.SelectedModels) == 0 {
 			continue
 		}
 		key := ""
@@ -273,10 +286,25 @@ func resolveModelCatalogs(ctx context.Context, cfg *config.AIConfig, resolveKey 
 		}
 		models, err := discoverModelCatalog(ctx, ModelCatalogRequest{Type: p.Type, BaseURL: p.BaseURL, APIKey: key}, &http.Client{Timeout: 20 * time.Second})
 		if err != nil {
-			failures = append(failures, fmt.Errorf("ollama catalog for %s: %w", p.ID, err))
+			failures = append(failures, fmt.Errorf("%s catalog for %s: %w", p.Type, p.ID, err))
 			continue
 		}
 		next.Providers[i] = p.WithDiscoveredModels(models)
 	}
 	return &next, errors.Join(failures...)
+}
+
+// DiscoverProviderModels supplies startup migration with the same authenticated read-only inventory.
+func DiscoverProviderModels(ctx context.Context, provider config.AIProvider, key string) ([]config.AIProviderModel, error) {
+	return discoverModelCatalog(ctx, ModelCatalogRequest{Type: provider.Type, BaseURL: provider.BaseURL, APIKey: key}, &http.Client{Timeout: 20 * time.Second})
+}
+
+// Scope alias groups to a connection and identical effective parameters.
+func modelAliasGroup(p config.AIProvider, m config.AIProviderModel) string {
+	if m.ModelDigest == "" {
+		return ""
+	}
+	raw, _ := json.Marshal([]any{p.ID, p.BaseURL, m.ModelDigest, m.ContextWindow, m.MaxOutputTokens, m.EffectiveContextWindowPercent, m.InputModalities, m.ReasoningCapability, m.DefaultReasoningSelection})
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }

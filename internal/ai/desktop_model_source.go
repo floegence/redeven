@@ -98,6 +98,8 @@ type AIRuntimeStatus struct {
 }
 
 type DesktopModelSourceModel struct {
+	AliasGroup                    string                        `json:"alias_group,omitempty"`
+	Quantization                  string                        `json:"quantization,omitempty"`
 	ID                            string                        `json:"id"`
 	Label                         string                        `json:"label,omitempty"`
 	Provider                      string                        `json:"provider,omitempty"`
@@ -1292,6 +1294,8 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 			capability = sanitizeDesktopModelSourceCapability(publicID, capability)
 			model := DesktopModelSourceModel{
 				ID:                            publicID,
+				AliasGroup:                    modelAliasGroup(p, m),
+				Quantization:                  m.Quantization,
 				Label:                         providerName + " / " + firstNonEmpty(m.DisplayName, modelName),
 				Provider:                      providerName,
 				ContextWindow:                 m.ContextWindow,

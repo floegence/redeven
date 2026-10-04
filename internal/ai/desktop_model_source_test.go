@@ -805,7 +805,7 @@ func TestDesktopModelSourceExecutesCatalogWireNameWithOptionalEndpointKey(t *tes
 			p := config.AIProvider{ID: "provider", Type: kind, BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: localModel, WireModelName: wireModel, ContextWindow: 32768}}}
 			if kind == "ollama" {
 				p.Models = nil
-				p.ModelSelection = &config.AIModelSelection{}
+				p.ModelSelection = &config.AIModelSelection{SelectedModels: []string{localModel}}
 			}
 			path := filepath.Join(t.TempDir(), "config.json")
 			if err := config.Save(path, &config.Config{AI: &config.AIConfig{CurrentModelID: "provider/" + localModel, Providers: []config.AIProvider{p}}}); err != nil {

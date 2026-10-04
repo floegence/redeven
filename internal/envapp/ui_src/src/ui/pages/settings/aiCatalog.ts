@@ -219,6 +219,7 @@ export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
       : undefined,
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
       display_name: m.display_name, status: m.status, web_search: m.web_search,
+      model_digest: m.model_digest, quantization: m.quantization, unavailable: m.unavailable,
       model_name: String(m?.model_name ?? ''),
       wire_model_name: String(m?.wire_model_name ?? ''),
       context_window: normalizePositiveInteger(m?.context_window),
@@ -236,7 +237,8 @@ export function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
   const models = Array.isArray(out.models) ? out.models : [];
   out.models = models.map((m) => ({
     display_name: m.display_name, status: m.status, web_search: m.web_search,
-      model_name: String(m?.model_name ?? ''),
+    model_digest: m.model_digest, quantization: m.quantization, unavailable: m.unavailable,
+    model_name: String(m?.model_name ?? ''),
     wire_model_name: String(m?.wire_model_name ?? '').trim() || undefined,
     context_window: normalizeContextWindowByProvider(out.type, m?.context_window),
     max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),

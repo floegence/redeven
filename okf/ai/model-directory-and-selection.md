@@ -3,85 +3,44 @@ type: AI Configuration Contract
 title: Model directory and selection
 description: Maintain an offline Agent catalog, model-specific capabilities, and user selection preferences without duplicate inventories.
 tags: [ai, models, providers, settings]
-timestamp: 2026-10-04T00:00:00Z
+timestamp: 2026-10-05T00:00:00Z
 ---
 
 # Summary
 
-Redeven owns the model directory, user selection preferences, credentials, and the one-time configuration conversion. A checked-in models.dev snapshot generates the exact catalog consumed by Go and both Flower settings surfaces. Brand catalogs default to all Agent models; users persist exclusions and parameter overrides. Image input is a variable model capability for every provider, including DeepSeek Vision. Current and default conversation models never change merely because the selectable catalog changes. Floret remains the published engine dependency and owns its own provider transport and opaque state.
+Redeven owns model discovery, explicit user selection, and atomic configuration upgrades. Catalog refreshes never select new models or change a conversation's saved model. Both settings surfaces preserve unavailable selections and parameter edits; chat shows a bounded searchable menu. Discovery failure cannot substitute another model. Floret remains the released execution engine and owns provider transport and opaque state.
 
 # Contract
 
-## Selection
+## Selection and discovery
 
-OpenAI, Anthropic, Gemini (`google`), Moonshot, GLM (`chatglm`), DeepSeek, Qwen, xAI, and Groq use generated catalogs. Groq exposes its hosted Agent models; brand providers expose their own models. Brand profiles persist `model_selection.disabled_models`, `custom_models`, and sparse `model_overrides`, with no expanded `models` inventory. Resolution combines the current catalog and preferences in memory. New entries become enabled; excluded names remain excluded. An inherited output ceiling is bounded by a smaller user context window, while an explicit output override remains validated as entered. A custom entry that later appears upstream remains one model with the user's parameters.
+OpenAI, Anthropic, Gemini (`google`), Moonshot, GLM (`chatglm`), DeepSeek, Qwen, xAI, and Groq use the same generated catalog in Go and both settings surfaces. Groq exposes hosted Agent models; brand providers expose their own models. These providers, Ollama, and OpenRouter persist `model_selection.selected_models`, custom definitions where supported, and sparse parameter overrides. An explicit empty selection disables every model without deleting the provider. New providers start with no selections. Custom OpenAI-compatible endpoints retain manual `models` entries.
 
-OpenRouter queries its configured `/models` endpoint with tool filtering and starts with no selected models. Its explicit `models` list remains the user's selection. Ollama queries `/api/tags`, `/api/ps`, and `/api/show`; only installed, local models advertising tools appear. Its inventory is transient. Loaded context capacity takes precedence over `num_ctx`; an unloaded model with neither uses a conservative 4,096-token capacity capped by the model limit. This avoids treating theoretical context length as the configured OpenAI-compatible serving capacity. Custom compatible endpoints retain manual model entry.
+Resolution combines current availability with saved intent in memory. New catalog entries stay unselected. Select all applies only to current candidates. Search, collapse, refresh, removal, and reopening never derive selection from visible rows. Missing selections remain visible as unavailable in settings; their identities and overrides survive save and recovery. Clearing a selection retains its parameter edits and custom definitions. Inherited output capacity is capped by a smaller context override; explicit output limits remain validated as entered.
 
-The two settings entrances share catalog resolution, serialization, search, selection count, and bulk controls. Searching, collapsing, reopening, or refreshing never derives selection from visible rows. Disabling and re-enabling a model preserves parameter edits; clearing selection also retains custom definitions for later selection. Offline Ollama discovery reports an error in its settings; other configured providers remain usable. Selecting all models changes the available range, not the new-chat default or a thread's persisted model.
+OpenRouter queries its configured `/models` endpoint with tool filtering. Refresh updates selected metadata without enabling additions. Wire IDs, including vendor paths, stay separate from local route identities. Explicitly entered OpenRouter custom definitions remain user-managed and do not claim discovered availability. Legacy local aliases continue resolving through their exact wire ID only while that ID is available.
 
-Provider field requirements, credential-aware saving, and composer readiness follow [Provider configuration validation](provider-configuration-validation.md).
+Ollama queries `/api/tags`, `/api/ps`, and `/api/show`; only installed local models advertising tools qualify. Loaded context capacity takes precedence over `num_ctx`; otherwise use the conservative 4,096-token serving default capped by the model limit. Inventory, digest, quantization, and availability are transient metadata, never persisted as user intent. Discovery errors leave preferences intact and other providers usable. The settings refresh action retries discovery; selected models must resolve against current inventory before execution.
 
-The generated directory stays outside the Env App initial bundle. The settings panel loads on first use and remains mounted after opening, preserving drafts and pending autosave when returning to chat. Lightweight model display helpers do not import catalog data; the build graph gate enforces that boundary.
+## Chat presentation
 
-An unavailable current model remains its exact stored identity and is shown with a request to choose another model. It is never silently replaced. A model-specific image flag participates in the attachment capability revision, so text-only and vision models may coexist within any provider. Actual image admission also requires a supported adapter route and authorized staged bytes; a metadata reasoning flag never invents request parameters.
+The composer initially shows at most eight selected models, prioritized by the current identity and recent thread models, grouped by provider/source. Search covers the complete selected set, including aliases. Users explicitly expand all selected models or open model management. Keyboard opening focuses search; arrows navigate enabled rows, Home/End navigate the list, and Escape returns focus to the trigger. The scrollable list keeps search and management controls visible on narrow screens.
 
-Compatibility epoch 16 requires matching Desktop and Runtime support for compact model preferences and the shared catalog endpoint. Older clients cannot save an empty expanded list over a catalog-owned profile. Existing epoch 9 through 15 upgrade paths remain available.
+Ollama aliases fold only when digest, provider connection, and effective parameters agree. The current alias is the representative when selected. Quantization and other aliases remain visible; different quantizations or overrides remain separate choices. Folding is presentation only: saved defaults, wire names, and thread model identities are never rewritten. An unavailable current model remains identifiable and disabled, with a request to choose another model.
 
-## Web search
+The generated directory stays outside the initial Env App bundle. Settings load on first use and remain mounted to preserve drafts. The lightweight composer menu helper does not import catalog data. Image input is resolved per model, including DeepSeek Vision, and participates in attachment capability revision; actual admission also requires a supported adapter route and authorized staged bytes.
 
-Search reviews in `scripts/model-catalog/overrides.json` enumerate wire model IDs,
-status (`supported`, `unsupported`, or `not_integrated`), official source URLs,
-and a review date. Supported entries identify an existing adapter protocol.
-`unsupported` requires explicit supplier evidence; an unimplemented integration
-uses `not_integrated`. Generation rejects missing reviews, unknown or mismatched
-protocols, duplicate IDs, and missing evidence. No newly shipped model silently
-inherits a disabled search default. Review the complete tool compatibility table;
-accepting Responses syntax or HTTP 200 does not prove hosted execution. Before
-marking a new search integration supported, qualify a real search result or
-hosted event through normal Turn admission. If that fails, resolve the discrepancy
-before enabling the capability. DeepSeek explicitly ignores built-in search, so
-its reviewed models use `unsupported` and its adapter cannot declare hosted search. Extra reviewed snapshot IDs preserve already
-supported Qwen configurations. User-owned OpenAI models retain the existing
-official-endpoint search contract; compatible endpoints retain their explicit
-`disabled`, `openai_builtin`, and `brave` choices.
+[Provider configuration validation](provider-configuration-validation.md) owns required fields and credentials. Compatibility epoch 36 prevents older Desktop clients from reinterpreting explicit selections as exclusions. Existing epochs 9 through 35 retain their declared upgrade paths.
 
-`config.ResolveAIWebSearch` is the pure authority for catalog, wire identity,
-endpoint, configuration, and Brave credential presence. `/api/ai/models` and
-`/api/ai/model_catalog` expose only readonly `web_search.status` and
-`web_search.reason`. Stable unavailable reasons distinguish `unsupported`,
-`not_integrated`, `not_configured`, `needs_credentials`, and
-`endpoint_not_supported`. Protocol names belong in internal diagnostics.
-
-Turn preparation uses the same resolution to build its tools. All native search
-modes become Floret `HostedToolDefinition`; Brave remains a local tool under
-existing permission and credential checks. The prompt reads this final local and
-hosted tool surface, distinguishing URL discovery from `web_fetch`. Adapters
-render only the request's tools. Transport selection is independent of search in
-one request, so automatic titles omit search without changing protocol. Attachment
-routing shares that transport decision. Floret owns immutable provider checkpoints. Model, reasoning and hosted search
-retain their Turn configuration across continuation and recovery; local tools
-and permission instructions refresh from current thread policy. A new Turn
-resolves current configuration.
-Floret canonical user retry admits a new Turn, so it also resolves current
-configuration. A restored native wire shape retains its required transport even
-if search settings changed while the earlier Turn was waiting.
-Provider rejection remains a real error, without a substitute search implementation.
-A native tool returned as a local function call fails explicitly before local
-dispatch. Tool restrictions apply to both local and hosted definitions.
-
-Both hosts use the shared badge, availability type, and localized reason labels.
-Settings aggregate actual model projections; brands and label existence never
-imply support. Missing search credentials do not prevent ordinary chat or model
-switching. Readonly projections are stripped from persisted selection preferences.
-`web_search.config` records model and wire identity, reviewed and effective state,
-mode, transport, and the disabling reason using the existing diagnostic channel.
+Model search capability follows [Model web search](model-web-search.md); selection alone never enables a search protocol.
 
 ## Configuration ownership
 
-`LoadForStartup` converts legacy brand profiles once, before Runtime services start. Original preset values inherit current metadata; user parameter changes become sparse overrides. Unknown custom entries remain custom. Retired original entries retain overrides and the current identity but do not reappear in the active catalog. Ollama legacy entries become overrides against the current installed inventory. OpenRouter and custom compatible profiles remain explicit selections.
+`LoadForStartup` freezes legacy selection once before services start. Old explicit brand, Ollama, and OpenRouter lists preserve only their listed identities. Known old preset values inherit current metadata; user differences become overrides. Custom definitions and retired model identities survive without admitting retired catalog entries. Custom compatible profiles remain manual.
 
-The configuration owner atomically saves the converted file before publishing it to services. Failure leaves the original file intact and returns an error; ordinary read-only `Load` does not migrate. Restart of a current profile does not rewrite its bytes. This is Redeven configuration conversion, not a Floret domain migration or an additional catalog database.
+Legacy brand exclusion profiles freeze the current catalog minus exclusions. Legacy Ollama exclusion profiles require a successful authenticated inventory query; startup preserves the original profile if discovery fails, and that provider remains unavailable pending review. The user can retry startup discovery or explicitly review/select models in settings. Merely opening, refreshing, or saving unrelated settings must not convert an unresolved profile to an empty selection. Bundle saves reject unresolved exclusion shapes. Explicit selection actions replace the legacy policy and preserve parameter overrides.
+
+The owner atomically persists a completed conversion before publishing it. Write failure leaves the original file intact and fails startup. Read-only `Load` never migrates; current profiles never rediscover or rewrite during migration. Discovery and runtime resolution create no catalog database or Floret migration.
 
 ## Directory maintenance
 
@@ -95,12 +54,10 @@ Gemini uses the supported OpenAI-compatible endpoint with model-specific effort 
 
 # Evidence
 
-- `redeven:internal/config/ai_web_search.go` - Search resolution and stable protocol selection.
-- `redeven:internal/ai/web_search_turn_integration_test.go` - Normal admission through captured provider HTTP, including Vision image search and aliases.
-- `redeven:scripts/model-catalog/test_generate.py` - New-model and invalid-review rejection.
 - `redeven:internal/config/ai_model_catalog.go` - Catalog and preference resolution.
 - `redeven:internal/config/ai_model_migration.go` - Atomic startup conversion.
-- `redeven:internal/config/ai_model_catalog_test.go` - Conversion, rollback, restart, and future catalog entries.
+- `redeven:internal/config/ai_model_selection_upgrade_test.go` - Offline freeze, alias identity, rollback, restart, and unavailable selections.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx` - Search, alias presentation, keyboard, bounded menus, and narrow-screen geometry.
 - `redeven:internal/ai/model_catalog.go` - Read-only OpenRouter and Ollama queries.
 - `redeven:internal/codeapp/appserver/server_model_catalog_test.go` - Admin authorization, input limits, and unchanged configuration.
 - `redeven:internal/flower_ui/src/settings/modelSelection.ts` - Shared UI selection owner.

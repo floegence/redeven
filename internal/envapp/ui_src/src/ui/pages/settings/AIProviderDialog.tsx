@@ -39,6 +39,7 @@ export type AIProviderDialogProps = {
   discoveringModels?: boolean;
   discoveryError?: string;
   open: boolean;
+  mode?: 'create' | 'edit';
   title: string;
   provider: AIProviderRow | null;
   canInteract: boolean;
@@ -146,7 +147,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
             variant="default"
             onClick={() => { if (!missingCredential()) props.onConfirm(); }}
             loading={saving()}
-            disabled={!props.canInteract || saving() || Boolean(missingCredential()) || !providerHasModels() && !props.provider?.model_selection}
+            disabled={!props.canInteract || saving() || Boolean(missingCredential()) || Boolean(props.provider?.model_selection && !props.provider.model_selection.selected_models) || !providerHasModels() && (props.mode === 'create' || !props.provider?.model_selection)}
           >
             {i18n.t('flowerProviderDialog.saveProvider')}
           </Button>
@@ -387,6 +388,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         title={i18n.t('flowerProviderDialog.recommendedModelsTitle')}
                         description={i18n.t('flowerProviderDialog.recommendedModelsDescription')}
                       />
+                      <Show when={provider().model_selection && !provider().model_selection?.selected_models}><p role="status" class="text-xs text-muted-foreground">{catalogCopy().selectionReview}</p></Show>
                       <ModelCatalogControls hasContent={props.recommendedModels.length > 0} copy={catalogCopy()} query={query()} count={props.provider?.models.length ?? 0} onQuery={setQuery} onSelectAll={props.onApplyAllPresets} onClear={props.onClearModels} onRefresh={props.onDiscoverModels} loading={props.discoveringModels} error={props.discoveryError} disabled={!props.canInteract} />
                       <Show
                         when={filterFlowerModels(props.recommendedModels, query()).length > 0}
@@ -400,7 +402,8 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                 <div class={cn('redeven-settings-choice rounded-lg border p-3', selected() && 'redeven-settings-choice--selected')}>
                                   <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
-                                      <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{preset.display_name || preset.model_name} <Show when={preset.status}><SettingsPill>{preset.status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
+                                      <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{preset.display_name || preset.model_name} <Show when={preset.unavailable}><SettingsPill>{catalogCopy().unavailableModel}</SettingsPill></Show><Show when={preset.quantization}><SettingsPill>{preset.quantization}</SettingsPill></Show> <Show when={preset.status}><SettingsPill>{preset.status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
+                                      <Show when={preset.model_digest && props.recommendedModels.some((other) => other.model_name !== preset.model_name && other.model_digest === preset.model_digest)}><p class="text-xs text-muted-foreground">{catalogCopy().aliases}: {props.recommendedModels.filter((other) => other.model_name !== preset.model_name && other.model_digest === preset.model_digest).map((other) => other.wire_model_name || other.model_name).join(', ')}</p></Show>
                                       <div class="mt-1 text-xs text-muted-foreground">
                                         {i18n.t('flowerProviderDialog.contextTokens', { count: formatTokenCount(preset.context_window) })}
                                         <Show when={preset.max_output_tokens}> · {i18n.t('flowerProviderDialog.outputTokens', { count: formatTokenCount(Number(preset.max_output_tokens ?? 0)) })}</Show>
@@ -411,7 +414,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                       variant={selected() ? 'ghost' : 'outline'}
                                       class={selected() ? 'text-muted-foreground hover:text-destructive' : ''}
                                       onClick={() => (selected() ? props.onRemoveRecommendedPreset(preset.model_name) : props.onAddSelectedPreset(preset.model_name))}
-                                      disabled={!props.canInteract}
+                                      disabled={!props.canInteract || (preset.unavailable && !selected())}
                                     >
                                       {selected() ? i18n.t('flowerProviderDialog.removeModel') : i18n.t('flowerProviderDialog.addPreset')}
                                     </Button>

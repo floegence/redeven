@@ -59,6 +59,8 @@ main() {
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.navigation.test.tsx \
       src/ui/FlowerSurface.providerReadiness.test.tsx \
+      src/ui/FlowerSurface.modelMenu.test.tsx \
+      src/ui/modelMenu.test.ts \
       src/ui/FlowerSurface.directoryActions.test.tsx \
       src/ui/FlowerSurface.directoryPicker.test.tsx \
       src/ui/FlowerSurface.fork.test.tsx \
@@ -190,6 +192,7 @@ main() {
         src/ui/FlowerSurface.inputResponse.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.providerReadiness.browser.test.tsx \
+        src/ui/FlowerSurface.modelMenu.browser.test.tsx \
         src/ui/FlowerSurface.settings.browser.test.tsx \
         src/ui/FlowerSettingsSurface.presentation.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \

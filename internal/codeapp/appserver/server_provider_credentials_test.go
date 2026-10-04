@@ -22,6 +22,7 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 		wantError                         string
 		invalidField                      string
 	}{
+		{name: "legacy exclusion save rejected", kind: "ollama", invalidField: "legacy selection", keyPatch: []any{"new-key"}, wantError: "selected_models"},
 		{name: "required key missing", kind: "openai", wantError: "api key"},
 		{name: "stored key retained", kind: "openai", savedKey: "stored-key"},
 		{name: "new key supplied", kind: "openai", keyPatch: []any{"new-key"}},
@@ -89,6 +90,9 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 				provider.WebSearch = &config.AIProviderWebSearch{Mode: "brave"}
 			}
 			switch tc.invalidField {
+			case "legacy selection":
+				provider.Models = nil
+				provider.ModelSelection = &config.AIModelSelection{}
 			case "base_url":
 				provider.BaseURL = ""
 			case "url scheme":
