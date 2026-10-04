@@ -1,5 +1,5 @@
 import { computerUseEnUS, type FlowerComputerCopy } from '../computerUseCopy';
-import { missingFlowerProviderCredential } from '../providerCredentials';
+import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../providerCredentials';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -646,7 +646,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                           <div class="flower-settings-provider-status">
                             <span>{copy().apiKey}</span>
                             <span class={cn('flower-settings-dot-pill', keyReady() && 'flower-settings-dot-pill-active')}>
-                              {provider.type === 'ollama' ? copy().dialog.catalog.optionalKey : keyReady() ? copy().ready : copy().needsKey}
+                              {flowerProviderAPIKeyOptional(provider.type) ? copy().dialog.catalog.optionalKey : keyReady() ? copy().ready : copy().needsKey}
                             </span>
                           </div>
                           <details class="flower-settings-provider-details">

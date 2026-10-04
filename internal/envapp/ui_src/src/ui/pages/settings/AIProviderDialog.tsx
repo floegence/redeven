@@ -1,5 +1,5 @@
 import { ModelCatalogControls } from '../../../../../../flower_ui/src/settings/ModelCatalogControls';
-import { missingFlowerProviderCredential } from '../../../../../../flower_ui/src/providerCredentials';
+import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../../../../../../flower_ui/src/providerCredentials';
 import { filterFlowerModels } from '../../../../../../flower_ui/src/settings/modelSelection';
 import { modelCatalogCopy } from '../../../../../../flower_ui/src/settings/modelCatalogCopy';
 import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
@@ -172,7 +172,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
             {
               id: 'connection',
               label: i18n.t('flowerProviderDialog.connectionTitle'),
-              description: provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim()
+              description: flowerProviderAPIKeyOptional(provider().type) ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim()
                 ? i18n.t('flowerProviderDialog.keyReady')
                 : i18n.t('flowerSettings.needsKey'),
               icon: Key,
@@ -208,7 +208,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                   </div>
                   <div class="mt-3 flex flex-wrap gap-1.5">
                     <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
-                      {provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
+                      {flowerProviderAPIKeyOptional(provider().type) ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
                     </SettingsPill>
                     <SettingsPill tone={flowerProviderSearchSummary(models(), catalogCopy()).enabled ? 'success' : 'default'}>{flowerProviderSearchSummary(models(), catalogCopy()).label}</SettingsPill>
                   </div>
@@ -311,7 +311,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         </div>
                       </Show>
                       <div>
-                        <FieldLabel hint={provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet ? i18n.t('flowerProviderDialog.savedKeyHint') : i18n.t('flowerProviderDialog.requiredBeforeUseHint')}>
+                        <FieldLabel hint={flowerProviderAPIKeyOptional(provider().type) ? catalogCopy().optionalKey : props.keySet ? i18n.t('flowerProviderDialog.savedKeyHint') : i18n.t('flowerProviderDialog.requiredBeforeUseHint')}>
                           {i18n.t('flowerProviderDialog.apiKey')}
                         </FieldLabel>
                         <Input
@@ -372,7 +372,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                     </div>
                     <div class="redeven-settings-inset flex flex-wrap gap-2 rounded-lg border p-3">
                       <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
-                        {provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
+                        {flowerProviderAPIKeyOptional(provider().type) ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
                       </SettingsPill>
                       <SettingsPill>{providerTypeDisplayLabel(provider().type)}</SettingsPill>
                       <SettingsPill tone={flowerProviderSearchSummary(models(), catalogCopy()).enabled ? 'success' : 'default'}>{flowerProviderSearchSummary(models(), catalogCopy()).label}</SettingsPill>

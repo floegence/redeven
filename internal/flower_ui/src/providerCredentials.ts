@@ -1,8 +1,12 @@
 import type { FlowerProviderDraft, FlowerProviderType } from './contracts/flowerSurfaceContracts';
 
 // Product credential policy shared by the composer and both provider editors.
+export function flowerProviderAPIKeyOptional(type: FlowerProviderType): boolean {
+  return type === 'ollama' || type === 'openai_compatible';
+}
+
 export function flowerProviderCredentialsReady(type: FlowerProviderType, keyConfigured: boolean): boolean {
-  return type === 'ollama' || keyConfigured;
+  return flowerProviderAPIKeyOptional(type) || keyConfigured;
 }
 
 function hasCredential(patch: string | null | undefined, stored: boolean): boolean {

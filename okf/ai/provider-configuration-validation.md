@@ -8,19 +8,19 @@ timestamp: 2026-10-04T00:00:00Z
 
 # Summary
 
-Redeven owns provider configuration, credential requirements, and Flower readiness. Ollama can send without a stored key; other local-profile providers require one. Both editors and the provider-bundle API enforce configuration completeness without inventing stored secrets. Invalid saves leave configuration and credentials unchanged; network or authentication failures remain execution errors. Floret's published thread-runtime contract is unchanged.
+Redeven owns provider configuration, credential requirements, and Flower readiness. Ollama and custom OpenAI-compatible endpoints can send without a stored key; other local-profile providers require one. Both editors and the provider-bundle API enforce configuration completeness without inventing stored secrets. Invalid saves leave configuration and credentials unchanged; network or authentication failures remain execution errors. Floret's published thread-runtime contract is unchanged.
 
 # Readiness and saving
 
-The shared Flower composer follows the same credential contract as provider execution: a selected Ollama inventory model can start or continue a conversation without a stored API key. Other local-profile provider types require their configured key. Credential snapshots report actual secret presence; readiness must not manufacture a configured secret or bypass catalog membership. Explicit Ollama credentials still apply to discovery and execution.
+The shared Flower composer follows the same credential contract as provider execution: a selected Ollama inventory model or configured OpenAI-compatible model can start or continue a conversation without a stored API key. Other local-profile provider types require their configured key. Credential snapshots report actual secret presence; readiness must not manufacture a configured secret or bypass catalog membership. Explicit optional credentials still apply to discovery and execution. Without a key, these endpoints receive no Authorization header and never inherit the host process OpenAI API key. An endpoint that requires authentication still needs its real credential; rejection by that endpoint remains an execution error.
 
-Both provider editors block saving missing credentials and identify the missing key. The provider-bundle API validates the resulting credential state before changing configuration or secrets, including retained credentials, replacements, explicit deletion, and the last update when a key appears more than once. Blank editor inputs preserve stored keys. Required keys cannot be removed while saving an enabled provider; an optional Ollama key can be removed. A missing Brave key blocks saving a provider with Brave search enabled, but does not disable ordinary chat for a previously saved profile. Invalid structural fields also reject the bundle before writes. These checks validate configuration completeness, not remote service reachability or credential validity.
+Both provider editors block saving missing required credentials and identify the missing key. The provider-bundle API validates the resulting credential state before changing configuration or secrets, including retained credentials, replacements, explicit deletion, and the last update when a key appears more than once. Blank editor inputs preserve stored keys. Required keys cannot be removed while saving an enabled provider; an optional endpoint key can be removed. A missing Brave key blocks saving a provider with Brave search enabled, but does not disable ordinary chat for a previously saved profile. Invalid structural fields also reject the bundle before writes. These checks validate configuration completeness, not remote service reachability or credential validity.
 
 # Field requirements
 
 | Field | Required value or omission behavior |
 | --- | --- |
-| Provider API key | Optional for Ollama; all other local-profile provider types require a new or stored key. Desktop and Redeven AI model sources retain their separate session authority. |
+| Provider API key | Optional for Ollama and custom OpenAI-compatible endpoints; all other local-profile provider types require a new or stored key. Desktop and Redeven AI model sources retain their separate session authority. |
 | Base URL | OpenAI, Anthropic, and Gemini may use their adapter default. Other provider types require an explicit HTTP(S) URL. |
 | Provider display name | Optional; the UI derives a name from the provider type or identity. |
 | Models | Explicit lists require named models; catalog preferences retain their existing selection semantics, including deselecting all models without deleting the provider. |
@@ -36,6 +36,7 @@ The Go configuration package owns the optional-key policy used by provider execu
 # Evidence
 
 - `redeven:internal/config/ai.go` - Structural validation and optional authentication contract.
+- `redeven:internal/ai/model_gateway_optional_key_test.go` - Streamed requests preserve explicit endpoint credentials and omit authentication when absent, even with host credentials set.
 - `redeven:internal/ai/provider_adapter.go` - Runtime credential resolution preserves optional keys and read failures.
 - `redeven:internal/codeapp/appserver/provider_credentials.go` - Validates final credential presence before bundle writes.
 - `redeven:internal/codeapp/appserver/server_provider_credentials_test.go` - Save acceptance and unchanged configuration and secrets on rejection.
