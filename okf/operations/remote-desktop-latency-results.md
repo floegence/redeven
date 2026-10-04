@@ -15,7 +15,9 @@ the tested configuration, not physical input-to-photon latency, universal GPU
 performance, zero-copy capture or WAN behavior. Capture/encoder failures still
 revoke media authority and require fresh current-generation paint.
 
-# Configuration and measurement
+# Contract
+
+## Configuration and measurement
 
 The physical server uses Ubuntu X11, i7-14700KF, RTX 4090 D, NVIDIA 550.90.07 and
 1920x1080 at 60 Hz. The local Mac runs Electron 41.10.5. Baseline and candidate use
@@ -38,7 +40,7 @@ of activity with two seconds of stillness; the heavy scene scrolls text in a
 1500x900 task-owned window. Compositor/capture sampling and clock uncertainty
 remain. There is no optical sensor or high-speed-camera evidence.
 
-# Observed results
+## Observed results
 
 Values are milliseconds, median / nearest-rank P95.
 
@@ -74,7 +76,7 @@ These are synthetic worker round trips, not desktop or 4K physical-display laten
 Raw-pixel transfer and GPU upload slightly increase capture-to-receive time on
 this already-fast CPU; the full improvement cannot be attributed to NVENC alone.
 
-# Failure and recovery evidence
+## Failure and recovery evidence
 
 The initial NVENC prototype omitted explicit SPS bitstream restrictions.
 VideoToolbox retained pictures for about 112 ms and repeatedly required recovery.
@@ -90,7 +92,9 @@ harness explicitly accepts that existing product decision. No product confirmati
 was bypassed. Unit/browser coverage rejects invalid cursor metadata and prevents
 cursor shape messages from granting painted-frame authority.
 
-# Limits and next work
+# Boundaries
+
+## Limits and next work
 
 X11 readback, scaling, raw IPC and GPU upload remain CPU-visible. A zero-copy GPU
 capture path requires its own design and evidence. Full-screen PNG transmission

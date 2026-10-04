@@ -15,7 +15,9 @@ button ordering and cancellation. A failed decoder still requires a fresh
 generation and paint. This record establishes one tested configuration, not
 physical input-to-photon latency or parity with NoMachine.
 
-# Configuration and method
+# Contract
+
+## Configuration and method
 
 The server runs Ubuntu 24.04 X11, i7-14700KF, RTX 4090 D, NVIDIA 550.90.07 and a
 1920x1080 60 Hz display. A task-owned Electron 41.10.5 window on the Mac is
@@ -50,7 +52,7 @@ mouse interference, ineffective event substitution or per-leg button releases
 are excluded and retained separately in the evidence corpus. All seven final
 runs are reported; frames are correlated observations, not independent trials.
 
-# Observed results
+## Observed results
 
 Values are milliseconds, empirical median / P95 of native input to the first
 observed matching client-window position.
@@ -91,7 +93,9 @@ candidate. The server's RTX 4090 D encodes; the Mac decodes. WebCodecs' hardware
 preference alone is not evidence of a selected hardware path. The browser does
 not expose VideoToolbox's per-session physical hardware-use property.
 
-# Correctness and remaining limits
+# Boundaries
+
+## Correctness and remaining limits
 
 Four real X11 host cursor shapes, explicit decoder failure/recovery, view-only
 mode and accepted control restoration pass on the final candidate. Product
