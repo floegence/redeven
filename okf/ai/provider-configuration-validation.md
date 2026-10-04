@@ -10,13 +10,15 @@ timestamp: 2026-10-04T00:00:00Z
 
 Redeven owns provider configuration, credential requirements, and Flower readiness. Ollama and custom OpenAI-compatible endpoints can send without a stored key; other local-profile providers require one. Both editors and the provider-bundle API enforce configuration completeness without inventing stored secrets. Invalid saves leave configuration and credentials unchanged; network or authentication failures remain execution errors. Floret's published thread-runtime contract is unchanged.
 
-# Readiness and saving
+# Contract
+
+## Readiness and saving
 
 The shared Flower composer follows the same credential contract as provider execution: a selected Ollama inventory model or configured OpenAI-compatible model can start or continue a conversation without a stored API key. Other local-profile provider types require their configured key. Credential snapshots report actual secret presence; readiness must not manufacture a configured secret or bypass catalog membership. Explicit optional credentials still apply to discovery and execution. Without a key, these endpoints receive no Authorization header and never inherit the host process OpenAI API key. An endpoint that requires authentication still needs its real credential; rejection by that endpoint remains an execution error.
 
 Both provider editors block saving missing required credentials and identify the missing key. The provider-bundle API validates the resulting credential state before changing configuration or secrets, including retained credentials, replacements, explicit deletion, and the last update when a key appears more than once. Blank editor inputs preserve stored keys. Required keys cannot be removed while saving an enabled provider; an optional endpoint key can be removed. A missing Brave key blocks saving a provider with Brave search enabled, but does not disable ordinary chat for a previously saved profile. Invalid structural fields also reject the bundle before writes. These checks validate configuration completeness, not remote service reachability or credential validity.
 
-# Field requirements
+## Field requirements
 
 | Field | Required value or omission behavior |
 | --- | --- |
@@ -27,7 +29,7 @@ Both provider editors block saving missing required credentials and identify the
 | Context and output limits | Published catalog or adapter defaults may supply omitted limits. Explicit compatible, OpenRouter, xAI, Groq, and Ollama model entries require context capacity. Custom catalog models also require it. Output limits remain optional. |
 | Brave API key | Required only when Brave search is enabled; existing stored credentials satisfy the requirement. |
 
-# Ownership and boundaries
+# Boundaries
 
 The [model directory](model-directory-and-selection.md) owns catalog discovery and selected-model membership. This contract governs configuration completeness only. It does not add a background connection probe, change transport protocols, or require optional display names and output limits. Existing malformed or externally edited configurations still receive defensive runtime checks; provider-bundle saves must not create a newly incomplete profile. Independent credential revocation remains available and may make an existing profile unavailable until a key is restored.
 
