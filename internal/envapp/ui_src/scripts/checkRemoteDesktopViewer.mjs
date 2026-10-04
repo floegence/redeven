@@ -18,6 +18,8 @@ const shared = path.join(root, 'internal/codeapp/appserver/host_application_view
 const native = JSON.parse(execFileSync('go', ['list', '-m', '-json', 'github.com/floegence/floe-native-apps'], { cwd: root, env: { ...process.env, GOWORK: 'off' }, encoding: 'utf8' })).Dir;
 const token = 'qualification-private-ticket';
 const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includes('--wayland') ? 'wayland' : 'x11';
+const separateCursor = backend !== 'macos' && !process.argv.includes('--embedded-cursor');
+const controlCursor = separateCursor ? 'default' : 'none';
 let messages = [], controls = [], sockets = [], generation = 0, frame = 0, selectedMode = 'control';
 let control, media, display = 'one', connectionCount = 0, disconnects = 0, ticketFailures = 0;
 let conflictNextConnect = false;
@@ -69,11 +71,11 @@ const server = http.createServer((request, response) => {
 const ws = new WebSocketServer({ noServer: true });
 const displays = [{ id: 'one', name: 'Fixture one', width: 320, height: 180, primary: true }, { id: 'two', name: 'Fixture two', width: 640, height: 360, primary: false }];
 function state() { control.send(JSON.stringify({ version: 1, type: 'state', state: 'active', mode: selectedMode, generation, display_id: display, displays })); }
-function paint() {
+function paint(cursor = selectedMode === 'control' && separateCursor ? 'separate' : 'embedded') {
   const png = new PNG({ width: display === 'one' ? 320 : 640, height: display === 'one' ? 180 : 360 });
   for (let i = 0; i < png.data.length; i += 4) { png.data[i] = 30; png.data[i + 1] = 80; png.data[i + 2] = 120; png.data[i + 3] = 255; }
   const data = PNG.sync.write(png);
-  const header = Buffer.from(JSON.stringify({ version: 1, type: 'frame', codec: 'png', key: true, generation, frame_id: ++frame, width: png.width, height: png.height, timestamp: 1, bytes: data.length }));
+  const header = Buffer.from(JSON.stringify({ version: 1, type: 'frame', codec: 'png', key: true, generation, frame_id: ++frame, width: png.width, height: png.height, timestamp: 1, bytes: data.length, ...(cursor ? { cursor } : {}) }));
   const prefix = Buffer.alloc(4); prefix.writeUInt32BE(header.length);
   media.send(Buffer.concat([prefix, header, data]));
 }
@@ -193,7 +195,7 @@ try {
   assert.equal(messages.filter(item => item.command.method === 'input').length, 0, 'input before first paint');
   paint();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-  assert.equal(await canvasCursor(), 'default', 'control must present the local system pointer without waiting for another remote frame');
+  assert.equal(await canvasCursor(), controlCursor, 'control must use the painted frame cursor presentation');
   assert.equal(await page.locator('#settings').evaluate(element => getComputedStyle(element).cursor), 'pointer', 'desktop cursor policy must not hide toolbar cursors');
   // Leave the remote picture unchanged and hold client animation frames. Real
   // mouse movement and drag must still send before any presentation resumes.
@@ -218,7 +220,7 @@ try {
       const received = () => messages.slice(movementStart).find(item => item.command.method === 'input' && item.command.input.kind === 'move' && Math.abs(item.command.input.x - x) < .005 && Math.abs(item.command.input.y - y) < .005);
       for (let attempt = 0; !received() && attempt < 100; attempt++) await page.waitForTimeout(20);
       assert(received(), `${dragging ? 'drag' : 'hover'} waited for another remote picture or local animation frame`);
-      assert.equal(await canvasCursor(), 'default', 'the local cursor disappeared while remote media was stationary');
+      assert.equal(await canvasCursor(), controlCursor, 'cursor presentation changed while remote media was stationary');
     }
     await page.mouse.up();
     assert.equal(frame, stationaryFrame, 'pointer responsiveness check unexpectedly received new media');
@@ -230,7 +232,7 @@ try {
       delete window.qualificationAnimationFrame; delete window.qualificationHeldFrames;
     });
   }
-  if (backend === 'x11') {
+  if (separateCursor) {
     const cursor = new PNG({ width: 8, height: 8 });
     cursor.data.fill(255);
     const data = PNG.sync.write(cursor);
@@ -245,6 +247,17 @@ try {
       'cursor shape must not grant painted authority');
     assert.equal(frame, stationaryFrame, 'cursor shape required a video frame');
   }
+  paint('embedded');
+  await page.waitForFunction(() => document.querySelector('#desktop').getAttribute('data-floe-desktop-cursor') === 'embedded');
+  assert.equal(await canvasCursor(), 'none', 'embedded host pixels must never show a second local cursor');
+  paint('separate');
+  await page.waitForFunction(() => document.querySelector('#desktop').getAttribute('data-floe-desktop-cursor') === 'separate');
+  assert.notEqual(await canvasCursor(), 'none', 'cursor-free pixels must restore immediate local feedback');
+  paint(null);
+  await page.waitForFunction(() => document.querySelector('#desktop').getAttribute('data-floe-desktop-cursor') === 'embedded');
+  assert.equal(await canvasCursor(), 'none', 'unlabelled legacy frames must retain one embedded cursor');
+  paint();
+  await page.waitForFunction(expected => document.querySelector('#desktop').getAttribute('data-floe-desktop-cursor') === expected, separateCursor ? 'separate' : 'embedded');
   assert.deepEqual(await page.locator('.floe-remote-input').evaluate(input => {
     const style = getComputedStyle(input);
     return { position: style.position, opacity: style.opacity };
@@ -431,7 +444,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#desktop').width === 640);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-  assert.equal(await canvasCursor(), 'default', 'display replacement must retain the local control cursor');
+  assert.equal(await canvasCursor(), controlCursor, 'display replacement must apply the control frame cursor presentation');
   await page.locator('#mode').selectOption('view');
   await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor === 'none');
   assert(await page.locator('#shortcuts').isDisabled(), 'view-only shortcuts remained interactive');
@@ -447,7 +460,7 @@ try {
   assert(await page.getByRole('dialog').isVisible(), 'takeover missing confirmation');
   await page.getByRole('button', { name: 'Take control', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-  assert.equal(await canvasCursor(), 'default', 'taking control must show the local control cursor');
+  assert.equal(await canvasCursor(), controlCursor, 'taking control must apply the control frame cursor presentation');
   assert(messages.some(item => item.command.method === 'set_mode' && item.takeover), 'takeover missing explicit flag');
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'locked', generation: ++generation }));
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host is locked');
@@ -472,7 +485,7 @@ try {
   assert(await page.locator('.floe-remote-input').isDisabled(), 'reconnect reused prior paint');
   assert.notEqual(await canvasCursor(), 'none', 'reconnect must retain the local cursor while awaiting fresh paint');
   paint(); await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-  assert.equal(await canvasCursor(), 'default', 'reconnect must retain the local control cursor after fresh paint');
+  assert.equal(await canvasCursor(), controlCursor, 'reconnect must apply the fresh frame cursor presentation');
   assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'running', 'reconnect closed enabled sound while the product still advertised it');
   await page.locator('#settings').click();
   assert(await page.locator('#sound').isChecked(), 'reconnect lost the sound preference');
@@ -508,7 +521,7 @@ try {
     throw error;
   }
   if (desktop) assert(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen()), 'fullscreen did not reach the native window');
-  assert.equal(await canvasCursor(), 'default', 'fullscreen must retain the local control cursor');
+  assert.equal(await canvasCursor(), controlCursor, 'fullscreen must retain the control frame cursor presentation');
   await page.locator('#desktop').click();
   await page.mouse.move(500, 400);
   await page.waitForFunction(() => document.querySelector('#toolbar').classList.contains('hidden-toolbar'), null, {timeout:4000});
@@ -599,7 +612,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.transportEvents.slice(-3)), [
     '/_redeven_desktop/disconnect', 'response:/_redeven_desktop/disconnect', 'disposed',
   ], 'disconnect must finish through the native transport before disposal');
-  console.log(JSON.stringify({ passed: true, checks: ['local control cursor', 'pointer and drag without media or animation frames', 'captured view-only cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'shortcut receipts', 'browser and Desktop files', 'clipboard epoch fencing', 'fullscreen hide and pin', 'disconnect retry and cleared pixels'] }));
+  console.log(JSON.stringify({ passed: true, backend, separateCursor, checks: ['painted cursor ownership', 'pointer and drag without media or animation frames', 'captured view-only cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'shortcut receipts', 'browser and Desktop files', 'clipboard epoch fencing', 'fullscreen hide and pin', 'disconnect retry and cleared pixels'] }));
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));
   if (directory) await rm(directory, { recursive: true, force: true });

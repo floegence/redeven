@@ -31,6 +31,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Graphical window transport](architecture/graphical-window-transport.md) - Route every desktop and host application data channel through resource-scoped Flowersec direct or tunnel sessions.
 - [Graphical window transport qualification](operations/graphical-window-transport-results.md) - Assess native direct/tunnel integrity, live Linux behavior and the remaining unlocked macOS checks.
 - [Remote desktop viewer interaction](architecture/remote-desktop-viewer.md) - Operate display, input, clipboard and fullscreen controls and recover from an unconfirmed disconnect.
+- [Remote desktop media and input scheduling](architecture/remote-desktop-media.md) - Preserve ordered media and input while reducing Wayland capture work and selecting supported encoders.
+- [Wayland cursor and scheduling optimization evidence](operations/remote-desktop-wayland-optimization-results.md) - Assess separate cursor ownership, ordered asynchronous input and damage-aware capture with explicit synthetic and real-host evidence boundaries.
 - [Remote desktop validation](operations/remote-desktop-validation.md) - Qualify office interaction, lifecycle and actual painted performance with published dependencies.
 - [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 performance, local delivery and remaining acceptance limits.
 - [Desktop latency and NVIDIA encoding](operations/remote-desktop-latency-results.md) - Compare controlled RTX 4090 D response measurements, decoder behavior and remaining copy/transport limits.

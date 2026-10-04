@@ -127,24 +127,8 @@ Browser media requires WebCodecs and HTTPS or a trustworthy local origin. The
 [acceptance record](../operations/remote-desktop-results.md) owns measured
 quality claims; a connected picture is not a 60 FPS certification.
 
-## Low-delay media
-
-The published player draws every current decoded picture immediately. A cumulative
-paint receipt names only the latest picture unchanged across a rendering opportunity
-and its following task. Replaced pictures do not receive individual paint receipts;
-reset cancels retired authority. PNG refinement decoding cannot serialize later
-H.264 decoding. Encoded reference dependencies remain ordered and bounded.
-
-Linux NVIDIA encoding uses the published component's verified glibc 2.31 worker
-and the installed NVIDIA driver, independently of its musl capture/media stack.
-A synthetic encode probe selects the backend; actual dimensions must then encode
-successfully. No system package, host FFmpeg, privileged operation or library-path
-injection is required. The worker uses private bounded pipes, one outstanding
-picture, zero B frames/lookahead and explicit zero-reorder H.264 SPS restrictions.
-An active encoder failure suspends media; it cannot silently replace a reference
-chain. The portable software encoder remains the explicit capability fallback.
-X11 readback, scaling, IPC and GPU upload still copy pixels. This does not claim
-zero-copy capture or certify hardware decode from a browser preference string.
+The [desktop media contract](remote-desktop-media.md) owns low-delay video,
+encoder selection and Wayland capture/input scheduling.
 
 # Evidence
 

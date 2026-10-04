@@ -3,15 +3,16 @@ type: Interaction Contract
 title: Remote desktop viewer interaction
 description: Operate the remote desktop toolbar, input modes and ended-session recovery consistently in browsers and Desktop.
 tags: [desktop, viewer, interaction, input]
-timestamp: 2026-10-04T13:20:00Z
+timestamp: 2026-10-04T18:10:00Z
 ---
 # Summary
 
 The Redeven viewer owns product controls and local feedback over published Floe
 input and native playback. The [remote desktop session contract](remote-desktop.md)
 owns authorization, capture generations and native authority. Only current painted
-control permits input. Control mode displays the client system pointer immediately,
-independently of remote frame arrival; local controls remain usable during recovery. Disconnect
+control permits input. Separate-cursor control frames enable immediate client
+pointer movement independently of later frame arrival; embedded-cursor frames
+hide the local pointer. Local controls remain usable during recovery. Disconnect
 stops local input and playback immediately, then confirms server removal or offers
 an explicit retry. It never presents a frozen desktop as a live connection.
 
@@ -42,14 +43,21 @@ is text-only and tied to the active controller. A manual text panel remains
 available when browser clipboard permission is unavailable. Clipboard contents,
 keys, passwords and pixels never enter audit records.
 
-Control mode displays the local system pointer without waiting for remote pixels.
-On Linux X11, published native playback receives the host cursor image and hotspot
-separately and applies them to that local pointer; video excludes the host cursor,
-and cursor-only movement produces no video frame. Transparent cursor shapes remain
-transparent. Retired generations cannot change the current pointer. macOS and
-Wayland retain embedded capture cursors and the local default pointer until their
-platforms provide the same independent shape contract. Local movement does not
-imply the host has processed input.
+Each current frame declares whether the host cursor is embedded in its pixels or
+supplied separately. The native player applies `data-floe-desktop-cursor` only
+after drawing that frame. The viewer shows the local system pointer only for
+separate control frames, applying the host shape and hotspot through
+`--floe-desktop-cursor`. Embedded and unlabelled frames hide the local pointer so
+there is exactly one cursor source. Cursor packets alone cannot change pixel
+ownership. Retired generations cannot change the current pointer.
+
+X11 supports separate shapes. Wayland can select portal cursor metadata when
+advertised, keeping control pixels cursor-free and compositing remote cursor
+position for view-only capture. Embedded-only Wayland and macOS display capture
+retain a single captured pointer; those paths do not promise immediate local
+movement. Transparent shapes remain transparent. Local movement does not imply
+the host has processed input. Platform capability is not qualification evidence;
+release and real-host validation must establish the selected capture path.
 View-only mode hides the local pointer only over a current painted desktop and
 shows the captured host cursor. Revoking painted authority hides the retired picture
 and restores the local pointer, including disconnect, lock, display replacement
