@@ -60,24 +60,26 @@ async function setupProvider(type: FlowerProviderType, keyConfigured: boolean | 
 }
 
 describe('Flower provider credential readiness', () => {
-  for (const existingThread of [false, true]) {
-    it.each([false, undefined, true])(`sends with Ollama and optional credentials (%s), existing thread: ${existingThread}`, async (keyConfigured) => {
-      const { launches, surface, snapshot, send } = await setupProvider('ollama', keyConfigured, existingThread);
-      expect(surface.querySelector('.flower-setup-welcome')).toBeNull();
-      expect(surface.querySelector('.flower-setup-inline')).toBeNull();
-      expect(surface.querySelector('.flower-model-reasoning-warning')).toBeNull();
-      send();
-      await waitFor(() => launches.length === 1);
-      expect(launches[0]).toEqual(expect.objectContaining({
-        prompt: 'Hello from the local model',
-        ...(existingThread ? { thread_id: 'thread-1' } : { model_id: 'local/agent' }),
-      }));
-      expect(flowerSurfaceNotifications()).toEqual([]);
-      expect(snapshot.provider_secrets[0]?.provider_api_key_configured).toBe(keyConfigured);
-    });
+  for (const type of ['ollama', 'openai_compatible'] as const) {
+    for (const existingThread of [false, true]) {
+      it.each([false, undefined, true])(`sends with ${type} and optional credentials (%s), existing thread: ${existingThread}`, async (keyConfigured) => {
+        const { launches, surface, snapshot, send } = await setupProvider(type, keyConfigured, existingThread);
+        expect(surface.querySelector('.flower-setup-welcome')).toBeNull();
+        expect(surface.querySelector('.flower-setup-inline')).toBeNull();
+        expect(surface.querySelector('.flower-model-reasoning-warning')).toBeNull();
+        send();
+        await waitFor(() => launches.length === 1);
+        expect(launches[0]).toEqual(expect.objectContaining({
+          prompt: 'Hello from the local model',
+          ...(existingThread ? { thread_id: 'thread-1' } : { model_id: 'local/agent' }),
+        }));
+        expect(flowerSurfaceNotifications()).toEqual([]);
+        expect(snapshot.provider_secrets[0]?.provider_api_key_configured).toBe(keyConfigured);
+      });
+    }
   }
 
-  it.each(['openai', 'anthropic', 'google', 'moonshot', 'chatglm', 'deepseek', 'qwen', 'openrouter', 'xai', 'groq', 'openai_compatible'] as const)('requires credentials for %s even with a local provider ID', async (type) => {
+  it.each(['openai', 'anthropic', 'google', 'moonshot', 'chatglm', 'deepseek', 'qwen', 'openrouter', 'xai', 'groq'] as const)('requires credentials for %s even with a local provider ID', async (type) => {
     const { launches, surface, send } = await setupProvider(type, false);
     expect(surface.querySelector('.flower-setup-inline')).not.toBeNull();
     send();
@@ -88,7 +90,7 @@ describe('Flower provider credential readiness', () => {
   });
 
   it('sends with a required-key provider after credentials are configured', async () => {
-    const { launches, send } = await setupProvider('openai_compatible', true);
+    const { launches, send } = await setupProvider('openai', true);
     send();
     await waitFor(() => launches.length === 1);
     expect(flowerSurfaceNotifications()).toEqual([]);

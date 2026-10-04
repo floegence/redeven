@@ -760,8 +760,8 @@ func testDesktopModelSourceError(id string, code string, message string) Desktop
 	}
 }
 
-func TestDesktopModelSourceExecutesCatalogWireNameWithOptionalOllamaKey(t *testing.T) {
-	for _, kind := range []string{"openrouter", "ollama"} {
+func TestDesktopModelSourceExecutesCatalogWireNameWithOptionalEndpointKey(t *testing.T) {
+	for _, kind := range []string{"openrouter", "ollama", "openai_compatible"} {
 		t.Run(kind, func(t *testing.T) {
 			const wireModel = "vendor/agent:latest"
 			var sent bool
@@ -805,7 +805,7 @@ func TestDesktopModelSourceExecutesCatalogWireNameWithOptionalOllamaKey(t *testi
 				t.Fatal(err)
 			}
 			secretPath := filepath.Join(t.TempDir(), "secrets.json")
-			if kind != "ollama" {
+			if kind == "openrouter" {
 				if err := settings.NewSecretsStore(secretPath).SetAIProviderAPIKey("provider", "test-key"); err != nil {
 					t.Fatal(err)
 				}

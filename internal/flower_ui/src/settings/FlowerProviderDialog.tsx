@@ -1,5 +1,5 @@
 import { WebSearchCapabilityBadge } from '../WebSearchCapabilityBadge';
-import { missingFlowerProviderCredential } from '../providerCredentials';
+import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../providerCredentials';
 import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { ModelCatalogControls } from './ModelCatalogControls';
@@ -268,7 +268,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                   </div>
                                 </Show>
                                 <div>
-                                  <FlowerFieldLabel hint={store.draft!.type === 'ollama' ? copy().catalog.optionalKey : props.keyConfigured ? copy().storedKeyKept : copy().requiredBeforeUse}>
+                                  <FlowerFieldLabel hint={flowerProviderAPIKeyOptional(store.draft!.type) ? copy().catalog.optionalKey : props.keyConfigured ? copy().storedKeyKept : copy().requiredBeforeUse}>
                                     {copy().apiKey}
                                   </FlowerFieldLabel>
                                   <Input
@@ -334,7 +334,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               </div>
                               <div class="flex flex-wrap gap-2">
                                 <FlowerSettingsPill tone={props.keyConfigured || String(store.draft!.provider_api_key ?? '').trim() ? 'success' : 'default'}>
-                                  {store.draft!.type === 'ollama' ? copy().catalog.optionalKey : props.keyConfigured || String(store.draft!.provider_api_key ?? '').trim() ? copy().keyReady : copy().needsKey}
+                                  {flowerProviderAPIKeyOptional(store.draft!.type) ? copy().catalog.optionalKey : props.keyConfigured || String(store.draft!.provider_api_key ?? '').trim() ? copy().keyReady : copy().needsKey}
                                 </FlowerSettingsPill>
                                 <FlowerSettingsPill>{providerTypeLabel(store.draft!.type)}</FlowerSettingsPill>
                                 <Show when={(store.draft!.web_search?.mode ?? 'disabled') === 'brave'}>

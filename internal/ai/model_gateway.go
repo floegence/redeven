@@ -2291,9 +2291,6 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 	if strings.TrimSpace(apiKey) == "" && !config.AIProviderAPIKeyOptional(providerType) {
 		return nil, errors.New("missing provider api key")
 	}
-	if providerType == "ollama" && strings.TrimSpace(apiKey) == "" {
-		apiKey = "ollama"
-	}
 	strictToolSchema := resolveStrictToolSchema(providerType, baseURL, strictToolSchemaOverride)
 	parallelTools := resolveParallelToolCallsWireMode(providerType, baseURL)
 	if len(parallelToolCallsOverride) > 0 {
@@ -2316,6 +2313,10 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			baseURL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 		}
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
+		if strings.TrimSpace(apiKey) == "" {
+			// Override ambient SDK credentials and omit authentication for keyless endpoints.
+			opts = append(opts, ooption.WithHeaderDel("Authorization"))
+		}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}

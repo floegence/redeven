@@ -89,13 +89,14 @@ describe('shared Flower provider dialog', () => {
     { type: 'openai', keyConfigured: true, draftKey: '', blocked: false },
     { type: 'openai', keyConfigured: false, draftKey: 'new-key', blocked: false },
     { type: 'ollama', keyConfigured: false, draftKey: '', blocked: false },
-    { type: 'openai_compatible', keyConfigured: false, draftKey: '', blocked: true },
+    { type: 'openai_compatible', keyConfigured: false, draftKey: '', blocked: false },
   ] as const)('checks $type stored=$keyConfigured draft=$draftKey before saving', ({ type, keyConfigured, draftKey, blocked }) => {
     const dialog = mountDialog('edit', undefined, keyConfigured);
     try {
       dialog.setProvider({ id: 'provider', type, base_url: 'http://localhost:11434/v1', provider_api_key: draftKey,
         models: [{ model_name: 'agent', context_window: 32768 }] });
       expect(dialog.button('Save provider').disabled).toBe(blocked);
+      if (type === 'ollama' || type === 'openai_compatible') expect(dialog.host.textContent).toContain('API key optional');
       dialog.button('Save provider').click();
       expect(Boolean(dialog.confirmed())).toBe(!blocked);
     } finally { dialog.dispose(); }

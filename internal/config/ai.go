@@ -280,7 +280,12 @@ func requiresExplicitAIProviderBaseURL(providerType string) bool {
 // AIProviderAPIKeyOptional defines local-profile authentication requirements.
 // A configured optional key is still used by discovery and execution.
 func AIProviderAPIKeyOptional(providerType string) bool {
-	return strings.EqualFold(strings.TrimSpace(providerType), "ollama")
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "ollama", "openai_compatible":
+		return true
+	default:
+		return false
+	}
 }
 
 func IsCuratedNativeAIProviderModel(providerType string, modelName string) bool {

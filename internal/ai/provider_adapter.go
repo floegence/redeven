@@ -75,8 +75,8 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Model
 	return adapter.Adapter, responseFormat, nil
 }
 
-// Ollama may run without authentication, but a configured key still applies to
-// both discovery and execution. Every execution route uses the same decision.
+// Optional endpoint authentication still uses a configured key for discovery
+// and execution. Every execution route uses the same decision.
 func resolveModelProviderKey(providerType, providerID string, resolve func(string) (string, bool, error)) (string, bool, error) {
 	optional := config.AIProviderAPIKeyOptional(providerType)
 	if resolve == nil {

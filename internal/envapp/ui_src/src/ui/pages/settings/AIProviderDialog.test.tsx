@@ -86,7 +86,7 @@ describe('provider save credentials', () => {
     { type: 'openai', keySet: true, keyDraft: '', blocked: false },
     { type: 'openai', keySet: false, keyDraft: 'new-key', blocked: false },
     { type: 'ollama', keySet: false, keyDraft: '', blocked: false },
-    { type: 'openai_compatible', keySet: false, keyDraft: '', blocked: true },
+    { type: 'openai_compatible', keySet: false, keyDraft: '', blocked: false },
   ] as const)('checks $type stored=$keySet draft=$keyDraft', ({ type, keySet, keyDraft, blocked }) => {
     const host = document.createElement('div');
     document.body.append(host);
@@ -95,6 +95,7 @@ describe('provider save credentials', () => {
     try {
       const save = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Save Provider')!;
       expect(save.disabled).toBe(blocked);
+      if (type === 'ollama' || type === 'openai_compatible') expect(host.textContent).toContain('API key optional');
       save.click();
       expect(props.onConfirm).toHaveBeenCalledTimes(blocked ? 0 : 1);
     } finally { dispose(); }
