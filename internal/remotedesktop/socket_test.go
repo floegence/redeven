@@ -62,7 +62,7 @@ func TestRemoteDesktopSocketsBindBothChannelsAndRetireTogether(t *testing.T) {
 	}
 	defer media.Close()
 	// Independent native pipes may publish the keyframe before active state.
-	native.media <- nativeapps.HostDesktopMessage{Version: 1, Type: "frame", Codec: "png", Generation: 2, FrameID: 1, Width: 2, Height: 2, Data: []byte{1, 2, 3}}
+	native.media <- nativeapps.HostDesktopMessage{Version: 1, Type: "frame", Codec: "png", Cursor: "separate", Generation: 2, FrameID: 1, Width: 2, Height: 2, Data: []byte{1, 2, 3}}
 	native.control <- nativeapps.HostDesktopMessage{Version: 1, Type: "state", State: "authorizing", Authorization: "restoring", Mode: "view"}
 	native.control <- nativeapps.HostDesktopMessage{Version: 1, Type: "state", State: "active", Authorization: "saved", Mode: "control", Generation: 2}
 	if err := control.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
@@ -83,7 +83,7 @@ func TestRemoteDesktopSocketsBindBothChannelsAndRetireTogether(t *testing.T) {
 		t.Fatal(kind, err)
 	}
 	frame, err := nativeapps.ReadHostDesktopMessage(bytes.NewReader(packet))
-	if err != nil || frame.FrameID != 1 {
+	if err != nil || frame.FrameID != 1 || frame.Cursor != "separate" {
 		t.Fatal(frame, err)
 	}
 	command := func(method string, values map[string]any) {
