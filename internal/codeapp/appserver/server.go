@@ -1629,6 +1629,9 @@ func (g *Server) saveAIProviderBundle(
 	aiKeyPatches []settings.AIProviderAPIKeyPatch,
 	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
 ) (*config.Config, error) {
+	if err := validateAIProviderBundleCredentials(modelProfile, g.secrets, aiKeyPatches, webSearchKeyPatches); err != nil {
+		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
+	}
 	prevConfig, err := g.loadConfigLocked()
 	if err != nil {
 		return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: err}

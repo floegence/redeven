@@ -63,12 +63,12 @@ vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
 
 afterEach(() => { document.body.innerHTML = ''; });
 
-function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelCatalogDiscovery) {
+function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelCatalogDiscovery, keyConfigured = true) {
   const host = document.createElement('div'); document.body.append(host);
   const [open, setOpen] = createSignal(true);
   const [provider, setProvider] = createSignal<FlowerProviderDraft>({ id: 'brand', type: 'openai', models: defaultFlowerProviderModels('openai') });
   let confirmed: FlowerProviderDraft | undefined;
-  const dispose = render(() => <FlowerProviderDialog onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
+  const dispose = render(() => <FlowerProviderDialog onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured={keyConfigured} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
   const button = (text: string) => {
     const el = [...host.querySelectorAll('button')].find((element) => element.textContent?.trim() === text);
     if (!el) throw new Error(`Missing button: ${text}`);
@@ -84,6 +84,32 @@ function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelC
 }
 
 describe('shared Flower provider dialog', () => {
+  it.each([
+    { type: 'openai', keyConfigured: false, draftKey: '', blocked: true },
+    { type: 'openai', keyConfigured: true, draftKey: '', blocked: false },
+    { type: 'openai', keyConfigured: false, draftKey: 'new-key', blocked: false },
+    { type: 'ollama', keyConfigured: false, draftKey: '', blocked: false },
+    { type: 'openai_compatible', keyConfigured: false, draftKey: '', blocked: true },
+  ] as const)('checks $type stored=$keyConfigured draft=$draftKey before saving', ({ type, keyConfigured, draftKey, blocked }) => {
+    const dialog = mountDialog('edit', undefined, keyConfigured);
+    try {
+      dialog.setProvider({ id: 'provider', type, base_url: 'http://localhost:11434/v1', provider_api_key: draftKey,
+        models: [{ model_name: 'agent', context_window: 32768 }] });
+      expect(dialog.button('Save provider').disabled).toBe(blocked);
+      dialog.button('Save provider').click();
+      expect(Boolean(dialog.confirmed())).toBe(!blocked);
+    } finally { dialog.dispose(); }
+  });
+
+  it('blocks Brave search without its separate key', () => {
+    const dialog = mountDialog('edit');
+    try {
+      dialog.setProvider({ id: 'provider', type: 'openai_compatible', base_url: 'https://example.com/v1', web_search: { mode: 'brave' },
+        models: [{ model_name: 'agent', context_window: 32768 }] });
+      expect(dialog.button('Save provider').disabled).toBe(true);
+      expect(dialog.host.textContent).toContain('Needs Brave key');
+    } finally { dialog.dispose(); }
+  });
   it('refreshes native capabilities from the server and shows mixed support without brand inference', async () => {
     vi.useFakeTimers();
     const models = defaultFlowerProviderModels('openai').map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));

@@ -80,6 +80,39 @@ function baseProvider(): AIProviderRow {
   };
 }
 
+describe('provider save credentials', () => {
+  it.each([
+    { type: 'openai', keySet: false, keyDraft: '', blocked: true },
+    { type: 'openai', keySet: true, keyDraft: '', blocked: false },
+    { type: 'openai', keySet: false, keyDraft: 'new-key', blocked: false },
+    { type: 'ollama', keySet: false, keyDraft: '', blocked: false },
+    { type: 'openai_compatible', keySet: false, keyDraft: '', blocked: true },
+  ] as const)('checks $type stored=$keySet draft=$keyDraft', ({ type, keySet, keyDraft, blocked }) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const props = makeProps({ provider: { ...baseProvider(), type }, keySet, keyDraft });
+    const dispose = render(() => <AIProviderDialog {...props} />, host);
+    try {
+      const save = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Save Provider')!;
+      expect(save.disabled).toBe(blocked);
+      save.click();
+      expect(props.onConfirm).toHaveBeenCalledTimes(blocked ? 0 : 1);
+    } finally { dispose(); }
+  });
+
+  it('blocks Brave search without its separate key', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const props = makeProps({ provider: { ...baseProvider(), type: 'openai_compatible', web_search: { mode: 'brave' } } });
+    const dispose = render(() => <AIProviderDialog {...props} />, host);
+    try {
+      const save = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Save Provider')!;
+      expect(save.disabled).toBe(true);
+      expect(document.body.querySelector('[role="status"]')?.textContent).toBe('Needs Brave key');
+    } finally { dispose(); }
+  });
+});
+
 function makeProps(overrides: Partial<AIProviderDialogProps> = {}): AIProviderDialogProps {
   return {
     open: true,

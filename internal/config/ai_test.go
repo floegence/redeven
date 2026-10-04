@@ -193,6 +193,7 @@ func TestAIConfigValidate_ProviderTypeBaseURLRequirements(t *testing.T) {
 	}{
 		{name: "openai_without_base_url", typ: "openai", baseURL: "", wantError: false},
 		{name: "anthropic_without_base_url", typ: "anthropic", baseURL: "", wantError: false},
+		{name: "google_without_base_url", typ: "google", baseURL: "", wantError: false},
 		{name: "openai_compatible_without_base_url", typ: "openai_compatible", baseURL: "", wantError: true},
 		{name: "moonshot_without_base_url", typ: "moonshot", baseURL: "", wantError: true},
 		{name: "chatglm_without_base_url", typ: "chatglm", baseURL: "", wantError: true},

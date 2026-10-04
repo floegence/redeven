@@ -1,4 +1,5 @@
 import { computerUseEnUS, type FlowerComputerCopy } from '../computerUseCopy';
+import { missingFlowerProviderCredential } from '../providerCredentials';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -335,6 +336,11 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         return { ok: false, error: copy().validation.duplicateProviderID(provider.id) };
       }
       providerIDs.add(provider.id);
+      const missingCredential = missingFlowerProviderCredential(provider,
+        providerSecretConfigured(props.snapshot, provider.id), providerWebSearchSecretConfigured(props.snapshot, provider.id));
+      if (missingCredential) {
+        return { ok: false, error: missingCredential === 'provider' ? copy().needsKey : copy().needsBraveKey };
+      }
       if (flowerProviderTypeRequiresBaseURL(provider.type) && !trim(provider.base_url)) {
         return { ok: false, error: copy().validation.providerRequiresBaseURL(providerDisplayName(provider, copy().providerTypeLabels)) };
       }

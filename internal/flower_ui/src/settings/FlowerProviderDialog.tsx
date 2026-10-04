@@ -1,4 +1,5 @@
 import { WebSearchCapabilityBadge } from '../WebSearchCapabilityBadge';
+import { missingFlowerProviderCredential } from '../providerCredentials';
 import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { ModelCatalogControls } from './ModelCatalogControls';
@@ -83,6 +84,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [expandedProviderType, setExpandedProviderType] = createSignal<FlowerProviderType | null>(null);
   const [store, setStore] = createStore<{ draft: FlowerProviderDraft | null }>({ draft: null });
   const providerHasModels = () => (store.draft?.models.length ?? 0) > 0;
+  const missingCredential = () => store.draft
+    ? missingFlowerProviderCredential(store.draft, props.keyConfigured, props.webSearchKeyConfigured)
+    : null;
   const providerTypeLabel = (type: FlowerProviderType): string => copy().providerTypeLabels[type] ?? type;
 
   createEffect(() => {
@@ -180,7 +184,12 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       title={props.mode === 'create' ? copy().addTitle : copy().editTitle}
       class="flower-provider-dialog w-[min(72rem,96vw)] max-w-[96vw]"
       footer={(
-        <div class="flex items-center justify-end gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <Show when={missingCredential()}>
+            <span role="status" class="mr-auto text-sm text-muted-foreground">
+              {missingCredential() === 'provider' ? copy().needsKey : copy().needsBraveKey}
+            </span>
+          </Show>
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
             {copy().discard}
           </Button>
@@ -188,8 +197,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             size="sm"
             variant="default"
             loading={props.saving}
-            disabled={props.saving || !providerHasModels() && !store.draft?.model_selection}
-            onClick={() => { if (store.draft) void props.onConfirm(store.draft); }}
+            disabled={props.saving || Boolean(missingCredential()) || !providerHasModels() && !store.draft?.model_selection}
+            onClick={() => { if (store.draft && !missingCredential()) void props.onConfirm(store.draft); }}
           >
             {copy().saveProvider}
           </Button>

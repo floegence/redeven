@@ -1261,8 +1261,8 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 		if providerID == "" {
 			continue
 		}
-		keySet := p.Type == "ollama"
-		if secretStore != nil && p.Type != "ollama" {
+		keySet := config.AIProviderAPIKeyOptional(p.Type)
+		if secretStore != nil && !keySet {
 			var err error
 			keySet, err = secretStore.HasAIProviderAPIKey(providerID)
 			if err != nil {
