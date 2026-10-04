@@ -138,6 +138,9 @@ type AIProviderWebSearch struct {
 }
 
 type AIProviderModel struct {
+	// Discovery metadata is presentation-only and is never selection authority.
+	ModelDigest                   string                `json:"model_digest,omitempty"`
+	Quantization                  string                `json:"quantization,omitempty"`
 	HostedWebSearch               bool                  `json:"hosted_web_search,omitempty"`
 	DisplayName                   string                `json:"display_name,omitempty"`
 	Status                        string                `json:"status,omitempty"`

@@ -21,6 +21,8 @@ import (
 )
 
 type Model struct {
+	AliasGroup          string                         `json:"alias_group,omitempty"`
+	Quantization        string                         `json:"quantization,omitempty"`
 	WebSearch           config.AIWebSearchAvailability `json:"web_search"`
 	ID                  string                         `json:"id"`
 	Label               string                         `json:"label,omitempty"`

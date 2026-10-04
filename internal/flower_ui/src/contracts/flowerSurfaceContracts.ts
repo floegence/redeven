@@ -43,6 +43,9 @@ export type FlowerReasoningCapability = Readonly<{
 export type FlowerWebSearchAvailability = Readonly<{ status: 'available' | 'unavailable'; reason: string }>;
 
 export type FlowerProviderModel = Readonly<{
+  model_digest?: string;
+  quantization?: string;
+  unavailable?: boolean;
   web_search?: FlowerWebSearchAvailability;
   display_name?: string;
   status?: string;
@@ -57,6 +60,7 @@ export type FlowerProviderModel = Readonly<{
 }>;
 
 export type FlowerModelSelection = Readonly<{
+  selected_models?: readonly string[];
   disabled_models?: readonly string[];
   custom_models?: readonly FlowerProviderModel[];
   model_overrides?: readonly FlowerProviderModel[];
@@ -100,6 +104,8 @@ export type FlowerProviderSecretState = Readonly<{
 }>;
 
 export type FlowerModelSourceModel = Readonly<{
+  alias_group?: string;
+  quantization?: string;
   web_search?: FlowerWebSearchAvailability;
   id: string;
   label: string;

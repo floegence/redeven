@@ -99,7 +99,7 @@ func TestOllamaAutomaticTitleUsesCapabilityAndSurvivesRestart(t *testing.T) {
 			state := t.TempDir()
 			meta := &session.Meta{EndpointID: "title-test", ChannelID: "title-channel", UserPublicID: "user", NamespacePublicID: "namespace", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}
 			open := func() *Service {
-				svc, err := NewService(Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Config: &config.AIConfig{CurrentModelID: "local/local-alias", Providers: []config.AIProvider{{ID: "local", Type: "ollama", BaseURL: server.URL + "/v1", ModelSelection: &config.AIModelSelection{}}}}, RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second})
+				svc, err := NewService(Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Config: &config.AIConfig{CurrentModelID: "local/local-alias", Providers: []config.AIProvider{{ID: "local", Type: "ollama", BaseURL: server.URL + "/v1", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"local-alias"}}}}}, RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second})
 				if err != nil {
 					t.Fatal(err)
 				}

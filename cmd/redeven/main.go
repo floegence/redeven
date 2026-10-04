@@ -18,6 +18,7 @@ import (
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
+	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
 	"github.com/floegence/redeven/internal/lockfile"
@@ -25,6 +26,7 @@ import (
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimepresentation"
 	"github.com/floegence/redeven/internal/runtimeservice"
+	"github.com/floegence/redeven/internal/settings"
 )
 
 var (
@@ -656,7 +658,13 @@ func (c *cli) runCmd(args []string) int {
 		Phase: runtimepresentation.PhaseLoadConfig,
 		Title: "Loading runtime config",
 	})
-	cfg, err := config.LoadForStartup(stateLayout.ConfigPath)
+	cfg, err := config.LoadForStartup(stateLayout.ConfigPath, func(provider config.AIProvider) ([]config.AIProviderModel, error) {
+		key, _, err := settings.NewSecretsStore(stateLayout.SecretsPath).GetAIProviderAPIKey(provider.ID)
+		if err != nil {
+			return nil, err
+		}
+		return ai.DiscoverProviderModels(context.Background(), provider, key)
+	})
 	if err != nil {
 		// Local mode must be able to start from a clean Local Environment (no bootstrap yet).
 		if (mode == runModeLocal || mode == runModeDesktop) && os.IsNotExist(err) {

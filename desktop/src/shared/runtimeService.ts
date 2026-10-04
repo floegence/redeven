@@ -139,7 +139,7 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 35;
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 36;
 export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';

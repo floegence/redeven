@@ -133,6 +133,34 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('refreshes dynamic catalogs without enabling new models or losing missing selections', async () => {
+    for (const type of ['ollama', 'openrouter'] as const) {
+      const base = settingsResponse();
+      const settings: AgentSettingsResponse = { ...base, ai: { ...base.ai, current_model_id: 'dynamic/agent', providers: [{
+        id: 'dynamic', type, base_url: 'http://localhost:11434/v1', models: [], model_selection: { selected_models: ['agent'] },
+      }] } };
+      let available = true;
+      const bridge = bridgeFor((request) => {
+        if (request.path === '/_redeven_proxy/api/settings') return settings;
+        if (request.path === '/_redeven_proxy/api/ai/models') return { models: [] };
+        if (request.path === '/_redeven_proxy/api/ai/model_catalog') return { models: available
+          ? [{ model_name: 'agent', context_window: 131072, model_digest: 'digest', quantization: 'Q8_0' }, { model_name: 'new', context_window: 64000 }]
+          : [{ model_name: 'new', context_window: 64000 }] };
+        throw new Error(`Unexpected request ${request.path}`);
+      });
+      const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+      const initial = await adapter.loadSettings();
+      expect(initial.model_profile?.providers[0].models).toEqual([expect.objectContaining({ model_name: 'agent', model_digest: 'digest', quantization: 'Q8_0' })]);
+      available = false;
+      const missing = await adapter.loadSettings();
+      expect(missing.model_profile?.providers[0].models).toEqual([expect.objectContaining({ model_name: 'agent', unavailable: true })]);
+      const bundle = mapFlowerSettingsDraftToRuntimeBundle({ model_profile: missing.model_profile! });
+      expect(bundle.model_profile.providers[0].model_selection?.selected_models).toEqual(['agent']);
+      available = true;
+      expect((await adapter.loadSettings()).model_profile?.providers[0].models[0].unavailable).not.toBe(true);
+    }
+  });
+
   it('loads local media through the bounded preview route and honors cancellation', async () => {
     const bytes = new Uint8Array([0, 128, 255]);
     const bridge = bridgeFor(() => ({ bytes, mime_type: 'video/mp4' }));

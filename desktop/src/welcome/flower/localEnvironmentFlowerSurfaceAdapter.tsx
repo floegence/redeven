@@ -366,6 +366,7 @@ function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[
   return {
     model_name: trim(model.model_name),
     display_name: model.display_name, status: model.status,
+    model_digest: model.model_digest, quantization: model.quantization, unavailable: model.unavailable,
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
     ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
     ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
@@ -505,8 +506,7 @@ function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse
 async function loadSettingsSnapshot(bridge: DesktopSettingsBridge, models?: ModelsResponse): Promise<FlowerSettingsSnapshot> {
   const snapshot = mapRuntimeFlowerSettings(await runtimeJSON<AgentSettingsResponse>(bridge, 'GET', '/_redeven_proxy/api/settings'));
   if (!snapshot.model_profile) return snapshot;
-  const providers = await Promise.all(snapshot.model_profile.providers.map((provider) => provider.type === 'ollama'
-    ? hydrateFlowerProviderCatalog(provider, (input) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/model_catalog', input)) : provider));
+  const providers = await Promise.all(snapshot.model_profile.providers.map((provider) => hydrateFlowerProviderCatalog(provider, (input) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/model_catalog', input))));
   return withFlowerWebSearchAvailability({ ...snapshot, model_profile: { ...snapshot.model_profile, providers } }, (models ?? await loadModels(bridge)).models ?? []);
 }
 

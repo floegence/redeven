@@ -1,5 +1,7 @@
+import { flowerMenuModels } from './modelMenu';
 import { flowerProviderCredentialsReady } from './providerCredentials';
 import {
+  Input,
   StableText,
   Button,
   ConfirmDialog,
@@ -994,6 +996,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let composerApprovalCardRef: HTMLElement | undefined;
   let previousComposerApprovalAnnouncementKey = '';
   const [modelMenuOpen, setModelMenuOpen] = createSignal(false);
+  const [modelQuery, setModelQuery] = createSignal('');
+  const [modelMenuExpanded, setModelMenuExpanded] = createSignal(false);
+  let modelSearchRef: HTMLInputElement | undefined;
   const [modelMenuShiftX, setModelMenuShiftX] = createSignal(0);
   const [modelCapabilityRevision, setModelCapabilityRevision] = createSignal(0);
   type ModelCapabilityLoadState =
@@ -1986,7 +1991,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const openModelMenu = () => {
     if (!composerModelInteractive() || modelPatchPending()) return;
+    setModelQuery(''); setModelMenuExpanded(false);
     setModelMenuOpen(true);
+    queueMicrotask(() => modelSearchRef?.focus());
   };
   const handleModelTriggerKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -1995,7 +2002,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const handleModelMenuKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') { event.preventDefault(); closeModelMenu(true); }
+    if (event.key === 'Escape') { event.preventDefault(); closeModelMenu(true); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    if (event.target === modelSearchRef && (event.key === 'Home' || event.key === 'End')) return;
+    const items = [...(modelMenuRef?.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item:not(:disabled)') ?? [])];
+    if (!items.length) return;
+    event.preventDefault();
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : event.key === 'ArrowDown' ? (current + 1) % items.length : current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
+    items[index]?.focus();
   };
   const openPermissionMenu = () => {
     if (!composerPermissionInteractive()) return;
@@ -2618,6 +2633,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   type ComposerModelOption = Readonly<{
     id: string;
     label: string;
+    name?: string;
+    group: string;
+    aliasKey?: string;
+    quantization?: string;
+    aliases?: readonly string[];
     source: 'model_profile' | 'desktop_model_source' | 'platform' | 'thread_snapshot';
     disabled?: boolean;
     providerType?: FlowerProviderType;
@@ -2638,7 +2658,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (!modelName) return null;
         return {
           id: `${providerID}/${modelName}`,
-          label: `${providerLabel} / ${modelName}`,
+          label: `${providerLabel} / ${model.display_name || modelName}`,
+          name: model.display_name || modelName,
+          group: providerLabel,
+          disabled: model.unavailable,
+          quantization: model.quantization,
+          aliasKey: model.model_digest ? JSON.stringify([providerID, model.model_digest, model.context_window, model.max_output_tokens, model.effective_context_window_percent, model.input_modalities, model.reasoning_capability, model.default_reasoning_selection]) : undefined,
           source: 'model_profile',
           providerType: provider.type,
           supportsImageInput: flowerModelSupportsImage(model.input_modalities),
@@ -2658,6 +2683,8 @@ webSearch: model.web_search,
       id: trimString(model.id),
       label: trimString(model.label) || trimString(model.id),
       source: 'desktop_model_source' as const,
+      group: 'Desktop',
+      aliasKey: model.alias_group, quantization: model.quantization,
       supportsImageInput: flowerModelSupportsImage(model.input_modalities),
 webSearch: model.web_search,
       ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
@@ -2668,7 +2695,7 @@ webSearch: model.web_search,
   const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => {
     const seen = new Set<string>();
     const platformOptions: ComposerModelOption[] = (snapshot()?.platform_model_source?.models ?? []).map((model) => ({
-      id: model.id, label: model.label, source: 'platform',
+      id: model.id, label: model.label, group: 'Redeven AI', source: 'platform',
       supportsImageInput: flowerModelSupportsImage(model.input_modalities),
       webSearch: model.web_search, contextWindow: model.context_window,
       maxOutputTokens: model.max_output_tokens, reasoningCapability: model.reasoning_capability,
@@ -2700,6 +2727,7 @@ webSearch: model.web_search,
       id: threadModelID,
       label: threadModelID,
       source: 'thread_snapshot',
+      group: copy().settings.dialog.catalog.unavailableModel,
       disabled: true,
       supportsImageInput: false,
     };
@@ -2710,25 +2738,14 @@ webSearch: model.web_search,
     return threadSnapshot ? [threadSnapshot, ...options] : options;
   });
   const selectedModelOption = createMemo(() => modelSelectOptions().find((option) => option.id === selectedComposerModelID()) ?? null);
+  const menuModelOptions = createMemo(() => flowerMenuModels(modelSelectOptions(), selectedComposerModelID(), [...threads()].sort((a, b) => b.updated_at_ms - a.updated_at_ms).map((thread) => trimString(thread.model_id)), modelQuery(), modelMenuExpanded()));
   const groupedModelOptions = createMemo(() => {
-    const options = modelSelectOptions();
-    const remoteOptions = options.filter((option) => option.source === 'model_profile');
-    const desktopOptions = options.filter((option) => option.source === 'desktop_model_source');
-    const platformOptions = options.filter((option) => option.source === 'platform');
-    const groups = [
-      {
-        source: 'model_profile' as const,
-        label: trimString(props.adapter.runtime.display_name),
-        options: remoteOptions,
-      },
-      {
-        source: 'desktop_model_source' as const,
-        label: 'Desktop',
-        options: desktopOptions,
-      },
-      { source: 'platform' as const, label: 'Redeven AI', options: platformOptions },
-    ].filter((group) => group.options.length > 0);
-    return groups.length > 1 ? groups : null;
+    const groups = new Map<string, ComposerModelOption[]>();
+    for (const model of menuModelOptions().models) {
+      const key = `${model.source}/${model.group}`;
+      groups.set(key, [...(groups.get(key) ?? []), model]);
+    }
+    return [...groups.values()].map((options) => ({ label: options[0].group, options, source: options[0].source }));
   });
   const selectedReasoningCapability = createMemo(() => {
     const thread = selectedThreadSettings();
@@ -2786,7 +2803,7 @@ webSearch: model.web_search,
         && source.state === 'ready'
         && source.models.some((model) => trimString(model.id) === option.id);
     }
-    if (option.source !== 'model_profile') return false;
+    if (option.disabled || option.source !== 'model_profile') return false;
     const providerID = option.id.split('/')[0] ?? '';
     const provider = snapshot()?.model_profile?.providers.find((item) => trimString(item.id) === providerID);
     if (!provider) return false;
@@ -6677,7 +6694,8 @@ webSearch: model.web_search,
   });
   createEffect(() => {
     if (!modelMenuOpen() || !composerNeedsModelAttachmentSupport() || !props.adapter.loadAttachmentCapability) return;
-    for (const option of catalogModelOptions()) {
+    for (const option of menuModelOptions().models) {
+      if (option.disabled) continue;
       const existing = modelCapabilityCache.get(option.id);
       if (existing?.kind === 'loading' || existing?.kind === 'ready') continue;
       modelCapabilityCache.set(option.id, { kind: 'loading' });
@@ -10581,8 +10599,10 @@ webSearch: model.web_search,
           ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
           : <Bot class="flower-model-menu-icon" />}
         <span class="flower-model-menu-copy">
-          <span class="flower-model-menu-name" title={option.label}>{option.label}</span>
+          <span class="flower-model-menu-name" title={option.label}>{option.name || option.label}</span>
           <span class="flower-model-menu-meta">
+            <Show when={option.quantization}><span>{option.quantization} · </span></Show>
+            <Show when={option.disabled}><span>{copy().settings.dialog.catalog.unavailableModel}{option.contextWindow ? ' · ' : ''}</span></Show>
             <Show when={option.contextWindow}>
               <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
             </Show>
@@ -10593,6 +10613,7 @@ webSearch: model.web_search,
               <span> · Image</span>
             </Show>
           </span>
+          <Show when={option.aliases?.length}><span class="flower-model-menu-meta flower-model-menu-aliases" title={option.aliases?.join(', ')}>{copy().settings.dialog.catalog.aliases}: {option.aliases?.join(', ')}</span></Show>
           <WebSearchCapabilityBadge availability={option.webSearch} copy={copy().settings.dialog.catalog} />
           <Show when={attachmentSupport()} keyed>
             {(state) => (
@@ -10676,28 +10697,29 @@ webSearch: model.web_search,
         ref={modelMenuRef}
         class="flower-model-menu"
         style={{ '--flower-model-menu-shift-x': `${modelMenuShiftX()}px` } as JSX.CSSProperties}
-        role="listbox"
+        role="dialog"
+        aria-label={copy().settings.dialog.catalog.search}
         onKeyDown={handleModelMenuKeyDown}
       >
-        <Show when={threadSnapshotModelOption()}>{(option) => modelMenuItem(option())}</Show>
-        <Show
-          when={groupedModelOptions()}
-          fallback={<For each={catalogModelOptions()}>{modelMenuItem}</For>}
-        >
-          {(groups) => (
-            <For each={groups()}>
-              {(group, index) => (
-                <div
-                  class={cn('flower-model-menu-group', index() > 0 && 'flower-model-menu-group-separated')}
-                  data-model-source-group={group.source}
-                >
-                  <div class="flower-model-menu-group-label">{group.label}</div>
-                  <For each={group.options}>{modelMenuItem}</For>
-                </div>
-              )}
-            </For>
-          )}
-        </Show>
+        <div class="flower-model-menu-header">
+          <Input ref={modelSearchRef} value={modelQuery()} onInput={(event) => setModelQuery(event.currentTarget.value)} placeholder={copy().settings.dialog.catalog.search} aria-label={copy().settings.dialog.catalog.search} size="sm" />
+        </div>
+        <div class="flower-model-menu-list" role="listbox" aria-label={copy().settings.dialog.catalog.search}>
+          <Show when={menuModelOptions().models.length} fallback={<p class="flower-model-menu-empty">{copy().settings.dialog.catalog.empty}</p>}>
+            <For each={groupedModelOptions()}>{(group, index) => (
+              <div class={cn('flower-model-menu-group', index() > 0 && 'flower-model-menu-group-separated')} data-model-source-group={group.source} role="group" aria-label={group.label}>
+                <div class="flower-model-menu-group-label">{group.label}</div>
+                <For each={group.options}>{modelMenuItem}</For>
+              </div>
+            )}</For>
+          </Show>
+        </div>
+        <div class="flower-model-menu-footer">
+          <Show when={!modelQuery().trim() && !modelMenuExpanded() && menuModelOptions().total > menuModelOptions().models.length}>
+            <Button size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
+          </Show>
+          <Button size="sm" variant="ghost" icon={Settings} onClick={() => { closeModelMenu(false); openSettings(); }}>{copy().settings.dialog.catalog.manage}</Button>
+        </div>
         {modelSourceStatusRow('menu')}
       </div>
     </Show>
@@ -10723,7 +10745,7 @@ webSearch: model.web_search,
           type="button"
           class="flower-model-reasoning-model-trigger"
           disabled={!composerModelInteractive() || modelPatchPending()}
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           aria-expanded={modelMenuOpen()}
           aria-label={selectedModelNeedsAttention()
             ? `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}. ${copy().chat.configureProviderBeforeChat}`

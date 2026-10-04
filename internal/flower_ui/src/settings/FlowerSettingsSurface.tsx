@@ -100,7 +100,7 @@ function providerDisplayName(
 }
 
 function collectModelOptions(providers: readonly FlowerProviderDraft[], labels?: FlowerProviderTypeLabels): readonly FlowerModelOption[] {
-  return providers.flatMap((provider) => provider.models
+  return providers.flatMap((provider) => provider.models.filter((model) => !model.unavailable)
     .map((model) => {
       const modelName = trim(model.model_name);
       const providerID = trim(provider.id);
@@ -149,6 +149,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
     ...(providerKey !== undefined ? { provider_api_key: providerKey } : {}),
     ...(webSearchKey !== undefined ? { web_search_api_key: webSearchKey } : {}),
     models: provider.models.map((model) => ({
+      unavailable: model.unavailable,
       model_name: trim(model.model_name),
       wire_model_name: model.wire_model_name, display_name: model.display_name, status: model.status,
       ...(normalizeFlowerPositiveInteger(model.context_window) ?? defaultFlowerContextWindowForProviderType(provider.type) ? { context_window: normalizeFlowerPositiveInteger(model.context_window) ?? defaultFlowerContextWindowForProviderType(provider.type) } : {}),
@@ -370,7 +371,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         if (modelNames.has(modelName)) {
           return { ok: false, error: copy().validation.duplicateModel(providerDisplayName(provider, copy().providerTypeLabels), modelName) };
         }
-        if ((provider.type === 'openai_compatible' || provider.type === 'openrouter' || provider.type === 'xai' || provider.type === 'groq' || provider.type === 'ollama') && !model.context_window && !defaultFlowerContextWindowForProviderType(provider.type)) {
+        if (!model.unavailable && (provider.type === 'openai_compatible' || provider.type === 'openrouter' || provider.type === 'xai' || provider.type === 'groq' || provider.type === 'ollama') && !model.context_window && !defaultFlowerContextWindowForProviderType(provider.type)) {
           return { ok: false, error: copy().validation.modelNeedsContextWindow(model.model_name) };
         }
         modelNames.add(modelName);

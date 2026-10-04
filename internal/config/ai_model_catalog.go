@@ -49,6 +49,8 @@ func AIModelLocalName(wire string) string {
 // AIModelSelection stores user intent independently of changing catalogs.
 // Presence distinguishes the current shape from a legacy explicit brand list.
 type AIModelSelection struct {
+	SelectedModels []string `json:"selected_models"`
+	// DisabledModels is decoded only to upgrade the previous exclusion policy.
 	DisabledModels []string          `json:"disabled_models,omitempty"`
 	CustomModels   []AIProviderModel `json:"custom_models,omitempty"`
 	ModelOverrides []AIProviderModel `json:"model_overrides,omitempty"`
@@ -72,8 +74,21 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 		return cloneAIModels(p.Models)
 	}
 	models := AIProviderCatalog(p.Type)
-	if p.Type == "ollama" {
+	if p.Type == "ollama" || p.Type == "openrouter" {
 		models = cloneAIModels(p.discoveredModels)
+	}
+	// A selected local alias may have a different name from its provider wire ID.
+	for _, override := range p.ModelSelection.ModelOverrides {
+		if override.WireModelName == "" || slices.ContainsFunc(models, func(m AIProviderModel) bool { return m.ModelName == override.ModelName }) {
+			continue
+		}
+		for _, discovered := range models {
+			if discovered.EffectiveWireModelName() == override.WireModelName {
+				discovered.ModelName = override.ModelName
+				models = append(models, discovered)
+				break
+			}
+		}
 	}
 	for i := range models {
 		for _, override := range p.ModelSelection.ModelOverrides {
@@ -96,10 +111,17 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 			models = append(models, custom)
 		}
 	}
-	return slices.DeleteFunc(models, func(m AIProviderModel) bool { return slices.Contains(p.ModelSelection.DisabledModels, m.ModelName) })
+	if p.ModelSelection.SelectedModels == nil {
+		// Legacy dynamic preferences are unavailable until their selection is frozen.
+		if p.Type == "ollama" || p.Type == "openrouter" {
+			return nil
+		}
+		return slices.DeleteFunc(models, func(m AIProviderModel) bool { return slices.Contains(p.ModelSelection.DisabledModels, m.ModelName) })
+	}
+	return slices.DeleteFunc(models, func(m AIProviderModel) bool { return !slices.Contains(p.ModelSelection.SelectedModels, m.ModelName) })
 }
 
-// WithDiscoveredModels binds the current Ollama inventory only to this value.
+// WithDiscoveredModels binds the current remote inventory only to this value.
 func (p AIProvider) WithDiscoveredModels(models []AIProviderModel) AIProvider {
 	p.discoveredModels = cloneAIModels(models)
 	return p
@@ -136,16 +158,19 @@ func (p AIProvider) validateModelSelection() error {
 	if p.ModelSelection == nil {
 		return nil
 	}
-	if !AIProviderUsesCatalog(p.Type) && p.Type != "ollama" {
+	if !AIProviderUsesCatalog(p.Type) && p.Type != "ollama" && p.Type != "openrouter" {
 		return fmt.Errorf("model_selection is unsupported for %s", p.Type)
 	}
 	if len(p.Models) > 0 {
 		return errors.New("models and model_selection are mutually exclusive")
 	}
+	if p.ModelSelection.SelectedModels != nil && len(p.ModelSelection.DisabledModels) > 0 {
+		return errors.New("selected_models and disabled_models are mutually exclusive")
+	}
 	seen := map[string]bool{}
-	for _, name := range p.ModelSelection.DisabledModels {
+	for _, name := range append(slices.Clone(p.ModelSelection.SelectedModels), p.ModelSelection.DisabledModels...) {
 		if strings.TrimSpace(name) == "" || strings.Contains(name, "/") || seen[name] {
-			return errors.New("invalid or duplicate disabled model")
+			return errors.New("invalid or duplicate selected model")
 		}
 		seen[name] = true
 	}

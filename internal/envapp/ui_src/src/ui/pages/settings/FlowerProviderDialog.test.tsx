@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import { recommendedModelsForFlowerProviderType } from '../../../../../../flower_ui/src/settings/providerCatalog';
 import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FlowerProviderDialog } from '../../../../../../flower_ui/src/settings/FlowerProviderDialog';
-import { defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../flower_ui/src/settings/modelSelection';
+import { cloneFlowerModel, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../flower_ui/src/settings/modelSelection';
 import type { FlowerProviderDraft, FlowerModelCatalogDiscovery } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
@@ -66,7 +67,7 @@ afterEach(() => { document.body.innerHTML = ''; });
 function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelCatalogDiscovery, keyConfigured = true) {
   const host = document.createElement('div'); document.body.append(host);
   const [open, setOpen] = createSignal(true);
-  const [provider, setProvider] = createSignal<FlowerProviderDraft>({ id: 'brand', type: 'openai', models: defaultFlowerProviderModels('openai') });
+  const [provider, setProvider] = createSignal<FlowerProviderDraft>({ id: 'brand', type: 'openai', models: [] });
   let confirmed: FlowerProviderDraft | undefined;
   const dispose = render(() => <FlowerProviderDialog onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured={keyConfigured} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
   const button = (text: string) => {
@@ -113,11 +114,11 @@ describe('shared Flower provider dialog', () => {
   });
   it('refreshes native capabilities from the server and shows mixed support without brand inference', async () => {
     vi.useFakeTimers();
-    const models = defaultFlowerProviderModels('openai').map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));
+    const models = recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel).map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));
     const discover = vi.fn(async () => ({ models }));
     const dialog = mountDialog('edit', discover);
     try {
-      dialog.setProvider({ id: 'brand', type: 'openai', models: defaultFlowerProviderModels('openai') });
+      dialog.setProvider({ id: 'brand', type: 'openai', models: recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel) });
       expect(dialog.host.textContent).not.toContain('OpenAI built-in web search');
       await vi.advanceTimersByTimeAsync(1000);
       expect(dialog.host.querySelectorAll('[data-web-search="available"]')).toHaveLength(models.length);
@@ -133,11 +134,11 @@ describe('shared Flower provider dialog', () => {
 
   it('shows DeepSeek as unsupported while keeping the provider usable', async () => {
     vi.useFakeTimers();
-    const models = defaultFlowerProviderModels('deepseek').map((model) => ({ ...model, web_search: { status: 'unavailable', reason: 'unsupported' } as const }));
+    const models = recommendedModelsForFlowerProviderType('deepseek').map(cloneFlowerModel).map((model) => ({ ...model, web_search: { status: 'unavailable', reason: 'unsupported' } as const }));
     const discover = vi.fn(async () => ({ models }));
     const dialog = mountDialog('edit', discover);
     try {
-      dialog.setProvider({ id: 'brand', type: 'deepseek', models: defaultFlowerProviderModels('deepseek') });
+      dialog.setProvider({ id: 'brand', type: 'deepseek', models: recommendedModelsForFlowerProviderType('deepseek').map(cloneFlowerModel) });
       await vi.advanceTimersByTimeAsync(1000);
       expect(dialog.host.querySelector('[data-web-search="available"]')).toBeNull();
       expect(dialog.host.querySelectorAll('[data-web-search="unavailable"]')).toHaveLength(models.length);
@@ -150,7 +151,7 @@ describe('shared Flower provider dialog', () => {
     const dialog = mountDialog('edit');
     try {
       const custom = { model_name: 'custom-vision', context_window: 32000, input_modalities: ['text', 'image'] };
-      dialog.setProvider({ id: 'brand', type: 'deepseek', models: [...defaultFlowerProviderModels('deepseek'), custom] });
+      dialog.setProvider({ id: 'brand', type: 'deepseek', models: [...recommendedModelsForFlowerProviderType('deepseek').map(cloneFlowerModel), custom] });
       dialog.button('Clear selection').click();
       expect(dialog.selected()).toBe(0);
       expect(dialog.host.textContent).toContain(custom.model_name);
@@ -166,17 +167,19 @@ describe('shared Flower provider dialog', () => {
     } finally { dialog.dispose(); }
   });
 
-  it('selects every model on creation and provider switch, including DeepSeek Vision', () => {
+  it('requires deliberate selection on creation and provider switch, including DeepSeek Vision', () => {
     const dialog = mountDialog();
     try {
       dialog.type('openai');
-      expect(dialog.selected()).toBe(defaultFlowerProviderModels('openai').length);
+      expect(dialog.selected()).toBe(0);
       for (const type of ['google', 'deepseek', 'anthropic', 'groq'] as const) {
         dialog.type(type);
-        expect(dialog.selected()).toBe(defaultFlowerProviderModels(type).length);
+        expect(dialog.selected()).toBe(0);
       }
       dialog.type('deepseek');
       expect(dialog.host.textContent).toContain('Vision');
+      expect(dialog.button('Save provider').disabled).toBe(true);
+      dialog.button('Select all').click();
       dialog.button('Save provider').click();
       expect(dialog.confirmed().models.some((model) => model.input_modalities?.includes('image'))).toBe(true);
       dialog.type('openrouter');
@@ -184,11 +187,12 @@ describe('shared Flower provider dialog', () => {
     } finally { dialog.dispose(); }
   });
 
-  it('preserves exclusions through search, collapse, save and reopen', () => {
+  it('preserves explicit selection through search, collapse, save and reopen', () => {
     const dialog = mountDialog();
     try {
       dialog.type('openai');
-      const total = defaultFlowerProviderModels('openai').length;
+      const total = recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel).length;
+      dialog.button('Select all').click();
       const checkbox = dialog.host.querySelector('input[type="checkbox"]') as HTMLInputElement;
       checkbox.click();
       expect(dialog.selected()).toBe(total - 1);
@@ -200,7 +204,7 @@ describe('shared Flower provider dialog', () => {
       expect(dialog.selected()).toBe(total - 1);
       dialog.button('Save provider').click();
       const saved = serializeFlowerProvider(dialog.confirmed());
-      expect(saved.model_selection?.disabled_models).toHaveLength(1);
+      expect(saved.model_selection?.selected_models).toHaveLength(total - 1);
       dialog.setOpen(false);
       dialog.setProvider({ ...saved, models: resolveFlowerProviderModels(saved) });
       dialog.setOpen(true); dialog.type('openai');

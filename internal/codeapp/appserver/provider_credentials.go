@@ -26,6 +26,9 @@ func validateAIProviderBundleCredentials(profile config.AIModelProfile, store *s
 	}
 	for _, provider := range profile.Providers {
 		id := strings.TrimSpace(provider.ID)
+		if provider.ModelSelection != nil && provider.ModelSelection.SelectedModels == nil {
+			return fmt.Errorf("provider %q requires explicit selected_models", id)
+		}
 		if !config.AIProviderAPIKeyOptional(provider.Type) {
 			configured, err := hasKey(id, keyUpdates, store.HasAIProviderAPIKey)
 			if err != nil {

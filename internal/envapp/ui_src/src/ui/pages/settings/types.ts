@@ -141,6 +141,9 @@ export type SettingsUpdateRequest = Readonly<{
 export type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
 
 export type AIProviderModelRow = {
+  model_digest?: string;
+  quantization?: string;
+  unavailable?: boolean;
   web_search?: FlowerWebSearchAvailability;
   display_name?: string;
   status?: string;
@@ -167,6 +170,9 @@ export type AIProviderRow = {
 };
 
 export type AIProviderModelPreset = Readonly<{
+  model_digest?: string;
+  quantization?: string;
+  unavailable?: boolean;
   web_search?: FlowerWebSearchAvailability;
   display_name?: string;
   status?: string;

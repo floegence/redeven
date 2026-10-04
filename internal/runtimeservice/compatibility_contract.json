@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
-    "reviewed_at": "2026-10-04",
+    "reviewed_at": "2026-10-05",
     "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Advance the Runtime Service compatibility epoch to 35 for explicit reasoning On and verified dynamic model controls.",
-    "same_window_rationale": "Epoch 35 intentionally changes the compatibility window: published Floret v7.22.0 adds the explicit reasoning selection value on, which older Desktop and Runtime clients reject. Both endpoints must understand this value for model discovery, thread settings, and Desktop model-source forwarding. Runtime protocol version and minimum component versions remain unchanged; the epoch check prevents mixed-version Flower attachment. Existing stored selections and automatic database upgrade lineages remain valid.",
+    "summary": "Advance the Runtime Service compatibility epoch to 36 for explicit model selection and discovery presentation.",
+    "same_window_rationale": "Epoch 36 changes the model selection contract from catalog exclusions to explicit selected_models. Older clients would expand these profiles and must not attach to the shared Flower surface. Both Desktop and Runtime are updated; existing selections migrate atomically, and offline legacy Ollama profiles remain unchanged until discovery or user review. Runtime protocol and minimum component versions remain unchanged.",
     "checked_surfaces": [
+      "Epoch 36 requires explicit selected_models for catalog providers and discovery alias metadata. Startup freezes earlier selections without expanding explicit lists; offline legacy Ollama profiles remain intact for settings recovery. Desktop attach/start, Local UI, startup reports, sys.ping, Env App maintenance and SSH bootstrap reject old Flower clients before they can widen model selection. Floret and product database schemas are unchanged.",
       "Epoch 35 pairs explicit reasoning On across Desktop and Runtime. Exact capability metadata, thread preference restart, model-source snapshots, provider requests, and shared Flower controls are covered. Attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume the canonical compatibility epoch.",
       "Reviewed the v0.13.11-to-v0.13.12 release-asset correction: the collector rewrites Electron Builder's Linux architecture aliases in latest-linux*.yml to the exact x64 and arm64 installer names staged in the closed inventory, preserving each file's size and SHA512 fields. Runtime and Desktop executable behavior, signed-resource handling, authorization, storage schemas, attach/start wire shapes, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap remain unchanged within epoch 34.",
       "Reviewed the v0.13.10-to-v0.13.11 release-test correction: compatibility-manifest generation tests now read the current reviewed contract for the epoch and upgrade window, so a release cannot pass stale expectations after an approved compatibility update. Generated manifests still bind the exact runtime executable digest and four-target release set; Runtime Service, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap remain unchanged within epoch 34.",
@@ -83,7 +84,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 35,
+  "compatibility_epoch": 36,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -110,7 +111,8 @@
     31,
     32,
     33,
-    34
+    34,
+    35
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

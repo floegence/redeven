@@ -108,6 +108,8 @@ type ModelsResponse = Readonly<{
   current_model?: string;
   models?: readonly Readonly<{
     id?: string;
+    alias_group?: string;
+    quantization?: string;
     label?: string;
     source?: string;
     context_window?: number;
@@ -360,6 +362,7 @@ function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[
   return {
     model_name: trim(model.model_name),
     display_name: model.display_name, status: model.status,
+    model_digest: model.model_digest, quantization: model.quantization, unavailable: model.unavailable,
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
     ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
     ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
@@ -399,6 +402,7 @@ function mapDesktopModels(models: ModelsResponse): readonly FlowerModelSourceMod
       id,
       web_search: model.web_search,
       label: trim(model.label) || id,
+      alias_group: model.alias_group, quantization: model.quantization,
       ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
       ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
       ...(Array.isArray(model.input_modalities) ? { input_modalities: model.input_modalities.map(trim).filter(Boolean) } : {}),

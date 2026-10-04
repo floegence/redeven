@@ -8,6 +8,7 @@ export function ModelCatalogControls(props: Readonly<{
 }>) {
   let search: HTMLInputElement | undefined;
   return <div>
+    <p class="mb-2 text-xs text-muted-foreground">{props.copy.selectionHint}</p>
     <div class="flex flex-wrap items-center gap-2">
       <Input ref={search} value={props.query} onInput={(event) => props.onQuery(event.currentTarget.value)} placeholder={props.copy.search} aria-label={props.copy.search} size="sm" class="min-w-40 flex-1" />
       <FeedbackIndicator label={props.copy.refresh} closeLabel={props.copy.feedbackClose} restoreFocus={() => search} entries={props.hasContent && props.error ? [{ id: 'catalog', severity: 'error', summary: props.error, actions: <Show when={props.onRefresh}><Button size="sm" variant="outline" disabled={props.disabled || props.loading} onClick={props.onRefresh}>{props.copy.refresh}</Button></Show> }] : []} />

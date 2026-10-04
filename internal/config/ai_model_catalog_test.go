@@ -9,16 +9,16 @@ import (
 )
 
 func TestModelSelectionUsesCatalogWithoutPersistingExpansion(t *testing.T) {
-	p := AIProvider{ID: "brand", Type: "openai", ModelSelection: &AIModelSelection{DisabledModels: []string{"gpt-5.5"}}}
-	if len(p.EffectiveModels()) != len(AIProviderCatalog("openai"))-1 {
-		t.Fatal("brand must default to all models except exclusions")
+	p := AIProvider{ID: "brand", Type: "openai", ModelSelection: &AIModelSelection{SelectedModels: []string{"gpt-6-astra"}}}
+	if len(p.EffectiveModels()) != 1 {
+		t.Fatal("only selected models should be enabled")
 	}
 	old := modelCatalog["openai"]
 	defer func() { modelCatalog["openai"] = old }()
 	modelCatalog["openai"] = append(append([]AIProviderModel{}, old...), AIProviderModel{ModelName: "future-agent", ContextWindow: 128000})
 	cfg := &AIConfig{Providers: []AIProvider{p}, CurrentModelID: "brand/gpt-6-astra"}
-	if !cfg.IsAllowedModelID("brand/future-agent") || cfg.IsAllowedModelID("brand/gpt-5.5") {
-		t.Fatal("catalog updates must preserve exclusions and enable additions")
+	if cfg.IsAllowedModelID("brand/future-agent") || cfg.IsAllowedModelID("brand/gpt-5.5") {
+		t.Fatal("catalog updates must preserve selections without enabling additions")
 	}
 	if len(p.Models) != 0 {
 		t.Fatal("resolution mutated persistent models")
@@ -61,8 +61,8 @@ func TestModelSelectionMigrationPreservesUserIntentAndRestarts(t *testing.T) {
 	if m.ReasoningCapability.SourceCheckedAt != current.ReasoningCapability.SourceCheckedAt {
 		t.Fatal("old preset reasoning remained pinned")
 	}
-	if !next.AI.IsAllowedModelID("brand/gpt-6-astra") || !next.AI.IsAllowedModelID("brand/my-model") {
-		t.Fatal("migration failed to enable current and custom models")
+	if next.AI.IsAllowedModelID("brand/gpt-6-astra") || !next.AI.IsAllowedModelID("brand/my-model") {
+		t.Fatal("migration must retain the explicit selection without enabling additions")
 	}
 	after, _ := os.ReadFile(path)
 	if bytes.Equal(before, after) {

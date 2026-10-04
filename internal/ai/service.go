@@ -1085,6 +1085,8 @@ func (s *Service) listModels(ctx context.Context, cfg *config.AIConfig) (*Models
 					WebSearch:           config.AIWebSearchAvailability{Status: "unavailable", Reason: "not_integrated"},
 					ID:                  modelID,
 					Label:               label,
+					AliasGroup:          m.AliasGroup,
+					Quantization:        m.Quantization,
 					Source:              modelSourceDesktopModelSource,
 					SourceLabel:         modelSourceDesktopModelSourceLabel,
 					ContextWindow:       capability.MaxContextTokens,
@@ -1177,6 +1179,8 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 
 func configModelView(id string, label string, provider config.AIProvider, m config.AIProviderModel) Model {
 	return Model{
+		AliasGroup:          modelAliasGroup(provider, m),
+		Quantization:        m.Quantization,
 		WebSearch:           config.ResolveAIWebSearch(provider, m.EffectiveWireModelName(), false).AIWebSearchAvailability,
 		ID:                  strings.TrimSpace(id),
 		Label:               strings.TrimSpace(label),

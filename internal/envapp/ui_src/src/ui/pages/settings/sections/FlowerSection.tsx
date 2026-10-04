@@ -88,7 +88,7 @@ function collectAIModelOptions(rows: AIProviderRow[], locale?: string): AIModelO
     const providerID = String(p?.id ?? '').trim(); if (!providerID) continue;
     const providerName = localizedProviderDisplayName(p, locale, providerID);
     for (const m of Array.isArray(p?.models) ? p.models : []) {
-      const modelName = String(m?.model_name ?? '').trim(); if (!modelName) continue;
+      const modelName = String(m?.model_name ?? '').trim(); if (!modelName || m.unavailable) continue;
       options.push({ id: modelID(providerID, modelName), label: `${providerName} / ${modelName}`, supportsImageInput: modelSupportsImageInput(m.input_modalities) });
     }
   }
@@ -153,7 +153,7 @@ function validateAIValue(cfg: AIConfig, i18n: I18nHelpers) {
     if (baseURL) { let u: URL; try { u = new URL(baseURL); } catch { throw new Error(i18n.t('flowerSettings.providerInvalidBaseUrl', { provider: id })); } if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error(i18n.t('flowerSettings.providerBaseUrlMustBeHttpHttps', { provider: id })); }
     if (models.length === 0 && !p.model_selection) throw new Error(i18n.t('flowerSettings.providerMissingModels', { provider: id }));
     const modelNames = new Set<string>();
-    for (const m of models) { const mn = String((m as any).model_name ?? '').trim(); const wm = String((m as any).wire_model_name ?? '').trim(); const cw = Number((m as any).context_window); if (!mn) throw new Error(i18n.t('flowerSettings.providerModelNameMissing', { provider: id })); if (mn.includes('/')) throw new Error(i18n.t('flowerSettings.providerModelNameMustNotContainSlash', { provider: id })); if (wm.includes('\u0000')) throw new Error(i18n.t('flowerSettings.providerModelNameMissing', { provider: id })); if (modelNames.has(mn)) throw new Error(i18n.t('flowerSettings.providerDuplicateModelName', { provider: id, model: mn })); if ((typ === 'openai_compatible' || typ === 'openrouter' || typ === 'xai' || typ === 'groq' || typ === 'ollama') && (!Number.isFinite(cw) || cw <= 0)) throw new Error(i18n.t('flowerSettings.providerModelRequiresContextWindow', { provider: id, model: mn })); modelNames.add(mn); modelIDs.add(modelID(id, mn)); }
+    for (const m of models) { const mn = String((m as any).model_name ?? '').trim(); const wm = String((m as any).wire_model_name ?? '').trim(); const cw = Number((m as any).context_window); if (!mn) throw new Error(i18n.t('flowerSettings.providerModelNameMissing', { provider: id })); if (mn.includes('/')) throw new Error(i18n.t('flowerSettings.providerModelNameMustNotContainSlash', { provider: id })); if (wm.includes('\u0000')) throw new Error(i18n.t('flowerSettings.providerModelNameMissing', { provider: id })); if (modelNames.has(mn)) throw new Error(i18n.t('flowerSettings.providerDuplicateModelName', { provider: id, model: mn })); if (!(m as any).unavailable && (typ === 'openai_compatible' || typ === 'openrouter' || typ === 'xai' || typ === 'groq' || typ === 'ollama') && (!Number.isFinite(cw) || cw <= 0)) throw new Error(i18n.t('flowerSettings.providerModelRequiresContextWindow', { provider: id, model: mn })); modelNames.add(mn); modelIDs.add(modelID(id, mn)); }
   }
   const cid = String((cfg as any).current_model_id ?? '').trim(); if (!cid) throw new Error(i18n.t('flowerSettings.missingCurrentModelId')); if (!modelIDs.has(cid) && !providers.some((p: AIProviderRow) => p.model_selection && cid.startsWith(`${p.id}/`))) throw new Error(i18n.t('flowerSettings.currentModelNotInProviders', { currentModelId: cid }));
 }
@@ -490,7 +490,7 @@ export function FlowerSection() {
         </div>
       </SettingsSection>
 
-      <AIProviderDialog open={providerDialogOpen()} onOpenChange={(o) => { if (!o) closeAIProviderDialog(); }}
+      <AIProviderDialog mode={providerDialogMode()} open={providerDialogOpen()} onOpenChange={(o) => { if (!o) closeAIProviderDialog(); }}
         title={providerDialogMode() === 'create' ? i18n.t('flowerSettings.addProviderDialogTitle') : i18n.t('flowerSettings.editProviderDialogTitle')}
         provider={providerDialogProvider()} canInteract={ctx.canInteract()} canAdmin={ctx.canAdmin()} aiSaving={saving()}
         keySet={!!providerKeySet()?.[String(providerDialogProvider()?.id ?? '').trim()]} keyDraft={providerKeyDraft()?.[String(providerDialogProvider()?.id ?? '').trim()] ?? ''} keySaving={!!providerKeySaving()?.[String(providerDialogProvider()?.id ?? '').trim()]}

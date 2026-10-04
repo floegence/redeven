@@ -3,7 +3,7 @@ type: AI Configuration Contract
 title: Provider configuration validation
 description: Apply provider-specific optional fields and reject incomplete model configurations before saving.
 tags: [ai, providers, credentials, settings]
-timestamp: 2026-10-04T00:00:00Z
+timestamp: 2026-10-05T00:00:00Z
 ---
 
 # Summary
@@ -25,7 +25,7 @@ Both provider editors block saving missing required credentials and identify the
 | Provider API key | Optional for Ollama and custom OpenAI-compatible endpoints; all other local-profile provider types require a new or stored key. Desktop and Redeven AI model sources retain their separate session authority. |
 | Base URL | OpenAI, Anthropic, and Gemini may use their adapter default. Other provider types require an explicit HTTP(S) URL. |
 | Provider display name | Optional; the UI derives a name from the provider type or identity. |
-| Models | Explicit lists require named models; catalog preferences retain their existing selection semantics, including deselecting all models without deleting the provider. |
+| Models | Explicit lists require named models; catalog providers save explicit `selected_models`, including an empty selection after deselecting all models. Unresolved legacy exclusion profiles require selection review; unavailable selected identities retain their metadata without requiring invented capacity. |
 | Context and output limits | Published catalog or adapter defaults may supply omitted limits. Explicit compatible, OpenRouter, xAI, Groq, and Ollama model entries require context capacity. Custom catalog models also require it. Output limits remain optional. |
 | Brave API key | Required only when Brave search is enabled; existing stored credentials satisfy the requirement. |
 

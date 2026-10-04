@@ -127,8 +127,8 @@ func TestOllamaCatalogUsesServedContextCapacity(t *testing.T) {
 
 func TestOfflineOllamaDoesNotDisableOtherProviders(t *testing.T) {
 	cfg := &config.AIConfig{CurrentModelID: "local/installed", Providers: []config.AIProvider{
-		{ID: "brand", Type: "openai", ModelSelection: &config.AIModelSelection{}},
-		{ID: "local", Type: "ollama", BaseURL: "http://127.0.0.1:0", ModelSelection: &config.AIModelSelection{}},
+		{ID: "brand", Type: "openai", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-6-astra"}}},
+		{ID: "local", Type: "ollama", BaseURL: "http://127.0.0.1:0", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"agent"}}},
 	}}
 	svc := &Service{cfg: cfg}
 	out, err := svc.ListModels()
@@ -159,7 +159,7 @@ func TestInstalledOllamaModelCanCreateThreadAndResolveImageCapability(t *testing
 		}
 	}))
 	defer server.Close()
-	cfg := &config.AIConfig{CurrentModelID: "local/agent:latest", Providers: []config.AIProvider{{ID: "local", Type: "ollama", BaseURL: server.URL + "/v1", ModelSelection: &config.AIModelSelection{}}}}
+	cfg := &config.AIConfig{CurrentModelID: "local/agent:latest", Providers: []config.AIProvider{{ID: "local", Type: "ollama", BaseURL: server.URL + "/v1", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"agent:latest"}}}}}
 	svc, err := NewService(Options{Config: cfg, StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/sh"})
 	if err != nil {
 		t.Fatal(err)
@@ -271,5 +271,54 @@ func TestOpenRouterReasoningMetadataDoesNotInventEfforts(t *testing.T) {
 	cap := models[0].EffectiveReasoningCapability("openrouter")
 	if cap.Kind != "dynamic" || len(cap.SupportedLevels) != 0 || cap.DisableSupported || !slices.Contains(cap.ResponseReasoningFields, "reasoning") {
 		t.Fatalf("capability=%+v", cap)
+	}
+}
+
+func TestModelCatalogOllamaPreservesQuantizationAndScopesAliases(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			_, _ = w.Write([]byte(`{"models":[{"name":"agent:27b","digest":"q8-digest"},{"name":"agent:q8","digest":"q8-digest"},{"name":"agent:q4","digest":"q4-digest"}]}`))
+		case "/api/ps":
+			_, _ = w.Write([]byte(`{"models":[]}`))
+		case "/api/show":
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			quantization := "Q8_0"
+			if body["model"] == "agent:q4" {
+				quantization = "Q4_K_M"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"tools"}, "parameters": "num_ctx 131072", "details": map[string]string{"quantization_level": quantization}})
+		default:
+			t.Errorf("unexpected request: %s", r.URL)
+		}
+	}))
+	defer server.Close()
+	models, err := discoverModelCatalog(context.Background(), ModelCatalogRequest{Type: "ollama", BaseURL: server.URL}, server.Client())
+	if err != nil || len(models) != 3 {
+		t.Fatalf("catalog identities lost: %+v %v", models, err)
+	}
+	p := config.AIProvider{ID: "local", Type: "ollama", BaseURL: server.URL}
+	if models[0].Quantization != "Q8_0" || models[1].Quantization != "Q4_K_M" {
+		t.Fatalf("quantization metadata lost: %+v", models)
+	}
+	group := modelAliasGroup(p, models[0])
+	if group == "" || group != modelAliasGroup(p, models[2]) || group == modelAliasGroup(p, models[1]) {
+		t.Fatal("alias groups must distinguish quantization")
+	}
+	other := p
+	other.ID = "other"
+	if group == modelAliasGroup(other, models[0]) {
+		t.Fatal("different providers folded together")
+	}
+	other = p
+	other.BaseURL += "/other"
+	if group == modelAliasGroup(other, models[0]) {
+		t.Fatal("different endpoints folded together")
+	}
+	changed := models[0]
+	changed.ContextWindow = 8192
+	if group == modelAliasGroup(p, changed) {
+		t.Fatal("different parameters folded together")
 	}
 }
