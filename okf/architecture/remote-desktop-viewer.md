@@ -22,7 +22,11 @@ an explicit retry. It never presents a frozen desktop as a live connection.
 The published Floe input and pointer controllers own client composition, physical
 keys, pointer gestures and release. Mouse and drag movement coalesces within the
 current JavaScript task and flushes before local paint without another animation-
-frame wait. Scroll remains accumulated per frame. Explicit pointer flushes
+frame wait. On browsers exposing `pointerrawupdate`, mouse and pen movement uses
+that event before the browser's frame-aligned `pointermove`; the latter still
+handles button-only chords without duplicating movement. Other browsers and
+touch gestures retain `pointermove`. One published controller owns both paths,
+including generation checks and cancellation. Scroll remains accumulated per frame. Explicit pointer flushes
 preserve ordering before keys or composed text; reset invalidates pending moves. The viewer defaults to the host input method,
 using physical keys from a direct-input client keyboard. Client-composed text is
 sent only after explicitly selecting Paste client text. That operation replaces

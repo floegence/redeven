@@ -31,6 +31,13 @@ protocols; they do not recognize gestures. Xpra retains rendering, stacking,
 clipboard and window decoration operations. Its old content mouse, wheel and touch
 handlers are absent. A decoration operation explicitly cancels the content gesture.
 
+Mouse and pen motion uses `pointerrawupdate` when exposed by the browser, avoiding
+the browser's rendering-aligned `pointermove` wait. The later move event still
+reconciles button-only chords without resending motion. Other browsers and touch
+gestures retain `pointermove`. Both motion paths use the same target authority,
+microtask coalescing, explicit flush and cancellation; platform bindings must not
+install another raw-event listener.
+
 The touch policy marks only remote pixel canvases. Local toolbar controls, window
 lists and the native editable input retain their own browser behavior. Touch scrolling
 does not move the input-method anchor or open the soft keyboard. Tap/drag activation

@@ -34,6 +34,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Remote desktop validation](operations/remote-desktop-validation.md) - Qualify office interaction, lifecycle and actual painted performance with published dependencies.
 - [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 performance, local delivery and remaining acceptance limits.
 - [Desktop latency and NVIDIA encoding](operations/remote-desktop-latency-results.md) - Compare controlled RTX 4090 D response measurements, decoder behavior and remaining copy/transport limits.
+- [Desktop drag latency](operations/remote-desktop-drag-latency.md) - Assess repeated native drag measurements and raw-pointer dispatch over the production SSH placement bridge.
 - [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.
 - [Wayland desktop qualification](operations/remote-desktop-wayland-results.md) - Assess real GNOME office interaction and retained capture limits after virtual graphics provisioning.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.
