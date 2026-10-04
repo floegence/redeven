@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Remote desktop viewer interaction
 description: Operate the remote desktop toolbar, input modes and ended-session recovery consistently in browsers and Desktop.
 tags: [desktop, viewer, interaction, input]
-timestamp: 2026-10-04T00:30:00Z
+timestamp: 2026-10-04T13:20:00Z
 ---
 # Summary
 
@@ -38,12 +38,14 @@ is text-only and tied to the active controller. A manual text panel remains
 available when browser clipboard permission is unavailable. Clipboard contents,
 keys, passwords and pixels never enter audit records.
 
-Control mode displays the client system's default pointer over the desktop canvas,
-so local movement does not wait for capture, encoding, transport or playback. The
-published macOS, Wayland and X11 captures still embed the host cursor in the picture;
-it remains visible as feedback about the host's actual position and cursor shape.
-The two cursors can separate while the remote picture catches up. The local pointer
-does not predict host cursor shapes or imply that the host has processed input.
+Control mode displays the local system pointer without waiting for remote pixels.
+On Linux X11, published native playback receives the host cursor image and hotspot
+separately and applies them to that local pointer; video excludes the host cursor,
+and cursor-only movement produces no video frame. Transparent cursor shapes remain
+transparent. Retired generations cannot change the current pointer. macOS and
+Wayland retain embedded capture cursors and the local default pointer until their
+platforms provide the same independent shape contract. Local movement does not
+imply the host has processed input.
 View-only mode hides the local pointer only over a current painted desktop and
 shows the captured host cursor. Revoking painted authority hides the retired picture
 and restores the local pointer, including disconnect, lock, display replacement

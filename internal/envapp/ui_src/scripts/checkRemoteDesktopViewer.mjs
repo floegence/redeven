@@ -230,6 +230,21 @@ try {
       delete window.qualificationAnimationFrame; delete window.qualificationHeldFrames;
     });
   }
+  if (backend === 'x11') {
+    const cursor = new PNG({ width: 8, height: 8 });
+    cursor.data.fill(255);
+    const data = PNG.sync.write(cursor);
+    const header = Buffer.from(JSON.stringify({ version: 1, type: 'cursor', codec: 'png', generation,
+      width: 8, height: 8, hot_x: 2, hot_y: 3, bytes: data.length }));
+    const prefix = Buffer.alloc(4); prefix.writeUInt32BE(header.length);
+    const receiptCount = messages.filter(item => item.command.method === 'frame_ack').length;
+    media.send(Buffer.concat([prefix, header, data]));
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor.startsWith('url('));
+    assert.match(await canvasCursor(), /2 3, default$/);
+    assert.equal(messages.filter(item => item.command.method === 'frame_ack').length, receiptCount,
+      'cursor shape must not grant painted authority');
+    assert.equal(frame, stationaryFrame, 'cursor shape required a video frame');
+  }
   assert.deepEqual(await page.locator('.floe-remote-input').evaluate(input => {
     const style = getComputedStyle(input);
     return { position: style.position, opacity: style.opacity };
