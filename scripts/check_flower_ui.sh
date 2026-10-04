@@ -193,6 +193,7 @@ main() {
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.providerReadiness.browser.test.tsx \
         src/ui/FlowerSurface.modelMenu.browser.test.tsx \
+        src/ui/FlowerProviderDialog.selection.browser.test.tsx \
         src/ui/FlowerSurface.settings.browser.test.tsx \
         src/ui/FlowerSettingsSurface.presentation.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \

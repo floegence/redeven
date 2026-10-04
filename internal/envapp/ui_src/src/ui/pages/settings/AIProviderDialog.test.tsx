@@ -163,7 +163,9 @@ function clickButton(host: HTMLElement, label: string) {
   const button = Array.from(host.querySelectorAll('button')).find((candidate) => {
     const strongLabel = candidate.querySelector('.text-sm.font-semibold')?.textContent?.trim();
     if (strongLabel === label) return true;
-    const text = candidate.textContent?.replace(/\s+/g, ' ').trim();
+    const visibleContent = candidate.cloneNode(true) as HTMLElement;
+    visibleContent.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove());
+    const text = visibleContent.textContent?.replace(/\s+/g, ' ').trim();
     return text === label;
   });
   if (!button) throw new Error(`Button not found: ${label}`);

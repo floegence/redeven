@@ -62,8 +62,6 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [query, setQuery] = createSignal('');
   const [loading, setLoading] = createSignal(false);
   const [discoveryError, setDiscoveryError] = createSignal('');
-  const catalog = () => store.draft ? flowerProviderModelChoices(store.draft) : [];
-  const visibleModels = () => filterFlowerModels(catalog(), query());
   const discoveryIdentity = (draft: FlowerProviderDraft) => JSON.stringify([draft.id, draft.type, draft.base_url, draft.provider_api_key, draft.web_search, draft.web_search_api_key, props.webSearchKeyConfigured]);
   let discoverySequence = 0;
   const discover = async () => {
@@ -83,6 +81,10 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [editingModelName, setEditingModelName] = createSignal('');
   const [expandedProviderType, setExpandedProviderType] = createSignal<FlowerProviderType | null>(null);
   const [store, setStore] = createStore<{ draft: FlowerProviderDraft | null }>({ draft: null });
+  const catalog = createMemo(() => store.draft ? flowerProviderModelChoices(store.draft) : []);
+  const catalogByName = createMemo(() => new Map(catalog().map((model) => [model.model_name, model])));
+  // Selection and discovery replace metadata objects; model names keep rows and focus stable.
+  const visibleModelNames = createMemo(() => filterFlowerModels(catalog(), query()).map((model) => model.model_name));
   const providerHasModels = () => (store.draft?.models.length ?? 0) > 0;
   const missingCredential = () => store.draft
     ? missingFlowerProviderCredential(store.draft, props.keyConfigured, props.webSearchKeyConfigured)
@@ -354,40 +356,46 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               <Show when={store.draft?.model_selection && !store.draft.model_selection.selected_models}><p role="status" class="flower-body-copy text-muted-foreground">{copy().catalog.selectionReview}</p></Show>
                               <ModelCatalogControls hasContent={catalog().length > 0} copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels && store.draft?.type !== 'openai_compatible' ? discover : undefined} />
                               <Show
-                                when={visibleModels().length > 0}
+                                when={visibleModelNames().length > 0}
                                 fallback={<div class="rounded-lg border border-dashed p-4 flower-body-copy text-muted-foreground">{copy().catalog.empty}</div>}
                               >
                                 <div class="rounded-lg border border-border">
-                                  <For each={visibleModels()}>
-                                    {(preset) => {
-                                      const modelName = () => cleanModelName(preset.model_name);
+                                  <For each={visibleModelNames()}>
+                                    {(name) => {
+                                      const preset = () => catalogByName().get(name)!;
+                                      const modelName = () => cleanModelName(name);
                                       const enabled = () => modelSelected(store.draft!, modelName());
                                       const activeModel = () => store.draft!.models.find((m) => cleanModelName(m.model_name) === modelName());
-                                      const model = () => activeModel() ?? preset;
+                                      const model = () => activeModel() ?? preset();
+                                      const modelNote = () => {
+                                        const value = preset();
+                                        return copy().modelNote('note_key' in value ? value.note_key as Parameters<FlowerProviderDialogCopy['modelNote']>[0] : undefined);
+                                      };
                                       const editOpen = () => editingModelName() === modelName();
                                       const modelIndex = () => store.draft!.models.findIndex((m) => cleanModelName(m.model_name) === modelName());
                                       return (
                                         <div class={cn('border-b border-border last:border-b-0', enabled() && 'bg-primary/5')}>
-                                          <div class="flex items-center gap-3 px-3 py-2.5">
+                                          <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
                                             <Checkbox
+                                              class="mt-1"
                                               checked={enabled()}
-                                              disabled={preset.unavailable && !enabled()}
-                                              aria-label={preset.display_name || modelName()}
-                                              onChange={(on) => { if (on) addPreset(preset); else removePreset(modelName()); }}
+                                              disabled={preset().unavailable && !enabled()}
+                                              aria-label={preset().display_name || modelName()}
+                                              onChange={(on) => { if (on) addPreset(preset()); else removePreset(modelName()); }}
                                               size="sm"
                                             />
                                             <div class="min-w-0 flex-1">
-                                              <div class="flex items-center gap-2">
-                                                <span class={cn('font-mono flower-body-copy font-semibold', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset.display_name || modelName()}</span>
+                                              <div class="flex flex-wrap items-center gap-2">
+                                                <span class={cn('break-all font-mono flower-body-copy font-semibold', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset().display_name || modelName()}</span>
                                                 <WebSearchCapabilityBadge availability={model().web_search} copy={copy().catalog} />
-                                                <Show when={preset.unavailable}><FlowerSettingsPill>{copy().catalog.unavailableModel}</FlowerSettingsPill></Show>
-                                                <Show when={preset.quantization}><FlowerSettingsPill>{preset.quantization}</FlowerSettingsPill></Show>
-                                                <Show when={preset.status}><FlowerSettingsPill>{preset.status === 'experimental' ? copy().catalog.experimental : copy().catalog.preview}</FlowerSettingsPill></Show>
-                                                <Show when={preset.wire_model_name}>
-                                                  <span class="font-mono text-[11px] text-muted-foreground">{preset.wire_model_name!}</span>
+                                                <Show when={preset().unavailable}><FlowerSettingsPill>{copy().catalog.unavailableModel}</FlowerSettingsPill></Show>
+                                                <Show when={preset().quantization}><FlowerSettingsPill>{preset().quantization}</FlowerSettingsPill></Show>
+                                                <Show when={preset().status}><FlowerSettingsPill>{preset().status === 'experimental' ? copy().catalog.experimental : copy().catalog.preview}</FlowerSettingsPill></Show>
+                                                <Show when={preset().wire_model_name}>
+                                                  <span class="font-mono text-[11px] text-muted-foreground">{preset().wire_model_name!}</span>
                                                 </Show>
                                               </div>
-                                              <Show when={preset.model_digest && catalog().some((other) => other.model_name !== preset.model_name && other.model_digest === preset.model_digest)}><p class="text-xs text-muted-foreground">{copy().catalog.aliases}: {catalog().filter((other) => other.model_name !== preset.model_name && other.model_digest === preset.model_digest).map((other) => other.wire_model_name || other.model_name).join(', ')}</p></Show>
+                                              <Show when={preset().model_digest && catalog().some((other) => other.model_name !== preset().model_name && other.model_digest === preset().model_digest)}><p class="text-xs text-muted-foreground">{copy().catalog.aliases}: {catalog().filter((other) => other.model_name !== preset().model_name && other.model_digest === preset().model_digest).map((other) => other.wire_model_name || other.model_name).join(', ')}</p></Show>
                                               <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                                                 <Show when={model().context_window}>
                                                   <span class={cn('rounded-full px-1.5 py-px text-[10px] font-medium', enabled() ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>{formatFlowerTokenCount(model().context_window)} {copy().contextSuffix}</span>
@@ -398,26 +406,26 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                                 <Show when={flowerModelSupportsImage(model().input_modalities)}>
                                                   <span class={cn('rounded-full px-1.5 py-px text-[10px] font-medium', enabled() ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>{copy().imageInput}</span>
                                                 </Show>
-                                                <Show when={!flowerModelSupportsImage(model().input_modalities) && enabled()}>
+                                                <Show when={!flowerModelSupportsImage(model().input_modalities)}>
                                                   <span class="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">{copy().text}</span>
                                                 </Show>
                                               </div>
-                                              <Show when={copy().modelNote('note_key' in preset ? preset.note_key as Parameters<FlowerProviderDialogCopy['modelNote']>[0] : undefined)}>
+                                              <Show when={modelNote()}>
                                                 {(note) => <div class="mt-0.5 text-[11px] text-muted-foreground">{note()}</div>}
                                               </Show>
                                             </div>
-                                            <Show when={enabled()}>
-                                              <Button size="sm" variant="ghost" class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setEditingModelName(editOpen() ? '' : modelName())} aria-label={copy().catalog.edit}>
+                                            <div class={cn('col-start-2 flex items-center justify-end gap-1 sm:col-start-3 sm:row-start-1', !enabled() && 'invisible')} aria-hidden={!enabled()}>
+                                              <Button disabled={!enabled()} size="sm" variant="ghost" class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setEditingModelName(editOpen() ? '' : modelName())} aria-label={copy().catalog.edit}>
                                                 <Pencil class="h-3 w-3" />
                                               </Button>
-                                              <Button size="sm" variant="ghost" class="h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => {
+                                              <Button disabled={!enabled()} size="sm" variant="ghost" class="h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => {
                                                 if (modelIndex() >= 0) {
-                                                  resetModelToPreset(modelIndex(), preset);
+                                                  resetModelToPreset(modelIndex(), preset());
                                                 }
                                               }} aria-label={copy().catalog.reset}>
                                                 <span class="text-[10px]">{copy().catalog.reset}</span>
                                               </Button>
-                                            </Show>
+                                            </div>
                                           </div>
                                           <Show when={enabled() && editOpen()}>
                                             <div class="border-t border-border/60 px-3 py-3">
