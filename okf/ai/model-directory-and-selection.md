@@ -22,6 +22,10 @@ OpenRouter queries its configured `/models` endpoint with tool filtering. Refres
 
 Ollama queries `/api/tags`, `/api/ps`, and `/api/show`; only installed local models advertising tools qualify. Loaded context capacity takes precedence over `num_ctx`; otherwise use the conservative 4,096-token serving default capped by the model limit. Inventory, digest, quantization, and availability are transient metadata, never persisted as user intent. Discovery errors leave preferences intact and other providers usable. The settings refresh action retries discovery; selected models must resolve against current inventory before execution.
 
+## Settings interaction
+
+Candidate rows in both provider dialogs use model identity independently of metadata object allocation. Selection changes preserve the existing checkbox or action button, keyboard focus, and scroll position. Selection controls reserve their layout space; shared dialog actions move as a group below model details on narrow screens. Metadata refresh updates surviving rows without retaining obsolete labels or availability. Parameter edits remain reactive without rebuilding the candidate row.
+
 ## Chat presentation
 
 The composer initially shows at most eight selected models, prioritized by the current identity and recent thread models, grouped by provider/source. Search covers the complete selected set, including aliases. Users explicitly expand all selected models or open model management. Keyboard opening focuses search; arrows navigate enabled rows, Home/End navigate the list, and Escape returns focus to the trigger. The scrollable list keeps search and management controls visible on narrow screens.
@@ -61,6 +65,7 @@ Gemini uses the supported OpenAI-compatible endpoint with model-specific effort 
 - `redeven:internal/ai/model_catalog.go` - Read-only OpenRouter and Ollama queries.
 - `redeven:internal/codeapp/appserver/server_model_catalog_test.go` - Admin authorization, input limits, and unchanged configuration.
 - `redeven:internal/flower_ui/src/settings/modelSelection.ts` - Shared UI selection owner.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Real published dialogs, scroll and focus continuity, narrow layouts, catalog refresh, and parameter editing.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx` - Real dialog search, collapse, switch, and reopen behavior.
 - `redeven:internal/ai/attachment_capabilities_test.go` - Per-model vision across provider types.
 - `redeven:internal/ai/model_gateway_gemini_test.go` - Streamed signatures, image input, and tool results.

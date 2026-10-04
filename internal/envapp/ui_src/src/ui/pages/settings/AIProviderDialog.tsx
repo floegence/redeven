@@ -5,7 +5,7 @@ import { modelCatalogCopy } from '../../../../../../flower_ui/src/settings/model
 import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Bot, Key, Settings, Sparkles } from '@floegence/floe-webapp-core/icons';
-import { Button, Checkbox, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Input, Select, StableText } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../../primitives/EnvAppModal';
 import { localizedFlowerProviderModelNote } from '../../../../../../flower_ui/src/settings/providerModelNotes';
 import {
@@ -81,6 +81,9 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   const i18n = useI18n();
   const [activeStep, setActiveStep] = createSignal<ProviderDialogStep>('type');
   const [query, setQuery] = createSignal('');
+  const catalogByName = createMemo(() => new Map(props.recommendedModels.map((model) => [model.model_name, model])));
+  // Parent draft updates replace metadata objects without changing model identities.
+  const visibleModelNames = createMemo(() => filterFlowerModels(props.recommendedModels, query()).map((model) => model.model_name));
   const catalogCopy = () => modelCatalogCopy(i18n.locale());
   const [customModelName, setCustomModelName] = createSignal('');
   const saving = createMemo(() => props.aiSaving || props.keySaving || props.webSearchKeySaving);
@@ -391,43 +394,46 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       <Show when={provider().model_selection && !provider().model_selection?.selected_models}><p role="status" class="text-xs text-muted-foreground">{catalogCopy().selectionReview}</p></Show>
                       <ModelCatalogControls hasContent={props.recommendedModels.length > 0} copy={catalogCopy()} query={query()} count={props.provider?.models.length ?? 0} onQuery={setQuery} onSelectAll={props.onApplyAllPresets} onClear={props.onClearModels} onRefresh={props.onDiscoverModels} loading={props.discoveringModels} error={props.discoveryError} disabled={!props.canInteract} />
                       <Show
-                        when={filterFlowerModels(props.recommendedModels, query()).length > 0}
+                        when={visibleModelNames().length > 0}
                         fallback={<div class="rounded-lg border border-dashed p-4 text-[length:var(--floe-type-body)] text-muted-foreground">{catalogCopy().empty}</div>}
                       >
                         <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                          <For each={filterFlowerModels(props.recommendedModels, query())}>
-                            {(preset) => {
-                              const selected = () => recommendedModelSelected(preset.model_name);
+                          <For each={visibleModelNames()}>
+                            {(name) => {
+                              const preset = () => catalogByName().get(name)!;
+                              const selected = () => recommendedModelSelected(preset().model_name);
                               return (
                                 <div class={cn('redeven-settings-choice rounded-lg border p-3', selected() && 'redeven-settings-choice--selected')}>
                                   <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
-                                      <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{preset.display_name || preset.model_name} <Show when={preset.unavailable}><SettingsPill>{catalogCopy().unavailableModel}</SettingsPill></Show><Show when={preset.quantization}><SettingsPill>{preset.quantization}</SettingsPill></Show> <Show when={preset.status}><SettingsPill>{preset.status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
-                                      <Show when={preset.model_digest && props.recommendedModels.some((other) => other.model_name !== preset.model_name && other.model_digest === preset.model_digest)}><p class="text-xs text-muted-foreground">{catalogCopy().aliases}: {props.recommendedModels.filter((other) => other.model_name !== preset.model_name && other.model_digest === preset.model_digest).map((other) => other.wire_model_name || other.model_name).join(', ')}</p></Show>
+                                      <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{preset().display_name || preset().model_name} <Show when={preset().unavailable}><SettingsPill>{catalogCopy().unavailableModel}</SettingsPill></Show><Show when={preset().quantization}><SettingsPill>{preset().quantization}</SettingsPill></Show> <Show when={preset().status}><SettingsPill>{preset().status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
+                                      <Show when={preset().model_digest && props.recommendedModels.some((other) => other.model_name !== preset().model_name && other.model_digest === preset().model_digest)}><p class="text-xs text-muted-foreground">{catalogCopy().aliases}: {props.recommendedModels.filter((other) => other.model_name !== preset().model_name && other.model_digest === preset().model_digest).map((other) => other.wire_model_name || other.model_name).join(', ')}</p></Show>
                                       <div class="mt-1 text-xs text-muted-foreground">
-                                        {i18n.t('flowerProviderDialog.contextTokens', { count: formatTokenCount(preset.context_window) })}
-                                        <Show when={preset.max_output_tokens}> · {i18n.t('flowerProviderDialog.outputTokens', { count: formatTokenCount(Number(preset.max_output_tokens ?? 0)) })}</Show>
+                                        {i18n.t('flowerProviderDialog.contextTokens', { count: formatTokenCount(preset().context_window) })}
+                                        <Show when={preset().max_output_tokens}> · {i18n.t('flowerProviderDialog.outputTokens', { count: formatTokenCount(Number(preset().max_output_tokens ?? 0)) })}</Show>
                                       </div>
                                     </div>
                                     <Button
                                       size="sm"
                                       variant={selected() ? 'ghost' : 'outline'}
-                                      class={selected() ? 'text-muted-foreground hover:text-destructive' : ''}
-                                      onClick={() => (selected() ? props.onRemoveRecommendedPreset(preset.model_name) : props.onAddSelectedPreset(preset.model_name))}
-                                      disabled={!props.canInteract || (preset.unavailable && !selected())}
+                                      class={cn('shrink-0', selected() && 'border border-transparent text-muted-foreground hover:text-destructive')}
+                                      onClick={() => (selected() ? props.onRemoveRecommendedPreset(preset().model_name) : props.onAddSelectedPreset(preset().model_name))}
+                                      disabled={!props.canInteract || (preset().unavailable && !selected())}
                                     >
-                                      {selected() ? i18n.t('flowerProviderDialog.removeModel') : i18n.t('flowerProviderDialog.addPreset')}
+                                      <StableText reserve={[i18n.t('flowerProviderDialog.removeModel'), i18n.t('flowerProviderDialog.addPreset')]}>
+                                        {selected() ? i18n.t('flowerProviderDialog.removeModel') : i18n.t('flowerProviderDialog.addPreset')}
+                                      </StableText>
                                     </Button>
                                   </div>
                                   <div class="mt-2 flex flex-wrap gap-1.5">
-                                    <WebSearchCapabilityBadge availability={preset.web_search} copy={catalogCopy()} />
+                                    <WebSearchCapabilityBadge availability={preset().web_search} copy={catalogCopy()} />
                                     <CapabilityTag active>{i18n.t('flowerSettings.textCapability')}</CapabilityTag>
-                                    <CapabilityTag active={modelSupportsImageInput(preset.input_modalities)}>{i18n.t('flowerSettings.imageInputCapability')}</CapabilityTag>
-                                    <Show when={selected()}>
+                                    <CapabilityTag active={modelSupportsImageInput(preset().input_modalities)}>{i18n.t('flowerSettings.imageInputCapability')}</CapabilityTag>
+                                    <span class={cn('inline-flex', !selected() && 'invisible')} aria-hidden={!selected()}>
                                       <CapabilityTag active>{i18n.t('flowerProviderDialog.selectedCapability')}</CapabilityTag>
-                                    </Show>
+                                    </span>
                                   </div>
-                                  <Show when={localizedFlowerProviderModelNote(i18n.locale(), preset.note_key)}>
+                                  <Show when={localizedFlowerProviderModelNote(i18n.locale(), preset().note_key)}>
                                     {(note) => <div class="mt-2 text-[11px] text-muted-foreground">{note()}</div>}
                                   </Show>
                                 </div>
