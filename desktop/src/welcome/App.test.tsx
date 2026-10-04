@@ -400,7 +400,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<EnvironmentProgressPanel');
     expect(appSrc).toContain('buildGatewayActionPresentation');
     expect(appSrc).toContain('row().environment_summary_label');
-    expect(appSrc).toContain('row().environment_summary_detail');
+    expect(appSrc).toContain("props.i18n.t('gatewayAccess.directory')");
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).toContain("case 'refresh_status':");
     expect(appSrc).toContain("case 'refresh_gateway':");
@@ -513,7 +513,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const totalGatewaySourceCount = createMemo(() => props.gatewaySources.length);');
     expect(appSrc).toContain('noMatchingGatewaysTitle');
     expect(styles).toContain('.redeven-gateway-grid');
-    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
+    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 24rem));');
     expect(styles).not.toContain('redeven-card-entrance');
   });
 
@@ -1050,12 +1050,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('gatewayProgressIsActive(visibleGatewayProgress())');
     expect(appSrc).toContain('const guidePanelHasState = createMemo(() => (');
     expect(appSrc).toContain('&& guidePanelHasState()');
-    expect(appSrc).toContain('let actionPopoverStaleCloseFrame = 0;');
-    expect(appSrc).toContain('const clearActionPopoverStaleCloseFrame = () => {');
-    expect(appSrc).toContain('actionPopoverStaleCloseFrame = requestAnimationFrame(() => {');
-    expect(appSrc).toContain(
-      'if (props.actionPopoverOpen && !actionPopoverOpen()) {\n        props.onActionPopoverOpenChange(false);\n      }',
-    );
     expect(appSrc).toContain('const foregroundCanShowGuidePanel = createMemo(() => {');
     expect(appSrc).toContain(
       'foregroundPendingProgress() !== null\n      || visibleGatewayDiagnosisResult() !== null\n      || gatewayProgressNeedsAttention(visibleGatewayProgress())',
@@ -1079,9 +1073,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain(
       'const diagnosisResult = visibleGatewayDiagnosisResult();\n    if (diagnosisResult) {\n      return diagnosisResult.panel_model;\n    }',
     );
-    expect(appSrc).toContain('const runPrimaryPointerDown: JSX.EventHandlerUnion<HTMLSpanElement, PointerEvent>');
-    expect(appSrc).toContain('if (currentProgress && progressPresentation()) {\n      return;\n    }');
-    expect(appSrc).toContain('onAnchorPointerDown={runPrimaryPointerDown}');
     expect(appSrc).toContain('function gatewayForegroundDiagnosisBelongsToRefresh(');
     expect(appSrc).toContain('return checkedAtUnixMS >= foreground.started_at_unix_ms;');
     expect(appSrc).toContain(
@@ -1203,7 +1194,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('runMoreMenuAction(action);');
     expect(appSrc).toContain('clicked_action: displayedPrimaryAction()');
     expect(appSrc).toContain('allowMainAxisOverflow={false}');
-    expect(appSrc).toContain('onAnchorPointerDown={runPrimaryPointerDown}');
     expect(actionPopoverSrc).toContain('onPointerDownCapture={stopSurfacePointerDownPropagation}');
     expect(actionPopoverSrc).toContain('event.stopPropagation();');
     expect(appSrc).toContain("'Update available': 'environmentCenter.gatewayNeedsUpdate'");
@@ -1248,7 +1238,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('gateway_env_id: action.environment_id');
     expect(appSrc).not.toContain('redeven-gateway-row');
     expect(styles).toContain('.redeven-gateway-grid');
-    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
+    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 24rem));');
     expect(styles).toContain('.redeven-gateway-card {');
     expect(styles).toContain('--redeven-action-popover-width: min(19rem, calc(100vw - 1rem));');
     expect(styles).not.toContain('--redeven-action-popover-width: min(28rem');

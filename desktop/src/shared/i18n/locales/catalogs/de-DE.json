@@ -2032,7 +2032,20 @@
     "targetNotChecked": "Ziel noch nicht geprüft",
     "accessOnly": "Gateway stellt nur den Zugriff bereit. Der Lebenszyklus der Laufzeitumgebung wird über ein separat registriertes Laufzeitziel verwaltet.",
     "setupServiceRequired": "Die Gateway-Verbindung wurde gespeichert. Starten Sie dieses Gateway und speichern Sie erneut, um Änderungen an Umgebungsprofilen zu erlauben.",
-    "setupFailed": "Die Gateway-Einrichtung konnte nicht abgeschlossen werden. Prüfen Sie die Details, korrigieren Sie die Verbindung und versuchen Sie es erneut."
+    "setupFailed": "Die Gateway-Einrichtung konnte nicht abgeschlossen werden. Prüfen Sie die Details, korrigieren Sie die Verbindung und versuchen Sie es erneut.",
+    "profileHelpLabel": "Informationen zur Profilberechtigung",
+    "profileHelpTitle": "Berechtigung zum Verwalten des Gateway-Verzeichnisses",
+    "profileHelpBody": "Dieser Desktop darf die auf dem Gateway gespeicherten Umgebungsnamen, Laufzeit-URLs und Standardzugriffsarten hinzufügen, bearbeiten und löschen. Andere gekoppelte Desktops sehen die Änderungen nach dem Aktualisieren.",
+    "profileHelpBoundary": "Dies erlaubt weder Installation, Start oder Stopp einer Laufzeit noch Zugriff auf deren Einstellungen. Passwort und Mehrfaktorauthentifizierung der Laufzeit bleiben erforderlich. Veröffentlichte Umgebungen lassen sich auch ohne diese Berechtigung öffnen.",
+    "directory": "Umgebungsverzeichnis",
+    "directorySaved": "Registrierte Umgebungen",
+    "directoryEmpty": "Keine Umgebungen registriert",
+    "directoryPending": "Verzeichnis noch nicht synchronisiert",
+    "directoryIntro": "Fügen Sie eine bestehende Laufzeit-URL hinzu, die dieses Gateway erreichen kann. Umgebungen werden nicht automatisch erkannt.",
+    "directoryAccessHint": "Dies sind registrierte Ziele. Beim Öffnen wird der Zugriff geprüft; die Verzeichnissynchronisierung prüft nicht den Zustand der Laufzeit.",
+    "addEnvironment": "Umgebung hinzufügen",
+    "authorizeProfiles": "Änderungen erlauben",
+    "thisDevice": "Dieses Gerät"
   },
   "connectionDialog": {
     "newEnvironmentTitle": "Neue Umgebung",

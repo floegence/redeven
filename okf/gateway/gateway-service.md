@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway service
 description: Standalone optional Gateway identity, catalog, session, and access forwarding service.
 tags: [gateway, desktop, release, access]
-timestamp: 2026-10-03T00:00:00Z
+timestamp: 2026-10-05T00:00:00Z
 ---
 # Summary
 
@@ -80,6 +80,37 @@ save/start results. A failed snapshot refresh cannot erase the original failure
 or change a successful save into a failed write. Command diagnostics remain
 structured, sanitized and available alongside localized guidance.
 
+## Desktop directory and operation presentation
+
+Each Gateway card separates connection identity, service status, trust, and the
+environment directory. The directory contains explicitly registered targets;
+Gateway does not scan the network or discover Runtime installations. An unknown
+directory count is distinct from a successfully synchronized empty directory.
+Catalog entries do not assert target reachability or Runtime health.
+
+Add environment opens the existing URL-profile form with this Gateway selected
+and Gateway proxy as the default access method. View environments opens the
+Gateway's directory in the environment list; opening a target verifies access
+through the explicitly selected method. Neither action grants Runtime lifecycle
+authority. A paired client without profile-write permission receives an
+Authorize changes entry into Gateway setup instead of an implicit grant.
+
+The profile-write checkbox has a keyboard-accessible question button. Its
+click-expanded body explains names, Runtime URLs, default access methods, and
+visibility to other paired Desktops after refresh. It also explains that Runtime
+password, MFA, settings, and lifecycle permissions remain independent. Reading
+this help never changes consent or submits a request.
+
+Gateway actions use the existing launcher operation as the single progress
+owner. Managed service events project into its step timeline, retaining the
+active phase and elapsed time on failure. Because installation and host phases
+can be skipped or revisited, service progress shows observed steps without an
+invented percentage or fixed step total. A single click submits an action once;
+the busy primary button uses the shared progress shimmer and reopens that same
+operation. Dismissing the popover does not cancel or resubmit work. Popovers and
+menus retain a noninteractive exit frame, restore trigger focus on Escape, and
+respect reduced-motion preferences.
+
 # Evidence
 
 - `redeven:cmd/redeven-gateway/main.go:1` - Standalone Gateway CLI and Gateway-only service commands.
@@ -88,5 +119,7 @@ structured, sanitized and available alongside localized guidance.
 - `redeven:spec/openapi/gateway-v3.yaml:1` - Access-only Gateway HTTP contract.
 - `redeven:desktop/src/welcome/GatewaySetup.client.test.tsx` - Explicit managed registration, URL pairing input, and own-service start interactions.
 - `redeven:desktop/src/main/gatewayLifecycleManager.test.ts` - Gateway-only service operations, target isolation, and URL management rejection.
+- `redeven:desktop/src/main/gatewayServiceProgress.test.ts` - Observed service phases, repeated-phase timing, and terminal progress.
+- `redeven:desktop/scripts/check-gateway-card-experience.mjs` - Real browser card actions, delayed progress, motion, focus restoration, and consent explanation.
 - `redeven:desktop/src/main/gatewayServiceHost.ts:1` - Explicit standalone Gateway installation under the Gateway state root.
 - `redeven:.github/workflows/release.yml:1` - Independent Gateway archive build and publication.

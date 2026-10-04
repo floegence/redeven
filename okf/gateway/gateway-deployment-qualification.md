@@ -46,7 +46,18 @@ deployment below owns private-target login and data-path qualification.
 Form tests use the production IPC normalizer for every transport; mocked
 launcher success alone is not deployment evidence. The UI qualification covers
 all ten locales at normal and narrow/dark/large-text layouts, including the
-explicit Start-and-retry setup continuation.
+explicit Start-and-retry setup continuation, card-to-profile Gateway selection,
+and profile permission help without changing consent.
+
+Run `node desktop/scripts/check-gateway-card-experience.mjs` for the focused
+Welcome interaction qualification. It renders production components with owned
+launcher fixtures at desktop and 430-pixel widths, with light/dark themes and
+large text. It checks single-click submission, delayed service progress, shared
+button shimmer, popup and menu entry/exit, keyboard navigation and focus return,
+failure presentation, and dismissal/reopening without canceling or resubmitting.
+The progress fixture uses the production service-step projection. Screenshots
+and its report live in `desktop/dist/gateway-card-experience/`. This establishes
+renderer behavior; real service deployment remains owned by the suites above.
 
 ## One reproducible local deployment
 
@@ -135,6 +146,8 @@ session; do not repeat all source tests on every platform or expand ordinary CI.
 - `redeven:desktop/scripts/check-gateway-setup-electron.mjs` - Production Desktop setup, service lifecycle and profile workflow.
 - `redeven:desktop/scripts/check-gateway-managed-hosts.mjs` - Real SSH and container managed-service qualification with owned cleanup.
 - `redeven:desktop/src/welcome/GatewaySetup.client.test.tsx` - Emitted IPC contracts, dialog lifetime and explicit authorization recovery.
+- `redeven:desktop/scripts/check-gateway-access-ui.mjs` - Ten-locale access, directory entry, consent help, and setup recovery qualification.
+- `redeven:desktop/scripts/check-gateway-card-experience.mjs` - Gateway cards, service progress, motion, keyboard navigation and focus qualification.
 
 - `redeven:desktop/scripts/check-gateway-deployment.mjs` - Owned Docker/Nginx topology, real TCP isolation, fixture-scoped TLS trust and cleanup.
 - `redeven:desktop/scripts/fixtures/gateway-deployment.ts` - Binary/SSE/redirect, idle lease, shutdown and redacted-log assertions.

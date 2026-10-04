@@ -15,6 +15,7 @@ import {
   SegmentedControl,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
+import { GatewayProfilePermission } from './GatewayProfilePermission';
 import { EnvironmentAccessWorkflow } from './EnvironmentAccessWorkflow';
 import type { SecurityRequest, SecurityResult } from '../shared/runtimeSecurity';
 import { CloudAccountOverview } from './CloudAccountOverview';
@@ -771,7 +772,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
 }
 
 function localizedGatewaySourceStatusLabel(i18n: DesktopI18n, label: string): string {
-  return localizedStringByValue(i18n, label, {
+  return localizedEnvironmentStatusLabel(i18n, localizedStringByValue(i18n, label, {
     Installing: 'environmentCenter.gatewayStatusInstalling',
     Starting: 'environmentCenter.gatewayStatusStarting',
     Updating: 'environmentCenter.gatewayStatusUpdating',
@@ -781,7 +782,7 @@ function localizedGatewaySourceStatusLabel(i18n: DesktopI18n, label: string): st
     Disabled: 'environmentCenter.gatewayDisabledStatus',
     Refreshing: 'environmentCenter.gatewayActionSyncing',
     'Not started': 'environmentStatus.stopped',
-  }) || localizedEnvironmentStatusLabel(i18n, label);
+  }));
 }
 
 function environmentActionTranslationKey(action: EnvironmentActionModel): DesktopTranslationKey | undefined {
@@ -8426,6 +8427,7 @@ function localizedProgressLocation(i18n: DesktopI18n, location: string): string 
 }
 
 function environmentProgressLabel(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
+  if (progress.subject_kind === 'gateway') return trimString(progress.environment_label) || i18n.t('environmentCenter.gatewayProgress');
   const open = progress.active_progress_surface === 'open' ? progress.open_progress : undefined;
   if (open) {
     const environmentLabel = trimString(open.environment_label) || trimString(progress.environment_label) || 'Environment';
@@ -8833,6 +8835,8 @@ function EnvironmentProgressPanel(props: Readonly<{
     runtimeSteps,
     () => runtimeLifecycle()?.plan_revision ?? 0,
   );
+  const observedGatewayServiceSteps = createMemo(() => props.progress.subject_kind === 'gateway'
+    && ['start_gateway', 'stop_gateway', 'restart_gateway', 'update_gateway'].includes(props.progress.action));
   const stagePercent = createMemo(() => {
     return environmentProgressMeterPercent(props.progress);
   });
@@ -9156,15 +9160,17 @@ function EnvironmentProgressPanel(props: Readonly<{
                 }}
               </Index>
             </div>
-            <div
-              class="redeven-environment-progress__meter"
-              data-plan-state={runtimeLifecycle()?.plan_state ?? 'executing'}
-              aria-hidden="true"
-            >
-              <span style={{ width: `${stagePercent()}%` }} />
-            </div>
+            <Show when={!observedGatewayServiceSteps()}>
+              <div
+                class="redeven-environment-progress__meter"
+                data-plan-state={runtimeLifecycle()?.plan_state ?? 'executing'}
+                aria-hidden="true"
+              >
+                <span style={{ width: `${stagePercent()}%` }} />
+              </div>
+            </Show>
             <div class="redeven-environment-progress__meta">
-              <Show when={stepProgress() || runtimeLifecycle()}>
+              <Show when={!observedGatewayServiceSteps() && (stepProgress() || runtimeLifecycle())}>
                 <span>
                   {props.i18n.t('progress.stepOf', {
                     current: Math.max(1, phaseSequence().findIndex((step) => step.phase === (
@@ -10586,6 +10592,9 @@ function pendingGatewayRefreshProgress(
 ): DesktopLauncherActionProgress {
   return {
     action: 'refresh_gateway',
+    title_key: 'progress.checkingGateway',
+    environment_label: gateway.display_name,
+    active_progress_surface: 'gateway',
     operation_key: operationKey,
     subject_kind: 'gateway',
     subject_id: gateway.gateway_id,
@@ -10926,7 +10935,6 @@ function GatewaySourceCard(props: Readonly<{
   let foregroundTerminalClearTimer: ReturnType<typeof setTimeout> | null = null;
   let foregroundTerminalClearKey: string | null = null;
   let actionPopoverExitTask: (() => void) | null = null;
-  let actionPopoverStaleCloseFrame = 0;
   const clearForegroundPendingProgress = () => {
     setForegroundPendingProgress(null);
     setForegroundAction((current) => current?.pending_progress
@@ -10941,13 +10949,6 @@ function GatewaySourceCard(props: Readonly<{
     clearTimeout(foregroundTerminalClearTimer);
     foregroundTerminalClearTimer = null;
     foregroundTerminalClearKey = null;
-  };
-  const clearActionPopoverStaleCloseFrame = () => {
-    if (!actionPopoverStaleCloseFrame) {
-      return;
-    }
-    cancelAnimationFrame(actionPopoverStaleCloseFrame);
-    actionPopoverStaleCloseFrame = 0;
   };
   const setForegroundPendingProgressForRequest = (progress: DesktopLauncherActionProgress | null) => {
     setForegroundPendingProgress(progress);
@@ -11218,26 +11219,28 @@ function GatewaySourceCard(props: Readonly<{
       || gatewayProgressNeedsAttention(visibleGatewayProgress());
   });
   const guidePanelVisible = createMemo(() => (
-    (props.actionPopoverOpen || foregroundWantsPopover())
+    props.actionPopoverOpen
     && guidePanelHasState()
     && foregroundCanShowGuidePanel()
     && !hasProgressPanel()
     && visiblePanelModel().execution_mode !== 'direct'
   ));
-  const progressPanelVisible = createMemo(() => (props.actionPopoverOpen || foregroundWantsPopover()) && hasProgressPanel());
+  const progressPanelVisible = createMemo(() => props.actionPopoverOpen && hasProgressPanel());
   const actionPopoverOpen = createMemo(() => progressPanelVisible() || guidePanelVisible());
-  createEffect(() => {
-    clearActionPopoverStaleCloseFrame();
-    if (!props.actionPopoverOpen || actionPopoverOpen()) {
-      return;
-    }
-    actionPopoverStaleCloseFrame = requestAnimationFrame(() => {
-      actionPopoverStaleCloseFrame = 0;
-      if (props.actionPopoverOpen && !actionPopoverOpen()) {
-        props.onActionPopoverOpenChange(false);
-      }
-    });
-  });
+  const catalogReady = createMemo(() => props.gateway.sync_state === 'ready' || (props.gateway.last_synced_at_ms ?? 0) > 0);
+  const canAddEnvironment = createMemo(() => gatewayCanWriteEnvironmentProfiles(props.gateway) && props.gateway.local_enabled !== false);
+  const canAuthorizeProfiles = createMemo(() => props.gateway.status === 'online' && props.gateway.trust_state === 'paired'
+    && !props.gateway.capabilities.includes('env_profile_write') && props.gateway.local_enabled !== false);
+  const transportLabel = createMemo(() => props.i18n.t({
+    url: 'connectionDialog.gatewayTransportUrl', local_host: 'gatewayAccess.localService',
+    local_container: 'connectionDialog.localContainer', ssh_host: 'connectionDialog.gatewayTransportSshHost',
+    ssh_container: 'connectionDialog.gatewayTransportSshContainer',
+  }[props.gateway.connection_kind] as DesktopTranslationKey));
+  const trustLabel = createMemo(() => props.i18n.t({
+    paired: 'environmentCenter.gatewayPanelTrustPaired', unpaired: 'environmentCenter.gatewayPanelTrustNotPaired',
+    trust_changed: 'environmentCenter.gatewayPanelTrustReviewRequired', revoked: 'environmentCenter.gatewayPanelTrustRevoked',
+  }[props.gateway.trust_state ?? 'unpaired'] as DesktopTranslationKey));
+  const moreActionsPresence = createFloatingPresence({ open: () => props.moreActionsMenuOpen, exitDurationMs: 160 });
   const menuActions = createMemo(() => row().secondary_actions);
   const progressIsRunning = (progress: DesktopLauncherActionProgress | null | undefined) => (
     progress?.status === 'running'
@@ -11265,7 +11268,7 @@ function GatewaySourceCard(props: Readonly<{
     return progressIsRunning(visibleGatewayProgress());
   });
   const primaryActionRunning = createMemo(() => (
-    foregroundActionRunning()
+    foregroundActionRunning() || primaryBusy()
   ));
   const menuActionRunning = (action: GatewaySourceActionModel) => foregroundActionBusy(action);
   const activeProgressForAction = (action: GatewaySourceActionModel): DesktopLauncherActionProgress | null => selectForegroundGatewayProgress(
@@ -11305,7 +11308,25 @@ function GatewaySourceCard(props: Readonly<{
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
         closeMoreActions();
+        moreActionsAnchorRef?.querySelector('button')?.focus();
+      } else if (moreActionsContainsTarget(event.target)) {
+        if (event.key === 'Tab') {
+          moreActionsAnchorRef?.querySelector('button')?.focus();
+          closeMoreActions();
+          return;
+        }
+        const items = Array.from(moreActionsOverlayRef?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
+        if (!items.length) return;
+        const current = items.findIndex(item => item === document.activeElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+          : event.key === 'ArrowDown' ? (current + 1) % items.length
+            : event.key === 'ArrowUp' ? (current + items.length - 1) % items.length : -1;
+        if (next >= 0) {
+          event.preventDefault();
+          items[next].focus();
+        }
       }
     };
     document.addEventListener('mousedown', handleMouseDown);
@@ -11342,7 +11363,6 @@ function GatewaySourceCard(props: Readonly<{
   });
   onCleanup(() => {
     clearForegroundTerminalClearTimer();
-    clearActionPopoverStaleCloseFrame();
   });
   createEffect(() => {
     const foreground = foregroundAction();
@@ -11810,49 +11830,53 @@ function GatewaySourceCard(props: Readonly<{
     }
     runAction(action);
   };
-  const runPrimaryPointerDown: JSX.EventHandlerUnion<HTMLSpanElement, PointerEvent> = (event) => {
-    const currentProgress = visibleGatewayProgress();
-    if (currentProgress && progressPresentation()) {
-      return;
-    }
-    const action = displayedPrimaryAction();
-    if (!actionStartsWorkflowImmediately(action)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    void runGatewayActionAsForeground(action);
-  };
 
   return (
-    <Card class="redeven-environment-card redeven-gateway-card h-full overflow-hidden">
-      <CardHeader class="px-4 pb-2.5 pt-4">
-        <div class="flex items-start justify-between gap-3">
+    <Card class="redeven-environment-card redeven-gateway-card h-full" data-gateway-id={props.gateway.gateway_id}>
+      <CardHeader class="redeven-gateway-card__header">
+        <div class="redeven-gateway-card__identity">
+          <span class="redeven-gateway-card__mark" aria-hidden="true"><ShieldCheck class="h-5 w-5" /></span>
           <div class="min-w-0 flex-1">
-            <div class="mb-2 flex flex-wrap items-center gap-2">
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {row().transport_label}
-              </Tag>
-              <EnvironmentStatusIndicator tone={row().status_tone}>
-                {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
-              </EnvironmentStatusIndicator>
-            </div>
-            <CardTitle class="truncate text-[length:var(--floe-type-control)] font-medium leading-5 tracking-[0.01em]" title={row().label}>
-              {row().label}
-            </CardTitle>
-            <div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <Show when={row().endpoint_label}>
-                {(endpoint) => <span class="redeven-gateway-card__endpoint">{endpoint()}</span>}
-              </Show>
-            </div>
+            <span class="redeven-gateway-card__transport">{transportLabel()}</span>
+            <CardTitle class="redeven-gateway-card__name" title={row().label}>{row().label}</CardTitle>
           </div>
+          <ConsoleActionIconButton title={props.i18n.t('environmentCenter.gatewayActionOpenSettings')}
+            aria-label={props.i18n.t('environmentCenter.manageGatewayForLabel', { label: row().label })}
+            disabled={primaryActionRunning()} onClick={() => props.openCreateGatewaySetup(props.gateway)}>
+            <Settings class="h-3.5 w-3.5" />
+          </ConsoleActionIconButton>
+        </div>
+        <div class="redeven-gateway-card__endpoint" title={row().endpoint_label}>
+          {props.gateway.connection_kind === 'local_host' ? props.i18n.t('gatewayAccess.thisDevice') : row().endpoint_label}
+        </div>
+        <div class="redeven-gateway-card__status-row">
+          <EnvironmentStatusIndicator tone={row().status_tone}>
+            {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
+          </EnvironmentStatusIndicator>
+          <span class="redeven-gateway-card__trust"><Shield class="h-3 w-3" />{trustLabel()}</span>
         </div>
       </CardHeader>
-      <CardContent class="flex flex-1 flex-col gap-3 px-4 pb-3">
-        <div class="redeven-gateway-card__catalog-summary" data-tone={row().guidance.tone}>
-          <div class="min-w-0">
-            <div class="redeven-gateway-card__summary-title">{localizedGatewaySourceCountText(props.i18n, row().environment_summary_label)}</div>
-            <div class="redeven-gateway-card__summary-detail">{localizedGatewaySourceText(props.i18n, row().environment_summary_detail)}</div>
+      <CardContent class="redeven-gateway-card__content">
+        <div class="redeven-gateway-card__catalog-summary">
+          <div class="redeven-gateway-card__catalog-heading">
+            <span>{props.i18n.t('gatewayAccess.directory')}</span>
+            <span class="redeven-gateway-card__count">{catalogReady() || row().environment_count > 0 ? row().environment_count : '—'}</span>
+          </div>
+          <p class="redeven-gateway-card__summary-title">{row().environment_count > 0
+            ? props.i18n.t('gatewayAccess.directorySaved')
+            : props.i18n.t(catalogReady() ? 'gatewayAccess.directoryEmpty' : 'gatewayAccess.directoryPending')}</p>
+          <p class="redeven-gateway-card__summary-detail">{props.i18n.t(row().environment_count > 0
+            ? 'gatewayAccess.directoryAccessHint' : 'gatewayAccess.directoryIntro')}</p>
+          <div class="redeven-gateway-card__directory-actions">
+            <Button size="sm" variant="outline" disabled={primaryActionRunning() || (!canAddEnvironment() && !canAuthorizeProfiles())}
+              onClick={() => canAuthorizeProfiles() ? props.openCreateGatewaySetup(props.gateway, 'identity_trust') : props.openCreateGatewayEnvironment(props.gateway)}>
+              <Show when={canAuthorizeProfiles()} fallback={<Plus class="h-3.5 w-3.5" />}><Lock class="h-3.5 w-3.5" /></Show>
+              {props.i18n.t(canAuthorizeProfiles() ? 'gatewayAccess.authorizeProfiles' : 'gatewayAccess.addEnvironment')}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={row().environment_count === 0 || props.gateway.local_enabled === false}
+              onClick={() => props.viewGatewayEnvironments(props.gateway)}>
+              {props.i18n.t('environmentCenter.viewEnvironments')}<ChevronRight class="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
       </CardContent>
@@ -11942,7 +11966,6 @@ function GatewaySourceCard(props: Readonly<{
               </Show>
             )}
             anchorClass="redeven-gateway-card__primary-anchor"
-            onAnchorPointerDown={runPrimaryPointerDown}
             allowMainAxisOverflow={false}
             placementLock="top-inline-shift"
             popoverAriaLabel={
@@ -11963,6 +11986,7 @@ function GatewaySourceCard(props: Readonly<{
                     primaryBlocked() && 'redeven-split-action-trigger--blocked',
                   )}
                   loading={primaryBusy()}
+                  data-floe-progress-shimmer={primaryBusy() ? 'surface' : undefined}
                   disabled={!displayedPrimaryAction().enabled && !primaryBlocked()}
                   aria-disabled={primaryBlocked() ? true : undefined}
                   aria-haspopup={primaryHasGuide() ? 'dialog' : undefined}
@@ -11987,6 +12011,7 @@ function GatewaySourceCard(props: Readonly<{
                   aria-haspopup="dialog"
                   aria-expanded={props.actionPopoverOpen}
                   aria-label={presentation().ariaLabel}
+                  data-floe-progress-shimmer={presentation().kind === 'progress_trigger' ? 'surface' : undefined}
                   onClick={() => {
                     props.onActionPopoverOpenChange(true);
                   }}
@@ -12000,63 +12025,71 @@ function GatewaySourceCard(props: Readonly<{
             </Show>
           </DesktopActionPopover>
           <div class="redeven-gateway-card__footer-actions">
-            <Show when={menuActions().length > 0}>
-                <span ref={moreActionsAnchorRef} class="relative">
-                  <DesktopTooltip content={moreActionsLabel()} placement="top">
-                    <span>
-                      <ConsoleActionIconButton
-                        title={moreActionsLabel()}
-                        aria-label={moreActionsForLabel()}
-                        aria-haspopup="menu"
-                        aria-expanded={props.moreActionsMenuOpen}
-                        disabled={primaryActionRunning()}
-                        onClick={() => props.onMoreActionsMenuOpenChange(!props.moreActionsMenuOpen)}
-                      >
-                        <MoreHorizontal class="h-3.5 w-3.5" />
-                      </ConsoleActionIconButton>
-                    </span>
-                  </DesktopTooltip>
-                  <Show when={props.moreActionsMenuOpen}>
-                    <DesktopAnchoredOverlaySurface
-                      open={props.moreActionsMenuOpen}
-                      anchorRef={moreActionsAnchorRef}
-                      placement="top"
-                      role="menu"
-                      ariaLabel={moreActionsForLabel()}
-                      interactive
-                      hideArrow
-                      class="redeven-split-menu z-[230] max-w-[min(16rem,calc(100vw-1rem))]"
-                      onOverlayRef={(element) => {
-                        moreActionsOverlayRef = element;
-                      }}
-                    >
-                      <For each={menuActions()}>
-                        {(action) => (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            class="redeven-split-menu-item"
-                            data-tone={gatewaySplitMenuItemToneData(action.intent) || undefined}
-                            disabled={menuItemDisabled(action)}
-                            title={!action.enabled ? action.disabled_reason : undefined}
-                            onClick={() => {
-                              if (menuItemDisabled(action)) {
-                                return;
-                              }
-                              runMoreMenuAction(action);
-                            }}
-                          >
-                            <span class="redeven-split-menu-item-icon">
-                              <GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />
-                            </span>
-                            {localizedGatewayActionLabel(action)}
-                          </button>
-                        )}
-                      </For>
-                    </DesktopAnchoredOverlaySurface>
-                  </Show>
+            <span ref={moreActionsAnchorRef} class="relative">
+              <DesktopTooltip content={moreActionsLabel()} placement="top">
+                <span>
+                  <ConsoleActionIconButton
+                    title={moreActionsLabel()}
+                    aria-label={moreActionsForLabel()}
+                    aria-haspopup="menu"
+                    aria-expanded={props.moreActionsMenuOpen}
+                    disabled={primaryActionRunning()}
+                    onClick={() => props.onMoreActionsMenuOpenChange(!props.moreActionsMenuOpen)}
+                  >
+                    <MoreHorizontal class="h-3.5 w-3.5" />
+                  </ConsoleActionIconButton>
                 </span>
-            </Show>
+              </DesktopTooltip>
+              <Show when={moreActionsPresence.mounted()}>
+                <DesktopAnchoredOverlaySurface
+                  open={moreActionsPresence.mounted()}
+                  positionFrozen={moreActionsPresence.exiting()}
+                  anchorRef={moreActionsAnchorRef}
+                  placement="top"
+                  role="menu"
+                  ariaLabel={moreActionsForLabel()}
+                  interactive={props.moreActionsMenuOpen}
+                  hideArrow
+                  class={cn('redeven-split-menu redeven-gateway-menu z-[230] max-w-[min(20rem,calc(100vw-1rem))]', moreActionsPresence.exiting() && 'redeven-gateway-menu--closing')}
+                  onOverlayRef={(element) => {
+                    moreActionsOverlayRef = element;
+                  }}
+                >
+                  <div role="none" inert={moreActionsPresence.exiting()} aria-hidden={moreActionsPresence.exiting()}>
+                    <For each={menuActions()}>
+                      {(action) => (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class="redeven-split-menu-item"
+                          data-tone={gatewaySplitMenuItemToneData(action.intent) || undefined}
+                          disabled={menuItemDisabled(action)}
+                          title={!action.enabled ? action.disabled_reason : undefined}
+                          onClick={() => {
+                            if (menuItemDisabled(action)) {
+                              return;
+                            }
+                            runMoreMenuAction(action);
+                          }}
+                        >
+                          <span class="redeven-split-menu-item-icon">
+                            <GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />
+                          </span>
+                          {localizedGatewayActionLabel(action)}
+                        </button>
+                      )}
+                    </For>
+                    <Show when={menuActions().length > 0}><div class="my-1 border-t border-border/60" role="separator" /></Show>
+                    <button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
+                      closeMoreActions(); props.openCreateGatewaySetup(props.gateway);
+                    }}><Settings class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionOpenSettings')}</button>
+                    <button type="button" role="menuitem" class="redeven-split-menu-item" data-tone="danger" onClick={() => {
+                      closeMoreActions(); props.deleteGateway(props.gateway);
+                    }}><X class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionDelete')}</button>
+                  </div>
+                </DesktopAnchoredOverlaySurface>
+              </Show>
+            </span>
           </div>
         </div>
       </CardFooter>
@@ -14188,9 +14221,8 @@ function GatewaySetupDialog(props: Readonly<{
           </div>
         </Show>
 
-        <Checkbox checked={props.state?.profile_write === true}
-          onChange={(enabled) => props.updateField('profile_write', enabled)}
-          label={props.i18n.t('gatewayAccess.grantWrite')} size="sm" />
+        <GatewayProfilePermission i18n={props.i18n} checked={props.state?.profile_write === true}
+          onChange={(enabled) => props.updateField('profile_write', enabled)} />
         <Show when={props.recovery}>
           {recovery => <GatewayProfileRecoveryNotice i18n={props.i18n} recovery={recovery()}
             busy={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onStart={props.onStart} />}

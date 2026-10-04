@@ -1,3 +1,4 @@
+import { gatewayServiceStepProgress, finishGatewayServiceStepProgress } from './gatewayServiceProgress';
 import { gatewayConnectionFromSetup } from './gatewayRegistration';
 import { GatewayEnvironmentMigration, legacyGatewayRuntimeTargetInput } from './gatewayEnvironmentMigration';
 import { DesktopWelcomeRuntimePoller } from './desktopWelcomeRuntimePoller';
@@ -7133,6 +7134,8 @@ async function runGatewayServiceActionFromLauncher(
     operation_key: operationKey, action: request.kind, subject_kind: 'gateway', subject_id: record.gateway_id,
     gateway_id: record.gateway_id, active_progress_surface: 'gateway', phase: 'checking_gateway_service',
     title: selected.title, title_key: selected.key, detail: '', cancelable: true,
+    environment_label: record.display_name,
+    step_progress: gatewayServiceStepProgress(undefined, 'checking_gateway_service'),
   });
   const owner = { action: operation.action, started_at_unix_ms: operation.started_at_unix_ms };
   const signal = launcherOperations.operationSignal(operationKey) ?? undefined;
@@ -7148,12 +7151,15 @@ async function runGatewayServiceActionFromLauncher(
         sessionsInvalidated = true;
         for (const session of affected) failGatewaySessionTransport(session, new GatewayProxyError('GATEWAY_SESSION_EXPIRED'));
       }
-      launcherOperations.updateCurrentAttempt(operationKey, owner, { phase: progress.phase, detail: progress.detail });
+      launcherOperations.updateCurrentAttempt(operationKey, owner, { phase: progress.phase, title_key: selected.key, detail: progress.detail,
+        step_progress: gatewayServiceStepProgress(launcherOperations.get(operationKey)?.step_progress, progress.phase),
+      });
     } });
     gatewayDiagnosisByID.delete(record.gateway_id);
     await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
     launcherOperations.finishCurrentAttempt(operationKey, owner, 'succeeded', {
-      phase: request.kind, title: selected.title, title_key: selected.key, detail: '',
+      phase: launcherOperations.get(operationKey)?.phase ?? request.kind, title: selected.title, title_key: selected.key, detail: '',
+      step_progress: finishGatewayServiceStepProgress(launcherOperations.get(operationKey)?.step_progress, 'succeeded'),
     });
     scheduleCurrentLauncherOperationRemoval(operationKey, owner);
     return launcherActionSuccess(selected.outcome);
@@ -7162,7 +7168,8 @@ async function runGatewayServiceActionFromLauncher(
     const failure = desktopFailureFromError(error, { code: 'operation_failed', title: selected.title,
       summary: error instanceof Error ? error.message : String(error), targetLabel: record.display_name });
     launcherOperations.finishCurrentAttempt(operationKey, owner, canceled ? 'canceled' : 'failed', {
-      phase: request.kind, title: selected.title, title_key: selected.key, detail: failure.summary, failure,
+      phase: launcherOperations.get(operationKey)?.phase ?? request.kind, title: selected.title, title_key: selected.key, detail: failure.summary, failure,
+      step_progress: finishGatewayServiceStepProgress(launcherOperations.get(operationKey)?.step_progress, canceled ? 'canceled' : 'failed'),
     });
     return launcherActionFailure(gatewayServiceFailureCode(error), 'gateway', failure.summary, {
       gatewayID: record.gateway_id, gatewayLabel: record.display_name, operationKey, failure, shouldRefreshSnapshot: true,
