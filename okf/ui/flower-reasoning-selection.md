@@ -3,11 +3,11 @@ type: UI Contract
 title: Flower reasoning selection ownership
 description: Preserve explicit reasoning choices across cold loads, shared drafts, submission, and restart.
 tags: [ai, flower, reasoning, composer]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-10-04T00:00:00Z
 ---
 # Summary
 
-Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Default reasoning is a configuration choice, not an enabled state or an effort level. Cold loading and restart preserve Off. Failed saves retain the confirmed setting, and active Turns retain their immutable runtime configuration.
+Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Default reasoning is a configuration choice, not an enabled state or an effort level. Cold loading and restart preserve explicit Off and On. Controls reflect verified model capabilities; unknown controls remain model-controlled. Failed saves retain the confirmed setting, and active Turns retain their immutable runtime configuration.
 
 # Contract
 
@@ -36,6 +36,33 @@ DeepSeek's published Floret transport omits explicit reasoning effort for absent
 or Default selections, sends `none` for Off, and preserves supported Low, High,
 and Max selections. The UI does not infer an effective provider default.
 
+# Model capability presentation
+
+The shared Desktop and Env App control distinguishes these model contracts:
+
+| Declared capability | Presentation |
+| --- | --- |
+| Boolean toggle | Default, Off when supported, and explicit On |
+| Named efforts | Default, Off when supported, and only declared supported levels |
+| Token budget | Bounded token input; clearing it removes the override |
+| Fixed thinking | Non-interactive Always on status |
+| Thinking with unknown controls | Non-interactive Model controlled status with an explanation |
+| No reasoning | No reasoning control |
+
+On is a persisted choice distinct from Default and from effort names. Published
+Floret v7.22.0 advertises it only for verified boolean transports. Named effort
+and token-budget controls may coexist only when the provider permits it; Qwen's
+`qwen_reasoning_effort` clears the budget when a specific effort is chosen and
+shows the budget input only under Default. Off clears any budget.
+
+Provider metadata discovery and exact wire encoding follow the
+[model reasoning contract](../ai/model-reasoning-runtime.md).
+
+Runtime compatibility epoch 35 pairs clients that understand the additive `on`
+value. Existing database lineages and immutable active-Turn settings do not
+change. The model directory remains the authority for provider metadata; no
+second capability store or probing inference request is introduced.
+
 # Boundaries
 
 This is shared Redeven UI policy, not a Floret API or a second preference store. The model catalog and navigation remain governed by [Flower model and navigation presentation](flower-model-navigation.md). Runtime continuation uses the [immutable Turn surface](../ai/floret-thread-runtime.md); no reasoning override is added to an input answer.
@@ -45,7 +72,9 @@ This is shared Redeven UI policy, not a Floret API or a second preference store.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Resolve confirmed settings independently from explicit drafts and freeze submission options.
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Connection-local explicit new-thread reasoning choice.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.reasoningSelection.browser.test.tsx` - Cold loading, explicit intent, failed saves, remounts, and request ownership.
-- `redeven:internal/ai/thread_reasoning_restart_test.go` - Persisted Off survives service reopening and waiting continuation with DeepSeek wire requests.
+- `redeven:internal/ai/thread_reasoning_restart_test.go` - Persisted Off and On survive service reopening; DeepSeek waiting continuation and Ollama dispatch retain the confirmed choice.
 
 - `redeven:internal/envapp/ui_src/src/ui/ReasoningControl.browser.test.tsx` - Default/effort labels, budgets, localization, and keyboard interaction.
 - `redeven:internal/ai/model_gateway_deepseek_test.go` - Published Floret transport reasoning selection wire contract.
+
+- `redeven:internal/ai/model_gateway_ollama_reasoning_test.go` - Exact declared wire choices, thinking stream/history, and opt-in live model acceptance.

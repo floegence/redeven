@@ -5005,7 +5005,10 @@
       "alwaysOn": "Sempre ativado",
       "tokens": "{count} tokens",
       "tokenUnit": "tokens",
-      "budgetLabel": "Orçamento de tokens de {label}"
+      "budgetLabel": "Orçamento de tokens de {label}",
+      "on": "Ativado",
+      "modelControlled": "Controlado pelo modelo",
+      "modelControlledHint": "Este modelo não informa quais opções de raciocínio são aceitas. O comportamento padrão do modelo será usado."
     },
     "filesystemPicker": {
       "path": "Caminho do diretório",

@@ -230,6 +230,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Codex design evidence](ai/computer-use-design-evidence.md) - Trace command-first, AX, batching and background-control decisions to official guidance and version-scoped packaged behavior.
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
+- [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md) - Discover exact thinking controls and preserve selections, streaming output, and provider history.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
 - [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport and enforce documented web tool limits.
 - [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.

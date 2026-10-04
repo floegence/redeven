@@ -125,3 +125,37 @@ describe('Reasoning control semantics', () => {
     expect(root.querySelector('button')?.textContent).toBe('Off');
   });
 });
+
+it('offers explicit On only for a declared toggle and preserves Default', () => {
+  const change = mount({ kind: 'toggle', supported_levels: ['on'], disable_supported: true });
+  const trigger = root.querySelector<HTMLButtonElement>('button')!;
+  trigger.click();
+  const options = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+  expect(options.map((item) => item.textContent)).toEqual(['Default', 'Off', 'On']);
+  options[2].click();
+  expect(change).toHaveBeenLastCalledWith({ level: 'on', budget_tokens: undefined });
+  expect(trigger.textContent).toBe('On');
+});
+
+it.each([['always_on', 'Always on'], ['dynamic', 'Model controlled']] as const)('shows %s without inventing an editable control', (kind, label) => {
+  const change = mount({ kind });
+  expect(root.textContent).toBe(label);
+  expect(root.querySelector('button')).toBeNull();
+  expect(change).not.toHaveBeenCalled();
+});
+
+it('clears an explicit budget and removes it when selecting an exclusive effort', async () => {
+  const change = mount({
+    kind: 'effort_budget', supported_levels: ['low', 'high'], budget_shape: 'qwen_thinking_budget',
+    wire_shape: 'qwen_reasoning_effort', min_budget_tokens: 1024,
+  }, 'full', { level: 'default', budget_tokens: 2048 });
+  const input = root.querySelector<HTMLInputElement>('input')!;
+  await userEvent.fill(input, '');
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  expect(change.mock.calls.at(-1)?.[0]?.budget_tokens).toBeUndefined();
+  await userEvent.fill(input, '4096');
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  await userEvent.click(Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent === 'High')!);
+  expect(change.mock.calls.at(-1)?.[0]).toEqual({ level: 'high' });
+  expect(root.querySelector('input')).toBeNull();
+});

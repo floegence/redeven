@@ -14,7 +14,7 @@ export type FlowerProviderType =
 
 export type FlowerWebSearchMode = 'disabled' | 'openai_builtin' | 'brave';
 
-export type FlowerReasoningLevel = 'default' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type FlowerReasoningLevel = 'default' | 'off' | 'on' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type FlowerReasoningSelection = Readonly<{
   level?: FlowerReasoningLevel;

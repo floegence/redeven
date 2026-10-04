@@ -1216,12 +1216,14 @@ func applyResponsesReasoning(params *oresponses.ResponseNewParams, controls Prov
 		params.SetExtraFields(mergeAnyFields(params.ExtraFields(), map[string]any{
 			"reasoning": map[string]any{"effort": reasoningEffortWireValue(selection.Level)},
 		}))
-	case "qwen_enable_thinking":
+	case "qwen_enable_thinking", "qwen_reasoning_effort":
 		if selection.BudgetTokens > 0 {
 			return fmt.Errorf("qwen responses reasoning does not support thinking_budget")
 		}
-		if selection.Level == config.AIReasoningLevelOff {
-			params.Reasoning = oshared.ReasoningParam{Effort: oshared.ReasoningEffort("none")}
+		if selection.Level == config.AIReasoningLevelOn {
+			params.SetExtraFields(mergeAnyFields(params.ExtraFields(), map[string]any{"enable_thinking": true}))
+		} else {
+			params.Reasoning = oshared.ReasoningParam{Effort: oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))}
 		}
 	default:
 		return fmt.Errorf("unsupported responses reasoning wire shape %q", capability.WireShape)
@@ -1242,8 +1244,16 @@ func applyChatReasoning(params *openai.ChatCompletionNewParams, controls Provide
 	}
 	extraFields := params.ExtraFields()
 	switch capability.WireShape {
-	case "openai_chat_reasoning_effort", "openai_responses_reasoning_effort", "glm_reasoning_effort", "kimi_reasoning_effort", "xai_reasoning_effort", "groq_qwen_reasoning_effort", "groq_gpt_oss_reasoning_effort", "ollama_model_family_think":
+	case "openai_chat_reasoning_effort", "openai_responses_reasoning_effort", "glm_reasoning_effort", "kimi_reasoning_effort", "xai_reasoning_effort", "groq_qwen_reasoning_effort", "groq_gpt_oss_reasoning_effort":
 		params.ReasoningEffort = oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))
+	case "ollama_model_family_think":
+		effort, err := flprovider.OllamaReasoningEffort(floretModelGatewayCapabilities(capability).ReasoningCapability, selection)
+		if err != nil {
+			return err
+		}
+		if effort != "" {
+			params.ReasoningEffort = oshared.ReasoningEffort(effort)
+		}
 	case "kimi_thinking_type", "glm_thinking_type":
 		extraFields = mergeAnyFields(extraFields, map[string]any{"thinking": map[string]any{"type": thinkingTypeForSelection(selection)}})
 	case "qwen_enable_thinking", "qwen_reasoning_effort":
@@ -1378,7 +1388,14 @@ func openAIResponsesToolOverride(v map[string]any) oresponses.ToolUnionParam {
 
 func buildOpenAIChatMessagesWithCapability(messages []Message, capability config.AIReasoningCapability, aliases providerToolAliases) ([]openai.ChatCompletionMessageParamUnion, error) {
 	capability = capability.Normalize()
-	replayReasoning := reasoningCapabilityContains(capability.HistoryReplayRequirements, "reasoning_content")
+	replayField := ""
+	for _, field := range []string{"reasoning_content", "reasoning"} {
+		if reasoningCapabilityContains(capability.HistoryReplayRequirements, field) {
+			replayField = field
+			break
+		}
+	}
+	replayReasoning := replayField != ""
 	out := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+2)
 	for _, msg := range messages {
 		role := strings.ToLower(strings.TrimSpace(msg.Role))
@@ -1479,7 +1496,7 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 					assistant.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(content)}
 				}
 				if replayReasoning && reasoningBuf.Len() > 0 {
-					assistant.SetExtraFields(map[string]any{"reasoning_content": reasoningBuf.String()})
+					assistant.SetExtraFields(map[string]any{replayField: reasoningBuf.String()})
 				}
 				out = append(out, openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant})
 				continue
@@ -1489,7 +1506,7 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 				assistant.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(content)}
 			}
 			if replayReasoning && reasoningBuf.Len() > 0 {
-				assistant.SetExtraFields(map[string]any{"reasoning_content": reasoningBuf.String()})
+				assistant.SetExtraFields(map[string]any{replayField: reasoningBuf.String()})
 			}
 			out = append(out, openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant})
 		default:

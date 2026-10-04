@@ -927,7 +927,10 @@
       "alwaysOn": "Toujours activé",
       "tokens": "{count} jetons",
       "tokenUnit": "jetons",
-      "budgetLabel": "Budget de jetons pour {label}"
+      "budgetLabel": "Budget de jetons pour {label}",
+      "on": "Activé",
+      "modelControlled": "Géré par le modèle",
+      "modelControlledHint": "Ce modèle ne précise pas les réglages de raisonnement pris en charge. Son comportement par défaut est utilisé."
     },
     "computer": {
       "title": "Navigateur et bureau",

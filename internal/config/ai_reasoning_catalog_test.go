@@ -24,15 +24,13 @@ func TestAIReasoningCatalogRowsHaveProvenance(t *testing.T) {
 		{name: "anthropic", providerType: "anthropic", modelName: "claude-opus-4-7", wantWire: "anthropic_output_config_effort", wantLevels: []string{"low", "medium", "high", "xhigh", "max"}},
 		{name: "anthropic_sonnet", providerType: "anthropic", modelName: "claude-sonnet-4-6", wantWire: "anthropic_output_config_effort", wantLevels: []string{"low", "medium", "high", "max"}, wantDisable: true},
 		{name: "gemini3", providerType: "google", modelName: "gemini-3.8-flash", wantWire: "openai_chat_reasoning_effort", wantLevels: []string{"low", "medium", "high"}},
-		{name: "kimi_toggle", providerType: "moonshot", modelName: "kimi-k2.6", wantWire: "kimi_thinking_type", wantDisable: true},
+		{name: "kimi_toggle", providerType: "moonshot", modelName: "kimi-k2.6", wantWire: "kimi_thinking_type", wantLevels: []string{"on"}, wantDisable: true},
 		{name: "glm_effort", providerType: "chatglm", modelName: "glm-5.2", wantWire: "glm_reasoning_effort", wantLevels: []string{"high", "max"}},
 		{name: "deepseek", providerType: "deepseek", modelName: "deepseek-v4-pro", wantWire: "deepseek_responses_reasoning_effort", wantLevels: []string{"low", "high", "max"}, wantDisable: true},
-		{name: "qwen", providerType: "qwen", modelName: "qwen3.6-plus", wantWire: "qwen_enable_thinking", wantDisable: true},
-		{name: "openrouter", providerType: "openrouter", modelName: "gpt-oss-120b", wantWire: "openrouter_reasoning_metadata"},
+		{name: "qwen", providerType: "qwen", modelName: "qwen3.6-plus", wantWire: "qwen_enable_thinking", wantLevels: []string{"on"}, wantDisable: true},
 		{name: "xai", providerType: "xai", modelName: "grok-4.3", wantWire: "openai_chat_reasoning_effort", wantLevels: []string{"off", "low", "medium", "high"}, wantDisable: true},
 		{name: "groq_qwen", providerType: "groq", modelName: "qwen/qwen3.6-27b", wantWire: "openai_chat_reasoning_effort", wantLevels: []string{"off"}, wantDisable: true},
 		{name: "groq_gpt_oss", providerType: "groq", modelName: "openai/gpt-oss-120b", wantWire: "openai_chat_reasoning_effort", wantLevels: []string{"low", "medium", "high"}},
-		{name: "ollama", providerType: "ollama", modelName: "gpt-oss", wantWire: "ollama_model_family_think"},
 	}
 	for _, tc := range tests {
 		tc := tc

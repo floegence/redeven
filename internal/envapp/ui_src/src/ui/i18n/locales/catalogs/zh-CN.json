@@ -5005,7 +5005,10 @@
       "alwaysOn": "始终开启",
       "tokens": "{count} 个 token",
       "tokenUnit": "token",
-      "budgetLabel": "{label} token 预算"
+      "budgetLabel": "{label} token 预算",
+      "on": "开启",
+      "modelControlled": "由模型控制",
+      "modelControlledHint": "此模型未声明支持的思考控制选项，将使用模型默认行为。"
     },
     "filesystemPicker": {
       "path": "目录路径",

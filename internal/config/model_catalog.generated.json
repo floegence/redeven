@@ -643,6 +643,9 @@
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "glm_thinking_type"
         },
         "release_date": "2026-04-07",
@@ -674,6 +677,9 @@
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "glm_thinking_type"
         },
         "release_date": "2026-04-01",
@@ -703,6 +709,9 @@
             "https://docs.z.ai/guides/capabilities/thinking-mode",
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "glm_thinking_type"
         },
@@ -734,6 +743,9 @@
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "glm_thinking_type"
         },
         "release_date": "2026-02-12",
@@ -763,6 +775,9 @@
             "https://docs.z.ai/guides/capabilities/thinking-mode",
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "glm_thinking_type"
         },
@@ -794,6 +809,9 @@
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "glm_thinking_type"
         },
         "release_date": "2026-01-19",
@@ -823,6 +841,9 @@
             "https://docs.z.ai/guides/capabilities/thinking-mode",
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "glm_thinking_type"
         },
@@ -855,6 +876,9 @@
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "glm_thinking_type"
         },
         "release_date": "2025-12-08",
@@ -886,6 +910,9 @@
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "glm_thinking_type"
         },
         "release_date": "2025-12-08",
@@ -915,6 +942,9 @@
             "https://docs.z.ai/guides/capabilities/thinking-mode",
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "glm_thinking_type"
         },
@@ -947,6 +977,9 @@
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "glm_thinking_type"
         },
         "release_date": "2025-08-11",
@@ -976,6 +1009,9 @@
             "https://docs.z.ai/guides/capabilities/thinking-mode",
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "glm_thinking_type"
         },
@@ -1007,6 +1043,9 @@
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "glm_thinking_type"
         },
         "release_date": "2025-07-28",
@@ -1036,6 +1075,9 @@
             "https://docs.z.ai/guides/capabilities/thinking-mode",
             "https://docs.z.ai/guides/vlm/glm-5.3-flash",
             "https://docs.z.ai/guides/vlm/glm-4.6v"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "glm_thinking_type"
         },
@@ -1844,6 +1886,9 @@
             "https://platform.kimi.com/docs/models",
             "https://platform.kimi.com/docs/guide/kimi-k3-quickstart",
             "https://platform.kimi.com/docs/guide/use-reasoning-effort"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "kimi_thinking_type"
         },
@@ -2836,6 +2881,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-07-15",
@@ -2867,6 +2915,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-06-02",
@@ -2896,6 +2947,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -2928,6 +2982,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-04-27",
@@ -2959,6 +3016,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-04-22",
@@ -2988,6 +3048,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3020,6 +3083,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-04-17",
@@ -3050,6 +3116,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3083,6 +3152,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-02-23",
@@ -3113,6 +3185,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3145,6 +3220,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-02-23",
@@ -3175,6 +3253,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3207,6 +3288,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-02-16",
@@ -3238,6 +3322,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2026-02-15",
@@ -3268,6 +3355,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3360,6 +3450,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3484,6 +3577,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2025-04",
@@ -3513,6 +3609,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3544,6 +3643,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
           ],
+          "supported_levels": [
+            "on"
+          ],
           "wire_shape": "qwen_enable_thinking"
         },
         "release_date": "2025-04",
@@ -3573,6 +3675,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3660,6 +3765,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },
@@ -3793,6 +3901,9 @@
             "https://www.alibabacloud.com/help/en/model-studio/models",
             "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
             "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
+          ],
+          "supported_levels": [
+            "on"
           ],
           "wire_shape": "qwen_enable_thinking"
         },

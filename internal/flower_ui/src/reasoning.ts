@@ -7,7 +7,7 @@ import type {
 
 type JsonRecord = Record<string, unknown>;
 
-const REASONING_LEVELS = new Set<FlowerReasoningLevel>(['default', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const REASONING_LEVELS = new Set<FlowerReasoningLevel>(['default', 'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 function recordValue(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null;
@@ -104,6 +104,13 @@ export function reasoningCapabilitySupportsControl(capability: FlowerReasoningCa
     || capability.min_budget_tokens
     || capability.max_budget_tokens,
   );
+}
+
+export function reasoningCapabilityHasPresentation(capability: FlowerReasoningCapability | null | undefined): boolean {
+  return reasoningCapabilitySupportsControl(capability)
+    || capability?.kind === 'always_on'
+    || capability?.kind === 'dynamic'
+    || capability?.kind === 'provider_dynamic';
 }
 
 export function defaultReasoningSelectionForCapability(capability: FlowerReasoningCapability | null | undefined): FlowerReasoningSelection | undefined {

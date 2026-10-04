@@ -927,7 +927,10 @@
       "alwaysOn": "항상 켜짐",
       "tokens": "토큰 {count}개",
       "tokenUnit": "토큰",
-      "budgetLabel": "{label} 토큰 예산"
+      "budgetLabel": "{label} 토큰 예산",
+      "on": "켜기",
+      "modelControlled": "모델이 제어",
+      "modelControlledHint": "이 모델은 지원하는 추론 설정을 제공하지 않으므로 모델의 기본 동작을 사용합니다."
     },
     "computer": {
       "title": "브라우저 및 데스크톱",

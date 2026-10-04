@@ -135,3 +135,79 @@ func TestThreadReasoningOffSurvivesRestartAndWaitingContinuation(t *testing.T) {
 		t.Fatalf("provider calls=%d, want one initial call and one continuation", calls.Load())
 	}
 }
+
+func TestOllamaReasoningOnSurvivesRestartAndProviderDispatch(t *testing.T) {
+	var agentCalls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/tags":
+			_, _ = w.Write([]byte(`{"models":[{"name":"renamed-model"}]}`))
+			return
+		case "/api/ps":
+			_, _ = w.Write([]byte(`{"models":[]}`))
+			return
+		case "/api/show":
+			_, _ = w.Write([]byte(`{"capabilities":["tools","thinking"],"thinking":{"values":[false,true],"default":false},"parameters":"num_ctx 131072"}`))
+			return
+		case "/v1/chat/completions":
+			var body map[string]json.RawMessage
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+				return
+			}
+			var tools []json.RawMessage
+			_ = json.Unmarshal(body["tools"], &tools)
+			if len(tools) > 0 {
+				agentCalls.Add(1)
+				if string(body["reasoning_effort"]) != `"medium"` {
+					t.Errorf("lost On on dispatch: %s", body["reasoning_effort"])
+				}
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			flusher := w.(http.Flusher)
+			for _, delta := range []map[string]any{{"reasoning": "Inspect first."}, {"content": "Done."}} {
+				writeOpenAISSEJSON(w, flusher, map[string]any{"id": "ollama", "object": "chat.completion.chunk", "model": "renamed-model", "choices": []any{map[string]any{"index": 0, "delta": delta}}})
+			}
+			writeOpenAISSEJSON(w, flusher, map[string]any{"id": "ollama", "object": "chat.completion.chunk", "model": "renamed-model", "choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": "stop"}}})
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+			w.WriteHeader(404)
+		}
+	}))
+	defer provider.Close()
+	state := t.TempDir()
+	meta := &session.Meta{EndpointID: "ollama-reasoning", ChannelID: "channel", NamespacePublicID: "namespace", UserPublicID: "user", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}
+	open := func() *Service {
+		svc, err := NewService(Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Config: &config.AIConfig{CurrentModelID: "local/renamed-model", Providers: []config.AIProvider{{ID: "local", Type: "ollama", BaseURL: provider.URL + "/v1", ModelSelection: &config.AIModelSelection{}}}}, RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return svc
+	}
+	svc := open()
+	defer func() { _ = svc.Close() }()
+	created, err := svc.CreateThread(t.Context(), meta, "", "local/renamed-model", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := config.AIReasoningSelection{Level: config.AIReasoningLevelOn}
+	if err := svc.SetThreadReasoningSelection(t.Context(), meta, created.ThreadID, on); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	svc = open()
+	view, err := svc.GetThread(t.Context(), meta, created.ThreadID)
+	if err != nil || view.ReasoningSelection != on {
+		t.Fatalf("restored=%+v err=%v", view, err)
+	}
+	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: created.ThreadID, ClientRequestID: "reasoning-on", Input: RunInput{Text: "Reply briefly."}}); err != nil {
+		t.Fatal(err)
+	}
+	waitForAskUserIntegrationThread(t, svc, meta, created.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
+	if agentCalls.Load() != 1 {
+		t.Fatalf("agent calls=%d", agentCalls.Load())
+	}
+}
