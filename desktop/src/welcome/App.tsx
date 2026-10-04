@@ -15,6 +15,7 @@ import {
   SegmentedControl,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
+import { GatewayMark } from './GatewayMark';
 import { GatewayProfilePermission } from './GatewayProfilePermission';
 import { EnvironmentAccessWorkflow } from './EnvironmentAccessWorkflow';
 import type { SecurityRequest, SecurityResult } from '../shared/runtimeSecurity';
@@ -51,6 +52,7 @@ import {
   Link,
   Lock,
   Highlighter,
+  HelpIcon,
   Play,
   Plus,
   Refresh,
@@ -11227,6 +11229,10 @@ function GatewaySourceCard(props: Readonly<{
   ));
   const progressPanelVisible = createMemo(() => props.actionPopoverOpen && hasProgressPanel());
   const actionPopoverOpen = createMemo(() => progressPanelVisible() || guidePanelVisible());
+  const [directoryHelpOpen, setDirectoryHelpOpen] = createSignal(false);
+  const directoryHelpID = createUniqueId();
+  const directoryHelpPresence = createFloatingPresence({ open: directoryHelpOpen, exitDurationMs: 160 });
+  const PrimaryActionIcon = (iconProps: { class?: string }) => <GatewaySourceActionIcon intent={displayedPrimaryAction().intent} class={iconProps.class} />;
   const catalogReady = createMemo(() => props.gateway.sync_state === 'ready' || (props.gateway.last_synced_at_ms ?? 0) > 0);
   const canAddEnvironment = createMemo(() => gatewayCanWriteEnvironmentProfiles(props.gateway) && props.gateway.local_enabled !== false);
   const canAuthorizeProfiles = createMemo(() => props.gateway.status === 'online' && props.gateway.trust_state === 'paired'
@@ -11299,7 +11305,7 @@ function GatewaySourceCard(props: Readonly<{
     }
     moreActionsFocusFrame = requestAnimationFrame(() => {
       moreActionsFocusFrame = 0;
-      firstEnabledMenuItem(moreActionsOverlayRef)?.focus();
+      if (!moreActionsOverlayRef?.contains(document.activeElement)) firstEnabledMenuItem(moreActionsOverlayRef)?.focus();
     });
     const handleMouseDown = (event: MouseEvent) => {
       if (!moreActionsContainsTarget(event.target)) {
@@ -11835,52 +11841,127 @@ function GatewaySourceCard(props: Readonly<{
     <Card class="redeven-environment-card redeven-gateway-card h-full" data-gateway-id={props.gateway.gateway_id}>
       <CardHeader class="redeven-gateway-card__header">
         <div class="redeven-gateway-card__identity">
-          <span class="redeven-gateway-card__mark" aria-hidden="true"><ShieldCheck class="h-5 w-5" /></span>
-          <div class="min-w-0 flex-1">
-            <span class="redeven-gateway-card__transport">{transportLabel()}</span>
+          <GatewayMark />
+          <div class="redeven-gateway-card__identity-text">
             <CardTitle class="redeven-gateway-card__name" title={row().label}>{row().label}</CardTitle>
+            <div class="redeven-gateway-card__connection">
+              <span>{transportLabel()}</span>
+              <Show when={props.gateway.connection_kind !== 'local_host' && row().endpoint_label}>
+                <span class="redeven-gateway-card__endpoint" title={row().endpoint_label}>{row().endpoint_label}</span>
+              </Show>
+            </div>
           </div>
-          <ConsoleActionIconButton title={props.i18n.t('environmentCenter.gatewayActionOpenSettings')}
-            aria-label={props.i18n.t('environmentCenter.manageGatewayForLabel', { label: row().label })}
-            disabled={primaryActionRunning()} onClick={() => props.openCreateGatewaySetup(props.gateway)}>
-            <Settings class="h-3.5 w-3.5" />
-          </ConsoleActionIconButton>
-        </div>
-        <div class="redeven-gateway-card__endpoint" title={row().endpoint_label}>
-          {props.gateway.connection_kind === 'local_host' ? props.i18n.t('gatewayAccess.thisDevice') : row().endpoint_label}
+          <div class="redeven-gateway-card__menu">
+            <span ref={moreActionsAnchorRef} class="relative">
+              <DesktopTooltip content={moreActionsLabel()} placement="top">
+                <span>
+                  <ConsoleActionIconButton
+                    title={moreActionsLabel()}
+                    aria-label={moreActionsForLabel()}
+                    aria-haspopup="menu"
+                    aria-expanded={props.moreActionsMenuOpen}
+                    disabled={primaryActionRunning()}
+                    onClick={() => props.onMoreActionsMenuOpenChange(!props.moreActionsMenuOpen)}
+                  >
+                    <MoreHorizontal class="h-3.5 w-3.5" />
+                  </ConsoleActionIconButton>
+                </span>
+              </DesktopTooltip>
+              <Show when={moreActionsPresence.mounted()}>
+                <DesktopAnchoredOverlaySurface
+                  open={moreActionsPresence.mounted()}
+                  positionFrozen={moreActionsPresence.exiting()}
+                  anchorRef={moreActionsAnchorRef}
+                  placement="top"
+                  role="menu"
+                  ariaLabel={moreActionsForLabel()}
+                  interactive={props.moreActionsMenuOpen}
+                  hideArrow
+                  class={cn('redeven-split-menu redeven-gateway-menu z-[230] max-w-[min(20rem,calc(100vw-1rem))]', moreActionsPresence.exiting() && 'redeven-gateway-menu--closing')}
+                  onOverlayRef={(element) => {
+                    moreActionsOverlayRef = element;
+                  }}
+                >
+                  <div role="none" inert={moreActionsPresence.exiting()} aria-hidden={moreActionsPresence.exiting()}>
+                    <For each={menuActions()}>
+                      {(action) => (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class="redeven-split-menu-item"
+                          data-tone={gatewaySplitMenuItemToneData(action.intent) || undefined}
+                          disabled={menuItemDisabled(action)}
+                          title={!action.enabled ? action.disabled_reason : undefined}
+                          onClick={() => {
+                            if (menuItemDisabled(action)) {
+                              return;
+                            }
+                            runMoreMenuAction(action);
+                          }}
+                        >
+                          <span class="redeven-split-menu-item-icon">
+                            <GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />
+                          </span>
+                          {localizedGatewayActionLabel(action)}
+                        </button>
+                      )}
+                    </For>
+                    <Show when={menuActions().length > 0}><div class="my-1 border-t border-border/60" role="separator" /></Show>
+                    <button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
+                      closeMoreActions(); props.openCreateGatewaySetup(props.gateway);
+                    }}><Settings class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionOpenSettings')}</button>
+                    <button type="button" role="menuitem" class="redeven-split-menu-item" data-tone="danger" onClick={() => {
+                      closeMoreActions(); props.deleteGateway(props.gateway);
+                    }}><X class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionDelete')}</button>
+                  </div>
+                </DesktopAnchoredOverlaySurface>
+              </Show>
+            </span>
+          </div>
         </div>
         <div class="redeven-gateway-card__status-row">
           <EnvironmentStatusIndicator tone={row().status_tone}>
             {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
           </EnvironmentStatusIndicator>
-          <span class="redeven-gateway-card__trust"><Shield class="h-3 w-3" />{trustLabel()}</span>
+          <span class="redeven-gateway-card__trust">{trustLabel()}</span>
         </div>
       </CardHeader>
       <CardContent class="redeven-gateway-card__content">
-        <div class="redeven-gateway-card__catalog-summary">
-          <div class="redeven-gateway-card__catalog-heading">
-            <span>{props.i18n.t('gatewayAccess.directory')}</span>
-            <span class="redeven-gateway-card__count">{catalogReady() || row().environment_count > 0 ? row().environment_count : '—'}</span>
-          </div>
-          <p class="redeven-gateway-card__summary-title">{row().environment_count > 0
-            ? props.i18n.t('gatewayAccess.directorySaved')
-            : props.i18n.t(catalogReady() ? 'gatewayAccess.directoryEmpty' : 'gatewayAccess.directoryPending')}</p>
-          <p class="redeven-gateway-card__summary-detail">{props.i18n.t(row().environment_count > 0
-            ? 'gatewayAccess.directoryAccessHint' : 'gatewayAccess.directoryIntro')}</p>
-          <div class="redeven-gateway-card__directory-actions">
-            <Button size="sm" variant="outline" disabled={primaryActionRunning() || (!canAddEnvironment() && !canAuthorizeProfiles())}
+        <div class="redeven-gateway-card__directory">
+          <div class="redeven-gateway-card__directory-row">
+            <button type="button" class="redeven-gateway-card__directory-link"
+              aria-label={props.i18n.t('environmentCenter.viewEnvironments')}
+              disabled={row().environment_count === 0 || props.gateway.local_enabled === false}
+              onClick={() => props.viewGatewayEnvironments(props.gateway)}>
+              <span>{props.i18n.t('gatewayAccess.directory')}</span>
+              <span class="redeven-gateway-card__count">{catalogReady() || row().environment_count > 0 ? row().environment_count : '—'}</span>
+              <Show when={row().environment_count > 0}><ChevronRight class="h-3 w-3" /></Show>
+            </button>
+            <Button size="xs" variant="ghost" class="redeven-gateway-card__add"
+              icon={canAuthorizeProfiles() ? Lock : Plus}
+              disabled={primaryActionRunning() || (!canAddEnvironment() && !canAuthorizeProfiles())}
               onClick={() => canAuthorizeProfiles() ? props.openCreateGatewaySetup(props.gateway, 'identity_trust') : props.openCreateGatewayEnvironment(props.gateway)}>
-              <Show when={canAuthorizeProfiles()} fallback={<Plus class="h-3.5 w-3.5" />}><Lock class="h-3.5 w-3.5" /></Show>
               {props.i18n.t(canAuthorizeProfiles() ? 'gatewayAccess.authorizeProfiles' : 'gatewayAccess.addEnvironment')}
             </Button>
-            <Button size="sm" variant="ghost" disabled={row().environment_count === 0 || props.gateway.local_enabled === false}
-              onClick={() => props.viewGatewayEnvironments(props.gateway)}>
-              {props.i18n.t('environmentCenter.viewEnvironments')}<ChevronRight class="h-3.5 w-3.5" />
-            </Button>
           </div>
+          <div class="redeven-gateway-card__directory-status">
+            <span>{row().environment_count > 0 ? props.i18n.t('gatewayAccess.directorySaved')
+              : props.i18n.t(catalogReady() ? 'gatewayAccess.directoryEmpty' : 'gatewayAccess.directoryPending')}</span>
+            <button type="button" class="redeven-gateway-card__help"
+              aria-label={props.i18n.t('gatewayAccess.directoryHelpLabel')}
+              aria-expanded={directoryHelpOpen()} aria-controls={directoryHelpPresence.mounted() ? directoryHelpID : undefined}
+              onClick={() => setDirectoryHelpOpen(value => !value)}><HelpIcon class="h-3.5 w-3.5" /></button>
+          </div>
+          <Show when={directoryHelpPresence.mounted()}>
+            <div id={directoryHelpID} class="redeven-gateway-card__explanation" data-state={directoryHelpPresence.state()}
+              inert={directoryHelpPresence.exiting()} aria-hidden={directoryHelpPresence.exiting()}>
+              <p>{props.i18n.t('gatewayAccess.directoryIntro')}</p>
+              <p>{props.i18n.t('gatewayAccess.directoryAccessHint')}</p>
+            </div>
+          </Show>
         </div>
       </CardContent>
-      <CardFooter class="redeven-gateway-card__footer mt-auto flex flex-col gap-2 border-t border-border/60 px-4 pb-3 pt-3">
+      <CardFooter class="redeven-gateway-card__footer">
         <div class="redeven-gateway-card__footer-row">
           <DesktopActionPopover
             open={actionPopoverOpen()}
@@ -11985,6 +12066,7 @@ function GatewaySourceCard(props: Readonly<{
                     'redeven-gateway-card__primary-button min-w-0 justify-center',
                     primaryBlocked() && 'redeven-split-action-trigger--blocked',
                   )}
+                  icon={PrimaryActionIcon}
                   loading={primaryBusy()}
                   data-floe-progress-shimmer={primaryBusy() ? 'surface' : undefined}
                   disabled={!displayedPrimaryAction().enabled && !primaryBlocked()}
@@ -11993,10 +12075,7 @@ function GatewaySourceCard(props: Readonly<{
                   aria-expanded={primaryHasGuide() ? props.actionPopoverOpen : undefined}
                   onClick={runPrimaryAction}
                 >
-                  <span class="redeven-split-action-trigger__content">
-                    <GatewaySourceActionIcon intent={displayedPrimaryAction().intent} />
-                    <span>{primaryActionLabel()}</span>
-                  </span>
+                  <span>{primaryActionLabel()}</span>
                 </Button>
               )}
             >
@@ -12024,73 +12103,7 @@ function GatewaySourceCard(props: Readonly<{
               )}
             </Show>
           </DesktopActionPopover>
-          <div class="redeven-gateway-card__footer-actions">
-            <span ref={moreActionsAnchorRef} class="relative">
-              <DesktopTooltip content={moreActionsLabel()} placement="top">
-                <span>
-                  <ConsoleActionIconButton
-                    title={moreActionsLabel()}
-                    aria-label={moreActionsForLabel()}
-                    aria-haspopup="menu"
-                    aria-expanded={props.moreActionsMenuOpen}
-                    disabled={primaryActionRunning()}
-                    onClick={() => props.onMoreActionsMenuOpenChange(!props.moreActionsMenuOpen)}
-                  >
-                    <MoreHorizontal class="h-3.5 w-3.5" />
-                  </ConsoleActionIconButton>
-                </span>
-              </DesktopTooltip>
-              <Show when={moreActionsPresence.mounted()}>
-                <DesktopAnchoredOverlaySurface
-                  open={moreActionsPresence.mounted()}
-                  positionFrozen={moreActionsPresence.exiting()}
-                  anchorRef={moreActionsAnchorRef}
-                  placement="top"
-                  role="menu"
-                  ariaLabel={moreActionsForLabel()}
-                  interactive={props.moreActionsMenuOpen}
-                  hideArrow
-                  class={cn('redeven-split-menu redeven-gateway-menu z-[230] max-w-[min(20rem,calc(100vw-1rem))]', moreActionsPresence.exiting() && 'redeven-gateway-menu--closing')}
-                  onOverlayRef={(element) => {
-                    moreActionsOverlayRef = element;
-                  }}
-                >
-                  <div role="none" inert={moreActionsPresence.exiting()} aria-hidden={moreActionsPresence.exiting()}>
-                    <For each={menuActions()}>
-                      {(action) => (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          class="redeven-split-menu-item"
-                          data-tone={gatewaySplitMenuItemToneData(action.intent) || undefined}
-                          disabled={menuItemDisabled(action)}
-                          title={!action.enabled ? action.disabled_reason : undefined}
-                          onClick={() => {
-                            if (menuItemDisabled(action)) {
-                              return;
-                            }
-                            runMoreMenuAction(action);
-                          }}
-                        >
-                          <span class="redeven-split-menu-item-icon">
-                            <GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />
-                          </span>
-                          {localizedGatewayActionLabel(action)}
-                        </button>
-                      )}
-                    </For>
-                    <Show when={menuActions().length > 0}><div class="my-1 border-t border-border/60" role="separator" /></Show>
-                    <button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
-                      closeMoreActions(); props.openCreateGatewaySetup(props.gateway);
-                    }}><Settings class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionOpenSettings')}</button>
-                    <button type="button" role="menuitem" class="redeven-split-menu-item" data-tone="danger" onClick={() => {
-                      closeMoreActions(); props.deleteGateway(props.gateway);
-                    }}><X class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionDelete')}</button>
-                  </div>
-                </DesktopAnchoredOverlaySurface>
-              </Show>
-            </span>
-          </div>
+
         </div>
       </CardFooter>
     </Card>

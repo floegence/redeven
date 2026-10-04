@@ -2037,6 +2037,7 @@
     "profileHelpTitle": "Berechtigung zum Verwalten des Gateway-Verzeichnisses",
     "profileHelpBody": "Dieser Desktop darf die auf dem Gateway gespeicherten Umgebungsnamen, Laufzeit-URLs und Standardzugriffsarten hinzufügen, bearbeiten und löschen. Andere gekoppelte Desktops sehen die Änderungen nach dem Aktualisieren.",
     "profileHelpBoundary": "Dies erlaubt weder Installation, Start oder Stopp einer Laufzeit noch Zugriff auf deren Einstellungen. Passwort und Mehrfaktorauthentifizierung der Laufzeit bleiben erforderlich. Veröffentlichte Umgebungen lassen sich auch ohne diese Berechtigung öffnen.",
+    "directoryHelpLabel": "Informationen zu Gateway-Umgebungen",
     "directory": "Umgebungsverzeichnis",
     "directorySaved": "Registrierte Umgebungen",
     "directoryEmpty": "Keine Umgebungen registriert",

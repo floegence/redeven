@@ -82,8 +82,12 @@ structured, sanitized and available alongside localized guidance.
 
 ## Desktop directory and operation presentation
 
-Each Gateway card separates connection identity, service status, trust, and the
-environment directory. The directory contains explicitly registered targets;
+Each Gateway card uses a dedicated route-through-entry mark and one compact
+identity row. Connection type and endpoint appear once; service status and trust
+share a separate line. One header menu owns settings, deletion and secondary
+actions. The environment directory is an inline entry, not a nested panel;
+its help control expands registration and reachability guidance without changing
+permission. The directory contains explicitly registered targets;
 Gateway does not scan the network or discover Runtime installations. An unknown
 directory count is distinct from a successfully synchronized empty directory.
 Catalog entries do not assert target reachability or Runtime health.
@@ -107,7 +111,9 @@ active phase and elapsed time on failure. Because installation and host phases
 can be skipped or revisited, service progress shows observed steps without an
 invented percentage or fixed step total. A single click submits an action once;
 the busy primary button uses the shared progress shimmer and reopens that same
-operation. Dismissing the popover does not cancel or resubmit work. Popovers and
+operation. Its action icon and admission spinner share the published Button icon
+slot, so pending requests never display both. Dismissing the popover does not
+cancel or resubmit work. Popovers and
 menus retain a noninteractive exit frame, restore trigger focus on Escape, and
 respect reduced-motion preferences.
 

@@ -2037,6 +2037,7 @@
     "profileHelpTitle": "管理閘道環境目錄的權限",
     "profileHelpBody": "允許目前的 Desktop 新增、編輯及刪除儲存在此閘道上的環境名稱、執行階段 URL 和預設存取方式。其他已配對的 Desktop 重新整理目錄後也會看到這些變更。",
     "profileHelpBoundary": "此權限不會安裝、啟動或停止執行階段，也不授予執行階段設定權限。執行階段的密碼和多重要素驗證仍然有效。不勾選也可以開啟閘道已發佈的環境。",
+    "directoryHelpLabel": "瞭解閘道環境目錄",
     "directory": "環境目錄",
     "directorySaved": "已登記的環境",
     "directoryEmpty": "尚未新增環境",

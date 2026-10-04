@@ -2037,6 +2037,7 @@
     "profileHelpTitle": "管理网关环境目录的权限",
     "profileHelpBody": "允许当前 Desktop 新增、编辑和删除保存在此网关上的环境名称、运行时 URL 和默认访问方式。其他已配对的 Desktop 刷新目录后也会看到这些变更。",
     "profileHelpBoundary": "此权限不会安装、启动或停止运行时，也不授予运行时设置权限。运行时的密码和多重身份验证仍然生效。不勾选也可以打开网关已发布的环境。",
+    "directoryHelpLabel": "了解网关环境目录",
     "directory": "环境目录",
     "directorySaved": "已登记的环境",
     "directoryEmpty": "尚未添加环境",

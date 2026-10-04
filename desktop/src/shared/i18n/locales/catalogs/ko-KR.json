@@ -2037,6 +2037,7 @@
     "profileHelpTitle": "게이트웨이 환경 목록 관리 권한",
     "profileHelpBody": "이 Desktop에서 게이트웨이에 저장된 환경 이름, 런타임 URL, 기본 접속 방식을 추가·수정·삭제하도록 허용합니다. 다른 페어링된 Desktop에도 목록을 새로 고치면 변경 사항이 반영됩니다.",
     "profileHelpBoundary": "런타임 설치·시작·중지 또는 런타임 설정 접근 권한은 부여하지 않습니다. 런타임 비밀번호와 다중 인증은 그대로 적용됩니다. 선택하지 않아도 공개된 환경을 열 수 있습니다.",
+    "directoryHelpLabel": "게이트웨이 환경 안내",
     "directory": "환경 목록",
     "directorySaved": "등록된 환경",
     "directoryEmpty": "등록된 환경 없음",

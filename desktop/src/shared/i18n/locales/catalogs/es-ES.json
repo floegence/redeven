@@ -2037,6 +2037,7 @@
     "profileHelpTitle": "Permiso para gestionar el directorio de la puerta de enlace",
     "profileHelpBody": "Permite a este Desktop añadir, editar y eliminar nombres de entornos, URL de entornos de ejecución y métodos de acceso predeterminados guardados en esta puerta de enlace. Otros Desktop emparejados verán los cambios al actualizar.",
     "profileHelpBoundary": "No permite instalar, iniciar ni detener un entorno de ejecución, ni acceder a su configuración. Su contraseña y autenticación multifactor siguen siendo necesarias. Sin este permiso también se pueden abrir los entornos publicados.",
+    "directoryHelpLabel": "Acerca de los entornos de la puerta de enlace",
     "directory": "Directorio de entornos",
     "directorySaved": "Entornos registrados",
     "directoryEmpty": "No hay entornos registrados",

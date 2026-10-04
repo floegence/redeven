@@ -55,6 +55,10 @@ launcher fixtures at desktop and 430-pixel widths, with light/dark themes and
 large text. It checks single-click submission, delayed service progress, shared
 button shimmer, popup and menu entry/exit, keyboard navigation and focus return,
 failure presentation, and dismissal/reopening without canceling or resubmitting.
+The update-required snapshot also covers an update already running before any
+card-local interaction. Both admission and background updates must show exactly
+one primary-button icon. Directory help and the header settings menu remain
+keyboard accessible after the compact card layout changes.
 The progress fixture uses the production service-step projection. Screenshots
 and its report live in `desktop/dist/gateway-card-experience/`. This establishes
 renderer behavior; real service deployment remains owned by the suites above.
