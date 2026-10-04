@@ -58,6 +58,46 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway setup and own-service actions', () => {
+  it('explains profile permission without granting it or submitting the form', async () => {
+    const perform = await mount();
+    await openSetup();
+    button('About environment profile permission').click(); await settle();
+    expect(document.body.textContent).toContain('add, edit and delete');
+    expect(document.body.textContent).toContain('password and MFA');
+    expect(perform).not.toHaveBeenCalled();
+    button('About environment profile permission').click(); await settle();
+    expect(button('Save Gateway')).toBeTruthy();
+  });
+
+  it('adds an environment from its Gateway card with that Gateway selected', async () => {
+    const snapshot = compactEnvironmentPreviewFixture().coverage;
+    const perform = await mount(undefined, snapshot);
+    button('Gateways').click(); await settle();
+    button('Add environment').click(); await settle();
+    input('gateway-environment-target-url', 'https://runtime.example/');
+    input('environment-label', 'Registered from Gateway');
+    button('Save').click(); await settle();
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_environment_registration', registration: { registration_ref: { kind: 'gateway_environment', gateway_id: 'bastion' }, access_mode: 'gateway_proxy' } });
+  });
+
+  it('offers explicit authorization for a read-only Gateway without granting it automatically', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, capabilities: ['env_catalog'] });
+    button('Gateways').click(); await settle();
+    button('Authorize changes').click(); await settle();
+    expect(document.getElementById('gateway-pairing-code')).toBeTruthy();
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it('opens only the selected Gateway directory without performing a connection action', async () => {
+    const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
+    button('Gateways').click(); await settle();
+    button('View Environments').click(); await settle();
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-environment-group]')).toHaveLength(1));
+    expect(document.querySelector('[data-environment-group]')?.textContent).toContain('Gateway workspace');
+    expect(perform).not.toHaveBeenCalled();
+  });
+
   it('shows the structured technical cause alongside localized setup guidance', async () => {
     const perform = await mount();
     await openSetup();
@@ -301,6 +341,25 @@ describe('Gateway setup and own-service actions', () => {
     expect(document.getElementById('gateway-pairing-code')).toBeTruthy();
     expect(perform).not.toHaveBeenCalled();
   });
+  it('lets users close and reopen live Gateway progress without canceling or repeating the operation', async () => {
+    const perform = await mount(compactEnvironmentPreviewFixture().coverage.gateway_sources[0]);
+    let complete!: (result: DesktopLauncherActionResult) => void;
+    perform.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    button('Gateways').click(); await settle();
+    button('Refresh').click(); await settle();
+    const progress = () => document.querySelector('.redeven-gateway-action-popover-surface');
+    expect(progress()).toBeTruthy();
+    expect(document.querySelector('.redeven-gateway-card [data-floe-progress-shimmer="surface"]')).toBeTruthy();
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await vi.waitFor(() => expect(progress()).toBeNull());
+    const trigger = document.querySelector<HTMLButtonElement>('.redeven-gateway-card__primary-button')!;
+    expect(trigger.getAttribute('data-floe-progress-shimmer')).toBe('surface');
+    trigger.click(); await settle();
+    expect(progress()).toBeTruthy();
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'refresh_gateway', gateway_id: 'bastion' });
+    complete({ ok: true, outcome: 'refreshed_gateway' }); await settle();
+  });
+
   it('starts only the explicitly registered Gateway service', async () => {
     const perform = await mount({ gateway_id: 'managed-fixture', display_name: 'Managed Fixture', local_enabled: true,
       connection_kind: 'ssh_host', management_capability: 'managed_ssh_host', capabilities: [], status: 'offline',
