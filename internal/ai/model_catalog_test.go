@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -28,6 +29,9 @@ func TestModelCatalogOpenRouterFiltersToolsAndPreservesWireIDs(t *testing.T) {
 	}
 	if len(out) != 1 || out[0].ModelName != "openai%2Fagent" || out[0].WireModelName != "openai/agent" || !out[0].SupportsImageInput() {
 		t.Fatalf("catalog = %+v", out)
+	}
+	if cap := out[0].EffectiveReasoningCapability("openrouter"); !cap.IsZero() {
+		t.Fatalf("non-reasoning model inherited controls: %+v", cap)
 	}
 }
 
@@ -63,6 +67,9 @@ func TestModelCatalogOllamaIncludesOnlyInstalledToolModels(t *testing.T) {
 	}
 	if len(out) != 1 || out[0].WireModelName != "agent:latest" || out[0].ContextWindow != 32768 || !out[0].SupportsImageInput() {
 		t.Fatalf("catalog = %+v", out)
+	}
+	if cap := out[0].EffectiveReasoningCapability("ollama"); !cap.IsZero() {
+		t.Fatalf("non-reasoning model inherited controls: %+v", cap)
 	}
 	if strings.Join(shown, ",") != "agent:latest,embedding:latest" {
 		t.Fatalf("queried unavailable models: %v", shown)
@@ -206,5 +213,63 @@ func TestModelProviderKeysSupportOptionalEndpointAuthentication(t *testing.T) {
 				t.Fatal("secret failure was ignored")
 			}
 		})
+	}
+}
+
+func TestOllamaReasoningCatalogPreservesExactDeclaredControls(t *testing.T) {
+	for _, tc := range []struct {
+		metadata, kind string
+		levels         []string
+		off            bool
+	}{
+		{`{"values":[false,"low","medium","xhigh"],"default":"medium"}`, "effort", []string{"low", "medium", "xhigh"}, true},
+		{`{"values":[false,true],"default":false}`, "toggle", []string{"on"}, true},
+		{`{"values":[true],"default":true}`, "always_on", nil, false},
+		{`{"values":[false],"default":false}`, "", nil, false},
+		{`null`, "dynamic", nil, false},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/api/tags":
+					_, _ = w.Write([]byte(`{"models":[{"name":"custom-alias:latest"}]}`))
+				case "/api/ps":
+					_, _ = w.Write([]byte(`{"models":[]}`))
+				case "/api/show":
+					_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"tools", "thinking"}, "thinking": json.RawMessage(tc.metadata), "parameters": "num_ctx 131072"})
+				default:
+					t.Errorf("unexpected request %s", r.URL)
+				}
+			}))
+			defer server.Close()
+			models, err := discoverModelCatalog(t.Context(), ModelCatalogRequest{Type: "ollama", BaseURL: server.URL}, server.Client())
+			if err != nil || len(models) != 1 {
+				t.Fatalf("models=%+v err=%v", models, err)
+			}
+			cap := models[0].EffectiveReasoningCapability("ollama")
+			if cap.Kind != tc.kind || !slices.Equal(cap.SupportedLevels, tc.levels) || cap.DisableSupported != tc.off {
+				t.Fatalf("capability=%+v", cap)
+			}
+			if tc.kind != "" && !slices.Contains(cap.ResponseReasoningFields, "reasoning") {
+				t.Fatal("Ollama reasoning output is not visible")
+			}
+		})
+	}
+}
+
+func TestOpenRouterReasoningMetadataDoesNotInventEfforts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"custom/thinking","name":"Thinking","context_length":128000,"supported_parameters":["tools","reasoning"],"architecture":{"output_modalities":["text"]}}]}`))
+	}))
+	defer server.Close()
+	models, err := discoverModelCatalog(t.Context(), ModelCatalogRequest{Type: "openrouter", BaseURL: server.URL}, server.Client())
+	if err != nil || len(models) != 1 {
+		t.Fatalf("models=%+v err=%v", models, err)
+	}
+	cap := models[0].EffectiveReasoningCapability("openrouter")
+	if cap.Kind != "dynamic" || len(cap.SupportedLevels) != 0 || cap.DisableSupported || !slices.Contains(cap.ResponseReasoningFields, "reasoning") {
+		t.Fatalf("capability=%+v", cap)
 	}
 }

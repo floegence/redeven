@@ -178,6 +178,10 @@ export const redevenWireSchemas = {
                   },
                   {
                     "kind": "literal",
+                    "value": "on"
+                  },
+                  {
+                    "kind": "literal",
                     "value": "minimal"
                   },
                   {

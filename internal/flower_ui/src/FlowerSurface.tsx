@@ -240,6 +240,7 @@ import {
   defaultReasoningSelectionForCapability,
   normalizeFlowerReasoningSelection,
   reasoningCapabilitySupportsControl,
+  reasoningCapabilityHasPresentation,
   sameFlowerReasoningSelection,
   serializeFlowerReasoningSelection,
 } from './reasoning';
@@ -2745,6 +2746,7 @@ webSearch: model.web_search,
       ?? normalizeFlowerReasoningSelection(selectedModelOption()?.defaultReasoningSelection)
       ?? defaultReasoningSelectionForCapability(selectedReasoningCapability());
   });
+  const composerReasoningVisible = createMemo(() => reasoningCapabilityHasPresentation(selectedReasoningCapability()));
   const composerReasoningEnabled = createMemo(() => reasoningCapabilitySupportsControl(selectedReasoningCapability()));
   const composerLaunchReasoningSelection = createMemo(() => (composerReasoningEnabled() ? composerReasoningSelection() : undefined));
   createEffect(() => {
@@ -10713,7 +10715,7 @@ webSearch: model.web_search,
       <div
         class={cn('flower-model-reasoning-control', `flower-composer-control-${location}`)}
         data-flower-composer-control="model_reasoning"
-        data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}
+        data-has-reasoning={composerReasoningVisible() || composerReasoningLoading() ? 'true' : 'false'}
         data-model-pending={modelPatchPending() ? 'true' : 'false'}
       >
         <button
@@ -10739,7 +10741,7 @@ webSearch: model.web_search,
           <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
         </button>
         {modelMenu()}
-        <Show when={composerReasoningEnabled() || composerReasoningLoading()}>
+        <Show when={composerReasoningVisible() || composerReasoningLoading()}>
           <span class="flower-model-reasoning-divider" aria-hidden="true" />
           <Show when={!composerReasoningLoading()} fallback={
             <span class="flower-reasoning-loading" role="status" aria-label={copy().chat.reasoningLoading} title={copy().chat.reasoningLoading}>
@@ -10800,13 +10802,13 @@ webSearch: model.web_search,
         return (
           <span
             class="flower-model-reasoning-control flower-composer-control-measure"
-            data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}
+            data-has-reasoning={composerReasoningVisible() || composerReasoningLoading() ? 'true' : 'false'}
           >
             <span class="flower-model-reasoning-model-trigger">
               <span class="flower-model-reasoning-model-label">{selectedThreadModelLabel()}</span>
               <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
             </span>
-            <Show when={composerReasoningEnabled() || composerReasoningLoading()}>
+            <Show when={composerReasoningVisible() || composerReasoningLoading()}>
               <span class="flower-model-reasoning-divider" aria-hidden="true" />
               <Show when={!composerReasoningLoading()} fallback={<span class="flower-reasoning-loading">…</span>}>
               <span class="flower-reasoning-control flower-reasoning-control-segment">

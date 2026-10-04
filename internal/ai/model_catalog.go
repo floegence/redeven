@@ -109,7 +109,7 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 			// Supported effort controls are a specific wire declaration, not an inference
 			// from a model-family name or an unqualified reasoning boolean.
 			if slices.Contains(m.Parameters, "reasoning") || slices.Contains(m.Parameters, "reasoning_effort") {
-				model.ReasoningCapability = config.AIReasoningCapabilityForModel("openrouter", m.ID)
+				model.ReasoningCapability = config.OpenRouterReasoningCapability()
 			}
 			out = append(out, model)
 		}
@@ -149,10 +149,11 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 			}
 			seen[m.Name] = true
 			var detail struct {
-				Capabilities []string       `json:"capabilities"`
-				Info         map[string]any `json:"model_info"`
-				RemoteHost   string         `json:"remote_host"`
-				Parameters   string         `json:"parameters"`
+				Capabilities []string        `json:"capabilities"`
+				Info         map[string]any  `json:"model_info"`
+				RemoteHost   string          `json:"remote_host"`
+				Parameters   string          `json:"parameters"`
+				Thinking     json.RawMessage `json:"thinking"`
 			}
 			if err := catalogJSON(ctx, client, http.MethodPost, base+"/api/show", in.APIKey, map[string]string{"model": m.Name}, &detail); err != nil {
 				return nil, err
@@ -185,8 +186,9 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 			if slices.Contains(detail.Capabilities, "vision") {
 				model.InputModalities = append(model.InputModalities, "image")
 			}
-			if slices.Contains(detail.Capabilities, "thinking") {
-				model.ReasoningCapability = config.AIReasoningCapabilityForModel("ollama", m.Name)
+			model.ReasoningCapability, err = config.OllamaReasoningCapability(detail.Thinking, slices.Contains(detail.Capabilities, "thinking"))
+			if err != nil {
+				return nil, fmt.Errorf("Ollama model %q thinking metadata: %w", m.Name, err)
 			}
 			out = append(out, model)
 		}

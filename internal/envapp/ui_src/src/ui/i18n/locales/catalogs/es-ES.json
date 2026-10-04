@@ -5005,7 +5005,10 @@
       "alwaysOn": "Siempre activado",
       "tokens": "{count} tokens",
       "tokenUnit": "tokens",
-      "budgetLabel": "Presupuesto de tokens de {label}"
+      "budgetLabel": "Presupuesto de tokens de {label}",
+      "on": "Activado",
+      "modelControlled": "Controlado por el modelo",
+      "modelControlledHint": "Este modelo no indica qué opciones de razonamiento admite. Se utiliza su comportamiento predeterminado."
     },
     "filesystemPicker": {
       "path": "Ruta del directorio",

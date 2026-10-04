@@ -15,11 +15,11 @@ const capability: FlowerReasoningCapability = {
 };
 const offThread = () => thread({ reasoning_selection: { level: 'off' }, reasoning_capability: capability });
 
-function settings() {
+function settings(modelCapability: FlowerReasoningCapability = capability) {
   const value = settingsSnapshot();
   return { ...value, model_profile: {
     ...value.model_profile!, providers: value.model_profile!.providers.map((provider) => ({
-      ...provider, models: provider.models.map((model) => ({ ...model, reasoning_capability: capability })),
+      ...provider, models: provider.models.map((model) => ({ ...model, reasoning_capability: modelCapability })),
     })),
   } };
 }
@@ -48,6 +48,54 @@ async function select(surface: HTMLElement, id = 'thread-1') {
 beforeEach(async () => { await page.viewport(1280, 900); });
 
 describe('Flower reasoning settings authority', () => {
+  it.each([
+    { name: 'declared effort', cap: { kind: 'effort', supported_levels: ['low', 'medium', 'xhigh'], disable_supported: true, default_level: 'default' }, labels: ['Default', 'Off', 'Low', 'Med', 'XHigh'], choice: 'XHigh', level: 'xhigh', width: 1280 },
+    { name: 'boolean toggle on a narrow screen', cap: { kind: 'toggle', supported_levels: ['on'], disable_supported: true, default_level: 'default' }, labels: ['Default', 'Off', 'On'], choice: 'On', level: 'on', width: 390 },
+  ] as const)('preserves $name through remount and launch', async ({ cap, labels, choice, level, width }) => {
+    await page.viewport(width, 900);
+    const { drafts, base } = fixture();
+    base.loadSettings = vi.fn(async () => settings(cap));
+    let surface = renderSurfaceWithDraftCoordinator(base, drafts);
+    await waitFor(() => control(surface)?.textContent?.includes('Default') === true);
+    control(surface)!.querySelector('button')!.click();
+    const items = Array.from(control(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+    expect(items.map((item) => item.textContent?.trim())).toEqual(labels);
+    items.find((item) => item.textContent?.trim() === choice)!.click();
+    expect(drafts.read('__new_thread__').value.reasoning_selection).toEqual({ level });
+    disposeRenderedSurface(surface);
+    surface.remove();
+    surface = renderSurfaceWithDraftCoordinator(base, drafts);
+    await waitFor(() => control(surface)?.textContent?.includes(choice) === true);
+    const textarea = surface.querySelector<HTMLTextAreaElement>('textarea')!;
+    textarea.value = 'Use the selected reasoning mode';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const submit = surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!;
+    await waitFor(() => !submit.disabled);
+    submit.click();
+    await waitFor(() => base.launchTurn.mock.calls.length === 1);
+    expect(base.launchTurn.mock.calls[0]![0].reasoning_selection).toEqual({ level });
+  });
+
+  it.each([
+    { kind: 'always_on', label: 'Always on' },
+    { kind: 'dynamic', label: 'Model controlled' },
+    { kind: 'none', label: '' },
+  ])('presents $kind without inventing editable controls', async ({ kind, label }) => {
+    await page.viewport(390, 900);
+    const { drafts, base } = fixture();
+    base.loadSettings = vi.fn(async () => settings({ kind }));
+    const surface = renderSurfaceWithDraftCoordinator(base, drafts);
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-composer-control="model_reasoning"]')));
+    if (label) {
+      await waitFor(() => control(surface)?.textContent?.includes(label) === true);
+      expect(control(surface)?.querySelector('button')).toBeNull();
+      expect(control(surface)!.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+    } else {
+      expect(control(surface)).toBeNull();
+    }
+    expect(drafts.read('__new_thread__')?.value.reasoning_selection).toBeUndefined();
+  });
+
   it('shows an unspecified effort model as Default and submits an explicit return to Default', async () => {
     const { drafts, base } = fixture();
     const cap: FlowerReasoningCapability = { kind: 'effort', supported_levels: ['low', 'high', 'max'], disable_supported: true };

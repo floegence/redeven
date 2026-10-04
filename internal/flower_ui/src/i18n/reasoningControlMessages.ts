@@ -1,9 +1,10 @@
 export const reasoningControlEnUS = {
-  default: 'Default', off: 'Off', minimal: 'Min', low: 'Low', medium: 'Med',
+  default: 'Default', off: 'Off', on: 'On', minimal: 'Min', low: 'Low', medium: 'Med',
   high: 'High', xhigh: 'XHigh', max: 'Max',
   label: 'Reasoning', defaultLabel: 'Default reasoning', reset: 'Reset reasoning',
   defaultHint: 'Use the model’s default reasoning configuration',
-  alwaysOn: 'Always on', tokens: '{count} tokens',
+  alwaysOn: 'Always on', modelControlled: 'Model controlled',
+  modelControlledHint: 'This model does not declare supported reasoning controls. Its default behavior is used.', tokens: '{count} tokens',
   tokenUnit: 'tokens', budgetLabel: '{label} budget tokens',
 } as const;
 

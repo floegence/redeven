@@ -14,6 +14,7 @@ import {
   flowerReasoningCapabilityLevels,
   normalizeFlowerReasoningSelection,
   reasoningCapabilitySupportsControl,
+  reasoningCapabilityHasPresentation,
 } from './reasoning';
 
 export type FlowerReasoningControlProps = Readonly<{
@@ -56,7 +57,7 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
   let menuRef: HTMLDivElement | undefined;
   const [menuOpen, setMenuOpen] = createSignal(false);
   const capability = createMemo(() => props.capability ?? null);
-  const visible = createMemo(() => reasoningCapabilitySupportsControl(capability()));
+  const visible = createMemo(() => reasoningCapabilityHasPresentation(capability()));
   const effectiveSelection = createMemo(() => effectiveFlowerReasoningSelection(capability(), props.selection));
   const levels = createMemo(() => {
     const cap = capability();
@@ -77,18 +78,21 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
     const cap = capability();
     if (!cap) return '';
     if (cap.kind === 'always_on') return copy().alwaysOn;
+    if (!reasoningCapabilitySupportsControl(cap)) return copy().modelControlled;
     const selection = effectiveSelection();
     if (selection?.level === 'off') return levelLabel('off');
     if (supportsBudget() && selection?.budget_tokens) return copy().tokens.replace('{count}', String(selection.budget_tokens));
     const level = selection?.level ?? cap.default_level ?? 'default';
     return levelLabel(level);
   });
+  const budgetVisible = createMemo(() => supportsBudget() && selectedLevel() !== 'off'
+    && (capability()?.wire_shape !== 'qwen_reasoning_effort' || selectedLevel() === 'default'));
   const menuEnabled = createMemo(() => interactive() && (levels().length > 1 || supportsBudget()));
   const emitLevel = (level: FlowerReasoningLevel) => {
     const current = normalizeFlowerReasoningSelection(props.selection) ?? {};
     props.onChange?.({
       level,
-      ...(level === 'off' ? {} : { budget_tokens: current.budget_tokens }),
+      ...(level === 'off' || (capability()?.wire_shape === 'qwen_reasoning_effort' && level !== 'default') ? {} : { budget_tokens: current.budget_tokens }),
     });
     if (menuVariant()) {
       setMenuOpen(false);
@@ -101,8 +105,7 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
     const current = normalizeFlowerReasoningSelection(props.selection) ?? {};
     const budget = clampBudget(cap, raw);
     props.onChange?.({
-      ...current,
-      level: current.level === 'off' ? 'default' : current.level,
+      level: current.level === 'off' || cap.wire_shape === 'qwen_reasoning_effort' ? 'default' : current.level,
       ...(budget ? { budget_tokens: budget } : {}),
     });
   };
@@ -200,7 +203,7 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
                       </For>
                     </div>
                   </Show>
-                  <Show when={supportsBudget() && selectedLevel() !== 'off'}>
+                  <Show when={budgetVisible()}>
                     <input
                       class="flower-reasoning-budget"
                       type="number"
@@ -219,7 +222,7 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
         >
           <Show
             when={menuEnabled()}
-            fallback={<span class={segmentMode() ? 'flower-reasoning-segment-static' : 'flower-reasoning-chip'}>{chipText()}</span>}
+            fallback={<span class={segmentMode() ? 'flower-reasoning-segment-static' : 'flower-reasoning-chip'} title={!reasoningCapabilitySupportsControl(capability()) && capability()?.kind !== 'always_on' ? copy().modelControlledHint : undefined}>{chipText()}</span>}
           >
             <button
               type="button"
@@ -259,7 +262,7 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
                     )}
                   </For>
                 </Show>
-                <Show when={supportsBudget() && selectedLevel() !== 'off'}>
+                <Show when={budgetVisible()}>
                   <input
                     class="flower-reasoning-menu-budget"
                     type="number"

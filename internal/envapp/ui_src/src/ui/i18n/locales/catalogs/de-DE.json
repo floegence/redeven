@@ -5005,7 +5005,10 @@
       "alwaysOn": "Immer aktiviert",
       "tokens": "{count} Tokens",
       "tokenUnit": "Tokens",
-      "budgetLabel": "Tokenbudget für {label}"
+      "budgetLabel": "Tokenbudget für {label}",
+      "on": "Ein",
+      "modelControlled": "Vom Modell gesteuert",
+      "modelControlledHint": "Dieses Modell gibt keine unterstützten Denkoptionen an. Es wird sein Standardverhalten verwendet."
     },
     "filesystemPicker": {
       "path": "Verzeichnispfad",

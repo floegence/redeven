@@ -23,6 +23,17 @@ Runtime liveness and startup reporting remain independent from optional AI/model
 
 Portal `ControlChannelFence` fields protect the Provider control channel and are distinct from Gateway `target_generation`. Neither counter is a Desktop ownership marker. The Runtime Service has no hidden v1 lifecycle-owner fallback and does not require a Gateway endpoint, pairing, or operation store to start.
 
+# Reasoning selection compatibility
+
+Compatibility epoch 35 requires both Desktop and Runtime to understand explicit
+reasoning `on` alongside the existing default, off, effort, and budget choices.
+Earlier clients reject `on`; ordinary epoch admission prevents a mixed pair
+from accepting a Flower or Desktop model-source request it cannot interpret.
+The supported upgrade window includes epoch 34. Stored thread preferences and
+database migration lineages remain unchanged. See the
+[reasoning selection contract](../ui/flower-reasoning-selection.md) for model
+capability and control semantics.
+
 # Evidence
 
 - `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.

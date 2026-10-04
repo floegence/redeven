@@ -349,3 +349,50 @@ func TestQwenNewEffortUsesOneReasoningControl(t *testing.T) {
 		t.Fatal("accepted mutually exclusive effort and budget")
 	}
 }
+
+func TestApplyResponsesReasoningQwenExplicitOnAndEffort(t *testing.T) {
+	for _, tc := range []struct {
+		model    string
+		level    config.AIReasoningLevel
+		expected string
+	}{
+		{"qwen3.6-plus", config.AIReasoningLevelOn, `"enable_thinking":true`},
+		{"qwen3.8-flash", config.AIReasoningLevelXHigh, `"reasoning":{"effort":"xhigh"}`},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			var params oresponses.ResponseNewParams
+			if err := applyResponsesReasoning(&params, ProviderControls{
+				ReasoningCapability: config.AIReasoningCapabilityForModel("qwen", tc.model),
+				ReasoningSelection:  config.AIReasoningSelection{Level: tc.level},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			payload := mustMarshalPayload(t, params)
+			if !strings.Contains(payload, tc.expected) {
+				t.Fatalf("payload=%s, want %s", payload, tc.expected)
+			}
+		})
+	}
+}
+
+func TestApplyChatReasoningExplicitOnForBooleanProviders(t *testing.T) {
+	for _, tc := range []struct{ provider, model, expected string }{
+		{"qwen", "qwen3.6-plus", `"enable_thinking":true`},
+		{"moonshot", "kimi-k2.6", `"thinking":{"type":"enabled"}`},
+		{"chatglm", "glm-5.1", `"thinking":{"type":"enabled"}`},
+	} {
+		t.Run(tc.provider, func(t *testing.T) {
+			var params openai.ChatCompletionNewParams
+			if err := applyChatReasoning(&params, ProviderControls{
+				ReasoningCapability: config.AIReasoningCapabilityForModel(tc.provider, tc.model),
+				ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelOn},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			payload := mustMarshalPayload(t, params)
+			if !strings.Contains(payload, tc.expected) {
+				t.Fatalf("payload=%s, want %s", payload, tc.expected)
+			}
+		})
+	}
+}

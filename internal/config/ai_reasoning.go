@@ -17,6 +17,7 @@ type AIReasoningLevel = flconfig.ReasoningLevel
 const (
 	AIReasoningLevelDefault = flconfig.ReasoningLevelDefault
 	AIReasoningLevelOff     = flconfig.ReasoningLevelOff
+	AIReasoningLevelOn      = flconfig.ReasoningLevelOn
 	AIReasoningLevelMinimal = flconfig.ReasoningLevelMinimal
 	AIReasoningLevelLow     = flconfig.ReasoningLevelLow
 	AIReasoningLevelMedium  = flconfig.ReasoningLevelMedium
@@ -54,7 +55,7 @@ func NormalizeAIReasoningSelection(in AIReasoningSelection) AIReasoningSelection
 
 func ValidateAIReasoningLevel(level AIReasoningLevel) bool {
 	switch NormalizeAIReasoningSelection(AIReasoningSelection{Level: level}).Level {
-	case "", AIReasoningLevelDefault, AIReasoningLevelOff, AIReasoningLevelMinimal, AIReasoningLevelLow, AIReasoningLevelMedium, AIReasoningLevelHigh, AIReasoningLevelXHigh, AIReasoningLevelMax:
+	case "", AIReasoningLevelDefault, AIReasoningLevelOff, AIReasoningLevelOn, AIReasoningLevelMinimal, AIReasoningLevelLow, AIReasoningLevelMedium, AIReasoningLevelHigh, AIReasoningLevelXHigh, AIReasoningLevelMax:
 		return true
 	default:
 		return false

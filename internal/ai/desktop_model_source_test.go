@@ -327,84 +327,91 @@ func TestDesktopModelSourceModelSnapshotDoesNotFallbackToFirstModel(t *testing.T
 func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T) {
 	t.Parallel()
 
-	modelID := "desktop:model_test"
-	modelSource, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
-		switch frame.Method {
-		case "ai.status.get":
-			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceStatus{
-				BindingState:    string(runtimeservice.BindingStateBound),
-				Connected:       true,
-				Configured:      true,
-				Available:       true,
-				ModelSource:     DesktopModelSourceDefaultSource,
-				SessionID:       "desktop-session",
-				ModelCount:      1,
-				ExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli(),
+	for _, reasoning := range []config.AIReasoningCapability{
+		config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro"),
+		{Kind: "effort", SupportedLevels: []string{"low", "medium", "xhigh"}, DefaultLevel: "default", DisableSupported: true, WireShape: "ollama_model_family_think", ResponseReasoningFields: []string{"reasoning"}, HistoryReplayRequirements: []string{"reasoning"}},
+		{Kind: "toggle", SupportedLevels: []string{"on"}, DefaultLevel: "default", DisableSupported: true, WireShape: "ollama_model_family_think"},
+	} {
+		t.Run(reasoning.WireShape+"/"+reasoning.Kind, func(t *testing.T) {
+			modelID := "desktop:model_test"
+			modelSource, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+				switch frame.Method {
+				case "ai.status.get":
+					return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceStatus{
+						BindingState:    string(runtimeservice.BindingStateBound),
+						Connected:       true,
+						Configured:      true,
+						Available:       true,
+						ModelSource:     DesktopModelSourceDefaultSource,
+						SessionID:       "desktop-session",
+						ModelCount:      1,
+						ExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli(),
+					})
+				case "ai.models.list":
+					return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceModelSnapshot{
+						Configured:   true,
+						CurrentModel: modelID,
+						Models: []DesktopModelSourceModel{{
+							ID:                            modelID,
+							Label:                         "DeepSeek / deepseek-v4-pro",
+							Provider:                      "DeepSeek",
+							ContextWindow:                 1_000_000,
+							MaxOutputTokens:               384_000,
+							EffectiveContextWindowPercent: 95,
+							InputModalities:               []string{config.AIInputModalityText, config.AIInputModalityImage},
+							SupportsImageInput:            true,
+							ReasoningCapability:           reasoning,
+						}},
+					})
+				default:
+					return testDesktopModelSourceError(frame.ID, "METHOD_NOT_FOUND", "unexpected method")
+				}
 			})
-		case "ai.models.list":
-			reasoning := config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro")
-			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceModelSnapshot{
-				Configured:   true,
-				CurrentModel: modelID,
-				Models: []DesktopModelSourceModel{{
-					ID:                            modelID,
-					Label:                         "DeepSeek / deepseek-v4-pro",
-					Provider:                      "DeepSeek",
-					ContextWindow:                 1_000_000,
-					MaxOutputTokens:               384_000,
-					EffectiveContextWindowPercent: 95,
-					InputModalities:               []string{config.AIInputModalityText, config.AIInputModalityImage},
-					SupportsImageInput:            true,
-					ReasoningCapability:           reasoning,
-				}},
-			})
-		default:
-			return testDesktopModelSourceError(frame.ID, "METHOD_NOT_FOUND", "unexpected method")
-		}
-	})
-	defer cleanup()
+			defer cleanup()
 
-	svc := &Service{
-		cfg:                &config.AIConfig{PermissionType: config.AIPermissionReadonly},
-		desktopModelSource: modelSource,
-	}
-	if !svc.Enabled() {
-		t.Fatalf("Enabled=false, want true")
-	}
-	out, err := svc.ListModels()
-	if err != nil {
-		t.Fatalf("ListModels: %v", err)
-	}
-	if out.CurrentModel != modelID {
-		t.Fatalf("CurrentModel=%q", out.CurrentModel)
-	}
-	if got, want := len(out.Models), 1; got != want {
-		t.Fatalf("len(Models)=%d, want %d", got, want)
-	}
-	model := out.Models[0]
-	if model.ID != modelID {
-		t.Fatalf("model.ID=%q", model.ID)
-	}
-	if model.Source != "desktop_model_source" || model.SourceLabel != "Desktop" {
-		t.Fatalf("model source=(%q,%q), want desktop model source", model.Source, model.SourceLabel)
-	}
-	if !model.SupportsImageInput {
-		t.Fatalf("model.SupportsImageInput=false, want true")
-	}
-	if model.ContextWindow != 950_000 || model.MaxOutputTokens != 384_000 {
-		t.Fatalf("model limits=(%d,%d), want effective Desktop limits", model.ContextWindow, model.MaxOutputTokens)
-	}
-	if model.ReasoningCapability.DefaultLevel != "high" || !model.ReasoningCapability.SupportsLevel(config.AIReasoningLevelMax) {
-		t.Fatalf("ReasoningCapability=%+v, want DeepSeek high/max", model.ReasoningCapability)
-	}
-	if out.Runtime == nil || out.Runtime.RemoteConfigured {
-		t.Fatalf("Runtime=%#v, want model-source-only runtime status", out.Runtime)
-	}
-	if out.Runtime.DesktopModelSource == nil || !out.Runtime.DesktopModelSource.Connected {
-		t.Fatalf("DesktopModelSource=%#v, want connected", out.Runtime.DesktopModelSource)
-	}
-	if !out.Runtime.DesktopModelSource.Configured {
-		t.Fatalf("DesktopModelSource.Configured=false, want true")
+			svc := &Service{
+				cfg:                &config.AIConfig{PermissionType: config.AIPermissionReadonly},
+				desktopModelSource: modelSource,
+			}
+			if !svc.Enabled() {
+				t.Fatalf("Enabled=false, want true")
+			}
+			out, err := svc.ListModels()
+			if err != nil {
+				t.Fatalf("ListModels: %v", err)
+			}
+			if out.CurrentModel != modelID {
+				t.Fatalf("CurrentModel=%q", out.CurrentModel)
+			}
+			if got, want := len(out.Models), 1; got != want {
+				t.Fatalf("len(Models)=%d, want %d", got, want)
+			}
+			model := out.Models[0]
+			if model.ID != modelID {
+				t.Fatalf("model.ID=%q", model.ID)
+			}
+			if model.Source != "desktop_model_source" || model.SourceLabel != "Desktop" {
+				t.Fatalf("model source=(%q,%q), want desktop model source", model.Source, model.SourceLabel)
+			}
+			if !model.SupportsImageInput {
+				t.Fatalf("model.SupportsImageInput=false, want true")
+			}
+			if model.ContextWindow != 950_000 || model.MaxOutputTokens != 384_000 {
+				t.Fatalf("model limits=(%d,%d), want effective Desktop limits", model.ContextWindow, model.MaxOutputTokens)
+			}
+			if !reflect.DeepEqual(model.ReasoningCapability, reasoning.Normalize()) {
+				t.Fatalf("ReasoningCapability=%+v, want %+v", model.ReasoningCapability, reasoning)
+			}
+			if out.Runtime == nil || out.Runtime.RemoteConfigured {
+				t.Fatalf("Runtime=%#v, want model-source-only runtime status", out.Runtime)
+			}
+			if out.Runtime.DesktopModelSource == nil || !out.Runtime.DesktopModelSource.Connected {
+				t.Fatalf("DesktopModelSource=%#v, want connected", out.Runtime.DesktopModelSource)
+			}
+			if !out.Runtime.DesktopModelSource.Configured {
+				t.Fatalf("DesktopModelSource.Configured=false, want true")
+			}
+		})
 	}
 }
 

@@ -5005,7 +5005,10 @@
       "alwaysOn": "常にオン",
       "tokens": "{count} トークン",
       "tokenUnit": "トークン",
-      "budgetLabel": "{label}のトークン予算"
+      "budgetLabel": "{label}のトークン予算",
+      "on": "オン",
+      "modelControlled": "モデルに従う",
+      "modelControlledHint": "このモデルは対応する思考設定を公開していないため、モデルの既定の動作を使用します。"
     },
     "filesystemPicker": {
       "path": "ディレクトリのパス",

@@ -829,7 +829,10 @@
     "alwaysOn": "Always on",
     "tokens": "{count} tokens",
     "tokenUnit": "tokens",
-    "budgetLabel": "{label} budget tokens"
+    "budgetLabel": "{label} budget tokens",
+    "on": "On",
+    "modelControlled": "Model controlled",
+    "modelControlledHint": "This model does not declare supported reasoning controls. Its default behavior is used."
   },
   "computer": {
     "title": "Browser and desktop",

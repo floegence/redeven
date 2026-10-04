@@ -1,0 +1,59 @@
+---
+type: AI Runtime Contract
+title: Model reasoning capabilities and transport
+description: Discover verified reasoning controls, preserve explicit intent, and map thinking output and history to provider protocols.
+tags: [ai, models, reasoning, providers]
+timestamp: 2026-10-04T00:00:00Z
+---
+# Summary
+
+Published Floret owns the portable reasoning selection contract, Ollama metadata
+parser, and Ollama wire encoding. Redeven maps model metadata, product settings,
+and provider requests to that contract. Only verified capabilities create
+controls; Default, Off, On, named effort, and token budget retain distinct
+meanings. Invalid selections fail before provider dispatch, while unknown
+controls retain the model's default behavior. Active Turns keep immutable
+settings through continuation and restart.
+
+# Capability and transport
+
+OpenAI-compatible Chat reasoning is capability-driven. Redeven computes model capability from the current provider type, model metadata, and [generated model directory](model-directory-and-selection.md) on each resolution; it does not persist a capability cache. Redeven reads only response fields named by that result, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text. Ollama metadata is parsed by published Floret v7.22.0, and its OpenAI-compatible stream and assistant history use the declared `reasoning` field. OpenRouter declares its response fields only when model metadata advertises reasoning, without inferring effort controls from aggregate parameter support. Generic provider identity never creates a reasoning capability. Qwen Responses preserves explicit On through its documented `enable_thinking` parameter, exact effort levels through `reasoning.effort`, and rejects unsupported token budgets. Assistant reasoning is replayed through provider-specific history fields only when the same capability declares that requirement; unsupported models receive no synthetic reasoning field.
+
+Ollama discovery delegates `/api/show.thinking` parsing and request mapping to
+Floret. Names and model families never imply controls. A declaration containing
+`false`, `low`, `medium`, and `xhigh` therefore exposes those choices, without
+inventing `high`. Default omits the override so the server retains its current
+default. A boolean On uses Ollama's OpenAI compatibility encoding; unsupported
+selections fail validation before dispatch. Older metadata without `thinking`
+and unrecognized model-defined effort names remain model-controlled; a verified
+subset of known levels and an explicit disable value can still be offered.
+
+Qwen, Kimi, and GLM boolean transports advertise explicit On independently of
+named effort. Qwen Chat encodes it as `enable_thinking: true`; Kimi and GLM use
+`thinking.type: enabled`. An absent or explicit Default selection does not send
+an override. Budget-only and fixed-thinking models never acquire synthetic
+effort names or a toggle merely because another model supports one.
+
+# Settings ownership
+
+Thread model, reasoning and permission settings are Redeven product state. Model and reasoning changes require an idle mutable thread with no queue or unresolved interaction. Permission changes apply at the next tool authorization boundary, including active, queued and resumed work. Execution authority records admission permission for historical attribution only, never as live tool authorization. The atomic v9-to-v10 migration and all earlier edges remain unchanged. `SendUserTurn.Model` and Ask User continuation `Model` may be empty or equal the persisted value; a mismatch is a conflict. The configured `current_model_id` initializes future threads only.
+
+The same capability and selection reach direct Environment models and Desktop
+model-source RPC. A model rename never changes its declared control type.
+The [Flower reasoning selection contract](../ui/flower-reasoning-selection.md)
+owns labels, draft intent, remounts, and mutually exclusive UI controls. The
+[Runtime snapshot contract](../architecture/runtime-service-snapshot.md)
+owns epoch 35 pairing for the additive `on` selection. Existing database
+migration lineages remain unchanged.
+
+# Evidence
+
+- `redeven:internal/config/ai_reasoning_catalog.go` - Thin published-Floret metadata mapping and explicit OpenRouter metadata contract.
+- `redeven:internal/ai/model_catalog.go` - Read-only discovery from declared capabilities.
+- `redeven:internal/ai/model_gateway.go` - Provider request, stream, and approved history-field mapping.
+- `redeven:internal/ai/model_gateway_ollama_reasoning_test.go` - Exact declared choices, thinking stream/history, and opt-in live acceptance.
+- `redeven:internal/ai/model_gateway_reasoning_test.go` - Boolean, effort, and budget contracts across provider transports.
+- `redeven:internal/ai/desktop_model_source_test.go` - Capability metadata survives Desktop model-source RPC.
+- `redeven:internal/ai/thread_reasoning_restart_test.go` - Saved On and Off survive reopening and immutable continuation.
+- [Ollama thinking metadata](https://docs.ollama.com/capabilities/thinking) and [OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility) - Declared values and Chat wire encoding.
+- [Qwen Responses API](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-responses) - Explicit enable, effort, and unsupported budget boundary.
