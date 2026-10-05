@@ -25,12 +25,19 @@ outcome, so the user must inspect the original manager before trying again.
 - Selection summaries prioritize requested objects and include node, instance,
   and external-resource observation evidence. Truncation is explicit; Flower
   reads the exact saved version for additional detail.
-- Remote requests use an existing authorized Runtime connection. No implicit
-  connection, local fallback, discovery loop, operation mirror, or action retry
-  is created by Tessiven.
 - The UI shows confirmed, refused, and unknown outcomes distinctly. Unknown
   mutation outcomes disable another mutation until the original manager has
   been inspected.
+
+# Boundaries
+
+Flower and the UI call the same Tessiven service; neither writes its database
+directly. Runtime and resource references identify targets without granting
+permission. Remote requests require an existing authorized Desktop placement
+connection exposing Runtime control. A target without that connection remains
+unavailable; Tessiven never connects implicitly or substitutes a local target.
+Managed Services and Containers retain execution and progress ownership.
+External and unmanaged resources support inspection and explanation only.
 
 # Evidence
 

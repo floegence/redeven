@@ -22,10 +22,17 @@ the canvas, while object details and DSL editing remain normal selectable text.
   open Ask Flower with the exact immutable canvas/version selection.
 - Layout hints are read from the saved document and applied only to visible
   graph objects; hidden members retain their hints for later expansion.
-- The shared Floe graph component owns pan, zoom, routing, layout, focus, and
-  floating-layer mechanics. Redeven owns Tessiven projection and business data.
 - Theme tokens, high contrast, product locale, and accessible names are used
   for every card, edge, menu, and action.
+
+# Boundaries
+
+The released Floe graph component owns pan, zoom, routing, layout, focus, and
+floating-layer mechanics. Redeven owns the Tessiven projection and business
+data. The graph renders the [saved version document](../architecture/tessiven-canvas-contract.md)
+without introducing independent topology state. Selecting a node, group, or
+historical version cannot change its management permissions. Ask Flower opens
+the existing input launcher and never sends a message automatically.
 
 # Evidence
 

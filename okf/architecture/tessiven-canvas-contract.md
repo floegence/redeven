@@ -27,6 +27,16 @@ failed validation or version conflict leaves the last saved document intact.
   rename, or duplicate produces a new complete version or canvas identity.
 - Historical and archived versions are readable but cannot mutate resources.
 
+# Boundaries
+
+The local Runtime owns the SQLite canvas library and immutable version
+documents. Desktop and Env App use the same service and do not persist a second
+business graph. Pan, zoom, temporary expansion, and selection are browsing
+state, not document versions. Canvas references never authorize resource
+actions; the [Flower and operations contract](../ai/tessiven-flower-and-operations.md)
+owns that boundary. Tessiven does not deploy services, discover targets in the
+background, or synchronize libraries between devices.
+
 # Evidence
 
 - `spec/tessiven/v1.schema.json`
