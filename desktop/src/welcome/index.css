@@ -617,6 +617,10 @@ html:not(.dark) .redeven-welcome-surface {
   width: min(58rem, 96vw);
 }
 
+.redeven-welcome-dialog-panel--gateway-environment {
+  width: min(42rem, 96vw);
+}
+
 /* Floe owns dialog material; Desktop only adjusts layout above. */
 
 /* ── Environment card grid ── */
@@ -3661,24 +3665,54 @@ pre,
 }
 
 .redeven-gateway-card__count {
-  color: var(--muted-foreground);
+  color: var(--foreground);
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
 }
 
 .redeven-gateway-card__add {
-  margin-inline-end: -0.5rem;
-  color: var(--muted-foreground);
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.75rem;
 }
 
-.redeven-gateway-card__directory-status {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
+.redeven-gateway-card__empty {
+  margin-top: 0.375rem;
   color: var(--muted-foreground);
   font-size: 0.6875rem;
-  line-height: 1.5;
+  line-height: 1.65;
+  text-wrap: pretty;
 }
+
+.redeven-gateway-card__disclosure {
+  transition: transform 160ms ease;
+}
+
+.redeven-gateway-card__directory-link[aria-expanded='true'] .redeven-gateway-card__disclosure { transform: rotate(90deg); }
+
+.redeven-gateway-environments {
+  display: grid;
+  max-height: 24rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-top: 0.625rem;
+}
+
+.redeven-gateway-environment { padding-block: 0.75rem; }
+.redeven-gateway-environment + .redeven-gateway-environment { border-top: 1px solid var(--border); }
+.redeven-gateway-environment__header { display: flex; gap: 0.5rem; align-items: start; }
+.redeven-gateway-environment__identity { display: grid; flex: 1; min-width: 0; gap: 0.25rem; }
+.redeven-gateway-environment__identity strong { font-size: 0.75rem; font-weight: 500; }
+.redeven-gateway-environment__identity span { color: var(--muted-foreground); font-size: 0.625rem; }
+.redeven-gateway-environment__identity > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.redeven-gateway-environment__controls { display: flex; margin: -0.25rem -0.25rem 0 0; }
+.redeven-gateway-environment__mode { display: block; margin-top: 0.5rem; color: var(--muted-foreground); font-size: 0.625rem; }
+.redeven-gateway-environment__actions { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem -0.5rem 0; }
+.redeven-gateway-context { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 0.5rem; background: var(--muted); }
+.redeven-gateway-context .redeven-gateway-mark { width: 2rem; height: 2rem; }
+.redeven-gateway-context > div { display: grid; min-width: 0; gap: 0.125rem; }
+.redeven-gateway-context span { color: var(--muted-foreground); font-size: 0.6875rem; }
+.redeven-gateway-context strong { font-size: 0.8125rem; font-weight: 500; overflow-wrap: anywhere; }
 
 .redeven-gateway-card__help {
   display: grid;
@@ -3811,6 +3845,8 @@ pre,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .redeven-gateway-card__disclosure { transition: none; }
+
   .redeven-gateway-menu,
   .redeven-gateway-card__explanation,
   .redeven-gateway-permission__explanation {

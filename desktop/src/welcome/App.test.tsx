@@ -352,7 +352,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal');
     expect(appSrc).toContain('const [gatewayQuery, setGatewayQuery] = createSignal');
     expect(appSrc).toContain('filterGatewayEnvironmentEntries(');
-    expect(appSrc).toContain('function focusGatewayEnvironments(gateway: DesktopGatewaySource): void');
+    expect(appSrc).toContain('function openCreateGatewayEnvironment(gateway: DesktopGatewaySource): void');
     expect(appSrc).toContain('<GatewaySourcesPanel');
     expect(appSrc).toContain("props.activeTab === 'gateways'");
     expect(appSrc).toContain('gatewaySourceFilterValue,');
@@ -1120,7 +1120,7 @@ describe('DesktopWelcomeShell', () => {
       'const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));',
     );
     expect(appSrc).toContain('class="redeven-gateway-card__directory"');
-    expect(appSrc).toContain('redeven-gateway-card__directory-status');
+    expect(appSrc).toContain('redeven-gateway-card__directory-row');
     expect(appSrc).toContain('redeven-gateway-card__explanation');
     expect(appSrc).toContain("if (action.intent === 'view_gateway_environments')");
     expect(appSrc).toContain("if (action.intent === 'add_gateway_environment')");
@@ -1248,7 +1248,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-card__primary-anchor');
     expect(styles).toContain('flex: 1 1 auto;');
     expect(styles).not.toContain('.redeven-gateway-card__guidance');
-    expect(styles).toContain('.redeven-gateway-card__directory-status');
+    expect(styles).toContain('.redeven-gateway-card__directory-row');
     expect(styles).toContain('.redeven-gateway-card__explanation');
     expect(styles).toContain('.redeven-gateway-card__directory');
     expect(styles).toContain('.redeven-gateway-action-panel__hero');
@@ -2451,7 +2451,7 @@ describe('DesktopWelcomeShell', () => {
     );
     expect(appSrc).toContain('props.switchKind(value as ConnectionDialogKind)');
     expect(appSrc).toContain("profile_route_kind: 'url';");
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentRouteType')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentTargetUrl')");
     expect(appSrc).not.toContain(
       "const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');",
     );
@@ -2613,10 +2613,10 @@ describe('DesktopWelcomeShell', () => {
     );
     expect((styles.match(/100dvh/g) ?? []).length).toBe(4);
 
-    expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
-    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);
+    expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(2);
+    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(6);
     expect((appSrc.match(/<EnvironmentSettingsDialog\b/g) ?? []).length).toBe(1);
-    expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
+    expect((appSrc.match(/class=\{(?:cn\()?CONNECTION_DIALOG_CLASS/g) ?? []).length).toBe(2);
     expect(appSrc).toContain('function ControlPlaneDialog');
     expect(appSrc).toContain("title={props.i18n.t('connectionDialog.addProviderTitle')}");
     expect(appSrc).toContain('open={providerRuntimeLinkDialogOpen()}');
