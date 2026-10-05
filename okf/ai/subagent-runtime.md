@@ -11,7 +11,7 @@ Floret v7 owns each SubAgent as a normal canonical child Thread. Redeven exposes
 
 # Contract
 
-The `subagents` tool supports spawn, send input, wait, list, inspect, close, and close all. Spawn requires `task_name`, `task_description`, `agent_type`, and `message`, with optional context mode. Title/objective aliases and inferred task names are rejected. Mission-only creates a child without inherited transcript; full-history uses the typed Floret fork path.
+The `subagents` tool supports spawn, send input, wait, list, inspect, close, and close all. Spawn requires `task_name`, `task_description`, `agent_type`, and `message`, with optional context mode. Title/objective aliases and inferred task names are rejected. Mission-only creates a child without inherited transcript; full-history uses the typed Floret fork path. Published Floret v7.23.1 closes copied in-flight tool calls before the child branch boundary with an explicit non-inheritance result. The child starts with paired model history while the parent retains ownership of its ongoing execution and real result.
 
 Every tool call and result uses Floret's typed `subagent_operation` Activity renderer. Its payload keeps the exact action, requested target order, task display fields, target status, requested/completed/missing counts, timeout state, and public error. Redeven never truncates a multi-target operation to its first child. Wait targets join current summaries only by canonical `ThreadID`; labels and unrelated child lists are not fallback identity. The older `subagent` renderer remains limited to one durable child-thread fact and is not an operation fallback.
 

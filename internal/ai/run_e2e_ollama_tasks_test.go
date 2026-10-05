@@ -104,6 +104,16 @@ func newOllamaTaskFixture(t *testing.T, profile config.AIProvider, model config.
 			if d, err := f.svc.GetFlowerThreadDetail(context.Background(), f.meta, f.threadID); err == nil {
 				f.report["last_observed"] = d
 			}
+			parent := identity.ThreadID(f.threadID)
+			if children, err := f.svc.threadRuntime.List(context.Background(), flruntime.ThreadScope{ParentID: &parent}); err == nil {
+				views := []flruntime.ThreadView{}
+				for _, child := range children {
+					if view, err := f.svc.threadRuntime.View(context.Background(), child.ID); err == nil {
+						views = append(views, view)
+					}
+				}
+				f.report["child_views"] = views
+			}
 		}
 		if f.svc != nil {
 			_ = f.svc.Close()
@@ -179,6 +189,17 @@ func (f *ollamaTaskFixture) wait(label string, accepts func(*FlowerThreadDetail)
 		d := f.view()
 		if accepts(d) {
 			return d
+		}
+		if strings.HasSuffix(f.t.Name(), "/subagent_full_history") {
+			for _, child := range f.children() {
+				v, err := f.svc.threadRuntime.View(f.ctx, child.ID)
+				if err != nil {
+					f.t.Fatal(err)
+				}
+				if v.LastOutcome != nil && *v.LastOutcome == flruntime.TurnOutcomeFailed {
+					f.t.Fatalf("full-history child failed: %+v", v.Failure)
+				}
+			}
 		}
 		if d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil && *d.Current.LastOutcome == flruntime.TurnOutcomeFailed {
 			f.t.Fatalf("%s failed before expected state: %+v", label, d.Current.Failure)
