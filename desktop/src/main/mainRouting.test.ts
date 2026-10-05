@@ -1718,7 +1718,7 @@ describe('main routing', () => {
     expect(ensureEnd).toBeGreaterThan(ensureStart);
     const ensureSrc = mainSrc.slice(ensureStart, ensureEnd);
     expect(ensureSrc).toContain('if (desktopPlatformCapabilities.wsl_environment)');
-    expect(ensureSrc).toContain('return ensureWSLRuntimeFlowerTarget(preferences);');
+    expect(ensureSrc).toContain('return ensureWSLRuntimeFlowerTarget(preferences, prepareModels);');
     expect(ensureSrc).toContain('const targetKey = localHostRuntimeLifecycleTargetKey(environment);');
     expect(ensureSrc).toContain("activeLifecycle.intent === 'start'");
     expect(ensureSrc).toContain("activeLifecycle.intent === 'restart'");
@@ -1736,14 +1736,17 @@ describe('main routing', () => {
     expect(ensureSrc).not.toContain('setTimeout(');
     expect(ensureSrc).not.toContain('setInterval(');
 
-    const coordinatorStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecord()');
+    const coordinatorStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecord(');
     const coordinatorEnd = mainSrc.indexOf('function requireSuccessfulRuntimeFlowerLifecycle(', coordinatorStart);
     expect(coordinatorStart).toBeGreaterThanOrEqual(0);
     expect(coordinatorEnd).toBeGreaterThan(coordinatorStart);
     const coordinatorSrc = mainSrc.slice(coordinatorStart, coordinatorEnd);
+    expect(coordinatorSrc).toContain('prepareModels = true');
+    expect(coordinatorSrc).toContain('ensureRuntimeFlowerRecordUncoalesced(preferences, prepareModels)');
     expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight');
-    expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight.set(targetKey, request)');
-    expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight.delete(targetKey)');
+    expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight.get(preparationKey)');
+    expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight.set(preparationKey, request)');
+    expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight.delete(preparationKey)');
 
     expect(mainSrc).not.toContain('async function startLocalHostRuntimeWithLifecycleProgress(');
     expect(mainSrc).not.toContain('async function stopEnvironmentRuntimeFromLauncherUncoordinated(');
