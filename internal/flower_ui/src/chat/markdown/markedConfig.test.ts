@@ -14,6 +14,14 @@ function createMarked(): Marked<string, string> {
 }
 
 describe('createFlowerMarkdownRenderer', () => {
+  it('preserves the first fence language for highlighting, including aliases and escaped input', () => {
+    for (const [info, language] of [['Python title=weather.py', 'python'], ['c++', 'c++'], ['c#', 'c#'], ['ts {1,2}', 'ts']]) {
+      expect(createMarked().parse('```' + info + '\ncode\n```')).toContain(`data-flower-code-language="${language}"`);
+    }
+    const escaped = createMarked().parse('```a" onmouseover="run\ncode\n```');
+    expect(escaped).toContain('data-flower-code-language="a&quot;"');
+    expect(escaped).not.toContain(' onmouseover=');
+  });
   it('opts assistant media into inert placeholders and leaves ordinary HTML code alone', () => {
     const marked = new Marked<string, string>({ gfm: true });
     marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });
@@ -50,7 +58,7 @@ describe('createFlowerMarkdownRenderer', () => {
     const html = createMarked().parse('`<tag>`\n\n```ts\nconst x = "<tag>";\n```');
 
     expect(html).toContain('<code class="flower-chat-md-inline-code">&lt;tag&gt;</code>');
-    expect(html).toContain('<pre class="flower-chat-md-code-block"><code class="language-ts">const x = &quot;&lt;tag&gt;&quot;');
+    expect(html).toContain('<pre class="flower-chat-md-code-block"><code class="language-ts" data-flower-code-language="ts">const x = &quot;&lt;tag&gt;&quot;');
   });
 
   it('renders blockquote content through the controlled renderer', () => {

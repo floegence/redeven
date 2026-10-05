@@ -47,6 +47,7 @@ describe('streaming markdown DOM', () => {
     const [streaming, setStreaming] = createSignal(true);
     mount(() => <FlowerMarkdownBlock content={content()} streaming={streaming()} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />);
     await frame();
+    await expect.poll(() => root.querySelector('code')?.hasAttribute('data-floe-code-highlighted')).toBe(true);
     const button = root.querySelector<HTMLButtonElement>('button')!;
     const segment = button.closest('.flower-chat-md-committed-segment')!;
     button.focus();

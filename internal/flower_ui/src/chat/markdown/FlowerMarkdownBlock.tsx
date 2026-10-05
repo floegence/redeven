@@ -4,6 +4,7 @@ import { render } from 'solid-js/web';
 import { Marked } from 'marked';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, Copy } from '@floegence/floe-webapp-core/icons';
+import { enhanceCodeBlock } from '@floegence/floe-webapp-core/code-highlight';
 import { MarkdownMedia, readMarkdownMediaPlaceholder, type MarkdownMediaLabels, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 
 import { writeTextToClipboard } from '../../clipboard';
@@ -112,9 +113,10 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     });
   };
 
-  const decorateRegion = (element: Accessor<HTMLDivElement>, content: Accessor<unknown>, mountMedia = true) => {
+  const decorateRegion = (element: Accessor<HTMLDivElement>, content: Accessor<unknown>, committed = true) => {
     let buttons: readonly HTMLButtonElement[] = [];
     const media = new Map<HTMLElement, () => void>();
+    const highlighted = new Map<HTMLElement, () => void>();
     const release = (button: HTMLButtonElement) => {
       iconCleanups.get(button)?.();
       iconCleanups.delete(button);
@@ -132,6 +134,15 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
           if (!root.contains(button)) release(button);
         }
         buttons = decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons);
+        for (const [node, dispose] of highlighted) {
+          if (!root.contains(node)) { dispose(); highlighted.delete(node); }
+        }
+        // Only committed segments own enhancement. Streaming tails remain appendable.
+        if (committed) {
+          for (const code of root.querySelectorAll<HTMLElement>('pre.flower-chat-md-code-block > code')) {
+            if (!highlighted.has(code)) highlighted.set(code, enhanceCodeBlock(code, code.dataset.flowerCodeLanguage ?? ''));
+          }
+        }
         for (const [node, dispose] of media) {
           if (!root.contains(node)) { dispose(); media.delete(node); }
         }
@@ -139,7 +150,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
           if (media.has(node) || !props.mediaLabels) continue;
           const source = readMarkdownMediaPlaceholder(node);
           if (!source) continue;
-          if (!mountMedia) { node.textContent = source.title || source.src || props.mediaLabels.html; continue; }
+          if (!committed) { node.textContent = source.title || source.src || props.mediaLabels.html; continue; }
           media.set(node, render(() => <MarkdownMedia source={source} labels={props.mediaLabels!} resolve={props.resolveMedia} />, node));
         }
       });
@@ -148,6 +159,8 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
       for (const button of buttons) release(button);
       for (const dispose of media.values()) dispose();
       media.clear();
+      for (const dispose of highlighted.values()) dispose();
+      highlighted.clear();
     });
   };
 

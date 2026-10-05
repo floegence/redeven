@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: {
     conditions: ['browser'], dedupe: ['solid-js'],
     alias: [
-      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|icons|layout|loading|ui)$/, replacement: `${coreDist}$1.js` },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|icons|layout|loading|ui)$/, replacement: `${coreDist}$1.js` },
       { find: /^@floegence\/floe-webapp-core$/, replacement: `${coreDist}index.js` },
       { find: /^marked$/, replacement: fileURLToPath(new URL('./node_modules/marked/lib/marked.esm.js', import.meta.url)) },
       { find: /^thinking-orbs\/engine$/, replacement: fileURLToPath(new URL('./node_modules/thinking-orbs/dist/engine.es.js', import.meta.url)) },

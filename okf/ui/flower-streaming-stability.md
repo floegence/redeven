@@ -88,8 +88,9 @@ replace that node's data when the source stops being a prefix extension.
 
 [Disclosure motion](flower-activity-interaction.md) retains short interaction
 feedback without animating steady streaming growth. Existing maximum detail
-height and internal scrolling remain. No virtual list, Worker, or user-facing
-performance configuration is added.
+height and internal scrolling remain. [Code highlighting](flower-code-highlighting.md)
+uses the published Floe Worker only for visible, committed code. Streaming tails
+retain their append-only path; no user-facing performance setting is introduced.
 
 # Boundaries
 
