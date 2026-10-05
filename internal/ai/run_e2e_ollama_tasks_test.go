@@ -51,6 +51,18 @@ func TestE2E_FlowerOllamaTaskLifecycle(t *testing.T) {
 		{"subagent_full_history", ollamaTaskSubagentHistory},
 		{"subagent_interrupt_and_followup", ollamaTaskSubagentInterrupt},
 		{"parent_stop_cancels_child", ollamaTaskParentStop},
+		{"interleave_duplicate_send_stop_restart", ollamaInterleaveDuplicateSend},
+		{"interleave_approval_queue_stop_restart", ollamaInterleaveApprovalQueue},
+		{"interleave_concurrent_approval_replay", ollamaInterleaveApprovalReplay},
+		{"interleave_ask_stop_stale_answer", ollamaInterleaveStaleAnswer},
+		{"interleave_retry_restart_retry", ollamaInterleaveRetryRestart},
+		{"interleave_send_now_duplicate_and_stale_edit", ollamaInterleaveSendNow},
+		{"interleave_permission_and_model_changes", ollamaInterleavePermissions},
+		{"interleave_disconnect_stop_restart", ollamaInterleaveReconnect},
+		{"interleave_delete_active_queue", ollamaInterleaveDelete},
+		{"interleave_independent_roots", ollamaInterleaveRoots},
+		{"interleave_children_stop_queue_restart", ollamaInterleaveChildRestart},
+		{"interleave_compaction_queue_restart", ollamaInterleaveCompaction},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -73,6 +85,7 @@ type ollamaTaskFixture struct {
 	report         map[string]any
 	mu             sync.Mutex
 	frames         []FlowerLiveStreamEnvelope
+	disconnect     func()
 }
 
 func newOllamaTaskFixture(t *testing.T, profile config.AIProvider, model config.AIProviderModel, modelID, key string) *ollamaTaskFixture {
@@ -100,7 +113,7 @@ func newOllamaTaskFixture(t *testing.T, profile config.AIProvider, model config.
 	f.report["state_root"] = f.opts.StateDir
 	f.report["workspace"] = f.root
 	f.report["proxy"] = f.fault.server.URL
-	f.observe()
+	f.disconnect = f.observe()
 	t.Cleanup(func() {
 		if f.svc != nil {
 			if d, err := f.svc.GetFlowerThreadDetail(context.Background(), f.meta, f.threadID); err == nil {
@@ -141,7 +154,7 @@ func newOllamaTaskFixture(t *testing.T, profile config.AIProvider, model config.
 	return f
 }
 
-func (f *ollamaTaskFixture) observe() {
+func (f *ollamaTaskFixture) observe() func() {
 	sub, err := f.svc.SubscribeFlowerLiveStream(f.ctx, f.meta, FlowerLiveStreamRequest{})
 	if err != nil {
 		f.t.Fatal(err)
@@ -162,7 +175,9 @@ func (f *ollamaTaskFixture) observe() {
 			}
 		}
 	}()
-	f.t.Cleanup(func() { sub.Close(); <-done })
+	closeObserver := func() { sub.Close(); <-done }
+	f.t.Cleanup(closeObserver)
+	return closeObserver
 }
 
 func (f *ollamaTaskFixture) send(id, text string) SendUserTurnResponse {
@@ -286,13 +301,21 @@ func (f *ollamaTaskFixture) verifyLive() {
 	f.t.Helper()
 	f.noRunningTerminalProcesses()
 	d := f.view()
+	want, err := json.Marshal(d.Current)
+	if err != nil {
+		f.t.Fatal(err)
+	}
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		f.mu.Lock()
 		matched := false
 		for _, e := range f.frames {
 			if e.Current != nil && e.Current.ThreadID == d.Current.ThreadID && e.Current.ViewVersion == d.Current.ViewVersion && e.Current.Activity == d.Current.Activity {
-				matched = true
+				got, err := json.Marshal(e.Current)
+				matched = err == nil && bytes.Equal(got, want)
+				if matched {
+					break
+				}
 			}
 		}
 		f.mu.Unlock()
@@ -590,15 +613,7 @@ func ollamaTaskAskUser(f *ollamaTaskFixture) {
 	if queued.Kind != "queued" {
 		f.t.Fatal("input while waiting was not queued")
 	}
-	if err := f.svc.Close(); err != nil {
-		f.t.Fatal(err)
-	}
-	var err error
-	f.svc, err = NewService(f.opts)
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	f.observe()
+	f.restart()
 	restored := f.ask()
 	if !reflect.DeepEqual(p, restored) {
 		f.t.Fatal("restart changed user question")

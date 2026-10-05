@@ -2,6 +2,7 @@ package ai
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestExistingThreadClaimsStagedAttachmentBeforeAdmission(t *testing.T) {
-	for _, invalid := range []string{"valid", "initial", "capability", "target", "owner", "missing_scope", "missing_capability", "duplicate"} {
+	for _, invalid := range []string{"valid", "initial", "attachment_only", "capability", "target", "owner", "missing_scope", "missing_capability", "duplicate"} {
 		t.Run(invalid, func(t *testing.T) {
 			svc := newRealtimeTestService(t, time.Millisecond)
 			meta := testSendTurnMeta()
@@ -50,6 +51,9 @@ func TestExistingThreadClaimsStagedAttachmentBeforeAdmission(t *testing.T) {
 				capability = "invalid"
 			}
 			req := SendUserTurnRequest{ClientRequestID: "attachment-turn", ThreadID: thread.ThreadID, StagingScopeID: scope.StagingScopeID, StagingCapability: capability, Input: RunInput{Text: "Read the attachment.", Attachments: []RunAttachmentIn{{AttachmentID: upload.AttachmentID}}}}
+			if invalid == "attachment_only" {
+				req.Input.Text = ""
+			}
 			if invalid == "initial" {
 				req.ThreadID, req.ClientRequestID = "", ""
 				req.Create = &CreateThreadRequest{ClientRequestID: scopeTarget, Title: "initial attachment", ModelID: thread.ModelID, WorkingDir: thread.WorkingDir}
@@ -64,7 +68,7 @@ func TestExistingThreadClaimsStagedAttachmentBeforeAdmission(t *testing.T) {
 				req.Input.Attachments = append(req.Input.Attachments, req.Input.Attachments[0])
 			}
 			response, err := svc.SendUserTurn(t.Context(), meta, req)
-			if invalid != "valid" && invalid != "initial" {
+			if invalid != "valid" && invalid != "initial" && invalid != "attachment_only" {
 				if err == nil {
 					t.Fatal("unauthorized staging claim accepted")
 				}
@@ -89,6 +93,11 @@ func TestExistingThreadClaimsStagedAttachmentBeforeAdmission(t *testing.T) {
 			replay, err := svc.SendUserTurn(t.Context(), meta, req)
 			if err != nil || replay.TurnID != response.TurnID {
 				t.Fatalf("retry: %+v %v", replay, err)
+			}
+			changed := req
+			changed.Input.Attachments = nil
+			if _, err := svc.SendUserTurn(t.Context(), meta, changed); !errors.Is(err, ErrTurnIdempotencyConflict) {
+				t.Fatalf("changed attachment replay: %v", err)
 			}
 		})
 	}

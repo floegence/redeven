@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -29,7 +30,6 @@ var ErrLongTextAttachmentRequired = threadstore.ErrLongTextAttachmentRequired
 
 type typedSendOperation struct {
 	done chan struct{}
-	resp SendUserTurnResponse
 	err  error
 }
 
@@ -158,7 +158,10 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		s.typedSendMu.Unlock()
 		select {
 		case <-existing.done:
-			return existing.resp, true, existing.err
+			if existing.err != nil {
+				return SendUserTurnResponse{}, true, existing.err
+			}
+			return s.sendTypedExistingThread(ctx, meta, req, uploadTargetID)
 		case <-ctx.Done():
 			return SendUserTurnResponse{}, true, ctx.Err()
 		}
@@ -168,13 +171,13 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	s.typedSendMu.Unlock()
 	finish := func(resp SendUserTurnResponse, err error) (SendUserTurnResponse, bool, error) {
 		s.typedSendMu.Lock()
-		operation.resp, operation.err = resp, err
+		operation.err = err
 		close(operation.done)
 		delete(s.typedSendOps, opKey)
 		s.typedSendMu.Unlock()
 		return resp, true, err
 	}
-	if existing, found, viewErr := s.typedSendLookup(ctx, req.ThreadID, executionKey); viewErr != nil {
+	if existing, found, viewErr := s.typedSendLookup(ctx, meta, req); viewErr != nil {
 		return finish(SendUserTurnResponse{}, viewErr)
 	} else if found {
 		return finish(existing, nil)
@@ -364,12 +367,24 @@ func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta
 	return r.floretTurnRuntimeContext(), nil
 }
 
-func (s *Service) typedSendLookup(ctx context.Context, threadID, requestID string) (SendUserTurnResponse, bool, error) {
+func (s *Service) typedSendLookup(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, bool, error) {
+	threadID, requestID := strings.TrimSpace(req.ThreadID), strings.TrimSpace(req.ClientRequestID)
 	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return SendUserTurnResponse{}, false, nil
 	}
-	view, err := typed.View(ctx, identity.ThreadID(strings.TrimSpace(threadID)))
+	reader, ok := typed.(flruntime.ThreadSendReader)
+	if !ok {
+		return SendUserTurnResponse{}, false, errors.New("floret send lookup is unavailable")
+	}
+	original, found, err := reader.LookupSend(ctx, flruntime.LookupSendInput{ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey(requestID)})
+	if err != nil || !found {
+		return SendUserTurnResponse{}, false, err
+	}
+	if err := s.validateTypedSendReplay(meta, req.Input, original); err != nil {
+		return SendUserTurnResponse{}, true, err
+	}
+	view, err := typed.View(ctx, identity.ThreadID(threadID))
 	if err != nil {
 		return SendUserTurnResponse{}, false, err
 	}
@@ -389,7 +404,41 @@ func (s *Service) typedSendLookup(ctx context.Context, threadID, requestID strin
 			return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, QueueID: queued.ID, Kind: "queued", Current: view}, true, nil
 		}
 	}
-	return SendUserTurnResponse{}, false, nil
+	// A removed queue item remains an accepted send. Returning the canonical
+	// current view acknowledges transport replay without re-admitting that work.
+	return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, QueueID: "queue:" + requestID, Kind: "queued", Current: view}, true, nil
+}
+
+func (s *Service) validateTypedSendReplay(meta *session.Meta, input RunInput, original flruntime.UserInput) error {
+	var authority *flowerCanonicalReferenceTargetAuthority
+	if flowerContextActionRequiresCanonicalReferenceAuthority(input.ContextAction) {
+		resolved, err := resolveFlowerCanonicalReferenceTargetAuthority(meta.EndpointID, s.ToolTargetPolicy())
+		if err != nil {
+			return err
+		}
+		authority = &resolved
+	}
+	projection, err := floretContextProjectionForInputWithAuthority(input, authority)
+	if err != nil {
+		return err
+	}
+	if len(input.Attachments) != len(original.Attachments) {
+		return ErrTurnIdempotencyConflict
+	}
+	for i, attachment := range input.Attachments {
+		id, err := uploadIDFromFloretResourceRef(original.Attachments[i].ResourceRef)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(attachment.AttachmentID) != id {
+			return ErrTurnIdempotencyConflict
+		}
+	}
+	submittedContext := slices.DeleteFunc(slices.Clone(original.Context), func(item flruntime.MessageContextItem) bool { return item.Kind == "runtime_context" })
+	if floretUserInputText(input) != original.Text || !slices.Equal(projection.References, original.References) || !slices.Equal(projection.Context, submittedContext) {
+		return ErrTurnIdempotencyConflict
+	}
+	return nil
 }
 
 func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *session.Meta, req SubmitRequestUserInputResponseRequest) (SubmitRequestUserInputResponseResponse, error) {

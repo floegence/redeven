@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -92,5 +93,14 @@ func TestQueuedMessageEditAndSendNowReachCanonicalProviderInput(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("edited user input missing from canonical history")
+	}
+	originalRequest := SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "chosen-queue-controls", Input: RunInput{Text: original}}
+	replayed, err := svc.SendUserTurn(t.Context(), meta, originalRequest)
+	if err != nil || replayed.TurnID != string(sent.TurnID) {
+		t.Fatalf("original send replay after promotion: %+v %v", replayed, err)
+	}
+	originalRequest.Input.Text = "Focus on the revised instruction"
+	if _, err := svc.SendUserTurn(t.Context(), meta, originalRequest); !errors.Is(err, ErrTurnIdempotencyConflict) {
+		t.Fatalf("edited content reused the original send identity: %v", err)
 	}
 }
