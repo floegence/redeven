@@ -100,6 +100,22 @@ func ollamaInterleaveDuplicateSend(f *ollamaTaskFixture) {
 	if _, err := f.svc.SendUserTurn(f.ctx, f.meta, conflict); err == nil {
 		f.t.Fatal("conflicting request identity accepted")
 	}
+	mixed := make([]func() error, 8)
+	for i := range mixed {
+		mixed[i] = func() error {
+			input := request
+			if i%2 == 0 {
+				input = conflict
+			}
+			_, err := f.svc.SendUserTurn(f.ctx, f.meta, input)
+			return err
+		}
+	}
+	for i, err := range ollamaConcurrent(mixed...) {
+		if i%2 == 0 && !errors.Is(err, ErrTurnIdempotencyConflict) || i%2 != 0 && err != nil {
+			f.t.Fatalf("mixed replay %d returned another request's outcome: %v", i, err)
+		}
+	}
 	stop := func() error { _, err := f.svc.StopThread(f.ctx, f.meta, f.threadID); return err }
 	for _, err := range ollamaConcurrent(stop, stop, stop) {
 		f.check(err)
@@ -117,6 +133,7 @@ func ollamaInterleaveDuplicateSend(f *ollamaTaskFixture) {
 	f.file("dedupe.txt", "ONCE\n")
 	f.report["duplicate_sends"] = 2
 	f.report["concurrent_stops"] = 3
+	f.report["mixed_concurrent_replays"] = len(mixed)
 }
 
 func ollamaInterleaveApprovalQueue(f *ollamaTaskFixture) {

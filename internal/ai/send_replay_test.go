@@ -82,3 +82,32 @@ func TestConcurrentSendReplayRejectsDifferentContent(t *testing.T) {
 		t.Fatalf("concurrent different input: %v", errs)
 	}
 }
+
+func TestConcurrentConflictingReplayDoesNotRejectIdenticalReplay(t *testing.T) {
+	svc := newRealtimeTestService(t, 0)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "Replay contention", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "same-key", Input: RunInput{Text: "original"}}
+	if _, err := svc.SendUserTurn(t.Context(), meta, request); err != nil {
+		t.Fatal(err)
+	}
+	commands := make([]func() error, 64)
+	for i := range commands {
+		commands[i] = func() error {
+			input := request
+			if i%2 == 0 {
+				input.Input.Text = "conflict"
+			}
+			_, err := svc.SendUserTurn(t.Context(), meta, input)
+			return err
+		}
+	}
+	for i, err := range ollamaConcurrent(commands...) {
+		if i%2 == 0 && !errors.Is(err, ErrTurnIdempotencyConflict) || i%2 != 0 && err != nil {
+			t.Fatalf("replay %d inherited another request's result: %v", i, err)
+		}
+	}
+}

@@ -30,7 +30,6 @@ var ErrLongTextAttachmentRequired = threadstore.ErrLongTextAttachmentRequired
 
 type typedSendOperation struct {
 	done chan struct{}
-	err  error
 }
 
 type SendUserTurnRequest struct {
@@ -153,25 +152,26 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	}
 	executionKey := strings.TrimSpace(req.ClientRequestID)
 	opKey := runThreadKey(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(req.ThreadID)) + "\x00" + executionKey
-	s.typedSendMu.Lock()
-	if existing := s.typedSendOps[opKey]; existing != nil {
+	operation := &typedSendOperation{done: make(chan struct{})}
+	for {
+		s.typedSendMu.Lock()
+		existing := s.typedSendOps[opKey]
+		if existing == nil {
+			s.typedSendOps[opKey] = operation
+			s.typedSendMu.Unlock()
+			break
+		}
 		s.typedSendMu.Unlock()
 		select {
 		case <-existing.done:
-			if existing.err != nil {
-				return SendUserTurnResponse{}, true, existing.err
-			}
-			return s.sendTypedExistingThread(ctx, meta, req, uploadTargetID)
+			// Each request validates its own input after the preceding
+			// admission settles, including when that request was rejected.
 		case <-ctx.Done():
 			return SendUserTurnResponse{}, true, ctx.Err()
 		}
 	}
-	operation := &typedSendOperation{done: make(chan struct{})}
-	s.typedSendOps[opKey] = operation
-	s.typedSendMu.Unlock()
 	finish := func(resp SendUserTurnResponse, err error) (SendUserTurnResponse, bool, error) {
 		s.typedSendMu.Lock()
-		operation.err = err
 		close(operation.done)
 		delete(s.typedSendOps, opKey)
 		s.typedSendMu.Unlock()
