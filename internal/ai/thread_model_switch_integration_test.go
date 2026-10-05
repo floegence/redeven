@@ -82,6 +82,9 @@ func TestThreadModelSwitchUsesPersistedModelAcrossTurnsAndRestart(t *testing.T) 
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionFullAccess)); err != nil {
+		t.Fatalf("SetThreadPermissionType(initial full_access): %v", err)
+	}
 	sendAndWaitForModelSwitch(t, svc, meta, thread.ThreadID, "flash input", "deepseek/deepseek-v4-flash")
 
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "deepseek/deepseek-v4-pro"); err != nil {

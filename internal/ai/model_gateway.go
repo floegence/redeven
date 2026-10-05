@@ -1487,23 +1487,14 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 				}
 			}
 			content := strings.TrimSpace(textBuf.String())
-			if len(toolCalls) == 0 {
-				if content == "" && (!replayReasoning || reasoningBuf.Len() == 0) {
-					continue
-				}
-				assistant := openai.ChatCompletionAssistantMessageParam{}
-				if content != "" {
-					assistant.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(content)}
-				}
-				if replayReasoning && reasoningBuf.Len() > 0 {
-					assistant.SetExtraFields(map[string]any{replayField: reasoningBuf.String()})
-				}
-				out = append(out, openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant})
+			if len(toolCalls) == 0 && content == "" && (!replayReasoning || reasoningBuf.Len() == 0) {
 				continue
 			}
-			assistant := openai.ChatCompletionAssistantMessageParam{ToolCalls: toolCalls}
-			if content != "" {
-				assistant.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(content)}
+			// Reasoning-only continuations still need a string content field on
+			// OpenAI-compatible endpoints such as Ollama.
+			assistant := openai.ChatCompletionAssistantMessageParam{
+				ToolCalls: toolCalls,
+				Content:   openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(content)},
 			}
 			if replayReasoning && reasoningBuf.Len() > 0 {
 				assistant.SetExtraFields(map[string]any{replayField: reasoningBuf.String()})

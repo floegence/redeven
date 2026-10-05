@@ -1,16 +1,55 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/openai/openai-go"
 )
+
+func TestE2E_FlowerOllamaReasoningOnlyContinuation(t *testing.T) {
+	if os.Getenv("REDEVEN_FLOWER_OLLAMA_TASK_E2E") != "1" {
+		t.Skip("set REDEVEN_FLOWER_OLLAMA_TASK_E2E=1 to qualify selected-model reasoning continuation")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	profile, model, _, key := loadOllamaQualificationProfile(t, ctx)
+	gateway, err := newProviderAdapter(profile.Type, profile.BaseURL, key, profile.StrictToolSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := ModelGatewayRequest{
+		Model:            model.EffectiveWireModelName(),
+		Messages:         []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "Compute 17 times 19. Think carefully, then answer with the number only."}}}},
+		ProviderControls: ProviderControls{ReasoningCapability: model.ReasoningCapability},
+		Budgets:          TurnBudgets{MaxOutputToken: 8},
+	}
+	first, err := gateway.StreamTurn(ctx, request, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Reasoning == "" || first.Text != "" || first.FinishReason != "length" {
+		t.Fatalf("expected actual reasoning-only truncation: %+v", first)
+	}
+	request.Messages = append(request.Messages, Message{Role: "assistant", Content: []ContentPart{{Type: "reasoning", Text: first.Reasoning}}})
+	request.Messages = append(request.Messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Continue and give the number only."}}})
+	request.Budgets.MaxOutputToken = 512
+	second, err := gateway.StreamTurn(ctx, request, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.FinishReason != "stop" || strings.TrimSpace(second.Text) != "323" {
+		t.Fatalf("reasoning continuation result=%+v", second)
+	}
+	t.Logf("model=%s requests=2 first_finish=%s reasoning_chars=%d second_finish=%s answer=%s", request.Model, first.FinishReason, len(first.Reasoning), second.FinishReason, second.Text)
+}
 
 func TestOllamaReasoningRequestUsesExactModelControls(t *testing.T) {
 	for _, tc := range []struct {

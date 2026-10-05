@@ -75,6 +75,15 @@ func TestBuildLayeredSystemPromptRefreshesToolAvailabilityAfterPermissionChanges
 		assertPromptContains(t, prompt, "submit the intended tool call: the runtime asks the user before executing its effect")
 		assertPromptContains(t, prompt, "Pending or unrequested approval is not denial")
 	}
+	for _, permission := range []FlowerPermissionType{FlowerPermissionFullAccess, FlowerPermissionReadonly, FlowerPermissionApprovalRequired} {
+		tools := []ToolDef{{Name: "read_file"}}
+		if permission != FlowerPermissionReadonly {
+			tools = append(tools, ToolDef{Name: "terminal.exec"})
+		}
+		prompt := buildPromptForToolSetTest(t, permission, tools)
+		assertPromptContains(t, prompt, "Current permission mode for this request: "+string(permission))
+		assertPromptContains(t, prompt, "Available tools for this request: "+joinToolNames(tools))
+	}
 }
 
 func TestBuildLayeredSystemPrompt_ExcludesOKFFromExternalResearch(t *testing.T) {

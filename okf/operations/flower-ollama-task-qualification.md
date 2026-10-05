@@ -49,6 +49,10 @@ their own services and tools. Source configuration and credentials stay unchange
 - Stop the parent while a child is running, wait for both canonical cancellations,
   prevent the delayed child effect, and accept new parent input.
 
+A focused gateway case also truncates actual model reasoning before visible
+text, then replays it into a successful continuation. It checks the exact Chat
+history shape needed by Ollama without fabricating provider output.
+
 ## Interleaved operations
 
 The additional interleaving cases combine commands at observed live boundaries:
@@ -130,5 +134,6 @@ natural network reliability.
 - `redeven:scripts/check_flower_tasks_ollama.sh` - Explicit published-dependency real-model runner.
 - `redeven:internal/ai/run_e2e_ollama_tasks_test.go` - Model-driven tasks, effects, fault boundaries, product commands, and acceptance evidence.
 - `redeven:internal/ai/run_e2e_ollama_interleavings_test.go` - Concurrent commands, stale responses, restart, isolation, and compaction interleavings.
+- `redeven:internal/ai/model_gateway_ollama_reasoning_test.go` - Actual reasoning-only truncation and gateway continuation.
 - `redeven:internal/ai/run_e2e_ollama_context_test.go` - Shared selected-profile discovery and transparent provider recorder.
 - `redeven:internal/ai/stop_thread.go` - Thin product mapping to upstream graceful subtree cancellation.
