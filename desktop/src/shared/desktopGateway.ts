@@ -199,6 +199,7 @@ export type DesktopGatewayDiagnosis = Readonly<{
 }>;
 
 export type DesktopGatewaySource = Readonly<{
+  identity_fingerprint?: string;
   gateway_id: string;
   display_name: string;
   local_enabled: boolean;

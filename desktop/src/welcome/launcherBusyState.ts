@@ -47,6 +47,8 @@ export type BusyAction =
   | 'refresh_gateway_catalog'
   | 'delete_gateway'
   | 'upsert_environment_registration'
+  | 'set_environment_access_route'
+  | 'check_gateway_environment_profile'
   | 'delete_environment_registration'
   | 'set_provider_environment_pinned'
   | 'set_environment_registration_pinned'

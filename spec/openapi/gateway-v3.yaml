@@ -199,6 +199,37 @@ paths:
         '101': {description: Binary byte stream opened.}
         '401': {description: Gateway session expired or revoked.}
         '502': {description: Gateway target unavailable.}
+  /gateway/v3/env-profiles/check:
+    post:
+      tags: [Profiles]
+      operationId: checkGatewayEnvironmentProfile
+      summary: Verify an unsaved Runtime URL from the Gateway network.
+      description: Requires a paired client with env_profile_write and the Gateway enable-profile-write policy, independently of URL or Desktop bridge transport. Uses the profile target and DNS policy, never follows redirects, forwards no credentials, publishes no profile and creates no session.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+          GatewayManagedBridgeToken: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvProfileCheckRequest'
+      responses:
+        '200':
+          description: Target health and optional nonce-bound Runtime identity proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvProfileCheckEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
   /gateway/v3/env-profiles/upsert:
     post:
       tags: [Profiles]
@@ -294,7 +325,7 @@ components:
   responses:
     GatewayError:
       description: Gateway error envelope.
-      x-redeven-http-statuses: [400, 401, 403, 404, 423, 500, 501]
+      x-redeven-http-statuses: [400, 401, 403, 404, 423, 500, 501, 502]
       content:
         application/json:
           schema:
@@ -322,6 +353,7 @@ components:
         - NOT_FOUND
         - CAPABILITY_UNSUPPORTED
         - UNAVAILABLE
+        - TARGET_UNAVAILABLE
         - NOT_IMPLEMENTED
     GatewayErrorShape:
       type: object
@@ -810,6 +842,57 @@ components:
           type: string
         connection_kind:
           type: string
+    RuntimeAccessIdentityProof:
+      type: object
+      required: [version, challenge, public_key, signature]
+      additionalProperties: false
+      description: Possession proof for display association over the selected transport, never a login or management grant.
+      properties:
+        version:
+          type: string
+          const: redeven-runtime-access-v1
+        challenge:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+        public_key:
+          type: string
+          description: Canonical unpadded base64url Ed25519 public key (32 bytes).
+        signature:
+          type: string
+          description: Canonical unpadded base64url Ed25519 signature of UTF-8 version, LF, challenge.
+    EnvProfileCheckRequest:
+      type: object
+      required: [protocol_version, target_url, client_nonce]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        target_url:
+          type: string
+          format: uri
+        client_nonce:
+          type: string
+          description: Canonical unpadded base64url 32-byte random identity challenge.
+          pattern: '^[A-Za-z0-9_-]{43}$'
+    EnvProfileCheckResponse:
+      type: object
+      required: [protocol_version]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        access_identity:
+          $ref: '#/components/schemas/RuntimeAccessIdentityProof'
+    EnvProfileCheckEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/EnvProfileCheckResponse'
     EnvProfileUpsertRequest:
       type: object
       required: [protocol_version, profile]

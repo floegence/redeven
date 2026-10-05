@@ -200,6 +200,7 @@ export type EnvironmentActionIntent =
   | 'unavailable';
 
 export type EnvironmentActionModel = Readonly<{
+  access_route_id?: string;
   intent: EnvironmentActionIntent;
   label: string;
   label_key?: DesktopTranslationKey;

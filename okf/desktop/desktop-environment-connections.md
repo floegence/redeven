@@ -71,6 +71,14 @@ Managed settings use the selected Runtime's private control channel, or its auth
 
 [Environment settings](desktop-environment-settings.md) owns section layout, draft/session identity, validation, and committed rebinding. [Local UI certificates](../security/local-ui-certificates.md) owns explicit HTTPS, certificate validity and client trust, maintenance confirmation, and restart blocking. [Local UI network exposure](../security/local-ui-network-exposure.md) owns bind, public-address, and password authority. Missing saved protocols retain HTTP; explicit HTTPS is preserved. Native settings remain readable for older Runtimes, while unsupported management requires an update or stop before saving. Failed writes preserve the prior password verifier and report failure rather than claiming success.
 
+# Verified access routes
+
+[Verified Environment access routes](desktop-environment-access.md) owns the
+nonce-based Runtime identity observation and explicit Desktop default selection.
+These observations do not grant management, replace live readiness, or change
+Cloud binding. The existing Env card layout and lifecycle owner are preserved;
+additional access choices live in its menu and connection settings.
+
 # Evidence
 
 - `redeven:desktop/src/main/desktopWelcomeRuntimePoller.test.ts` - Verifies five-second real probes with a pending Cloud request, per-target deduplication, and disabled automatic probing.

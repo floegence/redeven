@@ -128,6 +128,7 @@ type GatewayRouteTemplate =
   | 'gateway/v3/catalog'
   | 'gateway/v3/open-session'
   | 'gateway/v3/close-session'
+  | 'gateway/v3/env-profiles/check'
   | 'gateway/v3/env-profiles/upsert'
   | 'gateway/v3/env-profiles/delete';
 
@@ -954,6 +955,15 @@ export class GatewayURLClient {
     return response;
   }
 
+  async checkEnvironmentProfile(record: GatewayRecord, targetURL: string, clientNonce: string, options: GatewayRequestOptions = {}): Promise<unknown> {
+    const data = await requestGatewayJSON(record, 'gateway/v3/env-profiles/check', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION, target_url: targetURL, client_nonce: clientNonce,
+    }, { secretStore: this.secretStore, ...options });
+    const response = data.data as { protocol_version?: string; access_identity?: unknown };
+    if (response?.protocol_version !== GATEWAY_PROTOCOL_VERSION) throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol mismatch.');
+    return response.access_identity;
+  }
+
   async upsertEnvironmentProfile(
     record: GatewayRecord,
     request: GatewayEnvProfileUpsertRequest,
@@ -1082,6 +1092,15 @@ export class GatewayBridgeClient {
       artifact: response.connect_artifact,
     });
     return response;
+  }
+
+  async checkEnvironmentProfile(record: GatewayRecord, targetURL: string, clientNonce: string, options: GatewayRequestOptions = {}): Promise<unknown> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/env-profiles/check', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION, target_url: targetURL, client_nonce: clientNonce,
+    }, { secretStore: this.secretStore, ...options });
+    const response = data.data as { protocol_version?: string; access_identity?: unknown };
+    if (response?.protocol_version !== GATEWAY_PROTOCOL_VERSION) throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol mismatch.');
+    return response.access_identity;
   }
 
   async upsertEnvironmentProfile(

@@ -7,6 +7,7 @@ export type EnvironmentLibraryDisplayGroup = Readonly<{
   provider_entry?: DesktopEnvironmentEntry;
   member_entries: readonly DesktopEnvironmentEntry[];
   member_ids: readonly string[];
+  owner_ids?: readonly string[];
   search_text: string;
   pinned: boolean;
   cloud_source_id?: string;
@@ -69,7 +70,22 @@ export function buildEnvironmentLibraryDisplayGroups(
       cloud_source_id: environmentCloudSourceID(provider ?? primary),
     });
   }
-  return groups;
+  // Cloud owners retain their established tabs. Access routes only extend the
+  // original group's menu/settings; they never become additional owner tabs.
+  const byID = new Map(groups.map(group => [group.id, group]));
+  const merged = new Set<string>();
+  for (const group of groups) {
+    const ownerID = group.primary_entry.access_group_id;
+    if (!ownerID || ownerID === group.id || group.primary_entry.kind !== 'gateway_environment' || !group.primary_entry.verified_runtime_identity) continue;
+    const owner = byID.get(ownerID);
+    if (!owner || owner.primary_entry.verified_runtime_identity !== group.primary_entry.verified_runtime_identity) continue;
+    byID.set(ownerID, { ...owner, owner_ids: owner.owner_ids ?? owner.member_ids,
+      member_entries: [...owner.member_entries, ...group.member_entries],
+      member_ids: [...owner.member_ids, ...group.member_ids],
+      search_text: `${owner.search_text}\n${group.search_text}`, pinned: owner.pinned || group.pinned });
+    merged.add(group.id);
+  }
+  return groups.filter(group => !merged.has(group.id)).map(group => byID.get(group.id)!);
 }
 
 export function splitPinnedEnvironmentGroupIDs(groups: readonly EnvironmentLibraryDisplayGroup[]) {

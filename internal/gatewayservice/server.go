@@ -140,6 +140,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /gateway/v3/open-session", s.handleOpenSession)
 	mux.HandleFunc("POST /gateway/v3/close-session", s.handleCloseSession)
 	mux.HandleFunc("POST /gateway/v3/env-profiles/upsert", s.handleEnvProfileUpsert)
+	mux.HandleFunc("POST /gateway/v3/env-profiles/check", s.handleEnvProfileCheck)
 	mux.HandleFunc("POST /gateway/v3/env-profiles/delete", s.handleEnvProfileDelete)
 	mux.Handle("/gateway/v3/access/", http.HandlerFunc(s.handleProfileAccess))
 	return mux

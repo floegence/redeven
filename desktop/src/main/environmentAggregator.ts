@@ -157,6 +157,7 @@ function buildGatewayEnvironmentEntry(
     local_ui_url: '',
     secondary_text: environment.origin.label || gatewayLabel,
     gateway_id: gateway.gateway_id,
+    gateway_identity_fingerprint: gateway.identity_fingerprint,
     gateway_label: gatewayLabel,
     gateway_env_id: environment.gateway_env_id,
     gateway_status: gateway.status,

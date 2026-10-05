@@ -267,3 +267,23 @@
 @media (pointer: coarse) {
   .environment-connection-field input, .environment-connection-field select { font-size: 16px; min-height: 44px; }
 }
+
+/* Access choices live inside the existing connection form, not on the Env card. */
+.redeven-access-settings {
+  min-width: 0;
+  margin: 0 0 1rem;
+  padding: 0 0 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+}
+.redeven-access-settings legend { font-size: var(--floe-type-control); font-weight: 500; padding: 0; }
+.redeven-access-settings > p { color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.6; margin: 0.5rem 0 0.75rem; }
+.redeven-access-settings__routes { display: grid; gap: 0.5rem; margin-bottom: 0.75rem; }
+.redeven-access-choice { display: flex; align-items: start; gap: 0.625rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem; cursor: pointer; transition: border-color 120ms, background-color 120ms; }
+.redeven-access-choice[data-selected="true"] { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 4%, var(--background)); }
+.redeven-access-choice input { margin-top: 0.2rem; flex-shrink: 0; accent-color: var(--primary); cursor: pointer; }
+.redeven-access-choice span { min-width: 0; display: grid; gap: 0.25rem; }
+.redeven-access-choice strong { font-size: 0.75rem; font-weight: 500; overflow-wrap: anywhere; }
+.redeven-access-choice small { color: var(--muted-foreground); font-size: 0.6875rem; line-height: 1.6; }
+.redeven-access-settings:disabled .redeven-access-choice { cursor: not-allowed; opacity: 0.65; }
+.redeven-access-verification { border-left: 2px solid var(--success); padding: 0.375rem 0.625rem; font-size: 0.75rem; line-height: 1.6; color: var(--muted-foreground); }

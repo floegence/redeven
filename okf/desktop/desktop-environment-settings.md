@@ -210,6 +210,14 @@ operations are owned by [Local UI certificates](../security/local-ui-certificate
 SSH field and secret details are owned by
 [SSH environment settings](desktop-ssh-environment-settings.md).
 
+# Verified access routes
+
+[Verified Environment access routes](desktop-environment-access.md) owns the
+nonce-based Runtime identity observation and explicit Desktop default selection.
+These observations do not grant management, replace live readiness, or change
+Cloud binding. The existing Env card layout and lifecycle owner are preserved;
+additional access choices live in its menu and connection settings.
+
 # Evidence
 
 - `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Clicks inside tab and action padding, keyboard switching, multilingual narrow layouts and touch target dimensions.

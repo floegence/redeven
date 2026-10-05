@@ -107,6 +107,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Desktop
 
+- [Verified Environment access routes](desktop/desktop-environment-access.md) - Associate verified Gateway paths, select explicit defaults and preserve independent Runtime and Cloud authority.
+
 - [Host application component cache](desktop/host-application-component-cache.md) - Reuse graphical component downloads across devices and distinguish cached bytes from network and upload progress.
 - [Desktop development bundle retention](desktop/desktop-development-bundles.md) - Remove obsolete development packages while retaining current, recent, and running-process bundles.
 - [Desktop Web Service browser window](desktop/web-service-browser-window.md) - Preserve trusted chrome, isolated application state, exact navigation authority, and recoverable connection failures.

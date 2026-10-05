@@ -1,3 +1,5 @@
+import { EnvironmentAccessSettings } from './EnvironmentAccessSettings';
+import { environmentAccessRouteLabel } from './environmentAccessPresentation';
 import {
   StableText,
   Button,
@@ -2693,6 +2695,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [runtimeContainerOptionsKey, setRuntimeContainerOptionsKey] = createSignal('');
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const [deleteReplacement, setDeleteReplacement] = createSignal('');
+  createEffect(on(deleteTarget, () => setDeleteReplacement('')));
+  const deleteReplacementRoutes = () => deleteTarget()?.access_routes?.filter(route => route.environment_id !== deleteTarget()?.id) ?? [];
+  const deleteNeedsReplacement = () => !!deleteTarget()?.access_routes?.some(route => route.environment_id === deleteTarget()?.id
+    && route.id === deleteTarget()?.default_access_route_id) && deleteReplacementRoutes().length > 0;
   let deletedGatewayFocus: HTMLElement | undefined;
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
@@ -3700,7 +3707,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function openSettingsSurface(environmentID = snapshot().environments.find(entry => entry.registration_ref?.kind === 'local_environment')?.id ?? ''): void {
     const environment = snapshot().environments.find(entry => entry.id === environmentID);
-    if (!environment || !environment.can_edit) {
+    if (!environment || (!environment.can_edit && (environment.access_routes?.length ?? 0) < 2 && !environment.default_access_route_missing)) {
       showActionToast(i18n().t('environmentCenter.environmentRegistrationUnavailable'), 'error');
       return;
     }
@@ -3824,6 +3831,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function createEnvironmentConnectionDraft(environment: DesktopEnvironmentEntry): ConnectionDialogState {
     const registrationRef = environment.registration_ref;
+    if (!environment.can_edit) return null;
     if (!registrationRef || registrationRef.kind === 'local_environment') return null;
     if (registrationRef.kind === 'runtime_target') {
       if (environment.managed_runtime_host_access?.kind === 'wsl_host') return null;
@@ -4904,6 +4912,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     attempt?: EnvironmentLifecycleAttempt,
     bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
   ): Promise<boolean> {
+    if (action.access_route_id && (action.intent === 'open' || action.intent === 'focus')) {
+      const route = environment.access_routes?.find(candidate => candidate.id === action.access_route_id);
+      const owner = route && snapshot().environments.find(candidate => candidate.id === route.environment_id);
+      if (!owner || !route) return false;
+      if (owner.kind === 'gateway_environment') return openGatewayEnvironment(owner, errorTarget === 'settings' ? 'connect' : errorTarget,
+        route.kind === 'gateway_proxy' ? 'gateway_proxy' : 'direct_url', environment.id);
+      return triggerLocalEnvironmentAction(owner, { ...action, access_route_id: undefined }, errorTarget, attempt, bindOperation);
+    }
     switch (action.intent) {
       case 'open':
       case 'focus':
@@ -5874,6 +5890,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' = 'connect',
     accessMode?: 'direct_url' | 'gateway_proxy',
+    presentationEnvironmentID?: string,
   ): Promise<boolean> {
     if (!accessMode && environment.is_open && environment.open_session_key) {
       return focusEnvironmentWindow(environment.open_session_key, errorTarget);
@@ -5886,7 +5903,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherAction({
       kind: 'open_gateway_environment',
-      environment_id: environment.id,
+      environment_id: presentationEnvironmentID ?? environment.access_group_id ?? environment.id,
       gateway_id: gatewayID,
       gateway_env_id: gatewayEnvID,
       label: environment.label,
@@ -6008,6 +6025,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         snapshot().environments.find(entry => entry.id === environment.id) ?? environment, null);
     }
   }
+
+  async function saveDefaultAccessRoute(environmentID: string, routeID: string): Promise<boolean> {
+    const result = await performLauncherAction({ kind: 'set_environment_access_route', environment_id: environmentID, route_id: routeID }, 'dialog');
+    if (!result) return false;
+    await refreshSnapshot();
+    const environment = snapshot().environments.find(entry => entry.id === environmentID);
+    if (environment && settingsSession()?.environment.id === environmentID) settingsController.update({ environment });
+    return true;
+  }
+  const accessSettings = () => <Show when={settingsPresentation()?.environment}>{environment => (
+    <EnvironmentAccessSettings environment={snapshot().environments.find(entry => entry.id === environment().id) ?? environment()} i18n={i18n()} save={saveDefaultAccessRoute} />
+  )}</Show>;
 
   async function saveConnectionFromDialog(): Promise<void> {
     const state = connectionDialogState();
@@ -6157,12 +6186,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         throw new Error(i18n().t('environmentCenter.environmentRegistrationUnavailable'));
       }
       if (registrationRef.kind === 'gateway_environment') {
-        const result = await performLauncherActionSilently({ kind: 'delete_environment_registration', registration_ref: registrationRef });
+        const result = await performLauncherActionSilently({ kind: 'delete_environment_registration', registration_ref: registrationRef, ...(deleteNeedsReplacement() ? { replacement_route_id: deleteReplacement() } : {}) });
         if (deleteTarget() !== target) return;
         if (!result.ok) { setDeleteGatewayRecovery(profileRecovery(registrationRef.gateway_id, result)); return; }
         deleteResult = result;
       } else {
-        deleteResult = await props.runtime.launcher.performAction({ kind: 'delete_environment_registration', registration_ref: registrationRef });
+        deleteResult = await props.runtime.launcher.performAction({ kind: 'delete_environment_registration', registration_ref: registrationRef, ...(deleteNeedsReplacement() ? { replacement_route_id: deleteReplacement() } : {}) });
       }
       if (!deleteResult || !deleteResult.ok || (deleteResult.outcome !== 'deleted_environment' && deleteResult.outcome !== 'deleted_gateway_environment')) {
         throw new Error(deleteResult && !deleteResult.ok ? deleteResult.message : i18n().t('environmentCenter.environmentRegistrationUnavailable'));
@@ -6343,6 +6372,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     switchKind: switchConnectionDialogKind, switchBootstrapStrategy: switchSSHBootstrapStrategy,
     removeSSHPassword: removeSSHPasswordFromConnectionDialog, clearFieldErrors() { setConnectionDialogFieldErrors({}); },
     onSave: saveConnectionFromDialog,
+    async checkGatewayProfile(gatewayID, targetURL) {
+      const opening = settingsSession();
+      const draft = connectionDialogState();
+      setConnectionGatewayRecovery(null);
+      const result = await performLauncherActionSilently({ kind: 'check_gateway_environment_profile', gateway_id: gatewayID, target_url: targetURL });
+      if (opening ? !settingsController.current(opening) : connectionDialogState() !== draft) return null;
+      if (!result.ok) { setConnectionGatewayRecovery(profileRecovery(gatewayID, result)); return null; }
+      return result.gateway_profile_check ?? null;
+    },
   };
 
   return (
@@ -6699,6 +6737,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   </Button>
                 </Show>
               </>}>
+                {accessSettings()}
+                <Show when={connectionDialogError()}><p role="alert" class="text-xs text-destructive">{connectionDialogError()}</p></Show>
+                <Show when={settingsPresentation()?.environment.kind === 'gateway_environment'}>
+                  <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n().t('gatewayAccess.writePermission')}</p>
+                </Show>
+                <Show when={settingsPresentation()?.environment.registration_ref?.kind !== 'local_environment' && settingsPresentation()?.environment.kind !== 'gateway_environment'}>
                 <Show when={settingsPresentation()?.environment.managed_runtime_host_access?.kind === 'wsl_host'} fallback={(
                   <div class="space-y-4">
                     <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n().t('settings.cloudManaged')}</p>
@@ -6723,16 +6767,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
                   </div>
                 </Show>
+                </Show>
               </EnvironmentSettingsPanel>
             )}>
               <div class="environment-settings-panel" inert={!settingsSession()}>
                 <Show when={connectionSettingsDirty()}><div class="px-5 pt-3"><Button size="sm" variant="ghost" disabled={Boolean(settingsSession()?.saving)} onClick={() => { settingsController.resetConnection(); setConnectionDialogFieldErrors({}); setConnectionDialogError(''); }}>{i18n().t('settings.discardConnectionChanges')}</Button></div></Show>
                 <Show when={connectionSaveBlocked()}><p role="status" class="px-5 pt-3 text-xs text-warning">{i18n().t('settings.resolveAccessDraft')}</p></Show>
                 <Show when={settingsPresentation()?.connection?.connection_kind === 'ssh_environment'} fallback={
-                  <ConnectionDialogForm {...connectionFormProps} state={settingsPresentation()?.connection ?? null}
+                  <ConnectionDialogForm {...connectionFormProps} beforeFields={accessSettings()} state={settingsPresentation()?.connection ?? null}
                     saveBlocked={connectionSaveBlocked() || !connectionSettingsDirty() || Boolean(settingsSession()?.saving)} />
                 }>
-                  <SSHEnvironmentSettingsForm open={Boolean(settingsSession())} i18n={i18n()}
+                  <SSHEnvironmentSettingsForm beforeFields={accessSettings()} open={Boolean(settingsSession())} i18n={i18n()}
                     state={settingsPresentation()!.connection as SSHConnectionDialogState}
                     baseline={settingsPresentation()!.connection_baseline as SSHConnectionDialogState}
                     sshConfigHosts={sshConfigHosts()} sshConfigHostsLoading={sshConfigHostsLoading()}
@@ -6899,12 +6944,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <Button variant="ghost" disabled={busyStateMatchesAction(busyState(), 'delete_environment')}
             onClick={() => { setDeleteTarget(null); setDeleteGatewayRecovery(null); }}>{i18n().t('common.cancel')}</Button>
           <Button variant="destructive" loading={busyStateMatchesAction(busyState(), 'delete_environment')}
+            disabled={deleteNeedsReplacement() && !deleteReplacementRoutes().some(route => route.id === deleteReplacement())}
             onClick={() => void deleteEnvironment()}>
             {deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentConfirm') : i18n().t('confirm.removeEnvironmentConfirm')}
           </Button>
         </>}
       >
         <div class="space-y-2">
+          <Show when={deleteNeedsReplacement()}>
+            <label class="environment-connection-field">
+              <span>{i18n().t('gatewayAccess.removeDefaultHint')}</span>
+              <select value={deleteReplacement()} onChange={event => setDeleteReplacement(event.currentTarget.value)}>
+                <option value="">{i18n().t('gatewayAccess.chooseReplacement')}</option>
+                <For each={deleteReplacementRoutes()}>{route => <option value={route.id}>{environmentAccessRouteLabel(route, i18n())}</option>}</For>
+              </select>
+            </label>
+          </Show>
           <p class="text-[length:var(--floe-type-body)]">
             {deleteTargetIsGatewayEnvironment()
               ? i18n().t('confirm.deleteGatewayEnvironmentQuestion', {
@@ -12153,11 +12208,11 @@ function GatewaySourceCard(props: Readonly<{
       </Show>
       <EnvironmentSettingsReveal open={environmentsOpen() && row().environment_count > 0}>
         <div id={environmentListID} class="redeven-gateway-card__environments">
-          <GatewayEnvironmentList i18n={props.i18n} environments={props.gatewayEntries}
+          <GatewayEnvironmentList i18n={props.i18n} environments={props.gatewayEntries} progress={props.actionProgress} revealProgress={() => props.onActionPopoverOpenChange(true)}
             disabled={primaryActionRunning() || props.gateway.local_enabled === false}
             edit={props.editEnvironment} remove={props.deleteEnvironment}
             open={(environment, mode) => runForegroundRequest({ kind: 'open_gateway_environment',
-              environment_id: environment.id, gateway_id: props.gateway.gateway_id,
+              environment_id: environment.access_group_id ?? environment.id, gateway_id: props.gateway.gateway_id,
               gateway_env_id: environment.gateway_env_id ?? '', label: environment.label, access_mode: mode })} />
         </div>
       </EnvironmentSettingsReveal>
@@ -13338,6 +13393,7 @@ type ConnectionDialogProps = Readonly<{
   removeSSHPassword: () => void;
   clearFieldErrors: () => void;
   onSave: () => Promise<void>;
+  checkGatewayProfile: (gatewayID: string, targetURL: string) => Promise<DesktopLauncherActionSuccess['gateway_profile_check'] | null>;
   saveBlocked?: boolean;
 }>;
 
@@ -13427,6 +13483,22 @@ function ConnectionDialog(props: ConnectionDialogProps) {
 }
 
 function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JSX.Element }) {
+  const [check, setCheck] = createSignal<{ key: string; result: NonNullable<DesktopLauncherActionSuccess['gateway_profile_check']> }>();
+  const [checking, setChecking] = createSignal(false);
+  const checkKey = () => props.state?.connection_kind === 'gateway_url_profile'
+    ? JSON.stringify([props.state.mode, props.state.environment_id, props.state.gateway_id, props.state.target_url]) : '';
+  const initialKey = checkKey();
+  const checked = () => !!check() && check()!.key === checkKey();
+  const requiresCheck = () => props.state?.connection_kind === 'gateway_url_profile' && (props.state.mode === 'create' || checkKey() !== initialKey);
+  const verifyProfile = async () => {
+    const state = props.state;
+    if (state?.connection_kind !== 'gateway_url_profile') return;
+    const key = checkKey(); setChecking(true); setCheck(undefined);
+    try {
+      const result = await props.checkGatewayProfile(state.gateway_id, state.target_url);
+      if (result && checkKey() === key) setCheck({ key, result });
+    } finally { setChecking(false); }
+  };
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
   const isSSHBackedKind = createMemo(() => connectionKind() === 'ssh_container_runtime');
   const isContainerKind = createMemo(() => connectionKind() === 'local_container_runtime' || connectionKind() === 'ssh_container_runtime');
@@ -13437,10 +13509,16 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
             {props.i18n.t('common.cancel')}
           </Button>
+          <Show when={props.state?.connection_kind === 'gateway_url_profile'}>
+            <Button size="sm" variant="outline" disabled={checking() || !props.state?.label.trim() || (props.state?.connection_kind === 'gateway_url_profile' && !props.state.target_url.trim())}
+              data-floe-progress-shimmer={checking() ? 'surface' : undefined} aria-busy={checking()} onClick={() => void verifyProfile()}>
+              <StableText reserve={[props.i18n.t('gatewayAccess.verifyingConnection'), props.i18n.t('gatewayAccess.verifyConnection')]}>{props.i18n.t(checking() ? 'gatewayAccess.verifyingConnection' : 'gatewayAccess.verifyConnection')}</StableText>
+            </Button>
+          </Show>
           <Button
             size="sm"
             variant="default"
-            disabled={props.saveBlocked || (props.state?.connection_kind === 'gateway_url_profile' && props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action)}
+            disabled={props.saveBlocked || checking() || (requiresCheck() && !checked()) || (props.state?.connection_kind === 'gateway_url_profile' && props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action)}
             loading={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
             onClick={() => {
               void props.onSave();
@@ -13523,22 +13601,14 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                       spellcheck={false}
                       autofocus={props.state?.mode === 'create'}
                     />
-                    <p class="text-[11px] leading-5 text-muted-foreground">{props.i18n.t('connectionDialog.gatewayEnvironmentRouteUrlHelp')}</p>
+                    <p class="text-[11px] leading-5 text-muted-foreground">{props.i18n.t('gatewayAccess.profileRouteHint')}</p>
+                    <Show when={checked()}><p class="redeven-access-verification" role="status">
+                      {check()!.result.matched_environment_label ? props.i18n.t('gatewayAccess.verificationMatched', { label: check()!.result.matched_environment_label! })
+                        : props.i18n.t(check()!.result.identity_verified ? 'gatewayAccess.verificationNew' : 'gatewayAccess.verificationUnknown')}
+                    </p></Show>
                     <Show when={props.fieldErrors.target_url}>
                       <div class="text-[11px] text-destructive">{props.fieldErrors.target_url}</div>
                     </Show>
-                  </div>
-                  <div class="environment-connection-field">
-                    <label for="gateway-environment-access-mode" class="block text-xs font-medium text-foreground">
-                      {props.i18n.t('gatewayAccess.mode')}
-                    </label>
-                    <SegmentedControl id="gateway-environment-access-mode" aria-label={props.i18n.t('gatewayAccess.mode')}
-                      value={props.state?.connection_kind === 'gateway_url_profile' ? props.state.access_mode : 'gateway_proxy'}
-                      onChange={value => props.updateField('access_mode', value)} size="sm"
-                      options={[
-                        { value: 'gateway_proxy', label: props.i18n.t('gatewayAccess.proxy') },
-                        { value: 'direct_url', label: props.i18n.t('gatewayAccess.direct') },
-                      ]} />
                   </div>
                   <div class="environment-connection-field">
                     <label for="gateway-environment-origin-label" class="block text-xs font-medium text-foreground">

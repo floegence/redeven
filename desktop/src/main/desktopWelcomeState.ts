@@ -1,3 +1,4 @@
+import { decorateEnvironmentAccess } from './environmentAccess';
 import { reportedRuntimeURLs } from '../shared/desktopEnvironmentConnection';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import {
@@ -1912,7 +1913,7 @@ export function buildDesktopWelcomeSnapshot(
     entry_reason: args.entryReason ?? 'app_launch',
     close_action: openSessions.length > 0 ? 'close_launcher' : 'quit',
     open_windows: buildOpenEnvironmentWindows(openSessions),
-    environments,
+    environments: decorateEnvironmentAccess(environments, preferences),
     gateway_sources: gatewaySources,
     redeven_cloud_origins: redevenCloudAllowedOrigins(redevenCloudOriginPolicy),
     control_planes: controlPlanes,

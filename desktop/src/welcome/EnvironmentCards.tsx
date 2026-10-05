@@ -1,3 +1,4 @@
+import { environmentAccessPresentation } from './environmentAccessPresentation';
 import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -337,7 +338,7 @@ export function EnvironmentCardsPanel(
     if (request.canReveal && !request.canReveal()) return;
     if (!request.intent && !progress) return;
     const group = props.groups.find(group => group.member_ids.includes(environment.id));
-    if (group) selectOwner(group, environment.id);
+    if (group) selectOwner(group, (group.owner_ids ?? group.member_ids).includes(environment.id) ? environment.id : group.primary_entry.id);
     handledLifecycleProgressFocusRequestID = request.request_id;
     if (progress) {
       const disclosure = focusEnvironmentLifecycleDisclosure(null, environment.id, progress);
@@ -502,7 +503,7 @@ export function EnvironmentCardsPanel(
   const RelationCard = (cardProps: { groupID: string }) => {
     const group = () => projectedGroup(cardProps.groupID);
     const active = () => activeOwnerID(group());
-    const memberIDs = createMemo(() => group().member_ids, undefined, {
+    const memberIDs = createMemo(() => group().owner_ids ?? group().member_ids, undefined, {
       equals: (left, right) => left.length === right.length && left.every((id, index) => id === right[index]),
     });
     const items = createMemo(() => memberIDs().map(ownerID => {
@@ -731,7 +732,7 @@ function EnvironmentOwnerSurface(
     ? props.i18n.t('environmentCenter.refreshCloudStatus')
     : props.i18n.t('environmentCenter.refreshRuntimeStatus'));
   const environmentActionPresentation = createMemo(() => {
-    const presentation = props.presentation.actions(environmentActionModel().action_presentation);
+    const presentation = environmentAccessPresentation(props.environment, props.presentation.actions(environmentActionModel().action_presentation), props.i18n);
     return props.environment.kind === 'provider_environment' ? {
       ...presentation,
       primary_action: { ...presentation.primary_action, label: props.i18n.t(
@@ -1009,7 +1010,7 @@ function EnvironmentOwnerSurface(
               <ConsoleActionIconButton
                 title={props.i18n.t('environmentCenter.environmentSettings')}
                 aria-label={props.i18n.t('environmentCenter.settingsForLabel', { label: ownerLabel() })}
-                disabled={!props.environment.can_edit}
+                disabled={!props.environment.can_edit && (props.environment.access_routes?.length ?? 0) < 2 && !props.environment.default_access_route_missing}
                 onClick={() => props.editEnvironment(props.environment)}
               >
                 <Settings class="h-3.5 w-3.5" />

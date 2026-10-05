@@ -6,6 +6,8 @@ import { normalizeDesktopPrivateBridgeToken } from './desktopPrivateBridge';
 import { parseLocalUIAddressIssues, type LocalUIAddressIssue } from '../shared/localUIAddressIssues';
 
 export type StartupReport = Readonly<{
+  // Set only by Desktop after a live challenge proof; never decoded from startup JSON.
+  verified_runtime_identity?: string;
   local_ui_url: string;
   local_ui_urls: string[];
   local_ui_address_issues?: readonly LocalUIAddressIssue[];
