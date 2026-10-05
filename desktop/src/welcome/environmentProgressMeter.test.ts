@@ -7,8 +7,29 @@ import type {
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import {
   environmentProgressMeterPercent,
+  environmentProgressElapsedSeconds,
   environmentProgressStageElapsedSeconds,
 } from './environmentProgressMeter';
+
+describe('operation elapsed time', () => {
+  const progress: DesktopLauncherActionProgress = {
+    action: 'update_gateway', subject_kind: 'gateway', active_progress_surface: 'gateway',
+    status: 'running', phase: 'installing_gateway', title: 'Update Gateway', detail: '',
+    started_at_unix_ms: 1_000, updated_at_unix_ms: 5_000,
+  };
+  it('uses operation start across stages and popup reopening', () => {
+    expect(environmentProgressElapsedSeconds(progress, 19_900)).toBe(18);
+    expect(environmentProgressElapsedSeconds({ ...progress, phase: 'gateway_ready', updated_at_unix_ms: 20_000 }, 25_000)).toBe(24);
+  });
+  it.each(['succeeded', 'failed', 'canceled'] as const)('freezes elapsed time when %s', status => {
+    expect(environmentProgressElapsedSeconds({ ...progress, status, updated_at_unix_ms: 11_900 }, 99_000)).toBe(10);
+  });
+  it('does not invent missing timestamps or negative durations', () => {
+    expect(environmentProgressElapsedSeconds({ ...progress, started_at_unix_ms: undefined }, 19_900)).toBeNull();
+    expect(environmentProgressElapsedSeconds({ ...progress, status: 'failed', updated_at_unix_ms: undefined }, 19_900)).toBeNull();
+    expect(environmentProgressElapsedSeconds(progress, 500)).toBe(0);
+  });
+});
 
 function gatewayRefreshProgress(input: Readonly<{
   status: DesktopLauncherActionProgress['status'];

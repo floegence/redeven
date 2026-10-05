@@ -109,7 +109,13 @@ Gateway actions use the existing launcher operation as the single progress
 owner. Managed service events project into its step timeline, retaining the
 active phase and elapsed time on failure. Because installation and host phases
 can be skipped or revisited, service progress shows observed steps without an
-invented percentage or fixed step total. A single click submits an action once;
+invented percentage or fixed step total. The shared meter stays visible: it
+animates indeterminately during service work, fills on success, and stops on
+failure or cancellation. Total elapsed time comes from the operation's main-process
+start timestamp, survives stage changes and popover reopening, and freezes at the
+terminal snapshot timestamp. The separate current-stage timer remains a waiting
+hint. Primary-button labels identify the actual start, stop, restart, or update
+operation, including its failure. A single click submits an action once;
 the busy primary button uses the shared progress shimmer and reopens that same
 operation. Its action icon and admission spinner share the published Button icon
 slot, so pending requests never display both. Dismissing the popover does not

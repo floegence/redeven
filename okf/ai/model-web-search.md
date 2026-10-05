@@ -59,6 +59,8 @@ switching. Readonly projections are stripped from persisted selection preference
 `web_search.config` records model and wire identity, reviewed and effective state,
 mode, transport, and the disabling reason using the existing diagnostic channel.
 
+# Boundaries
+
 Model discovery and user-selected membership remain owned by [Model directory and selection](model-directory-and-selection.md).
 
 # Evidence

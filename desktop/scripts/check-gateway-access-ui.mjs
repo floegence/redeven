@@ -13,6 +13,7 @@ const report = { cases: [], errors: [] };
 try {
   const { compactEnvironmentPreviewFixture } = await server.ssrLoadModule(fileURLToPath(new URL('../src/testSupport/compactEnvironmentPreviewFixture.ts', import.meta.url)));
   const { createDesktopI18n, REDEVEN_SUPPORTED_LOCALES } = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/i18n/index.ts', import.meta.url)));
+  const { gatewayServiceStepProgress } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/gatewayServiceProgress.ts', import.meta.url)));
   const source = compactEnvironmentPreviewFixture().coverage;
   const snapshot = { ...source, open_windows: [], environments: source.environments.filter(entry => entry.kind === 'gateway_environment') };
   for (const locale of REDEVEN_SUPPORTED_LOCALES) {
@@ -43,8 +44,7 @@ try {
         assert.equal(await action.evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap');
         await action.focus();
         await page.keyboard.press('Enter');
-        const requests = await page.evaluate(() => window.settingsFixture.requests);
-        assert.ok(requests.some(request => request.kind === 'open_gateway_environment' && request.access_mode === mode));
+        await page.waitForFunction(mode => window.settingsFixture.requests.some(request => request.kind === 'open_gateway_environment' && request.access_mode === mode), mode);
       }
       await card.getByRole('button', { name: i18n.t('environmentCenter.settingsForLabel', { label: 'Gateway workspace' }), exact: true }).click();
       const select = page.locator('#gateway-environment-access-mode');
@@ -139,7 +139,39 @@ try {
       if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-service-${dark ? 'dark-narrow' : 'light'}.png` });
       await page.keyboard.press('Escape');
       await setup.waitFor({ state: 'detached' });
-      report.cases.push({ locale, width, dark, largeText });
+
+      const now = Date.now();
+      await page.clock.setFixedTime(now);
+      const progress = {
+        action: 'update_gateway', subject_kind: 'gateway', subject_id: 'bastion', gateway_id: 'bastion',
+        operation_key: 'bastion:update_gateway', active_progress_surface: 'gateway',
+        status: 'running', phase: 'installing_gateway', title: 'Update Gateway',
+        title_key: 'environmentCenter.gatewayActionUpdate', started_at_unix_ms: now, updated_at_unix_ms: now,
+        step_progress: gatewayServiceStepProgress(undefined, 'installing_gateway', 'running', now),
+      };
+      const managedSnapshot = { ...snapshot, gateway_sources: snapshot.gateway_sources.map(gateway => ({
+        ...gateway, connection_kind: 'local_host', management_capability: 'managed_local_host', status: 'needs_update',
+        service_state: { status: 'service_needs_update', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false },
+      })) };
+      await page.evaluate(snapshot => {
+        window.settingsFixture.publish(snapshot);
+        window.settingsFixture.beforeAction = () => new Promise(() => {});
+      }, managedSnapshot);
+      const primary = gatewayCard.locator('.redeven-gateway-card__primary-button');
+      await primary.click();
+      const popup = page.locator('.redeven-gateway-action-popover-surface');
+      await popup.getByRole('button', { name: i18n.t('environmentCenter.gatewayActionUpdate'), exact: true }).click();
+      await page.evaluate(({ snapshot, progress }) => window.settingsFixture.publish({ ...snapshot, action_progress: [progress] }), { snapshot: managedSnapshot, progress });
+      await page.clock.setFixedTime(now + 61_000);
+      await popup.getByText(i18n.t('progress.operationElapsed', { seconds: 61 }), { exact: true }).waitFor();
+      assert.ok((await primary.innerText()).includes(i18n.t('progress.updatingEllipsis')));
+      assert.equal(await popup.getByRole('progressbar').getAttribute('aria-valuenow'), null);
+      assert.equal(await popup.getByRole('progressbar').locator('span').evaluate(el => getComputedStyle(el).animationName), 'none');
+      assert.equal(await popup.evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
+      if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-progress-${dark ? 'dark-narrow' : 'light'}.png` });
+      await page.keyboard.press('Escape');
+      await popup.waitFor({ state: 'detached' });
+      report.cases.push({ locale, width, dark, largeText, progressElapsed: true, reducedMotion: true });
       await context.close();
     }
   }

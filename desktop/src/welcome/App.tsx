@@ -301,6 +301,7 @@ import {
 } from './environmentLifecycleDisclosure';
 import {
   environmentProgressMeterPercent,
+  environmentProgressElapsedSeconds,
   environmentProgressStageElapsedSeconds,
 } from './environmentProgressMeter';
 import {
@@ -8839,6 +8840,7 @@ function EnvironmentProgressPanel(props: Readonly<{
   );
   const observedGatewayServiceSteps = createMemo(() => props.progress.subject_kind === 'gateway'
     && ['start_gateway', 'stop_gateway', 'restart_gateway', 'update_gateway'].includes(props.progress.action));
+  const operationElapsedSeconds = createMemo(() => environmentProgressElapsedSeconds(props.progress, clockNow()));
   const stagePercent = createMemo(() => {
     return environmentProgressMeterPercent(props.progress);
   });
@@ -9162,16 +9164,22 @@ function EnvironmentProgressPanel(props: Readonly<{
                 }}
               </Index>
             </div>
-            <Show when={!observedGatewayServiceSteps()}>
-              <div
-                class="redeven-environment-progress__meter"
-                data-plan-state={runtimeLifecycle()?.plan_state ?? 'executing'}
-                aria-hidden="true"
-              >
-                <span style={{ width: `${stagePercent()}%` }} />
-              </div>
-            </Show>
+            <div
+              class="redeven-environment-progress__meter"
+              data-plan-state={observedGatewayServiceSteps()
+                ? (phaseStatus() === 'running' ? 'planning' : 'executing')
+                : runtimeLifecycle()?.plan_state ?? 'executing'}
+              role={observedGatewayServiceSteps() ? 'progressbar' : undefined}
+              aria-label={observedGatewayServiceSteps() ? localizedProgressTitle(props.i18n, props.progress) : undefined}
+              aria-valuenow={observedGatewayServiceSteps() && phaseStatus() === 'succeeded' ? 100 : undefined}
+              aria-hidden={!observedGatewayServiceSteps()}
+            >
+              <span style={{ width: `${observedGatewayServiceSteps() ? (phaseStatus() === 'running' || phaseStatus() === 'succeeded' ? 100 : 0) : stagePercent()}%` }} />
+            </div>
             <div class="redeven-environment-progress__meta">
+              <Show when={observedGatewayServiceSteps() && operationElapsedSeconds() !== null}>
+                <span class="redeven-environment-progress__elapsed">{props.i18n.t('progress.operationElapsed', { seconds: operationElapsedSeconds()! })}</span>
+              </Show>
               <Show when={!observedGatewayServiceSteps() && (stepProgress() || runtimeLifecycle())}>
                 <span>
                   {props.i18n.t('progress.stepOf', {
@@ -9675,8 +9683,8 @@ export function EnvironmentSplitActionButton(
     props.presentation.primary_action.intent === 'request_open_access' ? (
       <ShieldCheck class="mr-1 h-3.5 w-3.5" />
     ) : null;
-  const renderEnvironmentProgressTriggerIcon = (icon: 'play' | 'stop') => {
-    const ProgressIcon = icon === 'stop' ? Stop : Play;
+  const renderEnvironmentProgressTriggerIcon = (icon: 'play' | 'stop' | 'refresh') => {
+    const ProgressIcon = icon === 'stop' ? Stop : icon === 'refresh' ? Refresh : Play;
     return <ProgressIcon class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
   };
   const renderEnvironmentProgressPresentationIcon = (presentation: EnvironmentProgressPrimaryPresentation) =>
@@ -11351,9 +11359,8 @@ function GatewaySourceCard(props: Readonly<{
     if (presentation.kind === 'attention_trigger') {
       return <AlertTriangle class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
     }
-    return presentation.icon === 'stop'
-      ? <Stop class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-      : <Play class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
+    const ProgressIcon = presentation.icon === 'stop' ? Stop : presentation.icon === 'refresh' ? Refresh : Play;
+    return <ProgressIcon class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
   };
   let previousGatewayID = props.gateway.gateway_id;
   createEffect(() => {

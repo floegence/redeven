@@ -83,6 +83,13 @@ and final usage. Retain the command log and the tested source commit alongside
 these reports. A report's `pass` describes that scenario only; the Go process
 exit status is authoritative for the complete run.
 
+# Boundaries
+
+Results qualify the selected installed model and its observed serving capacity,
+not every Ollama model or host. The reduced-window scenario does not establish
+full-window behavior; that claim requires the configured-window case. This
+suite does not replace the separate browser interaction checks.
+
 # Evidence
 
 - `redeven:scripts/check_flower_context_ollama.sh` - Explicit real-provider entrypoint using the selected local profile.
