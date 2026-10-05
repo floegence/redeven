@@ -152,6 +152,9 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	if err != nil {
 		return nil, r.failRun("Failed to initialize Floret model identity", err)
 	}
+	if policy := flProvider.Capabilities().ReasoningHistory; policy != "" {
+		gatewayIdentity.StateCompatibilityKey += ":reasoning_history=" + string(policy)
+	}
 	var frozenAttachments map[string]frozenFloretAttachment
 	if req.Retry == nil {
 		contextProjection, err := floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority)

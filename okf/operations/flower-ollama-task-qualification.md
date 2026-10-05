@@ -71,6 +71,11 @@ The additional interleaving cases combine commands at observed live boundaries:
   replay promotion across restart without executing either item again.
 - Change permissions while input is queued, reject active model changes, and
   preserve an existing approval snapshot when permissions are later upgraded.
+- Repeat readonly, approval, shutdown/restart, stale approval rejection, fresh
+  approved input, post-effect stream failure, readonly downgrade, restart/retry,
+  and restored full-access writes.
+  Require exactly one effect, no earlier-input thinking in new model requests,
+  retained current-input thinking, and unchanged canonical thinking items.
 - Disconnect the workspace observer, enqueue and stop work, then restart and
   reconnect before promoting the retained task.
 - Reject ordinary deletion of an active thread, force deletion with queued work,
@@ -99,7 +104,8 @@ path differs from `$HOME/.redeven/local-environment`. The script sets
 
 Set `REDEVEN_FLOWER_TASK_REPORT_ROOT` to a private evidence directory for per-case
 JSON reports. They contain synthetic task views, model request metadata, fault
-counts, system-message count and live permission modes, PID, temporary state
+counts, system-message count, live permission modes, prior/current-input
+reasoning counts, PID, temporary state
 location, and loopback port; keep the run log and
 source commit alongside them. Reports contain no API keys. A scenario's `pass`
 flag does not replace the complete Go test process exit status. Temp stores and
@@ -127,6 +133,8 @@ repeatable, it can pause after a complete original SSE event containing generate
 text, or cut the real connection after a confirmed tool result reaches the next
 model request. It never fabricates model tokens or tool calls. A dedicated case
 waits for visible content before stopping; other cases may stop during reasoning.
+Repeated effect cycles use distinct result markers so a prior turn's retained
+tool result cannot trigger the next cycle's fault before its actual effect.
 These controlled transport faults qualify recovery paths, not the endpoint's
 natural network reliability.
 

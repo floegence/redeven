@@ -34,9 +34,13 @@ func floretModelGatewayCapabilities(capability config.AIReasoningCapability) flp
 		Budget:            flconfig.ReasoningBudget{MinTokens: int64(capability.MinBudgetTokens), MaxTokens: int64(capability.MaxBudgetTokens)},
 		DynamicModelValue: capability.DynamicProviderMetadata,
 	}
-	return flprovider.Capabilities{
+	result := flprovider.Capabilities{
 		Reasoning:           flprovider.ReasoningSupported,
 		ReasoningCapability: reasoning,
 		AttachmentPayload:   flprovider.AttachmentExpanded,
 	}
+	if capability.WireShape == "ollama_model_family_think" {
+		result.ReasoningHistory = flprovider.ReasoningHistoryCurrentUser
+	}
+	return result
 }

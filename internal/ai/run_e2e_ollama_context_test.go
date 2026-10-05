@@ -318,20 +318,22 @@ func assertOllamaContextUsage(t *testing.T, detail *FlowerThreadDetail, recorder
 }
 
 type ollamaContextRequest struct {
-	Kind                     string   `json:"kind"`
-	Model                    string   `json:"model"`
-	SystemHash               string   `json:"system_hash"`
-	SystemPermissionModes    []string `json:"system_permission_modes,omitempty"`
-	SystemMessageCount       int      `json:"system_message_count"`
-	ToolsHash                string   `json:"tools_hash"`
-	HasMarker                bool     `json:"has_marker"`
-	HasOriginalMarkerMessage bool     `json:"has_original_marker_message"`
-	Status                   int      `json:"status"`
-	InputTokens              int64    `json:"input_tokens"`
-	CacheReadTokens          int64    `json:"cache_read_tokens"`
-	OutputTokens             int64    `json:"output_tokens"`
-	MaxOutputTokens          int64    `json:"max_output_tokens"`
-	FinishReason             string   `json:"finish_reason"`
+	Kind                         string   `json:"kind"`
+	Model                        string   `json:"model"`
+	SystemHash                   string   `json:"system_hash"`
+	SystemPermissionModes        []string `json:"system_permission_modes,omitempty"`
+	SystemMessageCount           int      `json:"system_message_count"`
+	PriorUserReasoningMessages   int      `json:"prior_user_reasoning_messages"`
+	CurrentUserReasoningMessages int      `json:"current_user_reasoning_messages"`
+	ToolsHash                    string   `json:"tools_hash"`
+	HasMarker                    bool     `json:"has_marker"`
+	HasOriginalMarkerMessage     bool     `json:"has_original_marker_message"`
+	Status                       int      `json:"status"`
+	InputTokens                  int64    `json:"input_tokens"`
+	CacheReadTokens              int64    `json:"cache_read_tokens"`
+	OutputTokens                 int64    `json:"output_tokens"`
+	MaxOutputTokens              int64    `json:"max_output_tokens"`
+	FinishReason                 string   `json:"finish_reason"`
 }
 
 type ollamaContextRecorder struct {
@@ -468,10 +470,17 @@ func newOllamaContextProxy(t *testing.T, baseURL string, recorder *ollamaContext
 			recorder.mu.Lock()
 			for _, message := range payload.Messages {
 				var header struct {
-					Role    string `json:"role"`
-					Content string `json:"content"`
+					Role      string `json:"role"`
+					Content   string `json:"content"`
+					Reasoning string `json:"reasoning"`
 				}
 				_ = json.Unmarshal(message, &header)
+				if header.Role == "user" {
+					record.PriorUserReasoningMessages += record.CurrentUserReasoningMessages
+					record.CurrentUserReasoningMessages = 0
+				} else if header.Role == "assistant" && header.Reasoning != "" {
+					record.CurrentUserReasoningMessages++
+				}
 				if header.Role == "system" && record.SystemHash == "" {
 					record.SystemHash = sha256Hex(message)
 				}
