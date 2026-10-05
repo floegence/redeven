@@ -63,6 +63,7 @@ try {
     await page.evaluate(() => window.navigationFixture.releaseRuntime());
     await page.locator('[data-flower-engaged]').waitFor();
     assert.equal(await page.locator('[data-flower-runtime-availability]').count(), 0, 'AI readiness replaces preparation automatically');
+    await page.locator('.flower-empty-hero').waitFor({ state: 'visible' });
     const scale = await page.locator('.flower-chat-header').evaluate(header => ({
       height: header.getBoundingClientRect().height,
       family: getComputedStyle(header).fontFamily,

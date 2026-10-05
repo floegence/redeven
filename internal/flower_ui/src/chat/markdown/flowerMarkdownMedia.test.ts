@@ -40,9 +40,15 @@ describe('Flower Markdown resource resolution', () => {
     const onActionError = vi.fn();
     const controller = new AbortController();
     const adapter = { loadMessageFile: vi.fn(async () => new Blob(['pixels'], { type: 'image/png' })), openMessageFile } as unknown as FlowerSurfaceAdapter;
+    let copy = markdownMediaEnUS;
     const resolved = await resolveFlowerMarkdownMedia({ kind: 'image', title: 'Chart', src: './figures/chart.png' }, controller.signal, {
-      adapter, threadID: 't', workingDirectory: '/project', copy: markdownMediaEnUS, onActionError,
+      adapter, threadID: 't', workingDirectory: '/project', get copy() { return copy; }, onActionError,
     });
+    expect(resolved.preview!.label).toBe(copy.previewImage);
+    copy = { ...copy, previewImage: 'Preview selected image', revealInFolder: 'Show image folder' };
+    expect(resolved.preview!.label).toBe(copy.previewImage);
+    expect(resolved.reveal!.label).toBe(copy.revealInFolder);
+    expect(adapter.loadMessageFile).toHaveBeenCalledTimes(1);
     expect(resolved.openURL).toBeUndefined();
     resolved.preview!.onSelect();
     resolved.reveal!.onSelect();

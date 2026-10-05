@@ -14,6 +14,7 @@ import { removeUIStorageItem } from './services/uiStorage';
 import { FlowerMarkdownBlock } from '../../../../flower_ui/src/chat/markdown/FlowerMarkdownBlock';
 import { markdownMediaEnUS } from '../../../../flower_ui/src/chat/markdown/mediaCopy';
 import { adapter, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.media.test-support';
+import { FlowerSurface, createFlowerComposerDraftCoordinator, type FlowerSurfaceAdapter } from '../../../../flower_ui/src';
 
 async function imageBlob(): Promise<Blob> {
   const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 440;
@@ -33,6 +34,69 @@ async function imageBlob(): Promise<Blob> {
 }
 
 describe('Flower inline media', () => {
+  it('retains ready media for thirty seconds of host updates and reloads for thread, directory, and adapter changes', async () => {
+    await page.viewport(1200, 900);
+    const blob = await imageBlob();
+    const [revision, setRevision] = createSignal(0);
+    const seeds = ['first', 'second'].map(name => thread({ thread_id: name, title: name, working_dir: `/workspace/${name}`, messages: [{
+      id: `${name}-reply`, role: 'assistant', status: 'complete', turn_id: `${name}-turn`, created_at_ms: 2,
+      content: '![Workspace](./frame.png)',
+    }] }));
+    const loadMessageFile = vi.fn(async () => { revision(); return blob; });
+    let changeWorkingDirectory: () => void = () => { throw new Error('Workspace stream is not ready'); };
+    const initial: FlowerSurfaceAdapter = {
+      ...adapter(true), listThreads: async () => seeds,
+      loadThread: async id => {
+        const seed = seeds.find(seed => seed.thread_id === id)!;
+        return liveBootstrap(seed, seed.settings_revision ?? 1);
+      }, loadMessageFile,
+      connectLiveStream: async function* ({ signal }) {
+        yield { schema_version: 1, kind: 'ready', summaries: seeds };
+        const updated = await new Promise<typeof seeds[number] | undefined>(resolve => {
+          changeWorkingDirectory = () => {
+            seeds[1] = { ...seeds[1], working_dir: '/workspace/moved', updated_at_ms: 3, settings_revision: 2 };
+            resolve(seeds[1]);
+          };
+          if (signal.aborted) resolve(undefined);
+          else signal.addEventListener('abort', () => resolve(undefined), { once: true });
+        });
+        if (updated) yield { schema_version: 1, kind: 'summary.batch', summaries: [updated] };
+        if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    };
+    const [surfaceAdapter, setSurfaceAdapter] = createSignal(initial);
+    const host = document.createElement('div'); host.style.height = '850px'; document.body.append(host);
+    const dispose = render(() => <FloeConfigProvider><LayoutProvider>
+      <FlowerSurface adapter={surfaceAdapter()} draftCoordinator={createFlowerComposerDraftCoordinator()} notify={notice => { throw new Error(notice.message); }} />
+    </LayoutProvider></FloeConfigProvider>, host);
+    onTestFinished(() => { dispose(); host.remove(); });
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="first"] button')));
+    host.querySelector<HTMLButtonElement>('[data-thread-id="first"] button')!.click();
+    await waitFor(() => Boolean(host.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth));
+    const image = host.querySelector<HTMLImageElement>('.chat-media-image')!;
+    const src = image.src;
+    expect(loadMessageFile).toHaveBeenCalledTimes(1);
+    expect(loadMessageFile).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/first/frame.png' }));
+    for (let index = 0; index < 60; index++) {
+      setRevision(index + 1);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(host.querySelector('.chat-media-image')).toBe(image);
+      expect(image.src).toBe(src);
+    }
+    expect(loadMessageFile).toHaveBeenCalledTimes(1);
+    await page.screenshot({ path: './__screenshots__/redeven-flower-media-stability.png' });
+    host.querySelector<HTMLButtonElement>('[data-thread-id="second"] button')!.click();
+    await vi.waitFor(() => expect(loadMessageFile, 'thread switch').toHaveBeenCalledTimes(2));
+    expect(loadMessageFile).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/second/frame.png' }));
+    changeWorkingDirectory();
+    await vi.waitFor(() => expect(loadMessageFile, 'directory switch').toHaveBeenCalledTimes(3));
+    expect(loadMessageFile).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/moved/frame.png' }));
+    const replacementLoad = vi.fn(async () => blob);
+    setSurfaceAdapter({ ...initial, loadMessageFile: replacementLoad });
+    await waitFor(() => replacementLoad.mock.calls.length > 0);
+    expect(replacementLoad).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/moved/frame.png' }));
+  }, 45000);
+
   it.each(['light', 'dark'] as const)('opens the existing file preview and containing folder from a chat image in %s mode', async (mode) => {
     await page.viewport(1200, 900);
     document.documentElement.classList.add(mode);

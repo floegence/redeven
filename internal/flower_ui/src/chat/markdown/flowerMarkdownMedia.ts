@@ -56,8 +56,8 @@ export async function resolveFlowerMarkdownMedia(
     src,
     ...(source.kind !== 'image' ? { openURL: src } : {}),
     ...(path && openFile ? {
-      ...(source.kind === 'image' ? { preview: { label: context.copy.previewImage, onSelect: () => select('preview') } } : {}),
-      reveal: { label: context.copy.revealInFolder, onSelect: () => select('reveal') },
+      ...(source.kind === 'image' ? { preview: { get label() { return context.copy.previewImage; }, onSelect: () => select('preview') } } : {}),
+      reveal: { get label() { return context.copy.revealInFolder; }, onSelect: () => select('reveal') },
     } : {}),
   };
 }

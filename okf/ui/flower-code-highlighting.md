@@ -15,7 +15,9 @@ Desktop. Original code remains immediately readable and copyable. Highlighting
 must not alter text, frame geometry, copy controls, focus or an active selection;
 unavailable or excessive highlighting work leaves plain code visible.
 
-# Stable content boundary
+# Contract
+
+## Stable content boundary
 
 Flower decorates only committed HTML regions. Raw append-only tails and unstable
 HTML tails receive no syntax work. The existing parser decides when source becomes
@@ -32,7 +34,9 @@ Presentation class sanitization does not redefine language identity: fence
 metadata, case, and aliases such as `py`, `sh`, `c++` and `c#` reach the released
 grammar contract. HTML preview fences retain the existing media contract.
 
-# Interaction and cost boundary
+# Boundaries
+
+## Interaction and cost
 
 Floe parses in one lazy Worker and schedules only visible blocks. The shared API
 adds color-only spans inside the existing code element. It preserves text and

@@ -133,6 +133,22 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('updates runtime copy without replacing the adapter or transport', () => {
+    let label = 'Local Environment';
+    let subtitle = 'Local workspace';
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridgeFor(() => undefined), {
+      get runtimeDisplayName() { return label; },
+      get runtimeSubtitle() { return subtitle; },
+    });
+    const transport = adapter.connectLiveStream;
+    expect(adapter.runtime.display_name).toBe(label);
+    label = 'Updated environment';
+    subtitle = 'Updated workspace';
+    expect(adapter.runtime.display_name).toBe(label);
+    expect(adapter.runtime.subtitle).toBe(subtitle);
+    expect(adapter.connectLiveStream).toBe(transport);
+  });
+
   it('refreshes dynamic catalogs without enabling new models or losing missing selections', async () => {
     for (const type of ['ollama', 'openrouter'] as const) {
       const base = settingsResponse();
