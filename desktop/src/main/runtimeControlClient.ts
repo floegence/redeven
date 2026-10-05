@@ -31,6 +31,8 @@ type RuntimeControlEnvelope = Readonly<{
 }>;
 
 type RuntimeControlServiceRoute =
+  | 'v2/tessiven/host'
+  | 'v2/tessiven/resources'
 	| 'v2/provider-link'
 	| 'v2/provider-link/connect'
 	| 'v2/provider-link/disconnect'
@@ -294,4 +296,8 @@ export async function getCodeWorkspaceEngineStatus(
 
 export async function manageRuntimeSecurity(endpoint: DesktopRuntimeControlEndpoint, request: SecurityRequest): Promise<SecurityResult> {
  return parseSecurityResult((await requestRuntimeControl(endpoint, 'v2/runtime/security', { method: 'POST', body: request })).data);
+}
+
+export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpoint, payload: unknown, signal?: AbortSignal): Promise<unknown> {
+  return (await requestRuntimeControl(endpoint, 'v2/tessiven/resources', { method: 'POST', body: payload, signal, timeoutMs: 30000 })).data;
 }

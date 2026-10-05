@@ -1,3 +1,4 @@
+import { TESSIVEN_RUNTIME_ROUTES } from './runtimeTessivenRoutes';
 import { RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, type RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
 import { runtimeFlowerDeleteQuery } from './runtimeFlowerHTTP';
 
@@ -44,6 +45,7 @@ const runtimeFlowerSkillBrowseQuery = (kind: 'dir' | 'file') => (parsed: URL): b
     && [...parsed.searchParams.values()].every(value => value.length <= 8192);
 };
 const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
+  ...TESSIVEN_RUNTIME_ROUTES,
   { path: '/_redeven_proxy/api/ai/mcp', methods: ['GET', 'PUT', 'DELETE'] },
   { path: '/_redeven_proxy/api/ai/mcp/check', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/skills', methods: ['GET', 'POST', 'DELETE'] },
@@ -141,7 +143,7 @@ export function runtimeFlowerPath(rawPath: unknown): string {
     throw new Error('Flower runtime request path must be absolute.');
   }
   const parsed = new URL(raw, 'http://runtime-flower.local');
-  if (parsed.hash || !runtimeFlowerAllowedRoute(parsed)) {
+  if (parsed.origin !== 'http://runtime-flower.local' || parsed.hash || !runtimeFlowerAllowedRoute(parsed)) {
     throw new Error('Flower runtime request path is not allowed.');
   }
   return `${parsed.pathname}${parsed.search}`;

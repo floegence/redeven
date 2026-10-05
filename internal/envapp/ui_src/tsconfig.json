@@ -3,26 +3,51 @@
     "target": "ES2022",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "skipLibCheck": true,
     "moduleResolution": "Bundler",
     "baseUrl": ".",
     "paths": {
-      "@floegence/floe-webapp-core": ["node_modules/@floegence/floe-webapp-core"],
-      "@floegence/floe-webapp-core/*": ["node_modules/@floegence/floe-webapp-core/dist/*"],
-      "marked": ["node_modules/marked/lib/marked.d.ts"],
-      "solid-js": ["node_modules/solid-js"],
-      "solid-js/*": ["node_modules/solid-js/*"],
-      "thinking-orbs/engine": ["node_modules/thinking-orbs/dist/engine/index.d.ts"],
-      "vitest": ["node_modules/vitest"]
+      "@floegence/floe-webapp-core": [
+        "node_modules/@floegence/floe-webapp-core"
+      ],
+      "@floegence/floe-webapp-core/*": [
+        "node_modules/@floegence/floe-webapp-core/dist/*"
+      ],
+      "marked": [
+        "node_modules/marked/lib/marked.d.ts"
+      ],
+      "solid-js": [
+        "node_modules/solid-js"
+      ],
+      "solid-js/*": [
+        "node_modules/solid-js/*"
+      ],
+      "thinking-orbs/engine": [
+        "node_modules/thinking-orbs/dist/engine/index.d.ts"
+      ],
+      "vitest": [
+        "node_modules/vitest"
+      ]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
-    "types": ["vite/client", "node"],
+    "types": [
+      "vite/client",
+      "node"
+    ],
     "strict": true
   },
-  "include": ["src", "../../flower_ui/src"]
+  "include": [
+    "src",
+    "../../flower_ui/src",
+    "../../tessiven_ui/src"
+  ]
 }

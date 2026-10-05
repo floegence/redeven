@@ -23,6 +23,7 @@ import (
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/tessiven"
 	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
@@ -42,6 +43,8 @@ const (
 )
 
 type Options struct {
+	Tessiven               *tessiven.Service
+	TessivenResources      *tessiven.ResourceBackend
 	Logger                 *slog.Logger
 	StateDir               string
 	BuildVersion           string
@@ -99,6 +102,8 @@ type Options struct {
 }
 
 type Service struct {
+	tessiven               *tessiven.Service
+	tessivenResources      *tessiven.ResourceBackend
 	buildVersion           string
 	serviceClosing         bool // guarded by mu; fences background worker admission
 	storageGeneration      string
@@ -401,7 +406,8 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	svc := &Service{
-		buildVersion:                    strings.TrimSpace(opts.BuildVersion),
+		buildVersion: strings.TrimSpace(opts.BuildVersion),
+		tessiven:     opts.Tessiven, tessivenResources: opts.TessivenResources,
 		activateFloret:                  floretBootstrap.activate,
 		prepareFloretRestore:            floretBootstrap.prepareRestore,
 		readState:                       reads,

@@ -34,6 +34,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/terminal"
+	"github.com/floegence/redeven/internal/tessiven"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 	redevpluginversion "github.com/floegence/redevplugin/v3/pkg/version"
 )
@@ -100,18 +101,20 @@ type Service struct {
 	codePortMin int
 	codePortMax int
 
-	reg           *registry.Registry
-	pf            *portforward.Service
-	managed       *managedwebservice.Manager
-	hostApps      *hostapps.Manager
-	remoteDesktop *remotedesktop.Manager
-	containers    *containerresource.Service
-	runner        *codeserver.Runner
-	runtime       *codeserver.RuntimeManager
-	notes         *notes.Service
-	layouts       *workbenchlayout.Service
-	aiReady       *aiReadinessController
-	appSrv        *appserver.Server
+	reg            *registry.Registry
+	pf             *portforward.Service
+	managed        *managedwebservice.Manager
+	hostApps       *hostapps.Manager
+	remoteDesktop  *remotedesktop.Manager
+	containers     *containerresource.Service
+	runner         *codeserver.Runner
+	runtime        *codeserver.RuntimeManager
+	notes          *notes.Service
+	layouts        *workbenchlayout.Service
+	tessiven       *tessiven.Service
+	tessivenBroker *tessiven.Broker
+	aiReady        *aiReadinessController
+	appSrv         *appserver.Server
 
 	pluginIntegration *redevpluginintegration.Integration
 
@@ -264,7 +267,25 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
+	tessivenSvc, err := tessiven.Open(filepath.Join(stateAbs, "apps", "tessiven", "canvases.sqlite"))
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		return nil, err
+	}
+	tessivenOwned := true
+	defer func() {
+		if tessivenOwned {
+			_ = tessivenSvc.Close()
+		}
+	}()
+
+	tessivenBroker := &tessiven.Broker{}
+	svc.tessivenBroker = tessivenBroker
+	tessivenResources := &tessiven.ResourceBackend{Broker: tessivenBroker, Library: tessivenSvc, Managed: managedSvc, Containers: containerResourceSvc}
+
 	aiReady := newAIReadinessController(ctx, ai.Options{
+		Tessiven: tessivenSvc, TessivenResources: tessivenResources,
 		Logger:            logger,
 		StateDir:          stateAbs,
 		AgentHomeDir:      agentHomeDir,
@@ -376,6 +397,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		BrowserRuntime:        browserRuntime,
 		Notes:                 notesSvc,
 		WorkbenchLayout:       workbenchLayoutSvc,
+		Tessiven:              tessivenSvc,
+		TessivenResources:     tessivenResources,
 		Terminal:              opts.Terminal,
 		Audit:                 opts.Audit,
 		Diagnostics:           opts.Diagnostics,
@@ -420,6 +443,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.appSrv = appSrv
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
+	svc.tessiven = tessivenSvc
+	tessivenOwned = false
 	svc.aiReady = aiReady
 	svc.pluginIntegration = pluginIntegration
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
@@ -466,6 +491,12 @@ func (s *Service) Close() error {
 	}
 	if s.terminalLayoutCleanup != nil {
 		s.terminalLayoutCleanup()
+	}
+	if s.tessivenBroker != nil {
+		s.tessivenBroker.Close()
+	}
+	if s.tessiven != nil {
+		_ = s.tessiven.Close()
 	}
 	if s.layouts != nil {
 		_ = s.layouts.Close()

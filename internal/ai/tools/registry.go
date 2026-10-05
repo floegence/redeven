@@ -100,6 +100,14 @@ func cleanStringList(values []string) []string {
 }
 
 var builtinDefinitions = map[string]Definition{
+	"tessiven.schema":   {Name: "tessiven.schema", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("schema"), labelFields("canvas_id", "instance_id"))},
+	"tessiven.list":     {Name: "tessiven.list", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("list"), labelFields("canvas_id", "instance_id"))},
+	"tessiven.read":     {Name: "tessiven.read", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("read"), labelFields("canvas_id", "instance_id"))},
+	"tessiven.versions": {Name: "tessiven.versions", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("versions"), labelFields("canvas_id", "instance_id"))},
+	"tessiven.validate": {Name: "tessiven.validate", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("validate"), labelFields("canvas_id", "instance_id"))},
+	"tessiven.save":     {Name: "tessiven.save", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("save"), labelFields("canvas_id", "instance_id"))},
+	"tessiven.inspect":  {Name: "tessiven.inspect", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("inspect"), labelFields("canvas_id", "instance_id"))},
+	"tessiven.action":   {Name: "tessiven.action", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("action"), labelFields("canvas_id", "instance_id"))},
 	"computer.targets": {
 		Name: "computer.targets", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("discover"), resultPayloadFields("current_target_id", "default_candidate_ref", "candidates")),

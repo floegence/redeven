@@ -242,7 +242,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		if err != nil {
 			return finish(SendUserTurnResponse{}, err)
 		}
-		projection, projectionErr := floretContextProjectionForInputWithAuthority(effect.req.Input, effect.builder.canonicalReferenceAuthority)
+		projection, projectionErr := floretContextProjectionForInputWithAuthority(effect.req.Input, effect.builder.canonicalReferenceAuthority, tessivenContextResolver(ctx, s.tessiven))
 		if projectionErr != nil {
 			return finish(SendUserTurnResponse{}, projectionErr)
 		}
@@ -418,7 +418,7 @@ func (s *Service) validateTypedSendReplay(meta *session.Meta, input RunInput, or
 		}
 		authority = &resolved
 	}
-	projection, err := floretContextProjectionForInputWithAuthority(input, authority)
+	projection, err := floretContextProjectionForInputWithAuthority(input, authority, tessivenContextResolver(context.Background(), s.tessiven))
 	if err != nil {
 		return err
 	}

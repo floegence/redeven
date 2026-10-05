@@ -8,6 +8,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
+- [Tessiven canvas contract](architecture/tessiven-canvas-contract.md) - Store one Runtime-owned, versioned YAML canvas library with stable topology identities.
+
 - [Native Runtime bridge](architecture/native-runtime-bridge.md) - Attach native SSH clients to running instances with independent, restricted authorization.
 
 - [Flower browser source ownership](architecture/flower-browser-sources.md) - Admit browser targets once, preserve private ancestry and fence source loss without product projection.
@@ -147,6 +149,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower MCP runtime](ai/mcp-runtime.md) - Configure MCP servers and execute tools with authenticated configuration, Floret approval, and terminal unknown outcomes.
 ## UI
 
+- [Tessiven canvas](ui/tessiven-canvas.md) - Render progressively detailed Runtime topology with readable grouping, muted relationships, and accessible Ask Flower context.
+
 - [Runtime settings](ui/runtime-settings.md) - Navigate runtime configuration with retained drafts, responsive controls, and confirmed maintenance.
 - [Flower Skills and MCP](ui/flower-extensions.md) - Manage instructions and external tools in the conversation rail’s shared two-tab page.
 
@@ -206,6 +210,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.
 
 ## AI
+
+- [Tessiven Flower and service operations](ai/tessiven-flower-and-operations.md) - Generate evidence-backed canvas versions and route exact service actions through existing authority.
 
 - [Authorized platform model gateway](ai/platform-model-gateway.md) - Session-scoped catalogs, credential isolation, and stable streamed execution.
 

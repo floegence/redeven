@@ -6,12 +6,15 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/tessiven"
 )
 
 // runHostCapabilities is the complete host capability set available to one
 // exact root-thread runtime. It intentionally contains no Service, Floret
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
+	tessiven                  *tessiven.Service
+	tessivenResources         *tessiven.ResourceBackend
 	authorityThreadID         string
 	requestThreadSummary      func()
 	lastVisibleTimelineAnchor func(context.Context) (FlowerTimelineAnchor, error)
@@ -81,7 +84,8 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 	}
 	return runHostCapabilities{
 		authorityThreadID: effectAuthorityThreadID,
-		terminal:          terminal,
+		tessiven:          s.tessiven, tessivenResources: s.tessivenResources,
+		terminal: terminal,
 	}, nil
 }
 

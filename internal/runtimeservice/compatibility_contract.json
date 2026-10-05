@@ -5,9 +5,10 @@
     "previous_release": "v0.13.11",
     "reviewed_at": "2026-10-05",
     "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Advance the Runtime Service compatibility epoch to 36 for explicit model selection and discovery presentation.",
-    "same_window_rationale": "Epoch 36 changes the model selection contract from catalog exclusions to explicit selected_models. Older clients would expand these profiles and must not attach to the shared Flower surface. Both Desktop and Runtime are updated; existing selections migrate atomically, and offline legacy Ollama profiles remain unchanged until discovery or user review. Runtime protocol and minimum component versions remain unchanged.",
+    "summary": "Advance the Runtime Service compatibility epoch to 37 for Tessiven canvas references and authorized resource routing.",
+    "same_window_rationale": "Epoch 37 adds Tessiven immutable canvas/version/object references, exact Desktop request routes, and the owner-authenticated typed Runtime control bridge. Older clients cannot submit or interpret these contexts and must upgrade before shared Flower admission. The existing Context Action schema remains version 2; exact Runtime compatibility gates the added discriminated item.",
     "checked_surfaces": [
+      "Epoch 37 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, Tessiven request and event admission, canonical Flower context, and target-bound resource operations. Runtime-owned Tessiven storage is a new independent versioned database; existing database lineages remain unchanged.",
       "Epoch 36 requires explicit selected_models for catalog providers and discovery alias metadata. Startup freezes earlier selections without expanding explicit lists; offline legacy Ollama profiles remain intact for settings recovery. Desktop attach/start, Local UI, startup reports, sys.ping, Env App maintenance and SSH bootstrap reject old Flower clients before they can widen model selection. Floret and product database schemas are unchanged.",
       "Epoch 35 pairs explicit reasoning On across Desktop and Runtime. Exact capability metadata, thread preference restart, model-source snapshots, provider requests, and shared Flower controls are covered. Attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume the canonical compatibility epoch.",
       "Reviewed the v0.13.11-to-v0.13.12 release-asset correction: the collector rewrites Electron Builder's Linux architecture aliases in latest-linux*.yml to the exact x64 and arm64 installer names staged in the closed inventory, preserving each file's size and SHA512 fields. Runtime and Desktop executable behavior, signed-resource handling, authorization, storage schemas, attach/start wire shapes, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap remain unchanged within epoch 34.",
@@ -84,7 +85,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 36,
+  "compatibility_epoch": 37,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -112,7 +113,8 @@
     32,
     33,
     34,
-    35
+    35,
+    36
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

@@ -52,6 +52,7 @@ import (
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/terminal"
+	"github.com/floegence/redeven/internal/tessiven"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 )
 
@@ -69,6 +70,8 @@ type Options struct {
 	BrowserRuntime       *ai.ComputerUseRuntime
 	Notes                *notes.Service
 	WorkbenchLayout      *workbenchlayout.Service
+	Tessiven             *tessiven.Service
+	TessivenResources    *tessiven.ResourceBackend
 	Terminal             *terminal.Manager
 	Audit                *auditlog.Store
 	Diagnostics          *diagnostics.Store
@@ -227,19 +230,21 @@ type Server struct {
 	log         *slog.Logger
 	lifecycleMu sync.Mutex
 
-	backend        Backend
-	pf             PortForwardBackend
-	managed        managedwebservice.Backend
-	hostApps       hostapps.Backend
-	remoteDesktop  *remotedesktop.Manager
-	containers     *containerresource.Service
-	aiProvider     AIServiceProvider
-	browserRuntime *ai.ComputerUseRuntime
-	notes          *notes.Service
-	layouts        *workbenchlayout.Service
-	term           workbenchTerminalSessionManager
-	audit          *auditlog.Store
-	diag           *diagnostics.Store
+	backend           Backend
+	pf                PortForwardBackend
+	managed           managedwebservice.Backend
+	hostApps          hostapps.Backend
+	remoteDesktop     *remotedesktop.Manager
+	containers        *containerresource.Service
+	aiProvider        AIServiceProvider
+	browserRuntime    *ai.ComputerUseRuntime
+	notes             *notes.Service
+	layouts           *workbenchlayout.Service
+	tessiven          *tessiven.Service
+	tessivenResources *tessiven.ResourceBackend
+	term              workbenchTerminalSessionManager
+	audit             *auditlog.Store
+	diag              *diagnostics.Store
 
 	resolveSessionMeta   func(channelID string) (*session.Meta, bool)
 	acquirePluginSession func(channelID string) (*session.Meta, func(), bool)
@@ -438,6 +443,8 @@ func New(opts Options) (*Server, error) {
 		browserRuntime:        opts.BrowserRuntime,
 		notes:                 opts.Notes,
 		layouts:               opts.WorkbenchLayout,
+		tessiven:              opts.Tessiven,
+		tessivenResources:     opts.TessivenResources,
 		term:                  opts.Terminal,
 		audit:                 opts.Audit,
 		diag:                  opts.Diagnostics,
@@ -2579,6 +2586,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if g.handleHostApplicationsAPI(w, r) {
+		return
+	}
+	if g.handleTessivenAPI(w, r) {
 		return
 	}
 	if g.handleWorkbenchLayoutAPI(w, r) {

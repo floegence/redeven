@@ -1,0 +1,41 @@
+---
+type: AI Product Contract
+title: Tessiven Flower and operations
+description: Generate canvas versions and route service actions through their original owners.
+tags: [ai, tessiven, flower]
+timestamp: 2026-10-05T00:00:00Z
+---
+# Summary
+
+Flower maps authorized code, configuration, and connected Runtime facts into
+Tessiven versions through the `redeven-tessiven` system skill. Resource actions
+remain owned by the existing Managed Services and Containers managers. A
+transport failure after a mutation is dispatched is terminal with an unknown
+outcome, so the user must inspect the original manager before trying again.
+
+# Contract
+
+- Tessiven tools read the canonical schema, list/read/validate versions, save a
+  complete new version, inspect explicit targets, and execute one exact bound
+  instance when the existing permission and approval checks allow it.
+- Flower preserves stable object IDs, adds evidence and observation times, and
+  never guesses a management identity from a name, address, or process.
+- Ask Flower carries `canvas_id`, `version_id`, and bounded object references;
+  historical selections stay historical during the discussion.
+- Selection summaries prioritize requested objects and include node, instance,
+  and external-resource observation evidence. Truncation is explicit; Flower
+  reads the exact saved version for additional detail.
+- Remote requests use an existing authorized Runtime connection. No implicit
+  connection, local fallback, discovery loop, operation mirror, or action retry
+  is created by Tessiven.
+- The UI shows confirmed, refused, and unknown outcomes distinctly. Unknown
+  mutation outcomes disable another mutation until the original manager has
+  been inspected.
+
+# Evidence
+
+- `internal/ai/system_skills/redeven-tessiven/SKILL.md`
+- `internal/ai/tessiven_tools.go`
+- `internal/tessiven/resources.go`
+- `internal/tessiven/broker.go`
+- `internal/ai/run.go`

@@ -13,6 +13,7 @@ require (
 	github.com/floegence/redeven-service-templates v0.6.0
 	github.com/floegence/redevplugin/v3 v3.0.33
 	github.com/godbus/dbus/v5 v5.2.2
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/mholt/archives v0.1.5
 	github.com/modelcontextprotocol/go-sdk v1.8.0
@@ -20,6 +21,7 @@ require (
 	github.com/openai/openai-go v1.12.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pquerna/otp v1.5.0
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/shirou/gopsutil/v4 v4.25.12
 	github.com/yeka/zip v0.0.0-20231116150916-03d6312748a9
 	golang.org/x/crypto v0.57.0
@@ -49,7 +51,6 @@ require (
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
@@ -67,7 +68,6 @@ require (
 	github.com/quic-go/quic-go v0.62.0 // indirect
 	github.com/quic-go/webtransport-go v0.13.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sorairolake/lzip-go v0.3.8 // indirect

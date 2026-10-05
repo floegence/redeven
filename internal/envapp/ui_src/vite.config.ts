@@ -51,7 +51,8 @@ export default defineConfig({
   }, solid(), tailwindcss(), chunkModuleManifest(), pdfAssetsPlugin()],
   resolve: {
     alias: [
-      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
+      { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/graph.css') },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|graph|icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
       { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/index.js') },
       { find: /^marked$/, replacement: path.resolve(__dirname, 'node_modules/marked/lib/marked.esm.js') },
       { find: /^thinking-orbs\/engine$/, replacement: path.resolve(__dirname, 'node_modules/thinking-orbs/dist/engine.es.js') },

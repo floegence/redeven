@@ -114,6 +114,10 @@
     {
       "path": "internal/ai/system_skills/redeven-environment/SKILL.md",
       "reason": "This is a machine-consumed runtime skill source, not maintained repository knowledge documentation."
+    },
+    {
+      "path": "internal/ai/system_skills/redeven-tessiven/SKILL.md",
+      "reason": "This is a machine-consumed runtime skill source, not maintained repository knowledge documentation."
     }
   ],
   "locales": [

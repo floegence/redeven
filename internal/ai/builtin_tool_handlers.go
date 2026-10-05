@@ -797,6 +797,7 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 	}
+	defs = append(defs, builtInTessivenToolDefinitions()...)
 	defs = append(defs, builtInComputerToolDefinitions()...)
 	defs = append(defs, floretNativeToolDefinitions()...)
 	for i := range defs {
