@@ -32,87 +32,10 @@ func TestE2E_FlowerOllamaContextCompaction(t *testing.T) {
 	if os.Getenv("REDEVEN_FLOWER_OLLAMA_CONTEXT_E2E") != "1" {
 		t.Skip("run scripts/check_flower_context_ollama.sh to use the selected real Ollama model")
 	}
-	sourceRoot := os.Getenv("REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT")
-	if sourceRoot == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Fatal(err)
-		}
-		sourceRoot = filepath.Join(home, ".redeven", "local-environment")
-	}
-	raw, err := os.ReadFile(filepath.Join(sourceRoot, "config.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var source struct {
-		AI config.AIConfig `json:"ai"`
-	}
-	if err := json.Unmarshal(raw, &source); err != nil {
-		t.Fatal(err)
-	}
-	providerID, modelName, found := strings.Cut(source.AI.CurrentModelID, "/")
-	if !found {
-		t.Fatal("local configuration has no selected provider/model")
-	}
-	var selected config.AIProvider
-	for _, p := range source.AI.Providers {
-		if p.ID == providerID {
-			selected = p
-		}
-	}
-	if selected.Type != "ollama" {
-		t.Fatal("the selected model must belong to an Ollama provider")
-	}
-	apiKey := ""
-	if raw, err := os.ReadFile(filepath.Join(sourceRoot, "secrets.json")); err == nil {
-		var secrets struct {
-			AI struct {
-				Keys map[string]string `json:"provider_api_keys"`
-			} `json:"ai"`
-			Keys map[string]string `json:"provider_api_keys"`
-		}
-		if err := json.Unmarshal(raw, &secrets); err != nil {
-			t.Fatal("invalid local secrets JSON")
-		}
-		apiKey = secrets.AI.Keys[providerID]
-		if apiKey == "" {
-			apiKey = secrets.Keys[providerID]
-		}
-	} else if !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
 	ctx, cancel := context.WithTimeout(t.Context(), 25*time.Minute)
 	defer cancel()
-	models, err := discoverModelCatalog(ctx, ModelCatalogRequest{Type: selected.Type, BaseURL: selected.BaseURL, APIKey: apiKey}, &http.Client{Timeout: 20 * time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Exercise startup conversion on an isolated copy; never rewrite the user's profile.
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	upgraded, err := config.LoadForStartup(configPath, func(p config.AIProvider) ([]config.AIProviderModel, error) {
-		if p.ID != providerID {
-			return nil, fmt.Errorf("qualification only resolves the selected provider")
-		}
-		return models, nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range upgraded.AI.Providers {
-		if p.ID == providerID {
-			selected = p
-		}
-	}
-	selected = selected.WithDiscoveredModels(models)
-	var model config.AIProviderModel
-	for _, m := range selected.EffectiveModels() {
-		if m.ModelName == modelName {
-			model = m
-		}
-	}
+	selected, model, modelID, apiKey := loadOllamaQualificationProfile(t, ctx)
+	providerID, modelName := selected.ID, model.ModelName
 	if model.ModelName == "" || model.EffectiveInputWindowTokens() < 96_000 {
 		t.Fatal("selected model requires a discovered effective context of at least 96000 tokens to qualify manual compaction before automatic pressure")
 	}
@@ -144,7 +67,7 @@ func TestE2E_FlowerOllamaContextCompaction(t *testing.T) {
 					effective = m
 				}
 			}
-			cfg := &config.AIConfig{CurrentModelID: source.AI.CurrentModelID, PermissionType: config.AIPermissionReadonly, Providers: []config.AIProvider{profile}}
+			cfg := &config.AIConfig{CurrentModelID: modelID, PermissionType: config.AIPermissionReadonly, Providers: []config.AIProvider{profile}}
 			stateRoot, homeRoot := t.TempDir(), t.TempDir()
 			opts := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateRoot, AgentHomeDir: homeRoot, Shell: "bash", Config: cfg,
 				RunMaxWallTime: 8 * time.Minute, RunIdleTimeout: 3 * time.Minute,
@@ -156,7 +79,7 @@ func TestE2E_FlowerOllamaContextCompaction(t *testing.T) {
 			}
 			t.Cleanup(func() { _ = svc.Close() })
 			meta := session.Meta{EndpointID: "env_ollama_context_e2e", NamespacePublicID: "ns_ollama_context_e2e", ChannelID: "ch_ollama_context_e2e", UserPublicID: "user_ollama_context_e2e", UserEmail: "ollama-context-e2e@example.invalid", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}
-			created, err := svc.CreateThread(ctx, &meta, "Ollama context "+scenario, source.AI.CurrentModelID, "", "")
+			created, err := svc.CreateThread(ctx, &meta, "Ollama context "+scenario, modelID, "", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -625,4 +548,91 @@ func newOllamaContextProxy(t *testing.T, baseURL string, recorder *ollamaContext
 	}))
 	t.Cleanup(server.Close)
 	return server
+}
+
+func loadOllamaQualificationProfile(t *testing.T, ctx context.Context) (config.AIProvider, config.AIProviderModel, string, string) {
+	t.Helper()
+	sourceRoot := os.Getenv("REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT")
+	if sourceRoot == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sourceRoot = filepath.Join(home, ".redeven", "local-environment")
+	}
+	raw, err := os.ReadFile(filepath.Join(sourceRoot, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source struct {
+		AI config.AIConfig `json:"ai"`
+	}
+	if err := json.Unmarshal(raw, &source); err != nil {
+		t.Fatal(err)
+	}
+	providerID, modelName, found := strings.Cut(source.AI.CurrentModelID, "/")
+	if !found {
+		t.Fatal("local configuration has no selected provider/model")
+	}
+	var selected config.AIProvider
+	for _, p := range source.AI.Providers {
+		if p.ID == providerID {
+			selected = p
+		}
+	}
+	if selected.Type != "ollama" {
+		t.Fatal("the selected model must belong to an Ollama provider")
+	}
+	apiKey := ""
+	if raw, err := os.ReadFile(filepath.Join(sourceRoot, "secrets.json")); err == nil {
+		var secrets struct {
+			AI struct {
+				Keys map[string]string `json:"provider_api_keys"`
+			} `json:"ai"`
+			Keys map[string]string `json:"provider_api_keys"`
+		}
+		if err := json.Unmarshal(raw, &secrets); err != nil {
+			t.Fatal("invalid local secrets JSON")
+		}
+		apiKey = secrets.AI.Keys[providerID]
+		if apiKey == "" {
+			apiKey = secrets.Keys[providerID]
+		}
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	models, err := discoverModelCatalog(ctx, ModelCatalogRequest{Type: selected.Type, BaseURL: selected.BaseURL, APIKey: apiKey}, &http.Client{Timeout: 20 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Exercise startup conversion on an isolated copy; never rewrite the user's profile.
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := config.LoadForStartup(configPath, func(p config.AIProvider) ([]config.AIProviderModel, error) {
+		if p.ID != providerID {
+			return nil, fmt.Errorf("qualification only resolves the selected provider")
+		}
+		return models, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range upgraded.AI.Providers {
+		if p.ID == providerID {
+			selected = p
+		}
+	}
+	selected = selected.WithDiscoveredModels(models)
+	var model config.AIProviderModel
+	for _, m := range selected.EffectiveModels() {
+		if m.ModelName == modelName {
+			model = m
+		}
+	}
+	if model.ModelName == "" {
+		t.Fatal("selected installed Ollama model is unavailable")
+	}
+	return selected, model, source.AI.CurrentModelID, apiKey
 }

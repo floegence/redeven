@@ -39,7 +39,7 @@ func (s *Service) StopThread(ctx context.Context, meta *session.Meta, threadID s
 		return StopThreadResponse{}, err
 	}
 	requestKey := flruntime.RequestKey(requestID)
-	_, err = typed.Cancel(ctx, flruntime.CancelInput{ThreadID: identity.ThreadID(threadID), RequestKey: requestKey, Mode: flruntime.CancelModeGraceful})
+	_, err = typed.Cancel(ctx, flruntime.CancelInput{ThreadID: identity.ThreadID(threadID), RequestKey: requestKey, Mode: flruntime.CancelModeGraceful, IncludeDescendants: true})
 	if err != nil && !errors.Is(err, flruntime.ErrThreadNotFound) && !errors.Is(err, flruntime.ErrThreadDeleted) {
 		return StopThreadResponse{}, err
 	}

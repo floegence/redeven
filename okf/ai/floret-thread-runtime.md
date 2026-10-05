@@ -99,7 +99,10 @@ interaction, including one atomic Answers batch for Reject All. `Cancel` is
 idempotent for every known thread and atomically clears pending interactions,
 closes unfinished tool work, and writes one terminal aborted turn before
 returning. Late provider, tool, or save-point work cannot reactivate a terminal
-turn. `Retry` preserves logical request lineage without appending another user
+turn. Published Floret v7.23.0 retries a failed turn from its latest existing
+save point so confirmed tool results remain in provider context across repeated
+failures and restart. Thread-level queue facts may interleave a pending question
+without corrupting its canonical turn. `Retry` preserves logical request lineage without appending another user
 message. Delete and shutdown fence new effect work, cancel and join the active
 subtree, and prevent late output from outranking a tombstone.
 
@@ -180,7 +183,10 @@ and ordinary detail reads remain the only browser state paths; Stop never
 decorates a command response with viewer read state, projects a second detail,
 or starts a follow-up read.
 
-Flower explicitly requests `CancelModeGraceful`. Floret records the exact
+Flower explicitly requests `CancelModeGraceful` with `IncludeDescendants` through
+published Floret v7.23.0. Stop therefore includes active child threads, while
+independent roots and queued inputs remain untouched. Each thread publishes its
+own stopping and terminal views. Floret records the exact
 ThreadID, TurnID, RunID, source, and request time before cancelling execution.
 One five-second window lets dispatched tools finish their existing output and
 result commits. Confirmed results end the turn as cancelled; unconfirmed
