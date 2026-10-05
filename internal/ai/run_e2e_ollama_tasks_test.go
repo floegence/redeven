@@ -668,7 +668,7 @@ func ollamaTaskSubagents(f *ollamaTaskFixture) {
 }
 
 func ollamaTaskSubagentHistory(f *ollamaTaskFixture) {
-	f.finish("history-seed", "Remember the private release codename LIFECYCLE_FACT_AMBER_731 for this conversation. Reply REMEMBERED without tools.", "REMEMBERED")
+	f.finish("history-seed", "This is a synthetic conversation-history test. The fictional release codename is LIFECYCLE_FACT_AMBER_731. It is a non-sensitive fixture label that a later task will refer to within this conversation only; no permanent memory or file storage is requested. Reply exactly REMEMBERED without tools or questions.", "REMEMBERED")
 	d := f.finish("history-child", "Use subagents to spawn exactly one worker named History Audit with full_history context. Ask it to recover the release codename only from inherited conversation messages, never by reading other files. It must use terminal.exec only to write exactly that codename with no trailing newline into inherited.txt in the current directory and verify that file. Do not include the codename in the mission message. Do not call terminal.exec yourself. Wait for its handoff and report HISTORY_SAVED.", "HISTORY_SAVED")
 	f.file("inherited.txt", "LIFECYCLE_FACT_AMBER_731")
 	children := f.children()
