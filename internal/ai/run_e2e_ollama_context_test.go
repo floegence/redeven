@@ -318,18 +318,20 @@ func assertOllamaContextUsage(t *testing.T, detail *FlowerThreadDetail, recorder
 }
 
 type ollamaContextRequest struct {
-	Kind                     string `json:"kind"`
-	Model                    string `json:"model"`
-	SystemHash               string `json:"system_hash"`
-	ToolsHash                string `json:"tools_hash"`
-	HasMarker                bool   `json:"has_marker"`
-	HasOriginalMarkerMessage bool   `json:"has_original_marker_message"`
-	Status                   int    `json:"status"`
-	InputTokens              int64  `json:"input_tokens"`
-	CacheReadTokens          int64  `json:"cache_read_tokens"`
-	OutputTokens             int64  `json:"output_tokens"`
-	MaxOutputTokens          int64  `json:"max_output_tokens"`
-	FinishReason             string `json:"finish_reason"`
+	Kind                     string   `json:"kind"`
+	Model                    string   `json:"model"`
+	SystemHash               string   `json:"system_hash"`
+	SystemPermissionModes    []string `json:"system_permission_modes,omitempty"`
+	SystemMessageCount       int      `json:"system_message_count"`
+	ToolsHash                string   `json:"tools_hash"`
+	HasMarker                bool     `json:"has_marker"`
+	HasOriginalMarkerMessage bool     `json:"has_original_marker_message"`
+	Status                   int      `json:"status"`
+	InputTokens              int64    `json:"input_tokens"`
+	CacheReadTokens          int64    `json:"cache_read_tokens"`
+	OutputTokens             int64    `json:"output_tokens"`
+	MaxOutputTokens          int64    `json:"max_output_tokens"`
+	FinishReason             string   `json:"finish_reason"`
 }
 
 type ollamaContextRecorder struct {
@@ -466,11 +468,21 @@ func newOllamaContextProxy(t *testing.T, baseURL string, recorder *ollamaContext
 			recorder.mu.Lock()
 			for _, message := range payload.Messages {
 				var header struct {
-					Role string `json:"role"`
+					Role    string `json:"role"`
+					Content string `json:"content"`
 				}
 				_ = json.Unmarshal(message, &header)
 				if header.Role == "system" && record.SystemHash == "" {
 					record.SystemHash = sha256Hex(message)
+				}
+				if header.Role == "system" {
+					record.SystemMessageCount++
+					for _, line := range strings.Split(header.Content, "\n") {
+						if mode, ok := strings.CutPrefix(line, "- Current permission mode for this request: "); ok {
+							mode, _, _ = strings.Cut(mode, ".")
+							record.SystemPermissionModes = append(record.SystemPermissionModes, mode)
+						}
+					}
 				}
 				if header.Role == "user" && bytes.Contains(message, []byte(recorder.marker)) && recorder.originalMarkerHash == "" && record.Kind == "main" {
 					recorder.originalMarkerHash = sha256Hex(message)

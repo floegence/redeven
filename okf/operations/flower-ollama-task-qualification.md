@@ -99,7 +99,8 @@ path differs from `$HOME/.redeven/local-environment`. The script sets
 
 Set `REDEVEN_FLOWER_TASK_REPORT_ROOT` to a private evidence directory for per-case
 JSON reports. They contain synthetic task views, model request metadata, fault
-counts, PID, temporary state location, and loopback port; keep the run log and
+counts, system-message count and live permission modes, PID, temporary state
+location, and loopback port; keep the run log and
 source commit alongside them. Reports contain no API keys. A scenario's `pass`
 flag does not replace the complete Go test process exit status. Temp stores and
 fixture files are removed after each case; reports retain the observable results.
