@@ -21,13 +21,20 @@ Runtime login and revocation.
 
 ## Card information hierarchy
 
-Each Gateway card uses a dedicated route-through-entry mark and one compact
-identity row. Connection type and endpoint appear once; service status and trust
-share a separate line. One header menu owns settings, deletion and secondary
-actions. The card labels its count as added environments with a localized unit,
-never as a file directory or an online-environment count. Its help control
-explains registration and reachability without changing permission. An empty
-card explains the next action; a failed refresh labels the retained list as stale.
+Each Gateway occupies one full-width row at every viewport size. It shares the
+Redeven Cloud overview surface, identity spacing, action grouping and subtle
+status strip. The main row contains the dedicated Gateway mark, name and
+connection, registered-environment count, Add environment, current service or
+refresh action, and one secondary-actions menu. Narrow layouts reflow whole
+controls while keeping every label on one line. The status strip separates
+Gateway connectivity and trust from catalog guidance; no target-health metrics
+are invented to resemble Cloud statistics.
+
+The count includes a localized environment unit and a quieter Added label,
+never a filesystem-directory label or online-environment count. Its disclosure
+expands the existing environment list below the status strip. Its help explains
+registration and reachability without changing permission. Empty and failed
+refresh guidance lives in the status strip rather than adding a tall card body.
 The list contains explicitly registered targets;
 Gateway does not scan the network or discover Runtime installations. An unknown
 directory count is distinct from a successfully synchronized empty directory.
@@ -41,7 +48,7 @@ form omits unrelated connection types and gateway selection, retains its draft
 on failure, and closes after a successful save. Cancel preserves the page's
 query, filter, scroll position and originating control. Save refreshes the same
 authoritative launcher snapshot and reveals the updated count and list.
-View environments expands an inline list on the card. Names, target URLs and
+View environments expands full-width environment rows inside the card. Names, target URLs and
 default access methods remain inspectable there, with explicit direct/proxy
 actions drawn from the shared environment action model. Open uses the card's
 existing foreground progress owner; edit and delete use the existing settings
@@ -83,8 +90,8 @@ operation, including its failure. A single click submits an action once;
 the busy primary button uses the shared progress shimmer and reopens that same
 operation. Its action icon and admission spinner share the published Button icon
 slot, so pending requests never display both. Dismissing the popover does not
-cancel or resubmit work. Popovers and
-menus retain a noninteractive exit frame, restore trigger focus on Escape, and
+cancel or resubmit work. The main-row action anchor uses the existing automatic popover placement to
+keep progress inside the viewport. Popovers and menus retain a noninteractive exit frame, restore trigger focus on Escape, and
 respect reduced-motion preferences.
 
 # Boundaries
@@ -98,7 +105,7 @@ real network and installed-package qualification remains separate.
 # Validation
 
 `node desktop/scripts/check-gateway-access-ui.mjs` covers
-all ten locales at normal and narrow/dark/large-text layouts, including the
+all ten locales at 1280, 760 and 430-pixel widths, including dark and large-text layouts, including the
 explicit Start-and-retry setup continuation, card-to-profile Gateway selection,
 and profile permission help without changing consent.
 Adding from a card must retain the Gateway tab, lock the originating Gateway,
@@ -114,7 +121,8 @@ reports and screenshots live in `desktop/dist/gateway-environment-flow/`.
 Run `node desktop/scripts/check-gateway-card-experience.mjs` for the focused
 Welcome interaction qualification. It renders production components with owned
 launcher fixtures at desktop and 430-pixel widths, with light/dark themes and
-large text. It checks single-click submission, delayed service progress, shared
+large text. It asserts that every Gateway fills its own row, then checks single-click
+submission, delayed service progress, shared
 button shimmer, popup and menu entry/exit, keyboard navigation and focus return,
 failure presentation, and dismissal/reopening without canceling or resubmitting.
 The update confirmation leads into the same progress popup with a visible
@@ -124,11 +132,14 @@ The ten-locale access UI runner also checks progress layout and reduced motion.
 The update-required snapshot also covers an update already running before any
 card-local interaction. Both admission and background updates must show exactly
 one primary-button icon. Environment-count help and the header settings menu remain
-keyboard accessible after the compact card layout changes.
+keyboard accessible in the full-width overview layout.
 The progress fixture uses the production service-step projection. Screenshots
 and its report live in `desktop/dist/gateway-card-experience/`. This establishes
 renderer behavior; real service deployment remains owned by
 [Gateway deployment qualification](gateway-deployment-qualification.md).
+
+The shared shell also runs the existing Cloud overview browser check to verify
+account counts, responsive controls, recovery details and sign-out remain intact.
 
 # Evidence
 
@@ -139,3 +150,4 @@ renderer behavior; real service deployment remains owned by
 - `redeven:desktop/scripts/check-gateway-access-ui.mjs` - Ten-locale access, contextual creation, consent help and setup recovery.
 - `redeven:desktop/scripts/check-gateway-card-experience.mjs` - Service progress, motion, single-icon actions and keyboard navigation.
 - `redeven:desktop/scripts/check-gateway-environment-flow.mjs` - Creation, failed-save retry, editing, deletion, focus and count reconciliation.
+- `redeven:desktop/scripts/check-cloud-account-overview.mjs` - Regression coverage for the shared Cloud overview shell.

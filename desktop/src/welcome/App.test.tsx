@@ -513,7 +513,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const totalGatewaySourceCount = createMemo(() => props.gatewaySources.length);');
     expect(appSrc).toContain('noMatchingGatewaysTitle');
     expect(styles).toContain('.redeven-gateway-grid');
-    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 22rem));');
+    expect(styles).toContain('grid-template-columns: minmax(0, 1fr);');
     expect(styles).not.toContain('redeven-card-entrance');
   });
 
@@ -882,7 +882,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toMatch(/@media\s*\(min-width:\s*1024px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
   });
 
-  it('renders Gateway sources as environment-style cards with guided actions', () => {
+  it('renders Gateway sources as full-width overview cards with guided actions', () => {
     const appSrc = readWelcomeSource();
     const gatewaySourceActionRunnerSrc = readGatewaySourceActionRunnerSource();
     const actionPopoverSrc = readDesktopActionPopoverSource();
@@ -891,7 +891,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function GatewaySourceCard');
     expect(appSrc).toContain('class="redeven-gateway-library"');
     expect(appSrc).toContain('<div class="redeven-gateway-grid">');
-    expect(appSrc).toContain('redeven-environment-card redeven-gateway-card');
+    expect(appSrc).toContain('<section class="redeven-gateway-card"');
+    expect(appSrc).toContain('redeven-gateway-card__statusbar');
     expect(appSrc).toContain(
       'const selectedGatewayRefreshDiagnosisResult = createMemo<GatewayDiagnosisResultSnapshot | null>(() => {',
     );
@@ -1238,7 +1239,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('gateway_env_id: action.environment_id');
     expect(appSrc).not.toContain('redeven-gateway-row');
     expect(styles).toContain('.redeven-gateway-grid');
-    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 22rem));');
+    expect(styles).toContain('grid-template-columns: minmax(0, 1fr);');
     expect(styles).toContain('.redeven-gateway-card {');
     expect(styles).toContain('--redeven-action-popover-width: min(19rem, calc(100vw - 1rem));');
     expect(styles).not.toContain('--redeven-action-popover-width: min(28rem');
