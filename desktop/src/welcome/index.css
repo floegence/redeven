@@ -3660,7 +3660,6 @@ pre,
 }
 
 .redeven-gateway-card__primary-anchor { display: inline-flex; min-width: 0; }
-.redeven-gateway-card__primary-button { min-width: 0; height: 2rem; border-radius: .375rem; padding-inline: .75rem; }
 
 @media (max-width: 640px) {
   .redeven-gateway-card .redeven-gateway-card__identity { flex-basis: 100%; }
