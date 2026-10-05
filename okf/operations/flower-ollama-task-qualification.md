@@ -59,6 +59,9 @@ The additional interleaving cases combine commands at observed live boundaries:
 
 - Submit identical requests concurrently, reject conflicting content for the
   same key, issue concurrent stops, restart, and promote the single retained task.
+- Stop and immediately restart during real generation, approval, and Ask User;
+  preserve the original user-stop identity, reject stale responses, and promote
+  each retained queue item exactly once across the three boundaries.
 - Edit, reorder, and delete queued tasks during approval; stop and restart before
   promotion, and reject a late approval without executing the cancelled tool.
 - Submit duplicate approvals concurrently and replay the accepted answer before
@@ -108,7 +111,8 @@ counts, system-message count, live permission modes, prior/current-input
 reasoning counts, PID, temporary state
 location, and loopback port; keep the run log and
 source commit alongside them. Reports contain no API keys. A scenario's `pass`
-flag does not replace the complete Go test process exit status. Temp stores and
+flag includes service shutdown errors and does not replace the complete Go test
+process exit status. Temp stores and
 fixture files are removed after each case; reports retain the observable results.
 
 # Boundaries

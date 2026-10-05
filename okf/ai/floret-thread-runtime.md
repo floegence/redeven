@@ -117,7 +117,10 @@ subtree, and prevent late output from outranking a tombstone. Graceful Host
 shutdown resolves approvals owned by cancelled in-memory executions, so stale
 approvals cannot resume them after restart. Durable Ask User waits and queued
 inputs survive; dispatched effects with unknown outcomes remain failed and are
-never replayed. Floret owns this atomic settlement.
+never replayed. Floret v7.25.2 reuses an existing cancellation for the exact
+Turn/Run when Stop overlaps shutdown or another settlement path, preserving
+the original stop source, mode, and timestamp without a duplicate cancel fact.
+Floret owns this atomic settlement.
 
 Restart hydration restores accepted input, queue items, unresolved interactions,
 logical retry input, and canonical outputs, then resumes provider-safe work
