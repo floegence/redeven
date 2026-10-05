@@ -49,7 +49,7 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
     launcher: { getSnapshot: getSnapshot ?? (async () => snapshot), performAction, subscribeSnapshot: () => () => {}, getSSHConfigHosts: async () => [],
       listRuntimeContainers: async () => ({ ok: true, containers: [{ engine: 'docker', container_id: 'test-container-id',
         container_ref: 'qualification', container_label: 'Qualification container', image: 'debian', status_text: 'running' }] }) },
-    settings: { requestRuntimeFlower: async () => ({ ok: false, error: { message: 'No Runtime in this Gateway fixture' } }) },
+    settings: { cancel: () => {}, requestRuntimeFlower: async () => ({ ok: false, error: { message: 'No Runtime in this Gateway fixture' } }) },
   } as unknown as DesktopWelcomeRuntime} />, host));
   await settle();
   Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, value: vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation) });
@@ -74,6 +74,9 @@ describe('Gateway setup and own-service actions', () => {
     const perform = await mount(undefined, snapshot);
     button('Gateways').click(); await settle();
     button('Add environment').click(); await settle();
+    expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Environment type');
+    expect(document.getElementById('gateway-environment-gateway')).toBeNull();
     input('gateway-environment-target-url', 'https://runtime.example/');
     input('environment-label', 'Registered from Gateway');
     button('Save').click(); await settle();
@@ -89,12 +92,58 @@ describe('Gateway setup and own-service actions', () => {
     expect(perform).not.toHaveBeenCalled();
   });
 
-  it('opens only the selected Gateway directory without performing a connection action', async () => {
+  it('cancels Gateway environment creation in place without submitting or changing the Gateway', async () => {
+    const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
+    button('Gateways').click(); await settle();
+    button('Add environment').click(); await settle();
+    input('gateway-environment-target-url', 'https://draft.example/');
+    button('Cancel').click(); await settle();
+    expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
+    expect(perform).not.toHaveBeenCalled();
+    button('Add environment').click(); await settle();
+    expect((document.getElementById('gateway-environment-target-url') as HTMLInputElement).value).toBe('');
+  });
+
+  it('keeps a failed Gateway profile draft in context and updates the local list after explicit retry', async () => {
+    let snapshot = compactEnvironmentPreviewFixture().coverage;
+    const perform = await mount(undefined, snapshot, async () => snapshot);
+    button('Gateways').click(); await settle();
+    button('Add environment').click(); await settle();
+    input('gateway-environment-target-url', 'https://runtime.example/');
+    input('environment-label', 'Added in place');
+    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_catalog_failed', message: 'Gateway unavailable.' });
+    button('Save').click(); await settle();
+    expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
+    expect((document.getElementById('environment-label') as HTMLInputElement).value).toBe('Added in place');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Gateway unavailable.');
+    const original = snapshot.environments.find(entry => entry.kind === 'gateway_environment')!;
+    snapshot = { ...snapshot, environments: [...snapshot.environments, { ...original, id: 'gateway-added', label: 'Added in place', gateway_env_id: 'added' }],
+      gateway_sources: snapshot.gateway_sources.map(gateway => ({ ...gateway, environments: [...gateway.environments, { ...gateway.environments[0], gateway_env_id: 'added', display_name: 'Added in place' }] })) };
+    perform.mockResolvedValueOnce({ ok: true, outcome: 'saved_gateway_environment', environment_id: 'gateway-added' });
+    button('Save').click(); await settle();
+    expect(document.getElementById('gateway-environment-target-url')).toBeNull();
+    expect(document.querySelector('[data-gateway-id="bastion"]')?.textContent).toContain('2 environments');
+    expect(document.querySelector('[data-gateway-environment-id="added"]')?.textContent).toContain('Added in place');
+    expect(perform.mock.calls).toHaveLength(2);
+  });
+
+  it('expands Gateway environments locally and keeps explicit access modes on the shared request path', async () => {
     const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
     button('Gateways').click(); await settle();
     button('View Environments').click(); await settle();
-    await vi.waitFor(() => expect(document.querySelectorAll('[data-environment-group]')).toHaveLength(1));
-    expect(document.querySelector('[data-environment-group]')?.textContent).toContain('Gateway workspace');
+    expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
+    expect(document.querySelector('[data-gateway-environment-id="internal-workspace"]')?.textContent).toContain('Gateway workspace');
+    button('Open direct URL').click(); await settle();
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'open_gateway_environment', gateway_id: 'bastion', gateway_env_id: 'internal-workspace', access_mode: 'direct_url' });
+    expect(perform.mock.calls).toHaveLength(1);
+  });
+
+  it('expands only the selected Gateway environment list without performing a connection action', async () => {
+    const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
+    button('Gateways').click(); await settle();
+    button('View Environments').click(); await settle();
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-gateway-environment-id]')).toHaveLength(1));
+    expect(document.querySelector('[data-gateway-environment-id]')?.textContent).toContain('Gateway workspace');
     expect(perform).not.toHaveBeenCalled();
   });
 

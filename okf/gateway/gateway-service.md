@@ -80,48 +80,13 @@ save/start results. A failed snapshot refresh cannot erase the original failure
 or change a successful save into a failed write. Command diagnostics remain
 structured, sanitized and available alongside localized guidance.
 
-## Desktop directory and operation presentation
+## Desktop interaction contract
 
-Each Gateway card uses a dedicated route-through-entry mark and one compact
-identity row. Connection type and endpoint appear once; service status and trust
-share a separate line. One header menu owns settings, deletion and secondary
-actions. The environment directory is an inline entry, not a nested panel;
-its help control expands registration and reachability guidance without changing
-permission. The directory contains explicitly registered targets;
-Gateway does not scan the network or discover Runtime installations. An unknown
-directory count is distinct from a successfully synchronized empty directory.
-Catalog entries do not assert target reachability or Runtime health.
-
-Add environment opens the existing URL-profile form with this Gateway selected
-and Gateway proxy as the default access method. View environments opens the
-Gateway's directory in the environment list; opening a target verifies access
-through the explicitly selected method. Neither action grants Runtime lifecycle
-authority. A paired client without profile-write permission receives an
-Authorize changes entry into Gateway setup instead of an implicit grant.
-
-The profile-write checkbox has a keyboard-accessible question button. Its
-click-expanded body explains names, Runtime URLs, default access methods, and
-visibility to other paired Desktops after refresh. It also explains that Runtime
-password, MFA, settings, and lifecycle permissions remain independent. Reading
-this help never changes consent or submits a request.
-
-Gateway actions use the existing launcher operation as the single progress
-owner. Managed service events project into its step timeline, retaining the
-active phase and elapsed time on failure. Because installation and host phases
-can be skipped or revisited, service progress shows observed steps without an
-invented percentage or fixed step total. The shared meter stays visible: it
-animates indeterminately during service work, fills on success, and stops on
-failure or cancellation. Total elapsed time comes from the operation's main-process
-start timestamp, survives stage changes and popover reopening, and freezes at the
-terminal snapshot timestamp. The separate current-stage timer remains a waiting
-hint. Primary-button labels identify the actual start, stop, restart, or update
-operation, including its failure. A single click submits an action once;
-the busy primary button uses the shared progress shimmer and reopens that same
-operation. Its action icon and admission spinner share the published Button icon
-slot, so pending requests never display both. Dismissing the popover does not
-cancel or resubmit work. Popovers and
-menus retain a noninteractive exit frame, restore trigger focus on Escape, and
-respect reduced-motion preferences.
+[Gateway Desktop interactions](gateway-desktop-interactions.md) owns card
+information hierarchy, contextual environment management, profile-permission
+explanation, operation progress, motion and focus. The card count describes
+registered environments, never target health. UI actions reuse the launcher
+snapshot and operation owners; presentation cannot expand service authority.
 
 # Evidence
 
@@ -131,7 +96,5 @@ respect reduced-motion preferences.
 - `redeven:spec/openapi/gateway-v3.yaml:1` - Access-only Gateway HTTP contract.
 - `redeven:desktop/src/welcome/GatewaySetup.client.test.tsx` - Explicit managed registration, URL pairing input, and own-service start interactions.
 - `redeven:desktop/src/main/gatewayLifecycleManager.test.ts` - Gateway-only service operations, target isolation, and URL management rejection.
-- `redeven:desktop/src/main/gatewayServiceProgress.test.ts` - Observed service phases, repeated-phase timing, and terminal progress.
-- `redeven:desktop/scripts/check-gateway-card-experience.mjs` - Real browser card actions, delayed progress, motion, focus restoration, and consent explanation.
 - `redeven:desktop/src/main/gatewayServiceHost.ts:1` - Explicit standalone Gateway installation under the Gateway state root.
 - `redeven:.github/workflows/release.yml:1` - Independent Gateway archive build and publication.

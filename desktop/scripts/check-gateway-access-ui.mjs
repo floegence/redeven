@@ -92,13 +92,24 @@ try {
       }
       assert.equal(await gatewayCard.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
       if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-card-${dark ? 'dark-narrow' : 'light'}.png` });
-      await gatewayCard.getByRole('button', { name: i18n.t('gatewayAccess.addEnvironment'), exact: true }).click();
+      const addEnvironment = gatewayCard.getByRole('button', { name: i18n.t('gatewayAccess.addEnvironment'), exact: true });
+      await addEnvironment.focus();
+      await page.keyboard.press('Enter');
       const create = page.getByRole('dialog');
       await create.locator('#gateway-environment-target-url').waitFor();
-      assert.ok((await create.locator('#gateway-environment-gateway').innerText()).includes('Bastion'));
+      assert.equal(await gatewayCard.isVisible(), true, 'Adding stays on the originating Gateway');
+      assert.ok((await create.locator('.redeven-gateway-context').innerText()).includes('Bastion'));
+      assert.equal(await create.locator('#gateway-environment-gateway').count(), 0, 'The originating Gateway is fixed');
+      assert.equal(await create.getByText(i18n.t('connectionDialog.environmentType'), { exact: true }).count(), 0);
       assert.equal(await create.locator('#gateway-environment-access-mode').getByRole('radio', { name: i18n.t('gatewayAccess.proxy'), exact: true }).getAttribute('aria-checked'), 'true');
+      assert.equal(await create.evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
+      if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-add-${dark ? 'dark-narrow' : 'light'}.png` });
       await page.keyboard.press('Escape');
       await create.waitFor({ state: 'detached' });
+      await page.waitForFunction(() => document.activeElement?.classList.contains('redeven-gateway-card__add'), undefined, { timeout: 3000 });
+      await gatewayCard.locator('[data-gateway-environment-id="internal-workspace"]').waitFor();
+      assert.equal(await gatewayCard.evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
+      if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-expanded-${dark ? 'dark-narrow' : 'light'}.png` });
       await page.getByRole('button', { name: i18n.t('environmentCenter.gatewaysSection'), exact: true }).click();
       await page.getByRole('button', { name: i18n.t('environmentCenter.addGateway'), exact: true }).first().click();
       const setup = page.getByRole('dialog');
