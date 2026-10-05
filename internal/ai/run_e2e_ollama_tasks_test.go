@@ -565,7 +565,12 @@ func ollamaTaskApprovals(f *ollamaTaskFixture) {
 		f.report["approvals_"+action] = approvals
 		f.terminal(flruntime.TurnOutcomeCompleted)
 		if action == "accept" {
-			f.file("accept.txt", "APPROVED")
+			// Approval governs whether the requested write happens. A single
+			// terminal newline does not change this text marker's meaning.
+			content, err := os.ReadFile(filepath.Join(f.root, "accept.txt"))
+			if err != nil || strings.TrimSuffix(string(content), "\n") != "APPROVED" {
+				f.t.Fatalf("approved content=%q err=%v", content, err)
+			}
 		} else {
 			f.missing("reject.txt")
 		}
