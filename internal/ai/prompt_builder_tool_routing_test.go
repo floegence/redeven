@@ -67,6 +67,14 @@ func TestBuildLayeredSystemPrompt_RoutesOKFToRedevenRepositoryKnowledgeOnly(t *t
 	assertPromptContains(t, prompt, "Source-level conclusions require file or terminal verification after OKF navigation.")
 }
 
+func TestBuildLayeredSystemPromptRefreshesToolAvailabilityAfterPermissionChanges(t *testing.T) {
+	for _, prompt := range []string{buildPromptForToolRoutingTest(t), buildReadonlyPromptForToolRoutingTest(t)} {
+		assertPromptContains(t, prompt, "Tool availability and permissions can change between requests.")
+		assertPromptContains(t, prompt, "Use the tool definitions supplied with this request as the current capability list")
+		assertPromptContains(t, prompt, "earlier messages and runtime-context snapshots describe their own time")
+	}
+}
+
 func TestBuildLayeredSystemPrompt_ExcludesOKFFromExternalResearch(t *testing.T) {
 	t.Parallel()
 

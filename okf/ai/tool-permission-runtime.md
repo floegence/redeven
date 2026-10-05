@@ -30,6 +30,11 @@ Floret owns permission, approval, invocation and effect lifecycle. `ai_thread_se
 
 Each hosted Agent uses published Floret v7.18.0 `WithAgentDynamicToolSurface` with `RefreshProviderSurface` enabled. Current local tools and permission instructions always refresh, even when queued work started under a mode different from admission. `InitialProviderSurface` retains the first checkpoint's hosted search definitions so unrelated search settings keep their existing Turn boundary, including after restart. A new snapshot binds current permissions, tool definitions and prompt to the authoritative thread and execution key. Floret refreshes the provider envelope at the next request while preserving model, reasoning, earlier checkpoints and canonical history. Dispatch refresh occurs before calls enter authorization; their snapshot stays stable while any approval or execution is pending. Invalid identity, policy or epoch fails closed. No second permission ledger is maintained.
 
+The current request's tool definitions govern model capability claims. Historical
+runtime snapshots and assistant statements describe earlier permissions and must
+not make a restored tool appear unavailable. A listed tool that requires approval
+uses the normal approval flow; a prior denial still binds the denied action.
+
 Immediately before an effect, Redeven validates the Floret request against its invocation snapshot. Floret has settled any canonical approval; Redeven never creates or waits for a second decision. Each concurrent invocation receives one process-local proof. Cancellation, resource checks, target routing, effect fencing and output limits remain enforced. A setting change cannot settle a pending approval, cancel an executing tool or rewrite a provider request already sent. The next authorization batch reads the new setting.
 
 In `approval_required`, mutating actions use Floret's canonical interaction; in `full_access`, per-tool approval is skipped while the remaining execution checks still apply. Terminal process operations require effective write and execute permission. Model and reasoning settings retain their separate busy guard.
