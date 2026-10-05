@@ -52,6 +52,7 @@ func TestE2E_FlowerOllamaTaskLifecycle(t *testing.T) {
 		{"subagent_interrupt_and_followup", ollamaTaskSubagentInterrupt},
 		{"parent_stop_cancels_child", ollamaTaskParentStop},
 		{"interleave_duplicate_send_stop_restart", ollamaInterleaveDuplicateSend},
+		{"interleave_stop_immediate_restart", ollamaInterleaveStopImmediateRestart},
 		{"interleave_approval_queue_stop_restart", ollamaInterleaveApprovalQueue},
 		{"interleave_concurrent_approval_replay", ollamaInterleaveApprovalReplay},
 		{"interleave_ask_stop_stale_answer", ollamaInterleaveStaleAnswer},
@@ -132,7 +133,9 @@ func newOllamaTaskFixture(t *testing.T, profile config.AIProvider, model config.
 			}
 		}
 		if f.svc != nil {
-			_ = f.svc.Close()
+			if err := f.svc.Close(); err != nil {
+				t.Errorf("task runtime shutdown: %v", err)
+			}
 		}
 		f.report["pass"] = !t.Failed()
 		f.report["requests"] = f.recorder.snapshot()

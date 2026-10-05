@@ -75,6 +75,55 @@ func ollamaAppendPrompt(file, line string) string {
 	return fmt.Sprintf("In the current directory, use terminal.exec exactly once to execute: printf '%s\\n' >> %s . Then verify the file with a read-only command and report DONE. Do not repeat the append.", line, file)
 }
 
+func ollamaInterleaveStopImmediateRestart(f *ollamaTaskFixture) {
+	want := ""
+	for _, boundary := range []string{"stream", "approval", "input"} {
+		var stale func() error
+		switch boundary {
+		case "stream":
+			f.fault.arm("hold")
+			f.send("shutdown-stream", "Without tools, explain sorting algorithms in twenty paragraphs.")
+			f.fault.waitHit(f.t)
+		case "approval":
+			f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionApprovalRequired))
+			f.send("shutdown-approval", ollamaAppendPrompt("cancelled-shutdown.txt", "UNEXPECTED"))
+			i := f.approval()
+			stale = func() error {
+				_, err := f.svc.SubmitFlowerApproval(f.meta, SubmitFlowerApprovalRequest{ThreadID: f.threadID, InteractionID: i.ID, Approved: true})
+				return err
+			}
+		case "input":
+			f.send("shutdown-input", "Use ask_user to request a fictional fixture label with a single free-text question id label and response_mode write. After the answer, write it to cancelled-shutdown.txt. Do not guess the answer.")
+			p := f.ask()
+			stale = func() error {
+				_, err := f.svc.SubmitRequestUserInputResponse(f.ctx, f.meta, SubmitRequestUserInputResponseRequest{ThreadID: f.threadID, Response: RequestUserInputResponse{PromptID: p.PromptID, Answers: map[string]RequestUserInputAnswer{"label": {Text: "STALE"}}}})
+				return err
+			}
+		}
+		q := f.send("shutdown-queued-"+boundary, ollamaAppendPrompt("shutdown-recovery.txt", boundary))
+		f.stop()
+		// Deliberately do not wait for the cancellation to settle before close.
+		f.restart()
+		f.stoppedQueue(1)
+		v := f.view().Current
+		if v.Cancellation == nil || v.Cancellation.Source != "user_stop" || v.Cancellation.Mode != flruntime.CancelModeGraceful {
+			f.t.Fatalf("shutdown replaced the user's stop: %+v", v.Cancellation)
+		}
+		if stale != nil && stale() == nil {
+			f.t.Fatal("stale interaction revived stopped work after immediate restart")
+		}
+		f.missing("cancelled-shutdown.txt")
+		f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionFullAccess))
+		_, err := f.svc.SendQueuedInputNow(f.ctx, f.meta, f.threadID, q.QueueID)
+		f.check(err)
+		f.terminal(flruntime.TurnOutcomeCompleted)
+		want += boundary + "\n"
+		f.file("shutdown-recovery.txt", want)
+		f.report["stop_restart_"+boundary] = true
+	}
+	f.assertUsers(6)
+}
+
 func ollamaInterleaveDuplicateSend(f *ollamaTaskFixture) {
 	f.fault.arm("hold")
 	f.send("duplicate-active", "Without tools, explain sorting algorithms in twenty paragraphs.")

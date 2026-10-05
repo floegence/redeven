@@ -37,7 +37,7 @@ Tool calls remain paired with their original results. The adapter must not omit
 content, convert reasoning to visible text, or drop the continuation to satisfy
 an endpoint's message-shape requirements.
 
-Ollama uses the published Floret v7.25.1
+Ollama uses the published Floret v7.25.2
 `Capabilities.ReasoningHistory = ReasoningHistoryCurrentUser` projection. Each
 new canonical user input stops replaying earlier assistant thinking, which can
 contain expired permission and tool assumptions. Historical visible answers,
