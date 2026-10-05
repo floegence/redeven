@@ -15,7 +15,9 @@ invalid bounds must fail without reading outside the backing file. A native
 capture failure still suspends the generation. Synthetic compatibility evidence
 cannot certify an actual GNOME session or physical latency.
 
-# Reproduction And Repair
+# Contract
+
+## Reproduction And Repair
 
 The ordinary Desktop connection to `udesk24`, using its normal saved portal grant,
 progressed from authorization to active generation 1, then immediately suspended
@@ -37,9 +39,9 @@ copies complete before requeue, and existing cursor, sequence and damage rules
 remain authoritative. The old published component remains identifiable and is
 never modified in place.
 
-# Verification
+## Verification
 
-## Regression And Installed Libraries
+### Regression And Installed Libraries
 
 The same private synthetic producer was run against old and repaired capture
 clients on `udesk24`. It allocates MemFd without MAPPABLE and uses Mutter 46's
@@ -60,7 +62,7 @@ buffer identity, invalid/truncated backing files and idempotent stream cleanup.
 The upstream source gate also passes Go race/vet, platform builds and the existing
 source regression suites.
 
-## Distribution
+### Distribution
 
 The immutable v0.22.13 tag resolves through the Go proxy and checksum database to
 `eb15a01f9dd0f021d7a70348680ea2919522c349`. A CLI built from that verified module

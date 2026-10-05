@@ -7,7 +7,9 @@ timestamp: 2026-09-30T00:00:00Z
 ---
 # Summary
 
-Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.
+Desktop derives connection presentation from host access, process placement, Runtime-reported public addresses, and Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.
+
+[Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.
 
 # Contract
 
@@ -70,14 +72,6 @@ Settings show connection identity and access actions before configuration. Narro
 Managed settings use the selected Runtime's private control channel, or its authorized host CLI while stopped. Browser access and listening-port controls configure the Environment, not Desktop's managed connection. Remote loopback is labeled Environment only and cannot open in the client browser. SSH connection details remain available if access settings fail; the failure has an explicit Retry. URL registrations edit connection information only.
 
 [Environment settings](desktop-environment-settings.md) owns section layout, draft/session identity, validation, and committed rebinding. [Local UI certificates](../security/local-ui-certificates.md) owns explicit HTTPS, certificate validity and client trust, maintenance confirmation, and restart blocking. [Local UI network exposure](../security/local-ui-network-exposure.md) owns bind, public-address, and password authority. Missing saved protocols retain HTTP; explicit HTTPS is preserved. Native settings remain readable for older Runtimes, while unsupported management requires an update or stop before saving. Failed writes preserve the prior password verifier and report failure rather than claiming success.
-
-# Verified access routes
-
-[Verified Environment access routes](desktop-environment-access.md) owns the
-nonce-based Runtime identity observation and explicit Desktop default selection.
-These observations do not grant management, replace live readiness, or change
-Cloud binding. The existing Env card layout and lifecycle owner are preserved;
-additional access choices live in its menu and connection settings.
 
 # Evidence
 
