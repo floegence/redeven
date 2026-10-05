@@ -54,6 +54,8 @@ All operation labels, details, errors, recovery actions, tooltips, and accessibi
 
 # Boundaries
 
+[Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.
+
 ## Gateway access readiness
 
 Gateway catalog availability is publication evidence only. An explicit Direct
@@ -105,14 +107,6 @@ Ready publication mounts Flower automatically; later AI loss disposes that
 subtree while the shell-owned draft coordinator retains unsent content. Ordinary
 navigation and stable ready/degraded updates keep the same Flower instance.
 There is no renderer readiness poller, API-error retry loop, or inferred repair.
-
-# Verified access routes
-
-[Verified Environment access routes](desktop-environment-access.md) owns the
-nonce-based Runtime identity observation and explicit Desktop default selection.
-These observations do not grant management, replace live readiness, or change
-Cloud binding. The existing Env card layout and lifecycle owner are preserved;
-additional access choices live in its menu and connection settings.
 
 # Evidence
 

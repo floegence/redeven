@@ -395,7 +395,7 @@
               "wayland"
             ],
             "summary": "This record owns the reproduction and acceptance evidence for the Wayland MemFd\ncompatibility repair. The [media contract](../architecture/remote-desktop-media.md)\nowns buffer lifetime, cursor ownership and damage handling. An authorized readable\nsystem-memory frame must work when an older producer omits the MAPPABLE flag;\ninvalid bounds must fail without reading outside the backing file. A native\ncapture failure still suspends the generation. Synthetic compatibility evidence\ncannot certify an actual GNOME session or physical latency.",
-            "section_count": 3
+            "section_count": 2
           },
           {
             "concept_id": "operations.remote-desktop-validation",
@@ -1457,7 +1457,7 @@
               "runtime"
             ],
             "summary": "Desktop owns display association and default access selection. A Gateway profile\njoins an existing Runtime card only after the main process verifies possession\nof the same Runtime state identity over the selected transport. Names, URLs,\ncatalog availability and renderer claims never establish this relationship.\nExisting Local / Redeven Cloud binding and ownership remain independent.\nAn unverified or changed route stays separate; a missing saved default requires\nan explicit replacement. Association grants no login or management authority.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "desktop.host-application-component-cache",
@@ -1590,8 +1590,8 @@
               "environment",
               "settings"
             ],
-            "summary": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.",
-            "section_count": 3
+            "summary": "Desktop derives connection presentation from host access, process placement, Runtime-reported public addresses, and Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.\n\n[Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.",
+            "section_count": 2
           },
           {
             "concept_id": "desktop.desktop-runtime-readiness",
@@ -1606,7 +1606,7 @@
               "startup"
             ],
             "summary": "Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible service and Local UI readiness. Missing, stopped, old, or damaged Runtime state selects a direct Desktop Start, Update, or reinstall recovery; it never invokes Gateway or Provider lifecycle. A transient status gap during startup is observed within the bounded readiness deadline and is not treated as process exit.",
-            "section_count": 3
+            "section_count": 2
           },
           {
             "concept_id": "desktop.desktop-transport-recovery",
@@ -1701,7 +1701,7 @@
               "settings"
             ],
             "summary": "Desktop owns one settings window and one opening session per Environment. Opening\nnever waits for a Runtime access read and a failed read never selects another\neditor. Registration ownership determines available sections; every access read\nand write carries an explicit Environment ID and resolves its registered\nmanagement authority. Runtime owns access configuration. A failed operation\npreserves input and reports its real diagnostic; an obsolete response cannot\nchange a newer opening. Cloud, URL and Gateway registrations cannot read or save\nLocal access settings.",
-            "section_count": 3
+            "section_count": 2
           },
           {
             "concept_id": "desktop.desktop-ssh-environment-settings",
@@ -18442,7 +18442,7 @@
         "title": "Verified Environment access routes",
         "type": "Desktop Contract"
       },
-      "body_length": 7831,
+      "body_length": 8077,
       "summary": "Desktop owns display association and default access selection. A Gateway profile\njoins an existing Runtime card only after the main process verifies possession\nof the same Runtime state identity over the selected transport. Names, URLs,\ncatalog availability and renderer claims never establish this relationship.\nExisting Local / Redeven Cloud binding and ownership remain independent.\nAn unverified or changed route stays separate; a missing saved default requires\nan explicit replacement. Association grants no login or management authority.",
       "sections": [
         {
@@ -18451,6 +18451,13 @@
           "level": 1,
           "body": "## Runtime state identity\n\nEach Runtime state directory owns an immutable Ed25519 seed in\n`access-identity.key`. Startup creates a complete, private temporary file and\npublishes it exclusively; concurrent initializers read the winner. Invalid or\nsymlinked existing material fails closed and is never replaced. A Runtime\nrestart, update, display-name change or URL change preserves this identity.\nCopying the entire state directory copies the identity: this is installation\nstate identity, not physical-host identity or an operator certificate.\n\nPublic Local UI health and the private Desktop bridge use the same health\nhandler. An optional `X-Redeven-Runtime-Identity-Challenge` contains a canonical,\nunpadded base64url 32-byte random nonce. The uncached health response returns\n`access_identity` with version `redeven-runtime-access-v1`, challenge, raw\nEd25519 public key and signature of UTF-8 `version + LF + challenge`. The\nendpoint grants no Cookie, unlock, MFA bypass or management capability.\n\nDesktop verifies the version, exact outstanding challenge, canonical lengths\nand signature before deriving `runtime:\u003csha256(public key)\u003e`. It never accepts\nidentity from startup JSON, a catalog field or the renderer. This is a\npossession proof over the selected, already trusted transport. It does not\nprotect against a malicious trusted Gateway relaying a challenge to a different\nRuntime and is never used for authorization. Existing TLS, Gateway trust and\nRuntime authentication remain authoritative.\n\n## Observation and grouping\n\nMain-process observations bind an entry ID to its configured connection and\nverified identity. Gateway bindings include Gateway and profile IDs, endpoint,\nGateway key fingerprint, and target route; direct bindings include the saved\nconnection owner. Display labels and transient health do not invalidate a\nbinding. Editing coordinates or changing trust invalidates it immediately.\nAn asynchronous probe commits only while its configured binding still matches.\nA later valid proof for another identity separates the route. Reachability is\nnot inferred from a retained identity observation.\n\nGateway access members attach to the chosen original Runtime card, preferring\nan owner already linked to Cloud. Original registrations, lifecycle owners and\nCloud perspectives remain intact. Independently registered direct management\nowners keep their cards and settings. Gateway members extend the existing split\nmenu and connection settings; they never add owner tabs or a new card row.\nWithout a verified counterpart, the Gateway entry retains its own card.\n[Environment library](desktop-environment-library.md) owns Local / Cloud exact\nbinding, card layout, search and perspective selection.\n\nDesktop preferences version 15 adds optional versioned observations and route\ndefaults. Missing access state preserves existing behavior. Malformed access\nstate is rejected with the original file preserved. Existing registrations,\nGateway profiles and Cloud bindings remain in their current stores.\n\n## Explicit default and one-time opening\n\nThe existing main Open button uses the saved default. The menu exposes explicit\nroute choices, marks the default, and applies another choice only to that open.\nConnection settings commit a new default only on Save; closing the dialog drops\nits unsaved selection. Adding a verified route preserves an established default. Implicit defaults use\nstable registration / first-observation order, never probe completion order or\na newly rebuilt Gateway catalog timestamp.\nNew Gateway profiles use proxy access; existing direct-mode profiles retain\ntheir setting. Desktop's explicit default is local to this Desktop and does not\nrewrite shared Gateway profile access modes.\n\nA Gateway environment row always opens through its own Gateway. Its catalog\ncapabilities govern availability. Direct URL remains an explicit option in the\nenvironment access menu where advertised, including retained direct profiles.\nFailures never trigger another route, start Runtime, or change Cloud selection.\nMissing or detached default routes disable the default Open action while\nallowing explicit choices and connection settings.\n\nDeleting the default registration while alternatives remain requires an explicit\nreplacement. Desktop saves that choice only after deletion succeeds. Removing\nan entire Gateway is blocked until affected environments choose replacement\ndefaults in their connection settings. Profile deletion and session revocation\nretain their existing owner scope. Changing the default neither closes nor\nshares existing sessions. [Gateway access sessions](../gateway/gateway-access-sessions.md)\nowns transport isolation and same-route session reuse.\n\n## Gateway draft verification\n\nThe contextual profile dialog stays over its Gateway page. It fixes the Gateway\nidentity and asks for a Runtime URL reachable from that Gateway. It has no\nDirect / Proxy choice. Verify connection calls the signed v3\n`env-profiles/check` endpoint with a fresh nonce. Independent profile-write\npermission and the Gateway enable-profile-write policy are required on both URL\nand managed bridge transports.\n\nThe Gateway uses its existing HTTP/HTTPS target policy, DNS checks and TLS\nvalidation to request health. It forwards no credentials, follows no redirects,\nbounds response size and time, publishes no profile and creates no access\nsession. The Desktop verifies the returned proof and reports whether it matches\na known environment. Reachable targets without proof remain separate.\n\nNew or changed targets require verification before Save. Saving performs a fresh\ncheck, preventing a stale preview from establishing an association. Label-only\nedits retain existing access mode and do not require target availability.\nChanging the target invalidates the visible preview. Failure retains the draft;\na stopped Gateway offers the existing explicit Start-and-retry continuation.\nA late result cannot reopen or modify another dialog. Local default selection\nremains available even without permission to edit the shared Gateway profile.",
           "char_count": 6066
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "This contract owns display association and route selection. Runtime health,\nRuntime login, direct management, Gateway trust and Cloud ownership retain their\nexisting authorities. Proof observation never upgrades those permissions.",
+          "char_count": 230
         }
       ],
       "evidence": [
@@ -18584,8 +18591,8 @@
         "title": "Desktop Environment connections",
         "type": "Desktop Contract"
       },
-      "body_length": 15595,
-      "summary": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.",
+      "body_length": 15271,
+      "summary": "Desktop derives connection presentation from host access, process placement, Runtime-reported public addresses, and Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.\n\n[Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.",
       "sections": [
         {
           "id": "contract",
@@ -18600,13 +18607,6 @@
           "level": 1,
           "body": "## Gateway connection facts\n\nIndependent Gateway source cards retain their explicit URL, local, SSH, or\ncontainer transport. Service actions manage only the Gateway process, as defined\nby the [Gateway service contract](../gateway/gateway-service.md). They never\nappear as Runtime lifecycle actions on catalog Environment cards. Setup keeps\ncredentials local, and editing a saved SSH password preserves it unless the\nuser replaces, clears, or changes its SSH identity. URL pairing opens the code\nform; independent profile-write consent is available during creation and editing.\n\nGateway Environment cards show source, Gateway connection, trust, catalog sync,\ndefault access mode and the latest attempted access result separately. No access\nattempt means target not checked, even when the catalog is available. Explicit\nDirect URL and Gateway proxy actions appear only with their specific published\ncapabilities. Profile information remains visible without write permission;\ndisabled editing explains the independent authorization requirement. Unsupported\nSSH/container profile kinds remain visible without fabricated opening support.\nRuntime login state is never labeled as Gateway connectivity. The\n[Gateway access owner](../gateway/gateway-access-sessions.md) defines transports,\nrevocation and error distinctions. Session tokens and private loopback proxy\ncredentials never enter card facts, clipboard actions or QR data.\n\n## Environment library presentation\n\n[Environment library](desktop-environment-library.md) owns relationship cards, Runtime/Cloud access perspectives, source grids, searching, counts, and owner-scoped pin presentation. A selected perspective supplies the original owner to this connection model. Switching perspectives closes the previous owner's endpoint popover; it does not change address validity, cancel work, or rebind open settings. Standalone Runtime metadata retains startup age and one Cloud affiliation, while Cloud perspectives show only source, ENV ID and remote entry facts. Unsupported legacy links retain their recovery fact.\n\n## Access settings and independent clients\n\nPublic Runtime addresses are independent from Desktop's private management connection. Other Desktops and browsers may connect concurrently within their own reachable namespace. Saved bind, protocol, port, password, and certificate changes apply on the next Runtime start; drafts never synthesize or replace the current reported URL. Pending changes remain visible across settings reopenings and belong to one process start identity, including password-only changes.\n\nSettings show connection identity and access actions before configuration. Narrow windows wrap full URLs and retain trailing icon actions. Overflowing address groups scroll internally; when a group has no scroll range or reaches its upper or lower boundary, vertical wheel input continues into the settings body, including over address actions and filtered or empty results. The window and footer stay fixed, and the modal prevents scrolling the Welcome background. Live snapshots preserve expanded sections, scroll, focus, selection, and drafts. Certificate checks and pending operations bind to the real Environment ID; responses from an old target or closed section are ignored. Refreshing a snapshot does not restart a certificate check.\n\nManaged settings use the selected Runtime's private control channel, or its authorized host CLI while stopped. Browser access and listening-port controls configure the Environment, not Desktop's managed connection. Remote loopback is labeled Environment only and cannot open in the client browser. SSH connection details remain available if access settings fail; the failure has an explicit Retry. URL registrations edit connection information only.\n\n[Environment settings](desktop-environment-settings.md) owns section layout, draft/session identity, validation, and committed rebinding. [Local UI certificates](../security/local-ui-certificates.md) owns explicit HTTPS, certificate validity and client trust, maintenance confirmation, and restart blocking. [Local UI network exposure](../security/local-ui-network-exposure.md) owns bind, public-address, and password authority. Missing saved protocols retain HTTP; explicit HTTPS is preserved. Native settings remain readable for older Runtimes, while unsupported management requires an update or stop before saving. Failed writes preserve the prior password verifier and report failure rather than claiming success.",
           "char_count": 4491
-        },
-        {
-          "id": "verified-access-routes",
-          "title": "Verified access routes",
-          "level": 1,
-          "body": "[Verified Environment access routes](desktop-environment-access.md) owns the\nnonce-based Runtime identity observation and explicit Desktop default selection.\nThese observations do not grant management, replace live readiness, or change\nCloud binding. The existing Env card layout and lifecycle owner are preserved;\nadditional access choices live in its menu and connection settings.",
-          "char_count": 382
         }
       ],
       "evidence": [
@@ -18676,10 +18676,10 @@
           "description": "Isolated browser acceptance for the actual product popover and settings components, including narrow and dark surfaces, localized help on hover and keyboard focus, native wheel chaining through short, long and filtered address lists, fixed footer geometry and modal scroll isolation."
         }
       ],
-      "snippet": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation nev",
+      "snippet": "Desktop derives connection presentation from host access, process placement, Runtime-reported public addresses, and Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transpor",
       "links": [
         {
-          "label": "Verified Environment access routes",
+          "label": "Verified access routes",
           "path": "desktop/desktop-environment-access.md",
           "concept_id": "desktop.desktop-environment-access",
           "title": "Verified Environment access routes"
@@ -19148,7 +19148,7 @@
         "title": "Desktop environment settings",
         "type": "Desktop Contract"
       },
-      "body_length": 16280,
+      "body_length": 15988,
       "summary": "Desktop owns one settings window and one opening session per Environment. Opening\nnever waits for a Runtime access read and a failed read never selects another\neditor. Registration ownership determines available sections; every access read\nand write carries an explicit Environment ID and resolves its registered\nmanagement authority. Runtime owns access configuration. A failed operation\npreserves input and reports its real diagnostic; an obsolete response cannot\nchange a newer opening. Cloud, URL and Gateway registrations cannot read or save\nLocal access settings.",
       "sections": [
         {
@@ -19162,15 +19162,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Address namespace and copy/browser/QR policy are owned by\n[Environment connections](desktop-environment-connections.md); certificate\noperations are owned by [Local UI certificates](../security/local-ui-certificates.md).\nSSH field and secret details are owned by\n[SSH environment settings](desktop-ssh-environment-settings.md).",
-          "char_count": 326
-        },
-        {
-          "id": "verified-access-routes",
-          "title": "Verified access routes",
-          "level": 1,
-          "body": "[Verified Environment access routes](desktop-environment-access.md) owns the\nnonce-based Runtime identity observation and explicit Desktop default selection.\nThese observations do not grant management, replace live readiness, or change\nCloud binding. The existing Env card layout and lifecycle owner are preserved;\nadditional access choices live in its menu and connection settings.",
-          "char_count": 382
+          "body": "[Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.\n\nAddress namespace and copy/browser/QR policy are owned by\n[Environment connections](desktop-environment-connections.md); certificate\noperations are owned by [Local UI certificates](../security/local-ui-certificates.md).\nSSH field and secret details are owned by\n[SSH environment settings](desktop-ssh-environment-settings.md).",
+          "char_count": 444
         }
       ],
       "evidence": [
@@ -19248,7 +19241,7 @@
       "snippet": "Desktop owns one settings window and one opening session per Environment. Opening never waits for a Runtime access read and a failed read never selects another editor. Registration ownership determines available sections; every access read",
       "links": [
         {
-          "label": "Verified Environment access routes",
+          "label": "Verified access routes",
           "path": "desktop/desktop-environment-access.md",
           "concept_id": "desktop.desktop-environment-access",
           "title": "Verified Environment access routes"
@@ -19788,7 +19781,7 @@
         "title": "Desktop runtime readiness",
         "type": "Desktop Contract"
       },
-      "body_length": 12874,
+      "body_length": 12582,
       "summary": "Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible service and Local UI readiness. Missing, stopped, old, or damaged Runtime state selects a direct Desktop Start, Update, or reinstall recovery; it never invokes Gateway or Provider lifecycle. A transient status gap during startup is observed within the bounded readiness deadline and is not treated as process exit.",
       "sections": [
         {
@@ -19802,15 +19795,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "## Gateway access readiness\n\nGateway catalog availability is publication evidence only. An explicit Direct\nURL open probes the target from Desktop; Gateway proxy probes use the newly\nauthorized Gateway session transport. Both retain Gateway Environment identity\nand ordinary Runtime login/MFA. Failure never triggers another access mode or a\nRuntime lifecycle action. Open progress, cancellation, explicit alternate-mode\nretry, and focus restoration remain the shared Desktop presentation contract.\n[Gateway access sessions](../gateway/gateway-access-sessions.md) owns lease,\ntransport, and authentication boundaries.\n\nRead-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.\n\n## Desktop Flower compatibility\n\nDesktop's bundled Flower client uses\n[one protocol check](../../desktop/src/shared/runtimeFlowerAccess.ts) for HTTP\ncommands, workspace subscriptions, computer frames and attachment entrypoints.\nThe actual Runtime must report the supported protocol and compatibility epoch.\nMissing or malformed identity blocks before submission; a newer epoch requires\nDesktop update. Different commits within the supported window remain usable.\nThe Runtime's own Env App, terminals and files retain their independent opening\nboundary. A missing protocol is never normalized into a compatible claim.\n\nThe Flower entry displays the connected version/commit and an update action.\nThe existing Desktop lifecycle coordinator retains workload confirmation and\nre-probes the replacement process. Failed updates leave the action available;\nsuccess re-evaluates the observed Runtime snapshot. Composer drafts remain in\nthe existing composer draft coordinator while the incompatible client is unmounted.\nWSL uses the same check and update presentation. Development attachment logs\nreport both the validated bundle identity and actual connected Runtime identity.\nDesktop restart alone is not evidence that the background Runtime changed.\n\n## Desktop Flower AI preparation\n\nWelcome admits Flower only when the compatible, openable Runtime reports AI\n`ready` or `degraded`. Shell readiness alone does not admit settings, model,\nthread, attachment, or workspace-stream requests. Transitional AI states show\nlocalized preparation with an always-available return action; blocked,\nunavailable, or missing AI facts remain explicit and cannot admit requests.\nThe [AI lifecycle owner](../architecture/ai-readiness-lifecycle.md) defines these\nfacts and recovery authority.\n\nThe existing Welcome health observer supplies updates. Transitional AI\nobservations bypass its 30-second cache, so the next regular health tick can\nobserve publication. Current presence and the latest health snapshot take\nprecedence over historical startup reports, including while a probe is pending.\nReady publication mounts Flower automatically; later AI loss disposes that\nsubtree while the shell-owned draft coordinator retains unsent content. Ordinary\nnavigation and stable ready/degraded updates keep the same Flower instance.\nThere is no renderer readiness poller, API-error retry loop, or inferred repair.",
-          "char_count": 3332
-        },
-        {
-          "id": "verified-access-routes",
-          "title": "Verified access routes",
-          "level": 1,
-          "body": "[Verified Environment access routes](desktop-environment-access.md) owns the\nnonce-based Runtime identity observation and explicit Desktop default selection.\nThese observations do not grant management, replace live readiness, or change\nCloud binding. The existing Env card layout and lifecycle owner are preserved;\nadditional access choices live in its menu and connection settings.",
-          "char_count": 382
+          "body": "[Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.\n\n## Gateway access readiness\n\nGateway catalog availability is publication evidence only. An explicit Direct\nURL open probes the target from Desktop; Gateway proxy probes use the newly\nauthorized Gateway session transport. Both retain Gateway Environment identity\nand ordinary Runtime login/MFA. Failure never triggers another access mode or a\nRuntime lifecycle action. Open progress, cancellation, explicit alternate-mode\nretry, and focus restoration remain the shared Desktop presentation contract.\n[Gateway access sessions](../gateway/gateway-access-sessions.md) owns lease,\ntransport, and authentication boundaries.\n\nRead-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.\n\n## Desktop Flower compatibility\n\nDesktop's bundled Flower client uses\n[one protocol check](../../desktop/src/shared/runtimeFlowerAccess.ts) for HTTP\ncommands, workspace subscriptions, computer frames and attachment entrypoints.\nThe actual Runtime must report the supported protocol and compatibility epoch.\nMissing or malformed identity blocks before submission; a newer epoch requires\nDesktop update. Different commits within the supported window remain usable.\nThe Runtime's own Env App, terminals and files retain their independent opening\nboundary. A missing protocol is never normalized into a compatible claim.\n\nThe Flower entry displays the connected version/commit and an update action.\nThe existing Desktop lifecycle coordinator retains workload confirmation and\nre-probes the replacement process. Failed updates leave the action available;\nsuccess re-evaluates the observed Runtime snapshot. Composer drafts remain in\nthe existing composer draft coordinator while the incompatible client is unmounted.\nWSL uses the same check and update presentation. Development attachment logs\nreport both the validated bundle identity and actual connected Runtime identity.\nDesktop restart alone is not evidence that the background Runtime changed.\n\n## Desktop Flower AI preparation\n\nWelcome admits Flower only when the compatible, openable Runtime reports AI\n`ready` or `degraded`. Shell readiness alone does not admit settings, model,\nthread, attachment, or workspace-stream requests. Transitional AI states show\nlocalized preparation with an always-available return action; blocked,\nunavailable, or missing AI facts remain explicit and cannot admit requests.\nThe [AI lifecycle owner](../architecture/ai-readiness-lifecycle.md) defines these\nfacts and recovery authority.\n\nThe existing Welcome health observer supplies updates. Transitional AI\nobservations bypass its 30-second cache, so the next regular health tick can\nobserve publication. Current presence and the latest health snapshot take\nprecedence over historical startup reports, including while a probe is pending.\nReady publication mounts Flower automatically; later AI loss disposes that\nsubtree while the shell-owned draft coordinator retains unsent content. Ordinary\nnavigation and stable ready/degraded updates keep the same Flower instance.\nThere is no renderer readiness poller, API-error retry loop, or inferred repair.",
+          "char_count": 3450
         }
       ],
       "evidence": [
@@ -19917,7 +19903,7 @@
           "title": "AI readiness and service generation lifecycle"
         },
         {
-          "label": "Verified Environment access routes",
+          "label": "Verified access routes",
           "path": "desktop/desktop-environment-access.md",
           "concept_id": "desktop.desktop-environment-access",
           "title": "Verified Environment access routes"
@@ -23190,22 +23176,15 @@
         "title": "Wayland legacy MemFd capture compatibility",
         "type": "Acceptance Record"
       },
-      "body_length": 7092,
+      "body_length": 7108,
       "summary": "This record owns the reproduction and acceptance evidence for the Wayland MemFd\ncompatibility repair. The [media contract](../architecture/remote-desktop-media.md)\nowns buffer lifetime, cursor ownership and damage handling. An authorized readable\nsystem-memory frame must work when an older producer omits the MAPPABLE flag;\ninvalid bounds must fail without reading outside the backing file. A native\ncapture failure still suspends the generation. Synthetic compatibility evidence\ncannot certify an actual GNOME session or physical latency.",
       "sections": [
         {
-          "id": "reproduction-and-repair",
-          "title": "Reproduction And Repair",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
-          "body": "The ordinary Desktop connection to `udesk24`, using its normal saved portal grant,\nprogressed from authorization to active generation 1, then immediately suspended\nwith `CAPTURE_LAYOUT_UNSUPPORTED` in generation 2. The running Runtime contained\nRedeven commit `be653778e468` and native v0.22.12. This reproduces a functional\nregression independently of the VM's graphics performance.\n\nThe host runs Mutter 46.2 and PipeWire 1.0.5; the component supplies libpipewire\n1.4.9. Mutter 46 allocates MemFd with READWRITE flags but without MAPPABLE.\nPipeWire 1.0 maps by memory type as well as by flag; 1.4 requires MAPPABLE. Thus\nrequesting MAP_BUFFERS is insufficient: the capture client can receive a valid\nMemFd with a null data pointer. The previous implementation rejected this layout.\n\nThe native repair maps only a readable MemFd with validated file size, aligned\nmapping offset and bounded pixel range. Its read-only mapping follows the\nPipeWire buffer lifetime and is reused for subsequent frames. Removal and stream\nclosure release mappings without closing producer-owned descriptors. Pixel\ncopies complete before requeue, and existing cursor, sequence and damage rules\nremain authoritative. The old published component remains identifiable and is\nnever modified in place.",
-          "char_count": 1275
-        },
-        {
-          "id": "verification",
-          "title": "Verification",
-          "level": 1,
-          "body": "## Regression And Installed Libraries\n\nThe same private synthetic producer was run against old and repaired capture\nclients on `udesk24`. It allocates MemFd without MAPPABLE and uses Mutter 46's\n384-pixel cursor metadata allocation. The old installed component reproducibly\nfailed before the first frame with `CAPTURE_LAYOUT_UNSUPPORTED`.\n\nWith the repair, both library-mapped and producer-allocated buffers passed\ncontrol/view/control transitions. Each mode produced one cursor-free control\nframe with 101 shape updates, 101 composited view frames with zero separate shapes,\nthen one control frame with 101 shapes. No capture errors occurred, and no owned\nmapping survived stream closure. This local debug run used the installed private\nmedia libraries with task-owned candidate Python source; it is not published\npackage provenance evidence. No user desktop pixels or OS input were involved.\n\nNineteen focused Python checks cover metadata, damage continuity, padded pixels,\nnon-page-aligned MemFd offsets, read-only access, mapping reuse/removal, changed\nbuffer identity, invalid/truncated backing files and idempotent stream cleanup.\nThe upstream source gate also passes Go race/vet, platform builds and the existing\nsource regression suites.\n\n## Distribution\n\nThe immutable v0.22.13 tag resolves through the Go proxy and checksum database to\n`eb15a01f9dd0f021d7a70348680ea2919522c349`. A CLI built from that verified module\nprepared a new task-owned host-desktop installation on `udesk24`, revalidating\ncopies of the original archive cache. The resulting component digest is\n`a1bc3534cbd4734f26633eecfb8688b430b656740590033e5eefdc56ee27433a`. Both allocation\nmodes repeated the complete transition checks above with the installed published\nhelper, independently of the debug source overlay.\n\nFresh installed host-desktop release checks passed on native amd64 and arm64,\nincluding both PipeWire allocation modes. Redeven's published-player Wayland\nbrowser fixture, remote desktop Go tests and 32 macOS helper Swift tests passed.\nThe Go/Swift manifests select the exact published version. Source CI, CodeQL and\ndependency vulnerability scanning passed. After retrying failed jobs in\n[release qualification run 37268136945](https://github.com/floegence/floe-native-apps/actions/runs/37268136945),\ngeneral native arm64 and both private desktop architectures passed. General\nnative amd64 stopped twice with `download_failed` before graphical qualification;\nthe second attempt received 155,163,507 of 177,082,430 expected bytes. Retained\nlogs distinguish this acquisition failure from capture behavior. The complete\nrelease gate remains failed, so these results do not certify the full release\nqualification matrix.",
-          "char_count": 2713
+          "body": "## Reproduction And Repair\n\nThe ordinary Desktop connection to `udesk24`, using its normal saved portal grant,\nprogressed from authorization to active generation 1, then immediately suspended\nwith `CAPTURE_LAYOUT_UNSUPPORTED` in generation 2. The running Runtime contained\nRedeven commit `be653778e468` and native v0.22.12. This reproduces a functional\nregression independently of the VM's graphics performance.\n\nThe host runs Mutter 46.2 and PipeWire 1.0.5; the component supplies libpipewire\n1.4.9. Mutter 46 allocates MemFd with READWRITE flags but without MAPPABLE.\nPipeWire 1.0 maps by memory type as well as by flag; 1.4 requires MAPPABLE. Thus\nrequesting MAP_BUFFERS is insufficient: the capture client can receive a valid\nMemFd with a null data pointer. The previous implementation rejected this layout.\n\nThe native repair maps only a readable MemFd with validated file size, aligned\nmapping offset and bounded pixel range. Its read-only mapping follows the\nPipeWire buffer lifetime and is reused for subsequent frames. Removal and stream\nclosure release mappings without closing producer-owned descriptors. Pixel\ncopies complete before requeue, and existing cursor, sequence and damage rules\nremain authoritative. The old published component remains identifiable and is\nnever modified in place.\n\n## Verification\n\n### Regression And Installed Libraries\n\nThe same private synthetic producer was run against old and repaired capture\nclients on `udesk24`. It allocates MemFd without MAPPABLE and uses Mutter 46's\n384-pixel cursor metadata allocation. The old installed component reproducibly\nfailed before the first frame with `CAPTURE_LAYOUT_UNSUPPORTED`.\n\nWith the repair, both library-mapped and producer-allocated buffers passed\ncontrol/view/control transitions. Each mode produced one cursor-free control\nframe with 101 shape updates, 101 composited view frames with zero separate shapes,\nthen one control frame with 101 shapes. No capture errors occurred, and no owned\nmapping survived stream closure. This local debug run used the installed private\nmedia libraries with task-owned candidate Python source; it is not published\npackage provenance evidence. No user desktop pixels or OS input were involved.\n\nNineteen focused Python checks cover metadata, damage continuity, padded pixels,\nnon-page-aligned MemFd offsets, read-only access, mapping reuse/removal, changed\nbuffer identity, invalid/truncated backing files and idempotent stream cleanup.\nThe upstream source gate also passes Go race/vet, platform builds and the existing\nsource regression suites.\n\n### Distribution\n\nThe immutable v0.22.13 tag resolves through the Go proxy and checksum database to\n`eb15a01f9dd0f021d7a70348680ea2919522c349`. A CLI built from that verified module\nprepared a new task-owned host-desktop installation on `udesk24`, revalidating\ncopies of the original archive cache. The resulting component digest is\n`a1bc3534cbd4734f26633eecfb8688b430b656740590033e5eefdc56ee27433a`. Both allocation\nmodes repeated the complete transition checks above with the installed published\nhelper, independently of the debug source overlay.\n\nFresh installed host-desktop release checks passed on native amd64 and arm64,\nincluding both PipeWire allocation modes. Redeven's published-player Wayland\nbrowser fixture, remote desktop Go tests and 32 macOS helper Swift tests passed.\nThe Go/Swift manifests select the exact published version. Source CI, CodeQL and\ndependency vulnerability scanning passed. After retrying failed jobs in\n[release qualification run 37268136945](https://github.com/floegence/floe-native-apps/actions/runs/37268136945),\ngeneral native arm64 and both private desktop architectures passed. General\nnative amd64 stopped twice with `download_failed` before graphical qualification;\nthe second attempt received 155,163,507 of 177,082,430 expected bytes. Retained\nlogs distinguish this acquisition failure from capture behavior. The complete\nrelease gate remains failed, so these results do not certify the full release\nqualification matrix.",
+          "char_count": 4037
         },
         {
           "id": "boundaries",
@@ -33022,5 +33001,5 @@
       ]
     }
   ],
-  "source_sha256": "850c4de000261aa1c59589cad08cdf07f276040e3e6bb73e8bff2e5cfdc8d866"
+  "source_sha256": "87d9e56aff018d12f1ec1644aef5a8d04e0e312b2b2514ad006720c2b18b2391"
 }

@@ -117,6 +117,12 @@ a stopped Gateway offers the existing explicit Start-and-retry continuation.
 A late result cannot reopen or modify another dialog. Local default selection
 remains available even without permission to edit the shared Gateway profile.
 
+# Boundaries
+
+This contract owns display association and route selection. Runtime health,
+Runtime login, direct management, Gateway trust and Cloud ownership retain their
+existing authorities. Proof observation never upgrades those permissions.
+
 # Evidence
 
 - `redeven:internal/runtimeidentity/access_identity.go` - State identity, exclusive initialization and nonce proof.

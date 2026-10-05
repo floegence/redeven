@@ -204,19 +204,13 @@ preparing.
 
 # Boundaries
 
+[Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.
+
 Address namespace and copy/browser/QR policy are owned by
 [Environment connections](desktop-environment-connections.md); certificate
 operations are owned by [Local UI certificates](../security/local-ui-certificates.md).
 SSH field and secret details are owned by
 [SSH environment settings](desktop-ssh-environment-settings.md).
-
-# Verified access routes
-
-[Verified Environment access routes](desktop-environment-access.md) owns the
-nonce-based Runtime identity observation and explicit Desktop default selection.
-These observations do not grant management, replace live readiness, or change
-Cloud binding. The existing Env card layout and lifecycle owner are preserved;
-additional access choices live in its menu and connection settings.
 
 # Evidence
 
