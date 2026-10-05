@@ -39,6 +39,19 @@ func TestFloretModelGatewayCapabilities_ZeroIsExplicitNone(t *testing.T) {
 	}
 }
 
+func TestFloretReasoningHistoryUsesOllamaCurrentInputBoundary(t *testing.T) {
+	for _, wire := range []string{"ollama_model_family_think", "qwen_enable_thinking", "moonshot_thinking", "openai_reasoning_effort"} {
+		got := floretModelGatewayCapabilities(config.AIReasoningCapability{Kind: "dynamic", WireShape: wire})
+		want := flprovider.ReasoningHistoryPolicy("")
+		if wire == "ollama_model_family_think" {
+			want = flprovider.ReasoningHistoryCurrentUser
+		}
+		if got.ReasoningHistory != want {
+			t.Fatalf("wire=%s history=%s want=%s", wire, got.ReasoningHistory, want)
+		}
+	}
+}
+
 func TestFloretModelGatewayCapabilities_PreservesInvalidKindForHostValidation(t *testing.T) {
 	got := floretModelGatewayCapabilities(config.AIReasoningCapability{Kind: "future_kind"})
 	if got.Reasoning != flprovider.ReasoningSupported {

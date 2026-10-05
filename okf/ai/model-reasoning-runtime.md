@@ -37,6 +37,19 @@ Tool calls remain paired with their original results. The adapter must not omit
 content, convert reasoning to visible text, or drop the continuation to satisfy
 an endpoint's message-shape requirements.
 
+Ollama uses the published Floret v7.25.1
+`Capabilities.ReasoningHistory = ReasoningHistoryCurrentUser` projection. Each
+new canonical user input stops replaying earlier assistant thinking, which can
+contain expired permission and tool assumptions. Historical visible answers,
+tool calls/results, and canonical thinking remain intact. Tool continuations,
+reasoning-only truncation, and retry after the current input retain reasoning;
+ephemeral answers do not start a new boundary. The selected policy is part of
+the gateway state compatibility key. Preparation estimates the same projected
+payload it sends. Other provider protocols retain their required history policy.
+The same published runtime preserves pure-thinking tool-call reasoning once in
+each provider continuation, including parallel calls, while retaining the
+canonical reasoning journal unchanged.
+
 Qwen, Kimi, and GLM boolean transports advertise explicit On independently of
 named effort. Qwen Chat encodes it as `enable_thinking: true`; Kimi and GLM use
 `thinking.type: enabled`. An absent or explicit Default selection does not send
@@ -80,6 +93,7 @@ migration lineages remain unchanged.
 - `redeven:internal/config/ai_reasoning_catalog.go` - Thin published-Floret metadata mapping and explicit OpenRouter metadata contract.
 - `redeven:internal/ai/model_catalog.go` - Read-only discovery from declared capabilities.
 - `redeven:internal/ai/model_gateway.go` - Provider request, stream, and approved history-field mapping.
+- `redeven:internal/ai/floret_reasoning.go` - Published replay policy selection for Ollama.
 - `redeven:internal/ai/model_gateway_ollama_reasoning_test.go` - Exact declared choices, thinking stream/history, and opt-in live acceptance.
 - `redeven:internal/ai/model_gateway_reasoning_test.go` - Boolean, effort, and budget contracts across provider transports.
 - `redeven:internal/ai/desktop_model_source_test.go` - Capability metadata survives Desktop model-source RPC.

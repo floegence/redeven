@@ -321,6 +321,76 @@ func ollamaInterleavePermissions(f *ollamaTaskFixture) {
 	f.file("permission-restored.txt", "RESTORED\n")
 }
 
+func ollamaInterleavePermissionHistory(f *ollamaTaskFixture) {
+	want := ""
+	for cycle := 0; cycle < 2; cycle++ {
+		prefix := fmt.Sprintf("permission-history-%d", cycle)
+		committed := fmt.Sprintf("HISTORY_COMMITTED_%d", cycle)
+		f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionReadonly))
+		f.finish(prefix+"-readonly", "Create forbidden-history.txt containing BLOCKED if your current tools permit it. Otherwise explain which command execution and file mutation tools are unavailable. Do not request user input or approval.", "")
+		f.missing("forbidden-history.txt")
+		f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionApprovalRequired))
+		prompt := fmt.Sprintf("Use terminal.exec exactly once to execute: printf 'APPROVED_%d\\n' >> permission-history.txt; printf %s . After it succeeds, explain transactions in three sentences. The append must run only once. Do not call other tools.", cycle, committed)
+		f.send(prefix+"-cancel-on-shutdown", prompt)
+		approval := f.approval()
+		f.restart()
+		f.terminal(flruntime.TurnOutcomeCancelled)
+		_, err := f.svc.SubmitFlowerApproval(f.meta, SubmitFlowerApprovalRequest{ThreadID: f.threadID, InteractionID: approval.ID, Approved: true})
+		if err == nil {
+			f.t.Fatal("shutdown left an old approval actionable")
+		}
+		if want == "" {
+			f.missing("permission-history.txt")
+		} else {
+			f.file("permission-history.txt", want)
+		}
+		f.fault.armAfterTool("cut", committed)
+		f.send(prefix+"-approve", prompt)
+		approval = f.approval()
+		_, err = f.svc.SubmitFlowerApproval(f.meta, SubmitFlowerApprovalRequest{ThreadID: f.threadID, InteractionID: approval.ID, Approved: true})
+		f.check(err)
+		f.fault.waitHit(f.t)
+		f.terminal(flruntime.TurnOutcomeFailed)
+		want += fmt.Sprintf("APPROVED_%d\n", cycle)
+		f.file("permission-history.txt", want)
+		f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionReadonly))
+		f.restart()
+		_, err = f.svc.RetryThreadContinuation(f.ctx, f.meta, f.threadID)
+		f.check(err)
+		f.terminal(flruntime.TurnOutcomeCompleted)
+		f.file("permission-history.txt", want)
+		f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionFullAccess))
+		f.finish(prefix+"-restored", ollamaAppendPrompt("permission-history.txt", fmt.Sprintf("RESTORED_%d", cycle)), "")
+		want += fmt.Sprintf("RESTORED_%d\n", cycle)
+		f.file("permission-history.txt", want)
+	}
+	currentReasoning := 0
+	for _, request := range f.recorder.snapshot() {
+		if request.Kind != "main" {
+			continue
+		}
+		if request.PriorUserReasoningMessages != 0 {
+			f.t.Fatal("a new input replayed prior-input reasoning")
+		}
+		currentReasoning += request.CurrentUserReasoningMessages
+	}
+	if currentReasoning == 0 {
+		f.t.Fatal("tool continuations did not retain any real reasoning")
+	}
+	thinking := 0
+	for _, item := range f.view().Current.Items {
+		if item.Kind == flruntime.ThreadItemThinking {
+			thinking++
+		}
+	}
+	if thinking == 0 {
+		f.t.Fatal("canonical thinking was removed")
+	}
+	f.assertUsers(8)
+	f.report["canonical_thinking_items"] = thinking
+	f.report["continuation_reasoning_messages"] = currentReasoning
+}
+
 func ollamaInterleaveReconnect(f *ollamaTaskFixture) {
 	f.fault.arm("hold")
 	f.send("disconnect-active", "Without tools, explain transactions in twenty paragraphs.")

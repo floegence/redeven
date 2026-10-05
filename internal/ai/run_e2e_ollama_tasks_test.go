@@ -58,6 +58,7 @@ func TestE2E_FlowerOllamaTaskLifecycle(t *testing.T) {
 		{"interleave_retry_restart_retry", ollamaInterleaveRetryRestart},
 		{"interleave_send_now_duplicate_and_stale_edit", ollamaInterleaveSendNow},
 		{"interleave_permission_and_model_changes", ollamaInterleavePermissions},
+		{"interleave_permission_history_restart_retry", ollamaInterleavePermissionHistory},
 		{"interleave_disconnect_stop_restart", ollamaInterleaveReconnect},
 		{"interleave_delete_active_queue", ollamaInterleaveDelete},
 		{"interleave_independent_roots", ollamaInterleaveRoots},

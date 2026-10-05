@@ -113,7 +113,11 @@ save point so confirmed tool results remain in provider context across repeated
 failures and restart. Thread-level queue facts may interleave a pending question
 without corrupting its canonical turn. `Retry` preserves logical request lineage without appending another user
 message. Delete and shutdown fence new effect work, cancel and join the active
-subtree, and prevent late output from outranking a tombstone.
+subtree, and prevent late output from outranking a tombstone. Graceful Host
+shutdown resolves approvals owned by cancelled in-memory executions, so stale
+approvals cannot resume them after restart. Durable Ask User waits and queued
+inputs survive; dispatched effects with unknown outcomes remain failed and are
+never replayed. Floret owns this atomic settlement.
 
 Restart hydration restores accepted input, queue items, unresolved interactions,
 logical retry input, and canonical outputs, then resumes provider-safe work
