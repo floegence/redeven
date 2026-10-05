@@ -16,31 +16,6 @@ their own services and tools. Source configuration and credentials stay unchange
 
 # Contract
 
-## Scope and boundaries
-
-The [thread runtime](../ai/floret-thread-runtime.md) owns commands, cancellation,
-queueing, and retry. The [subagent contract](../ai/subagent-runtime.md) owns child
-membership and handoffs. This suite qualifies those contracts against actual
-inference. It does not implement another runtime or promise universal model
-instruction compliance. [Context qualification](flower-ollama-context-qualification.md)
-separately owns token accounting and compaction pressure cases.
-
-The existing environment's selected Ollama model and serving capacity are
-resolved through the shared profile loader. Any startup conversion occurs on a
-temporary copy. Every observed provider request must use that model. Isolated
-threads use real full-access tools only against synthetic files in their fixture
-workspace; the approval scenario changes its own thread to approval-required.
-Runtime state lives outside that workspace so task files do not expose journals
-as an alternate source for inherited-history answers.
-
-A loopback proxy forwards actual model output. To make interruption timing
-repeatable, it can pause after a complete original SSE event containing generated
-text, or cut the real connection after a confirmed tool result reaches the next
-model request. It never fabricates model tokens or tool calls. A dedicated case
-waits for visible content before stopping; other cases may stop during reasoning.
-These controlled transport faults qualify recovery paths, not the endpoint's
-natural network reliability.
-
 ## Acceptance scenarios
 
 - Read structured data, compute a sum, write and verify a file, then modify it in
@@ -94,6 +69,31 @@ counts, PID, temporary state location, and loopback port; keep the run log and
 source commit alongside them. Reports contain no API keys. A scenario's `pass`
 flag does not replace the complete Go test process exit status. Temp stores and
 fixture files are removed after each case; reports retain the observable results.
+
+# Boundaries
+
+The [thread runtime](../ai/floret-thread-runtime.md) owns commands, cancellation,
+queueing, and retry. The [subagent contract](../ai/subagent-runtime.md) owns child
+membership and handoffs. This suite qualifies those contracts against actual
+inference. It does not implement another runtime or promise universal model
+instruction compliance. [Context qualification](flower-ollama-context-qualification.md)
+separately owns token accounting and compaction pressure cases.
+
+The existing environment's selected Ollama model and serving capacity are
+resolved through the shared profile loader. Any startup conversion occurs on a
+temporary copy. Every observed provider request must use that model. Isolated
+threads use real full-access tools only against synthetic files in their fixture
+workspace; the approval scenario changes its own thread to approval-required.
+Runtime state lives outside that workspace so task files do not expose journals
+as an alternate source for inherited-history answers.
+
+A loopback proxy forwards actual model output. To make interruption timing
+repeatable, it can pause after a complete original SSE event containing generated
+text, or cut the real connection after a confirmed tool result reaches the next
+model request. It never fabricates model tokens or tool calls. A dedicated case
+waits for visible content before stopping; other cases may stop during reasoning.
+These controlled transport faults qualify recovery paths, not the endpoint's
+natural network reliability.
 
 # Evidence
 
