@@ -1,0 +1,605 @@
+{
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "const": "redeven.io/tessiven/v1"
+    },
+    "kind": {
+      "const": "ServiceCanvas"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Canvas title."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Business scope and purpose."
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      },
+      "maxItems": 20000,
+      "description": "Runtime host nodes."
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/group"
+      },
+      "maxItems": 20000,
+      "description": "Visual grouping only."
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/service"
+      },
+      "maxItems": 20000,
+      "description": "Stable logical business services."
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/instance"
+      },
+      "maxItems": 20000,
+      "description": "Concrete service placements."
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/resource"
+      },
+      "maxItems": 20000,
+      "description": "Dependencies not assigned to a node in this canvas."
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation"
+      },
+      "maxItems": 20000,
+      "description": "Evidence-backed dependencies."
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      },
+      "maxItems": 20000,
+      "description": "Sources of claims and observations."
+    },
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "initiallyExpanded": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Node or group IDs to expand initially."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Optional stable object order."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000
+        },
+        "positions": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "type": "object",
+            "properties": {
+              "objectRef": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+                "description": "Node, group, or resource ID."
+              },
+              "x": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "objectRef",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://redeven.io/tessiven/v1.schema.json",
+  "title": "Redeven Tessiven ServiceCanvas v1",
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "healthy",
+            "degraded",
+            "unavailable",
+            "unknown"
+          ],
+          "description": "Last observed state, never an implicit live status."
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Observation time in RFC 3339."
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Evidence supporting this observation."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "state",
+        "observedAt",
+        "evidenceRefs"
+      ],
+      "additionalProperties": false
+    },
+    "node": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Human-readable host node name."
+        },
+        "runtimeRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Exact Runtime target reference returned by inspection; it grants no authority."
+        },
+        "observation": {
+          "$ref": "#/$defs/observation"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "runtimeRef"
+      ],
+      "additionalProperties": false
+    },
+    "group": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Visual group name; groups are not executable resources."
+        },
+        "nodeRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Member node ID. Each node belongs to at most one group."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "nodeRefs"
+      ],
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Logical business service name."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "gateway",
+            "web",
+            "api",
+            "worker",
+            "database",
+            "cache",
+            "search",
+            "queue",
+            "service"
+          ],
+          "description": "Semantic service type."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Service description."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "instance": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "nodeRef": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Hosting node ID."
+        },
+        "serviceRef": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Logical service ID."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Optional instance name."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "replica",
+            "peer",
+            "standalone",
+            "unknown"
+          ],
+          "description": "Membership role, separate from shard identity."
+        },
+        "shard": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Optional shard identity."
+        },
+        "binding": {
+          "$ref": "#/$defs/binding"
+        },
+        "observation": {
+          "$ref": "#/$defs/observation"
+        }
+      },
+      "required": [
+        "id",
+        "nodeRef",
+        "serviceRef",
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "owner": {
+          "type": "string",
+          "enum": [
+            "managed_service",
+            "container"
+          ],
+          "description": "Authoritative management module."
+        },
+        "resourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Exact resource identity returned by inspection."
+        },
+        "engine": {
+          "type": "string",
+          "enum": [
+            "docker",
+            "podman"
+          ],
+          "description": "Container engine; required for container bindings."
+        },
+        "endpointId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Exact container engine endpoint identity."
+        },
+        "identity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Optional observed resource generation fingerprint; checked before mutation."
+        }
+      },
+      "required": [
+        "owner",
+        "resourceId"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "owner": {
+                "const": "container"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "engine",
+              "endpointId"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "engine"
+                  ]
+                },
+                {
+                  "required": [
+                    "endpointId"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "resource": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "External dependency name."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "domain",
+            "cdn",
+            "load_balancer",
+            "database",
+            "cache",
+            "object_store",
+            "nas",
+            "filesystem",
+            "queue",
+            "external"
+          ],
+          "description": "External dependency type."
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Descriptive endpoint without credentials; never executed or fetched automatically."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Resource description."
+        },
+        "observation": {
+          "$ref": "#/$defs/observation"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "relation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Source service, instance, or external resource ID."
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Destination service, instance, or external resource ID."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "calls",
+            "forwards",
+            "resolves",
+            "reads",
+            "writes",
+            "accesses",
+            "mounts",
+            "replicates",
+            "peers"
+          ],
+          "description": "Directed dependency semantics; cycles are allowed."
+        },
+        "protocol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Descriptive protocol."
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Supporting evidence IDs."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to",
+        "kind",
+        "evidenceRefs"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "code",
+            "configuration",
+            "runtime",
+            "inference"
+          ],
+          "description": "Distinguishes declarations, observations, and inferences."
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Source locator without credentials. Descriptive only; no automatic fetch."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Bounded explanation of the supporting fact or inference."
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Time of the runtime observation; required for runtime evidence."
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "locator",
+        "summary"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "runtime"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "observedAt"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -21,7 +21,8 @@ export type ContextActionSurface =
   | 'file_preview'
   | 'monitoring'
   | 'git_browser'
-  | 'editor_preview';
+  | 'editor_preview'
+  | 'tessiven';
 
 export type ContextActionTarget = Readonly<{
   target_id: string;
@@ -48,6 +49,7 @@ export type ContextActionPresentation = Readonly<{
 }>;
 
 export type ContextActionContextItem =
+  | Readonly<{ kind: 'tessiven_selection'; canvas_id: string; version_id: number; object_refs: string[] }>
   | Readonly<{
       kind: 'file_path';
       path: string;
@@ -105,6 +107,7 @@ const ASK_FLOWER_SURFACES: readonly ContextActionSurface[] = [
   'monitoring',
   'git_browser',
   'editor_preview',
+  'tessiven',
 ];
 
 const ASK_FLOWER_RUNTIME_HINTS: readonly NonNullable<ContextActionExecutionContext['runtime_hint']>[] = [
@@ -123,6 +126,7 @@ const ASK_FLOWER_SESSION_SOURCES: readonly NonNullable<ContextActionExecutionCon
 ];
 
 const KNOWN_CONTEXT_KINDS = new Set([
+  'tessiven_selection',
   'file_path',
   'terminal_selection',
   'process_snapshot',
@@ -178,6 +182,11 @@ function parseContextItem(value: unknown): ContextActionContextItem | null {
   if (!isRecord(value)) return null;
   const kind = typeof value.kind === 'string' ? value.kind : '';
   switch (kind) {
+    case 'tessiven_selection': {
+      const validID = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(id);
+      if (!hasOnlyKeys(value, ['kind', 'canvas_id', 'version_id', 'object_refs']) || !validID(value.canvas_id) || !Number.isSafeInteger(value.version_id) || Number(value.version_id) <= 0 || !Array.isArray(value.object_refs) || value.object_refs.length > 100 || !value.object_refs.every(validID)) return null;
+      return { kind, canvas_id: value.canvas_id, version_id: value.version_id as number, object_refs: [...value.object_refs] };
+    }
     case 'file_path': {
       if (!validPath(value.path)) return null;
       if (typeof value.is_directory !== 'boolean') return null;
@@ -236,6 +245,7 @@ function parseContextItem(value: unknown): ContextActionContextItem | null {
 
 function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean {
   switch (surface) {
+    case 'tessiven': return kind === 'tessiven_selection';
     case 'terminal': return kind === 'terminal_selection';
     case 'monitoring': return kind === 'process_snapshot';
     case 'git_browser':
@@ -252,7 +262,7 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
   if (value.schema_version !== CONTEXT_ACTION_SCHEMA_VERSION || value.action_id !== 'assistant.ask.flower' || value.provider !== 'flower') return null;
   if (!isRecord(value.target) || !validNonEmptyString(value.target.target_id) || !isStringMember(value.target.locality, ASK_FLOWER_LOCALITIES)) return null;
   if (!isRecord(value.source) || !isStringMember(value.source.surface, ASK_FLOWER_SURFACES)) return null;
-  const strictWireSurface = value.source.surface === 'flower_composer' || value.source.surface === 'terminal';
+  const strictWireSurface = value.source.surface === 'flower_composer' || value.source.surface === 'terminal' || value.source.surface === 'tessiven';
   if (strictWireSurface) {
     if (!hasOnlyKeys(value, ['schema_version', 'action_id', 'provider', 'target', 'source', 'execution_context', 'context', 'presentation', 'suggested_working_dir_abs'])) return null;
     if (!hasOnlyKeys(value.target, ['target_id', 'locality']) || !hasOnlyKeys(value.source, ['surface', 'surface_id'])) return null;

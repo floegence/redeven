@@ -31,6 +31,7 @@ import (
 	"github.com/floegence/redeven/internal/okf"
 	"github.com/floegence/redeven/internal/processenv"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/tessiven"
 	"github.com/floegence/redeven/internal/websearch"
 )
 
@@ -1592,7 +1593,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			partial = target.Payload
 			outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
 		}
-		if errors.Is(toolErrRaw, errComputerEffectUnknown) || errors.Is(toolErrRaw, errMCPEffectUnknown) {
+		if errors.Is(toolErrRaw, errComputerEffectUnknown) || errors.Is(toolErrRaw, errMCPEffectUnknown) || errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown) {
 			outcome.dispatchErr = toolErrRaw
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: toolErrRaw.Error(), Retryable: false}, "", partial)
 			return outcome, nil
@@ -1993,6 +1994,9 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, err
 		}
 		return r.mcpManager.Call(ctx, toolName, args)
+	}
+	if strings.HasPrefix(toolName, "tessiven.") {
+		return r.execTessivenTool(ctx, meta, toolName, args)
 	}
 	if r.shouldRouteTargetTool(toolName) {
 		return r.execTargetTool(ctx, toolID, toolName, args)

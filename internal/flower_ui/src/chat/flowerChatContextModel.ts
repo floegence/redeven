@@ -151,6 +151,7 @@ function buildTextSnapshotChip(item: Extract<ContextActionContextItem, { kind: '
 
 function buildChip(item: ContextActionContextItem, index: number): FlowerChatContextChip {
   switch (item.kind) {
+    case 'tessiven_selection': return buildTextSnapshotChip({ kind: 'text_snapshot', title: 'Tessiven', detail: `${item.canvas_id} · v${item.version_id}`, content: JSON.stringify(item) }, index);
     case 'file_path': return buildFilePathChip(item, index);
     case 'terminal_selection': return buildTerminalSelectionChip(item, index);
     case 'process_snapshot': return buildProcessSnapshotChip(item, index);

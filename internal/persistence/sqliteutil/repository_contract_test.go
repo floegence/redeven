@@ -22,6 +22,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 		"internal/codeapp/registry/registry.go":     {},
 		"internal/containerresource/store.go":       {},
 		"internal/localui/authorization_store.go":   {},
+		"internal/tessiven/store.go":                {},
 		"internal/notes/service.go":                 {},
 		"internal/portforward/registry/registry.go": {},
 		"internal/terminal/group_catalog.go":        {},

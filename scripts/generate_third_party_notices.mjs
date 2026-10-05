@@ -49,6 +49,7 @@ const npmLicenseOverrides = new Map([
 ]);
 
 const npmCoordinateLicenseOverrides = new Map([
+  ['elkjs@0.12.0', { license: 'EPL-2.0 OR GPL-3.0-or-later', note: 'Redeven selects EPL-2.0 for the unmodified ELK layout engine; the verified license and exact source reference are reproduced below.' }],
   ['cytoscape@3.34.3', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['dayjs@1.11.23', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['es-module-lexer@2.3.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
@@ -730,7 +731,9 @@ function policyViolations(entries) {
       violations.push(`${entry.name}@${entry.version}: disallowed license ${license}`);
       continue;
     }
-    if (/\bGPL\b|GPL-\d/iu.test(license) && !/\b(MIT|Apache-2\.0|MPL-2\.0|BSD|ISC)\b/iu.test(license)) {
+    const reviewedELKChoice = entry.name === 'elkjs' && entry.version === '0.12.0'
+      && license === 'EPL-2.0 OR GPL-3.0-or-later';
+    if (/\bGPL\b|GPL-\d/iu.test(license) && !/\b(MIT|Apache-2\.0|MPL-2\.0|BSD|ISC)\b/iu.test(license) && !reviewedELKChoice) {
       violations.push(`${entry.name}@${entry.version}: GPL-only style license ${license}`);
     }
     if (/\bLGPL\b|LGPL-\d/iu.test(license)) {
@@ -858,6 +861,37 @@ function renderPdfResourceLicenses() {
     if (crypto.createHash('sha256').update(bytes).digest('hex') !== digest) throw new Error(`PDF resource notice changed: ${name}`);
     return `### pdfjs-dist@${version}: ${name} (${license})\n\n\`\`\`text\n${bytes.toString('utf8').replace(/[ \t]+$/gm, '').trim()}\n\`\`\``;
   }).join('\n\n');
+}
+
+function renderELKNotices() {
+  const coreManifest = fs.realpathSync(path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core/package.json'));
+  const root = path.dirname(createRequire(coreManifest).resolve('elkjs/package.json'));
+  const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const license = fs.readFileSync(path.join(root, 'LICENSE.md'));
+  if (metadata.name !== 'elkjs' || metadata.version !== '0.12.0'
+    || metadata.license !== 'EPL-2.0 OR GPL-3.0-or-later'
+    || crypto.createHash('sha256').update(license).digest('hex') !== '637e81f4a1b6b4079535c499fca05e238cf7605c1ff5b76d60d7da7ce96700c9') {
+    throw new Error('Review the ELK source and EPL license selection for the new layout engine version.');
+  }
+  return `## ELK Graph Layout Engine
+
+Tessiven consumes the unmodified \`elkjs@0.12.0\` layout engine through Floe.
+Redeven selects the Eclipse Public License 2.0 (EPL-2.0) option from the package's
+\`EPL-2.0 OR GPL-3.0-or-later\` license expression. This selection covers ELK,
+not the separately maintained Redeven code. Copyright belongs to the ELK
+contributors; the package author is Ulf Rüegg.
+
+The corresponding source, build files, and upstream dependency declarations are
+available at https://github.com/kieler/elkjs/tree/ff5771d7165445c42c408bb8a090c8035272218c
+(release 0.12.0). The Java layout algorithms are maintained at
+https://github.com/eclipse/elk. Redistributors must preserve this notice, the
+EPL license, and access to the corresponding source, and make any modifications
+to the covered ELK program available under its license. Redeven makes no changes
+to the covered source.
+
+\`\`\`text
+${license.toString('utf8').trim()}
+\`\`\``;
 }
 
 function renderBrowserMediaNotices() {
@@ -1007,6 +1041,8 @@ Redeven Desktop packages Electron and Chromium runtime components. Desktop relea
 Flower's headless Chromium browser is installed separately, only after user confirmation. It is not included in the standard Redeven Runtime or Desktop computer-helper bundle. Redeven downloads an official Playwright Chromium or Chrome for Testing archive (or accepts the identical local archive) at the platform-specific version, URL, size and SHA-256 in \`internal/browserinstall/catalog.json\`. The original distribution and its license resources remain intact in the user's Runtime state directory. Chromium is available under the BSD-style license and the licenses of its included third-party components; see https://chromium.googlesource.com/chromium/src/+/main/LICENSE and the distribution's own notices.
 
 ${renderBrowserMediaNotices()}
+
+${renderELKNotices()}
 
 ## License Policy Guard
 

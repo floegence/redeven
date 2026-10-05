@@ -1030,7 +1030,8 @@ export type FlowerTurnLauncherSourceSurface =
   | 'file_preview'
   | 'monitoring'
   | 'git_browser'
-  | 'editor_preview';
+  | 'editor_preview'
+  | 'tessiven';
 
 export type FlowerLinkedContextSourceSurface = FlowerTurnLauncherSourceSurface | 'flower_composer';
 

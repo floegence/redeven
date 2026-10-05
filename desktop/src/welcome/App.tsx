@@ -1,3 +1,10 @@
+import { handleTessivenLink, type TessivenOpenRequest } from '../../../internal/tessiven_ui/src/navigation';
+import { TessivenPage } from '../../../internal/tessiven_ui/src/TessivenPage';
+import { TessivenIcon } from '../../../internal/tessiven_ui/src/TessivenIcon';
+import { tessivenText } from '../../../internal/tessiven_ui/src/i18n';
+import { tessivenFlowerIntent } from '../../../internal/tessiven_ui/src/flower';
+import { createDesktopTessivenTransport } from './tessivenTransport';
+import type { ContextActionEnvelope } from '../../../internal/flower_ui/src/contextActionWire';
 import { EnvironmentAccessSettings } from './EnvironmentAccessSettings';
 import { environmentAccessRouteLabel } from './environmentAccessPresentation';
 import {
@@ -29,7 +36,7 @@ import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBound
 import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
 import { buildRuntimeConnectionRows, isShareableConnectionAddress, type DesktopShareableConnectionAddress, type AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import qrcode from 'qrcode-generator';
@@ -2717,7 +2724,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     open: flowerTurnLauncherOpen,
     chrome: window.redevenDesktopWindowChrome,
   });
-  const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<EnvironmentFlowerTurnLauncherIntent | null>(null);
+  const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
   const [flowerFocusThreadRequest, setFlowerFocusThreadRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   let flowerFocusThreadRequestSequence = 0;
@@ -2751,8 +2758,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   // requests separately from environment/progress refreshes.
   const [activeSurface, setActiveSurface] = createSignal(props.snapshot.surface);
   const flowerVisible = () => activeSurface() === 'flower';
+  const [tessivenOpenRequest, setTessivenOpenRequest] = createSignal<TessivenOpenRequest | null>(null);
+  onMount(() => {
+    const click = (event: MouseEvent) => { handleTessivenLink(event, request => { setTessivenOpenRequest(request); navigateWelcomeSurface('tessiven'); }); };
+    document.addEventListener('click', click);
+    onCleanup(() => document.removeEventListener('click', click));
+  });
+  const tessivenVisible = () => activeSurface() === 'tessiven';
+  const environmentsVisible = () => !flowerVisible() && !tessivenVisible();
+  const tessivenVisited = createMemo((visited: boolean) => visited || tessivenVisible(), false);
+  const tessivenTransport = createDesktopTessivenTransport(props.runtime.settings);
+  const tessivenCopy = createMemo(() => tessivenText(languageSnapshot().resolved_locale));
   const flowerVisited = createMemo((visited: boolean) => visited || flowerVisible(), false);
-  const environmentsVisited = createMemo((visited: boolean) => visited || !flowerVisible(), false);
+  const environmentsVisited = createMemo((visited: boolean) => visited || environmentsVisible(), false);
   const visibleSurface = createMemo<DesktopLauncherSurface>(() => settingsSession() ? 'environment_settings' : activeSurface());
   const i18n = createMemo(() => createDesktopI18n(languageSnapshot().resolved_locale));
   const sshConfigHostsLoadKey = createMemo(() => {
@@ -2782,7 +2800,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const session = settingsSession();
     // A connection save can replace its registration ID before the reply rebinds the dialog.
     if (session && !session.saving && !entries.some(entry => entry.id === session.environment.id)) settingsController.close();
-    const contextOwner = flowerTurnLauncherIntent()?.context_action?.source.surface_id;
+    const contextAction = flowerTurnLauncherIntent()?.context_action as ContextActionEnvelope | undefined;
+    const contextOwner = contextAction?.source.surface === 'desktop_welcome_environment_card' ? contextAction.source.surface_id : undefined;
     if (contextOwner && !entries.some(entry => entry.id === contextOwner)) closeFlowerTurnLauncher();
   });
   const settingsSurface = (): DesktopSettingsSurfaceSnapshot => {
@@ -6333,13 +6352,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   const topBarLogoLabel = () => (
-    flowerVisible()
+    !environmentsVisible()
       ? i18n().t('shell.backToEnvironments')
       : i18n().t('shell.openRedevenDashboard')
   );
   const deleteTargetIsGatewayEnvironment = createMemo(() => deleteTarget()?.kind === 'gateway_environment');
   const activateTopBarLogo = () => {
-    if (flowerVisible()) {
+    if (!environmentsVisible()) {
       void openEnvironmentCenterSurface();
       return;
     }
@@ -6414,7 +6433,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         trailingActions={(
           <div class="flex items-center gap-1">
-            <Show when={flowerVisible()}>
+            <Show when={!environmentsVisible()}>
               <button
                 type="button"
                 class="redeven-flower-back-button"
@@ -6437,6 +6456,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <FlowerIcon class="h-5 w-5" />
               </button>
             </Show>
+            <Show when={!tessivenVisible()}><button type="button" class="redeven-flower-topbar-button" aria-label="Tessiven" title="Tessiven" onClick={() => navigateWelcomeSurface('tessiven')}><TessivenIcon kind="tessiven"/></button></Show>
             <DesktopLanguagePicker
               openRequest={languagePickerOpenRequest()}
               snapshot={languageSnapshot()}
@@ -6539,11 +6559,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
       >
         <Show when={environmentsVisited()}>
-          <div class="h-full min-h-0" style={{ display: flowerVisible() ? 'none' : undefined }}
-            data-desktop-page="environments" aria-hidden={flowerVisible() ? 'true' : undefined} inert={flowerVisible()}>
+          <div class="h-full min-h-0" style={{ display: environmentsVisible() ? undefined : 'none' }}
+            data-desktop-page="environments" aria-hidden={!environmentsVisible() ? 'true' : undefined} inert={!environmentsVisible()}>
             <ConnectEnvironmentSurface
               i18n={i18n()}
-              visible={!flowerVisible()}
+              visible={environmentsVisible()}
               snapshot={snapshot()}
               busyState={busyState()}
               actionProgress={activeActionProgress()}
@@ -6619,6 +6639,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             />
           </div>
         </Show>
+        <Show when={tessivenVisited()}><div class="h-full min-h-0" style={{ display: tessivenVisible() ? undefined : 'none' }} data-desktop-page="tessiven" aria-hidden={!tessivenVisible() ? 'true' : undefined} inert={!tessivenVisible()}>
+          <TessivenPage locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
+            onAsk={selection => { setFlowerTurnLauncherIntent(tessivenFlowerIntent(selection, tessivenCopy())); setFlowerTurnLauncherAnchor(null); setFlowerTurnLauncherOpen(true); }}
+            onOpenService={async () => { throw new Error(tessivenCopy()('openUnavailable')); }}/>
+        </div></Show>
         <Show when={flowerVisited()}>
           <div class="h-full min-h-0" style={{ display: flowerVisible() ? undefined : 'none' }}
             data-desktop-page="flower" aria-hidden={!flowerVisible() ? 'true' : undefined} inert={!flowerVisible()}>

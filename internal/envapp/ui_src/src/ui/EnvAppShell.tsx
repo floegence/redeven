@@ -1,3 +1,6 @@
+import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiven_ui/src/navigation';
+import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
+import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
 import { EnvironmentAccessGate, type AccessGatePhase, type AccessGateFeedback } from './EnvironmentAccessGate';
 import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './services/envResourceCache';
@@ -306,6 +309,7 @@ const PLUGIN_ACTIVITY_COMPONENT_PREFIX = 'redeven.plugin.activity:';
 function pluginActivityComponentID(inventoryKey: string): string {
   return `${PLUGIN_ACTIVITY_COMPONENT_PREFIX}${encodeURIComponent(inventoryKey)}`;
 }
+const EnvTessivenPage = lazy(() => import('./pages/EnvTessivenPage'));
 const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
 const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module) => ({ default: module.EnvMonitorPage })));
 const EnvFileBrowserPage = lazy(() => import('./pages/EnvFileBrowserPage').then((module) => ({ default: module.EnvFileBrowserPage })));
@@ -732,6 +736,16 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   );
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);
+  const [tessivenOpenRequest, setTessivenOpenRequest] = createSignal<TessivenOpenRequest | null>(null);
+  onMount(() => {
+    const click = (event: MouseEvent) => { if (isLocalMode()) handleTessivenLink(event, request => { setTessivenOpenRequest(request); setTessivenOpen(true); }); };
+    document.addEventListener('click', click);
+    onCleanup(() => document.removeEventListener('click', click));
+  });
+  const [tessivenOpen, setTessivenOpen] = createSignal(new URLSearchParams(window.location.search).get('surface') === 'tessiven');
+  const tessivenCopy = createMemo(() => tessivenText(i18n.locale()));
+  const tessivenVisible = () => tessivenOpen() && isLocalMode();
+  const TessivenNavigationIcon = () => <TessivenIcon kind="tessiven"/>;
   const initialAccessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
   if (initialAccessResumeToken) {
     writeLocalAccessResumeToken(initialAccessResumeToken);
@@ -3229,10 +3243,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     && !accessGateVisible()
     && !recoveryVisible()
   ));
-  const flowerSurfaceEngaged = createMemo(() => (
+  const flowerSurfaceEngaged = createMemo(() => (!tessivenVisible() && (
     flowerSurfaceVisible()
     && (flowerProductPlacement() === 'workbench' || activityFlowerExpanded())
-  ));
+  )));
   const activityFlowerSummaryCopy = createMemo<ActivityFlowerSummaryCopy>(() => ({
     lead: {
       running: i18n.t('shell.flowerCompanion.summary.lead.workingOn'),
@@ -4033,6 +4047,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   });
 
   const openSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
+    setTessivenOpen(false);
     const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
 
     if (viewMode() === 'workbench') {
@@ -4197,6 +4212,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       },
     };
 
+    if (isLocalMode()) items.push({ id: 'tessiven', icon: TessivenNavigationIcon, label: 'Tessiven', collapseBehavior: 'preserve', onClick: () => setTessivenOpen(true) });
     if (!layout.isMobile()) items.push(pluginPanelItem);
 
     items.push(
@@ -4720,6 +4736,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const HeaderActions = () => (
     <div class="flex items-center gap-1">
+      <Show when={isLocalMode()}><TopBarIconButton label={tessivenVisible() ? tessivenCopy()('back') : 'Tessiven'} onClick={() => setTessivenOpen(!tessivenOpen())}><TessivenNavigationIcon/></TopBarIconButton></Show>
       <Show when={!layout.isMobile()}>
         <EnvDisplayModeSwitcher
           mode={viewModeSelection.visual()}
@@ -5098,7 +5115,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       >
         <Show when={activityContentAvailable()}>
           <EnvWorkbenchPage
-            inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
+            inputEnabled={!tessivenVisible() && viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
             dockItems={pluginDockItems()}
             registerExternalDockDragController={setExternalDockDragController}
             dockActions={[{
@@ -5114,7 +5131,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
             pluginSurfaceHost={{
               coordinator: pluginSurfaceCoordinator,
               confirmationQueue: pluginConfirmationQueue,
-              workbenchVisible: () => viewMode() === 'workbench' && !workbenchPluginCenterBlocking(),
+              workbenchVisible: () => !tessivenVisible() && viewMode() === 'workbench' && !workbenchPluginCenterBlocking(),
               resolveTarget: resolveCurrentPluginSurfaceTarget,
               resolveSurface: resolvePluginSurface,
               onOpenPluginDetails: (inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure),
@@ -5171,9 +5188,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
           <PageAssetRecoveryNotice reason={assetRecovery.reason()} ready={assetRecoveryReady()} />
           <KeepAliveStack
             class="redeven-env-shell-stage min-h-0 flex-1"
-            activeId={viewMode()}
+            activeId={tessivenVisible() ? 'tessiven' : viewMode()}
             activationMode="after-paint"
             views={[
+              { id: 'tessiven', render: () => <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}><Show when={activityContentAvailable()} fallback={accessGatePanel()}><EnvTessivenPage openRequest={tessivenOpenRequest()} visible={tessivenVisible()}/></Show></DisplayModePageShell> },
               {
                 id: 'activity',
                 render: () => (

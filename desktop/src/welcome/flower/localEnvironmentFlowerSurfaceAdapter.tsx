@@ -275,7 +275,7 @@ async function runtimeJSON<T>(
   return result.data as T;
 }
 
-function runtimeFlowerStreamFetch(
+export function runtimeFlowerStreamFetch(
   bridge: DesktopSettingsBridge,
   streamID: string,
 ): typeof globalThis.fetch {

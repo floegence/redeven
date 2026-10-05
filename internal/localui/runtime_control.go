@@ -151,6 +151,8 @@ func (s *runtimeControlServer) StartOnListener(ctx context.Context, ln net.Liste
 
 func (s *runtimeControlServer) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/tessiven/host", s.handleTessivenHost)
+	mux.HandleFunc("/v2/tessiven/resources", s.handleTessivenTarget)
 	mux.HandleFunc("/v2/provider-link", s.handleProviderLink)
 	mux.HandleFunc("/v2/provider-link/connect", s.handleProviderLinkConnect)
 	mux.HandleFunc("/v2/provider-link/disconnect", s.handleProviderLinkDisconnect)

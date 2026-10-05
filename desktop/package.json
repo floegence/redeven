@@ -13,7 +13,7 @@
     "prepare:windows-ssh": "node scripts/build-windows-ssh.mjs",
     "start": "npm run build && npm run prepare:bundled-runtime && npm run prepare:windows-ssh && electron .",
     "build": "node scripts/build-standalone-styles.mjs --check && tsc -p tsconfig.json && node dist/build/buildPreloads.js && vite build --config vite.welcome.config.mjs",
-    "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" \"vite.welcome.config.mjs\" --max-warnings=0 && cd ../internal/flower_ui && NODE_PATH=../../desktop/node_modules ../../desktop/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --max-warnings=0",
+    "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" \"vite.welcome.config.mjs\" --max-warnings=0 && cd ../internal/flower_ui && NODE_PATH=../../desktop/node_modules ../../desktop/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --max-warnings=0 && cd ../tessiven_ui && NODE_PATH=../../desktop/node_modules ../../desktop/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.typecheck.json --noEmit",
     "test:runtime-compatibility": "vitest run src/shared/runtimeService.test.ts src/main/runtimeState.test.ts src/main/runtimeProcess.test.ts",
     "test:startup-continuity": "node scripts/check-startup-continuity.mjs",
@@ -114,8 +114,8 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.82.1",
-    "@floegence/floe-webapp-core": "0.82.1",
+    "@floegence/floe-webapp-boot": "0.84.0",
+    "@floegence/floe-webapp-core": "0.84.0",
     "@floegence/flowersec-core": "5.7.1",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",
     "builder-util-runtime": "^9.7.0",

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"path"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -38,6 +39,8 @@ const (
 	contextActionSurfaceMonitoring = "monitoring"
 	contextActionSurfaceGit        = "git_browser"
 	contextActionSurfaceEditor     = "editor_preview"
+	contextActionSurfaceTessiven   = "tessiven"
+	contextActionKindTessiven      = "tessiven_selection"
 	contextActionKindFilePath      = "file_path"
 	contextActionKindFileSelection = "file_selection"
 	contextActionKindTerminal      = "terminal_selection"
@@ -106,23 +109,26 @@ type ContextActionPresentation struct {
 }
 
 type ContextActionContextItem struct {
-	Kind           string  `json:"kind"`
-	Path           string  `json:"path,omitempty"`
-	IsDirectory    bool    `json:"is_directory,omitempty"`
-	RootLabel      string  `json:"root_label,omitempty"`
-	Selection      string  `json:"selection,omitempty"`
-	SelectionChars int     `json:"selection_chars,omitempty"`
-	WorkingDir     string  `json:"working_dir,omitempty"`
-	PID            int     `json:"pid,omitempty"`
-	Name           string  `json:"name,omitempty"`
-	Username       string  `json:"username,omitempty"`
-	CPUPercent     float64 `json:"cpu_percent,omitempty"`
-	MemoryBytes    int64   `json:"memory_bytes,omitempty"`
-	Platform       string  `json:"platform,omitempty"`
-	CapturedAtMs   int64   `json:"captured_at_ms,omitempty"`
-	Title          string  `json:"title,omitempty"`
-	Detail         string  `json:"detail,omitempty"`
-	Content        string  `json:"content,omitempty"`
+	Kind           string   `json:"kind"`
+	CanvasID       string   `json:"canvas_id,omitempty"`
+	VersionID      int64    `json:"version_id,omitempty"`
+	ObjectRefs     []string `json:"object_refs,omitempty"`
+	Path           string   `json:"path,omitempty"`
+	IsDirectory    bool     `json:"is_directory,omitempty"`
+	RootLabel      string   `json:"root_label,omitempty"`
+	Selection      string   `json:"selection,omitempty"`
+	SelectionChars int      `json:"selection_chars,omitempty"`
+	WorkingDir     string   `json:"working_dir,omitempty"`
+	PID            int      `json:"pid,omitempty"`
+	Name           string   `json:"name,omitempty"`
+	Username       string   `json:"username,omitempty"`
+	CPUPercent     float64  `json:"cpu_percent,omitempty"`
+	MemoryBytes    int64    `json:"memory_bytes,omitempty"`
+	Platform       string   `json:"platform,omitempty"`
+	CapturedAtMs   int64    `json:"captured_at_ms,omitempty"`
+	Title          string   `json:"title,omitempty"`
+	Detail         string   `json:"detail,omitempty"`
+	Content        string   `json:"content,omitempty"`
 	wireFields     map[string]json.RawMessage
 }
 
@@ -140,7 +146,7 @@ func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
 		switch field {
 		case "kind", "path", "is_directory", "root_label", "selection", "selection_chars", "working_dir",
 			"pid", "name", "username", "cpu_percent", "memory_bytes", "platform", "captured_at_ms",
-			"title", "detail", "content":
+			"title", "detail", "content", "canvas_id", "version_id", "object_refs":
 		default:
 			return fmt.Errorf("json: unknown field %q", field)
 		}
@@ -152,6 +158,18 @@ func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
 
 func (item ContextActionContextItem) MarshalJSON() ([]byte, error) {
 	switch strings.TrimSpace(item.Kind) {
+	case contextActionKindTessiven:
+		refs := item.ObjectRefs
+		if refs == nil {
+			refs = []string{}
+		}
+		return json.Marshal(struct {
+			Kind       string   `json:"kind"`
+			CanvasID   string   `json:"canvas_id"`
+			VersionID  int64    `json:"version_id"`
+			ObjectRefs []string `json:"object_refs"`
+		}{contextActionKindTessiven, item.CanvasID, item.VersionID, refs})
+
 	case contextActionKindFilePath:
 		return json.Marshal(struct {
 			Kind        string `json:"kind"`
@@ -268,7 +286,7 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 		contextActionSurfacePreview,
 		contextActionSurfaceMonitoring,
 		contextActionSurfaceGit,
-		contextActionSurfaceEditor:
+		contextActionSurfaceEditor, contextActionSurfaceTessiven:
 	default:
 		return nil, ErrInvalidContextAction
 	}
@@ -359,6 +377,8 @@ func validateAskFlowerContextActionItems(action *ContextActionEnvelope) error {
 
 func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 	switch strings.TrimSpace(surface) {
+	case contextActionSurfaceTessiven:
+		return kind == contextActionKindTessiven
 	case contextActionSurfaceComposer, contextActionSurfaceFile:
 		return kind == contextActionKindFilePath
 	case contextActionSurfacePreview, contextActionSurfaceEditor:
@@ -376,7 +396,35 @@ func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 	}
 }
 
+var tessivenContextID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+
 func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
+	if item.Kind != contextActionKindTessiven && (item.CanvasID != "" || item.VersionID != 0 || item.ObjectRefs != nil) {
+		return false
+	}
+	if item.Kind == contextActionKindTessiven {
+		if !tessivenContextID.MatchString(item.CanvasID) || item.VersionID <= 0 || item.VersionID > 9007199254740991 || len(item.ObjectRefs) > 100 {
+			return false
+		}
+		for key := range item.wireFields {
+			if key != "kind" && key != "canvas_id" && key != "version_id" && key != "object_refs" {
+				return false
+			}
+		}
+		for _, id := range item.ObjectRefs {
+			if !tessivenContextID.MatchString(id) {
+				return false
+			}
+		}
+		if item.wireFields != nil {
+			raw, ok := item.wireFields["object_refs"]
+			if !ok || len(raw) == 0 || raw[0] != '[' {
+				return false
+			}
+		}
+		return item.Path == "" && item.Title == "" && item.Content == "" && item.Detail == "" && item.Selection == "" && item.WorkingDir == "" && item.RootLabel == "" && !item.IsDirectory && item.PID == 0 && item.SelectionChars == 0 && item.Name == "" && item.Username == "" && item.Platform == "" && item.CPUPercent == 0 && item.MemoryBytes == 0 && item.CapturedAtMs == 0
+	}
+
 	switch strings.TrimSpace(item.Kind) {
 	case contextActionKindFilePath:
 		return strings.TrimSpace(item.Path) != "" &&
@@ -471,7 +519,8 @@ func normalizeContextActionItems(items []ContextActionContextItem) []ContextActi
 	out := make([]ContextActionContextItem, 0, len(items))
 	for _, item := range items {
 		normalized := ContextActionContextItem{
-			Kind:           strings.TrimSpace(item.Kind),
+			Kind:     strings.TrimSpace(item.Kind),
+			CanvasID: item.CanvasID, VersionID: item.VersionID, ObjectRefs: item.ObjectRefs,
 			Path:           strings.TrimSpace(item.Path),
 			IsDirectory:    item.IsDirectory,
 			RootLabel:      strings.TrimSpace(item.RootLabel),

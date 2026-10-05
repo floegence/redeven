@@ -1,3 +1,6 @@
+import { connectTessivenHost, type TessivenHost } from './tessivenHost';
+import { requestTessivenTarget } from './runtimeControlClient';
+import { isTessivenRuntimePath } from './runtimeTessivenRoutes';
 import { verifyRuntimeAccessIdentity } from './runtimeAccessIdentity';
 import { environmentAccessBinding, rememberEnvironmentIdentity, selectEnvironmentAccessRoute, removalNeedsAccessReplacement } from './environmentAccess';
 import { gatewayServiceStepProgress, finishGatewayServiceStepProgress } from './gatewayServiceProgress';
@@ -10484,7 +10487,7 @@ async function releaseRuntimeFlowerBridge(): Promise<void> {
   await lease?.release();
 }
 
-async function ensureWSLRuntimeFlowerTarget(preferences: DesktopPreferences): Promise<RuntimeFlowerTarget> {
+async function ensureWSLRuntimeFlowerTarget(preferences: DesktopPreferences, prepareModels = true): Promise<RuntimeFlowerTarget> {
   const targetID = preferences.default_flower_runtime_target_id;
   const target = preferences.saved_runtime_targets.find(candidate => candidate.id === targetID);
   if (!target || target.host_access.kind !== 'wsl_host') throw new Error('Choose a default WSL Environment before opening Flower.');
@@ -10506,13 +10509,13 @@ async function ensureWSLRuntimeFlowerTarget(preferences: DesktopPreferences): Pr
     catch (error) { await lease.release(); throw error; }
     runtimeFlowerBridgeLease = lease;
   }
-  await prepareDesktopModels(runtimeFlowerBridgeLease);
+  if (prepareModels) await prepareDesktopModels(runtimeFlowerBridgeLease);
   return { record: runtimeFlowerBridgeLease.record, local_environment: null };
 }
 
-async function ensureRuntimeFlowerRecordUncoalesced(preferences: DesktopPreferences): Promise<RuntimeFlowerTarget> {
+async function ensureRuntimeFlowerRecordUncoalesced(preferences: DesktopPreferences, prepareModels = true): Promise<RuntimeFlowerTarget> {
   if (desktopPlatformCapabilities.wsl_environment) {
-    return ensureWSLRuntimeFlowerTarget(preferences);
+    return ensureWSLRuntimeFlowerTarget(preferences, prepareModels);
   }
   const environment = preferences.local_environment;
   const targetKey = localHostRuntimeLifecycleTargetKey(environment);
@@ -10605,18 +10608,51 @@ async function ensureRuntimeFlowerRecordUncoalesced(preferences: DesktopPreferen
   );
 }
 
-async function ensureRuntimeFlowerRecord(): Promise<RuntimeFlowerTarget> {
+let tessivenHost: { endpoint: string; token: string; host: TessivenHost } | undefined;
+async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
+  const endpoint = target.record.startup.runtime_control;
+  if (!endpoint) return;
+  if (tessivenHost?.endpoint === endpoint.base_url && tessivenHost.token === endpoint.token && tessivenHost.host.active()) { await tessivenHost.host.ready; return; }
+  tessivenHost?.host.close();
+  const host = connectTessivenHost(endpoint, async (message, signal) => {
+    const runtime = message.request.runtime_ref;
+    // The registry is the authority. No discovery, acquisition factory, target
+    // name lookup, or local substitute can create a connection here.
+    const record = runtimePlacementBridgeRegistry.values().find(value => value.target_id === runtime);
+    if (!record || !record.startup.runtime_control) throw new RuntimeControlError('TESSIVEN_TARGET_UNAVAILABLE', 'The exact Runtime target has no available authorized connection.', 409);
+    const lease = await runtimePlacementBridgeRegistry.acquire(record.session.placement_target_id, 'tessiven-resource', async () => { throw new Error('The Tessiven target connection ended.'); }, signal);
+    try {
+      if (lease.record.session !== record.session || !lease.active) throw new Error('The Tessiven target connection changed.');
+      const result = await requestTessivenTarget(record.startup.runtime_control, { request: message.request, permissions: message.permissions }, signal);
+      if (!lease.active || runtimePlacementBridgeRegistry.get(record.session.placement_target_id)?.session !== record.session) throw new Error('The target connection ended; inspect the operation before retrying.');
+      if (message.request.action === 'open' && await openTessivenManagedService(target, result)) {
+        const opening = (result as { opening: Record<string, unknown> }).opening; opening.opened_by_host = true;
+      }
+      return result;
+    } finally { await lease.release(); }
+  });
+  tessivenHost = { endpoint: endpoint.base_url, token: endpoint.token, host };
+  await host.ready;
+}
+
+async function ensureRuntimeFlowerRecord(prepareModels = true): Promise<RuntimeFlowerTarget> {
   const preferences = await loadDesktopPreferencesCached();
   const targetKey = desktopPlatformCapabilities.wsl_environment
     ? `wsl:${preferences.default_flower_runtime_target_id || 'default'}`
     : `local:${localHostRuntimeLifecycleTargetKey(preferences.local_environment)}`;
-  const inFlight = runtimeFlowerTargetInFlight.get(targetKey);
+  const preparationKey = `${targetKey}:${prepareModels ? "models" : "runtime"}`;
+  const inFlight = runtimeFlowerTargetInFlight.get(preparationKey);
   if (inFlight) return inFlight;
-  const request = ensureRuntimeFlowerRecordUncoalesced(preferences);
-  runtimeFlowerTargetInFlight.set(targetKey, request);
+  const request = ensureRuntimeFlowerRecordUncoalesced(preferences, prepareModels).then(async target => {
+    // The host is independent of model configuration and remains useful to the
+    // local Env App after the Welcome page is hidden.
+    try { await ensureTessivenHost(target); } catch (error) { console.warn('Tessiven host connection unavailable:', error instanceof Error ? error.message : String(error)); }
+    return target;
+  });
+  runtimeFlowerTargetInFlight.set(preparationKey, request);
   const release = () => {
-    if (runtimeFlowerTargetInFlight.get(targetKey) === request) {
-      runtimeFlowerTargetInFlight.delete(targetKey);
+    if (runtimeFlowerTargetInFlight.get(preparationKey) === request) {
+      runtimeFlowerTargetInFlight.delete(preparationKey);
     }
   };
   void request.then(release, release);
@@ -10750,7 +10786,7 @@ async function runningBrowserFlowerTarget(): Promise<RuntimeFlowerTarget | null>
     ? { record, local_environment: environment } : null;
 }
 
-async function retainRuntimeFlowerTarget(target: RuntimeFlowerTarget, owner: string): Promise<RuntimePlacementBridgeLease | undefined> {
+async function retainRuntimeFlowerTarget(target: RuntimeFlowerTarget, owner: string, prepareModels = true): Promise<RuntimePlacementBridgeLease | undefined> {
   if (!('session' in target.record)) return undefined;
   const record = target.record;
   const lease = await runtimePlacementBridgeRegistry.acquire(record.session.placement_target_id, owner, async () => {
@@ -10760,8 +10796,36 @@ async function retainRuntimeFlowerTarget(target: RuntimeFlowerTarget, owner: str
     await lease.release();
     throw new Error('The Flower Runtime connection changed.');
   }
-  await prepareDesktopModels(lease);
+  if (prepareModels) await prepareDesktopModels(lease);
   return lease;
+}
+
+async function openTessivenManagedService(source: RuntimeFlowerTarget, data: unknown): Promise<boolean> {
+  const result = data as { runtime_ref?: string; opening?: { opened_by_host?: boolean; state?: string; app_path?: string; forward?: { forward_id?: string; target_url?: string; access_mode?: string } } } | null;
+  const opening = result?.opening;
+  if (opening?.opened_by_host) return true;
+  if (opening?.state !== 'ready') return false;
+  const target = result?.runtime_ref === 'local:local' ? source.record : runtimePlacementBridgeRegistry.values().find(record => record.target_id === result?.runtime_ref);
+  if (!target || !opening.forward?.forward_id || !opening.app_path || !opening.forward.target_url) throw new Error('The exact service connection is unavailable.');
+  const base = runtimeFlowerBaseURL(target);
+  const route = new URL(opening.app_path, base);
+  route.hostname = `pf-${opening.forward.forward_id}.localhost`;
+  const request = normalizeDesktopShellOpenWebServiceWindowRequest({ url: route.toString(), forward_id: opening.forward.forward_id, target_url: opening.forward.target_url, access_mode: opening.forward.access_mode });
+  if (!request) throw new Error('Runtime returned an invalid service opening.');
+  let sessionRecord = [...sessionsByKey.values()].find(record => !record.closing && record.startup.local_ui_bridge_url === target.startup.local_ui_bridge_url);
+  if (!sessionRecord && request.access_mode === 'desktop_loopback' && source.local_environment && target === source.record) {
+    const opened = await openLocalEnvironmentRecord(await loadDesktopPreferencesCached(), source.local_environment, { stealAppFocus: false });
+    if (!opened.ok) throw new Error(opened.message);
+    sessionRecord = [...sessionsByKey.values()].find(record => !record.closing && record.startup.local_ui_bridge_url === target.startup.local_ui_bridge_url);
+  }
+  if (sessionRecord) {
+    const response = await openWebServiceWindowFromShell(sessionRecord, request);
+    if (!response.ok) throw new Error(response.message);
+  } else {
+    if (request.access_mode === 'desktop_loopback') throw new Error('Open this connected environment in Desktop to use its desktop-only service.');
+    await openWebServiceInSystemBrowser({ currentRouteURL: route.toString(), bridgeBaseURL: target.startup.local_ui_bridge_url, bridgeToken: target.startup.local_ui_bridge_token, allowedBaseURL: base, forwardID: request.forward_id }, { openURL: openExternalURL });
+  }
+  return true;
 }
 
 async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> {
@@ -10772,7 +10836,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   }
   const browserInstallation = path === '/_redeven_proxy/api/ai/computer/managed/browser';
   const flowerTarget = browserInstallation ? await runningBrowserFlowerTarget() : await withRuntimeFlowerTimeout(
-    ensureRuntimeFlowerRecord(),
+    ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path)),
     RUNTIME_FLOWER_READINESS_TIMEOUT_MS,
     'runtime_flower_readiness_timeout',
     'Desktop could not prepare the Runtime for Flower in time.',
@@ -10780,7 +10844,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (!flowerTarget || (request.environment_id && request.environment_id !== flowerTarget.record.environment_id)) {
     throw new Error('The browser installation environment session has ended.');
   }
-  const lease = await retainRuntimeFlowerTarget(flowerTarget, 'flower-request');
+  const lease = await retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !isTessivenRuntimePath(path));
   try {
   const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));
@@ -10858,6 +10922,13 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
     };
   }
   const dataRecord = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  if (path === '/_redeven_proxy/api/tessiven/resources' && method === 'POST' && (request.body as { action?: string } | undefined)?.action === 'open') {
+    const opened = await openTessivenManagedService(flowerTarget, dataRecord?.data);
+    if (opened && dataRecord?.data && typeof dataRecord.data === 'object') {
+      const data = dataRecord.data as { opening?: Record<string, unknown> };
+      if (data.opening) data.opening.opened_by_host = true;
+    }
+  }
   const responseCapabilityRaw = response.headers['upload-staging-capability'];
   const responseCapability = compact(Array.isArray(responseCapabilityRaw) ? responseCapabilityRaw[0] : responseCapabilityRaw);
   if (responseCapability && (responseCapability.length > 1024 || /[\r\n\0]/u.test(responseCapability))) {
@@ -10936,7 +11007,7 @@ async function startRuntimeFlowerStream(
   } catch (error) {
     return { ok: false, error: runtimeFlowerErrorFromUnknown(error) };
   }
-  if (!runtimeFlowerMethodAllowed(path, 'GET') || new URL(path, 'http://runtime-flower.local').pathname !== '/_redeven_proxy/api/ai/flower/stream') {
+  if (!runtimeFlowerMethodAllowed(path, 'GET') || !['/_redeven_proxy/api/ai/flower/stream', '/_redeven_proxy/api/tessiven/events'].includes(path)) {
     return { ok: false, error: runtimeFlowerError('runtime_flower_invalid_stream', 'Flower stream path is not allowed.') };
   }
   const key = runtimeFlowerStreamOperationKey(sender.id, request.stream_id);
@@ -10960,8 +11031,8 @@ async function startRuntimeFlowerStream(
   sender.once('destroyed', operation.senderDestroyedListener);
 
   try {
-    const flowerTarget = await ensureRuntimeFlowerRecord();
-    const lease = await retainRuntimeFlowerTarget(flowerTarget, `flower-stream:${key}`);
+    const flowerTarget = await ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path));
+    const lease = await retainRuntimeFlowerTarget(flowerTarget, `flower-stream:${key}`, !isTessivenRuntimePath(path));
     if (operation.settled) { await lease?.release(); return { ok: false, error: runtimeFlowerError('runtime_flower_stream_cancelled', 'Flower stream was cancelled.') }; }
     operation.bridgeLease = lease;
     const record = flowerTarget.record;
@@ -19565,6 +19636,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('will-quit', () => {
+    tessivenHost?.host.close();
     desktopUpdateCoordinatorCache?.dispose();
     linuxPackageUpdateAdapterCache?.dispose();
   });
