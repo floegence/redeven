@@ -30,6 +30,10 @@ controls while keeping every label on one line. The status strip separates
 Gateway connectivity and trust from catalog guidance; no target-health metrics
 are invented to resemble Cloud statistics.
 
+Add environment and the primary action share the published Button `sm` size,
+including its height, padding and corners. Idle, disabled and progress states
+retain that geometry; card-local styles do not override the button dimensions.
+
 The count includes a localized environment unit and a quieter Added label,
 never a filesystem-directory label or online-environment count. Its disclosure
 expands the existing environment list below the status strip. Its help explains
