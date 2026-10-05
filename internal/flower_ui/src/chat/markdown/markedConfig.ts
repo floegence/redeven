@@ -107,7 +107,8 @@ export function createFlowerMarkdownRenderer(options: { media?: boolean } = {}):
         return markdownMediaPlaceholder({ kind: 'html', html: token.text, title: '' });
       }
       const langClass = normalizeLanguageClass(token.lang);
-      return `<pre class="flower-chat-md-code-block"><code class="${langClass}">${escapeFlowerMarkdownHtml(token.text)}</code></pre>`;
+      const language = String(token.lang ?? '').trim().split(/\s+/, 1)[0].toLowerCase();
+      return `<pre class="flower-chat-md-code-block"><code class="${langClass}" data-flower-code-language="${escapeFlowerMarkdownHtml(language)}">${escapeFlowerMarkdownHtml(token.text)}</code></pre>`;
     },
     blockquote(token: Tokens.Blockquote) {
       return `<blockquote class="flower-chat-md-blockquote">${this.parser.parse(token.tokens)}</blockquote>`;
