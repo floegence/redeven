@@ -25,7 +25,7 @@ Spawn and child input use deterministic request keys scoped to the parent thread
 
 Each child execution proves parent-child membership through the typed runtime and derives its current tool policy from Redeven settings. Child tools cannot address the root or a sibling, and the child surface excludes recursive subagent creation. Approval and Ask User interactions remain canonical child interactions; resolving them updates only that child current view.
 
-Flower detail reads canonical child current state and typed activity through the parent-scoped product route. It does not parse metadata into messages, reconstruct activity from audits, or maintain a second child transcript. Parent cancellation may cancel active children, while thread deletion follows the canonical Floret tree deletion contract.
+Flower detail reads canonical child current state and typed activity through the parent-scoped product route. It does not parse metadata into messages, reconstruct activity from audits, or maintain a second child transcript. Flower Stop requests graceful cancellation of the selected thread and every existing descendant through published Floret `CancelInput.IncludeDescendants`. Children retain their canonical histories and queued inputs; independent root threads keep running. Each child settles its own confirmed effects, so parent settlement is not a barrier proving every child is already idle. Thread deletion follows the canonical Floret tree deletion contract.
 
 # Boundaries
 
