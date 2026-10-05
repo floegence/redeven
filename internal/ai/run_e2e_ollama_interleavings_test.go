@@ -281,7 +281,7 @@ func ollamaInterleaveSendNow(f *ollamaTaskFixture) {
 	f.assertUsers(3)
 	// Reconnect refreshes selected detail; an idempotent replay has no new
 	// lifecycle event. Fresh input also proves the live observer is reattached.
-	f.finish("send-now-followup", "Reply exactly SEND_NOW_RECOVERED without tools.", "SEND_NOW_RECOVERED")
+	f.finish("send-now-followup", "What is 2 + 2? Answer with the number only, without tools.", "4")
 }
 
 func ollamaInterleavePermissions(f *ollamaTaskFixture) {
