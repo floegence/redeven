@@ -3,9 +3,9 @@ set -euo pipefail
 umask 077
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 SOURCE_STATE_ROOT=${REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT:-$HOME/.redeven/local-environment}
-TEST_PATTERN='^TestE2E_FlowerOllamaTaskLifecycle$'
+TEST_PATTERN='^TestE2E_FlowerOllama(TaskLifecycle|ReasoningOnlyContinuation)$'
 if [[ $# -eq 1 && "$1" == "--interleavings" ]]; then
-  TEST_PATTERN+='/interleave_'
+  TEST_PATTERN='^TestE2E_FlowerOllamaTaskLifecycle$/interleave_'
 elif [[ $# -ne 0 ]]; then
   echo "usage: $0 [--interleavings]" >&2
   exit 2

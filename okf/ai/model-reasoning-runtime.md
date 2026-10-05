@@ -30,6 +30,13 @@ selections fail validation before dispatch. Older metadata without `thinking`
 and unrecognized model-defined effort names remain model-controlled; a verified
 subset of known levels and an explicit disable value can still be offered.
 
+Chat history always serializes an explicit string `content` for a retained
+assistant message. A reasoning-only response, including output truncation before
+visible text, uses `content: ""` while preserving the declared reasoning field.
+Tool calls remain paired with their original results. The adapter must not omit
+content, convert reasoning to visible text, or drop the continuation to satisfy
+an endpoint's message-shape requirements.
+
 Qwen, Kimi, and GLM boolean transports advertise explicit On independently of
 named effort. Qwen Chat encodes it as `enable_thinking: true`; Kimi and GLM use
 `thinking.type: enabled`. An absent or explicit Default selection does not send

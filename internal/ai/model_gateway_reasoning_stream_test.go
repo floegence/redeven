@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,4 +90,36 @@ func TestBuildOpenAIChatMessagesWithCapability_GatesReasoningReplay(t *testing.T
 	assertReasoningContent("required", withReplay, true)
 	assertReasoningContent("unknown", withoutCapability, false)
 	assertReasoningContent("unsupported", withoutReplay, false)
+}
+
+func TestBuildOpenAIChatMessagesPreservesEmptyContentWithReasoning(t *testing.T) {
+	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.exec"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"reasoning", "reasoning_content"} {
+		for _, toolCall := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/tool=%v", field, toolCall), func(t *testing.T) {
+				parts := []ContentPart{{Type: "reasoning", Text: "Inspect first."}}
+				if toolCall {
+					parts = append(parts, ContentPart{Type: "tool_call", ToolCallID: "call", ToolName: "terminal.exec", ArgsJSON: `{}`})
+				}
+				messages, err := buildOpenAIChatMessagesWithCapability([]Message{{Role: "assistant", Content: parts}}, config.AIReasoningCapability{Kind: "toggle", HistoryReplayRequirements: []string{field}}, aliases)
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw, err := json.Marshal(messages)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var wire []map[string]any
+				if err := json.Unmarshal(raw, &wire); err != nil {
+					t.Fatal(err)
+				}
+				if len(wire) != 1 || wire[0]["content"] != "" || wire[0][field] != "Inspect first." {
+					t.Fatalf("reasoning continuation must retain explicit empty content: %s", raw)
+				}
+			})
+		}
+	}
 }
