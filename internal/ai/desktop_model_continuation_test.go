@@ -91,8 +91,8 @@ func TestDesktopModelContinuationEndToEnd(t *testing.T) {
 					return
 				}
 				if tc.retry && n == 3 {
-					if !strings.Contains(string(body["input"]), "Inspect the available target.") || strings.Contains(string(body["input"]), "inspect-call") {
-						t.Error("Retry must use the canonical user input without replaying the failed attempt")
+					if strings.Count(string(body["input"]), "Inspect the available target.") != 1 || !strings.Contains(string(body["input"]), "Observed once.") {
+						t.Error("Retry must retain one canonical user input and its confirmed tool result")
 					}
 				}
 				w.Header().Set("Content-Type", "text/event-stream")
@@ -122,7 +122,7 @@ func TestDesktopModelContinuationEndToEnd(t *testing.T) {
 					if n == 2 && !strings.Contains(string(body["input"]), `"receipt":"original-reasoning"`) {
 						t.Error("lost original DeepSeek reasoning")
 					}
-					if n > 1 && !tc.retry {
+					if n > 1 {
 						var input []map[string]json.RawMessage
 						_ = json.Unmarshal(body["input"], &input)
 						calls, results := 0, 0
