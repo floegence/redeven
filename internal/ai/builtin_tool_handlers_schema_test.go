@@ -112,6 +112,13 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	if fmt.Sprint(yieldSchema["type"]) != "integer" || fmt.Sprint(yieldSchema["maximum"]) != "30000" {
 		t.Fatalf("yield_ms maximum=%v, want 30000", yieldSchema["maximum"])
 	}
+	stdinSchema, ok := execProps["stdin"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(stdinSchema["description"]), "does not close stdin or send EOF") {
+		t.Fatal("terminal.exec stdin must describe its interactive input boundary")
+	}
+	if !strings.Contains(terminalExec.Description, "wait for exit_code and verify requested effects") {
+		t.Fatal("terminal.exec must distinguish running input echo from completed work")
+	}
 
 	var readSchema map[string]any
 	if err := json.Unmarshal(terminalRead.InputSchema, &readSchema); err != nil {

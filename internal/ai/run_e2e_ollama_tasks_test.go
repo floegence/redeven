@@ -284,6 +284,7 @@ func (f *ollamaTaskFixture) tool(d *FlowerThreadDetail, name string) {
 }
 func (f *ollamaTaskFixture) verifyLive() {
 	f.t.Helper()
+	f.noRunningTerminalProcesses()
 	d := f.view()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
@@ -323,6 +324,19 @@ func (f *ollamaTaskFixture) verifyLive() {
 		}
 	}
 	f.report["live_final_matches"] = true
+}
+
+func (f *ollamaTaskFixture) noRunningTerminalProcesses() {
+	f.t.Helper()
+	manager := f.svc.terminalProcessManager()
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	for _, p := range manager.processes {
+		if p.Snapshot().Status == terminalProcessStatusRunning {
+			f.t.Fatal("completed task left a running terminal process")
+		}
+	}
+	f.report["terminal_processes_settled"] = true
 }
 
 func ollamaTaskFiles(f *ollamaTaskFixture) {
@@ -367,15 +381,7 @@ func ollamaTaskStopTerminal(f *ollamaTaskFixture) {
 	f.terminal(flruntime.TurnOutcomeCancelled)
 	f.file("started.txt", "STARTED")
 	f.missing("late.txt")
-	manager := f.svc.terminalProcessManager()
-	manager.mu.Lock()
-	for _, p := range manager.processes {
-		if p.Snapshot().Status == terminalProcessStatusRunning {
-			manager.mu.Unlock()
-			f.t.Fatal("cancel left a running terminal process")
-		}
-	}
-	manager.mu.Unlock()
+	f.noRunningTerminalProcesses()
 	f.finish("terminal-after-stop", "Use terminal.exec to write exactly RECOVERED into recovered.txt in the current directory. Reply RECOVERED.", "RECOVERED")
 	f.file("recovered.txt", "RECOVERED")
 }

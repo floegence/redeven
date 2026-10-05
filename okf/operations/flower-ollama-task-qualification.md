@@ -76,7 +76,8 @@ natural network reliability.
 
 Every successful case checks a final workspace-stream view against canonical
 detail, unique item identities, no live items after settlement, and actual
-selected-model requests. Browser component suites separately exercise queue
+selected-model requests. These finite tasks must leave no running terminal
+processes. Browser component suites separately exercise queue
 reordering, subagent disclosure/detail, and approval layout. Passing both layers
 does not claim an automated Desktop click-through against the live model.
 
