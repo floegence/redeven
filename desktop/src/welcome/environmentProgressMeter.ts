@@ -1,5 +1,13 @@
 import type { DesktopLauncherActionProgress, DesktopStepProgress } from '../shared/desktopLauncherIPC';
 
+export function environmentProgressElapsedSeconds(progress: DesktopLauncherActionProgress, nowUnixMS: number): number | null {
+  const running = progress.status === 'running' || progress.status === 'canceling' || progress.status === 'cleanup_running';
+  const start = Number(progress.started_at_unix_ms);
+  const end = Number(running ? nowUnixMS : progress.updated_at_unix_ms);
+  if (!Number.isFinite(start) || start <= 0 || !Number.isFinite(end) || end <= 0) return null;
+  return Math.max(0, Math.floor((end - start) / 1_000));
+}
+
 export function environmentProgressMeterPercent(
   progress: DesktopLauncherActionProgress,
 ): number {

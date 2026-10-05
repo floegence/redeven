@@ -55,6 +55,10 @@ launcher fixtures at desktop and 430-pixel widths, with light/dark themes and
 large text. It checks single-click submission, delayed service progress, shared
 button shimmer, popup and menu entry/exit, keyboard navigation and focus return,
 failure presentation, and dismissal/reopening without canceling or resubmitting.
+The update confirmation leads into the same progress popup with a visible
+indeterminate meter and total elapsed time. Advancing the fixture clock verifies
+that elapsed time survives stage changes and reopening, then freezes on failure.
+The ten-locale access UI runner also checks progress layout and reduced motion.
 The update-required snapshot also covers an update already running before any
 card-local interaction. Both admission and background updates must show exactly
 one primary-button icon. Directory help and the header settings menu remain

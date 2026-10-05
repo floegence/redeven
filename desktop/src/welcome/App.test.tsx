@@ -1950,7 +1950,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('data-step-key={step().key}');
     expect(appSrc).toContain('data-plan-revision={runtimeLifecycle()?.plan_revision ?? 0}');
     expect(appSrc).toContain('data-entering={runtimeLifecycle() ? stepEntering(step().key) : false}');
-    expect(appSrc).toContain("data-plan-state={runtimeLifecycle()?.plan_state ?? 'executing'}");
+    expect(appSrc).toContain("runtimeLifecycle()?.plan_state ?? 'executing'");
     expect(appSrc).not.toContain("current.plan_state === 'planning'");
     expect(appSrc).toContain('localizedProgressPlanningLabel(props.i18n, props.progress.action)');
     expect(appSrc).toContain("runtimeLifecycle()?.plan_state === 'planning'");

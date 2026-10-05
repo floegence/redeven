@@ -2612,6 +2612,7 @@
     "protectedWorkloadPresent": "存在受保护的活动工作负载",
     "snapshotRevision": "快照修订版 {revision}",
     "stepOf": "第 {current} / {total} 步",
+    "operationElapsed": "总耗时 · {seconds} 秒",
     "stageElapsed": "仍在处理 · {seconds} 秒",
     "planningStartupPath": "正在规划启动路径",
     "planningRestartPath": "正在规划重启路径",

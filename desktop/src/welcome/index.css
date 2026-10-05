@@ -3111,6 +3111,10 @@ html:not(.dark) .redeven-header-separator {
   animation: redeven-runtime-planning-meter 1.2s ease-in-out infinite;
 }
 
+.redeven-environment-progress__elapsed {
+  font-variant-numeric: tabular-nums;
+}
+
 .redeven-environment-progress__meta {
   display: flex;
   min-width: 0;

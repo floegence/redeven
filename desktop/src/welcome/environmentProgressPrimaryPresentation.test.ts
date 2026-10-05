@@ -26,6 +26,22 @@ const openAction: EnvironmentActionModel = {
   variant: 'default',
 };
 
+describe('Gateway service primary progress', () => {
+  it.each([
+    ['start_gateway', 'Starting...', 'Start failed', 'play'],
+    ['stop_gateway', 'Stopping...', 'Stop failed', 'stop'],
+    ['restart_gateway', 'Restarting...', 'Restart failed', 'refresh'],
+    ['update_gateway', 'Updating...', 'Update failed', 'refresh'],
+  ] as const)('names %s independently of its current internal phase', (action, label, failure, icon) => {
+    const progress: DesktopLauncherActionProgress = {
+      action, subject_kind: 'gateway', active_progress_surface: 'gateway',
+      status: 'running', phase: 'preparing_gateway_package', title: 'Gateway', detail: '',
+    };
+    expect(environmentProgressPrimaryPresentation(progress)).toMatchObject({ label, icon });
+    expect(environmentProgressPrimaryPresentation({ ...progress, status: 'failed' })).toMatchObject({ label: failure });
+  });
+});
+
 function lifecycleActionProgress(input: Readonly<{
   action?: DesktopLauncherActionKind;
   operation?: DesktopRuntimeLifecycleOperation;

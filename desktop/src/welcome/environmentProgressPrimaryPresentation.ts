@@ -10,7 +10,7 @@ export type EnvironmentProgressPrimaryPresentation = Readonly<
       label: string;
       label_key: DesktopTranslationKey;
       ariaLabel: string;
-      icon: 'play' | 'stop';
+      icon: 'play' | 'stop' | 'refresh';
     }
   | {
       kind: 'attention_trigger';
@@ -235,10 +235,13 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): P
     case 'check_gateway':
       return { label: 'Refreshing...', label_key: 'environmentCenter.gatewayActionSyncing' };
     case 'stop_environment_runtime':
+    case 'stop_gateway':
       return { label: 'Stopping...', label_key: 'progress.stoppingEllipsis' };
     case 'restart_environment_runtime':
+    case 'restart_gateway':
       return { label: 'Restarting...', label_key: 'progress.restartingEllipsis' };
     case 'update_environment_runtime':
+    case 'update_gateway':
       return { label: 'Updating...', label_key: 'progress.updatingEllipsis' };
     case 'refresh_environment_runtime':
       return { label: 'Refreshing...', label_key: 'environmentCenter.gatewayActionSyncing' };
@@ -254,11 +257,12 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): P
   }
 }
 
-function runningProgressPrimaryIcon(progress: DesktopLauncherActionProgress): 'play' | 'stop' {
+function runningProgressPrimaryIcon(progress: DesktopLauncherActionProgress): 'play' | 'stop' | 'refresh' {
   if (progress.status === 'canceling' || progress.status === 'cleanup_running') {
     return 'stop';
   }
-  return progress.action === 'stop_environment_runtime'
+  if (progress.action === 'update_gateway' || progress.action === 'restart_gateway') return 'refresh';
+  return progress.action === 'stop_environment_runtime' || progress.action === 'stop_gateway'
     ? 'stop'
     : 'play';
 }
@@ -285,15 +289,19 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): Pr
       return { label: 'Refresh failed', label_key: 'progress.checkFailed' };
     case 'start':
     case 'start_environment_runtime':
+    case 'start_gateway':
       return { label: 'Start failed', label_key: 'progress.startFailed' };
     case 'restart':
     case 'restart_environment_runtime':
+    case 'restart_gateway':
       return { label: 'Restart failed', label_key: 'progress.restartFailed' };
     case 'update':
     case 'update_environment_runtime':
+    case 'update_gateway':
       return { label: 'Update failed', label_key: 'progress.updateFailed' };
     case 'stop':
     case 'stop_environment_runtime':
+    case 'stop_gateway':
       return { label: 'Stop failed', label_key: 'progress.stopFailed' };
     case 'refresh':
     case 'refresh_environment_runtime':
