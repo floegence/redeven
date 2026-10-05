@@ -33,7 +33,9 @@ Each hosted Agent uses published Floret v7.18.0 `WithAgentDynamicToolSurface` wi
 The current request's tool definitions govern model capability claims. Historical
 runtime snapshots and assistant statements describe earlier permissions and must
 not make a restored tool appear unavailable. A listed tool that requires approval
-uses the normal approval flow; a prior denial still binds the denied action.
+requests approval by submitting the intended call. The runtime asks before any
+effect executes; missing prior approval is not a denial. An actual rejection
+still binds the denied action and must not be bypassed with another tool.
 
 Immediately before an effect, Redeven validates the Floret request against its invocation snapshot. Floret has settled any canonical approval; Redeven never creates or waits for a second decision. Each concurrent invocation receives one process-local proof. Cancellation, resource checks, target routing, effect fencing and output limits remain enforced. A setting change cannot settle a pending approval, cancel an executing tool or rewrite a provider request already sent. The next authorization batch reads the new setting.
 

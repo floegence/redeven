@@ -72,6 +72,8 @@ func TestBuildLayeredSystemPromptRefreshesToolAvailabilityAfterPermissionChanges
 		assertPromptContains(t, prompt, "Tool availability and permissions can change between requests.")
 		assertPromptContains(t, prompt, "Use the tool definitions supplied with this request as the current capability list")
 		assertPromptContains(t, prompt, "earlier messages and runtime-context snapshots describe their own time")
+		assertPromptContains(t, prompt, "submit the intended tool call: the runtime asks the user before executing its effect")
+		assertPromptContains(t, prompt, "Pending or unrequested approval is not denial")
 	}
 }
 
