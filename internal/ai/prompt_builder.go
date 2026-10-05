@@ -191,7 +191,8 @@ func buildPromptMandateSection(spec promptProfileSpec) promptSection {
 func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 	lines := []string{
 		"# Tool Usage Strategy",
-		"- Tool availability and permissions can change between requests. Use the tool definitions supplied with this request as the current capability list; earlier messages and runtime-context snapshots describe their own time. Recheck the current definitions before claiming a tool is unavailable. A listed tool may require approval when invoked; use that approval flow instead of treating required confirmation as missing capability. Existing denials still apply to the denied action.",
+		"- Tool availability and permissions can change between requests. Use the tool definitions supplied with this request as the current capability list; earlier messages and runtime-context snapshots describe their own time. Recheck the current definitions before claiming a tool is unavailable.",
+		"- For an available tool that requires approval, submit the intended tool call: the runtime asks the user before executing its effect. You do not need a prior approval response to propose the call. Pending or unrequested approval is not denial. Report permission denied only after an actual rejection; never bypass that rejection through another tool.",
 		"- When the arguments are fully known and calls do not depend on one another, emit those calls together in the same response.",
 		"- When a call depends on a previous result, wait for that result and emit the dependent call in a later response.",
 		"- The runtime does not infer dependencies or conflicts between calls; express dependencies through response boundaries.",
