@@ -1,7 +1,7 @@
 ---
 type: Architecture Contract
 title: Remote desktop media and input scheduling
-description: Preserve cursor ownership and ordered input/video while reducing capture, encoding and playback work.
+description: Preserve bounded pixel ownership, cursor presentation and ordered input/video while reducing capture and playback work.
 tags: [desktop, media, input, wayland, latency]
 timestamp: 2026-10-05T05:30:00Z
 ---
@@ -53,6 +53,14 @@ The producer retains its descriptor. Invalid bounds fail explicitly; this does
 not introduce DMA-BUF import. The
 [buffer compatibility record](../operations/remote-desktop-wayland-buffer-results.md)
 owns the reproduction and distribution evidence.
+Capture copies producer pixels directly into a bounded Gst buffer pool, using
+native memory work outside the Python interpreter lock. The retained clean Gst
+frame owns the comparison baseline; embedded-cursor composition uses a separate
+buffer. BGRA/BGRx/RGBA/RGBx and padded rows retain their existing pixel meaning.
+Encoder views retain their parent buffer lease. Exhaustion waits without losing
+the final changed frame, and shutdown interrupts that wait before joining capture.
+The [capture pool record](../operations/remote-desktop-capture-pool-results.md)
+owns format, lifetime, installed-stack and measured performance evidence.
 Portal input submits bounded ordered asynchronous D-Bus calls without blocking
 media callbacks. Delivery failure closes that OS session and requires reconnect.
 Static refinement waits for input and pixels to settle and retires stale candidates

@@ -34,6 +34,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Remote desktop media and input scheduling](architecture/remote-desktop-media.md) - Preserve ordered media and input while reducing Wayland capture work and selecting supported encoders.
 - [Wayland cursor and scheduling optimization evidence](operations/remote-desktop-wayland-optimization-results.md) - Assess separate cursor ownership, ordered asynchronous input and damage-aware capture with explicit synthetic and real-host evidence boundaries.
 - [Wayland legacy MemFd capture compatibility](operations/remote-desktop-wayland-buffer-results.md) - Assess the post-authorization capture repair for older GNOME buffer allocations and its real-host verification boundary.
+- [Wayland capture pool optimization evidence](operations/remote-desktop-capture-pool-results.md) - Verify pixel lifetime and compare the installed pool implementation with the previous release on udesk24.
 - [Remote desktop validation](operations/remote-desktop-validation.md) - Qualify office interaction, lifecycle and actual painted performance with published dependencies.
 - [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 performance, local delivery and remaining acceptance limits.
 - [Desktop latency and NVIDIA encoding](operations/remote-desktop-latency-results.md) - Compare controlled RTX 4090 D response measurements, decoder behavior and remaining copy/transport limits.
