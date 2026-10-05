@@ -42,6 +42,10 @@ preview error without interrupting the conversation.
 - Only stable Markdown segments mount media. An unfinished streaming tail stays
   inert, and later reply text does not reload committed previews. Media near the
   viewport loads lazily. Disposal aborts pending observation and revokes blob URLs.
+- The resolver identity changes only with the adapter, selected thread, or working
+  directory. Published Floe owns request cancellation and ignores reactive reads
+  inside the resolver. Health snapshots, labels, and ordinary thread updates do
+  not reload a ready preview; a real context change cancels stale work.
 
 ## Resource and document boundaries
 
@@ -69,6 +73,7 @@ Canonical Floret messages remain the durable display source. Resource routes ret
 
 # Evidence
 
+- [Isolated Electron acceptance for Welcome and built Env App](../../desktop/scripts/check-flower-media.mjs): build Env App, then run `pnpm --dir desktop test:flower-media`; records both 30-second observations under `desktop/dist/flower-media-acceptance`.
 - [Markdown integration](../../internal/flower_ui/src/chat/markdown/FlowerMarkdownBlock.tsx)
 - [Resource mapping](../../internal/flower_ui/src/chat/markdown/flowerMarkdownMedia.ts)
 - [Runtime preview checks](../../internal/codeapp/appserver/server_fs_file_test.go)

@@ -79,6 +79,12 @@ Disposing Welcome releases Flower and its stream. Changing the selected runtime
 identity remounts the Flower boundary so the previous runtime's cached conversation
 does not become the new runtime's view.
 
+Each selected environment owns one Flower adapter. Health snapshots and language
+changes update presentation without replacing its transport. Runtime labels stay
+reactive independently of adapter identity. Filesystem context invalidation uses
+only the selected environment ID, Runtime start identity, and open session key;
+health timestamps and probe progress are not filesystem identities.
+
 # Boundaries
 
 Navigation grants no runtime authority. The existing compatibility boundary,
@@ -95,4 +101,5 @@ page; contextual window placement remains in
 - `redeven:desktop/src/main/desktopWelcomeState.ts` - Welcome snapshot projection.
 - `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Pending IPC, immediate return, retained instances, and explicit host requests.
 - `redeven:desktop/scripts/check-flower-navigation.mjs` - Browser paint timing, delayed AI admission, draft and selection retention, inert pages, and workspace stream lifetime using a fixture that rejects premature AI requests.
+- `redeven:desktop/scripts/check-flower-media.mjs` - Thirty seconds of health snapshots in isolated Electron, with stable image nodes, resource requests, and workspace subscription; also checks the built Env App entry.
 - `redeven:desktop/scripts/check-welcome-tab-motion.mjs` - Real-browser per-card opacity, rise, stagger, natural playback, rapid and repeated selection, snapshot continuity, keyboard focus, reduced motion, and retained-page return on wide and narrow layouts.

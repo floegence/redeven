@@ -731,8 +731,8 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       runtime_id: LOCAL_ENVIRONMENT_RUNTIME_ID,
       runtime_kind: 'local_environment',
       carrier_kind: 'runtime',
-      display_name: options.runtimeDisplayName ?? LOCAL_ENVIRONMENT_LABEL,
-      subtitle: options.runtimeSubtitle ?? LOCAL_ENVIRONMENT_SUBTITLE,
+      get display_name() { return options.runtimeDisplayName ?? LOCAL_ENVIRONMENT_LABEL; },
+      get subtitle() { return options.runtimeSubtitle ?? LOCAL_ENVIRONMENT_SUBTITLE; },
     },
     transport: {
       listThreads: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?limit=200'),

@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-05 — Stable Flower media loading
+
+- Documented one Desktop Flower adapter per selected environment and filesystem
+  scope invalidation by Runtime/connection identity, excluding health polling.
+- Documented explicit media resolver context and published Floe cancellation
+  ownership in [inline media](ui/flower-inline-media.md).
+
 ## 2026-10-03: Pending message controls
 
 - Adopt published Floret v7.20.0 for atomic queued-text editing and explicit stop-and-send. Keep attachment/context authority in Floret, reject stale text, and preserve existing idle-only promotion. Native clients can manage pending messages without disabling the composer.

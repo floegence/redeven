@@ -32,14 +32,18 @@ async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_envir
   const performAction = vi.fn(() => new Promise<never>(() => {}));
   const getSnapshot = vi.fn(() => new Promise<never>(() => {}));
   const requestRuntimeFlower = vi.fn(() => new Promise<never>(() => {}));
-  const settings = { load: vi.fn(), save: vi.fn(), cancel: vi.fn(), requestRuntimeFlower } as unknown as DesktopWelcomeRuntime['settings'];
+  const startRuntimeFlowerStream = vi.fn(() => new Promise<never>(() => {}));
+  const cancelRuntimeFlowerStream = vi.fn();
+  const settings = { load: vi.fn(), save: vi.fn(), cancel: vi.fn(), requestRuntimeFlower,
+    startRuntimeFlowerStream, cancelRuntimeFlowerStream, subscribeRuntimeFlowerStream: () => () => {},
+  } as unknown as DesktopWelcomeRuntime['settings'];
   const host = document.createElement('div');
   document.body.append(host);
   disposers.push(render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launcher: {
     getSnapshot, performAction, subscribeSnapshot: listener => { receive = listener; return () => {}; },
   } }} />, host));
   await settle();
-  return { performAction, getSnapshot, requestRuntimeFlower, snapshot, publish(patch: Partial<typeof snapshot>) {
+  return { performAction, getSnapshot, requestRuntimeFlower, startRuntimeFlowerStream, cancelRuntimeFlowerStream, snapshot, publish(patch: Partial<typeof snapshot>) {
     snapshot = { ...snapshot, ...patch, snapshot_revision: (snapshot.snapshot_revision ?? 0) + 1 };
     receive?.(snapshot);
   } };
@@ -125,4 +129,27 @@ it('releases the previous Flower when the selected runtime identity changes', as
   expect(flower()).not.toBe(previous);
   expect(previous?.isConnected).toBe(false);
   expect(card?.isConnected).toBe(false);
+});
+
+it('keeps filesystem requests stable through health snapshots and refreshes after runtime or session replacement', async () => {
+  const h = await mount('flower');
+  const mounted = flower();
+  const initialCalls = h.requestRuntimeFlower.mock.calls.length;
+  for (let revision = 1; revision <= 3; revision++) {
+    h.publish({ environments: h.snapshot.environments.map(entry => ({
+      ...entry, runtime_health: { status: 'online', checked_at_unix_ms: revision, source: 'local_runtime_probe', freshness: 'fresh' },
+    })) });
+    await settle();
+  }
+  expect(flower()).toBe(mounted);
+  expect(h.requestRuntimeFlower).toHaveBeenCalledTimes(initialCalls);
+  expect(h.startRuntimeFlowerStream).toHaveBeenCalledTimes(1);
+  expect(h.cancelRuntimeFlowerStream).not.toHaveBeenCalled();
+  h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_started_at_unix_ms: 42 })) });
+  await settle();
+  expect(flower()).toBe(mounted);
+  expect(h.requestRuntimeFlower).toHaveBeenCalledTimes(initialCalls + 1);
+  h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_started_at_unix_ms: 42, open_session_key: 'replacement' })) });
+  await settle();
+  expect(h.requestRuntimeFlower).toHaveBeenCalledTimes(initialCalls + 2);
 });

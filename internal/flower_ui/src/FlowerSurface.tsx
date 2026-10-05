@@ -27,7 +27,7 @@ import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, cr
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
-import { createInputHistoryController, type InputHistoryEntry } from '@floegence/floe-webapp-core/chat';
+import { createInputHistoryController, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
 import { FlowerContextMenu } from './FlowerContextMenu';
@@ -1938,6 +1938,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return context?.roots?.find((root) => root.id === context.defaultRootId)?.pathAbs ?? '';
   });
   const selectedThreadWorkingDirectory = createMemo(() => normalizeAbsolutePath(selectedThread()?.working_dir ?? ''));
+  const resolveMessageMedia = createMemo<NonNullable<MarkdownMediaProps['resolve']>>(() => {
+    const adapter = props.adapter;
+    const threadID = selectedThreadID();
+    const workingDirectory = selectedThreadWorkingDirectory();
+    return (source, signal) => resolveFlowerMarkdownMedia(source, signal, {
+      adapter, threadID, workingDirectory, get copy() { return copy().chat.media; },
+      onActionError: error => notifyThreadActionError(getErrorMessage(error)),
+    });
+  });
   const draftWorkingDirectory = createMemo(() => normalizeAbsolutePath(currentComposerSessionDraft().workingDirDraft ?? ''));
   const displayedWorkingDirectory = createMemo(() => {
     if (selectedThreadDetailPending()) return '';
@@ -9491,10 +9500,7 @@ webSearch: model.web_search,
           content={block().content}
           streaming={streaming()}
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
-          resolveMedia={(source, signal) => resolveFlowerMarkdownMedia(source, signal, {
-            adapter: props.adapter, threadID: selectedThreadID(), workingDirectory: selectedThreadWorkingDirectory(),
-            copy: copy().chat.media, onActionError: error => notifyThreadActionError(getErrorMessage(error)),
-          })}
+          resolveMedia={resolveMessageMedia()}
           copyCodeLabel={copy().chat.copyCode}
           codeCopiedLabel={copy().chat.codeCopied}
         />
