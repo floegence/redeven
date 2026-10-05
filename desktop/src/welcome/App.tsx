@@ -6952,13 +6952,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       >
         <div class="space-y-2">
           <Show when={deleteNeedsReplacement()}>
-            <label class="environment-connection-field">
-              <span>{i18n().t('gatewayAccess.removeDefaultHint')}</span>
-              <select value={deleteReplacement()} onChange={event => setDeleteReplacement(event.currentTarget.value)}>
-                <option value="">{i18n().t('gatewayAccess.chooseReplacement')}</option>
-                <For each={deleteReplacementRoutes()}>{route => <option value={route.id}>{environmentAccessRouteLabel(route, i18n())}</option>}</For>
-              </select>
-            </label>
+            <fieldset class="redeven-access-settings" disabled={busyStateMatchesAction(busyState(), 'delete_environment')}>
+              <legend>{i18n().t('gatewayAccess.chooseReplacement')}</legend>
+              <p>{i18n().t('gatewayAccess.removeDefaultHint')}</p>
+              <div class="redeven-access-settings__routes">
+                <For each={deleteReplacementRoutes()}>{route => (
+                  <label class="redeven-access-choice" data-selected={deleteReplacement() === route.id}>
+                    <input type="radio" name="environment-access-replacement" value={route.id} checked={deleteReplacement() === route.id}
+                      onChange={() => setDeleteReplacement(route.id)} />
+                    <span><strong>{environmentAccessRouteLabel(route, i18n())}</strong></span>
+                  </label>
+                )}</For>
+              </div>
+            </fieldset>
           </Show>
           <p class="text-[length:var(--floe-type-body)]">
             {deleteTargetIsGatewayEnvironment()

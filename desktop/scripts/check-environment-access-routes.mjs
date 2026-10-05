@@ -69,10 +69,9 @@ try {
     await page.waitForFunction(() => window.settingsFixture.requests.some(r => r.kind === 'set_environment_access_route'));
     for (const [width, dark, large] of [[1280, false, false], [430, true, true]]) {
       await page.setViewportSize({ width, height: 1050 });
-      await page.evaluate(({ dark, large }) => {
-        document.documentElement.classList.toggle('dark', dark); document.documentElement.classList.toggle('light', !dark);
-        document.documentElement.style.fontSize = large ? '20px' : '16px';
-      }, { dark, large });
+      await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
+      await page.waitForFunction(dark => document.documentElement.classList.contains('dark') === dark, dark);
+      await page.evaluate(large => { document.documentElement.style.fontSize = large ? '20px' : '16px'; }, large);
       await page.evaluate(() => document.fonts.ready);
       assert.equal(await dialog.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${locale}: settings fit`);
       for (const button of await dialog.getByRole('button').all()) assert.equal(await button.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
@@ -95,7 +94,9 @@ try {
     await row.getByRole('button', { name: i18n.t('environmentCenter.removeLabel', { label: gateway.label }), exact: true }).click();
     const remove = dialog.getByRole('button', { name: i18n.t('confirm.deleteGatewayEnvironmentConfirm'), exact: true });
     assert.equal(await remove.isDisabled(), true, 'deleting the default requires an explicit replacement');
-    await dialog.locator('select').selectOption(`${runtime.id}:direct`);
+    assert.equal(await dialog.evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
+    await page.screenshot({ path: `${output}/${locale}-delete-default.png` });
+    await dialog.getByRole('radio').first().check();
     await remove.click();
     requests = await page.evaluate(() => window.settingsFixture.requests);
     assert.equal(requests.at(-1).kind, 'delete_environment_registration');
