@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote desktop media and input scheduling
 description: Preserve cursor ownership and ordered input/video while reducing capture, encoding and playback work.
 tags: [desktop, media, input, wayland, latency]
-timestamp: 2026-10-04T18:10:00Z
+timestamp: 2026-10-05T05:30:00Z
 ---
 # Summary
 
@@ -46,6 +46,13 @@ The [viewer contract](remote-desktop-viewer.md) owns single-cursor policy.
 Contiguous SPA header sequences permit damage-aware comparison and unchanged-copy
 suppression; missing metadata, corruption or discontinuity require full pixels.
 Cursor-only buffers cannot restore a baseline lost before them.
+Older compositors may provide readable MemFd without the MAPPABLE flag. The
+native client maps these bounded system-memory planes read-only when libpipewire
+has not mapped them, and releases its mappings on buffer removal or stream close.
+The producer retains its descriptor. Invalid bounds fail explicitly; this does
+not introduce DMA-BUF import. The
+[buffer compatibility record](../operations/remote-desktop-wayland-buffer-results.md)
+owns the reproduction and distribution evidence.
 Portal input submits bounded ordered asynchronous D-Bus calls without blocking
 media callbacks. Delivery failure closes that OS session and requires reconnect.
 Static refinement waits for input and pixels to settle and retires stale candidates
