@@ -16,9 +16,11 @@ try {
   const { gatewayServiceStepProgress } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/gatewayServiceProgress.ts', import.meta.url)));
   const source = compactEnvironmentPreviewFixture().coverage;
   const snapshot = { ...source, open_windows: [], environments: source.environments.filter(entry => entry.kind === 'gateway_environment') };
-  for (const locale of REDEVEN_SUPPORTED_LOCALES) {
+  const locales = process.argv.length > 2 ? process.argv.slice(2) : REDEVEN_SUPPORTED_LOCALES;
+  assert.ok(locales.every(locale => REDEVEN_SUPPORTED_LOCALES.includes(locale)));
+  for (const locale of locales) {
     const i18n = createDesktopI18n(locale);
-    for (const [width, dark, largeText] of [[1280, false, false], [760, true, true]]) {
+    for (const [width, dark, largeText] of [[1280, false, false], [760, true, true], [430, true, true]]) {
       const context = await browser.newContext({ viewport: { width, height: 1000 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
       const page = await context.newPage();
       page.on('pageerror', error => report.errors.push(error.message));
@@ -90,7 +92,24 @@ try {
       for (const control of await gatewayCard.getByRole('button').all()) {
         assert.equal(await control.evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap');
       }
-      assert.equal(await gatewayCard.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
+      assert.equal(await gatewayCard.evaluate(element => element.scrollWidth > element.clientWidth + 1), false,
+        `${locale} ${width}px: ${JSON.stringify(await gatewayCard.evaluate(card => {
+          const bounds = card.getBoundingClientRect();
+          return [...card.querySelectorAll('*')].filter(el => el.getBoundingClientRect().right > bounds.right + 1).map(el => ({ class: el.className, text: el.textContent, width: el.getBoundingClientRect().width }));
+        }))}`);
+      const clippedControls = await gatewayCard.locator('button').evaluateAll(buttons => buttons.flatMap(button => {
+        const bounds = button.getBoundingClientRect();
+        const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+          if (!node.textContent.trim()) continue;
+          const range = document.createRange(); range.selectNodeContents(node);
+          if ([...range.getClientRects()].some(rect => rect.left < bounds.left - 2 || rect.right > bounds.right + 2)) return [button.textContent];
+        }
+        return [];
+      }));
+      assert.deepEqual(clippedControls, [], `${locale}: ${width}px Gateway labels remain visible`);
+
       if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-card-${dark ? 'dark-narrow' : 'light'}.png` });
       const addEnvironment = gatewayCard.getByRole('button', { name: i18n.t('gatewayAccess.addEnvironment'), exact: true });
       await addEnvironment.focus();

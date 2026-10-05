@@ -44,6 +44,15 @@ try {
     const card = page.locator('[data-gateway-id="local-preview"]');
     const library = page.locator('.redeven-gateway-library');
     await card.waitFor();
+    const rows = await library.locator('[data-gateway-id]').evaluateAll(cards => cards.map(card => {
+      const rect = card.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width, parentWidth: card.parentElement.getBoundingClientRect().width };
+    }));
+    assert.equal(rows.length, 3);
+    for (const [index, row] of rows.entries()) {
+      assert.ok(Math.abs(row.width - row.parentWidth) <= 2, 'Each Gateway fills one complete row');
+      if (index) assert.ok(row.top >= rows[index - 1].bottom, 'Gateways never share a row');
+    }
     assert.ok((await card.innerText()).includes(i18n.t('gatewayAccess.directoryPending')));
     assert.equal(await card.getByRole('button', { name: i18n.t('gatewayAccess.addEnvironment'), exact: true }).isDisabled(), true);
     assert.equal(await library.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
@@ -92,6 +101,8 @@ try {
     await page.evaluate(({ snapshot, progress }) => window.settingsFixture.publish({ ...snapshot, action_progress: [progress] }), { snapshot: workflowSnapshot, progress });
     const popover = page.locator('.redeven-gateway-action-popover-surface');
     await popover.waitFor();
+    const popoverBounds = await popover.boundingBox();
+    assert.ok(popoverBounds.y >= 0 && popoverBounds.y + popoverBounds.height <= 1050, 'Progress fits the viewport from its main-row anchor');
     assert.equal(await trigger.locator('svg').count(), 1, 'Progress must retain one icon');
     assert.equal(await trigger.getAttribute('data-floe-progress-shimmer'), 'surface');
     assert.notEqual(await popover.evaluate(el => getComputedStyle(el).animationName), 'none');
