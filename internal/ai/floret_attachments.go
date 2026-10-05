@@ -105,17 +105,22 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []
 
 type floretTurnUploadLoader func(context.Context, string) (*threadstore.UploadRecord, error)
 
-func floretTurnInputWithUploadLoader(ctx context.Context, input RunInput, references []flruntime.MessageReference, load floretTurnUploadLoader) (flruntime.TurnInput, error) {
-	out := flruntime.TurnInput{Text: strings.TrimSpace(input.Text), References: append([]flruntime.MessageReference(nil), references...)}
+func floretUserInputText(input RunInput) string {
+	text := strings.TrimSpace(input.Text)
 	if input.StructuredResponse != nil {
 		summary := strings.TrimSpace(input.StructuredResponse.PublicSummary)
 		switch {
-		case summary != "" && out.Text != "":
-			out.Text = summary + "\n\n" + out.Text
+		case summary != "" && text != "":
+			text = summary + "\n\n" + text
 		case summary != "":
-			out.Text = summary
+			text = summary
 		}
 	}
+	return text
+}
+
+func floretTurnInputWithUploadLoader(ctx context.Context, input RunInput, references []flruntime.MessageReference, load floretTurnUploadLoader) (flruntime.TurnInput, error) {
+	out := flruntime.TurnInput{Text: floretUserInputText(input), References: append([]flruntime.MessageReference(nil), references...)}
 	if len(input.Attachments) == 0 {
 		if err := out.Validate(); err != nil {
 			return flruntime.TurnInput{}, err

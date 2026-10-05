@@ -66,12 +66,6 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	if thread == nil || strings.TrimSpace(thread.ThreadID) == "" {
 		return fail(initialTurnPhaseResumeCanonicalCreate, errors.New("created thread identity is missing"))
 	}
-	if replay, found, replayErr := s.typedSendLookup(ctxOrBackground(ctx), thread.ThreadID, clientRequestID); replayErr != nil {
-		return fail(initialTurnPhaseStartCommand, replayErr)
-	} else if found {
-		replay.AppliedPermissionType = settings.PermissionType
-		return replay, nil
-	}
 	req.ClientRequestID = clientRequestID
 	req.ThreadID = thread.ThreadID
 	req.Create = nil

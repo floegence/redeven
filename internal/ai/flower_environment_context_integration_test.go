@@ -65,10 +65,21 @@ func TestEnvironmentCardSendPreservesDeviceThroughDeepSeekWireFollowup(t *testin
 	if err := json.Unmarshal(raw, &card); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "selected", ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-flash", Input: RunInput{Text: "Assess this device.", ContextAction: &card}}); err != nil {
+	selected := SendUserTurnRequest{ClientRequestID: "selected", ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-flash", Input: RunInput{Text: "Assess this device.", ContextAction: &card}}
+	if _, err := svc.SendUserTurn(t.Context(), meta, selected); err != nil {
 		t.Fatal(err)
 	}
 	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
+	if _, err := svc.SendUserTurn(t.Context(), meta, selected); err != nil {
+		t.Fatalf("same selected context replay: %v", err)
+	}
+	changedCard := card
+	changedCard.Context = append([]ContextActionContextItem(nil), card.Context...)
+	changedCard.Context[0].Content += " changed"
+	selected.Input.ContextAction = &changedCard
+	if _, err := svc.SendUserTurn(t.Context(), meta, selected); err == nil {
+		t.Fatal("changed selected context was accepted as a replay")
+	}
 	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "followup", ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-flash", Input: RunInput{Text: "What about its memory?"}}); err != nil {
 		t.Fatal(err)
 	}

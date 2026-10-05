@@ -82,6 +82,15 @@ One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O ru
 
 `Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch. If an effect outcome cannot be confirmed, Floret atomically closes the Turn with `effect_outcome_unknown`; it never replays or exposes that effect for retry.
 
+Transport retries read the original admitted input through Floret's published
+`ThreadSendReader.LookupSend`. Redeven checks submitted text, ordered upload
+identities, references, and submitted context before acknowledging a replay.
+Conflicting content is rejected even when the first request is still being
+admitted. Runtime context is not refreshed and claimed uploads are not resolved
+again. Queue edits, promotion, removal, and restart preserve the original send
+identity; replaying a removed input never re-enqueues it. The canonical journal
+remains the only durable source for this comparison.
+
 Pending text can be edited through `PATCH /_redeven_proxy/api/ai/threads/:id/queue/:queueID`.
 The request carries `client_request_id`, `expected_text` and `text`; authorization
 precedes Floret's optional `ThreadQueueController.EditQueued`. A stale or already

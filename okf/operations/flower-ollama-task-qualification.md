@@ -49,6 +49,34 @@ their own services and tools. Source configuration and credentials stay unchange
 - Stop the parent while a child is running, wait for both canonical cancellations,
   prevent the delayed child effect, and accept new parent input.
 
+## Interleaved operations
+
+The additional interleaving cases combine commands at observed live boundaries:
+
+- Submit identical requests concurrently, reject conflicting content for the
+  same key, issue concurrent stops, restart, and promote the single retained task.
+- Edit, reorder, and delete queued tasks during approval; stop and restart before
+  promotion, and reject a late approval without executing the cancelled tool.
+- Submit duplicate approvals concurrently and replay the accepted answer before
+  and after restart; reject a conflicting answer and verify one actual effect.
+- Stop an Ask User interaction, restart and run replacement input, then reject a
+  stale answer without reviving the cancelled task.
+- Cut two real continuations across restarts, race retry commands, and enqueue
+  new input while retrying; preserve the original write exactly once.
+- Race duplicate send-now commands, reject edits to consumed queue items, and
+  replay promotion across restart without executing either item again.
+- Change permissions while input is queued, reject active model changes, and
+  preserve an existing approval snapshot when permissions are later upgraded.
+- Disconnect the workspace observer, enqueue and stop work, then restart and
+  reconnect before promoting the retained task.
+- Reject ordinary deletion of an active thread, force deletion with queued work,
+  and reject late input or promotion before and after restart.
+- Stop one active root while another root executes independently.
+- Stop a parent with a running child and queued input, restart, and resume only
+  the parent queue without reviving or duplicating the cancelled child.
+- Queue manual compaction and recall behind active work, stop and restart, then
+  compact once; retain a synthetic conversation fact and persisted context usage.
+
 Every successful case checks a final workspace-stream view against canonical
 detail, unique item identities, no live items after settlement, and actual
 selected-model requests. These finite tasks must leave no running terminal
@@ -58,7 +86,9 @@ does not claim an automated Desktop click-through against the live model.
 
 ## Execution and evidence
 
-Run `scripts/check_flower_tasks_ollama.sh` explicitly. Set
+Run `scripts/check_flower_tasks_ollama.sh` explicitly, or use
+`scripts/check_flower_tasks_ollama.sh --interleavings` for only the combined
+operation cases. Set
 `REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT` when the existing local-environment
 path differs from `$HOME/.redeven/local-environment`. The script sets
 `GOWORK=off` and is outside ordinary CI and the push gate.
@@ -99,5 +129,6 @@ natural network reliability.
 
 - `redeven:scripts/check_flower_tasks_ollama.sh` - Explicit published-dependency real-model runner.
 - `redeven:internal/ai/run_e2e_ollama_tasks_test.go` - Model-driven tasks, effects, fault boundaries, product commands, and acceptance evidence.
+- `redeven:internal/ai/run_e2e_ollama_interleavings_test.go` - Concurrent commands, stale responses, restart, isolation, and compaction interleavings.
 - `redeven:internal/ai/run_e2e_ollama_context_test.go` - Shared selected-profile discovery and transparent provider recorder.
 - `redeven:internal/ai/stop_thread.go` - Thin product mapping to upstream graceful subtree cancellation.
