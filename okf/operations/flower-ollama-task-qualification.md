@@ -30,6 +30,8 @@ resolved through the shared profile loader. Any startup conversion occurs on a
 temporary copy. Every observed provider request must use that model. Isolated
 threads use real full-access tools only against synthetic files in their fixture
 workspace; the approval scenario changes its own thread to approval-required.
+Runtime state lives outside that workspace so task files do not expose journals
+as an alternate source for inherited-history answers.
 
 A loopback proxy forwards actual model output. To make interruption timing
 repeatable, it can pause after a complete original SSE event containing generated
@@ -64,7 +66,9 @@ natural network reliability.
   complete result handoffs, aggregated result, inspection, and follow-up input
   without creating duplicate children.
 - Fork full conversation history into a child, recover a fact omitted from its
-  mission, and perform a real file write. Closing the child retains its history.
+  mission, and perform a real child file write. Assert the fact is present in
+  inherited messages, absent from the mission, and never written by the parent.
+  Closing the child retains its history.
 - Interrupt a child during a running command, send replacement work to the same
   child, and prevent the original delayed effect.
 - Stop the parent while a child is running, wait for both canonical cancellations,

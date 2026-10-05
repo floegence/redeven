@@ -83,7 +83,9 @@ func newOllamaTaskFixture(t *testing.T, profile config.AIProvider, model config.
 	proxy := newOllamaContextProxy(t, profile.BaseURL, f.recorder)
 	f.fault = newOllamaTaskFault(t, proxy.URL)
 	profile.BaseURL = f.fault.server.URL + "/v1"
-	f.opts = Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: filepath.Join(f.root, "state"), AgentHomeDir: f.root, Shell: "/bin/bash", Config: &config.AIConfig{CurrentModelID: modelID, PermissionType: config.AIPermissionFullAccess, Providers: []config.AIProvider{profile}}, RunMaxWallTime: 6 * time.Minute, RunIdleTimeout: 2 * time.Minute, ToolApprovalTimeout: 3 * time.Minute, ResolveProviderAPIKey: func(string) (string, bool, error) { return key, key != "", nil }}
+	// Runtime journals must not appear among task files: otherwise a child
+	// could recover a fact from SQLite instead of its inherited conversation.
+	f.opts = Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: f.root, Shell: "/bin/bash", Config: &config.AIConfig{CurrentModelID: modelID, PermissionType: config.AIPermissionFullAccess, Providers: []config.AIProvider{profile}}, RunMaxWallTime: 6 * time.Minute, RunIdleTimeout: 2 * time.Minute, ToolApprovalTimeout: 3 * time.Minute, ResolveProviderAPIKey: func(string) (string, bool, error) { return key, key != "", nil }}
 	var err error
 	f.svc, err = NewService(f.opts)
 	if err != nil {
@@ -340,6 +342,12 @@ func ollamaTaskStopGeneration(f *ollamaTaskFixture, mode string) {
 	f.fault.arm(mode)
 	f.send("stream", "Without tools, explain how database transactions work in 40 detailed numbered paragraphs.")
 	f.fault.waitHit(f.t)
+	if mode == "hold_content" {
+		f.wait("visible assistant output", func(d *FlowerThreadDetail) bool {
+			return ollamaTaskText(d.Current) != ""
+		})
+		f.report["visible_output_before_stop"] = true
+	}
 	f.stop()
 	f.terminal(flruntime.TurnOutcomeCancelled)
 	f.stop()
@@ -655,12 +663,39 @@ func ollamaTaskSubagents(f *ollamaTaskFixture) {
 
 func ollamaTaskSubagentHistory(f *ollamaTaskFixture) {
 	f.finish("history-seed", "Remember the private release codename LIFECYCLE_FACT_AMBER_731 for this conversation. Reply REMEMBERED without tools.", "REMEMBERED")
-	f.finish("history-child", "Use subagents to spawn exactly one worker named History Audit with full_history context. Ask it to recover the release codename from inherited conversation history and use terminal.exec to write only that codename into inherited.txt in the current directory. Do not include the codename in the mission message or write the file yourself. Wait for its handoff and report HISTORY_SAVED.", "HISTORY_SAVED")
+	d := f.finish("history-child", "Use subagents to spawn exactly one worker named History Audit with full_history context. Ask it to recover the release codename only from inherited conversation messages, never by reading other files. It must use terminal.exec only to write exactly that codename with no trailing newline into inherited.txt in the current directory and verify that file. Do not include the codename in the mission message. Do not call terminal.exec yourself. Wait for its handoff and report HISTORY_SAVED.", "HISTORY_SAVED")
 	f.file("inherited.txt", "LIFECYCLE_FACT_AMBER_731")
 	children := f.children()
 	if len(children) != 1 {
 		f.t.Fatalf("full-history children=%d", len(children))
 	}
+	child, err := f.svc.GetFlowerSubagentDetail(f.ctx, f.meta, f.threadID, children[0].ID.String())
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	inherited, mission, executed := false, false, false
+	for _, item := range child.Current.Items {
+		if item.Kind == flruntime.ThreadItemUser {
+			if item.TurnID == child.Current.TurnID {
+				mission = true
+				if strings.Contains(item.Text, "LIFECYCLE_FACT_AMBER_731") {
+					f.t.Fatal("child mission leaked the inherited fact")
+				}
+			} else {
+				inherited = inherited || strings.Contains(item.Text, "LIFECYCLE_FACT_AMBER_731")
+			}
+		}
+		executed = executed || item.TurnID == child.Current.TurnID && item.Activity != nil && item.Activity.ToolName == "terminal.exec" && string(item.Activity.Status) == "success"
+	}
+	if !inherited || !mission || !executed || child.Current.LastOutcome == nil || *child.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
+		f.t.Fatal("child did not complete a tool task from inherited history")
+	}
+	for _, item := range d.Current.Items {
+		if item.Activity != nil && item.Activity.ToolName == "terminal.exec" {
+			f.t.Fatal("parent performed the child's file task")
+		}
+	}
+	f.report["history_inherited_without_mission_leak"] = true
 	f.finish("history-close", "Use subagents close on History Audit, then list the children and report HISTORY_CLOSED. Do not spawn children or delete conversation history.", "HISTORY_CLOSED")
 	if len(f.children()) != 1 {
 		f.t.Fatal("closing a child deleted its conversation")
