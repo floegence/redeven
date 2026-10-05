@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+import { verifyRuntimeAccessIdentity } from './runtimeAccessIdentity';
 import http from 'node:http';
 import https from 'node:https';
 import { parseLocalUIAddressIssues, type LocalUIAddressIssue } from '../shared/localUIAddressIssues';
@@ -57,6 +59,7 @@ type RuntimeProbeResponse = RuntimeProbeResult<Readonly<{
 }>>;
 
 type RuntimeProbeStatus = Readonly<{
+  verified_runtime_identity?: string;
   status: 'online';
   local_ui_url?: string;
   local_ui_urls?: readonly string[];
@@ -230,7 +233,10 @@ async function probeRedevenLocalUIHealth(
     return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
   const probeURL = new URL('/api/local/runtime/health', baseURL);
-  const response = await request(probeURL, options);
+  const challenge = randomBytes(32).toString('base64url');
+  const response = await request(probeURL, { ...options, headers: {
+    ...options.headers, 'X-Redeven-Runtime-Identity-Challenge': challenge,
+  } });
   if (!response.ok) {
     return {
       ...response,
@@ -255,7 +261,8 @@ async function probeRedevenLocalUIHealth(
   if (!status) {
     return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
-  return { ok: true, value: status };
+  const identity = verifyRuntimeAccessIdentity(JSON.parse(response.value.body)?.data?.access_identity, challenge);
+  return { ok: true, value: { ...status, verified_runtime_identity: identity } };
 }
 
 function validateEnvAppShellHTML(body: string): EnvAppShellValidation {
@@ -435,6 +442,7 @@ function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatu
     local_ui_url: localUIURL,
     local_ui_urls: localUIURLs,
     local_ui_address_issues: status.local_ui_address_issues,
+    verified_runtime_identity: status.verified_runtime_identity,
     password_required: status.password_required,
     ...(status.exposure ? { exposure: status.exposure } : {}),
     ...(status.pid ? { pid: status.pid } : {}),
@@ -447,6 +455,7 @@ function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
   return {
     status: 'online',
     local_ui_address_issues: startup.local_ui_address_issues,
+    verified_runtime_identity: startup.verified_runtime_identity,
     password_required: startup.password_required === true,
     ...(startup.exposure ? { exposure: startup.exposure } : {}),
     ...(startup.pid ? { pid: startup.pid } : {}),

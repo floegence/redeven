@@ -30,6 +30,7 @@ func TestGatewayOpenAPIContractExposesAccessOnlySurface(t *testing.T) {
 		"/gateway/v3/access/{token}/{path}",
 		"/gateway/v3/access/{token}/_tunnel",
 		"/gateway/v3/env-profiles/upsert",
+		"/gateway/v3/env-profiles/check",
 		"/gateway/v3/env-profiles/delete",
 	}
 	if len(document.Paths) != len(want) {
@@ -78,6 +79,8 @@ func TestGatewayOpenAPIContractAccessModesAndArtifacts(t *testing.T) {
 		t.Fatalf("access modes: %v", modes)
 	}
 	for schema, required := range map[string][]string{
+		"EnvProfileCheckRequest":       {"protocol_version", "target_url", "client_nonce"},
+		"RuntimeAccessIdentityProof":   {"version", "challenge", "public_key", "signature"},
 		"EnvironmentProfile":           {"access_mode"},
 		"GatewayProxyConnectArtifact":  {"kind", "url", "gateway_session_id", "expires_at_unix_ms", "artifact_nonce", "proof"},
 		"DesktopBridgeConnectArtifact": {"url", "gateway_session_id", "bridge_session_id", "route_id"},

@@ -254,6 +254,7 @@ type Agent struct {
 	shell                   string
 	stateDir                string
 	configPath              string
+	accessIdentity          *runtimeidentity.AccessIdentity
 	instanceID              string
 	binaryPath              string
 	localUIBind             string
@@ -387,6 +388,10 @@ func New(opts Options) (*Agent, error) {
 			return nil, fmt.Errorf("create plugin process generation: %w", err)
 		}
 	}
+	accessIdentity, err := runtimeidentity.LoadAccessIdentity(stateDir)
+	if err != nil {
+		return nil, fmt.Errorf("load Runtime access identity: %w", err)
+	}
 	runtimeWorkloads := runtimeservice.NewWorkloadManager()
 	terminalManager := terminal.NewManagerWithScope(shell, filesystemScope, logger)
 	if err := terminalManager.EnablePersistentGroups(filepath.Join(stateDir, "apps", "terminal", "groups.sqlite")); err != nil {
@@ -404,6 +409,7 @@ func New(opts Options) (*Agent, error) {
 		shell:                   shell,
 		stateDir:                stateDir,
 		configPath:              cfgPathAbs,
+		accessIdentity:          accessIdentity,
 		instanceID:              strings.TrimSpace(opts.InstanceID),
 		binaryPath:              binaryPath,
 		localUIBind:             strings.TrimSpace(opts.LocalUIBind),
@@ -2037,4 +2043,9 @@ func newLogger(format string, level string, out io.Writer) (*slog.Logger, error)
 	}
 
 	return slog.New(h), nil
+}
+
+// ProveAccessIdentity describes this Runtime without granting login or management rights.
+func (a *Agent) ProveAccessIdentity(challenge string) (runtimeidentity.AccessIdentityProof, error) {
+	return a.accessIdentity.Prove(challenge)
 }

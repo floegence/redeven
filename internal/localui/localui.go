@@ -34,6 +34,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
 	"github.com/floegence/redeven/internal/portforward"
+	"github.com/floegence/redeven/internal/runtimeidentity"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
@@ -997,6 +998,7 @@ type accessStatusResp struct {
 }
 
 type runtimeHealthResp struct {
+	AccessIdentity       *runtimeidentity.AccessIdentityProof    `json:"access_identity,omitempty"`
 	Status               string                                  `json:"status"`
 	LocalUIURL           string                                  `json:"local_ui_url,omitempty"`
 	LocalUIURLs          []string                                `json:"local_ui_urls"`
@@ -1576,9 +1578,20 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	var proof *runtimeidentity.AccessIdentityProof
+	if challenge := r.Header.Get("X-Redeven-Runtime-Identity-Challenge"); challenge != "" {
+		value, err := s.a.ProveAccessIdentity(challenge)
+		if err != nil {
+			http.Error(w, "invalid Runtime identity challenge", http.StatusBadRequest)
+			return
+		}
+		proof = &value
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	access := s.publicAccessSnapshot()
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
 		Status:               "online",
+		AccessIdentity:       proof,
 		LocalUIURL:           firstNonEmptyString(access.urls),
 		LocalUIURLs:          access.publicURLs(),
 		LocalUIAddressIssues: access.issues,

@@ -508,6 +508,7 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
   const trustState = gatewayTrustState(record);
   const connectionKind = record.connection.kind as DesktopGatewayConnectionKind;
   return {
+    identity_fingerprint: record.trust_profile?.gateway_public_key_fingerprint,
     gateway_id: record.gateway_id,
     display_name: record.display_name,
     local_enabled: record.local_enabled,

@@ -1,3 +1,4 @@
+import type { EnvironmentAccessRoute } from './environmentAccess';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
@@ -145,6 +146,7 @@ export type DesktopLauncherActionOutcome =
   | 'refreshed_gateway_catalog'
   | 'refreshed_gateway_status'
   | 'deleted_gateway'
+  | 'checked_gateway_environment_profile'
   | 'saved_gateway_environment'
   | 'deleted_gateway_environment'
   | 'initialized_environment'
@@ -237,6 +239,8 @@ export type DesktopLauncherActionKind =
   | 'refresh_gateway_status'
   | 'delete_gateway'
   | 'upsert_environment_registration'
+  | 'check_gateway_environment_profile'
+  | 'set_environment_access_route'
   | 'delete_environment_registration'
   | 'cancel_launcher_operation'
   | 'dismiss_launcher_operation'
@@ -356,6 +360,13 @@ export type DesktopEnvironmentRegistrationUpsert = Readonly<
 >;
 
 export type DesktopEnvironmentEntry = Readonly<{
+  verified_runtime_identity?: string;
+  gateway_identity_fingerprint?: string;
+  access_group_id?: string;
+  access_preference_key?: string;
+  access_routes?: readonly EnvironmentAccessRoute[];
+  default_access_route_id?: string;
+  default_access_route_missing?: boolean;
   id: string;
   kind: DesktopEnvironmentEntryKind;
   /** Authoritative registration owner; never infer storage from the presentation kind. */
@@ -863,9 +874,12 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'upsert_environment_registration';
       registration: DesktopEnvironmentRegistrationUpsert;
     }
+  | { kind: 'check_gateway_environment_profile'; gateway_id: string; target_url: string }
+  | { kind: 'set_environment_access_route'; environment_id: string; route_id: string }
   | {
       kind: 'delete_environment_registration';
       registration_ref: EnvironmentRegistrationRef;
+      replacement_route_id?: string;
     }
   | {
       kind: 'refresh_gateway_catalog';
@@ -898,6 +912,7 @@ export type DesktopLauncherActionSuccess = Readonly<{
   session_key?: string;
   utility_window_kind?: 'launcher' | 'environment_settings';
   reinstall_preview?: DesktopReinstallTargetPreview;
+  gateway_profile_check?: Readonly<{ identity_verified: boolean; matched_environment_label?: string }>;
 }>;
 
 export type DesktopReinstallTargetPreview = Readonly<{
@@ -1154,6 +1169,18 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   const candidate = value as Partial<DesktopLauncherActionRequest>;
   const kind = compact(candidate.kind) as DesktopLauncherActionKind;
   switch (kind) {
+    case 'check_gateway_environment_profile': {
+      const input = candidate as { gateway_id?: unknown; target_url?: unknown };
+      const gateway_id = compact(input.gateway_id);
+      const target_url = compact(input.target_url);
+      return gateway_id && target_url ? { kind, gateway_id, target_url } : null;
+    }
+    case 'set_environment_access_route': {
+      const input = candidate as { environment_id?: unknown; route_id?: unknown };
+      const environment_id = compact(input.environment_id);
+      const route_id = compact(input.route_id);
+      return environment_id && route_id ? { kind, environment_id, route_id } : null;
+    }
     case 'close_launcher_or_quit':
       return { kind };
     case 'open_flower':
@@ -1611,6 +1638,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         registration_ref: registrationRef,
+        ...(compact((candidate as { replacement_route_id?: unknown }).replacement_route_id)
+          ? { replacement_route_id: compact((candidate as { replacement_route_id?: unknown }).replacement_route_id) } : {}),
       };
     }
     case 'cancel_launcher_operation': {

@@ -216,6 +216,12 @@ export class GatewayLifecycleManager {
     };
   }
 
+  async checkEnvironmentProfile(record: GatewayRecord, targetURL: string, clientNonce: string): Promise<unknown> {
+    if (record.connection.kind === 'url') return new GatewayURLClient(this.options.secret_store).checkEnvironmentProfile(record, targetURL, clientNonce, { timeoutMs: 15_000 });
+    const session = await this.ensureGatewayReady(record, { startPolicy: 'require_ready' });
+    return session.client.checkEnvironmentProfile(record, targetURL, clientNonce, { timeoutMs: 15_000 });
+  }
+
   async upsertEnvironmentProfile(
     record: GatewayRecord,
     request: GatewayEnvProfileUpsertRequest,

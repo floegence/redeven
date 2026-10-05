@@ -120,3 +120,20 @@ describe('mixed Cloud source library built from real snapshots', () => {
     expect(buildEnvironmentLibrarySummaryModel(snapshot, groups).attention_count).toBe(6);
   });
 });
+
+describe('verified Gateway access beside Cloud ownership', () => {
+  it('retains both established Cloud owners and places Gateway only in access membership', () => {
+    const { runtime, cloud } = linkedEnvironmentFixture();
+    const gateway = { ...runtime, id: 'gateway-route', kind: 'gateway_environment' as const,
+      provider_runtime_link_target: undefined, verified_runtime_identity: 'runtime:verified', access_group_id: runtime.id, gateway_label: 'Office' };
+    const direct = { ...runtime, verified_runtime_identity: 'runtime:verified', access_group_id: runtime.id };
+    for (const entries of [[gateway, cloud, direct], [direct, gateway, cloud]]) {
+      const groups = buildEnvironmentLibraryDisplayGroups(entries);
+      expect(groups).toHaveLength(1);
+      expect(groups[0].owner_ids).toEqual([runtime.id, cloud.id]);
+      expect(groups[0].member_ids).toEqual([runtime.id, cloud.id, gateway.id]);
+      expect(groups[0].primary_entry).toBe(direct);
+      expect(groups[0].provider_entry).toBe(cloud);
+    }
+  });
+});

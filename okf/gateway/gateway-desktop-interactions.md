@@ -48,9 +48,9 @@ form omits unrelated connection types and gateway selection, retains its draft
 on failure, and closes after a successful save. Cancel preserves the page's
 query, filter, scroll position and originating control. Save refreshes the same
 authoritative launcher snapshot and reveals the updated count and list.
-View environments expands full-width environment rows inside the card. Names, target URLs and
-default access methods remain inspectable there, with explicit direct/proxy
-actions drawn from the shared environment action model. Open uses the card's
+View environments expands full-width environment rows inside the card. Names,
+target URLs and identity verification remain inspectable there. Each row opens
+through its own Gateway; the environment card menu owns other explicit routes. Open uses the card's
 existing foreground progress owner; edit and delete use the existing settings
 and confirmation workflows. Neither operation navigates to another tab or
 creates a second profile store. Successful writes update the list in place;
@@ -69,8 +69,8 @@ Authorize changes entry into Gateway setup instead of an implicit grant.
 ## Permission explanation
 
 The profile-write checkbox has a keyboard-accessible question button. Its
-click-expanded body explains names, Runtime URLs, default access methods, and
-visibility to other paired Desktops after refresh. It also explains that Runtime
+click-expanded body explains shared names and Runtime URLs, visibility to other
+paired Desktops after refresh, and the locally saved default connection. It also explains that Runtime
 password, MFA, settings, and lifecycle permissions remain independent. Reading
 this help never changes consent or submits a request.
 
@@ -97,8 +97,9 @@ respect reduced-motion preferences.
 # Boundaries
 
 The Gateway page shows explicit registrations, not network discovery or a health
-monitor. Direct and proxy access remain explicit actions from the same shared
-model as the environment library. Service and profile permissions remain owned
+monitor. The environment library keeps explicit direct and proxy actions; Gateway rows
+always use their own proxy. [Verified Environment access routes](../desktop/desktop-environment-access.md)
+owns identity association, draft verification and default-route selection. Service and profile permissions remain owned
 by the linked Gateway contracts. Renderer fixtures establish interaction only;
 real network and installed-package qualification remains separate.
 
@@ -112,7 +113,7 @@ Adding from a card must retain the Gateway tab, lock the originating Gateway,
 omit unrelated connection types, and restore keyboard focus on cancellation.
 
 Run `node desktop/scripts/check-gateway-environment-flow.mjs` for the contextual
-profile workflow. It exercises empty state, failed Save with retained draft,
+profile workflow. It exercises empty state, verification before Save, failed Save with retained draft,
 explicit retry, refreshed count and expanded list, editing, confirmed deletion,
 and retained stale-list feedback at light/dark desktop and 430-pixel large-text
 layouts. It uses production renderer components and isolated IPC fixtures;

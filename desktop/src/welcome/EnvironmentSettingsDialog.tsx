@@ -35,7 +35,7 @@ export function EnvironmentSettingsDialog(props: {
 }) {
   const isOpen = createMemo(() => props.open);
   const presentation = createMemo<DesktopEnvironmentEntry | null>(previous => props.environment ?? previous, null);
-  const hasConnection = () => presentation()?.registration_ref?.kind !== 'local_environment';
+  const hasConnection = () => presentation()?.registration_ref?.kind !== 'local_environment' || (presentation()?.access_routes?.length ?? 0) > 1 || presentation()?.default_access_route_missing;
   const hasAccess = () => !!presentation() && environmentHasAccessSettings(presentation()!);
   const hasTabs = () => hasConnection() && hasAccess();
   const dialogTitle = createMemo(() => {

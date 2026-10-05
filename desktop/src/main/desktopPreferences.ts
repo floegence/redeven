@@ -1,3 +1,4 @@
+import { normalizeEnvironmentAccessPreferences, type EnvironmentAccessPreferences } from './environmentAccess';
 import { parseLocalUIProtocol } from '../shared/settingsIPC';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -101,6 +102,7 @@ export type DesktopSavedControlPlane = Readonly<{
 }>;
 
 export type DesktopPreferences = Readonly<{
+  environment_access?: EnvironmentAccessPreferences;
   local_environment: DesktopLocalEnvironmentState;
   provider_environments: readonly DesktopProviderEnvironmentRecord[];
   saved_environments: readonly DesktopSavedEnvironment[];
@@ -276,6 +278,7 @@ type DesktopControlPlaneFile = Readonly<{
 }>;
 
 type DesktopPreferencesFile = Readonly<{
+  environment_access?: unknown;
   version?: number;
   default_flower_runtime_target_id?: unknown;
 }>;
@@ -2301,6 +2304,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     legacy_ssh_environments: legacySSHEnvironments,
   });
   const nextPreferences: DesktopPreferences = {
+    environment_access: normalizeEnvironmentAccessPreferences(preferencesFile?.environment_access),
     local_environment: registrationMigration.local_environment,
     provider_environments: providerEnvironments,
     saved_environments: savedEnvironments,
@@ -2369,7 +2373,8 @@ export async function saveDesktopPreferences(
       .filter(([targetID, secret]) => targetID !== '' && secret),
   );
   const preferencesFile: DesktopPreferencesFile = {
-    version: 14,
+    version: 15,
+    ...(preferences.environment_access ? { environment_access: normalizeEnvironmentAccessPreferences(preferences.environment_access) } : {}),
     default_flower_runtime_target_id: savedRuntimeTargets.some((target) => (
       target.id === preferences.default_flower_runtime_target_id
     ))

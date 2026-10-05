@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/floegence/redeven/internal/runtimeidentity"
 	"strings"
 )
 
@@ -105,6 +106,7 @@ const (
 	GatewayErrorCodeNotFound              GatewayErrorCode = "NOT_FOUND"
 	GatewayErrorCodeCapabilityUnsupported GatewayErrorCode = "CAPABILITY_UNSUPPORTED"
 	GatewayErrorCodeUnavailable           GatewayErrorCode = "UNAVAILABLE"
+	GatewayErrorCodeTargetUnavailable     GatewayErrorCode = "TARGET_UNAVAILABLE"
 	GatewayErrorCodeNotImplemented        GatewayErrorCode = "NOT_IMPLEMENTED"
 )
 
@@ -832,4 +834,15 @@ func normalizeRequestedCapability(capability RequestedCapability) RequestedCapab
 	default:
 		return ""
 	}
+}
+
+// EnvProfileCheckRequest checks an unsaved URL through the authorized Gateway.
+type EnvProfileCheckRequest struct {
+	ProtocolVersion string `json:"protocol_version"`
+	TargetURL       string `json:"target_url"`
+	ClientNonce     string `json:"client_nonce"`
+}
+type EnvProfileCheckResponse struct {
+	ProtocolVersion string                               `json:"protocol_version"`
+	AccessIdentity  *runtimeidentity.AccessIdentityProof `json:"access_identity,omitempty"`
 }

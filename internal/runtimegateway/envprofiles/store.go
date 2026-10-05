@@ -730,3 +730,8 @@ func randomGatewayEnvID() (string, error) {
 	}
 	return "envp_" + base64.RawURLEncoding.EncodeToString(raw[:]), nil
 }
+
+// ValidateURLTarget applies the profile policy without persisting a draft.
+func (s *Store) ValidateURLTarget(raw string) (string, error) {
+	return normalizeProfileURL(raw, s.policy)
+}

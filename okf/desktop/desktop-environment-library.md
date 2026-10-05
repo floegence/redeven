@@ -15,7 +15,10 @@ Welcome derives one Environment library from original snapshot owners. An exactl
 
 Pair Local, SSH, or WSL Runtime entries only when the Runtime link target ID equals the Cloud linked-runtime summary ID and Provider origin, Provider ID, and ENV ID all agree. Names, addresses, and online status do not establish identity. The snapshot builder emits display summaries while a complete exact binding is linking, linked, or disconnecting. Candidate occupancy and operation authorization retain their own strict binding rules; a display summary grants no authority. Unbound, unrelated, or missing counterparts remain independent.
 
-Each group retains a stable primary Runtime ID, original owner references, member IDs, Cloud source identity, combined search content, and an any-owner pin result. A standalone Cloud group uses its Cloud entry ID. Build this projection once per snapshot; overview, source grids, filtering, layout, and summary counts consume it. Gateway management retains its separate projection and contract.
+Each group retains a stable primary Runtime ID, original owner references, member IDs, Cloud source identity, combined search content, and an any-owner pin result. A standalone Cloud group uses its Cloud entry ID. Build this projection once per snapshot; overview, source grids, filtering, layout, and summary counts consume it. Verified Gateway access members may join an original Runtime card under the
+[verified access routes contract](desktop-environment-access.md), without adding
+owner tabs. Independently registered direct management owners retain their
+original cards and settings. Gateway management retains its separate projection.
 
 Runtime entries own the observed link targets used by Cloud summaries and candidate occupancy. During a health refresh, cached Runtime Service identity keeps both sides of an existing pair consistent while live presence is withdrawn; a pending check alone must not split a pair or add a standalone Cloud card. Fresh unbound or changed identity immediately updates grouping. Current observed health takes precedence over historical open-window startup reports, and display continuity never restores live control authority.
 

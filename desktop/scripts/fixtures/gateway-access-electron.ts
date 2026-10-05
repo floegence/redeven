@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import https from 'node:https';
+import { randomBytes } from 'node:crypto';
+import { verifyRuntimeAccessIdentity } from '../../src/main/runtimeAccessIdentity';
+import { probeExternalLocalUIHealth } from '../../src/main/runtimeState';
 import { verifyGatewayDeployment } from './gateway-deployment';
 import { GatewayURLClient, redactGatewayDiagnosticValue } from '../../src/main/gatewayClient';
 import { createGatewayProxyTransport, type GatewayProxyTransport } from '../../src/main/gatewayProxyTransport';
@@ -39,6 +42,10 @@ void app.whenReady().then(async () => {
   const completed = await client.completePairing(record, buildPairingCompleteRequest(material, challenge, { profileWrite: true }));
   assertGatewayPairingCompleteResponse(material, challenge, completed, { client_capability: 'env_profile_write' });
   record = { ...record, trust_profile: await completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }) };
+  const nonce = randomBytes(32).toString('base64url');
+  const identity = verifyRuntimeAccessIdentity(await client.checkEnvironmentProfile(record, fixture.plain, nonce), nonce);
+  assert.match(identity ?? '', /^runtime:[a-f0-9]{64}$/u);
+  assert.equal((await client.catalog(record)).environments.length, 0, 'verification does not publish a profile');
   for (const [id, url] of [['env_http', fixture.plain], ['env_tls', fixture.secure]]) {
     await client.upsertEnvironmentProfile(record, { gateway_env_id: id, display_name: id, access_mode: 'gateway_proxy', access_route: { kind: 'url', url } });
   }
@@ -72,6 +79,15 @@ void app.whenReady().then(async () => {
   const password = { password: 'gateway-fixture-password' };
   try {
     const first = await open('env_http', 'gateway_proxy');
+    const proxyHealth = await probeExternalLocalUIHealth(fixture.plain, { agent: first.proxy!.agent });
+    assert.ok(proxyHealth.ok);
+    assert.equal(proxyHealth.value.verified_runtime_identity, identity);
+    if (!fixture.deployment) {
+      const directHealth = await probeExternalLocalUIHealth(fixture.plain);
+      assert.ok(directHealth.ok);
+      assert.equal(directHealth.value.verified_runtime_identity, identity);
+    }
+    cases.push('signed draft verification and actual Desktop proxy readiness prove the same Runtime identity without login');
     assert.equal(await unlocked(first), false);
     assert.equal((await call(first, '/api/local/runtime')).status, 423);
     assert.equal((await call(first, '/api/local/access/unlock', password)).body.data.unlocked, true);

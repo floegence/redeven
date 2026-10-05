@@ -8,13 +8,14 @@ import type { StartupReport } from './startup';
 export function desktopWelcomeOnlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
   startup: Pick<StartupReport, 'local_ui_url' | 'runtime_service' | 'started_at_unix_ms' | 'pid'>
-    & Pick<StartupReport, 'local_ui_address_issues'> & Readonly<{ local_ui_urls?: readonly string[] }>,
+    & Pick<StartupReport, 'local_ui_address_issues' | 'verified_runtime_identity'> & Readonly<{ local_ui_urls?: readonly string[] }>,
   maintenance?: DesktopRuntimeMaintenanceRequirement,
 ): DesktopRuntimeHealth {
   const runtimeService = startup.runtime_service ? normalizeRuntimeServiceSnapshot(startup.runtime_service) : undefined;
   const effectiveMaintenance = desktopRuntimeMaintenanceForRuntimeService(maintenance, runtimeService);
   return {
     status: 'online',
+    ...(startup.verified_runtime_identity ? { verified_runtime_identity: startup.verified_runtime_identity } : {}),
     checked_at_unix_ms: Date.now(),
     source,
     local_ui_url: startup.local_ui_url,

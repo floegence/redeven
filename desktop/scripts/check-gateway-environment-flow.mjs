@@ -60,6 +60,7 @@ try {
       let failNextDelete = true;
       let current = snapshot;
       window.settingsFixture.actionResult = request => {
+        if (request.kind === 'check_gateway_environment_profile') return { ok: true, outcome: 'checked_gateway_environment_profile', gateway_profile_check: { identity_verified: true } };
         if (request.kind === 'upsert_environment_registration') {
           if (failNextSave) {
             failNextSave = false;
@@ -84,6 +85,8 @@ try {
       };
     }, { snapshot, gateway, environment });
     const save = dialog.getByRole('button', { name: i18n.t('connectionDialog.save'), exact: true });
+    assert.equal(await save.isDisabled(), true);
+    await dialog.getByRole('button', { name: i18n.t('gatewayAccess.verifyConnection'), exact: true }).click();
     await save.click();
     await dialog.getByText(i18n.t('gatewayAccess.unavailable'), { exact: true }).waitFor();
     assert.equal(await dialog.locator('#environment-label').inputValue(), 'Development');

@@ -17,7 +17,7 @@ The protocol contains these route groups:
 
 - pairing challenge and completion;
 - Gateway capability and catalog reads;
-- Environment profile upsert and delete;
+- Environment profile check, upsert and delete;
 - open-session artifact issuance;
 - owner-authenticated, idempotent close-session revocation;
 - authenticated access forwarding used by the issued session.
@@ -52,6 +52,16 @@ same access path to the current bridge ID and route ID. Every artifact proof
 binds kind, URL/path, Gateway, Environment, session, capability, nonce and expiry.
 
 The OpenAPI document is the machine-readable authority. Typed Go protocol structures must remain closed to Runtime lifecycle fields, and structural tests must fail when a Runtime or lifecycle route is introduced.
+
+## Unsaved URL verification
+
+`POST /gateway/v3/env-profiles/check` requires the same independent profile-write
+grant as profile mutation. It checks target health with the existing target and
+DNS policy, forwards a fresh identity challenge, and returns optional Runtime
+proof without publishing a profile or creating a session. It never forwards
+credentials or follows redirects; target failure returns `TARGET_UNAVAILABLE`.
+[Verified Environment access routes](../desktop/desktop-environment-access.md)
+owns the proof and Desktop display-association boundary.
 
 ## Compatibility
 

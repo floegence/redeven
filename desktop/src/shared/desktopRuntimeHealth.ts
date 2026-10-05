@@ -66,6 +66,7 @@ export type DesktopRuntimeHealthSource =
 export type DesktopEnvironmentWindowState = 'closed' | 'opening' | 'open';
 
 export type DesktopRuntimeHealth = Readonly<{
+  verified_runtime_identity?: string;
   status: DesktopRuntimeStatus;
   checked_at_unix_ms: number;
   source: DesktopRuntimeHealthSource;

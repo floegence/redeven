@@ -1,3 +1,5 @@
+import { verifyRuntimeAccessIdentity } from './runtimeAccessIdentity';
+import { environmentAccessBinding, rememberEnvironmentIdentity, selectEnvironmentAccessRoute, removalNeedsAccessReplacement } from './environmentAccess';
 import { gatewayServiceStepProgress, finishGatewayServiceStepProgress } from './gatewayServiceProgress';
 import { gatewayConnectionFromSetup } from './gatewayRegistration';
 import { GatewayEnvironmentMigration, legacyGatewayRuntimeTargetInput } from './gatewayEnvironmentMigration';
@@ -2091,6 +2093,7 @@ async function verifyLocalEnvironmentRuntimeRecord(
         local_ui_url: startup.local_ui_url,
         local_ui_urls: startup.local_ui_urls,
         local_ui_address_issues: startup.local_ui_address_issues,
+        verified_runtime_identity: startup.verified_runtime_identity,
         password_required: startup.password_required,
         started_at_unix_ms: startup.started_at_unix_ms ?? record.startup.started_at_unix_ms,
         effective_run_mode: startup.effective_run_mode ?? record.startup.effective_run_mode,
@@ -4700,6 +4703,7 @@ function runtimeTargetHealthFromState(
       local_ui_url: state.local_ui_url,
       local_ui_urls: state.startup?.local_ui_urls,
       local_ui_address_issues: state.startup?.local_ui_address_issues,
+      verified_runtime_identity: state.startup?.verified_runtime_identity,
       runtime_service: state.runtime_service,
       pid: state.startup?.pid,
       started_at_unix_ms: state.startup?.started_at_unix_ms,
@@ -4801,6 +4805,21 @@ function projectWelcomeRuntimeProbeResult(
   };
 }
 
+async function observeDirectAccessIdentity(preferences: DesktopPreferences, environmentID: string,
+  probe: () => Promise<DesktopWelcomeRuntimeHealthProbeResult>): Promise<DesktopWelcomeRuntimeHealthProbeResult> {
+  const entryFor = (current: DesktopPreferences) => buildDesktopWelcomeSnapshot({ preferences: current,
+    platformCapabilities: desktopPlatformCapabilities }).environments.find(entry => entry.id === environmentID);
+  const expected = entryFor(preferences);
+  const result = await probe();
+  const identity = result.health?.verified_runtime_identity;
+  if (identity && expected) await mutateDesktopPreferences(current => {
+    const entry = entryFor(current);
+    return entry && environmentAccessBinding(entry) === environmentAccessBinding(expected)
+      ? rememberEnvironmentIdentity(current, entry, identity) : current;
+  });
+  return result;
+}
+
 function buildWelcomeRuntimeHealthTargets(
   preferences: DesktopPreferences,
   openSessions: readonly DesktopSessionSummary[],
@@ -4813,7 +4832,7 @@ function buildWelcomeRuntimeHealthTargets(
         presence_target_id: desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id),
         auto_refresh_enabled: true,
         checking_health: checkingRuntimeHealth('local_runtime_probe', 'not_started', 'Checking Local Runtime status.'),
-        probe: () => probeLocalEnvironmentRuntimeHealth(preferences, openSessions),
+        probe: () => observeDirectAccessIdentity(preferences, preferences.local_environment.id, () => probeLocalEnvironmentRuntimeHealth(preferences, openSessions)),
       }]
     : [];
   return [
@@ -4824,7 +4843,7 @@ function buildWelcomeRuntimeHealthTargets(
       slot: 'external_local_ui' as const,
       auto_refresh_enabled: environment.auto_runtime_probe_enabled,
       checking_health: checkingRuntimeHealth('external_local_ui_probe', 'unverified', 'Checking saved Environment status.'),
-      probe: () => probeSavedExternalRuntimeHealth(environment),
+      probe: () => observeDirectAccessIdentity(preferences, environment.id, () => probeSavedExternalRuntimeHealth(environment)),
     })),
     ...preferences.saved_runtime_targets
       .filter((target) => desktopPlatformCapabilities.native_host_runtime || target.host_access.kind !== 'local_host')
@@ -4853,7 +4872,7 @@ function buildWelcomeRuntimeHealthTargets(
             'not_started',
             'Checking Runtime status.',
           ),
-          probe: () => probeSavedRuntimeTargetHealth(target),
+          probe: () => observeDirectAccessIdentity(preferences, target.id, () => probeSavedRuntimeTargetHealth(target)),
           project_shared_result: (result: DesktopWelcomeRuntimeHealthProbeResult) => projectWelcomeRuntimeProbeResult(result, {
             target_id: presenceTargetID,
             placement_target_id: target.id,
@@ -5232,7 +5251,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
   const localMaintenanceResult = localMaintenance
     ? localEnvironmentMaintenanceProbeResult(preferences.local_environment, localMaintenance)
     : null;
-  const localRuntimeHealth = {
+  const localRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>> = {
     ...healthSnapshot.localRuntimeHealth,
     ...(localMaintenanceResult?.health
       ? { [preferences.local_environment.id]: localMaintenanceResult.health }
@@ -6143,6 +6162,35 @@ function gatewayEnvironmentAccessEndpoint(
   return endpoint.toString();
 }
 
+function gatewayProfileCheckKey(record: GatewayRecord, targetURL: string): string {
+  return JSON.stringify([record.gateway_id, record.connection, record.trust_profile?.gateway_public_key_fingerprint,
+    record.trust_profile?.binding_audience, new URL(targetURL).href]);
+}
+async function verifyGatewayProfileDraft(record: GatewayRecord, targetURL: string) {
+  const key = gatewayProfileCheckKey(record, targetURL);
+  const challenge = crypto.randomBytes(32).toString('base64url');
+  const proof = await gatewayLifecycleManager().checkEnvironmentProfile(record, targetURL, challenge);
+  const identity = verifyRuntimeAccessIdentity(proof, challenge);
+  if (proof !== undefined && !identity) throw new GatewayClientError('GATEWAY_RUNTIME_IDENTITY_INVALID', 'The Runtime identity proof could not be verified.');
+  const current = await gatewayStore().get(record.gateway_id);
+  if (!current || gatewayProfileCheckKey(current, targetURL) !== key) throw new GatewayClientError('GATEWAY_TRUST_CHANGED', 'Gateway trust changed during verification.');
+  return { identity };
+}
+async function checkGatewayEnvironmentProfileFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'check_gateway_environment_profile' }>): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record) return launcherActionFailure('environment_missing', 'dialog', 'This Gateway is no longer available.');
+  try {
+    const denied = await requireGatewayProfileWriteCapability(record);
+    if (denied) return denied;
+    const check = await verifyGatewayProfileDraft(record, request.target_url);
+    const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
+    const matched = check.identity ? snapshot.environments.find(entry => entry.verified_runtime_identity === check.identity) : undefined;
+    return { ok: true, outcome: 'checked_gateway_environment_profile', gateway_profile_check: {
+      identity_verified: !!check.identity, ...(matched ? { matched_environment_label: matched.label } : {}),
+    } };
+  } catch (error) { return gatewayProfileActionFailure(record, error); }
+}
+
 async function upsertGatewayEnvironmentProfileFromLauncher(
   request: Extract<DesktopEnvironmentRegistrationUpsert, { registration_ref: { kind: 'gateway_environment' } }>,
 ): Promise<DesktopLauncherActionResult> {
@@ -6167,6 +6215,11 @@ async function upsertGatewayEnvironmentProfileFromLauncher(
     if (capabilityFailure) {
       return capabilityFailure;
     }
+    const existing = request.registration_ref.gateway_env_id
+      ? await gatewayEnvironmentProfileForAction(record, request.registration_ref.gateway_env_id) : undefined;
+    const targetURL = request.access_route.url ?? '';
+    const check = (!existing || existing.access_endpoint?.url !== targetURL)
+      ? await verifyGatewayProfileDraft(record, targetURL) : undefined;
     const saved = await gatewayLifecycleManager().upsertEnvironmentProfile(record, {
       gateway_env_id: request.registration_ref.gateway_env_id || undefined,
       display_name: request.display_name,
@@ -6182,6 +6235,16 @@ async function upsertGatewayEnvironmentProfileFromLauncher(
       mode: 'refresh_catalog',
       startPolicy: 'require_ready',
     }).catch(() => undefined);
+    if (check?.identity) {
+      const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
+      const entry = snapshot.environments.find(candidate => candidate.gateway_id === record.gateway_id && candidate.gateway_env_id === saved.environment.gateway_env_id);
+      const currentRecord = await gatewayStore().get(record.gateway_id);
+      if (entry && currentRecord && gatewayProfileCheckKey(currentRecord, targetURL) === gatewayProfileCheckKey(record, targetURL)
+        && entry.gateway_identity_fingerprint === record.trust_profile?.gateway_public_key_fingerprint
+        && entry.gateway_environment_profile_access_route?.url === saved.environment.profile_access_route?.url) {
+        await mutateDesktopPreferences(current => rememberEnvironmentIdentity(current, entry, check.identity!));
+      }
+    }
     return launcherActionSuccess('saved_gateway_environment', {
       environmentID: desktopGatewayEnvironmentEntryID(record.gateway_id, saved.environment.gateway_env_id),
     });
@@ -6280,6 +6343,11 @@ function gatewayProfileActionFailure(record: GatewayRecord, error: unknown, gate
       ...(requiresService && error.service_state.can_start ? {
         continuationAction: { kind: 'start_gateway' as const, gateway_id: record.gateway_id },
       } : {}),
+      ...(error instanceof GatewayClientError && error.code === 'TARGET_UNAVAILABLE' ? { failure: desktopOperationFailurePresentation({
+        code: 'operation_failed', title: 'Target unavailable', titleKey: 'gatewayAccess.targetUnavailable',
+        summary: 'The Gateway could not reach this Runtime. Check its URL and start the Runtime before retrying.',
+        summaryKey: 'gatewayAccess.targetUnavailableHelp', targetLabel: record.display_name,
+      }) } : {}),
       ...(requiresService ? { failure: desktopOperationFailurePresentation({
         code: 'operation_failed', title: 'Gateway service required',
         titleKey: 'environmentCenter.gatewayPanelFactGatewayService',
@@ -13906,7 +13974,8 @@ async function openGatewayEnvironmentFromLauncher(
     );
   }
   const targetID = `gateway:${encodeURIComponent(record.gateway_id)}:env:${encodeURIComponent(request.gateway_env_id)}`;
-  const operationKey = `${targetID}:open`;
+  const requestedMode = request.access_mode ?? gatewaySyncStateByID.get(record.gateway_id)?.source?.environments.find(candidate => candidate.gateway_env_id === request.gateway_env_id)?.profile?.access_mode ?? 'direct_url';
+  const operationKey = `${targetID}:${requestedMode}:open`;
   const progress = (phase: DesktopOpenConnectionPhase) => buildOpenConnectionProgress({
     hostAccess: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: '' },
     phase, environmentID: request.environment_id, environmentLabel: request.label ?? request.gateway_env_id,
@@ -13959,6 +14028,16 @@ async function openGatewayEnvironmentFromLauncher(
         gateway_id: gatewayID, environment_id: environmentID, session_id: sessionID,
       }),
     }, signal);
+    if (mode === 'gateway_proxy' && access.startup.verified_runtime_identity) {
+      const verifiedIdentity = access.startup.verified_runtime_identity;
+      const expectedEndpoint = environment.access_endpoint?.url;
+      const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
+      const entry = snapshot.environments.find(candidate => candidate.gateway_id === record.gateway_id && candidate.gateway_env_id === environment?.gateway_env_id);
+      if (entry && entry.gateway_environment_profile_access_route?.url === expectedEndpoint
+        && entry.gateway_identity_fingerprint === record.trust_profile?.gateway_public_key_fingerprint) {
+        await mutateDesktopPreferences(current => rememberEnvironmentIdentity(current, entry, verifiedIdentity));
+      }
+    }
     if (!runtimeServiceIsOpenable(access.startup.runtime_service)) {
       throw new GatewayClientError('GATEWAY_RUNTIME_NOT_READY', 'The target Runtime is not ready to open.');
     }
@@ -17783,17 +17862,34 @@ async function upsertEnvironmentRegistrationFromWelcome(
 
 async function deleteEnvironmentRegistrationFromWelcome(
   registrationRef: EnvironmentRegistrationRef,
+  replacementRouteID?: string,
 ): Promise<DesktopLauncherActionResult> {
+  const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
+  const removed = snapshot.environments.find(entry => registrationRef.kind === 'gateway_environment'
+    ? entry.gateway_id === registrationRef.gateway_id && entry.gateway_env_id === registrationRef.gateway_env_id
+    : 'id' in registrationRef && entry.id === registrationRef.id);
+  const needsReplacement = removed && removalNeedsAccessReplacement(removed, [removed.id]);
+  if (needsReplacement && !removed.access_routes?.some(route => route.id === replacementRouteID && route.environment_id !== removed.id)) {
+    return launcherActionFailure('action_invalid', 'environment', 'Choose a replacement default connection before removing this route.', {
+      failure: desktopOperationFailurePresentation({ code: 'operation_failed', title: 'Choose connection', titleKey: 'gatewayAccess.chooseDefault',
+        summary: 'Choose a replacement default connection before removing this route.', summaryKey: 'gatewayAccess.removeDefaultHint' }),
+    });
+  }
+  const complete = async (result: DesktopLauncherActionResult) => {
+    if (result.ok && needsReplacement && replacementRouteID) await mutateDesktopPreferences(current =>
+      selectEnvironmentAccessRoute(current, snapshot.environments, removed.id, replacementRouteID));
+    return result;
+  };
   if (registrationRef.kind === 'saved_environment') {
     await deleteSavedEnvironmentFromWelcome(registrationRef.id);
-    return launcherActionSuccess('deleted_environment');
+    return complete(launcherActionSuccess('deleted_environment'));
   }
   if (registrationRef.kind === 'runtime_target') {
     await deleteSavedRuntimeTargetFromWelcome(registrationRef.id);
-    return launcherActionSuccess('deleted_environment');
+    return complete(launcherActionSuccess('deleted_environment'));
   }
   if (registrationRef.kind === 'gateway_environment') {
-    return deleteGatewayEnvironmentProfileFromLauncher(registrationRef);
+    return complete(await deleteGatewayEnvironmentProfileFromLauncher(registrationRef));
   }
   return launcherActionFailure(
     'action_invalid',
@@ -18016,9 +18112,18 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return refreshGatewayCatalogFromLauncher(request);
     case 'refresh_gateway_status':
       return refreshGatewayStatusFromLauncher(request);
-    case 'delete_gateway':
+    case 'delete_gateway': {
+      const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
+      const removed = snapshot.environments.filter(entry => entry.gateway_id === request.gateway_id);
+      if (removed.some(entry => removalNeedsAccessReplacement(entry, removed.map(candidate => candidate.id)))) {
+        return launcherActionFailure('action_invalid', 'gateway', 'Choose replacement default connections before removing this Gateway.', {
+          failure: desktopOperationFailurePresentation({ code: 'operation_failed', title: 'Choose connection', titleKey: 'gatewayAccess.chooseDefault',
+            summary: 'Choose replacement default connections before removing this Gateway.', summaryKey: 'gatewayAccess.removeGatewayDefaultHint' }),
+        });
+      }
       await deleteGatewayFromLauncher(request.gateway_id);
       return launcherActionSuccess('deleted_gateway');
+    }
     case 'upsert_environment_registration':
       try {
         return await upsertEnvironmentRegistrationFromWelcome(request.registration);
@@ -18029,8 +18134,15 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           error instanceof Error ? error.message : String(error),
         );
       }
+    case 'check_gateway_environment_profile':
+      return checkGatewayEnvironmentProfileFromLauncher(request);
+    case 'set_environment_access_route': {
+      const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
+      await mutateDesktopPreferences(current => selectEnvironmentAccessRoute(current, snapshot.environments, request.environment_id, request.route_id));
+      return launcherActionSuccess('saved_environment', { environmentID: request.environment_id });
+    }
     case 'delete_environment_registration':
-      return deleteEnvironmentRegistrationFromWelcome(request.registration_ref);
+      return deleteEnvironmentRegistrationFromWelcome(request.registration_ref, request.replacement_route_id);
     case 'close_launcher_or_quit':
       if (openSessionSummaries().length <= 0) {
         await requestQuit();

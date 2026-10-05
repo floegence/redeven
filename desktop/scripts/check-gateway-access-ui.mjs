@@ -14,8 +14,10 @@ try {
   const { compactEnvironmentPreviewFixture } = await server.ssrLoadModule(fileURLToPath(new URL('../src/testSupport/compactEnvironmentPreviewFixture.ts', import.meta.url)));
   const { createDesktopI18n, REDEVEN_SUPPORTED_LOCALES } = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/i18n/index.ts', import.meta.url)));
   const { gatewayServiceStepProgress } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/gatewayServiceProgress.ts', import.meta.url)));
+  const { decorateEnvironmentAccess } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/environmentAccess.ts', import.meta.url)));
+  const { defaultDesktopPreferences } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/desktopPreferences.ts', import.meta.url)));
   const source = compactEnvironmentPreviewFixture().coverage;
-  const snapshot = { ...source, open_windows: [], environments: source.environments.filter(entry => entry.kind === 'gateway_environment') };
+  const snapshot = { ...source, open_windows: [], environments: decorateEnvironmentAccess(source.environments.filter(entry => entry.kind === 'gateway_environment'), defaultDesktopPreferences()) };
   const locales = process.argv.length > 2 ? process.argv.slice(2) : REDEVEN_SUPPORTED_LOCALES;
   assert.ok(locales.every(locale => REDEVEN_SUPPORTED_LOCALES.includes(locale)));
   for (const locale of locales) {
@@ -41,7 +43,8 @@ try {
       assert.ok((await card.innerText()).includes(i18n.t('gatewayAccess.proxy')));
       for (const [key, mode] of [['openProxy', 'gateway_proxy'], ['openDirect', 'direct_url']]) {
         await card.locator('.redeven-split-action-toggle').click();
-        const action = page.getByRole('menuitem', { name: i18n.t(`gatewayAccess.${key}`), exact: true });
+        const label = key === 'openProxy' ? `${i18n.t('gatewayAccess.viaNamedGateway', { gateway: snapshot.environments[0].gateway_label })} · ${i18n.t('gatewayAccess.defaultLabel')}` : i18n.t('gatewayAccess.direct');
+        const action = page.getByRole('menuitem', { name: label, exact: true });
         await action.waitFor();
         assert.equal(await action.evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap');
         await action.focus();
@@ -49,12 +52,12 @@ try {
         await page.waitForFunction(mode => window.settingsFixture.requests.some(request => request.kind === 'open_gateway_environment' && request.access_mode === mode), mode);
       }
       await card.getByRole('button', { name: i18n.t('environmentCenter.settingsForLabel', { label: 'Gateway workspace' }), exact: true }).click();
-      const select = page.locator('#gateway-environment-access-mode');
-      await select.waitFor();
-      assert.equal(await select.getByRole('radio', { name: i18n.t('gatewayAccess.proxy'), exact: true }).getAttribute('aria-checked'), 'true');
-      await select.getByRole('radio', { name: i18n.t('gatewayAccess.direct'), exact: true }).click();
-      assert.equal(await select.getByRole('radio', { name: i18n.t('gatewayAccess.direct'), exact: true }).getAttribute('aria-checked'), 'true');
       const dialog = page.getByRole('dialog');
+      assert.equal(await dialog.locator('#gateway-environment-access-mode').count(), 0);
+      const select = dialog.locator('.redeven-access-settings');
+      assert.equal(await select.getByRole('radio').first().isChecked(), true);
+      await select.getByRole('radio').nth(1).check();
+      await dialog.locator('#environment-label').fill('Edited Gateway workspace');
       await page.evaluate(() => {
         window.settingsFixture.actionResult = request => {
           if (request.kind === 'upsert_environment_registration') return {
@@ -74,7 +77,8 @@ try {
       await page.keyboard.press('Enter');
       await dialog.getByText(i18n.t('gatewayAccess.profileServiceReady'), { exact: true }).waitFor();
       assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(request => request.kind === 'upsert_environment_registration').length), 1);
-      assert.equal(await select.getByRole('radio', { name: i18n.t('gatewayAccess.direct'), exact: true }).getAttribute('aria-checked'), 'true');
+      assert.equal(await select.getByRole('radio').nth(1).isChecked(), true);
+      assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(request => request.kind === 'set_environment_access_route').length), 0);
       assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
       assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
       if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-profile-${dark ? 'dark-narrow' : 'light'}.png` });
@@ -120,7 +124,8 @@ try {
       assert.ok((await create.locator('.redeven-gateway-context').innerText()).includes('Bastion'));
       assert.equal(await create.locator('#gateway-environment-gateway').count(), 0, 'The originating Gateway is fixed');
       assert.equal(await create.getByText(i18n.t('connectionDialog.environmentType'), { exact: true }).count(), 0);
-      assert.equal(await create.locator('#gateway-environment-access-mode').getByRole('radio', { name: i18n.t('gatewayAccess.proxy'), exact: true }).getAttribute('aria-checked'), 'true');
+      assert.equal(await create.locator('#gateway-environment-access-mode').count(), 0);
+      assert.equal(await create.getByRole('button', { name: i18n.t('connectionDialog.save'), exact: true }).isDisabled(), true);
       assert.equal(await create.evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
       if (locale === 'zh-CN') await page.screenshot({ path: `${output}/gateway-add-${dark ? 'dark-narrow' : 'light'}.png` });
       await page.keyboard.press('Escape');
