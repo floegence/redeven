@@ -211,7 +211,6 @@ export type EnvironmentActionModel = Readonly<{
   provider_origin?: string;
   provider_id?: string;
   gateway_id?: string;
-  access_mode?: 'direct_url' | 'gateway_proxy';
   runtime_operation?: DesktopRuntimeOperation;
   runtime_operation_method?: DesktopRuntimeOperationMethod;
   disabled_reason?: string;
@@ -314,7 +313,7 @@ function formatRuntimeStartedRelativeTimestamp(unixMS: number): string {
 function environmentRuntimeStartedLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'gateway_environment') {
     const gatewayLabel = compact(environment.gateway_label) || 'Gateway';
-    if (environment.gateway_environment_access_capabilities?.some(capability => capability === 'open_direct' || capability === 'open_via_gateway')) {
+    if (environment.gateway_member?.state === 'active' && environment.gateway_member.connected) {
       return `Gateway available:${gatewayLabel}`;
     }
     return 'Gateway access-only';
@@ -649,7 +648,7 @@ function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
     return 'Redeven Cloud remote';
   }
   if (environment.kind === 'gateway_environment') {
-    return compact(environment.gateway_environment_origin?.label)
+    return compact(environment.gateway_member?.metadata.hostname)
       || compact(environment.gateway_label)
       || 'Gateway';
   }
@@ -783,14 +782,12 @@ function baseEnvironmentCardFactsModel(
     const result = environment.gateway_access_result;
     const resultKey: DesktopTranslationKey = !result ? 'gatewayAccess.targetNotChecked'
       : result.status === 'ready' ? 'gatewayAccess.accessReady'
-      : result.status === 'session_expired' ? 'gatewayAccess.expired'
+      : result.status === 'member_removed' ? 'gatewayAccess.memberRemoved'
       : result.status === 'runtime_authentication_required' ? 'gatewayAccess.runtimeAuthentication'
       : result.status === 'gateway_unavailable' ? 'gatewayAccess.unavailable' : 'gatewayAccess.targetUnavailable';
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       buildEnvironmentCardFact('GATEWAY', gatewayFactLabel(environment)),
-      { id: 'access-mode', label: 'Default access', label_key: 'gatewayAccess.mode', value: '',
-        value_key: environment.gateway_environment_profile?.access_mode === 'gateway_proxy' ? 'gatewayAccess.proxy' : 'gatewayAccess.direct', value_tone: 'default' },
       { id: 'gateway-trust', label: 'Trust', label_key: 'environmentCenter.gatewayPanelFactTrust', value: '', value_tone: 'default',
         value_key: environment.gateway_trust_state === 'paired' ? 'environmentCenter.gatewayPanelTrustPaired'
           : environment.gateway_trust_state === 'trust_changed' ? 'environmentCenter.gatewayPanelTrustReviewRequired'
@@ -799,7 +796,7 @@ function baseEnvironmentCardFactsModel(
         value_key: environment.gateway_sync_state === 'ready' ? 'gatewayAccess.catalogAvailable'
           : environment.gateway_sync_state === 'catalog_failed' ? 'environmentStatus.syncFailed' : 'environmentStatus.notChecked' },
       { id: 'access-check', label: 'Last access check',
-        label_key: !result ? 'gatewayAccess.lastCheck' : result.access_mode === 'gateway_proxy' ? 'gatewayAccess.lastCheckProxy' : 'gatewayAccess.lastCheckDirect',
+        label_key: 'gatewayAccess.lastCheck',
         checked_at_unix_ms: result?.checked_at_unix_ms, value: '', value_key: resultKey, value_tone: 'default' },
       compact(environment.gateway_env_id) !== ''
         ? buildEnvironmentCardFact('ENV ID', environment.gateway_env_id ?? '', { copy_value: true })
@@ -900,7 +897,7 @@ function environmentRuntimeDisplayState(environment: DesktopEnvironmentEntry): E
     if (environment.gateway_status === 'online' && environment.runtime_operations.open.availability === 'available') {
       return 'ready_to_open';
     }
-    if (environment.gateway_environment_state === 'archived') {
+    if (environment.gateway_member?.state === 'removed') {
       return 'removed';
     }
     return 'sync_required';
@@ -1017,9 +1014,7 @@ function environmentDisplayStatusLabel(
         : providerSyncStatusLabel(environment);
     case 'offline':
       if (environment.kind === 'gateway_environment') {
-        return environment.gateway_environment_state === 'stopped'
-          ? 'STOPPED'
-          : 'GATEWAY OFFLINE';
+        return 'GATEWAY OFFLINE';
       }
       if (environment.kind === 'provider_environment' && providerRemoteLooksOffline(environment)) {
         return 'REMOTE OFFLINE';
@@ -1201,10 +1196,6 @@ function resolveEnvironmentOpenFlow(
   }
   if (allowUncheckedPreflight && environmentOpenPreflightAvailable(environment)) {
     return 'preflight';
-  }
-  if (environment.gateway_environment_state === 'stopped'
-    && environment.runtime_operations.start.availability === 'available') {
-    return 'start';
   }
   if (environment.runtime_operations.start.availability === 'available') {
     return 'start';
@@ -1533,14 +1524,6 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   const items: EnvironmentActionMenuItemModel[] = [];
   if (environment.kind === 'gateway_environment') {
     const refreshPlan = environment.runtime_operations.refresh;
-    for (const mode of ['gateway_proxy', 'direct_url'] as const) {
-      const capability = mode === 'gateway_proxy' ? 'open_via_gateway' : 'open_direct';
-      if (!environment.gateway_environment_access_capabilities?.includes(capability)) continue;
-      const label = mode === 'gateway_proxy' ? 'Open through Gateway' : 'Open direct URL';
-      const labelKey = mode === 'gateway_proxy' ? 'gatewayAccess.openProxy' : 'gatewayAccess.openDirect';
-      items.push({ id: `open_${mode}`, label, label_key: labelKey,
-        action: { intent: 'open', label, label_key: labelKey, enabled: true, variant: 'outline', access_mode: mode } });
-    }
     items.push({
       id: 'refresh_runtime',
       label: 'Refresh access',
@@ -2488,7 +2471,7 @@ export type GatewayRowModel = Readonly<{
 
 export type GatewaySourceActionIntent =
   | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway'
-  | 'add_gateway_environment'
+  | 'manage_gateway_members'
   | 'refresh_gateway'
   | 'pair_gateway'
   | 'enable_gateway'
@@ -2772,10 +2755,10 @@ function gatewayEnvironmentSummaryDetail(
   if (desktopGatewayNeedsResolution(gateway.status)) {
     return 'Resolve this Gateway before its managed environments can appear in the Environments tab.';
   }
-  if (gateway.status === 'online' && gateway.capabilities.includes('env_profile_write')) {
-    return 'Add a Gateway-backed Environment to make it available from every Desktop paired with this Gateway.';
+  if (gateway.status === 'online' && gateway.permissions?.manage_members) {
+    return 'Invite a Runtime to join this Gateway. Paired Desktops with access permission can open its members.';
   }
-  return 'No environments are currently exposed by this Gateway catalog.';
+  return 'No Runtime members are currently registered with this Gateway.';
 }
 
 export function buildGatewaySourceRowModel(

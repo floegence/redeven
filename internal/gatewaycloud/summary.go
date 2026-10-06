@@ -1,9 +1,10 @@
 package gatewaycloud
 
 import (
-	"context"
-	"errors"
-	"os"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
 )
 
 // Summary is safe for local management UI and never includes machine credentials.
@@ -17,25 +18,30 @@ type Summary struct {
 	ManagementURL     string `json:"management_url,omitempty"`
 }
 
-func InspectGateway(ctx context.Context, stateRoot string) (*Summary, error) {
-	var config GatewayConfig
-	if err := ReadState(GatewayConfigPath(stateRoot), &config); errors.Is(err, os.ErrNotExist) {
-		return &Summary{State: "unconfigured"}, nil
-	} else if err != nil {
-		return nil, err
+func (g *Gateway) Summary() Summary {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := Summary{Configured: g.config.CloudOrigin != "", CloudOrigin: g.config.CloudOrigin, GatewayPublicID: g.config.GatewayPublicID, NamespacePublicID: g.config.NamespacePublicID, State: "unconfigured"}
+	if !out.Configured {
+		return out
 	}
-	identity, err := gatewayIdentity(config)
-	if err != nil {
-		return nil, err
+	out.State = "pending"
+	key, _ := gatewayIdentity(g.config)
+	fingerprint := ""
+	if len(key.PrivateKey) > 0 {
+		sum := sha256.Sum256(key.PrivateKey.Public().(ed25519.PublicKey))
+		fingerprint = hex.EncodeToString(sum[:])
 	}
-	client, err := directCloudClient(config.CloudOrigin)
-	if err != nil {
-		return nil, err
+	if g.status != nil {
+		out.State, out.Region, fingerprint = g.status.Gateway.State, g.status.Gateway.Region, g.status.Gateway.PublicKeySHA256
 	}
-	defer client.Close()
-	status, err := client.GatewayStatus(ctx, identity)
-	if err != nil {
-		return nil, err
+	if g.status != nil && g.status.Gateway.IdentityExpiresAtUnixMS <= time.Now().UnixMilli() && out.State != "revoked" && out.State != "retired" {
+		out.State = "expired"
 	}
-	return &Summary{Configured: true, CloudOrigin: config.CloudOrigin, GatewayPublicID: status.Gateway.PublicID, NamespacePublicID: status.Gateway.NamespacePublicID, Region: status.Gateway.Region, State: status.Gateway.State, ManagementURL: GatewayManagementURL(config.CloudOrigin, status.Gateway.NamespacePublicID, status.Gateway.PublicID, status.Gateway.PublicKeySHA256)}, nil
+	if out.GatewayPublicID == "" {
+		out.State = "registering"
+		return out
+	}
+	out.ManagementURL = GatewayManagementURL(out.CloudOrigin, out.NamespacePublicID, out.GatewayPublicID, fingerprint)
+	return out
 }

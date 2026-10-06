@@ -2,21 +2,17 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"runtime"
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/gatewaycloud"
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-// JoinGatewayCloud advances one durable enrollment stage over the trusted
-// Runtime control channel. Closing Desktop pauses polling without undoing
-// recorded consent. Bound environments require explicit migration instead.
-func (a *Agent) JoinGatewayCloud(ctx context.Context, material *gc.JoinMaterial) (string, error) {
-	if a == nil {
-		return "", gatewaycloud.ErrState
-	}
+// advanceGatewayPublication follows the sole locally approved membership. It
+// has no separate invitation or local consent entry point for Cloud access.
+func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 	a.providerLinkMu.Lock()
 	defer a.providerLinkMu.Unlock()
 	a.gatewayRecoveryMu.Lock()
@@ -27,54 +23,67 @@ func (a *Agent) JoinGatewayCloud(ctx context.Context, material *gc.JoinMaterial)
 			if a.code != nil {
 				_ = a.code.SetControlplaneBaseURL(a.remoteConfigSnapshot().ControlplaneBaseURL)
 			}
-			a.startGatewayCloudObserver()
 			a.startOrRestartControlChannel()
 		}
 	}()
+	cfg := a.remoteConfigSnapshot()
+	member := cfg.Gateway
+	if member == nil || member.Leaving || member.PendingJoin != nil {
+		return gatewaycloud.ErrState
+	}
+	var association gp.MemberCloudContext
+	if err := member.Request(ctx, "/v4/member/cloud", gp.CatalogRequest{ProtocolVersion: gp.Version}, &association, true); err != nil {
+		return err
+	}
 	a.mu.Lock()
-	if a.cfg == nil || a.cfg.GatewayCloudMigration != nil || (a.cfg.EnvironmentID != "" && a.cfg.GatewayCloud == nil) {
+	if a.cfg.Gateway == nil || a.cfg.Gateway.MemberID != member.MemberID || a.cfg.Gateway.MemberVersion != member.MemberVersion {
 		a.mu.Unlock()
-		return "", gatewaycloud.ErrState
+		return gatewaycloud.ErrState
 	}
-	if a.cfg.GatewayCloud == nil {
-		if material == nil {
-			a.mu.Unlock()
-			return "", gatewaycloud.ErrState
-		}
-		next := *a.cfg
-		if err := next.EnsureRuntimeIDs(); err != nil {
-			a.mu.Unlock()
-			return "", err
-		}
-		route, err := gatewaycloud.PrepareRuntime(*material, next.LocalEnvironmentPublicID)
-		if err != nil {
-			a.mu.Unlock()
-			return "", err
-		}
-		next.GatewayCloud = route
-		if err := config.Save(a.configPath, &next); err != nil {
-			a.mu.Unlock()
-			return "", err
-		}
-		a.cfg = &next
-	}
-	route := *a.cfg.GatewayCloud
+	a.gatewayCloudState, a.gatewayCloudMemberID = association.State, member.MemberID
 	a.mu.Unlock()
-	if material != nil && (material.RequestPublicID != route.RequestPublicID || material.CloudOrigin != route.CloudOrigin || material.GatewayPublicID != route.GatewayPublicID || material.NamespacePublicID != route.NamespacePublicID) {
-		return "", gatewaycloud.ErrState
+	if cfg.GatewayPublication != nil && cfg.GatewayPublication.Binding != nil {
+		return nil
 	}
-	if route.Revoked {
-		return "", gatewaycloud.ErrState
+	// Existing identities require the explicit migration/conversion transaction.
+	if (cfg.GatewayMigrationEvidence != nil || cfg.EnvironmentID != "") && cfg.GatewayPublication == nil && cfg.GatewayEnvironmentChoice == "" {
+		return gatewaycloud.ErrState
+	}
+	if !association.Allowed {
+		return gatewaycloud.ErrState
+	}
+	route := cfg.GatewayPublication.Clone()
+	if route == nil {
+		var err error
+		route, err = gatewaycloud.PrepareRuntime(member, association)
+		if err != nil {
+			return err
+		}
+	}
+	if cfg.GatewayEnvironmentChoice == "new" {
+		route.NewEnvironment = true
+	}
+	if cfg.GatewayEnvironmentChoice == "preserve" && cfg.GatewayMigrationEvidence != nil {
+		evidence := cfg.GatewayMigrationEvidence
+		if evidence.CloudOrigin != route.CloudOrigin || evidence.NamespacePublicID != route.NamespacePublicID || evidence.RegionOrigin != route.RegionOrigin || evidence.RuntimePublicID != route.RuntimePublicID {
+			return gatewaycloud.ErrState
+		}
+		route.PreviousBinding = evidence.Clone()
+	}
+	if route.Revoked || route.GatewayPublicID != association.GatewayPublicID || route.NamespacePublicID != association.NamespacePublicID || route.CloudOrigin != association.CloudOrigin || route.RegionOrigin != association.RegionOrigin {
+		return gatewaycloud.ErrState
 	}
 	persist := func(delivery *gatewaycloud.CredentialDelivery) error {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if a.cfg.GatewayCloud == nil || a.cfg.GatewayCloud.RequestPublicID != route.RequestPublicID || a.cfg.GatewayCloud.Revoked {
+		if a.cfg.Gateway == nil || a.cfg.Gateway.Leaving || a.cfg.Gateway.MemberID != member.MemberID || a.cfg.Gateway.MemberVersion != member.MemberVersion {
+			return gatewaycloud.ErrState
+		}
+		if current := a.cfg.GatewayPublication; current != nil && (current.RequestPublicID != route.RequestPublicID || current.Revoked) {
 			return gatewaycloud.ErrState
 		}
 		next := *a.cfg
-		copy := route
-		next.GatewayCloud = &copy
+		next.GatewayPublication = route.Clone()
 		if delivery != nil {
 			if err := next.ApplyGatewayDelivery(delivery); err != nil {
 				return err
@@ -90,66 +99,69 @@ func (a *Agent) JoinGatewayCloud(ctx context.Context, material *gc.JoinMaterial)
 		}
 		return nil
 	}
-	if route.ClientCertificatePEM == "" {
-		if err := route.Enroll(ctx); err != nil {
-			return "", err
-		}
-		return "verifying", persist(nil)
+	// Persist the independent Cloud key before submitting any proof.
+	if err := persist(nil); err != nil {
+		return err
 	}
-	if route.JoinToken != "" {
-		if _, err := route.Join(ctx, gc.RuntimeMetadata{Hostname: hostnameBestEffort(), OS: runtime.GOOS, Arch: runtime.GOARCH, Version: a.version}); err != nil {
-			return "", err
+	if !route.Proven {
+		candidate, err := route.Join(ctx, member, gc.RuntimeMetadata{Hostname: hostnameBestEffort(), OS: runtime.GOOS, Arch: runtime.GOARCH, Version: a.version})
+		if err != nil {
+			return err
+		}
+		if candidate.MemberID != member.MemberID || candidate.MemberVersion != member.MemberVersion || candidate.RequestPublicID != route.RequestPublicID {
+			return gatewaycloud.ErrState
+		}
+		route.Proven = true
+		if err := persist(nil); err != nil {
+			return err
 		}
 	}
-	status, err := route.Status(ctx)
+	status, err := route.Status(ctx, member)
 	if err != nil {
-		return "", err
-	}
-	if status.Candidate.State == "revoked" || status.Candidate.State == "unpublished" {
-		return "", gatewaycloud.ErrState
+		return err
 	}
 	b := status.Candidate.Binding
 	if b == nil {
-		return "awaiting_approval", nil
-	}
-	if b.State != "active" || b.GatewayPublicID != route.GatewayPublicID || b.NamespacePublicID != route.NamespacePublicID || b.RuntimePublicID != route.RuntimePublicID {
-		return "", gatewaycloud.ErrState
-	}
-	if route.JoinToken == "" {
-		a.mu.Lock()
-		registered := a.controlRegistered
-		a.mu.Unlock()
-		if registered {
-			return "connected", nil
+		if cfg.GatewayEnvironmentChoice != "preserve" {
+			return nil
 		}
-		return "connecting", nil
+		if cfg.GatewayMigrationEvidence != nil {
+			if status.Candidate.MigrationSource != nil {
+				return nil
+			}
+			return cfg.GatewayMigrationEvidence.ConsentPreservation(ctx, member, route)
+		}
+		if status.Candidate.UserMigrationSource != nil {
+			return nil
+		}
+		return a.consentGatewayUserMigration(ctx, route)
+	}
+	if cfg.GatewayEnvironmentChoice == "preserve" && b.EnvPublicID != cfg.EnvironmentID {
+		return gatewaycloud.ErrState
+	}
+	if status.Candidate.State != "published" || b.MemberID != member.MemberID || b.MemberVersion != member.MemberVersion || b.State != "active" || b.GatewayPublicID != route.GatewayPublicID || b.NamespacePublicID != route.NamespacePublicID || b.RuntimePublicID != route.RuntimePublicID {
+		return gatewaycloud.ErrState
 	}
 	route.Binding = b
 	if route.DeliveryRequestID == "" {
 		route.DeliveryRequestID, err = gatewaycloud.NewDeliveryID()
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
 	if err := persist(nil); err != nil {
-		return "", err
+		return err
 	}
-	delivery, err := route.Recover(ctx)
+	delivery, err := route.Recover(ctx, member)
 	if route.ForgetExpiredDelivery(err) {
 		if saveErr := persist(nil); saveErr != nil {
-			return "", saveErr
+			return saveErr
 		}
 	}
 	if err != nil {
-		var cloud *gatewaycloud.CloudError
-		if errors.As(err, &cloud) && cloud.Code == "GATEWAY_ENVIRONMENT_PENDING" {
-			// Publication commits before the asynchronous Region projection.
-			// Keep polling the same durable delivery until that projection exists.
-			return "connecting", nil
-		}
-		return "", err
+		return err
 	}
-	return "connecting", persist(delivery)
+	return persist(delivery)
 }
 
 func (a *Agent) startGatewayCloudObserver() {

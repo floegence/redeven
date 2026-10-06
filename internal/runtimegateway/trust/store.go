@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven/internal/gatewaystate"
 	"github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/runtimegateway/security"
 )
@@ -55,12 +55,12 @@ type gatewayIdentity struct {
 }
 
 type clientKey struct {
-	ClientKeyID        string `json:"client_key_id"`
-	ClientPublicKey    string `json:"client_public_key"`
-	BindingAudience    string `json:"binding_audience"`
-	ProfileWrite       bool   `json:"profile_write,omitempty"`
-	PairedAtUnixMS     int64  `json:"paired_at_unix_ms"`
-	LastVerifiedUnixMS int64  `json:"last_verified_at_unix_ms,omitempty"`
+	ClientKeyID        string                      `json:"client_key_id"`
+	ClientPublicKey    string                      `json:"client_public_key"`
+	BindingAudience    string                      `json:"binding_audience"`
+	Permissions        protocol.GatewayPermissions `json:"permissions"`
+	PairedAtUnixMS     int64                       `json:"paired_at_unix_ms"`
+	LastVerifiedUnixMS int64                       `json:"last_verified_at_unix_ms,omitempty"`
 }
 
 func NewStore(filePath string) *Store {
@@ -80,14 +80,8 @@ func (s *Store) GatewayMetadata(bindingAudience string) (protocol.GatewayMetadat
 		return protocol.GatewayMetadata{}, "", err
 	}
 	return protocol.GatewayMetadata{
-		GatewayID:   state.Gateway.GatewayID,
-		DisplayName: state.Gateway.DisplayName,
-		Status:      protocol.GatewayStatusOnline,
-		Capabilities: []protocol.GatewayCapability{
-			protocol.GatewayCapabilityEnvCatalog,
-			protocol.GatewayCapabilityEnvDirectOpen,
-			protocol.GatewayCapabilityEnvProxyOpen,
-		},
+		GatewayID:                   state.Gateway.GatewayID,
+		DisplayName:                 state.Gateway.DisplayName,
 		GatewayPublicKeyFingerprint: fingerprint,
 	}, fingerprint, nil
 }
@@ -140,6 +134,15 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 	s.mu.Lock()
 	if s.pending == nil {
 		s.pending = map[string]pendingChallenge{}
+	}
+	for id, pending := range s.pending {
+		if pending.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+			delete(s.pending, id)
+		}
+	}
+	if len(s.pending) >= 128 {
+		s.mu.Unlock()
+		return protocol.PairingChallengeResponse{}, errors.New("too many pending pairings")
 	}
 	s.pending[gatewayNonce] = pendingChallenge{
 		ClientNonce:     req.ClientNonce,
@@ -194,9 +197,7 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		"gateway_nonce":    req.GatewayNonce,
 		"protocol_version": protocol.Version,
 	}
-	if req.ClientCapability != "" {
-		requestFields["client_capability"] = req.ClientCapability
-	}
+	requestFields["permissions"] = req.Permissions
 	requestPayload, err := security.CanonicalJSON(requestFields)
 	if err != nil {
 		return protocol.PairingCompleteResponse{}, err
@@ -209,7 +210,7 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		ClientKeyID:     req.ClientKeyID,
 		ClientPublicKey: challenge.ClientPublicKey,
 		BindingAudience: req.BindingAudience,
-		ProfileWrite:    req.ClientCapability == string(protocol.GatewayCapabilityEnvProfileWrite),
+		Permissions:     req.Permissions,
 		PairedAtUnixMS:  pairedAt,
 	}
 	if err := s.saveClient(client); err != nil {
@@ -224,9 +225,7 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		"paired_at_unix_ms": pairedAt,
 		"protocol_version":  protocol.Version,
 	}
-	if req.ClientCapability != "" {
-		responseFields["client_capability"] = req.ClientCapability
-	}
+	responseFields["permissions"] = req.Permissions
 	payload, err := security.CanonicalJSON(responseFields)
 	if err != nil {
 		return protocol.PairingCompleteResponse{}, err
@@ -240,6 +239,7 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		GatewayID:       state.Gateway.GatewayID,
 		ClientKeyID:     req.ClientKeyID,
 		PairedAtUnixMS:  pairedAt,
+		Permissions:     req.Permissions,
 		Proof:           proof,
 	}, nil
 }
@@ -287,11 +287,8 @@ func (s *Store) IsPaired(clientKeyID string, bindingAudience string) bool {
 	if err != nil {
 		return false
 	}
-	client, ok := state.Clients[strings.TrimSpace(clientKeyID)]
+	_, ok := state.Clients[strings.TrimSpace(clientKeyID)]
 	if !ok {
-		return false
-	}
-	if cleanAudience := strings.TrimSpace(bindingAudience); cleanAudience != "" && client.BindingAudience != cleanAudience {
 		return false
 	}
 	return ok
@@ -309,34 +306,25 @@ func (s *Store) ClientPublicKey(clientKeyID string, bindingAudience string) (str
 	if !ok {
 		return "", false
 	}
-	if cleanAudience := strings.TrimSpace(bindingAudience); cleanAudience != "" && client.BindingAudience != cleanAudience {
-		return "", false
-	}
 	return client.ClientPublicKey, true
 }
 
-func (s *Store) ClientCanWriteProfiles(clientKeyID string, bindingAudience string) bool {
+func (s *Store) ClientPermissions(clientKeyID string) protocol.GatewayPermissions {
 	state, err := s.ensureStateForRead()
 	if err != nil {
-		return false
+		return protocol.GatewayPermissions{}
 	}
-	client, ok := state.Clients[strings.TrimSpace(clientKeyID)]
-	if !ok {
-		return false
-	}
-	if cleanAudience := strings.TrimSpace(bindingAudience); cleanAudience != "" && client.BindingAudience != cleanAudience {
-		return false
-	}
-	return client.ProfileWrite
+	return state.Clients[strings.TrimSpace(clientKeyID)].Permissions
 }
+
+// Initialize establishes a machine identity before any client is paired. Its ID
+// and key remain stable across listener address changes.
+func (s *Store) Initialize() error { _, err := s.ensureStateForPairing(""); return err }
 
 func (s *Store) ensureStateForPairing(bindingAudience string) (fileState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.state.Gateway.GatewayID != "" {
-		if err := s.migrateBlankAudienceGatewayIDLocked(bindingAudience); err != nil {
-			return fileState{}, err
-		}
 		return s.state, nil
 	}
 	state, err := s.loadState()
@@ -353,36 +341,14 @@ func (s *Store) ensureStateForPairing(bindingAudience string) (fileState, error)
 		}
 	}
 	s.state = state
-	if err := s.migrateBlankAudienceGatewayIDLocked(bindingAudience); err != nil {
-		return fileState{}, err
-	}
 	return s.state, nil
 }
 
-func (s *Store) validateBindingAudience(state fileState, bindingAudience string) error {
-	cleanAudience := strings.TrimSpace(bindingAudience)
-	if cleanAudience == "" {
-		return nil
-	}
-	expectedGatewayID := security.StableGatewayID(cleanAudience)
-	if state.Gateway.GatewayID != expectedGatewayID && !isBlankAudienceGatewayID(state.Gateway.GatewayID) {
-		return errors.New("gateway identity does not match binding audience")
+func (s *Store) validateBindingAudience(_ fileState, bindingAudience string) error {
+	if len(bindingAudience) > 1024 || strings.ContainsAny(bindingAudience, "\r\n\x00") {
+		return errors.New("invalid binding audience")
 	}
 	return nil
-}
-
-func (s *Store) migrateBlankAudienceGatewayIDLocked(bindingAudience string) error {
-	cleanAudience := strings.TrimSpace(bindingAudience)
-	if cleanAudience == "" {
-		return nil
-	}
-	expectedGatewayID := security.StableGatewayID(cleanAudience)
-	if s.state.Gateway.GatewayID == expectedGatewayID || !isBlankAudienceGatewayID(s.state.Gateway.GatewayID) || len(s.state.Clients) > 0 {
-		return nil
-	}
-	state := s.state
-	state.Gateway.GatewayID = expectedGatewayID
-	return s.saveStateLocked(state)
 }
 
 func (s *Store) ensureStateForRead() (fileState, error) {
@@ -406,6 +372,10 @@ func (s *Store) loadState() (fileState, error) {
 	if strings.TrimSpace(s.filePath) == "" {
 		return newFileState("")
 	}
+	info, err := os.Lstat(s.filePath)
+	if err == nil && (!info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 4<<20) {
+		return fileState{}, errors.New("invalid Gateway trust file")
+	}
 	raw, err := os.ReadFile(s.filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -416,6 +386,34 @@ func (s *Store) loadState() (fileState, error) {
 	var state fileState
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return fileState{}, err
+	}
+	if state.Gateway.GatewayID == "" || state.Gateway.PublicKey == "" || state.Gateway.PrivateKey == "" {
+		return fileState{}, errors.New("invalid Gateway identity")
+	}
+	// Verify the key pair before any one-time migration can replace the file.
+	proof, err := security.SignPayload(state.Gateway.PrivateKey, state.Gateway.GatewayID)
+	if err != nil || !security.VerifySignature(state.Gateway.PublicKey, state.Gateway.GatewayID, proof) {
+		return fileState{}, errors.New("invalid Gateway identity key pair")
+	}
+	for id, client := range state.Clients {
+		if id != client.ClientKeyID || id != security.ClientKeyID(client.ClientPublicKey) {
+			return fileState{}, errors.New("invalid paired Gateway client")
+		}
+		if _, err := security.PublicKeyFingerprint(client.ClientPublicKey); err != nil {
+			return fileState{}, errors.New("invalid paired Gateway client key")
+		}
+	}
+	if state.SchemaVersion == 1 {
+		for id, client := range state.Clients {
+			client.Permissions = protocol.GatewayPermissions{Access: true}
+			state.Clients[id] = client
+		}
+		state.SchemaVersion = 2
+		if err := s.persistState(state); err != nil {
+			return fileState{}, err
+		}
+	} else if state.SchemaVersion != 2 {
+		return fileState{}, errors.New("unsupported Gateway trust schema")
 	}
 	if state.Clients == nil {
 		state.Clients = map[string]clientKey{}
@@ -438,7 +436,7 @@ func (s *Store) saveClient(client clientKey) error {
 }
 
 func (s *Store) saveStateLocked(state fileState) error {
-	state.SchemaVersion = 1
+	state.SchemaVersion = 2
 	if state.Clients == nil {
 		state.Clients = map[string]clientKey{}
 	}
@@ -453,41 +451,21 @@ func (s *Store) persistState(state fileState) error {
 	if strings.TrimSpace(s.filePath) == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(s.filePath), 0o700); err != nil {
-		return err
-	}
-	body, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.filePath), ".gateway-trust-*")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	defer os.Remove(name)
-	if _, err := tmp.Write(append(body, '\n')); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, s.filePath)
+	return gatewaystate.Write(s.filePath, state)
 }
 
-func newFileState(bindingAudience string) (fileState, error) {
+func newFileState(_ string) (fileState, error) {
 	keyPair, err := security.GenerateKeyPair()
 	if err != nil {
 		return fileState{}, err
 	}
-	gatewayID := security.StableGatewayID(bindingAudience)
+	gatewayID, err := randomB64u(24)
+	if err != nil {
+		return fileState{}, err
+	}
+	gatewayID = "gw_" + gatewayID
 	return fileState{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		Gateway: gatewayIdentity{
 			GatewayID:   gatewayID,
 			DisplayName: "Redeven Gateway",
@@ -496,10 +474,6 @@ func newFileState(bindingAudience string) (fileState, error) {
 		},
 		Clients: map[string]clientKey{},
 	}, nil
-}
-
-func isBlankAudienceGatewayID(gatewayID string) bool {
-	return strings.TrimSpace(gatewayID) == security.StableGatewayID("")
 }
 
 func randomB64u(n int) (string, error) {

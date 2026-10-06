@@ -17,7 +17,7 @@ export function environmentLibrarySearchText(entry: DesktopEnvironmentEntry): st
   return [
     entry.label, entry.local_ui_url, ...(entry.local_ui_urls ?? []), entry.remote_environment_url,
     entry.secondary_text, entry.control_plane_label, entry.provider_origin, entry.env_public_id,
-    entry.gateway_label, entry.gateway_env_id, entry.gateway_endpoint_label, entry.gateway_environment_origin?.label,
+    entry.gateway_label, entry.gateway_env_id, entry.gateway_endpoint_label, entry.gateway_member?.metadata.hostname,
     entry.ssh_details?.ssh_destination, entry.ssh_details?.runtime_root,
     entry.ssh_details?.release_base_url, entry.ssh_details?.bootstrap_strategy,
     entry.managed_runtime_host_access?.kind === 'wsl_host' ? entry.managed_runtime_host_access.distribution_name : '',

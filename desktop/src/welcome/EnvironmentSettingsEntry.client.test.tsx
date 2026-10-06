@@ -560,7 +560,7 @@ describe('settings entry asynchronous isolation', () => {
     expect(document.querySelector('[role="dialog"] [role="tablist"]')).toBeNull();
     expect(button('Change access')).not.toBeNull();
   });
-  it.each(['wsl', 'container', 'url', 'gateway'] as const)('opens the %s connection section without access I/O', async kind => {
+  it.each(['wsl', 'container', 'url'] as const)('opens the %s connection section without access I/O', async kind => {
     const h = await mount(async () => ({ ok: false, code: 'SETTINGS_WSL_STOPPED', error: 'WSL stopped' }));
     const original = h.snapshot.environments.find(entry => entry.id === id)!;
     const entry: DesktopEnvironmentEntry = { ...original, id: `fixture-${kind}`, label: `Fixture ${kind}`,
@@ -569,7 +569,6 @@ describe('settings entry asynchronous isolation', () => {
         kind: 'container_process', container_engine: 'docker', container_id: 'fixture-container', container_ref: 'fixture-container', container_label: 'Container', runtime_root: '/root/.redeven', bridge_strategy: 'exec_stream',
       } } : {}),
       ...(kind === 'url' ? { kind: 'external_local_ui', registration_ref: { kind: 'saved_environment', id: 'fixture-url' }, local_ui_url: 'https://example.invalid/' } : {}),
-      ...(kind === 'gateway' ? { kind: 'gateway_environment', registration_ref: { kind: 'gateway_environment', gateway_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } } : {}),
     };
     h.publish({ ...h.snapshot, environments: [...h.snapshot.environments, entry] }); await settle();
     button(`Settings for Fixture ${kind}`).click(); await settle();
@@ -587,10 +586,7 @@ describe('settings entry asynchronous isolation', () => {
       expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toBe('WSL name save failed');
       expect((document.getElementById('wsl-settings-name') as HTMLInputElement).value).toBe('Renamed WSL');
     }
-    if (kind === 'gateway') {
-      await closeEditor(); h.publish({ ...h.snapshot, environments: [...h.snapshot.environments.filter(value => value.id !== entry.id), { ...entry, can_edit: false }] }); await settle();
-      expect([...document.querySelectorAll('button')].some(el => el.getAttribute('aria-label') === 'Settings for Fixture gateway')).toBe(false);
-    }
+
   });
 
   it('finishes a submitted save-and-restart for its original target after the window closes', async () => {

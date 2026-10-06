@@ -8,60 +8,7 @@ export type RuntimeProgressEnvironmentMatch = Pick<
   'id' | 'managed_runtime_target_id' | 'managed_runtime_placement_target_id' | 'provider_runtime_link_target'
 >;
 
-export type BusyAction =
-  | 'join_runtime_gateway_cloud'
-  | 'configure_gateway_cloud'
-  | 'inspect_gateway_cloud'
-  | ''
-  | 'open_local_environment'
-  | 'open_provider_environment'
-  | 'open_gateway_environment'
-  | 'open_remote_environment'
-  | 'open_ssh_environment'
-  | 'prepare_environment_open'
-  | 'start_environment_runtime'
-  | 'restart_environment_runtime'
-  | 'update_environment_runtime'
-  | 'manage_desktop_update'
-  | 'connect_provider_runtime'
-  | 'disconnect_provider_runtime'
-  | 'stop_environment_runtime'
-  | 'refresh_environment_runtime'
-  | 'refresh_all_environment_runtimes'
-  | 'start_control_plane_connect'
-  | 'open_flower'
-  | 'open_environment_center'
-  | 'focus_environment_window'
-  | 'open_environment_settings'
-  | 'refresh_control_plane'
-  | 'upsert_gateway'
-  | 'refresh_gateway'
-  | 'check_gateway'
-  | 'pair_gateway'
-  | 'sync_gateway'
-  | 'set_gateway_enabled'
-  | 'start_gateway'
-  | 'stop_gateway'
-  | 'restart_gateway'
-  | 'update_gateway'
-  | 'preview_reinstall_target'
-  | 'reinstall_target'
-  | 'refresh_gateway_status'
-  | 'refresh_gateway_catalog'
-  | 'delete_gateway'
-  | 'upsert_environment_registration'
-  | 'set_environment_access_route'
-  | 'check_gateway_environment_profile'
-  | 'delete_environment_registration'
-  | 'set_provider_environment_pinned'
-  | 'set_environment_registration_pinned'
-  | 'sign_out_control_plane'
-  | 'cancel_launcher_operation'
-  | 'dismiss_launcher_operation'
-  | 'close_launcher_or_quit'
-  | 'save_settings'
-  | 'save_environment'
-  | 'delete_environment';
+export type BusyAction = DesktopLauncherActionRequest['kind'] | '' | 'save_settings' | 'save_environment' | 'delete_environment';
 
 export type DesktopLauncherBusyState = Readonly<{
   action: BusyAction;
@@ -126,15 +73,11 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
       return withRequestTimestamp({
         action: 'save_environment',
         environment_id:
-          request.registration.registration_ref.kind === 'gateway_environment'
-            ? request.registration.registration_ref.gateway_env_id
-            : request.registration.registration_ref.id,
+          request.registration.registration_ref.id,
         provider_origin: '',
         provider_id: '',
         gateway_id:
-          request.registration.registration_ref.kind === 'gateway_environment'
-            ? request.registration.registration_ref.gateway_id
-            : '',
+          '',
         progress: null,
       });
     case 'delete_environment_registration':

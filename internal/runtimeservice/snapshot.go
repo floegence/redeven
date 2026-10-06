@@ -59,7 +59,6 @@ type Capability struct {
 }
 
 type Capabilities struct {
-	GatewayCloudJoin   Capability `json:"gateway_cloud_join"`
 	DesktopModelSource Capability `json:"desktop_model_source"`
 	ProviderLink       Capability `json:"provider_link"`
 	RuntimeGateway     Capability `json:"runtime_gateway"`
@@ -120,7 +119,7 @@ type ProviderLinkBinding struct {
 }
 
 type Snapshot struct {
-	GatewayCloud          *GatewayCloudAccess `json:"gateway_cloud,omitempty"`
+	GatewayPublication    *GatewayPublication `json:"gateway_publication,omitempty"`
 	RuntimeVersion        string              `json:"runtime_version,omitempty"`
 	RuntimeCommit         string              `json:"runtime_commit,omitempty"`
 	RuntimeBuildTime      string              `json:"runtime_build_time,omitempty"`
@@ -140,8 +139,8 @@ type Snapshot struct {
 	Bindings              Bindings            `json:"bindings"`
 }
 
-// GatewayCloudAccess contains presentation metadata only, never admission keys.
-type GatewayCloudAccess struct {
+// GatewayPublication contains presentation metadata only, never admission keys.
+type GatewayPublication struct {
 	ProtocolVersion   int    `json:"protocol_version"`
 	CloudOrigin       string `json:"cloud_origin"`
 	NamespacePublicID string `json:"namespace_public_id"`
@@ -241,7 +240,6 @@ func NormalizeAIReadiness(readiness AIReadiness) AIReadiness {
 }
 
 func NormalizeCapabilities(capabilities Capabilities) Capabilities {
-	capabilities.GatewayCloudJoin = NormalizeCapability(capabilities.GatewayCloudJoin)
 	capabilities.DesktopModelSource = NormalizeCapability(capabilities.DesktopModelSource)
 	capabilities.ProviderLink = NormalizeCapability(capabilities.ProviderLink)
 	capabilities.RuntimeGateway = NormalizeCapability(capabilities.RuntimeGateway)

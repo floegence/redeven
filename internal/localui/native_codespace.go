@@ -60,6 +60,7 @@ func (s *Server) handleNativeCodeSpace(w http.ResponseWriter, r *http.Request) {
 	}
 	next := r.Clone(r.Context())
 	next.Host = presentation.Host
+	next.Header.Set("Origin", presentation.String())
 	next.Header.Del("X-Redeven-Code-Origin")
 	next.Header.Del(localAccessResumeHeader)
 	next.Header.Del("Cookie")

@@ -1,3 +1,4 @@
+import { memberFixture } from '../testSupport/gatewayMembershipFixture';
 import { describe, expect, it } from 'vitest';
 
 import { buildGatewayEnvironmentEntries } from './environmentAggregator';
@@ -11,22 +12,14 @@ describe('Gateway environment projection', () => {
         local_enabled: true,
         connection_kind: 'url',
         management_capability: 'access_only',
-        capabilities: ['env_catalog', 'env_direct_open', 'env_proxy_open'],
+        capabilities: ['member_access'], permissions: { access: true, manage_members: true, configure_cloud: true },
         status: 'online',
         created_at_ms: 1,
         updated_at_ms: 1,
-        environments: [{
-          gateway_env_id: 'env-1',
-          display_name: 'Remote',
-          env_kind: 'reachable_env',
-          state: 'available',
-          capabilities: ['open'],
-          access_capabilities: ['open'],
-          origin: { kind: 'gateway_host', label: 'host' },
-        }],
+        environments: [memberFixture],
       }],
     });
-    expect(entry).toMatchObject({ kind: 'gateway_environment', can_delete: false });
+    expect(entry).toMatchObject({ kind: 'gateway_environment', can_delete: false, can_edit: false });
     expect(entry?.runtime_operations.start.menu_visibility).toBe('hidden');
   });
 });

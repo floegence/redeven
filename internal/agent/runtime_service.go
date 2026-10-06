@@ -25,7 +25,6 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 
 	capabilities := runtimeservice.Capabilities{
-		GatewayCloudJoin: runtimeservice.Capability{Supported: true, BindMethod: runtimeservice.RuntimeControlBindMethodV2},
 		DesktopModelSource: runtimeservice.Capability{
 			Supported:  false,
 			ReasonCode: "ai_service_unavailable",
@@ -40,9 +39,10 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 		},
 	}
-	gatewayCloud := a.gatewayCloudAccessSnapshot()
-	if gatewayCloud != nil {
-		capabilities.ProviderLink = runtimeservice.Capability{ReasonCode: "gateway_cloud_managed", Message: "Manage this Namespace-owned connection in Redeven Cloud."}
+	gatewayCloud := a.gatewayPublicationSnapshot()
+	cfg := a.remoteConfigSnapshot()
+	if gatewayCloud != nil || (cfg != nil && (cfg.Gateway != nil || cfg.GatewayRejoinRequired)) {
+		capabilities.ProviderLink = runtimeservice.Capability{ReasonCode: "gateway_managed", Message: "Manage the Gateway connection in Runtime settings and its publication in Redeven Cloud."}
 	}
 	bindings := runtimeservice.Bindings{
 		DesktopModelSource: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
@@ -69,14 +69,14 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 
 	return runtimeservice.ApplyCompatibilityContract(runtimeservice.Snapshot{
-		GatewayCloud:     gatewayCloud,
-		RuntimeVersion:   strings.TrimSpace(a.version),
-		RuntimeCommit:    strings.TrimSpace(a.commit),
-		RuntimeBuildTime: strings.TrimSpace(a.buildTime),
-		ProtocolVersion:  runtimeservice.ProtocolVersion,
-		EffectiveRunMode: strings.TrimSpace(a.effectiveRunMode),
-		RemoteEnabled:    a.remoteEnabled,
-		AIReadiness:      aiReadiness,
+		GatewayPublication: gatewayCloud,
+		RuntimeVersion:     strings.TrimSpace(a.version),
+		RuntimeCommit:      strings.TrimSpace(a.commit),
+		RuntimeBuildTime:   strings.TrimSpace(a.buildTime),
+		ProtocolVersion:    runtimeservice.ProtocolVersion,
+		EffectiveRunMode:   strings.TrimSpace(a.effectiveRunMode),
+		RemoteEnabled:      a.remoteEnabled,
+		AIReadiness:        aiReadiness,
 		ActiveWorkload: runtimeservice.Workload{
 			TerminalCount:    terminalCount,
 			SessionCount:     len(sessions),
@@ -88,13 +88,13 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	})
 }
 
-func (a *Agent) gatewayCloudAccessSnapshot() *runtimeservice.GatewayCloudAccess {
+func (a *Agent) gatewayPublicationSnapshot() *runtimeservice.GatewayPublication {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.cfg == nil || a.cfg.GatewayCloud == nil {
+	if a.cfg == nil || a.cfg.GatewayPublication == nil {
 		return nil
 	}
-	route := a.cfg.GatewayCloud
+	route := a.cfg.GatewayPublication
 	state := "connecting"
 	switch {
 	case route.Revoked:
@@ -106,7 +106,7 @@ func (a *Agent) gatewayCloudAccessSnapshot() *runtimeservice.GatewayCloudAccess 
 	case a.controlRegistered:
 		state = "connected"
 	}
-	return &runtimeservice.GatewayCloudAccess{ProtocolVersion: route.ProtocolVersion, CloudOrigin: route.CloudOrigin, NamespacePublicID: route.NamespacePublicID, GatewayPublicID: route.GatewayPublicID, State: state}
+	return &runtimeservice.GatewayPublication{ProtocolVersion: route.ProtocolVersion, CloudOrigin: route.CloudOrigin, NamespacePublicID: route.NamespacePublicID, GatewayPublicID: route.GatewayPublicID, State: state}
 }
 
 func (a *Agent) CurrentRuntimeServiceSnapshot() runtimeservice.Snapshot {

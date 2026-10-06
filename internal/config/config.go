@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/floegence/redeven/internal/gatewaycloud"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"math"
 	"strings"
 	"time"
@@ -272,18 +273,23 @@ func (c *RemoteDesktopConfig) RememberApproval() bool {
 // artifacts remain opaque but are intentionally persisted here for recovery;
 // user-provided provider keys are loaded separately from secrets.json.
 type Config struct {
-	GatewayCloudMigration    *gatewaycloud.RuntimeConfig `json:"gateway_cloud_migration,omitempty"`
-	GatewayCloud             *gatewaycloud.RuntimeConfig `json:"gateway_cloud,omitempty"`
-	RemoteDesktop            *RemoteDesktopConfig        `json:"remote_desktop,omitempty"`
-	ProviderOrigin           string                      `json:"provider_origin"`
-	ControlplaneBaseURL      string                      `json:"controlplane_base_url"`
-	ControlplaneProviderID   string                      `json:"controlplane_provider_id,omitempty"`
-	EnvironmentID            string                      `json:"environment_id"`
-	LocalEnvironmentPublicID string                      `json:"local_environment_public_id"`
-	BindingGeneration        int64                       `json:"binding_generation,omitempty"`
-	AgentInstanceID          string                      `json:"agent_instance_id"`
-	Direct                   *DirectConnectInfo          `json:"direct"`
-	ControlArtifactPool      *ControlArtifactPool        `json:"control_artifact_pool,omitempty"`
+	GatewayRemovalOutbox     []gatewaymembership.RemovalDelivery `json:"gateway_removal_outbox,omitempty"`
+	GatewayClosureOutbox     []gatewaycloud.ClosureDelivery      `json:"gateway_closure_outbox,omitempty"`
+	Gateway                  *gatewaymembership.RuntimeConfig    `json:"gateway,omitempty"`
+	GatewayMigrationEvidence *gatewaycloud.MigrationEvidence     `json:"gateway_migration_evidence,omitempty"`
+	GatewayEnvironmentChoice string                              `json:"gateway_environment_choice,omitempty"`
+	GatewayRejoinRequired    bool                                `json:"gateway_rejoin_required,omitempty"`
+	GatewayPublication       *gatewaycloud.RuntimeConfig         `json:"gateway_publication,omitempty"`
+	RemoteDesktop            *RemoteDesktopConfig                `json:"remote_desktop,omitempty"`
+	ProviderOrigin           string                              `json:"provider_origin"`
+	ControlplaneBaseURL      string                              `json:"controlplane_base_url"`
+	ControlplaneProviderID   string                              `json:"controlplane_provider_id,omitempty"`
+	EnvironmentID            string                              `json:"environment_id"`
+	LocalEnvironmentPublicID string                              `json:"local_environment_public_id"`
+	BindingGeneration        int64                               `json:"binding_generation,omitempty"`
+	AgentInstanceID          string                              `json:"agent_instance_id"`
+	Direct                   *DirectConnectInfo                  `json:"direct"`
+	ControlArtifactPool      *ControlArtifactPool                `json:"control_artifact_pool,omitempty"`
 
 	// AI config controls optional Flower AI assistant features.
 	AI *AIConfig `json:"ai,omitempty"`
@@ -317,6 +323,7 @@ type Config struct {
 	CodeServerPortMax int `json:"code_server_port_max,omitempty"`
 
 	extra                          map[string]json.RawMessage
+	gatewayConfigMigrated          bool
 	bootstrapDeliveryAttemptPath   string
 	bootstrapDeliveryRequestIDB64u string
 }
@@ -329,8 +336,16 @@ func (c *Config) ValidateLocalMinimal() error {
 	if c == nil {
 		return errors.New("nil config")
 	}
-	if c.GatewayCloud != nil {
-		if _, err := c.GatewayCloud.Identity(); err != nil {
+	if c.Gateway != nil {
+		if err := c.Gateway.Validate(c.LocalEnvironmentPublicID); err != nil {
+			return fmt.Errorf("invalid Gateway membership: %w", err)
+		}
+	}
+	if c.GatewayEnvironmentChoice != "" && c.GatewayEnvironmentChoice != "preserve" && c.GatewayEnvironmentChoice != "new" {
+		return errors.New("invalid Gateway environment choice")
+	}
+	if c.GatewayPublication != nil {
+		if _, err := c.GatewayPublication.Identity(); err != nil {
 			return err
 		}
 	}

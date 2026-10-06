@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
-    "reviewed_at": "2026-10-06",
+    "reviewed_at": "2026-10-07",
     "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Epoch 40 admits canonical file references alongside exact Tessiven canvas selections in the embedded Flower composer. Desktop and Runtime require matching strict context validation; authorization and storage lineage are unchanged.",
-    "same_window_rationale": "Epoch 40 allows strict canonical file references with Tessiven selections. Earlier Runtime validators reject these mixed contexts, so Desktop and Runtime must upgrade together; no database or authorization boundary changes.",
+    "summary": "Epoch 41 requires Gateway v4 Runtime-initiated membership and Gateway Cloud v2. Runtime, Gateway and Desktop must be upgraded together; retired URL profiles and separate Cloud enrollment are removed.",
+    "same_window_rationale": "Epoch 41 binds Gateway access to Runtime member identity and introduces a single trusted membership management API. Previous clients cannot safely interpret the new delegation and permission contract.",
     "checked_surfaces": [
+      "Gateway v4 replaces URL profiles with Runtime-initiated membership, isolated reverse HTTPS access and Cloud v2 Namespace publication. Trusted Runtime management includes explicit environment preservation or replacement consent. Runtime Service, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 41; prior Gateway protocols and Cloud enrollment paths are not supported.",
       "Epoch 40 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, mixed Tessiven selection/file context validation, and canonical Flower composer delivery. No database schema changes.",
       "Epoch 38 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, title-only Tessiven creation, exact Desktop method admission, seeded example attribution, and Flower version updates. Existing canvas documents and database schema remain unchanged.",
       "Epoch 37 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, Tessiven request and event admission, canonical Flower context, and target-bound resource operations. Runtime-owned Tessiven storage is a new independent versioned database; existing database lineages remain unchanged.",
@@ -87,7 +88,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 40,
+  "compatibility_epoch": 41,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -119,7 +120,8 @@
     36,
     37,
     38,
-    39
+    39,
+    40
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

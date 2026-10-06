@@ -41,7 +41,7 @@ func (c *Client) Close() {
 }
 
 func cloudCall[In, Out any](c *Client, ctx context.Context, path string, input In) (*Out, error) {
-	return cloudCallPath[In, Out](c, ctx, "/api/console/v1/gateway-cloud/v1/"+path, input)
+	return cloudCallPath[In, Out](c, ctx, "/api/console/v1/gateway-cloud/v2/"+path, input)
 }
 
 func cloudCallPath[In, Out any](c *Client, ctx context.Context, path string, input In) (*Out, error) {
@@ -87,6 +87,8 @@ func validErrorCode(code string) bool {
 }
 
 type Identity struct {
+	GatewayKey        ed25519.PrivateKey
+	MemberKey         ed25519.PrivateKey
 	PrivateKey        ed25519.PrivateKey
 	NamespacePublicID string
 	GatewayPublicID   string
@@ -108,6 +110,18 @@ func (c *Client) Sign(ctx context.Context, identity Identity, purpose gc.Purpose
 		return gc.SignedRequest{}, ErrCloudRequest
 	}
 	proof.NamespacePublicID, proof.BindingGeneration = identity.NamespacePublicID, identity.BindingGeneration
+	switch value := payload.(type) {
+	case gc.GatewayRegistration:
+		if err := gc.SignGatewayMachineIdentity(proof, &value, identity.GatewayKey); err != nil {
+			return gc.SignedRequest{}, err
+		}
+		payload = value
+	case gc.RuntimeJoin:
+		if err := gc.SignRuntimeMembership(proof, &value, identity.MemberKey); err != nil {
+			return gc.SignedRequest{}, err
+		}
+		payload = value
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return gc.SignedRequest{}, err
@@ -179,5 +193,10 @@ func (c *Client) RotateKey(ctx context.Context, identity Identity, newKey ed2551
 		return err
 	}
 	_, err = cloudCall[gc.SignedRequest, gc.EmptyRequest](c, ctx, "rotate-identity", challenge)
+	return err
+}
+
+func (c *Client) CompleteCommand(ctx context.Context, identity Identity, result gc.GatewayCommandResult) error {
+	_, err := signedCloudCall[gc.GatewayCommandResult, gc.EmptyRequest](c, ctx, identity, gc.PurposeCommandResult, "command-result", result)
 	return err
 }

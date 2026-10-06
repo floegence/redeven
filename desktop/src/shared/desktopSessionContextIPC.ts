@@ -18,7 +18,7 @@ export type DesktopSessionTransportRecoveryFailureCode =
   | 'remote_command_ended'
   | 'gateway_unavailable'
   | 'gateway_target_unavailable'
-  | 'gateway_session_expired'
+  | 'gateway_member_removed'
   | 'process_identity_changed';
 
 export type DesktopSessionTransportRecoveryAction = 'retry_now' | 'open_connection_center';
@@ -119,7 +119,7 @@ export function normalizeDesktopSessionTransportRecoverySnapshot(
       && code !== 'remote_command_ended'
       && code !== 'gateway_unavailable'
       && code !== 'gateway_target_unavailable'
-      && code !== 'gateway_session_expired'
+      && code !== 'gateway_member_removed'
       && code !== 'process_identity_changed'
     ) {
       return undefined;

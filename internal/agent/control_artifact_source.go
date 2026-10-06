@@ -28,11 +28,20 @@ func sameControlBinding(expected, current *config.Config) bool {
 	if expected == nil || current == nil || expected.EnvironmentID != current.EnvironmentID || expected.BindingGeneration != current.BindingGeneration || expected.ControlplaneBaseURL != current.ControlplaneBaseURL {
 		return false
 	}
+	if expected.GatewayRejoinRequired != current.GatewayRejoinRequired {
+		return false
+	}
+	if (expected.Gateway == nil) != (current.Gateway == nil) {
+		return false
+	}
+	if current.Gateway != nil && (current.Gateway.Leaving || expected.Gateway.MemberID != current.Gateway.MemberID || expected.Gateway.MemberVersion != current.Gateway.MemberVersion || expected.Gateway.GatewayID != current.Gateway.GatewayID) {
+		return false
+	}
 	left, right := gatewayFence(expected), gatewayFence(current)
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-	return *left == *right && !current.GatewayCloud.Revoked
+	return *left == *right && !current.GatewayPublication.Revoked
 }
 
 type controlArtifactSessionBinding struct {
@@ -67,7 +76,7 @@ func (source *controlArtifactSource) Acquire(ctx context.Context) (flowersec.Art
 	entry, generation, err := source.agent.acquireControlArtifactEntry()
 	if errors.Is(err, errControlArtifactPoolEmpty) || errors.Is(err, errControlArtifactPoolRelinkRequired) {
 		cfg := source.agent.remoteConfigSnapshot()
-		if cfg != nil && cfg.GatewayCloud != nil && !cfg.GatewayCloud.Revoked {
+		if cfg != nil && cfg.GatewayPublication != nil && !cfg.GatewayPublication.Revoked {
 			if recoveryErr := source.agent.recoverGatewayCredentials(ctx); recoveryErr != nil {
 				return flowersec.ArtifactLease{}, flowersec.NewRetryableArtifactSourceError(recoveryErr)
 			}

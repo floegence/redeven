@@ -14,7 +14,6 @@ import type { StartupReport } from './startup';
 it.each<{ kind: DesktopSessionTransportKind; host: string }>([
   { kind: 'native_local_bridge', host: '127.0.0.1' },
   { kind: 'placement_bridge', host: '127.0.0.1' },
-  { kind: 'gateway_bridge', host: '127.0.0.1' },
   { kind: 'external_local_ui', host: '127.0.0.1' },
   { kind: 'external_local_ui', host: '::1' },
 ])('reuses the selected $kind listener at $host and its bound instance', async ({ kind, host }) => {
@@ -38,6 +37,7 @@ it.each<{ kind: DesktopSessionTransportKind; host: string }>([
       `/api/local/codespaces/demo/${instance}/file%2Fname?x=%2F&x=2`,
     );
     expect(request.headers['x-redeven-code-access']).toBe('runtime-access');
+    expect(request.headers.origin).toBe(new URL(baseURL).origin);
     expect(
       request.headers[CODESPACE_NATIVE_AUTH_HEADER.toLowerCase()],
     ).toBeUndefined();
@@ -72,7 +72,7 @@ it.each<{ kind: DesktopSessionTransportKind; host: string }>([
   try {
     const response = await fetch(`${gateway.origin}/file%2Fname?x=%2F&x=2`, {
       method: 'POST',
-      headers: { [CODESPACE_NATIVE_AUTH_HEADER]: gateway.token },
+      headers: { [CODESPACE_NATIVE_AUTH_HEADER]: gateway.token, Origin: gateway.origin },
       body: 'native\x00body',
     });
     expect(response.status).toBe(200);
@@ -105,4 +105,39 @@ it.each([undefined, 'redeven_local_access', 'redeven_local_access_http_0', 'othe
     signal: new AbortController().signal,
   })).rejects.toThrow('codespace_unavailable');
   expect(webSession.cookies.get).not.toHaveBeenCalled();
+});
+
+it.each(['route', 'request', 'parent', 'socket'] as const)('settles a member TLS handshake when %s closes it', async cause => {
+  const { PassThrough } = await import('node:stream');
+  const socket = new PassThrough();
+  const parent = new AbortController(), request = new AbortController();
+  const baseURL = 'https://member.redeven.invalid/';
+  const connectionAgent = { createConnection: vi.fn((_options, callback) => callback(null, socket)) };
+  const route = await createLocalNativeCodeSpaceRoute({
+    transport: { kind: 'gateway_member', baseURL, allowedBaseURL: baseURL, entryURL: baseURL, displayURL: baseURL, partition: 'member', proxyPolicy: 'gateway' },
+    startup: {} as StartupReport, signal: parent.signal, codeSpaceID: 'demo',
+    connectionAgent: connectionAgent as unknown as import('node:https').Agent,
+    webSession: { fetch: vi.fn(async () => new Response(JSON.stringify({ ok: true, data: {
+      instance_id: 'fixed-generation-12345678', access_cookie_name: 'redeven_local_access_https_443',
+    } }))), cookies: { get: vi.fn(async () => []) } } as unknown as Session,
+  });
+  const pending = route.openConnection(request.signal, 'http://127.0.0.1:1234');
+  const assertion = expect(pending).rejects.toThrow(cause === 'socket' ? 'codespace_transport_unavailable' : 'codespace_closed');
+  if (cause === 'route') await route.close();
+  if (cause === 'request') request.abort();
+  if (cause === 'parent') parent.abort();
+  if (cause === 'socket') socket.destroy();
+  await assertion;
+  expect(socket.destroyed).toBe(true);
+  expect(connectionAgent.createConnection).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ host: 'member.redeven.invalid', port: 443 }), expect.any(Function));
+  await route.close();
+});
+
+it('rejects a member route without its explicit path before making any request', async () => {
+  const fetch = vi.fn();
+  await expect(createLocalNativeCodeSpaceRoute({
+    transport: { kind: 'gateway_member', baseURL: 'https://member.redeven.invalid', allowedBaseURL: '', entryURL: '', displayURL: '', partition: '', proxyPolicy: 'gateway' },
+    startup: {} as StartupReport, signal: new AbortController().signal, codeSpaceID: 'demo', webSession: { fetch } as unknown as Session,
+  })).rejects.toThrow('codespace_member_transport_missing');
+  expect(fetch).not.toHaveBeenCalled();
 });

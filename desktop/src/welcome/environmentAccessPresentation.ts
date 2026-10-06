@@ -4,8 +4,8 @@ import type { DesktopI18n } from '../shared/i18n';
 import type { EnvironmentActionPresentation } from './viewModel';
 
 export function environmentAccessRouteLabel(route: EnvironmentAccessRoute, i18n: DesktopI18n): string {
-  return route.kind === 'gateway_proxy' ? i18n.t('gatewayAccess.viaNamedGateway', { gateway: route.gateway_label ?? route.label })
-    : route.kind === 'direct_url' ? i18n.t('gatewayAccess.direct') : i18n.t('gatewayAccess.registeredConnection');
+  return route.kind === 'gateway_member' ? i18n.t('gatewayAccess.viaNamedGateway', { gateway: route.gateway_label ?? route.label })
+    : i18n.t('gatewayAccess.registeredConnection');
 }
 
 /** Access choices extend the existing split button without changing lifecycle owners. */
@@ -18,7 +18,7 @@ export function environmentAccessPresentation(entry: DesktopEnvironmentEntry, pr
   return { ...presentation,
     primary_action: !selected ? { ...presentation.primary_action, intent: 'unavailable', enabled: false,
       label: i18n.t('gatewayAccess.chooseDefault'), disabled_reason: i18n.t('gatewayAccess.defaultMissing') }
-      : selected.environment_id === entry.id && selected.kind === 'direct' ? presentation.primary_action
+      : selected.environment_id === entry.id ? presentation.primary_action
       : { ...open(selected), variant: 'default', label: i18n.t(selected.is_open ? 'environmentAction.focus' : 'environmentAction.open') },
     primary_action_overlay: selected?.kind === 'direct' ? presentation.primary_action_overlay : {
       kind: 'tooltip', tone: selected ? 'neutral' : 'warning',
@@ -26,6 +26,6 @@ export function environmentAccessPresentation(entry: DesktopEnvironmentEntry, pr
     },
     menu_actions: [...(routes.length > 1 || !selected ? routes.map(route => ({ id: `access:${route.id}`, action: open(route),
       label: `${environmentAccessRouteLabel(route, i18n)}${route.id === selected?.id ? ` · ${i18n.t('gatewayAccess.defaultLabel')}` : ''}` })) : []),
-      ...presentation.menu_actions.filter(item => !item.action.access_mode)],
+      ...presentation.menu_actions],
   };
 }

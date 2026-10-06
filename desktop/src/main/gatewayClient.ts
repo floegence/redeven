@@ -1,1159 +1,269 @@
+import type { GatewayMemberServiceResponse } from '../shared/gatewayMembership';
+import { randomBytes } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import type net from 'node:net';
+import type { NodeConnectionPath } from '@floegence/flowersec-core/node';
 import { openGatewayBridgeSocket } from './gatewayBridgeSocket';
-
+import { normalizeGatewayBaseURL, gatewayProtocolID, type GatewayRecord } from './gatewayStore';
 import {
-  normalizeGatewayBaseURL,
-  gatewayProtocolID,
-  type GatewayRecord,
-  type GatewayTrustProfile,
-  type GatewayURLConnection,
-} from './gatewayStore';
-import {
-  assertGatewayConnectArtifactProof,
-  assertGatewayFingerprint,
-  createGatewayAuthHeaders,
-  type GatewayPairingCompleteResponse,
-  type GatewayPairingChallengeResponse,
-  type GatewayPairingCompleteRequest,
-  type GatewaySecretStore,
+  assertGatewayAddressProof, assertGatewayFingerprint, createGatewayAuthHeaders,
+  type GatewayPairingChallengeResponse, type GatewayPairingCompleteRequest,
+  type GatewayPairingCompleteResponse, type GatewaySecretStore,
 } from './gatewayTrust';
-import type {
-  DesktopGatewayCapability,
-  DesktopGatewayEnvironment,
-  DesktopGatewayEnvironmentCapability,
-  DesktopGatewayEnvironmentProfileAccessRoute,
-  DesktopGatewayEnvironmentOriginKind,
-  DesktopGatewayEnvironmentState,
-} from '../shared/desktopGateway';
-import { desktopGatewayProfileURLHasEmbeddedCredentials } from '../shared/desktopGateway';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
+import {
+  GATEWAY_PROTOCOL_VERSION, type GatewayPermissions, type GatewayMember,
+  type GatewayPolicy, type GatewayMemberInvitation, type GatewayMemberOffer,
+  type GatewayMemberOperationResult, type GatewayCloudPermission, type GatewayHookStatuses, type GatewayHookStatus,
+} from '../shared/gatewayMembership';
 
-const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v3';
-const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 20_000;
-
-type GatewayRequestOptions = Readonly<{
-  timeoutMs?: number;
-  signal?: AbortSignal;
-}>;
-
+export type GatewayRequestOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal }>;
 export type GatewayCatalogResponse = Readonly<{
-  protocol_version: string;
+  protocol_version: typeof GATEWAY_PROTOCOL_VERSION;
   gateway: Readonly<{
-    gateway_id: string;
-    display_name: string;
-    status: 'online' | 'pairing_required' | 'trust_changed' | 'error' | 'unknown';
-    capabilities: readonly DesktopGatewayCapability[];
-    gateway_public_key_fingerprint?: string;
+    gateway_id: string; display_name: string; gateway_public_key_fingerprint: string;
+    member_url: string; member_tls_root_pem: string; permissions: GatewayPermissions;
   }>;
-  environments: readonly DesktopGatewayEnvironment[];
+  members: readonly GatewayMember[];
+  policy: GatewayPolicy;
+  revision: number;
+  rebuild_required: boolean;
+  hook_status: GatewayHookStatuses;
 }>;
-
-export type GatewayOpenSessionRequest = Readonly<{
-  gateway_env_id: string;
-  requested_capability: 'env_app' | 'terminal' | 'files' | 'web_service' | 'port_forward';
-  client_nonce: string;
-  access_mode?: 'direct_url' | 'gateway_proxy';
-  bridge_session_id?: string;
-  route_id?: string;
-}>;
-
-export type GatewayOpenSessionResponse = Readonly<{
-  protocol_version: string;
-  gateway_session_id: string;
-  gateway_env_id: string;
-  connect_artifact: GatewayConnectArtifact;
-  diagnostics_hint?: Readonly<{
-    gateway_env_id: string;
-    connection_kind: string;
-  }>;
-}>;
-
-export type GatewayEnvProfileAccessRoute = Readonly<{
-  kind: 'url';
-  url?: string;
-  origin_label?: string;
-}>;
-
-export type GatewayEnvProfileUpsertRequest = Readonly<{
-  gateway_env_id?: string;
-  display_name: string;
-  access_route: GatewayEnvProfileAccessRoute;
-  access_mode?: 'direct_url' | 'gateway_proxy';
-}>;
-
-export type GatewayEnvProfileUpsertResponse = Readonly<{
-  protocol_version: string;
-  environment: DesktopGatewayEnvironment;
-}>;
-
-export type GatewayEnvProfileDeleteRequest = Readonly<{
-  gateway_env_id: string;
-}>;
-
-export type GatewayEnvProfileDeleteResponse = Readonly<{
-  protocol_version: string;
-  gateway_env_id: string;
-  deleted: boolean;
-}>;
-
-/* Runtime lifecycle is managed by Desktop direct channels, never by Gateway. */
-/* Removed Gateway Runtime lifecycle protocol types. */
-export type GatewayConnectArtifact = Readonly<{
-  kind: 'local_direct_artifact' | 'gateway_proxy_artifact' | 'desktop_bridge_artifact';
-  url?: string;
-  gateway_session_id?: string;
-  bridge_session_id?: string;
-  route_id?: string;
-  expires_at_unix_ms: number;
-  artifact_nonce: string;
-  proof: string;
-}>;
-
-type GatewayHTTPEnvelope = Readonly<{
-  ok?: boolean;
-  data?: unknown;
-  error?: Readonly<{
-    code?: unknown;
-    message?: unknown;
-    retryable?: unknown;
-    redacted_detail?: unknown;
-  }>;
-}>;
-
-type GatewayRouteTemplate =
-  | 'gateway/v3/pairing/challenge'
-  | 'gateway/v3/pairing/complete'
-  | 'gateway/v3/catalog'
-  | 'gateway/v3/open-session'
-  | 'gateway/v3/close-session'
-  | 'gateway/v3/env-profiles/check'
-  | 'gateway/v3/env-profiles/upsert'
-  | 'gateway/v3/env-profiles/delete';
-
-type GatewayRoute = GatewayRouteTemplate;
-
-type GatewayHTTPMethod = 'GET' | 'POST' | 'PUT';
-
-type GatewayTransportCallOptions = GatewayRequestOptions & Readonly<{
-  secretStore: GatewaySecretStore;
-  authenticated?: boolean;
-}>;
-
-type GatewayHTTPDataResult = Readonly<{
-  data: unknown;
+export type GatewayMemberPolicyUpdate = Readonly<{
+  member_id: string; expected_member_version: number; cloud_permission: GatewayCloudPermission;
 }>;
 
 export class GatewayClientError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly statusCode: number | null = null,
-    readonly retryable = false,
-  ) {
-    super(message);
-    this.name = 'GatewayClientError';
+  constructor(readonly code: string, message: string, readonly statusCode: number | null = null, readonly retryable = false) {
+    super(message); this.name = 'GatewayClientError';
   }
 }
-
-function compact(value: unknown): string {
-  return String(value ?? '').trim();
+function invalid(): never { throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway returned an invalid response.'); }
+function object(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
+  return value as Record<string, unknown>;
 }
-
-function parseEnvelope(raw: string): GatewayHTTPEnvelope | null {
-  try {
-    return JSON.parse(raw || '{}') as GatewayHTTPEnvelope;
-  } catch {
-    return null;
-  }
+function text(value: unknown, maximum = 1024): string {
+  if (typeof value !== 'string' || value.length > maximum) return invalid();
+  return value;
 }
-
-function gatewayErrorMessage(envelope: GatewayHTTPEnvelope, statusCode: number): string {
-  const redactedDetail = compact(envelope.error?.redacted_detail);
-  if (redactedDetail) {
-    return String(redactGatewayDiagnosticValue(redactedDetail));
-  }
-  const code = compact(envelope.error?.code);
-  return code
-    ? `Gateway request failed with ${code}.`
-    : `Gateway request failed with status ${statusCode}.`;
+function id(value: unknown): string {
+  const result = text(value, 160);
+  if (!/^[A-Za-z0-9_-]+$/u.test(result)) return invalid();
+  return result;
 }
-
-function gatewayURL(connection: GatewayURLConnection, route: GatewayRoute): URL {
-  const baseURL = normalizeGatewayBaseURL(connection.base_url);
-  const url = new URL(route, baseURL);
-  if (url.protocol !== 'https:') {
-    if (url.protocol !== 'http:' || !connection.allow_loopback_http || !isLoopbackHost(url.hostname)) {
-      throw new GatewayClientError('GATEWAY_URL_INSECURE', 'Gateway URL must use HTTPS unless loopback development mode is enabled.');
-    }
-  }
-  return url;
+function integer(value: unknown, minimum = 0): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) return invalid();
+  return value;
 }
-
-function abortError(): GatewayClientError {
-  const error = new GatewayClientError('GATEWAY_CANCELED', 'Gateway request was canceled.', null, true);
-  error.name = 'AbortError';
-  return error;
+function boolean(value: unknown): boolean { if (typeof value !== 'boolean') return invalid(); return value; }
+function version(value: unknown): typeof GATEWAY_PROTOCOL_VERSION {
+  if (value !== GATEWAY_PROTOCOL_VERSION) throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
+  return value;
 }
-
-function gatewayTimeoutMs(value: unknown): number {
-  return Math.max(1, Math.floor(Number(value) || DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS));
+function permissions(value: unknown): GatewayPermissions {
+  const item = object(value);
+  return { access: boolean(item.access), manage_members: boolean(item.manage_members), configure_cloud: boolean(item.configure_cloud) };
 }
-
-function throwIfCanceled(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError();
-  }
+function cloudPermission(value: unknown): GatewayCloudPermission {
+  if (value !== 'inherit' && value !== 'allow' && value !== 'deny') return invalid();
+  return value;
 }
-
-function parseGatewayHTTPResponse(raw: string, statusCode: number): unknown {
-  const parsed = parseEnvelope(raw);
-  if (statusCode === 404 && !parsed) {
-    throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol mismatch. Update Gateway and Desktop to matching versions.', statusCode);
-  }
-  if (!parsed) {
-    throw new GatewayClientError(
-      'GATEWAY_INVALID_RESPONSE',
-      statusCode >= 400
-        ? `Gateway returned HTTP ${statusCode} with a non-JSON response.`
-        : 'Gateway returned a non-JSON response.',
-      statusCode,
-    );
-  }
-  if (parsed.ok === false || statusCode >= 400) {
-    throw new GatewayClientError(
-      compact(parsed.error?.code) || 'GATEWAY_REQUEST_FAILED',
-      gatewayErrorMessage(parsed, statusCode),
-      statusCode,
-      parsed.error?.retryable === true,
-    );
-  }
-  return Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed;
+function hookStatus(value: unknown): GatewayHookStatus {
+  if (value !== 'not_configured' && value !== 'configured' && value !== 'invalid') return invalid();
+  return value;
 }
-
-function isLoopbackHost(hostname: string): boolean {
-  const host = compact(hostname).toLowerCase();
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+function policy(value: unknown): GatewayPolicy {
+  const item = object(value);
+  if (item.publication_mode !== 'manual' && item.publication_mode !== 'automatic') return invalid();
+  return { revision: integer(item.revision, 1), default_cloud_allowed: boolean(item.default_cloud_allowed), publication_mode: item.publication_mode };
 }
-
-function requestGatewayJSON(
-  record: GatewayRecord,
-  route: GatewayRoute,
-  body: unknown | undefined,
-  options: GatewayTransportCallOptions,
-  method: GatewayHTTPMethod = 'POST',
-): Promise<GatewayHTTPDataResult> {
-  if (record.connection.kind !== 'url') {
-    return Promise.reject(new GatewayClientError('GATEWAY_TRANSPORT_UNSUPPORTED', 'This Gateway transport is not handled by the URL client.'));
-  }
-  let url: URL;
-  try {
-    url = gatewayURL(record.connection, route);
-  } catch (error) {
-    return Promise.reject(error);
-  }
-
-  const payload = body == null ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body), 'utf8');
-  const requestImpl = url.protocol === 'https:' ? https.request : http.request;
-  return new Promise((resolve, reject) => {
-    if (options.signal?.aborted) {
-      reject(abortError());
-      return;
-    }
-    void createGatewayAuthHeaders({
-      record,
-      method,
-      route: `/${route}`,
-      body,
-      secret_store: options.secretStore,
-    }).then((authHeaders) => {
-      const req = requestImpl(url, {
-        method,
-        timeout: gatewayTimeoutMs(options.timeoutMs),
-        headers: {
-          Accept: 'application/json',
-          ...authHeaders,
-          ...(payload.length > 0 ? { 'Content-Length': payload.length } : {}),
-        },
-      }, (response) => {
-        response.setEncoding('utf8');
-        let raw = '';
-        response.on('data', (chunk: string) => {
-          raw += chunk;
-        });
-        response.on('end', () => {
-          const statusCode = response.statusCode ?? 500;
-          try {
-            resolve({
-              data: parseGatewayHTTPResponse(raw, statusCode),
-            });
-          } catch (error) {
-            reject(error);
-          }
-        });
-      });
-      const onAbort = () => {
-        req.destroy(abortError());
-      };
-      options.signal?.addEventListener('abort', onAbort, { once: true });
-      req.on('timeout', () => {
-        req.destroy(new GatewayClientError('GATEWAY_TIMEOUT', 'Gateway request timed out.', null, true));
-      });
-      req.on('error', (error) => {
-        options.signal?.removeEventListener('abort', onAbort);
-        reject(error instanceof GatewayClientError
-          ? error
-          : new GatewayClientError('GATEWAY_UNREACHABLE', error.message || 'Desktop could not reach the Gateway.', null, true));
-      });
-      req.on('close', () => {
-        options.signal?.removeEventListener('abort', onAbort);
-      });
-      if (payload.length > 0) {
-        req.write(payload);
-      }
-      req.end();
-    }).catch(reject);
-  });
-}
-
-function requestGatewayPairingJSON(
-  record: GatewayRecord,
-  route: Extract<GatewayRoute, 'gateway/v3/pairing/challenge' | 'gateway/v3/pairing/complete'>,
-  body: unknown,
-  options: GatewayRequestOptions = {},
-): Promise<unknown> {
-  if (record.connection.kind !== 'url') {
-    return Promise.reject(new GatewayClientError('GATEWAY_TRANSPORT_UNSUPPORTED', 'This Gateway transport is not handled by the URL client.'));
-  }
-  let url: URL;
-  try {
-    url = gatewayURL(record.connection, route);
-  } catch (error) {
-    return Promise.reject(error);
-  }
-
-  const payload = Buffer.from(JSON.stringify(body), 'utf8');
-  const requestImpl = url.protocol === 'https:' ? https.request : http.request;
-  return new Promise((resolve, reject) => {
-    if (options.signal?.aborted) {
-      reject(abortError());
-      return;
-    }
-    const req = requestImpl(url, {
-      method: 'POST',
-      timeout: gatewayTimeoutMs(options.timeoutMs),
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'Content-Length': payload.length,
-      },
-    }, (response) => {
-      response.setEncoding('utf8');
-      let raw = '';
-      response.on('data', (chunk: string) => {
-        raw += chunk;
-      });
-      response.on('end', () => {
-        const statusCode = response.statusCode ?? 500;
-        try {
-          resolve(parseGatewayHTTPResponse(raw, statusCode));
-        } catch (error) {
-          reject(error);
-        }
-      });
-    });
-    const onAbort = () => {
-      req.destroy(abortError());
-    };
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-    req.on('timeout', () => {
-      req.destroy(new GatewayClientError('GATEWAY_TIMEOUT', 'Gateway request timed out.', null, true));
-    });
-    req.on('error', (error) => {
-      options.signal?.removeEventListener('abort', onAbort);
-      reject(error instanceof GatewayClientError
-        ? error
-        : new GatewayClientError('GATEWAY_UNREACHABLE', error.message || 'Desktop could not reach the Gateway.', null, true));
-    });
-    req.on('close', () => {
-      options.signal?.removeEventListener('abort', onAbort);
-    });
-    req.write(payload);
-    req.end();
-  });
-}
-
-async function requestGatewayBridgeJSON(
-  bridge: RuntimePlacementBridgeSessionHandle,
-  record: GatewayRecord,
-  route: GatewayRoute,
-  body: unknown | undefined,
-  options: GatewayTransportCallOptions,
-  method: GatewayHTTPMethod = 'POST',
-): Promise<GatewayHTTPDataResult> {
-  throwIfCanceled(options.signal);
-  const authHeaders = options.authenticated === false ? {} : await createGatewayAuthHeaders({
-    record, method, route: `/${route}`, body, secret_store: options.secretStore,
-  });
-  throwIfCanceled(options.signal);
-  const payload = body == null ? '' : JSON.stringify(body);
-  const agent = new http.Agent({ keepAlive: false });
-  agent.createConnection = () => {
-    try { return openGatewayBridgeSocket(bridge) as net.Socket; }
-    catch (error) {
-      throw error instanceof GatewayClientError ? error
-        : new GatewayClientError('GATEWAY_BRIDGE_UNAVAILABLE', 'Gateway bridge is unavailable.', null, true);
-    }
-  };
-  try {
-    return await new Promise((resolve, reject) => {
-      let settled = false;
-      const finish = (error?: unknown, data?: unknown) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        options.signal?.removeEventListener('abort', abort);
-        if (error) reject(error); else resolve({ data });
-      };
-      const fail = (error: Error) => finish(error instanceof GatewayClientError ? error
-        : new GatewayClientError('GATEWAY_BRIDGE_FAILED', 'Gateway bridge request failed.', null, true));
-      const req = http.request('http://redeven-gateway.local', {
-        agent, method, path: `/${route}`, headers: {
-          Accept: 'application/json', 'X-Redeven-Gateway-Transport': 'desktop_bridge',
-          ...authHeaders, 'Content-Length': Buffer.byteLength(payload), Connection: 'close',
-        },
-      }, response => {
-        response.setEncoding('utf8');
-        let raw = '';
-        response.on('data', (chunk: string) => { raw += chunk; });
-        response.once('error', fail);
-        response.once('end', () => {
-          try { finish(undefined, parseGatewayHTTPResponse(raw, response.statusCode ?? 500)); }
-          catch (error) { finish(error); }
-        });
-      });
-      const abort = () => req.destroy(abortError());
-      const timer = setTimeout(() => req.destroy(new GatewayClientError('GATEWAY_TIMEOUT', 'Gateway request timed out.', null, true)), gatewayTimeoutMs(options.timeoutMs));
-      req.once('error', fail);
-      options.signal?.addEventListener('abort', abort, { once: true });
-      if (options.signal?.aborted) abort(); else req.end(payload);
-    });
-  } finally { agent.destroy(); }
-}
-
-function normalizeProtocolVersion(value: unknown): typeof GATEWAY_PROTOCOL_VERSION {
-  const protocolVersion = typeof value === 'string' ? value : '';
-  if (protocolVersion !== GATEWAY_PROTOCOL_VERSION) {
-    throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
-  }
-  return protocolVersion;
-}
-
-function normalizeEnvironmentState(value: unknown): DesktopGatewayEnvironmentState {
-  switch (compact(value)) {
-    case 'available':
-    case 'starting':
-    case 'stopped':
-    case 'archived':
-      return compact(value) as DesktopGatewayEnvironmentState;
-    default:
-      return 'unknown';
-  }
-}
-
-function normalizeEnvironmentCapability(value: unknown): DesktopGatewayEnvironmentCapability | null {
-  switch (compact(value)) {
-    case 'open':
-    case 'open_direct':
-    case 'open_via_gateway':
-    case 'terminal':
-    case 'files':
-    case 'web_service':
-    case 'port_forward':
-      return compact(value) as DesktopGatewayEnvironmentCapability;
-    default:
-      return null;
-  }
-}
-
-function normalizeGatewayCapability(value: unknown): DesktopGatewayCapability | null {
-  switch (compact(value)) {
-    case 'env_catalog':
-    case 'env_direct_open':
-    case 'env_proxy_open':
-    case 'env_profile_write':
-    case 'terminal':
-    case 'files':
-    case 'web_service':
-    case 'port_forward':
-      return compact(value) as DesktopGatewayCapability;
-    default:
-      return null;
-  }
-}
-
-function normalizeGatewayStatus(value: unknown): GatewayCatalogResponse['gateway']['status'] {
-  switch (compact(value)) {
-    case 'online':
-    case 'pairing_required':
-    case 'trust_changed':
-    case 'error':
-      return compact(value) as GatewayCatalogResponse['gateway']['status'];
-    default:
-      return 'unknown';
-  }
-}
-
-function normalizeOriginKind(value: unknown): DesktopGatewayEnvironmentOriginKind {
-  switch (compact(value)) {
-    case 'gateway_host':
-    case 'ssh_target':
-    case 'container':
-    case 'network_target':
-      return compact(value) as DesktopGatewayEnvironmentOriginKind;
-    default:
-      return 'network_target';
-  }
-}
-
-function normalizeProfileAccessRouteKind(value: unknown): DesktopGatewayEnvironmentProfileAccessRoute['kind'] | null {
-  const kind = compact(value);
-  return kind === 'url' || kind === 'ssh_host' || kind === 'ssh_container' ? kind : null;
-}
-
-function normalizeGatewayEnvironmentProfileAccessRoute(value: unknown): DesktopGatewayEnvironmentProfileAccessRoute | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-  const candidate = value as Record<string, unknown>;
-  const kind = normalizeProfileAccessRouteKind(candidate.kind);
-  if (!kind) {
-    return undefined;
-  }
-  const route: DesktopGatewayEnvironmentProfileAccessRoute = {
-    kind,
-    ...(compact(candidate.url) ? { url: compact(candidate.url) } : {}),
-    ...(compact(candidate.origin_label) ? { origin_label: compact(candidate.origin_label) } : {}),
-    ...(kind !== 'url' ? {
-      ssh_destination: compact(candidate.ssh_destination), ssh_port: Number(candidate.ssh_port) || 22,
-      auth_mode: compact(candidate.auth_mode), ssh_runtime_root: compact(candidate.ssh_runtime_root),
-      ...(kind === 'ssh_container' ? { container_engine: compact(candidate.container_engine),
-        container_id: compact(candidate.container_id), container_runtime_root: compact(candidate.container_runtime_root) } : {}),
-    } : {}),
-  };
-  if (route.kind === 'url' && (!route.url || desktopGatewayProfileURLHasEmbeddedCredentials(route.url))) {
-    return undefined;
-  }
-  return route;
-}
-
-function normalizeGatewayEnvironmentProfile(value: unknown): DesktopGatewayEnvironment['profile'] | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-  const candidate = value as Record<string, unknown>;
-  const kind = normalizeProfileAccessRouteKind(candidate.access_route_kind);
-  if (candidate.managed !== true || !kind) {
-    return undefined;
-  }
-  if (candidate.access_mode !== 'direct_url' && candidate.access_mode !== 'gateway_proxy') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile access_mode is invalid.');
-  }
+function member(value: unknown): GatewayMember {
+  const item = object(value), metadata = object(item.metadata);
+  if (item.state !== 'active' && item.state !== 'removed') return invalid();
   return {
-    managed: true,
-    access_route_kind: kind,
-    access_mode: candidate.access_mode,
-  };
-}
-
-function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  const candidate = value as Record<string, unknown>;
-  const gatewayEnvID = compact(candidate.gateway_env_id);
-  if (!gatewayEnvID || gatewayEnvID === 'env_local') {
-    return null;
-  }
-  const origin = candidate.origin && typeof candidate.origin === 'object'
-    ? candidate.origin as Record<string, unknown>
-    : {};
-  const accessCapabilities = Array.isArray(candidate.access_capabilities)
-    ? candidate.access_capabilities.map(normalizeEnvironmentCapability).filter((item): item is DesktopGatewayEnvironmentCapability => !!item)
-    : [];
-  const normalizedAccessCapabilities = [...new Set(accessCapabilities)];
-  const profileAccessRoute = normalizeGatewayEnvironmentProfileAccessRoute(candidate.profile_access_route);
-  const accessEndpoint = normalizeGatewayEnvironmentProfileAccessRoute(candidate.access_endpoint);
-  const profile = normalizeGatewayEnvironmentProfile(candidate.profile);
-  return {
-    gateway_env_id: gatewayEnvID,
-    display_name: compact(candidate.display_name) || gatewayEnvID,
-    env_kind: 'reachable_env',
-    state: normalizeEnvironmentState(candidate.state),
-    capabilities: normalizedAccessCapabilities,
-    access_capabilities: normalizedAccessCapabilities,
-    ...(profile ? { profile } : {}),
-    ...(profileAccessRoute ? { profile_access_route: profileAccessRoute } : {}),
-    ...(accessEndpoint ? { access_endpoint: accessEndpoint } : {}),
-    origin: {
-      kind: normalizeOriginKind(origin.kind),
-      label: compact(origin.label),
-    },
-    ...(Number.isFinite(Number(candidate.last_seen_at_unix_ms)) && Number(candidate.last_seen_at_unix_ms) > 0
-      ? { last_seen_at_unix_ms: Math.floor(Number(candidate.last_seen_at_unix_ms)) }
-      : {}),
-  };
-}
-
-function normalizeGatewayEnvProfileUpsertResponse(value: unknown): GatewayEnvProfileUpsertResponse {
-  if (!value || typeof value !== 'object') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile save response is invalid.');
-  }
-  const candidate = value as Record<string, unknown>;
-  const environment = normalizeGatewayEnvironment(candidate.environment);
-  if (!environment) {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile save response is missing environment.');
-  }
-  return {
-    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
-    environment,
-  };
-}
-
-function normalizeGatewayEnvProfileDeleteResponse(value: unknown): GatewayEnvProfileDeleteResponse {
-  if (!value || typeof value !== 'object') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile delete response is invalid.');
-  }
-  const candidate = value as Record<string, unknown>;
-  const gatewayEnvID = compact(candidate.gateway_env_id);
-  if (!gatewayEnvID) {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile delete response is missing gateway_env_id.');
-  }
-  return {
-    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
-    gateway_env_id: gatewayEnvID,
-    deleted: candidate.deleted === true,
-  };
-}
-
-function normalizeGatewayProfileURL(value: string | undefined): string {
-  const raw = compact(value);
-  if (!raw) {
-    return '';
-  }
-  if (desktopGatewayProfileURLHasEmbeddedCredentials(raw)) {
-    throw new GatewayClientError('GATEWAY_PROFILE_URL_CREDENTIALS_UNSUPPORTED', 'Gateway target URL must not include embedded credentials.');
-  }
-  try {
-    const parsed = new URL(raw);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return raw;
-    }
-    parsed.pathname = '/';
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.toString();
-  } catch {
-    return raw;
-  }
-}
-
-function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unknown {
-  if (request.access_route.kind !== 'url') {
-    throw new Error('Gateway profile access must use an explicit URL endpoint.');
-  }
-  const routeURL = normalizeGatewayProfileURL(request.access_route.url);
-  return {
-    protocol_version: GATEWAY_PROTOCOL_VERSION,
-    profile: {
-      ...(compact(request.gateway_env_id) ? { gateway_env_id: compact(request.gateway_env_id) } : {}),
-      display_name: compact(request.display_name),
-      ...(request.access_mode ? { access_mode: request.access_mode } : {}),
-      access_route: {
-        kind: 'url',
-        ...(routeURL ? { url: routeURL } : {}),
-        ...(compact(request.access_route.origin_label) ? { origin_label: compact(request.access_route.origin_label) } : {}),
-      },
+    member_id: id(item.member_id), runtime_public_id: id(item.runtime_public_id), member_version: integer(item.member_version, 1),
+    display_name: text(item.display_name), state: item.state, connected: boolean(item.connected),
+    last_seen_at_unix_ms: integer(item.last_seen_at_unix_ms), cloud_permission: cloudPermission(item.cloud_permission),
+    effective_cloud_allowed: boolean(item.effective_cloud_allowed), cloud_state: text(item.cloud_state, 80),
+    cloud_revocation_pending: boolean(item.cloud_revocation_pending), metadata: {
+      hostname: text(metadata.hostname), os: text(metadata.os, 64), arch: text(metadata.arch, 64), version: text(metadata.version, 128),
     },
   };
 }
-
 export function normalizeGatewayCatalogResponse(value: unknown): GatewayCatalogResponse {
-  if (!value || typeof value !== 'object') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway catalog response is invalid.');
-  }
-  const candidate = value as Record<string, unknown>;
-  const gateway = candidate.gateway && typeof candidate.gateway === 'object'
-    ? candidate.gateway as Record<string, unknown>
-    : {};
-  const gatewayID = compact(gateway.gateway_id);
-  if (!gatewayID) {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway catalog response is missing gateway_id.');
-  }
+  const item = object(value), gateway = object(item.gateway), hooks = object(item.hook_status);
+  const memberURL = new URL(text(gateway.member_url));
+  if (memberURL.protocol !== 'https:' || memberURL.origin !== gateway.member_url || memberURL.username || memberURL.password || memberURL.pathname !== '/' || memberURL.search || memberURL.hash) return invalid();
+  if (!Array.isArray(item.members) || item.members.length > 1024) return invalid();
+  const members = item.members.map(member);
+  if (new Set(members.map(value => value.member_id)).size !== members.length) return invalid();
   return {
-    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
-    gateway: {
-      gateway_id: gatewayID,
-      display_name: compact(gateway.display_name) || gatewayID,
-      status: normalizeGatewayStatus(gateway.status),
-      capabilities: Array.isArray(gateway.capabilities)
-        ? [...new Set(gateway.capabilities.map(normalizeGatewayCapability).filter((item): item is DesktopGatewayCapability => !!item))]
-        : [],
-      ...(compact(gateway.gateway_public_key_fingerprint) ? { gateway_public_key_fingerprint: compact(gateway.gateway_public_key_fingerprint) } : {}),
-    },
-    environments: Array.isArray(candidate.environments)
-      ? candidate.environments.map(normalizeGatewayEnvironment).filter((item): item is DesktopGatewayEnvironment => !!item)
-      : [],
+    protocol_version: version(item.protocol_version), gateway: {
+      gateway_id: id(gateway.gateway_id), display_name: text(gateway.display_name),
+      gateway_public_key_fingerprint: text(gateway.gateway_public_key_fingerprint), member_url: text(gateway.member_url),
+      member_tls_root_pem: text(gateway.member_tls_root_pem, 16_384), permissions: permissions(gateway.permissions),
+    }, members, policy: policy(item.policy), revision: integer(item.revision, 1), rebuild_required: boolean(item.rebuild_required),
+    hook_status: { 'member.admit': hookStatus(hooks['member.admit']), 'access.open': hookStatus(hooks['access.open']), 'cloud.publish': hookStatus(hooks['cloud.publish']) },
   };
 }
-
-function normalizePairingChallengeResponse(value: unknown): GatewayPairingChallengeResponse {
-  if (!value || typeof value !== 'object') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway pairing challenge response is invalid.');
+function envelope(raw: string, status: number): unknown {
+  let data: Record<string, unknown>;
+  try { data = object(JSON.parse(raw)); }
+  catch { throw new GatewayClientError(status === 404 ? 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' : 'GATEWAY_INVALID_RESPONSE', 'Gateway returned an invalid protocol response.', status); }
+  if (status >= 400 || data.ok !== true) {
+    const error = data.error && typeof data.error === 'object' ? data.error as Record<string, unknown> : {};
+    const code = typeof error.code === 'string' && /^[A-Z_]{1,80}$/u.test(error.code) ? error.code : 'GATEWAY_REQUEST_FAILED';
+    throw new GatewayClientError(code, `Gateway request failed with ${code}.`, status, status === 429 || status >= 500);
   }
-  const candidate = value as Record<string, unknown>;
-  const gatewayPublicKey = typeof candidate.gateway_public_key === 'string' ? candidate.gateway_public_key : '';
-  const response = {
-    protocol_version: typeof candidate.protocol_version === 'string' ? candidate.protocol_version : '',
-    gateway_id: compact(candidate.gateway_id),
-    gateway_public_key: gatewayPublicKey,
-    gateway_public_key_fingerprint: compact(candidate.gateway_public_key_fingerprint) || undefined,
-    gateway_nonce: compact(candidate.gateway_nonce),
-    pairing_code: compact(candidate.pairing_code) || undefined,
-    expires_at_unix_ms: Number(candidate.expires_at_unix_ms),
-    signature: compact(candidate.signature),
-  };
-  if (
-    response.protocol_version !== GATEWAY_PROTOCOL_VERSION
-    || !response.gateway_id
-    || !compact(response.gateway_public_key)
-    || !response.gateway_nonce
-    || !Number.isFinite(response.expires_at_unix_ms)
-    || !response.signature
-  ) {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway pairing challenge response is incomplete.');
-  }
-  return response;
+  return data.data;
 }
 
-function normalizePairingCompleteResponse(value: unknown): GatewayPairingCompleteResponse {
-  if (!value || typeof value !== 'object') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway pairing completion response is invalid.');
-  }
-  const candidate = value as Record<string, unknown>;
-  const response: GatewayPairingCompleteResponse = {
-    protocol_version: typeof candidate.protocol_version === 'string' ? candidate.protocol_version : '',
-    gateway_id: compact(candidate.gateway_id),
-    client_key_id: compact(candidate.client_key_id),
-    paired_at_unix_ms: Number(candidate.paired_at_unix_ms),
-    proof: compact(candidate.proof),
-  };
-  if (
-    response.protocol_version !== GATEWAY_PROTOCOL_VERSION
-    || !response.gateway_id
-    || !response.client_key_id
-    || !Number.isFinite(response.paired_at_unix_ms)
-    || !response.proof
-  ) {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway pairing completion response is incomplete.');
-  }
-  return response;
-}
+/** One signed v4 client for URL and trusted host transports. The optional bridge
+ * changes only byte delivery; it never grants Runtime lifecycle permissions.
+ */
+export class GatewayClient {
+  constructor(private readonly secretStore: GatewaySecretStore, private readonly bridge?: RuntimePlacementBridgeSessionHandle) {}
 
-function assertLocalDirectArtifactURL(rawURL: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawURL);
-  } catch {
-    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact URL is invalid.');
+  async verifyAddress(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<void> {
+    const nonce = randomBytes(24).toString('base64url');
+    const response = await this.request(record, 'identity', { protocol_version: GATEWAY_PROTOCOL_VERSION, nonce }, options);
+    assertGatewayAddressProof(record, nonce, response);
   }
-  if (parsed.username || parsed.password) {
-    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact URL must not include embedded credentials.');
-  }
-  if (parsed.search || parsed.hash) {
-    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact URL must not include query or fragment data.');
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact URL must use HTTP or HTTPS.');
-  }
-  return parsed.toString();
-}
 
-function normalizeConnectArtifact(value: unknown): GatewayConnectArtifact {
-  if (!value || typeof value !== 'object') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway open-session response is missing connect_artifact.');
-  }
-  const candidate = value as Record<string, unknown>;
-  const kind = compact(candidate.kind);
-  const expiresAt = Number(candidate.expires_at_unix_ms);
-  const artifactNonce = compact(candidate.artifact_nonce);
-  const proof = compact(candidate.proof);
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || !artifactNonce || !proof) {
-    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway connect artifact is invalid or expired.');
-  }
-  if (kind === 'local_direct_artifact' || kind === 'gateway_proxy_artifact') {
-    const url = compact(candidate.url);
-    if (!url) {
-      throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact is missing its URL.');
+  private async request(record: GatewayRecord, route: string, body: unknown, options: GatewayRequestOptions, authenticated = true): Promise<unknown> {
+    const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 20_000)]) : AbortSignal.timeout(options.timeoutMs ?? 20_000);
+    signal.throwIfAborted();
+    const path = `/gateway/v4/${route}`;
+    const headers = authenticated ? await createGatewayAuthHeaders({ record, method: 'POST', route: path, body, secret_store: this.secretStore }) : {};
+    signal.throwIfAborted();
+    let url: URL;
+    let agent: http.Agent | undefined;
+    if (this.bridge) {
+      url = new URL(path, 'http://redeven-gateway.local');
+      agent = new http.Agent({ keepAlive: false });
+      agent.createConnection = () => openGatewayBridgeSocket(this.bridge!) as net.Socket;
+    } else {
+      if (record.connection.kind !== 'url') throw new GatewayClientError('GATEWAY_BRIDGE_UNAVAILABLE', 'Gateway host bridge is unavailable.');
+      url = new URL(`gateway/v4/${route}`, normalizeGatewayBaseURL(record.connection.base_url));
+      if (url.protocol !== 'https:' && !(record.connection.allow_loopback_http && url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname))) {
+        throw new GatewayClientError('GATEWAY_URL_INSECURE', 'Gateway requires HTTPS.');
+      }
     }
-    const normalizedURL = assertLocalDirectArtifactURL(url);
-    const gatewaySessionID = compact(candidate.gateway_session_id);
-    if (kind === 'gateway_proxy_artifact' && !gatewaySessionID) {
-      throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway proxy artifact is missing its session identity.');
-    }
-    return {
-      kind,
-      url: normalizedURL,
-      ...(kind === 'gateway_proxy_artifact' ? { gateway_session_id: gatewaySessionID } : {}),
-      expires_at_unix_ms: Math.floor(expiresAt),
-      artifact_nonce: artifactNonce,
-      proof,
-    };
+    const payload = JSON.stringify(body);
+    if (Buffer.byteLength(payload) > 64 << 10) throw new GatewayClientError('INVALID_REQUEST', 'Gateway request exceeds its size limit.');
+    try {
+      return await new Promise((resolve, reject) => {
+        const request = (url.protocol === 'https:' ? https.request : http.request)(url, {
+          method: 'POST', agent: agent ?? false, signal, headers: {
+            ...headers, 'Content-Type': 'application/json', Accept: 'application/json',
+            'Content-Length': Buffer.byteLength(payload), Connection: 'close',
+            ...(this.bridge ? { 'X-Redeven-Gateway-Transport': 'desktop_bridge' } : {}),
+          },
+        }, response => {
+          const parts: Buffer[] = []; let bytes = 0;
+          response.on('data', (part: Buffer) => {
+            bytes += part.length;
+            if (bytes > 2 << 20) request.destroy(new GatewayClientError('GATEWAY_RESPONSE_LIMIT', 'Gateway response exceeds its size limit.'));
+            else parts.push(part);
+          });
+          response.once('error', reject);
+          response.once('end', () => { try { resolve(envelope(Buffer.concat(parts).toString('utf8'), response.statusCode ?? 500)); } catch (error) { reject(error); } });
+        });
+        request.once('error', error => reject(error instanceof GatewayClientError ? error : new GatewayClientError(signal.aborted ? 'GATEWAY_CANCELED' : 'GATEWAY_UNREACHABLE', 'Gateway request could not complete.', null, true)));
+        request.end(payload);
+      });
+    } catch (error) {
+      if (error instanceof GatewayClientError) throw error;
+      throw new GatewayClientError(signal.aborted ? 'GATEWAY_CANCELED' : 'GATEWAY_UNREACHABLE', 'Gateway request could not complete.', null, true);
+    } finally { agent?.destroy(); }
   }
-  if (kind === 'desktop_bridge_artifact') {
-    const bridgeSessionID = compact(candidate.bridge_session_id);
-    const routeID = compact(candidate.route_id);
-    if (!bridgeSessionID || !routeID) {
-      throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway bridge artifact is incomplete.');
-    }
-    return {
-      kind,
-      ...(compact(candidate.url) ? { url: compact(candidate.url) } : {}),
-      ...(compact(candidate.gateway_session_id) ? { gateway_session_id: compact(candidate.gateway_session_id) } : {}),
-      bridge_session_id: bridgeSessionID,
-      route_id: routeID,
-      expires_at_unix_ms: Math.floor(expiresAt),
-      artifact_nonce: artifactNonce,
-      proof,
-    };
-  }
-  throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway connect artifact kind is not supported.');
-}
-
-export function normalizeGatewayOpenSessionResponse(value: unknown): GatewayOpenSessionResponse {
-  if (!value || typeof value !== 'object') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway open-session response is invalid.');
-  }
-  const candidate = value as Record<string, unknown>;
-  const gatewaySessionID = compact(candidate.gateway_session_id);
-  const gatewayEnvID = compact(candidate.gateway_env_id);
-  if (!gatewaySessionID || !gatewayEnvID) {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway open-session response is missing session identity.');
-  }
-  const diagnostics = candidate.diagnostics_hint && typeof candidate.diagnostics_hint === 'object'
-    ? candidate.diagnostics_hint as Record<string, unknown>
-    : null;
-  return {
-    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
-    gateway_session_id: gatewaySessionID,
-    gateway_env_id: gatewayEnvID,
-    connect_artifact: normalizeConnectArtifact(candidate.connect_artifact),
-    ...(diagnostics ? {
-      diagnostics_hint: {
-        gateway_env_id: compact(diagnostics.gateway_env_id),
-        connection_kind: compact(diagnostics.connection_kind),
-      },
-    } : {}),
-  };
-}
-
-function assertProxyArtifactIdentity(record: GatewayRecord, response: GatewayOpenSessionResponse): void {
-  const artifact = response.connect_artifact;
-  if (artifact.kind !== 'gateway_proxy_artifact') return;
-  const url = new URL(artifact.url!);
-  const prefix = record.connection.kind === 'url' ? new URL('gateway/v3/access/', record.connection.base_url).pathname : '';
-  if (record.connection.kind !== 'url' || url.origin !== new URL(record.connection.base_url).origin
-    || artifact.gateway_session_id !== response.gateway_session_id
-    || !url.pathname.startsWith(prefix) || !/^[A-Za-z0-9_-]{43}\/$/u.test(url.pathname.slice(prefix.length))) {
-    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway proxy artifact does not match its Gateway and session.');
-  }
-}
-
-function assertGatewayIdentity(record: GatewayRecord, observedGatewayID: string, observedFingerprint: string | undefined): void {
-  const profile: GatewayTrustProfile | undefined = record.trust_profile;
-  if (gatewayProtocolID(record) !== observedGatewayID) {
-    throw new GatewayClientError('GATEWAY_ID_MISMATCH', 'Gateway response does not match the saved Gateway.');
-  }
-  if (profile) {
-    if (!observedFingerprint) {
-      throw new GatewayClientError('GATEWAY_FINGERPRINT_REQUIRED', 'Gateway response did not include the pinned fingerprint.');
-    }
-    assertGatewayFingerprint(profile, observedFingerprint);
-  }
-}
-
-export class GatewayURLClient {
-  constructor(private readonly secretStore: GatewaySecretStore) {}
 
   async catalog(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayCatalogResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v3/catalog', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION,
-    }, {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    });
-    const catalog = normalizeGatewayCatalogResponse(data.data);
-    assertGatewayIdentity(record, catalog.gateway.gateway_id, catalog.gateway.gateway_public_key_fingerprint);
+    const catalog = normalizeGatewayCatalogResponse(await this.request(record, 'catalog', { protocol_version: GATEWAY_PROTOCOL_VERSION }, options));
+    if (catalog.gateway.gateway_id !== gatewayProtocolID(record)) throw new GatewayClientError('GATEWAY_ID_MISMATCH', 'Gateway identity changed.');
+    assertGatewayFingerprint(record.trust_profile!, catalog.gateway.gateway_public_key_fingerprint);
     return catalog;
   }
 
-  async pairingChallenge(
-    record: GatewayRecord,
-    request: Readonly<{
-      protocol_version: 'redeven-gateway-v3';
-	      client_nonce: string;
-	      client_public_key: string;
-	      binding_audience: string;
-	      pairing_code?: string;
-	    }>,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayPairingChallengeResponse> {
-    const data = await requestGatewayPairingJSON(record, 'gateway/v3/pairing/challenge', request, options);
-    return normalizePairingChallengeResponse(data);
+  async pairingChallenge(record: GatewayRecord, request: Readonly<{ protocol_version: typeof GATEWAY_PROTOCOL_VERSION; client_nonce: string; client_public_key: string; binding_audience: string; pairing_code?: string }>, options: GatewayRequestOptions = {}): Promise<GatewayPairingChallengeResponse> {
+    const value = object(await this.request(record, 'pairing/challenge', request, options, false));
+    return { protocol_version: version(value.protocol_version), gateway_id: id(value.gateway_id), gateway_public_key: text(value.gateway_public_key),
+      gateway_public_key_fingerprint: text(value.gateway_public_key_fingerprint), gateway_nonce: text(value.gateway_nonce),
+      ...(value.pairing_code ? { pairing_code: text(value.pairing_code) } : {}), expires_at_unix_ms: integer(value.expires_at_unix_ms, 1), signature: text(value.signature) };
   }
 
-  async completePairing(
-    record: GatewayRecord,
-    request: GatewayPairingCompleteRequest,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayPairingCompleteResponse> {
-    const data = await requestGatewayPairingJSON(record, 'gateway/v3/pairing/complete', request, options);
-    return normalizePairingCompleteResponse(data);
+  async completePairing(record: GatewayRecord, request: GatewayPairingCompleteRequest, options: GatewayRequestOptions = {}): Promise<GatewayPairingCompleteResponse> {
+    const value = object(await this.request(record, 'pairing/complete', request, options, false));
+    return { protocol_version: version(value.protocol_version), gateway_id: id(value.gateway_id), client_key_id: id(value.client_key_id),
+      paired_at_unix_ms: integer(value.paired_at_unix_ms, 1), permissions: permissions(value.permissions), proof: text(value.proof) };
   }
 
-  async openSession(
-    record: GatewayRecord,
-    request: GatewayOpenSessionRequest,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayOpenSessionResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v3/open-session', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION,
-      gateway_env_id: request.gateway_env_id,
-      requested_capability: request.requested_capability,
-      client_nonce: request.client_nonce,
-      ...(request.access_mode ? { access_mode: request.access_mode } : {}),
-    }, {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
+  async invite(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayMemberInvitation> {
+    const item = object(await this.request(record, 'invitations', { protocol_version: GATEWAY_PROTOCOL_VERSION }, options));
+    if (item.gateway_id !== gatewayProtocolID(record)) return invalid();
+    return { protocol_version: version(item.protocol_version), invitation_id: id(item.invitation_id), gateway_id: id(item.gateway_id),
+      gateway_url: text(item.gateway_url), gateway_public_key: text(item.gateway_public_key), gateway_tls_root_pem: text(item.gateway_tls_root_pem, 16_384),
+      token: text(item.token), issued_at_unix_ms: integer(item.issued_at_unix_ms, 1), expires_at_unix_ms: integer(item.expires_at_unix_ms, 1), signature: text(item.signature) };
+  }
+
+  async openMember(record: GatewayRecord, memberID: string, options: GatewayRequestOptions = {}): Promise<GatewayMemberOffer> {
+    const offer = object(await this.request(record, 'access/open', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID) }, options));
+    version(offer.protocol_version);
+    if (offer.member_id !== memberID) return invalid();
+    integer(offer.member_version, 1); integer(offer.generation, 1); integer(offer.expires_at_unix_ms, 1); id(offer.channel_id);
+    // The transport validates the full signed delegation, certificate and SDK
+    // artifact before connecting. No unverified endpoint reaches a dialer.
+    object(offer.artifact); object(offer.service); object(offer.delegation);
+    return offer as unknown as GatewayMemberOffer;
+  }
+
+  async memberService(record: GatewayRecord, memberID: string, memberVersion: number, options: GatewayRequestOptions = {}): Promise<GatewayMemberServiceResponse> {
+    const response = object(await this.request(record, 'access/service', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID), expected_member_version: integer(memberVersion, 1) }, options));
+    version(response.protocol_version);
+    if (response.member_id !== memberID || response.member_version !== memberVersion) return invalid();
+    object(response.service); object(response.delegation);
+    return response as unknown as GatewayMemberServiceResponse;
+  }
+
+  memberConnectionPath(catalog: GatewayCatalogResponse): NodeConnectionPath | undefined {
+    if (!this.bridge) return undefined;
+    const endpoint = new URL(catalog.gateway.member_url);
+    return { connect: async ({ hostname, port, signal }) => {
+      signal.throwIfAborted();
+      if (hostname !== endpoint.hostname.replace(/^\[|\]$/gu, '') || port !== Number(endpoint.port || 443)) throw new GatewayClientError('MEMBER_TARGET_DENIED', 'Gateway member endpoint does not match.');
+      const socket = openGatewayBridgeSocket(this.bridge!, 'gateway_member');
+      const abort = () => socket.destroy();
+      signal.addEventListener('abort', abort, { once: true });
+      socket.once('close', () => signal.removeEventListener('abort', abort));
+      if (signal.aborted) { socket.destroy(); signal.throwIfAborted(); }
+      return socket;
+    } };
+  }
+
+  async removeMember(record: GatewayRecord, memberID: string, expectedMemberVersion: number, options: GatewayRequestOptions = {}): Promise<void> {
+    await this.request(record, 'members/remove', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID), expected_member_version: integer(expectedMemberVersion, 1) }, options);
+  }
+
+  async updateMembers(record: GatewayRecord, items: readonly GatewayMemberPolicyUpdate[], options: GatewayRequestOptions = {}): Promise<readonly GatewayMemberOperationResult[]> {
+    const value = await this.request(record, 'members/policy', { protocol_version: GATEWAY_PROTOCOL_VERSION, items }, options);
+    if (!Array.isArray(value) || value.length !== items.length) return invalid();
+    return value.map((raw, index) => {
+      const item = object(raw);
+      if (item.member_id !== items[index].member_id) return invalid();
+      return { member_id: id(item.member_id), ...(item.error_code ? { error_code: text(item.error_code, 80) } : {}), ...(item.member ? { member: member(item.member) } : {}) };
     });
-    const response = normalizeGatewayOpenSessionResponse(data.data);
-    assertProxyArtifactIdentity(record, response);
-    if (response.gateway_env_id !== request.gateway_env_id) {
-      throw new GatewayClientError('GATEWAY_ENV_ID_MISMATCH', 'Gateway open-session response does not match the requested environment.');
-    }
-    assertGatewayConnectArtifactProof({
-      record,
-      gateway_env_id: request.gateway_env_id,
-      requested_capability: request.requested_capability,
-      client_nonce: request.client_nonce,
-      gateway_session_id: response.gateway_session_id,
-      artifact: response.connect_artifact,
-    });
-    return response;
   }
 
-  async checkEnvironmentProfile(record: GatewayRecord, targetURL: string, clientNonce: string, options: GatewayRequestOptions = {}): Promise<unknown> {
-    const data = await requestGatewayJSON(record, 'gateway/v3/env-profiles/check', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION, target_url: targetURL, client_nonce: clientNonce,
-    }, { secretStore: this.secretStore, ...options });
-    const response = data.data as { protocol_version?: string; access_identity?: unknown };
-    if (response?.protocol_version !== GATEWAY_PROTOCOL_VERSION) throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol mismatch.');
-    return response.access_identity;
+  async updatePolicy(record: GatewayRecord, next: GatewayPolicy, options: GatewayRequestOptions = {}): Promise<void> {
+    await this.request(record, 'policy', { protocol_version: GATEWAY_PROTOCOL_VERSION, expected_revision: next.revision, policy: next }, options);
   }
 
-  async upsertEnvironmentProfile(
-    record: GatewayRecord,
-    request: GatewayEnvProfileUpsertRequest,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayEnvProfileUpsertResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v3/env-profiles/upsert', gatewayEnvProfilePayload(request), {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    });
-    return normalizeGatewayEnvProfileUpsertResponse(data.data);
-  }
-
-  async closeSession(record: GatewayRecord, gatewaySessionID: string, options: GatewayRequestOptions = {}): Promise<void> {
-    await requestGatewayJSON(record, 'gateway/v3/close-session', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION,
-      gateway_session_id: gatewaySessionID,
-    }, { secretStore: this.secretStore, ...options });
-  }
-
-  async deleteEnvironmentProfile(
-    record: GatewayRecord,
-    request: GatewayEnvProfileDeleteRequest,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayEnvProfileDeleteResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v3/env-profiles/delete', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION,
-      gateway_env_id: compact(request.gateway_env_id),
-    }, {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    });
-    return normalizeGatewayEnvProfileDeleteResponse(data.data);
+  async dismissMigration(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<void> {
+    await this.request(record, 'migration/dismiss', { protocol_version: GATEWAY_PROTOCOL_VERSION }, options);
   }
 }
 
-export class GatewayBridgeClient {
-  constructor(
-    private readonly secretStore: GatewaySecretStore,
-    private readonly bridge: RuntimePlacementBridgeSessionHandle,
-  ) {}
-
-  async catalog(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayCatalogResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/catalog', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION,
-    }, {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    });
-    const catalog = normalizeGatewayCatalogResponse(data.data);
-    assertGatewayIdentity(record, catalog.gateway.gateway_id, catalog.gateway.gateway_public_key_fingerprint);
-    return catalog;
-  }
-
-  async closeSession(record: GatewayRecord, gatewaySessionID: string, options: GatewayRequestOptions = {}): Promise<void> {
-    await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/close-session', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION,
-      gateway_session_id: gatewaySessionID,
-    }, { secretStore: this.secretStore, ...options });
-  }
-
-  async pairingChallenge(
-    record: GatewayRecord,
-    request: Readonly<{
-      protocol_version: 'redeven-gateway-v3';
-	      client_nonce: string;
-	      client_public_key: string;
-	      binding_audience: string;
-	      pairing_code?: string;
-	    }>,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayPairingChallengeResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/pairing/challenge', request, {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-      authenticated: false,
-    });
-    return normalizePairingChallengeResponse(data.data);
-  }
-
-  async completePairing(
-    record: GatewayRecord,
-    request: GatewayPairingCompleteRequest,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayPairingCompleteResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/pairing/complete', request, {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-      authenticated: false,
-    });
-    return normalizePairingCompleteResponse(data.data);
-  }
-
-  async openSession(
-    record: GatewayRecord,
-    request: GatewayOpenSessionRequest,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayOpenSessionResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/open-session', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION,
-      gateway_env_id: request.gateway_env_id,
-      requested_capability: request.requested_capability,
-      client_nonce: request.client_nonce,
-      bridge_session_id: request.bridge_session_id,
-      route_id: request.route_id,
-      ...(request.access_mode ? { access_mode: request.access_mode } : {}),
-    }, {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    });
-    const response = normalizeGatewayOpenSessionResponse(data.data);
-    if (response.gateway_env_id !== request.gateway_env_id) {
-      throw new GatewayClientError('GATEWAY_ENV_ID_MISMATCH', 'Gateway open-session response does not match the requested environment.');
-    }
-    assertGatewayConnectArtifactProof({
-      record,
-      gateway_env_id: request.gateway_env_id,
-      requested_capability: request.requested_capability,
-      client_nonce: request.client_nonce,
-      gateway_session_id: response.gateway_session_id,
-      artifact: response.connect_artifact,
-    });
-    return response;
-  }
-
-  async checkEnvironmentProfile(record: GatewayRecord, targetURL: string, clientNonce: string, options: GatewayRequestOptions = {}): Promise<unknown> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/env-profiles/check', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION, target_url: targetURL, client_nonce: clientNonce,
-    }, { secretStore: this.secretStore, ...options });
-    const response = data.data as { protocol_version?: string; access_identity?: unknown };
-    if (response?.protocol_version !== GATEWAY_PROTOCOL_VERSION) throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol mismatch.');
-    return response.access_identity;
-  }
-
-  async upsertEnvironmentProfile(
-    record: GatewayRecord,
-    request: GatewayEnvProfileUpsertRequest,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayEnvProfileUpsertResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/env-profiles/upsert', gatewayEnvProfilePayload(request), {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    });
-    return normalizeGatewayEnvProfileUpsertResponse(data.data);
-  }
-
-  async deleteEnvironmentProfile(
-    record: GatewayRecord,
-    request: GatewayEnvProfileDeleteRequest,
-    options: GatewayRequestOptions = {},
-  ): Promise<GatewayEnvProfileDeleteResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v3/env-profiles/delete', {
-      protocol_version: GATEWAY_PROTOCOL_VERSION,
-      gateway_env_id: compact(request.gateway_env_id),
-    }, {
-      secretStore: this.secretStore,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    });
-    return normalizeGatewayEnvProfileDeleteResponse(data.data);
-  }
-}
-
-export function redactGatewayDiagnosticValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactGatewayDiagnosticValue);
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
-      key,
-      isSensitiveGatewayKey(key) ? '[redacted]' : redactGatewayDiagnosticValue(nested),
-    ]));
-  }
-  return typeof value === 'string' ? value.replace(/(\/gateway\/v3\/access\/)[A-Za-z0-9_-]+/gu, '$1[redacted]').slice(0, 240) : value;
-}
-
-function isSensitiveGatewayKey(key: string): boolean {
-  const lowered = key.toLowerCase();
-  return lowered.includes('token')
-    || lowered.includes('secret')
-    || lowered.includes('password')
-    || lowered.includes('authorization')
-    || lowered.includes('cookie')
-    || lowered.includes('signature')
-    || lowered.includes('private_key')
-    || lowered.includes('proof');
-}
+export { redactGatewayDiagnosticValue } from '../shared/gatewayDiagnostics';

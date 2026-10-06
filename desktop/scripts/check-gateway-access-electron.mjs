@@ -10,14 +10,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 execFileSync(path.join(root, '../scripts/check_desktop_electron_test_runtime.sh'), [], { stdio: 'inherit' });
 const configPath = process.argv[2];
 const fixture = JSON.parse(await readFile(configPath, 'utf8'));
-const output = path.join(root, fixture.deployment ? 'dist/gateway-deployment-acceptance' : 'dist/gateway-access-acceptance');
+const output = path.join(root, 'dist/gateway-access-acceptance');
 await mkdir(output, { recursive: true });
 await rm(path.join(output, 'report.json'), { force: true });
 const runner = path.join(output, 'runner.cjs');
 await build({ entryPoints: [path.join(root, 'scripts/fixtures/gateway-runtime-browser.ts')], outfile: path.join(output, 'runtime-browser.js'),
   bundle: true, platform: 'browser', format: 'iife', globalName: 'GatewayAcceptance' });
 await build({ entryPoints: [path.join(root, 'scripts/fixtures/gateway-access-electron.ts')], outfile: runner,
-  bundle: true, platform: 'node', format: 'cjs', external: ['electron', '@floegence/floe-webapp-core/*'] });
+  bundle: true, platform: 'node', format: 'cjs', external: ['electron', '@floegence/floe-webapp-core/*', '@floegence/flowersec-core/*'] });
 const child = spawn(electron, [runner, `--user-data-dir=${fixture.state}/electron`, `--redeven-smoke-run=${randomUUID()}`], {
   stdio: 'inherit', cwd: fixture.state, detached: process.platform !== 'win32',
   env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, REDEVEN_GATEWAY_FIXTURE: configPath, REDEVEN_GATEWAY_OUTPUT: output },
@@ -32,7 +32,7 @@ const stop = () => {
 };
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
-const timer = setTimeout(stop, fixture.deployment ? 14 * 60_000 : 90_000);
+const timer = setTimeout(stop, 90_000);
 const result = await new Promise((resolve, reject) => {
   child.once('error', reject); child.once('exit', (code, signal) => resolve({ code, signal }));
 }).finally(() => { clearTimeout(timer); process.off('SIGINT', stop); process.off('SIGTERM', stop); });

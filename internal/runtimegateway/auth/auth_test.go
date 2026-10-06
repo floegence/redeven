@@ -166,6 +166,7 @@ func pairTestClient(t *testing.T, store *trust.Store, audience string) testPairi
 		"gateway_id":       challenge.GatewayID,
 		"gateway_nonce":    challenge.GatewayNonce,
 		"protocol_version": protocol.Version,
+		"permissions":      protocol.GatewayPermissions{Access: true},
 	})
 	if err != nil {
 		t.Fatalf("CanonicalJSON() error = %v", err)
@@ -181,6 +182,7 @@ func pairTestClient(t *testing.T, store *trust.Store, audience string) testPairi
 		GatewayID:       challenge.GatewayID,
 		BindingAudience: audience,
 		ClientKeyID:     clientKeyID,
+		Permissions:     protocol.GatewayPermissions{Access: true},
 		Proof:           proof,
 	}); err != nil {
 		t.Fatalf("CompletePairing() error = %v", err)

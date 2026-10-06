@@ -65,7 +65,7 @@ func TestEgressForwardsAuthenticatedBytesAndRevokesMember(t *testing.T) {
 	proxy.StartTLS()
 	defer proxy.Close()
 	sum := sha256.Sum256(certificate.Certificate[0])
-	member := Member{ID: "member-a", Generation: 1, CertificateSHA256: hex.EncodeToString(sum[:]), Destinations: []string{target.Addr().String()}}
+	member := Member{MemberVersion: 1, ID: "member-a", Generation: 1, CertificateSHA256: hex.EncodeToString(sum[:]), Destinations: []string{target.Addr().String()}}
 	if err := server.ReplaceMembers([]Member{member}); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestEgressRejectsDuplicateOrMalformedMembersWithoutChangingPolicy(t *testin
 		t.Fatal(err)
 	}
 	defer server.Close()
-	valid := Member{ID: "a", Generation: 1, CertificateSHA256: strings.Repeat("a", 64), Destinations: []string{"cloud.example:443"}}
+	valid := Member{MemberVersion: 1, ID: "a", Generation: 1, CertificateSHA256: strings.Repeat("a", 64), Destinations: []string{"cloud.example:443"}}
 	if err := server.ReplaceMembers([]Member{valid}); err != nil {
 		t.Fatal(err)
 	}
@@ -181,5 +181,42 @@ func TestEgressRejectsDuplicateOrMalformedMembersWithoutChangingPolicy(t *testin
 	valid.Destinations = []string{"cloud.example:443/path"}
 	if err := server.ReplaceMembers([]Member{valid}); err == nil {
 		t.Fatal("malformed destination accepted")
+	}
+}
+
+func TestEgressIdentityExpiryRejectsNewFlowsWithoutCancelingExisting(t *testing.T) {
+	server, err := New(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	member := Member{ID: "member", MemberVersion: 1, Generation: 1, CertificateSHA256: strings.Repeat("a", 64), Destinations: []string{"cloud.example:443"}, AdmissionExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli()}
+	if err := server.ReplaceMembers([]Member{member}); err != nil {
+		t.Fatal(err)
+	}
+	active, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	connection, status := server.reserve(member.CertificateSHA256, member.Destinations[0], cancel)
+	if status != http.StatusOK {
+		t.Fatal(status)
+	}
+	defer connection.reservation.Release()
+	member.AdmissionExpiresAtUnixMS = time.Now().Add(-time.Second).UnixMilli()
+	if err := server.ReplaceMembers([]Member{member}); err != nil {
+		t.Fatal(err)
+	}
+	if active.Err() != nil {
+		t.Fatal("identity expiry terminated an existing business flow")
+	}
+	denied, status := server.reserve(member.CertificateSHA256, member.Destinations[0], func() {})
+	if denied != nil || status != http.StatusForbidden {
+		t.Fatal("expired identity admitted a new flow")
+	}
+	member.MemberVersion++
+	if err := server.ReplaceMembers([]Member{member}); err != nil {
+		t.Fatal(err)
+	}
+	if active.Err() == nil {
+		t.Fatal("member replacement failed to close the old flow")
 	}
 }

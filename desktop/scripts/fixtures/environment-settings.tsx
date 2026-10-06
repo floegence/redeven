@@ -49,7 +49,7 @@ const settings: DesktopWelcomeRuntime['settings'] = {
   }, cancel() {},
   async requestRuntimeFlower() { return { ok: false, error: { message: 'Fixture has no Flower runtime.' } }; },
 };
-render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launcher: {
+const launcher: DesktopWelcomeRuntime["launcher"] = {
   getSnapshot: async () => snapshot, subscribeSnapshot: listener => { receiveSnapshot = listener; return () => { receiveSnapshot = undefined; }; }, getSSHConfigHosts: async () => [],
   performAction: async request => {
     window.settingsFixture.requests.push(request);
@@ -92,4 +92,6 @@ render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launc
     }
     return { ok: true, outcome: 'saved_environment' };
   },
-} }} />, document.getElementById('root')!);
+};
+window.redevenDesktopLauncher = launcher;
+render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launcher }} />, document.getElementById('root')!);

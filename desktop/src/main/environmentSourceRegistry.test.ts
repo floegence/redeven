@@ -1,3 +1,4 @@
+import { memberFixture } from '../testSupport/gatewayMembershipFixture';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -119,14 +120,7 @@ describe('environmentSourceRegistry', () => {
       label: 'Provider Env',
     });
     const gateway = gatewaySource({
-      environments: [{
-        gateway_env_id: 'env_demo',
-        display_name: 'Provider Env',
-        env_kind: 'reachable_env',
-        state: 'available',
-        capabilities: ['open'],
-        origin: { kind: 'network_target', label: 'Bastion network' },
-      }],
+      environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Provider Env' }],
     });
     const preferences = testDesktopPreferences({
       provider_environments: [providerEnvironment],

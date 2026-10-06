@@ -174,6 +174,9 @@ func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
 	if r == nil || s == nil {
 		return false
 	}
+	if origin := gatewayMemberOrigin(r); origin != "" {
+		return r.TLS != nil && origin == "https://"+r.Host
+	}
 	if bridge := nativeRuntimeRequest(r); bridge != nil {
 		return r.Host == bridge.authority
 	}
@@ -298,7 +301,7 @@ func strictSameOriginWSRequest(r *http.Request, requireOrigin bool) bool {
 	if r == nil {
 		return false
 	}
-	expected, err := canonicalPublicAuthority(r.Host, requestProtocol(r))
+	expected, err := canonicalRequestAuthority(r, r.Host)
 	if err != nil {
 		return false
 	}
@@ -328,8 +331,21 @@ func requestOriginAuthority(r *http.Request, requireOrigin bool) (string, bool) 
 	if !strings.EqualFold(strings.TrimSpace(origin.Scheme), expectedScheme) {
 		return "", false
 	}
-	actual, err := canonicalPublicAuthority(origin.Host, expectedScheme)
+	actual, err := canonicalRequestAuthority(r, origin.Host)
 	return actual, err == nil
+}
+
+// Logical member origins are admitted only by the reverse HTTPS listener. This
+// context cannot be supplied by a header or used to widen public listener hosts.
+func canonicalRequestAuthority(r *http.Request, raw string) (string, error) {
+	if origin := gatewayMemberOrigin(r); origin != "" {
+		parsed, err := url.Parse(origin)
+		if err != nil || r.TLS == nil || parsed.Scheme != "https" || (raw != parsed.Host && raw != net.JoinHostPort(parsed.Hostname(), "443")) {
+			return "", fmt.Errorf("invalid member authority")
+		}
+		return net.JoinHostPort(parsed.Hostname(), "443"), nil
+	}
+	return canonicalPublicAuthority(raw, requestProtocol(r))
 }
 
 func dedupeStrings(values []string) []string {

@@ -9,7 +9,7 @@ import (
 )
 
 func TestGatewayCloudWireFixtures(t *testing.T) {
-	raw, err := os.ReadFile("testdata/wire-v1.json")
+	raw, err := os.ReadFile("testdata/wire-v2.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +17,7 @@ func TestGatewayCloudWireFixtures(t *testing.T) {
 	if err := json.Unmarshal(raw, &fixtures); err != nil {
 		t.Fatal(err)
 	}
-	types := map[string]any{"gateway_status": &GatewayStatus{}, "runtime_status": &RuntimeStatus{}, "publish_response": &PublishResponse{}, "directory_sync": &DirectorySync{}, "runtime_join": &RuntimeJoin{}, "closure_list": &ClosureList{}}
+	types := map[string]any{"gateway_status": &GatewayStatus{}, "runtime_status": &RuntimeStatus{}, "publish_response": &PublishResponse{}, "directory_sync": &DirectorySync{}, "runtime_join": &RuntimeJoin{}, "closure_list": &ClosureList{}, "closure_request": &RuntimeClosureExchangeRequest{}, "closure_response": &RuntimeClosureExchangeResponse{}}
 	for name, target := range types {
 		t.Run(name, func(t *testing.T) {
 			original := fixtures[name]

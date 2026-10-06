@@ -1,4 +1,5 @@
-import { normalizeGatewayJoinMaterial, type GatewayJoinMaterial, type GatewayJoinPhase } from './gatewayJoin';
+import type { GatewayMember, GatewayPermissions, GatewayPolicy, GatewayMemberInvitation, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
+import { normalizeGatewayInvitation, type GatewayMembershipStatus, type GatewayMembershipOperation } from './gatewayJoin';
 import { normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from './gatewayCloud';
 import type { EnvironmentAccessRoute } from './environmentAccess';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
@@ -32,8 +33,6 @@ import type {
   DesktopEnvironmentSource,
   DesktopGatewayConnectionKind,
   DesktopGatewayEnvironment,
-  DesktopGatewayEnvironmentCapability,
-  DesktopGatewayEnvironmentState,
   DesktopGatewayDiagnosis,
   DesktopGatewayServiceState,
   DesktopGatewaySource,
@@ -110,6 +109,7 @@ export type DesktopLauncherOperationSubjectKind =
   | 'control_plane';
 export type DesktopLauncherActionOutcome =
   | 'gateway_cloud_updated'
+  | 'gateway_membership_updated'
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
@@ -149,9 +149,8 @@ export type DesktopLauncherActionOutcome =
   | 'refreshed_gateway_catalog'
   | 'refreshed_gateway_status'
   | 'deleted_gateway'
-  | 'checked_gateway_environment_profile'
-  | 'saved_gateway_environment'
-  | 'deleted_gateway_environment'
+  | 'gateway_invitation_created'
+  | 'gateway_members_updated'
   | 'initialized_environment'
   | 'reconciled_runtime_operation'
   | 'saved_environment'
@@ -202,7 +201,7 @@ export type DesktopLauncherActionFailureCode =
   | 'operation_not_cancelable'
   | 'action_invalid';
 export type DesktopLauncherActionKind =
-  | 'join_runtime_gateway_cloud'
+  | 'manage_runtime_gateway'
   | 'configure_gateway_cloud'
   | 'inspect_gateway_cloud'
   | 'open_local_environment'
@@ -245,7 +244,11 @@ export type DesktopLauncherActionKind =
   | 'refresh_gateway_status'
   | 'delete_gateway'
   | 'upsert_environment_registration'
-  | 'check_gateway_environment_profile'
+  | 'invite_gateway_runtime'
+  | 'remove_gateway_member'
+  | 'update_gateway_policy'
+  | 'update_gateway_members'
+  | 'dismiss_gateway_rebuild'
   | 'set_environment_access_route'
   | 'delete_environment_registration'
   | 'cancel_launcher_operation'
@@ -316,7 +319,6 @@ export type DesktopGatewayStartRequiredRetryAction = Readonly<
       gateway_env_id: string;
       label: string;
       start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
-      access_mode?: 'direct_url' | 'gateway_proxy';
     }
 >;
 export type DesktopGatewayResolveFocus =
@@ -353,16 +355,7 @@ export type DesktopEnvironmentRegistrationUpsert = Readonly<
       auto_runtime_probe_enabled: boolean;
     } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>
       & Pick<DesktopLauncherRuntimeTarget, 'ssh_password' | 'ssh_password_mode'>)
-  | {
-      registration_ref: Extract<EnvironmentRegistrationRef, { kind: 'gateway_environment' }>;
-      display_name: string;
-      access_mode?: 'direct_url' | 'gateway_proxy';
-      access_route: Readonly<{
-        kind: 'url';
-        url?: string;
-        origin_label?: string;
-      }>;
-    }
+
 >;
 
 export type DesktopEnvironmentEntry = Readonly<{
@@ -433,13 +426,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   gateway_trust_state?: DesktopGatewayTrustState;
   gateway_status_message?: string;
   gateway_endpoint_label?: string;
-  gateway_environment_state?: DesktopGatewayEnvironmentState;
-  gateway_environment_kind?: DesktopGatewayEnvironment['env_kind'];
-  gateway_environment_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
-  gateway_environment_access_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
-  gateway_environment_profile?: DesktopGatewayEnvironment['profile'];
-  gateway_environment_profile_access_route?: DesktopGatewayEnvironment['profile_access_route'];
-  gateway_environment_origin?: DesktopGatewayEnvironment['origin'];
+  gateway_member?: GatewayMember;
   gateway_access_result?: DesktopGatewayEnvironment['last_access_result'];
   gateway_sync_state?: DesktopGatewaySource['sync_state'];
   environment_source?: DesktopEnvironmentSource;
@@ -457,7 +444,6 @@ export type DesktopEnvironmentEntry = Readonly<{
   runtime_operations: DesktopRuntimeOperationPlans;
   auto_runtime_probe_enabled?: boolean;
   auto_runtime_probe_configurable?: boolean;
-  gateway_open_access_mode?: 'direct_url' | 'gateway_proxy';
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_action: DesktopEnvironmentOpenAction;
@@ -679,7 +665,6 @@ export type DesktopLauncherOperationNextAction = Readonly<
       gateway_env_id: string;
       label: string;
       start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
-      access_mode?: 'direct_url' | 'gateway_proxy';
       label_key?: DesktopTranslationKey;
     }
   | {
@@ -691,7 +676,7 @@ export type DesktopLauncherOperationNextAction = Readonly<
 >;
 
 export type DesktopLauncherActionRequest = Readonly<
-  | { kind: 'join_runtime_gateway_cloud'; runtime_target_id: DesktopProviderRuntimeLinkTargetID; material?: GatewayJoinMaterial }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopProviderRuntimeLinkTargetID; operation: GatewayMembershipOperation; invitation?: GatewayMemberInvitation; environment_choice?: 'preserve' | 'new' }
   | { kind: 'configure_gateway_cloud'; gateway_id: string; configuration: GatewayCloudConfiguration }
   | { kind: 'inspect_gateway_cloud'; gateway_id: string }
   | {
@@ -711,7 +696,6 @@ export type DesktopLauncherActionRequest = Readonly<
       gateway_env_id: string;
       label: string;
       start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
-      access_mode?: 'direct_url' | 'gateway_proxy';
     }
   | {
       kind: 'open_remote_environment';
@@ -806,7 +790,7 @@ export type DesktopLauncherActionRequest = Readonly<
       connection_kind: 'url';
       gateway_url: string;
       pairing_code?: string;
-      profile_write?: boolean;
+      permissions?: GatewayPermissions;
       allow_loopback_http: boolean;
     }
   | {
@@ -814,7 +798,7 @@ export type DesktopLauncherActionRequest = Readonly<
       gateway_id?: string;
       display_name: string;
       connection_kind: Exclude<DesktopGatewayConnectionKind, 'url'>;
-    profile_write?: boolean;
+    permissions?: GatewayPermissions;
       host_access: DesktopRuntimeHostAccess;
       placement: DesktopRuntimePlacement;
       ssh_password?: string;
@@ -883,7 +867,11 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'upsert_environment_registration';
       registration: DesktopEnvironmentRegistrationUpsert;
     }
-  | { kind: 'check_gateway_environment_profile'; gateway_id: string; target_url: string }
+  | { kind: 'invite_gateway_runtime'; gateway_id: string }
+  | { kind: 'remove_gateway_member'; gateway_id: string; member_id: string; member_version: number }
+  | { kind: 'update_gateway_policy'; gateway_id: string; policy: GatewayPolicy }
+  | { kind: 'update_gateway_members'; gateway_id: string; items: readonly { member_id: string; expected_member_version: number; cloud_permission: GatewayCloudPermission }[] }
+  | { kind: 'dismiss_gateway_rebuild'; gateway_id: string }
   | { kind: 'set_environment_access_route'; environment_id: string; route_id: string }
   | {
       kind: 'delete_environment_registration';
@@ -913,8 +901,10 @@ export type DesktopLauncherActionRequest = Readonly<
 >;
 
 export type DesktopLauncherActionSuccess = Readonly<{
+  gateway_invitation?: GatewayMemberInvitation;
+  gateway_member_results?: readonly GatewayMemberOperationResult[];
   gateway_cloud?: GatewayCloudSummary;
-  gateway_join_phase?: GatewayJoinPhase;
+  gateway_membership?: GatewayMembershipStatus;
   ok: true;
   outcome: DesktopLauncherActionOutcome;
   environment_id?: string;
@@ -923,7 +913,6 @@ export type DesktopLauncherActionSuccess = Readonly<{
   session_key?: string;
   utility_window_kind?: 'launcher' | 'environment_settings';
   reinstall_preview?: DesktopReinstallTargetPreview;
-  gateway_profile_check?: Readonly<{ identity_verified: boolean; matched_environment_label?: string }>;
 }>;
 
 export type DesktopReinstallTargetPreview = Readonly<{
@@ -1180,11 +1169,37 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   const candidate = value as Partial<DesktopLauncherActionRequest>;
   const kind = compact(candidate.kind) as DesktopLauncherActionKind;
   switch (kind) {
-    case 'check_gateway_environment_profile': {
-      const input = candidate as { gateway_id?: unknown; target_url?: unknown };
+    case 'invite_gateway_runtime':
+    case 'dismiss_gateway_rebuild': {
+      const gateway_id = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      return gateway_id ? { kind, gateway_id } : null;
+    }
+    case 'remove_gateway_member': {
+      const input = candidate as Record<string, unknown>;
+      const gateway_id = compact(input.gateway_id), member_id = compact(input.member_id);
+      const member_version = input.member_version;
+      return gateway_id && member_id && Number.isSafeInteger(member_version) && Number(member_version) > 0
+        ? { kind, gateway_id, member_id, member_version: Number(member_version) } : null;
+    }
+    case 'update_gateway_policy': {
+      const input = candidate as Record<string, unknown>, policy = input.policy as Partial<GatewayPolicy> | undefined;
       const gateway_id = compact(input.gateway_id);
-      const target_url = compact(input.target_url);
-      return gateway_id && target_url ? { kind, gateway_id, target_url } : null;
+      if (!gateway_id || !policy || !Number.isSafeInteger(policy.revision) || Number(policy.revision) < 1
+        || typeof policy.default_cloud_allowed !== 'boolean' || !['manual', 'automatic'].includes(String(policy.publication_mode))) return null;
+      return { kind, gateway_id, policy: { revision: Number(policy.revision), default_cloud_allowed: policy.default_cloud_allowed, publication_mode: policy.publication_mode as GatewayPolicy['publication_mode'] } };
+    }
+    case 'update_gateway_members': {
+      const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id);
+      if (!gateway_id || !Array.isArray(input.items) || !input.items.length || input.items.length > 1024) return null;
+      const items: { member_id: string; expected_member_version: number; cloud_permission: GatewayCloudPermission }[] = [];
+      for (const raw of input.items) {
+        if (!raw || typeof raw !== 'object') return null;
+        const item = raw as Record<string, unknown>, member_id = compact(item.member_id);
+        if (!member_id || !Number.isSafeInteger(item.expected_member_version) || Number(item.expected_member_version) < 1
+          || !['inherit', 'allow', 'deny'].includes(String(item.cloud_permission))) return null;
+        items.push({ member_id, expected_member_version: Number(item.expected_member_version), cloud_permission: item.cloud_permission as GatewayCloudPermission });
+      }
+      return new Set(items.map(item => item.member_id)).size === items.length ? { kind, gateway_id, items } : null;
     }
     case 'set_environment_access_route': {
       const input = candidate as { environment_id?: unknown; route_id?: unknown };
@@ -1245,8 +1260,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
     }
     case 'open_gateway_environment': {
-      const accessMode = compact((candidate as { access_mode?: unknown }).access_mode);
-      if (accessMode && accessMode !== 'direct_url' && accessMode !== 'gateway_proxy') return null;
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
       const gatewayEnvID = compact((candidate as { gateway_env_id?: unknown }).gateway_env_id);
@@ -1264,7 +1277,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         gateway_id: gatewayID,
         gateway_env_id: gatewayEnvID,
         label,
-        ...(accessMode ? { access_mode: accessMode as 'direct_url' | 'gateway_proxy' } : {}),
         ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
       };
     }
@@ -1425,6 +1437,9 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'upsert_gateway': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id) || undefined;
       const displayName = compact((candidate as { display_name?: unknown }).display_name);
+      const rawPermissions = (candidate as { permissions?: unknown }).permissions;
+      const permissions = normalizeGatewayPermissions(rawPermissions);
+      if (rawPermissions !== undefined && !permissions) return null;
       const connectionKind = compact((candidate as { connection_kind?: unknown }).connection_kind);
       if (connectionKind === '' || connectionKind === 'url') {
         const gatewayURL = compact((candidate as { gateway_url?: unknown }).gateway_url);
@@ -1437,7 +1452,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           display_name: displayName,
           connection_kind: 'url',
           gateway_url: gatewayURL,
-          profile_write: (candidate as { profile_write?: unknown }).profile_write === true,
+          permissions,
           ...(compact((candidate as { pairing_code?: unknown }).pairing_code)
             ? { pairing_code: compact((candidate as { pairing_code?: unknown }).pairing_code) }
             : {}),
@@ -1461,7 +1476,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         const passwordMode = compact(raw.ssh_password_mode);
         if (passwordMode && !['keep', 'replace', 'clear'].includes(passwordMode)) return null;
         return { kind, gateway_id: gatewayID, display_name: displayName, connection_kind: expected,
-          host_access: hostAccess, placement, profile_write: raw.profile_write === true,
+          host_access: hostAccess, placement, permissions,
           ssh_password: typeof raw.ssh_password === 'string' ? raw.ssh_password : undefined,
           ssh_password_mode: (passwordMode || 'keep') as 'keep' | 'replace' | 'clear' };
       } catch { return null; }
@@ -1529,12 +1544,16 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         gateway_id: gatewayID,
       };
     }
-    case 'join_runtime_gateway_cloud': {
-      const runtimeTargetID = compact((candidate as { runtime_target_id?: unknown }).runtime_target_id);
-      const raw = (candidate as { material?: unknown }).material;
-      const material = raw === undefined ? undefined : normalizeGatewayJoinMaterial(raw);
-      if (!/^(local|ssh|wsl):.+$/.test(runtimeTargetID) || material === null) return null;
-      return { kind, runtime_target_id: runtimeTargetID as DesktopProviderRuntimeLinkTargetID, ...(material ? { material } : {}) };
+    case 'manage_runtime_gateway': {
+      const input = candidate as Record<string, unknown>;
+      const runtimeTargetID = compact(input.runtime_target_id), operation = compact(input.operation);
+      const invitation = input.invitation === undefined ? undefined : normalizeGatewayInvitation(input.invitation);
+      const choice = input.environment_choice;
+      if (choice !== undefined && ((operation !== 'join' && operation !== 'replace') || (choice !== 'preserve' && choice !== 'new'))) return null;
+      if (!/^(local|ssh|wsl):.+$/u.test(runtimeTargetID) || !['join', 'replace', 'update-address', 'status', 'retry', 'leave'].includes(operation)
+        || ((operation === 'join' || operation === 'replace' || operation === 'update-address') ? !invitation : invitation !== undefined)) return null;
+      return { kind, runtime_target_id: runtimeTargetID as DesktopProviderRuntimeLinkTargetID,
+        operation: operation as GatewayMembershipOperation, ...(invitation ? { invitation } : {}), ...(choice ? { environment_choice: choice } : {}) };
     }
     case 'configure_gateway_cloud': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
@@ -1627,41 +1646,13 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           },
         };
       }
-      if (registrationRef.kind === 'local_environment') return null;
-      const displayName = compact(registrationCandidate.display_name);
-      const accessRouteRaw = registrationCandidate.access_route;
-      const accessRoute = accessRouteRaw && typeof accessRouteRaw === 'object'
-        ? accessRouteRaw as Record<string, unknown>
-        : {};
-      const routeKind = compact(accessRoute.kind);
-      if (displayName === '' || routeKind !== 'url') {
-        return null;
-      }
-      const normalizedRoute = {
-        kind: 'url' as const,
-        url: compact(accessRoute.url) || undefined,
-        origin_label: compact(accessRoute.origin_label) || undefined,
-      } as Extract<DesktopEnvironmentRegistrationUpsert, { registration_ref: { kind: 'gateway_environment' } }>['access_route'];
-      if (!normalizedRoute.url) {
-        return null;
-      }
-      const accessMode = compact(registrationCandidate.access_mode);
-      if (accessMode && accessMode !== 'direct_url' && accessMode !== 'gateway_proxy') return null;
-      return {
-        kind,
-        registration: {
-          registration_ref: registrationRef,
-          display_name: displayName,
-          access_route: normalizedRoute,
-          ...(accessMode ? { access_mode: accessMode as 'direct_url' | 'gateway_proxy' } : {}),
-        },
-      };
+      return null;
     }
     case 'delete_environment_registration': {
       const registrationRef = normalizeEnvironmentRegistrationRef(
         (candidate as { registration_ref?: unknown }).registration_ref,
       );
-      if (!registrationRef || registrationRef.kind === 'local_environment') return null;
+      if (!registrationRef || registrationRef.kind === 'local_environment' || registrationRef.kind === 'gateway_environment') return null;
       return {
         kind,
         registration_ref: registrationRef,
@@ -1692,4 +1683,12 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     default:
       return null;
   }
+}
+
+function normalizeGatewayPermissions(value: unknown): GatewayPermissions | undefined {
+  if (value === undefined) return undefined;
+  const permissions = value as Partial<GatewayPermissions> | null;
+  if (!permissions || typeof permissions.access !== 'boolean' || typeof permissions.manage_members !== 'boolean'
+    || typeof permissions.configure_cloud !== 'boolean') return undefined;
+  return { access: permissions.access, manage_members: permissions.manage_members, configure_cloud: permissions.configure_cloud };
 }

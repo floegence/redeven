@@ -36,6 +36,9 @@ func TestNativeCodeSpaceLocalAccessAndGeneration(t *testing.T) {
 func testNativeCodeSpaceLocalAccessAndGeneration(t *testing.T, origin string) {
 	calls := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != origin {
+			t.Error("native forwarding did not restore the authorized editor origin")
+		}
 		if r.Host != strings.TrimPrefix(origin, "http://") || r.URL.RequestURI() != "/echo?x=%2F&x=2" || r.Header.Get("X-Redeven-Code-Access") != "" || r.Header.Get("X-Redeven-Code-Origin") != "" {
 			t.Errorf("native request boundary: %s %s %v", r.Host, r.URL.RequestURI(), r.Header)
 		}

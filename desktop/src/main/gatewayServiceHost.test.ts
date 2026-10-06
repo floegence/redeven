@@ -30,6 +30,7 @@ describe('gatewayServiceHost', () => {
   it('does not install or start Gateway through a Runtime root', () => {
     const source = fs.readFileSync(path.join(__dirname, 'gatewayServiceHost.ts'), 'utf8');
     expect(source).not.toContain('/gateway/managed');
+    expect(source).not.toContain('--enable-profile-write');
     expect(source).not.toContain('--runtime-root "$runtime_root"');
     expect(source).toContain('managed_root="${state_root%/}/managed"');
   });

@@ -21,6 +21,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH="${arch}" GOWORK=off \
   go test -c -o "${STATE_DIR}/isolation.test" ./internal/gatewaycloud
 mkdir -p "${STATE_DIR}/cloud" "${STATE_DIR}/gateway" "${STATE_DIR}/runtime"
 for role in cloud gateway runtime; do mv "${STATE_DIR}/${role}.json" "${STATE_DIR}/${role}/${role}.json"; done
+mv "${STATE_DIR}/members.json" "${STATE_DIR}/gateway/members.json"
 mv "${STATE_DIR}/cloud-root.pem" "${STATE_DIR}/runtime/cloud-root.pem"
 printf 'nameserver 192.0.2.1\noptions timeout:1 attempts:1\n' > "${STATE_DIR}/resolv.conf"
 docker network create --internal --subnet 10.242.73.0/24 "${LAN_NETWORK}" >/dev/null
@@ -46,7 +47,7 @@ for stage in cloud gateway; do
 done
 # Only the Gateway address is reachable; Cloud DNS and public routing are absent.
 docker run --rm --name "${RUN_ID}-runtime" --network "${LAN_NETWORK}" --ip 10.242.73.3 \
-  -v "${STATE_DIR}/runtime:/state:ro" \
+  -v "${STATE_DIR}/runtime:/state" \
   -v "${STATE_DIR}/isolation.test:/isolation.test:ro" \
   -v "${STATE_DIR}/resolv.conf:/etc/resolv.conf:ro" \
   -e SSL_CERT_FILE=/state/cloud-root.pem -e REDEVEN_GATEWAY_ISOLATION_STATE=/state \

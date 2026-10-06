@@ -18,9 +18,9 @@ try {
   const i18n = createDesktopI18n('zh-CN');
   const writable = { ...source.gateway_sources[0], sync_state: 'ready' };
   const local = { ...writable, gateway_id: 'local-preview', display_name: 'Gateway-local', connection_kind: 'local_host',
-    management_capability: 'managed_local_host', status: 'offline', trust_state: 'unpaired', capabilities: [], sync_state: 'idle',
+    management_capability: 'managed_local_host', status: 'offline', trust_state: 'unpaired', capabilities: [], permissions: { access: false, manage_members: false, configure_cloud: false }, sync_state: 'idle',
     endpoint_label: 'This device', environments: [], service_state: { status: 'not_started', can_start: true, can_stop: false, can_restart: false, can_update: false, can_pair_after_start: true } };
-  const readonly = { ...writable, gateway_id: 'readonly-preview', display_name: 'Shared Gateway', capabilities: ['env_catalog'], environments: [] };
+  const readonly = { ...writable, gateway_id: 'readonly-preview', display_name: 'Shared Gateway', capabilities: ['member_access'], permissions: { access: true, manage_members: false, configure_cloud: false }, environments: [] };
   const snapshot = { ...source, platform_capabilities: { ...source.platform_capabilities, native_host_runtime: true },
     open_windows: [], environments: source.environments.filter(entry => entry.kind === 'gateway_environment'), gateway_sources: [local, writable, readonly] };
   for (const [width, dark, largeText] of [[1824, true, false], [1280, false, false], [430, true, true]]) {
@@ -54,7 +54,7 @@ try {
       if (index) assert.ok(row.top >= rows[index - 1].bottom, 'Gateways never share a row');
     }
     assert.ok((await card.innerText()).includes(i18n.t('gatewayAccess.directoryPending')));
-    assert.equal(await card.getByRole('button', { name: i18n.t('gatewayAccess.addEnvironment'), exact: true }).isDisabled(), true);
+    assert.equal(await card.getByRole('button', { name: i18n.t('gatewayMembers.invite'), exact: true }).isDisabled(), true);
     assert.equal(await library.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
     for (const button of await library.getByRole('button').all()) assert.equal(await button.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
     await library.evaluate(async el => { await Promise.all(el.getAnimations({ subtree: true }).filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished)); });
@@ -169,9 +169,8 @@ try {
     await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: 'Gateway-local' }), exact: true }).click();
     await page.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
     const setup = page.getByRole('dialog');
-    await setup.getByRole('button', { name: i18n.t('gatewayAccess.profileHelpLabel'), exact: true }).click();
-    await setup.getByText(i18n.t('gatewayAccess.profileHelpBody'), { exact: true }).waitFor();
-    assert.equal(await setup.getByRole('checkbox', { name: i18n.t('gatewayAccess.grantWrite'), exact: true }).isChecked(), false);
+    await setup.getByText(i18n.t('gatewayMembers.permissionBoundary'), { exact: true }).waitFor();
+    assert.equal(await setup.getByRole('checkbox', { name: i18n.t('gatewayMembers.manageMembers'), exact: true }).isChecked(), false);
     await setup.evaluate(async el => { await Promise.all(el.getAnimations({ subtree: true }).filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished)); });
     await page.screenshot({ path: `${output}/permission-${width}.png` });
     await page.keyboard.press('Escape'); await setup.waitFor({ state: 'detached' });

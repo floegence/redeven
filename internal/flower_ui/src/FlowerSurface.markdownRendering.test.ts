@@ -125,7 +125,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
     const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
     const headerRowIndex = src.indexOf('flower-chat-header-row');
-    const dockIndex = src.indexOf('flower-chat-bottom-dock-track', timelineListIndex);
+    const dockIndex = src.indexOf('flower-chat-bottom-dock-track', src.indexOf('const composerPanel ='));
     const statusLaneIndex = src.indexOf('flower-model-status-lane', dockIndex);
     const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
     const composerIndex = src.indexOf('flower-composer p-3');
@@ -137,7 +137,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(headerIndex).toBeGreaterThanOrEqual(0);
     expect(headerRowIndex).toBeGreaterThan(headerIndex);
     expect(timelineListIndex).toBeGreaterThanOrEqual(0);
-    expect(dockIndex).toBeGreaterThan(timelineListIndex);
+    expect(dockIndex).toBeGreaterThanOrEqual(0);
+    expect(src.indexOf('<Show when={!props.embeddedConversation}>{composerPanel()}</Show>')).toBeGreaterThan(timelineListIndex);
     expect(statusLaneIndex).toBeGreaterThan(dockIndex);
     expect(composerAnchorIndex).toBeGreaterThan(statusLaneIndex);
     expect(src).toContain('flower-composer-command-menu');

@@ -9,19 +9,24 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/floegence/redeven/internal/desktopbridge"
 	"github.com/floegence/redeven/internal/gatewaycloud"
+	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayservice"
+	"github.com/floegence/redeven/internal/gatewaystate"
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/processenv"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	processlib "github.com/shirou/gopsutil/v4/process"
 )
 
@@ -45,6 +50,7 @@ type serviceStatus struct {
 	Status                 string `json:"status"`
 	PID                    int    `json:"pid,omitempty"`
 	Listen                 string `json:"listen,omitempty"`
+	MemberListen           string `json:"member_listen,omitempty"`
 	StateRoot              string `json:"state_root"`
 	Executable             string `json:"executable,omitempty"`
 	ProcessStartedAtUnixMS int64  `json:"process_started_at_unix_ms,omitempty"`
@@ -75,6 +81,8 @@ func (c *cli) run(args []string) int {
 		return 0
 	}
 	switch strings.TrimSpace(strings.ToLower(args[0])) {
+	case "members", "invite", "policy":
+		return c.membershipCmd(args)
 	case "cloud-status":
 		return c.cloudStatusCmd(args[1:])
 	case "cloud-connect":
@@ -100,24 +108,31 @@ func (c *cli) run(args []string) int {
 
 func (c *cli) cloudConnectCmd(args []string) int {
 	fs := newFlagSet("cloud-connect")
-	jsonOutput := fs.Bool("json", false, "Return machine-readable approval details without starting the service.")
-	reauthorize := fs.Bool("reauthorize", false, "Register a new identity after revocation or expiry; requires Cloud approval and new Runtime consent.")
+	jsonOutput := fs.Bool("json", false, "Return machine-readable Cloud approval details.")
+	reauthorize := fs.Bool("reauthorize", false, "Register a new identity after revocation or expiry; requires new Namespace approval. Existing local memberships are retained.")
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	cloudOrigin := fs.String("cloud", "", "Redeven Cloud HTTPS origin (required).")
-	listenerURL := fs.String("gateway-url", "", "Internal HTTPS origin reachable by Runtime members.")
-	listen := fs.String("egress-listen", "0.0.0.0:7443", "Internal TLS listener address.")
-	if err := parseFlags(fs, args); err != nil || fs.NArg() != 0 || *listenerURL == "" || strings.TrimSpace(*cloudOrigin) == "" {
-		writeError(c.stderr, "Usage: redeven-gateway cloud-connect --cloud https://cloud.example.com --gateway-url https://gateway.internal:7443 [--state-root path]")
+	if err := parseFlags(fs, args); err != nil || fs.NArg() != 0 || strings.TrimSpace(*cloudOrigin) == "" {
+		writeError(c.stderr, "Usage: redeven-gateway cloud-connect --cloud https://cloud.example.com [--state-root path]")
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	root := normalizeStateRoot(*stateRoot)
-	configure := gatewaycloud.ConfigureGateway
-	if *reauthorize {
-		configure = gatewaycloud.ReauthorizeGateway
+	starter := *c
+	starter.stdout = c.stderr
+	if code := starter.serviceStartCmd([]string{"--state-root", root}); code != 0 {
+		return code
 	}
-	gateway, err := configure(ctx, root, *cloudOrigin, *listenerURL, *listen, Version)
+	client, err := newHostAdminClient(root)
+	if err != nil {
+		writeError(c.stderr, err.Error())
+		return 1
+	}
+	defer client.transport.CloseIdleConnections()
+	var response gc.Gateway
+	err = client.request(ctx, "/gateway/v4/cloud/configure", gp.ConfigureCloudRequest{ProtocolVersion: gp.Version, CloudOrigin: *cloudOrigin, Reauthorize: *reauthorize}, &response)
+	gateway := &response
 	if err != nil {
 		writeError(c.stderr, err.Error())
 		return 1
@@ -127,15 +142,15 @@ func (c *cli) cloudConnectCmd(args []string) int {
 		return 0
 	}
 	fmt.Fprintf(c.stdout, "Approve Gateway access in Redeven Cloud:\n%s\n", gatewaycloud.GatewayManagementURL(*cloudOrigin, gateway.NamespacePublicID, gateway.PublicID, gateway.PublicKeySHA256))
-	return c.serviceStartCmd([]string{"--state-root", root})
+	return 0
 }
 
 func (c *cli) serveCmd(args []string) int {
 	fs := newFlagSet("serve")
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
-	allowPrivateProfileTargets := fs.Bool("allow-private-profile-targets", false, "Allow URL profile targets on private networks.")
-	enableProfileWrite := fs.Bool("enable-profile-write", false, "Allow paired clients to create, edit, and delete Gateway environment profiles.")
+	memberURL := fs.String("member-url", "", "Advertised HTTPS member endpoint.")
+	memberListen := fs.String("member-listen", "", "Member TLS listen address (new Gateway default: :7443).")
 	pairingCode := fs.String("pairing-code", "", "One-time pairing code required by URL Gateway clients.")
 	if err := parseFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -160,7 +175,7 @@ func (c *cli) serveCmd(args []string) int {
 			return 1
 		}
 	}
-	return c.runGatewayService(ctx, stateRootValue, *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
+	return c.runGatewayService(ctx, stateRootValue, *listen, managedDesktopBridgeService(), true, *memberURL, *memberListen, *pairingCode, managedBridgeToken)
 }
 
 func (c *cli) desktopBridgeCmd(args []string) int {
@@ -198,7 +213,7 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 	}
 	gatewayURL := fmt.Sprintf("http://%s/", strings.TrimSpace(status.Listen))
 	bridge := desktopbridge.Server{
-		DialSurface: desktopbridge.NewGatewaySurfaceDialer(gatewayURL, managedBridgeToken),
+		DialSurface: desktopbridge.NewGatewaySurfaceDialer(gatewayURL, "https://"+status.MemberListen, managedBridgeToken),
 		Hello: desktopbridge.Hello{
 			RuntimeVersion:  Version,
 			RuntimeCommit:   Commit,
@@ -250,8 +265,8 @@ func (c *cli) serviceStartCmd(args []string) int {
 	fs := newFlagSet("service-start")
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
-	allowPrivateProfileTargets := fs.Bool("allow-private-profile-targets", false, "Allow URL profile targets on private networks.")
-	enableProfileWrite := fs.Bool("enable-profile-write", true, "Allow paired clients to create, edit, and delete Gateway environment profiles.")
+	memberURL := fs.String("member-url", "", "Advertised HTTPS member endpoint.")
+	memberListen := fs.String("member-listen", "", "Member TLS listen address (new Gateway default: :7443).")
 	if err := parseFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeText(c.stdout, serviceStartHelpText())
@@ -286,11 +301,11 @@ func (c *cli) serviceStartCmd(args []string) int {
 	}
 	defer logFile.Close()
 	cmdArgs := gatewayServiceServeArgs(stateRootValue, strings.TrimSpace(*listen))
-	if *allowPrivateProfileTargets {
-		cmdArgs = append(cmdArgs, "--allow-private-profile-targets")
+	if *memberURL != "" {
+		cmdArgs = append(cmdArgs, "--member-url", *memberURL)
 	}
-	if *enableProfileWrite {
-		cmdArgs = append(cmdArgs, "--enable-profile-write")
+	if *memberListen != "" {
+		cmdArgs = append(cmdArgs, "--member-listen", *memberListen)
 	}
 	cmd := exec.Command(exe, cmdArgs...)
 	configureDetachedProcess(cmd)
@@ -401,7 +416,7 @@ func gatewayServiceStopped(stateRoot string, status serviceStatus) (bool, error)
 	return true, nil
 }
 
-func (c *cli) runGatewayService(ctx context.Context, stateRoot string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
+func (c *cli) runGatewayService(ctx context.Context, stateRoot string, listen string, desktopBridgeTransport bool, printListen bool, memberURL string, memberListen string, pairingCode string, managedBridgeToken string) int {
 	stateRootValue := normalizeStateRoot(stateRoot)
 	if err := os.MkdirAll(stateRootValue, 0o700); err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Gateway state root: %v", err))
@@ -418,13 +433,22 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, listen st
 	}
 	defer func() { _ = serviceLock.Release() }()
 	_ = os.Remove(gatewayStartupFailurePath(stateRootValue))
-	serviceOptions := gatewayservice.Options{
-		StateRoot:                  stateRootValue,
-		DesktopBridgeTransport:     desktopBridgeTransport,
-		AllowPrivateProfileTargets: allowPrivateProfileTargets,
-		ProfileWriteEnabled:        enableProfileWrite,
-		PairingCode:                pairingCode,
-		ManagedBridgeToken:         managedBridgeToken,
+	hostToken, err := randomTokenB64u(32)
+	if err != nil {
+		return c.failGatewayStartup(stateRootValue, err)
+	}
+	if err := gatewaystate.Write(hostAdminTokenPath(stateRootValue), hostToken); err != nil {
+		return c.failGatewayStartup(stateRootValue, err)
+	}
+	defer os.Remove(hostAdminTokenPath(stateRootValue))
+	serviceOptions := gatewayservice.Options{Version: Version,
+		StateRoot:              stateRootValue,
+		DesktopBridgeTransport: desktopBridgeTransport,
+		MemberURL:              memberURL,
+		MemberListen:           memberListen,
+		PairingCode:            pairingCode,
+		ManagedBridgeToken:     managedBridgeToken,
+		HostAdminToken:         hostToken,
 	}
 	svc, err := gatewayservice.New(serviceOptions)
 	if err != nil {
@@ -437,12 +461,35 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, listen st
 	defer srv.Close()
 	if len(listeners) > 0 {
 		actualListen := listeners[0].Addr().String()
-		_ = writePIDFile(stateRootValue, os.Getpid(), actualListen)
+		memberAddress := listeners[1].Addr().(*net.TCPAddr)
+		memberHost := memberAddress.IP.String()
+		if memberAddress.IP.IsUnspecified() {
+			memberHost = "127.0.0.1"
+			if memberAddress.IP.To4() == nil {
+				memberHost = "::1"
+			}
+		}
+		if err := writePIDFile(stateRootValue, os.Getpid(), actualListen, net.JoinHostPort(memberHost, strconv.Itoa(memberAddress.Port))); err != nil {
+			return c.failGatewayStartup(stateRootValue, err)
+		}
 		if printListen {
 			fmt.Fprintf(c.stdout, "redeven-gateway listening on %s\n", actualListen)
 		}
 	}
-	<-ctx.Done()
+	reload := make(chan os.Signal, 1)
+	signal.Notify(reload, syscall.SIGHUP)
+	defer signal.Stop(reload)
+	for running := true; running; {
+		select {
+		case <-ctx.Done():
+			running = false
+		case <-reload:
+			if err := svc.ReloadHooks(); err != nil {
+				// Never print hook content or executable output.
+				writeError(c.stderr, "POLICY_CONFIG_INVALID: Gateway hooks now deny access; correct policy-hooks.json and reload")
+			}
+		}
+	}
 	_ = removePIDFile(stateRootValue)
 	return 0
 }
@@ -509,7 +556,7 @@ func readGatewayStartupFailure(stateRoot string) gatewayStartupFailure {
 	return failure
 }
 
-func writePIDFile(stateRoot string, pid int, listen string) error {
+func writePIDFile(stateRoot string, pid int, listen string, memberListen string) error {
 	if err := os.MkdirAll(stateRoot, 0o700); err != nil {
 		return err
 	}
@@ -518,6 +565,7 @@ func writePIDFile(stateRoot string, pid int, listen string) error {
 		Status:                 "running",
 		PID:                    pid,
 		Listen:                 strings.TrimSpace(listen),
+		MemberListen:           strings.TrimSpace(memberListen),
 		StateRoot:              stateRoot,
 		Executable:             strings.TrimSpace(exe),
 		ProcessStartedAtUnixMS: processStartedAtUnixMS(pid),
@@ -734,6 +782,9 @@ Usage:
   redeven-gateway <command> [flags]
 
 Commands:
+  invite            Create a one-use Runtime membership invitation.
+  members           List members, remove membership, or set member Cloud policy.
+  policy            View or update Gateway Cloud publication policy.
   serve             Run the Gateway HTTP service.
   desktop-bridge    Run the Gateway desktop bridge over stdio.
   service-status    Probe a managed Gateway service.
@@ -752,10 +803,8 @@ Run the Gateway HTTP service.
 Flags:
   --state-root <path>   Gateway state root.
   --listen <addr>       Listen address (default 127.0.0.1:0).
-  --allow-private-profile-targets
-                        Allow URL profiles to target private networks.
-  --enable-profile-write
-                        Allow paired clients to create, edit, and delete Gateway Environment profiles.
+  --member-url <url>     Advertised HTTPS endpoint for Runtime members.
+  --member-listen <addr> Member TLS listen address (default :7443).
 `, "\n")
 }
 
@@ -772,7 +821,7 @@ Flags:
 
 func serviceStatusHelpText() string { return "redeven-gateway service-status --state-root <path>\n" }
 func serviceStartHelpText() string {
-	return "redeven-gateway service-start --state-root <path> [--listen <addr>] [--allow-private-profile-targets] [--enable-profile-write]\n"
+	return "redeven-gateway service-start --state-root <path> [--listen <addr>] [--member-url <url>] [--member-listen <addr>]\n"
 }
 func serviceStopHelpText() string { return "redeven-gateway service-stop --state-root <path>\n" }
 
@@ -784,7 +833,14 @@ func (c *cli) cloudStatusCmd(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	status, err := gatewaycloud.InspectGateway(ctx, normalizeStateRoot(*root))
+	client, err := newHostAdminClient(normalizeStateRoot(*root))
+	if err != nil {
+		writeError(c.stderr, err.Error())
+		return 1
+	}
+	defer client.transport.CloseIdleConnections()
+	var status gatewaycloud.Summary
+	err = client.request(ctx, "/gateway/v4/cloud/status", gp.CatalogRequest{ProtocolVersion: gp.Version}, &status)
 	if err != nil {
 		writeError(c.stderr, err.Error())
 		return 1

@@ -28,7 +28,7 @@ type VerifiedRequest struct {
 	BindingAudience string
 	Nonce           string
 	TimestampUnixMS int64
-	ProfileWrite    bool
+	Permissions     protocol.GatewayPermissions
 }
 
 func NewVerifier(store *trust.Store) *Verifier {
@@ -106,7 +106,7 @@ func (v *Verifier) VerifyDigest(ctx context.Context, r *http.Request, bodyDigest
 		BindingAudience: cleanAudience,
 		Nonce:           nonce,
 		TimestampUnixMS: ts,
-		ProfileWrite:    v.store.ClientCanWriteProfiles(clientKeyID, cleanAudience),
+		Permissions:     v.store.ClientPermissions(clientKeyID),
 	}, nil
 }
 

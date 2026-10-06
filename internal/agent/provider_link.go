@@ -247,7 +247,7 @@ func providerDisconnectSnapshotFromConfig(cfg *config.Config) (providerDisconnec
 }
 
 func (a *Agent) providerLinkCanReplaceCurrentLocked(req ProviderLinkRequest) *ProviderLinkError {
-	if a.cfg != nil && (a.cfg.GatewayCloud != nil || a.cfg.GatewayCloudMigration != nil) {
+	if a.cfg != nil && (a.cfg.Gateway != nil || a.cfg.GatewayPublication != nil || a.cfg.GatewayMigrationEvidence != nil || a.cfg.GatewayRejoinRequired) {
 		return &ProviderLinkError{Code: ProviderLinkErrorAlreadyLinked, Message: "Gateway Cloud access requires explicit migration before changing the provider binding."}
 	}
 	current := a.providerLinkBindingLocked("")
@@ -493,7 +493,7 @@ func (a *Agent) DisconnectProvider(ctx context.Context) (*ProviderLinkResponse, 
 			Message: "Provider disconnect requires a runtime config.",
 		}
 	}
-	if cfg.GatewayCloud != nil {
+	if cfg.GatewayPublication != nil {
 		a.mu.Unlock()
 		return nil, &ProviderLinkError{Code: ProviderLinkErrorDisconnectRejected, Message: "Manage this Namespace access from the Gateway page in Redeven Cloud."}
 	}

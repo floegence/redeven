@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { startRuntimePlacementBridgeSession } from '../../src/main/runtimePlacementBridgeSession';
-import { joinRuntimeGatewayCloud } from '../../src/main/runtimeControlClient';
-import { normalizeGatewayJoinMaterial } from '../../src/shared/gatewayJoin';
+import { manageRuntimeGateway } from '../../src/main/runtimeControlClient';
+import { normalizeDesktopLauncherActionRequest } from '../../src/shared/desktopLauncherIPC';
 
 async function run() {
   await app.whenReady();
@@ -23,14 +23,14 @@ async function run() {
   } });
   ipcMain.handle('gateway-qualification:action', async (event, request) => {
     if (event.sender !== window.webContents || event.senderFrame !== event.sender.mainFrame ||
-      request?.kind !== 'join_runtime_gateway_cloud' || request.runtime_target_id !== 'ssh:qualification') {
+      request?.kind !== 'manage_runtime_gateway' || request.runtime_target_id !== 'ssh:qualification') {
       return { ok: false, code: 'UNTRUSTED_TARGET' };
     }
-    const material = request.material === undefined ? undefined : normalizeGatewayJoinMaterial(request.material);
-    if (request.material !== undefined && !material) return { ok: false, code: 'INVALID_MATERIAL' };
+    const action = normalizeDesktopLauncherActionRequest(request);
+    if (action?.kind !== 'manage_runtime_gateway') return { ok: false, code: 'INVALID_MEMBERSHIP_ACTION' };
     try {
-      const result = await joinRuntimeGatewayCloud(bridge.runtime_control!, material ?? undefined);
-      return { ok: true, gateway_join_phase: result.phase };
+      const result = await manageRuntimeGateway(bridge.runtime_control!, action.operation, action.invitation, action.environment_choice);
+      return { ok: true, gateway_membership: result };
     } catch { return { ok: false, code: 'GATEWAY_JOIN_FAILED' }; }
   });
   app.on('before-quit', () => { void bridge.disconnect(); });

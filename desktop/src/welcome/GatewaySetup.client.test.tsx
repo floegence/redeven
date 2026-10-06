@@ -16,10 +16,10 @@ async function openSetup(transport = 'Local host') {
   button('Add').click(); await settle();
   button(transport).click(); await settle();
 }
-function grantWrite() {
+function grantMemberManagement() {
   const checkbox = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
-    .find(element => element.closest('label')?.textContent?.includes('Allow environment profile changes')
-      || element.getAttribute('aria-label') === 'Allow environment profile changes');
+    .find(element => element.closest('label')?.textContent?.includes('Manage members and invitations')
+      || element.getAttribute('aria-label') === 'Manage members and invitations');
   expect(checkbox).toBeTruthy(); checkbox!.click();
 }
 function button(label: string): HTMLButtonElement {
@@ -58,99 +58,29 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway setup and own-service actions', () => {
-  it('explains profile permission without granting it or submitting the form', async () => {
-    const perform = await mount();
-    await openSetup();
-    button('About environment profile permission').click(); await settle();
-    expect(document.body.textContent).toContain('add, edit and delete');
-    expect(document.body.textContent).toContain('password and MFA');
-    expect(perform).not.toHaveBeenCalled();
-    button('About environment profile permission').click(); await settle();
-    expect(button('Save Gateway')).toBeTruthy();
-  });
-
-  it('adds an environment from its Gateway card with that Gateway selected', async () => {
-    const snapshot = compactEnvironmentPreviewFixture().coverage;
-    const perform = await mount(undefined, snapshot);
-    button('Gateways').click(); await settle();
-    button('Add environment').click(); await settle();
-    expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
-    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Environment type');
-    expect(document.getElementById('gateway-environment-gateway')).toBeNull();
-    input('gateway-environment-target-url', 'https://runtime.example/');
-    input('environment-label', 'Registered from Gateway');
-    expect(button('Save').disabled).toBe(true);
-    perform.mockResolvedValueOnce({ ok: true, outcome: 'checked_gateway_environment_profile', gateway_profile_check: { identity_verified: true } });
-    button('Verify connection').click(); await settle();
-    button('Save').click(); await settle();
-    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'check_gateway_environment_profile', gateway_id: 'bastion' });
-    expect(perform.mock.calls[1]?.[0]).toMatchObject({ kind: 'upsert_environment_registration', registration: { registration_ref: { kind: 'gateway_environment', gateway_id: 'bastion' }, access_mode: 'gateway_proxy' } });
-  });
-
-  it('invalidates target verification when its URL changes and ignores a result after closing', async () => {
-    const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
-    button('Gateways').click(); await settle(); button('Add environment').click(); await settle();
-    input('gateway-environment-target-url', 'https://first.example/');
-    let complete!: (result: DesktopLauncherActionResult) => void;
-    perform.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
-    button('Verify connection').click(); await settle();
-    input('gateway-environment-target-url', 'https://second.example/');
-    complete({ ok: true, outcome: 'checked_gateway_environment_profile', gateway_profile_check: { identity_verified: true } });
-    await settle(); expect(button('Save').disabled).toBe(true);
-    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Connection verified.');
-    perform.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
-    button('Verify connection').click(); await settle(); button('Cancel').click(); await settle();
-    button('Add environment').click(); await settle();
-    complete({ ok: true, outcome: 'checked_gateway_environment_profile', gateway_profile_check: { identity_verified: true } });
-    await settle(); expect(button('Save').disabled).toBe(true);
-    expect((document.getElementById('gateway-environment-target-url') as HTMLInputElement).value).toBe('');
-    expect(perform.mock.calls.every(([request]) => request.kind === 'check_gateway_environment_profile')).toBe(true);
-  });
-
   it('offers explicit authorization for a read-only Gateway without granting it automatically', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, capabilities: ['env_catalog'] });
+    const perform = await mount({ ...source, capabilities: ['member_access'], permissions: { access: true, manage_members: false, configure_cloud: false } });
     button('Gateways').click(); await settle();
-    button('Authorize changes').click(); await settle();
+    button('Pairing permissions').click(); await settle();
     expect(document.getElementById('gateway-pairing-code')).toBeTruthy();
     expect(perform).not.toHaveBeenCalled();
   });
 
-  it('cancels Gateway environment creation in place without submitting or changing the Gateway', async () => {
-    const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
+  it('preserves existing pairing permissions when saving only a Gateway name', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const permissions = { access: true, manage_members: false, configure_cloud: true };
+    const perform = await mount({ ...source, permissions, gateway_url: 'https://gateway.example/' });
     button('Gateways').click(); await settle();
-    button('Add environment').click(); await settle();
-    input('gateway-environment-target-url', 'https://draft.example/');
-    button('Cancel').click(); await settle();
-    expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
-    expect(perform).not.toHaveBeenCalled();
-    button('Add environment').click(); await settle();
-    expect((document.getElementById('gateway-environment-target-url') as HTMLInputElement).value).toBe('');
-  });
-
-  it('keeps a failed Gateway profile draft in context and updates the local list after explicit retry', async () => {
-    let snapshot = compactEnvironmentPreviewFixture().coverage;
-    const perform = await mount(undefined, snapshot, async () => snapshot);
-    button('Gateways').click(); await settle();
-    button('Add environment').click(); await settle();
-    input('gateway-environment-target-url', 'https://runtime.example/');
-    input('environment-label', 'Added in place');
-    perform.mockResolvedValueOnce({ ok: true, outcome: 'checked_gateway_environment_profile', gateway_profile_check: { identity_verified: true } });
-    button('Verify connection').click(); await settle();
-    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_catalog_failed', message: 'Gateway unavailable.' });
-    button('Save').click(); await settle();
-    expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
-    expect((document.getElementById('environment-label') as HTMLInputElement).value).toBe('Added in place');
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Gateway unavailable.');
-    const original = snapshot.environments.find(entry => entry.kind === 'gateway_environment')!;
-    snapshot = { ...snapshot, environments: [...snapshot.environments, { ...original, id: 'gateway-added', label: 'Added in place', gateway_env_id: 'added' }],
-      gateway_sources: snapshot.gateway_sources.map(gateway => ({ ...gateway, environments: [...gateway.environments, { ...gateway.environments[0], gateway_env_id: 'added', display_name: 'Added in place' }] })) };
-    perform.mockResolvedValueOnce({ ok: true, outcome: 'saved_gateway_environment', environment_id: 'gateway-added' });
-    button('Save').click(); await settle();
-    expect(document.getElementById('gateway-environment-target-url')).toBeNull();
-    expect(document.querySelector('[data-gateway-id="bastion"]')?.textContent).toContain('2 environments');
-    expect(document.querySelector('[data-gateway-environment-id="added"]')?.textContent).toContain('Added in place');
-    expect(perform.mock.calls).toHaveLength(3);
+    button('Pairing permissions').click(); await settle();
+    const cloud = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
+      .find(element => element.closest('label')?.textContent?.includes('Configure Cloud access')
+        || element.getAttribute('aria-label') === 'Configure Cloud access');
+    expect(cloud?.getAttribute('aria-checked') === 'true' || (cloud as HTMLInputElement)?.checked).toBe(true);
+    input('gateway-name', 'Renamed Gateway');
+    button('Save Gateway').click(); await settle();
+    expect(perform).toHaveBeenCalledOnce();
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway', display_name: 'Renamed Gateway', permissions: undefined });
   });
 
   it('opens Gateway environment rows explicitly through their owning Gateway', async () => {
@@ -160,7 +90,7 @@ describe('Gateway setup and own-service actions', () => {
     expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
     expect(document.querySelector('[data-gateway-environment-id="internal-workspace"]')?.textContent).toContain('Gateway workspace');
     button('Open Env App').click(); await settle();
-    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'open_gateway_environment', gateway_id: 'bastion', gateway_env_id: 'internal-workspace', access_mode: 'gateway_proxy' });
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'open_gateway_environment', gateway_id: 'bastion', gateway_env_id: 'internal-workspace' });
     expect(perform.mock.calls).toHaveLength(1);
   });
 
@@ -185,11 +115,11 @@ describe('Gateway setup and own-service actions', () => {
     expect(document.querySelector('details')?.textContent).toContain('Gateway URL must use HTTP or HTTPS.');
     expect(document.querySelector('details')?.textContent).toContain('Fixture diagnostic');
   });
-  it('requires a pairing code before claiming to grant URL profile authorization', async () => {
+  it('requires a pairing code before claiming to grant member management authorization', async () => {
     const perform = await mount();
     await openSetup('URL');
     input('gateway-url', 'https://gateway.example/');
-    grantWrite();
+    grantMemberManagement();
     button('Save Gateway').click(); await settle();
     expect(perform).not.toHaveBeenCalled();
     expect(document.getElementById('gateway-pairing-code')?.getAttribute('aria-invalid')).toBe('true');
@@ -208,15 +138,15 @@ describe('Gateway setup and own-service actions', () => {
       placement: { kind: 'container_process', container_id: 'test-container-id', container_ref: 'qualification', runtime_root: 'remote_default' } });
   });
 
-  it('submits a URL Gateway with explicit pairing and independent profile consent', async () => {
+  it('submits a URL Gateway with explicit pairing and independent member management consent', async () => {
     const perform = await mount();
     await openSetup('URL');
     input('gateway-url', 'https://gateway.example/');
     input('gateway-pairing-code', 'test-pairing-code');
-    grantWrite();
+    grantMemberManagement();
     button('Save Gateway').click(); await settle();
     expect(normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0])).toMatchObject({ kind: 'upsert_gateway',
-      connection_kind: 'url', gateway_url: 'https://gateway.example/', pairing_code: 'test-pairing-code', profile_write: true });
+      connection_kind: 'url', gateway_url: 'https://gateway.example/', pairing_code: 'test-pairing-code', permissions: { access: true, manage_members: true, configure_cloud: false } });
   });
 
   it.each(['Local host', 'SSH Host'])('submits valid default download coordinates for %s', async transport => {
@@ -229,22 +159,22 @@ describe('Gateway setup and own-service actions', () => {
     expect(request).toMatchObject({ kind: 'upsert_gateway', placement: { runtime_root: 'remote_default', release_base_url: '' } });
   });
 
-  it('preserves the saved identity and draft when explicit profile authorization needs Start', async () => {
+  it('preserves the saved identity and draft when explicit member management authorization needs Start', async () => {
     const perform = await mount();
     await openSetup();
     input('gateway-name', 'Draft Gateway');
-    grantWrite();
+    grantMemberManagement();
     perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Connection saved. Start before granting permission.',
       gateway_id: 'saved-fixture', continuation_action: { kind: 'start_gateway', gateway_id: 'saved-fixture' } });
     button('Save Gateway').click(); await settle();
-    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway', profile_write: true });
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway', permissions: { access: true, manage_members: true, configure_cloud: false } });
     expect((document.getElementById('gateway-name') as HTMLInputElement).value).toBe('Draft Gateway');
     perform.mockResolvedValueOnce({ ok: true, outcome: 'started_gateway' });
     button('Start Gateway').click(); await settle();
     expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['upsert_gateway', 'start_gateway']);
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Review your changes, then retry.');
     button('Save Gateway').click(); await settle();
-    expect(perform.mock.calls[2]?.[0]).toMatchObject({ kind: 'upsert_gateway', gateway_id: 'saved-fixture', display_name: 'Draft Gateway', profile_write: true });
+    expect(perform.mock.calls[2]?.[0]).toMatchObject({ kind: 'upsert_gateway', gateway_id: 'saved-fixture', display_name: 'Draft Gateway', permissions: { access: true, manage_members: true, configure_cloud: false } });
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
 
@@ -283,99 +213,6 @@ describe('Gateway setup and own-service actions', () => {
     expect(perform).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
-  it('retains a profile draft and starts the Gateway only after an explicit click, then waits for Save', async () => {
-    const snapshot = compactEnvironmentPreviewFixture().coverage;
-    const perform = await mount(undefined, snapshot);
-    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Start Gateway before saving.',
-      gateway_id: 'bastion', continuation_action: { kind: 'start_gateway', gateway_id: 'bastion' } });
-    button('Settings for Gateway workspace').click(); await settle();
-    input('environment-label', 'Preserved draft');
-    button('Save').click(); await settle();
-    expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['upsert_environment_registration']);
-    expect((document.getElementById('environment-label') as HTMLInputElement).value).toBe('Preserved draft');
-    perform.mockResolvedValueOnce({ ok: true, outcome: 'started_gateway' });
-    button('Start Gateway').click(); await settle();
-    expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['upsert_environment_registration', 'start_gateway']);
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Review your changes, then retry.');
-    expect((document.getElementById('environment-label') as HTMLInputElement).value).toBe('Preserved draft');
-    perform.mockResolvedValueOnce({ ok: true, outcome: 'saved_gateway_environment', environment_id: snapshot.environments.find(entry => entry.kind === 'gateway_environment')!.id });
-    button('Save').click(); await settle();
-    expect(perform.mock.calls[2]?.[0]).toMatchObject({ kind: 'upsert_environment_registration', registration: { display_name: 'Preserved draft' } });
-  });
-
-  it('keeps profile deletion explicit after starting the stopped Gateway', async () => {
-    const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
-    button('Remove Gateway workspace').click(); await settle();
-    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Start Gateway before deleting.',
-      gateway_id: 'bastion', continuation_action: { kind: 'start_gateway', gateway_id: 'bastion' } });
-    button('Delete from Gateway').click(); await settle();
-    expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['delete_environment_registration']);
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Start Gateway before deleting.');
-    perform.mockResolvedValueOnce({ ok: true, outcome: 'started_gateway' });
-    button('Start Gateway').click(); await settle();
-    expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['delete_environment_registration', 'start_gateway']);
-    perform.mockResolvedValueOnce({ ok: true, outcome: 'deleted_gateway_environment' });
-    button('Delete from Gateway').click(); await settle();
-    expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['delete_environment_registration', 'start_gateway', 'delete_environment_registration']);
-  });
-
-  it.each([true, false])('keeps the result of Start while editing a new profile, success=%s', async success => {
-    const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
-    button('Through Gateway').click(); await settle();
-    input('gateway-environment-target-url', 'https://runtime.example/');
-    input('environment-label', 'Draft before Start');
-    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Start Gateway before saving.',
-      gateway_id: 'bastion', continuation_action: { kind: 'start_gateway', gateway_id: 'bastion' } });
-    button('Verify connection').click(); await settle();
-    let complete!: (result: DesktopLauncherActionResult) => void;
-    perform.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
-    button('Start Gateway').click(); await settle();
-    input('environment-label', 'Edited during Start');
-    complete(success ? { ok: true, outcome: 'started_gateway' }
-      : { ok: false, code: 'gateway_service_start_failed', scope: 'gateway', message: 'Fixture start failed' });
-    await settle();
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(success ? 'Review your changes, then retry.' : 'Fixture start failed');
-    expect((document.getElementById('environment-label') as HTMLInputElement).value).toBe('Edited during Start');
-    expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['check_gateway_environment_profile', 'start_gateway']);
-  });
-
-  it('reports snapshot refresh failure without losing a successful explicit Start or the profile draft', async () => {
-    const snapshot = compactEnvironmentPreviewFixture().coverage;
-    const getSnapshot = vi.fn(async () => snapshot);
-    const perform = await mount(undefined, snapshot, getSnapshot);
-    button('Through Gateway').click(); await settle();
-    input('gateway-environment-target-url', 'https://runtime.example/');
-    input('environment-label', 'Retained after refresh failure');
-    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Start Gateway before saving.',
-      gateway_id: 'bastion', continuation_action: { kind: 'start_gateway', gateway_id: 'bastion' } });
-    button('Verify connection').click(); await settle();
-    getSnapshot.mockRejectedValueOnce(new Error('Fixture snapshot unavailable'));
-    perform.mockResolvedValueOnce({ ok: true, outcome: 'started_gateway' });
-    button('Start Gateway').click(); await settle();
-    expect(document.body.textContent).toContain('Fixture snapshot unavailable');
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Review your changes, then retry.');
-    expect((document.getElementById('environment-label') as HTMLInputElement).value).toBe('Retained after refresh failure');
-    expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['check_gateway_environment_profile', 'start_gateway']);
-  });
-
-  it('does not deliver a pending Start result to a reopened profile dialog', async () => {
-    const perform = await mount(undefined, compactEnvironmentPreviewFixture().coverage);
-    button('Through Gateway').click(); await settle();
-    input('gateway-environment-target-url', 'https://runtime.example/');
-    perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Start Gateway before saving.',
-      gateway_id: 'bastion', continuation_action: { kind: 'start_gateway', gateway_id: 'bastion' } });
-    button('Verify connection').click(); await settle();
-    let complete!: (result: DesktopLauncherActionResult) => void;
-    perform.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
-    button('Start Gateway').click(); await settle();
-    button('Cancel').click(); await settle();
-    button('Through Gateway').click(); await settle();
-    complete({ ok: false, code: 'gateway_service_start_failed', scope: 'gateway', message: 'Old start failed' });
-    await settle();
-    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Old start failed');
-    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Start Gateway before saving.');
-  });
-
   it('saves an explicit local Gateway without creating a Runtime registration', async () => {
     const perform = await mount();
     button('Gateways').click(); await settle();
@@ -386,7 +223,7 @@ describe('Gateway setup and own-service actions', () => {
     button('Save Gateway').click(); await settle();
     expect(perform).toHaveBeenCalledWith(expect.objectContaining({ kind: 'upsert_gateway', connection_kind: 'local_host',
       host_access: { kind: 'local_host' }, placement: expect.objectContaining({ kind: 'host_process', runtime_root: '/tmp/gateway-fixture' }),
-      profile_write: false }));
+      permissions: undefined }));
     expect(perform.mock.calls.every(([request]) => request.kind === 'upsert_gateway')).toBe(true);
     expect(normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0])).not.toBeNull();
   });

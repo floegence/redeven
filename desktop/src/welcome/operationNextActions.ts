@@ -16,7 +16,7 @@ export function environmentActionForLauncherRetry(
     case 'open_ssh_environment':
       return { intent: 'open_with_preflight', label: 'Open', enabled: true, variant: 'default' };
     case 'open_gateway_environment':
-      return { intent: 'open_with_preflight', label: 'Open', enabled: true, variant: 'default', access_mode: request.access_mode };
+      return { intent: 'open_with_preflight', label: 'Open', enabled: true, variant: 'default' };
     case 'start_environment_runtime':
       return { intent: 'start_runtime', label: 'Start', enabled: true, variant: 'default' };
     case 'stop_environment_runtime':
@@ -54,7 +54,7 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'resolve_gateway':
       return `${action.kind}:gateway:${action.gateway_id}:${action.resolve_focus ?? ''}`;
     case 'open_gateway_environment':
-      return `${action.kind}:gateway:${action.gateway_id}:environment:${action.environment_id}:${action.access_mode ?? ''}`;
+      return `${action.kind}:gateway:${action.gateway_id}:environment:${action.environment_id}`;
     case 'copy_diagnostics':
     case 'dismiss':
     case 'retry':

@@ -20,13 +20,12 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
-  it('keeps profile authorization and mutations read-only with respect to Gateway service lifecycle', () => {
+  it('keeps member administration separate from Gateway service lifecycle', () => {
     const source = readMainSource();
-    const profileActions = source.slice(source.indexOf('async function requireGatewayProfileWriteCapability('), source.indexOf('function gatewayServiceFailureCode('));
+    const profileActions = source.slice(source.indexOf('async function manageGatewayMemberFromLauncher('), source.indexOf('function gatewayActionFailure('));
     expect(profileActions).not.toContain('start_if_needed');
     expect(profileActions).not.toContain('startGateway(');
     expect(profileActions).toContain("startPolicy: 'require_ready'");
-    expect(profileActions).toContain("continuationAction: { kind: 'start_gateway'");
     expect(profileActions).not.toContain('.catch(() => null)');
   });
   it('stops the exact SSH Runtime when its state and installation directories differ', () => {
@@ -1918,7 +1917,7 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('resolveDesktopSessionTransport(target, startup');
     expect(mainSrc).toContain('placementBridge: options.transportRecovery != null');
-    expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport, options.gatewayProxy);');
+    expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport, options.gatewayMember);');
     expect(mainSrc).toContain("await webSession.setProxy({ mode: 'direct' });");
     expect(mainSrc).toContain('loopbackGateway?: WebServiceLoopbackGateway,\n  graphicalWindow = false,\n): void');
     expect(mainSrc).toContain('desktopDiagnosticsHookSessions.has(webSession)');
@@ -2032,20 +2031,20 @@ describe('main routing', () => {
     expect(helperSrc).toContain('assertGatewayPairingChallenge({');
     expect(pairSrc).not.toContain('confirmDesktopImpact({');
     expect(pairSrc).not.toContain("phase: 'waiting_for_identity_confirmation'");
-    expect(helperSrc).toContain("const pairingOptions = { profileWrite: options.profileWrite === true };");
+    expect(helperSrc).toContain("const permissions = options.permissions ?? { access: true, manage_members: false, configure_cloud: false };");
     expect(helperSrc).not.toContain('runtimeGrants');
     expect(helperSrc).not.toContain('runtime_grants');
     expect(helperSrc).toContain(
-      'const completionRequest = buildPairingCompleteRequest(material, challenge, pairingOptions);',
+      'const completionRequest = buildPairingCompleteRequest(material, challenge, permissions);',
     );
     expect(helperSrc).toContain('const completion = await client.completePairing(record, completionRequest, {');
-    expect(helperSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion, {');
+    expect(helperSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion, permissions);');
     expect(helperSrc).toContain('completeGatewayPairing({');
     expect(helperSrc).toContain('trust_accepted: true');
     expect(helperSrc.indexOf('assertGatewayPairingChallenge({')).toBeLessThan(
       helperSrc.indexOf('const completion = await client.completePairing(record, completionRequest, {'),
     );
-    expect(helperSrc.indexOf('assertGatewayPairingCompleteResponse(material, challenge, completion, {')).toBeLessThan(
+    expect(helperSrc.indexOf('assertGatewayPairingCompleteResponse(material, challenge, completion, permissions);')).toBeLessThan(
       helperSrc.indexOf('completeGatewayPairing({'),
     );
     expect(helperSrc.indexOf('completeGatewayPairing({')).toBeLessThan(
@@ -2352,30 +2351,23 @@ describe('main routing', () => {
     expect(serviceSrc).toContain('manager.stopGateway');
     expect(serviceSrc).not.toContain('executeDirectManagedEnvironmentLifecycle');
     expect(serviceSrc).not.toContain('runtimeLifecycleSession');
-    expect(serviceSrc).toContain("session.gateway_access_mode !== 'direct_url'");
+    expect(serviceSrc).toContain("session.target.gateway_id === record.gateway_id");
   });
 
-  it('opens Gateway-backed Environments only through explicit access endpoints', () => {
+  it('opens Gateway members through their reverse transport without Runtime lifecycle authority', () => {
     const mainSrc = readMainSource();
     const openStart = mainSrc.indexOf('async function openGatewayEnvironmentFromLauncher(');
     const openEnd = mainSrc.indexOf('async function openProviderRemoteEnvironmentRecord(', openStart);
     expect(openStart).toBeGreaterThanOrEqual(0);
     expect(openEnd).toBeGreaterThan(openStart);
     const openSrc = mainSrc.slice(openStart, openEnd);
-    expect(openSrc).toContain('gatewayEnvironmentAccessEndpoint(record, environment)');
-    expect(openSrc).toContain('prepareGatewayEnvironmentAccess(record, environment, mode');
-    expect(openSrc).toContain('openSessionWithBridge');
+    expect(openSrc).toContain('prepareGatewayEnvironmentAccess(record, environment, catalog, client, signal)');
+    expect(openSrc).toContain('createSessionRecord(target, access.startup');
     expect(openSrc).toContain('buildGatewayDesktopTarget');
     expect(openSrc).not.toContain('openRemoteEnvironmentFromLauncher({');
     expect(openSrc).not.toContain('start_environment_runtime');
     expect(openSrc).not.toContain('pairGatewayWithClient');
-    const endpointStart = mainSrc.indexOf('function gatewayEnvironmentAccessEndpoint(');
-    const endpointEnd = mainSrc.indexOf('async function upsertGatewayEnvironmentProfileFromLauncher(', endpointStart);
-    expect(endpointStart).toBeGreaterThanOrEqual(0);
-    expect(endpointEnd).toBeGreaterThan(endpointStart);
-    const endpointSrc = mainSrc.slice(endpointStart, endpointEnd);
-    expect(endpointSrc).toContain("route.kind !== 'url'");
-    expect(endpointSrc).toContain("pathName.includes('/gateway')");
+
   });
 
   it('parses Control Plane deep links through PKCE authorization state instead of bearer handoff tickets', () => {

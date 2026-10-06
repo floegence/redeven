@@ -353,7 +353,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal');
     expect(appSrc).toContain('const [gatewayQuery, setGatewayQuery] = createSignal');
     expect(appSrc).toContain('filterGatewayEnvironmentEntries(');
-    expect(appSrc).toContain('function openCreateGatewayEnvironment(gateway: DesktopGatewaySource): void');
+    expect(appSrc).toContain('function openGatewayMembers(gateway: DesktopGatewaySource): void');
     expect(appSrc).toContain('<GatewaySourcesPanel');
     expect(appSrc).toContain("props.activeTab === 'gateways'");
     expect(appSrc).toContain('gatewaySourceFilterValue,');
@@ -400,7 +400,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.openCreateGatewaySetup(props.gateway, action.resolve_focus)');
     expect(appSrc).toContain('<EnvironmentProgressPanel');
     expect(appSrc).toContain('buildGatewayActionPresentation');
-    expect(appSrc).toContain('row().environment_summary_label');
     expect(appSrc).toContain("props.i18n.t('gatewayAccess.directory')");
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).toContain("case 'refresh_status':");
@@ -426,12 +425,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("<DesktopTooltip content={props.i18n.t('environmentCenter.addGateway')}");
     expect(appSrc).toContain("aria-label={props.i18n.t('environmentCenter.addGateway')}");
     expect(appSrc).toContain("case 'view_gateway_environments':");
-    expect(appSrc).toContain("case 'add_gateway_environment':");
+    expect(appSrc).toContain("case 'manage_gateway_members':");
     expect(appSrc).not.toContain("props.i18n.t('environmentCenter.syncGatewayForLabel'");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.moreActions')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.moreActionsForLabel'");
     expect(appSrc).toContain('popoverAriaLabel={');
-    expect(appSrc).toContain('localizedGatewaySourceCountText(props.i18n, row().environment_summary_label)');
     expect(appSrc).not.toContain('>\\n            View\\n');
     expect(appSrc).not.toContain('content="More actions"');
     const gatewayHeaderButtonOffset = appSrc.indexOf("props.i18n.t('environmentCenter.addGatewayShort')");
@@ -455,7 +453,7 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain(
-      "if (environment.kind === 'gateway_environment') {\n      return openGatewayEnvironment(environment, errorTarget, accessMode);\n    }",
+      "if (environment.kind === 'gateway_environment') {\n      return openGatewayEnvironment(environment, errorTarget);\n    }",
     );
     expect(appSrc).toContain("kind: 'open_gateway_environment'");
     expect(appSrc).toContain('gateway_id: gatewayID');
@@ -468,15 +466,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("gateway_environment') {\n      return openRemoteEnvironment");
   });
 
-  it('keeps Gateway-backed Environment access limited to explicit URL profiles', () => {
+  it('uses member invitations instead of Gateway target configuration', () => {
     const appSrc = readWelcomeSource();
-
-    expect(appSrc).toContain("connection_kind: 'gateway_url_profile'");
-    expect(appSrc).toContain("connection_kind: 'url'");
-    expect(appSrc).toContain("kind: 'url'");
-    expect(appSrc).not.toContain("profile_route_kind === 'ssh_container'");
-    expect(appSrc).not.toContain("profile_route_kind === 'ssh_host'");
-    expect(appSrc).not.toContain('connectionDialog.gatewayEnvironmentSshAuthHelp');
+    expect(appSrc).toContain('<GatewayMembersDialog');
+    expect(appSrc).not.toContain('GatewayURLProfileConnectionDialogState');
+    expect(appSrc).not.toContain('GatewayProfileSourcePicker');
   });
 
   it('keeps open-flow steps on the shared timeline and progress styles', () => {
@@ -1125,7 +1119,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-gateway-card__directory-row');
     expect(appSrc).toContain('redeven-gateway-card__explanation');
     expect(appSrc).toContain("if (action.intent === 'view_gateway_environments')");
-    expect(appSrc).toContain("if (action.intent === 'add_gateway_environment')");
+    expect(appSrc).toContain("if (action.intent === 'manage_gateway_members')");
     expect(appSrc).toContain('const primaryActionRunning = createMemo(() => (');
     expect(appSrc).toContain('foregroundActionRunning()');
     expect(appSrc).not.toContain('const gatewayActionRunning = createMemo(() => (');
@@ -1474,63 +1468,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('<option');
   });
 
-  it('renders the Gateway profile source control as an anchored rich listbox', () => {
-    const appSrc = readWelcomeSource();
-    const pickerStart = appSrc.indexOf('function GatewayProfileSourcePicker');
-    const pickerEnd = appSrc.indexOf('function ConnectionDialog', pickerStart);
-    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
 
-    expect(pickerSrc).toContain('function GatewayProfileSourcePicker');
-    expect(pickerSrc).not.toContain('<select');
-    expect(pickerSrc).not.toContain('<option');
-    expect(pickerSrc).toContain('<DesktopAnchoredListbox');
-    expect(pickerSrc).toContain('anchorRef={buttonRef}');
-    expect(pickerSrc).toContain('role="listbox"');
-    expect(pickerSrc).toContain('role="option"');
-    expect(pickerSrc).toContain('tabIndex={-1}');
-    expect(pickerSrc).toContain('scrollDesktopListboxOptionIntoView');
-    expect(pickerSrc).toContain('aria-haspopup="listbox"');
-    expect(pickerSrc).toContain("aria-expanded={open() ? 'true' : 'false'}");
-    expect(pickerSrc).toContain('aria-controls={listboxID}');
-    expect(pickerSrc).toContain('buildGatewaySourceRowModel(gateway)');
-    expect(pickerSrc).toContain("props.i18n.t('environmentCenter.gatewaySearchPlaceholder')");
-    expect(pickerSrc).toContain("props.i18n.t('environmentCenter.noMatchingGatewaysDescription')");
-    expect(pickerSrc).toContain('localizedGatewaySourceStatusLabel');
-    expect(pickerSrc).toContain('localizedGatewaySourceCountText');
-    expect(pickerSrc).toContain('gatewaySourceToneTagVariant(row().status_tone)');
-    expect(pickerSrc).toContain('selectedGatewayProfileSource(props.gateways, props.selectedGatewayID)');
-    expect(pickerSrc).not.toContain('sources[0]');
-    expect(pickerSrc).toContain('connectionDialog.validationGatewayRequired');
-    expect(pickerSrc).toContain('<ShieldCheck');
-    expect(pickerSrc).toContain('<ChevronDown');
-    expect(pickerSrc).toContain('<Check');
-  });
-
-  it('keeps Gateway profile source selection searchable and keyboard reachable', () => {
-    const appSrc = readWelcomeSource();
-    const pickerStart = appSrc.indexOf('function GatewayProfileSourcePicker');
-    const pickerEnd = appSrc.indexOf('function ConnectionDialog', pickerStart);
-    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
-    const dialogStart = appSrc.indexOf('function ConnectionDialog');
-    const dialogEnd = appSrc.indexOf('function officialProviderOptionForOrigin', dialogStart);
-    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
-
-    expect(pickerSrc).toContain('const [query, setQuery] = createSignal');
-    expect(pickerSrc).toContain('gatewayProfileSourceSearchText(gateway)');
-    expect(pickerSrc).toContain("event.key === 'ArrowDown'");
-    expect(pickerSrc).toContain("event.key === 'ArrowUp'");
-    expect(pickerSrc).toContain("event.key === 'Enter' || event.key === ' '");
-    expect(pickerSrc).toContain("event.key === 'Escape'");
-    expect(pickerSrc).toContain('buttonRef?.focus();');
-    expect(pickerSrc).toContain('props.onSelect(gateway.gateway_id);');
-    expect(pickerSrc).toContain('props.clearFieldErrors();');
-    expect(dialogSrc).toContain('<GatewayProfileSourcePicker');
-    expect(dialogSrc).toContain('gateways={props.gatewayProfileSources}');
-    expect(dialogSrc).toContain(
-      "selectedGatewayID={props.state?.connection_kind === 'gateway_url_profile' ? props.state.gateway_id : ''}",
-    );
-    expect(dialogSrc).toContain("onSelect={(gatewayID) => props.updateField('gateway_id', gatewayID)}");
-  });
 
   it('preserves keyboard and focus behavior for the Desktop header language listbox', () => {
     const appSrc = readWelcomeSource();
@@ -2450,11 +2388,9 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain(
-      'type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | GatewayURLProfileConnectionDialogState | null;',
+      'type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null;',
     );
     expect(appSrc).toContain('props.switchKind(value as ConnectionDialogKind)');
-    expect(appSrc).toContain("profile_route_kind: 'url';");
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentTargetUrl')");
     expect(appSrc).not.toContain(
       "const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');",
     );
@@ -2656,22 +2592,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const openTargetDetail = createMemo');
   });
 
-  it('uses Gateway-specific deletion copy for Gateway-owned profiles', () => {
-    const appSrc = readWelcomeSource();
-
-    expect(appSrc).toContain("i18n().t('confirm.removeEnvironmentTitle')");
-    expect(appSrc).toContain("i18n().t('confirm.removeEnvironmentConfirm')");
-    expect(appSrc).toContain("i18n().t('confirm.removeEnvironmentQuestion'");
-    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentTitle')");
-    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentConfirm')");
-    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentQuestion'");
-    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentDescription')");
-    expect(appSrc).toContain('const deleteTargetOperation = createMemo(() => {');
-    expect(appSrc).toContain("i18n().t('confirm.removeEnvironmentBusyDescription')");
-    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentBusyDescription')");
-    expect(appSrc).toContain("i18n().t('environmentCenter.environmentRemovedCleanup')");
-    expect(appSrc).toContain("i18n().t('environmentCenter.gatewayEnvironmentRemoved')");
-  });
 
   it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {
     const appSrc = readWelcomeSource();

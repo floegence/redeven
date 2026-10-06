@@ -103,8 +103,9 @@ describe('shared Flower UI boundary', () => {
   it('keeps Desktop Welcome on the shared Flower surface and icon instead of the old inline panel', () => {
     const appSrc = readText(path.join(repoRoot, 'desktop', 'src', 'welcome', 'App.tsx'));
 
-    expect(appSrc).toContain('copy={createDesktopFlowerSurfaceCopy(i18n())}');
-    expect(appSrc).toContain("runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment')");
+    expect(appSrc).toContain('createMemo(() => createDesktopFlowerSurfaceCopy(i18n()))');
+    expect(appSrc).toContain('copy={flowerSurfaceCopy()}');
+    expect(appSrc).toContain("get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); }");
     expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
     expect(appSrc).toContain('createLocalEnvironmentFlowerSurfaceAdapter(');
     expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
@@ -197,8 +198,11 @@ describe('shared Flower UI boundary', () => {
     expect(submitSource).toContain('closeFlowerTurnLauncher();');
     expect(submitSource).not.toContain("showActionToast(getErrorMessage(error), 'error')");
     expect(envSubmitSource, 'the complete Env App submit handler must be checked').toBeDefined();
-    expect(envSubmitSource).toContain('await adapter.launchTurn');
-    expect(envSubmitSource).toContain('handoffFlowerTurn(handoffContext, threadId);');
+    expect(envSubmitSource).toContain('await sendFlowerTurn(input)');
+    const envSendSource = envShellSrc.match(/^ {2}const sendFlowerTurn = async \([^\n]*\{\n[\s\S]*?^ {2}\};/mu)?.[0];
+    expect(envSendSource).toContain('await adapter.launchTurn');
+    expect(envSendSource).toContain('if (!threadId)');
+    expect(envSubmitSource).toContain('handoffFlowerTurn(handoffContext, threadID);');
     expect(envSubmitSource).not.toContain('notify.error');
     expect(launcherSrc).toContain("role={launchErrorKind() === 'unknown' ? 'status' : 'alert'}");
     expect(launcherSrc).toContain("'flower-turn-launcher-error'");
@@ -252,7 +256,7 @@ describe('shared Flower UI boundary', () => {
 
 		expect(surfaceSrc).toContain("type FlowerComposerControlID = 'permission' | 'model_reasoning' | 'read_only'");
 		expect(surfaceSrc).toContain("data-flower-composer-control=\"model_reasoning\"");
-		expect(surfaceSrc).toContain("data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}");
+		expect(surfaceSrc).toContain("data-has-reasoning={composerReasoningVisible() || composerReasoningLoading() ? 'true' : 'false'}");
 		expect(surfaceSrc).toContain('variant="segment"');
 		expect(surfaceSrc).toContain('label={reasoningControlLabel()}');
 		expect(surfaceSrc).not.toContain("data-flower-composer-control=\"model\"");

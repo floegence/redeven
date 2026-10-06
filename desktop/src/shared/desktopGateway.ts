@@ -1,18 +1,11 @@
+import type { GatewayMember, GatewayPermissions, GatewayPolicy, GatewayHookStatuses } from './gatewayMembership';
 import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
 import type { DesktopContainerEngine } from './desktopRuntimePlacement';
 
 export type DesktopGatewayConnectionKind = 'url' | 'local_host' | 'local_container' | 'ssh_host' | 'ssh_container';
 export type DesktopGatewayManagementCapability = 'access_only' | 'managed_local_host' | 'managed_local_container' | 'managed_ssh_host' | 'managed_ssh_container';
 
-export type DesktopGatewayCapability =
-  | 'env_catalog'
-  | 'env_direct_open'
-  | 'env_proxy_open'
-  | 'env_profile_write'
-  | 'terminal'
-  | 'files'
-  | 'web_service'
-  | 'port_forward';
+export type DesktopGatewayCapability = 'member_access' | 'member_manage' | 'cloud_configure';
 
 export type DesktopGatewayStatus =
   | 'unknown'
@@ -32,68 +25,11 @@ export type DesktopGatewayTrustState =
   | 'trust_changed'
   | 'revoked';
 
-export type DesktopGatewayEnvironmentState =
-  | 'available'
-  | 'starting'
-  | 'stopped'
-  | 'unknown'
-  | 'archived';
-
-export type DesktopGatewayEnvironmentCapability =
-  | 'open'
-  | 'open_direct'
-  | 'open_via_gateway'
-  | 'terminal'
-  | 'files'
-  | 'web_service'
-  | 'port_forward';
-
-export type DesktopGatewayEnvironmentOriginKind =
-  | 'gateway_host'
-  | 'ssh_target'
-  | 'container'
-  | 'network_target';
-
-export type DesktopGatewayEnvironmentProfileAccessRoute = Readonly<{
-  kind: 'url' | 'ssh_host' | 'ssh_container';
-  url?: string;
-  origin_label?: string;
-  ssh_destination?: string;
-  ssh_port?: number;
-  auth_mode?: string;
-  ssh_runtime_root?: string;
-  container_engine?: string;
-  container_id?: string;
-  container_runtime_root?: string;
-}>;
-
-export type DesktopGatewayEnvironmentProfile = Readonly<{
-  managed: boolean;
-  access_route_kind: DesktopGatewayEnvironmentProfileAccessRoute['kind'];
-  access_mode?: 'direct_url' | 'gateway_proxy';
-}>;
-
-export type DesktopGatewayEnvironment = Readonly<{
-  gateway_env_id: string;
-  display_name: string;
-  env_kind: 'reachable_env';
-  state: DesktopGatewayEnvironmentState;
-  capabilities: readonly DesktopGatewayEnvironmentCapability[];
-  access_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
-  profile?: DesktopGatewayEnvironmentProfile;
-  profile_access_route?: DesktopGatewayEnvironmentProfileAccessRoute;
-  access_endpoint?: DesktopGatewayEnvironmentProfileAccessRoute;
-  origin: Readonly<{
-    kind: DesktopGatewayEnvironmentOriginKind;
-    label: string;
-  }>;
-  last_seen_at_unix_ms?: number;
+export type DesktopGatewayEnvironment = GatewayMember & Readonly<{
   last_access_result?: DesktopGatewayAccessResult;
 }>;
-
 export type DesktopGatewayAccessResult = Readonly<{
-  access_mode: 'direct_url' | 'gateway_proxy';
-  status: 'ready' | 'gateway_unavailable' | 'target_unavailable' | 'runtime_authentication_required' | 'session_expired';
+  status: 'ready' | 'gateway_unavailable' | 'target_unavailable' | 'runtime_authentication_required' | 'member_removed';
   checked_at_unix_ms: number;
 }>;
 
@@ -230,6 +166,11 @@ export type DesktopGatewaySource = Readonly<{
   created_at_ms: number;
   updated_at_ms: number;
   environments: readonly DesktopGatewayEnvironment[];
+  permissions?: GatewayPermissions;
+  policy?: GatewayPolicy;
+  catalog_revision?: number;
+  rebuild_required?: boolean;
+  hook_status?: GatewayHookStatuses;
 }>;
 
 export type DesktopEnvironmentSourceKind = 'local' | 'provider' | 'gateway';
@@ -258,19 +199,6 @@ export function desktopGatewayEnvironmentEntryID(
   return cleanGatewayID && cleanGatewayEnvID
     ? `gateway:${cleanGatewayID}:env:${cleanGatewayEnvID}`
     : '';
-}
-
-export function desktopGatewayProfileURLHasEmbeddedCredentials(value: string | undefined): boolean {
-  const raw = compact(value);
-  if (!raw) {
-    return false;
-  }
-  try {
-    const parsed = new URL(raw);
-    return parsed.username !== '' || parsed.password !== '';
-  } catch {
-    return false;
-  }
 }
 
 export function desktopGatewayConnectionKindLabel(kind: DesktopGatewayConnectionKind): string {
@@ -357,40 +285,9 @@ export function desktopGatewayNeedsResolution(status: DesktopGatewayStatus): boo
 }
 
 export function desktopGatewayCanOpenEnvironment(
-  gateway: Pick<DesktopGatewaySource, 'status' | 'gateway_url'>,
-  environment: Pick<DesktopGatewayEnvironment, 'state' | 'capabilities' | 'access_capabilities' | 'access_endpoint'>,
+  gateway: Pick<DesktopGatewaySource, 'status' | 'permissions'>,
+  environment: Pick<DesktopGatewayEnvironment, 'state' | 'connected'>,
 ): boolean {
-  const accessCapabilities = environment.access_capabilities ?? [];
-  const endpoint = environment.access_endpoint;
-  if (!endpoint || endpoint.kind !== 'url' || !endpoint.url?.trim()) {
-    return false;
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(endpoint.url);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return false;
-  }
-  if (parsed.username || parsed.password) {
-    return false;
-  }
-  const endpointPath = parsed.pathname.toLowerCase();
-  if (endpointPath.includes('/gateway') || endpointPath.includes('/bridge') || endpointPath.includes('/open-session')) {
-    return false;
-  }
-  if (gateway.gateway_url) {
-    try {
-      if (new URL(gateway.gateway_url).origin === parsed.origin) {
-        return false;
-      }
-    } catch {
-      return false;
-    }
-  }
-  return gateway.status === 'online'
-    && environment.state !== 'archived'
-    && (accessCapabilities.includes('open_direct') || accessCapabilities.includes('open_via_gateway'));
+  return gateway.status === 'online' && gateway.permissions?.access === true
+    && environment.state === 'active' && environment.connected;
 }

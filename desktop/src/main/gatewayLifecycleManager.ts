@@ -14,19 +14,7 @@ import {
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
 import { type RuntimePlacementBridgeSession, startRuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
-import {
-  GatewayBridgeClient,
-  GatewayURLClient,
-  redactGatewayDiagnosticValue,
-  type GatewayCatalogResponse,
-  type GatewayEnvProfileDeleteRequest,
-  type GatewayEnvProfileDeleteResponse,
-  type GatewayEnvProfileUpsertRequest,
-  type GatewayEnvProfileUpsertResponse,
-  type GatewayOpenSessionRequest,
-  type GatewayOpenSessionResponse,
-} from './gatewayClient';
-import { gatewayEnvAppBridgeRouteID } from './gatewaySessionArtifact';
+import { GatewayClient, redactGatewayDiagnosticValue, type GatewayCatalogResponse } from './gatewayClient';
 import { gatewayRecordSSHPasswordRef, type GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
 import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
@@ -52,9 +40,8 @@ import type { DesktopOperationFailurePresentation } from '../shared/desktopOpera
 
 export type GatewayLifecycleSession = Readonly<{
   target_id: string;
-  route_id: string;
   bridge_session: RuntimePlacementBridgeSession;
-  client: GatewayBridgeClient;
+  client: GatewayClient;
 }>;
 
 export class GatewayServiceStartRequiredError extends Error {
@@ -172,7 +159,7 @@ export class GatewayLifecycleManager {
 
   async refreshCatalog(record: GatewayRecord, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayCatalogResponse> {
     if (record.connection.kind === 'url') {
-      return new GatewayURLClient(this.options.secret_store).catalog(record, options);
+      return new GatewayClient(this.options.secret_store).catalog(record, options);
     }
     return (await this.ensureGatewayReady(record, {
       startPolicy: options.startPolicy ?? 'require_ready',
@@ -181,99 +168,15 @@ export class GatewayLifecycleManager {
     })).client.catalog(record, options);
   }
 
-  async openSession(
-    record: GatewayRecord,
-    request: GatewayOpenSessionRequest,
-    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<GatewayOpenSessionResponse> {
-    return (await this.openSessionWithBridge(record, request, options)).response;
-  }
-
-  async openSessionWithBridge(
-    record: GatewayRecord,
-    request: GatewayOpenSessionRequest,
-    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<Readonly<{
-    response: GatewayOpenSessionResponse;
-    bridge_session?: RuntimePlacementBridgeSession;
-  }>> {
-    if (record.connection.kind === 'url') {
-      return {
-        response: await new GatewayURLClient(this.options.secret_store).openSession(record, request, options),
-      };
-    }
-    const session = await this.ensureGatewayReady(record, {
-      startPolicy: options.startPolicy ?? 'require_ready',
-      signal: options.signal,
-      onProgress: options.onProgress,
-    });
-    const bridgeRequest = {
-      ...request,
-      bridge_session_id: session.bridge_session.placement_target_id,
-      route_id: session.route_id,
-    };
-    return {
-      response: await session.client.openSession(record, bridgeRequest, options),
-      bridge_session: session.bridge_session,
-    };
-  }
-
-  async checkEnvironmentProfile(record: GatewayRecord, targetURL: string, clientNonce: string): Promise<unknown> {
-    if (record.connection.kind === 'url') return new GatewayURLClient(this.options.secret_store).checkEnvironmentProfile(record, targetURL, clientNonce, { timeoutMs: 15_000 });
-    const session = await this.ensureGatewayReady(record, { startPolicy: 'require_ready' });
-    return session.client.checkEnvironmentProfile(record, targetURL, clientNonce, { timeoutMs: 15_000 });
-  }
-
-  async upsertEnvironmentProfile(
-    record: GatewayRecord,
-    request: GatewayEnvProfileUpsertRequest,
-    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<GatewayEnvProfileUpsertResponse> {
-    if (record.connection.kind === 'url') {
-      return new GatewayURLClient(this.options.secret_store).upsertEnvironmentProfile(record, request, options);
-    }
-    const session = await this.ensureGatewayReady(record, {
-      startPolicy: 'require_ready',
-      signal: options.signal,
-      onProgress: options.onProgress,
-    });
-    return session.client.upsertEnvironmentProfile(record, request, options);
-  }
-
-  async deleteEnvironmentProfile(
-    record: GatewayRecord,
-    request: GatewayEnvProfileDeleteRequest,
-    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<GatewayEnvProfileDeleteResponse> {
-    if (record.connection.kind === 'url') {
-      return new GatewayURLClient(this.options.secret_store).deleteEnvironmentProfile(record, request, options);
-    }
-    const session = await this.ensureGatewayReady(record, {
-      startPolicy: 'require_ready',
-      signal: options.signal,
-      onProgress: options.onProgress,
-    });
-    return session.client.deleteEnvironmentProfile(record, request, options);
-  }
-
-  async closeSession(record: GatewayRecord, gatewaySessionID: string): Promise<void> {
-    if (record.connection.kind === 'url') {
-      return new GatewayURLClient(this.options.secret_store).closeSession(record, gatewaySessionID, { timeoutMs: 5_000 });
-    }
-    const session = this.sessions.get(gatewayLifecycleTargetID(record));
-    if (session) await session.client.closeSession(record, gatewaySessionID, { timeoutMs: 5_000 });
-  }
-
-
-  async bridgeClient(record: GatewayRecord, options: Readonly<{
-    startPolicy: GatewayStartPolicy;
+  async client(record: GatewayRecord, options: Readonly<{
+    startPolicy?: GatewayStartPolicy;
     signal?: AbortSignal;
-  }>): Promise<GatewayBridgeClient> {
-    const session = await this.ensureGatewayReady(record, {
-      startPolicy: options.startPolicy,
-      signal: options.signal,
-    });
-    return session.client;
+    onProgress?: GatewayLifecycleProgressSink;
+  }> = {}): Promise<GatewayClient> {
+    if (record.connection.kind === 'url') return new GatewayClient(this.options.secret_store);
+    return (await this.ensureGatewayReady(record, {
+      startPolicy: options.startPolicy ?? 'require_ready', signal: options.signal, onProgress: options.onProgress,
+    })).client;
   }
 
   async inspectService(record: GatewayRecord, signal?: AbortSignal): Promise<DesktopGatewayServiceState> {
@@ -668,9 +571,8 @@ export class GatewayLifecycleManager {
     }
     const session: GatewayLifecycleSession = {
       target_id: targetID,
-      route_id: gatewayEnvAppBridgeRouteID(record),
       bridge_session: bridgeSession,
-      client: new GatewayBridgeClient(this.options.secret_store, bridgeSession),
+      client: new GatewayClient(this.options.secret_store, bridgeSession),
     };
     this.sessions.set(targetID, session);
     void bridgeSession.closed.then(() => {

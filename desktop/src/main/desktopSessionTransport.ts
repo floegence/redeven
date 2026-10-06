@@ -9,8 +9,7 @@ import {
 export type DesktopSessionTransportKind =
   | 'native_local_bridge'
   | 'placement_bridge'
-  | 'gateway_bridge'
-  | 'gateway_proxy'
+  | 'gateway_member'
   | 'provider_remote'
   | 'external_local_ui';
 
@@ -86,9 +85,7 @@ export function shouldFailDesktopSessionMainDocument(input: Readonly<{
 
 type DesktopSessionTransportOptions = Readonly<{
   placementBridge?: boolean;
-  gatewayProxy?: boolean;
-  gatewayDirect?: boolean;
-  gatewayBridge?: boolean;
+  gatewayMember?: boolean;
 }>;
 
 function rootURL(rawURL: string): string {
@@ -148,19 +145,17 @@ export function resolveDesktopSessionTransport(
   }
 
   if (target.kind === 'gateway_environment') {
-    if (!options.gatewayProxy && !options.gatewayDirect) {
-      throw new Error('Gateway session requires an explicit access mode.');
-    }
+    if (!options.gatewayMember) throw new Error('Gateway session requires a member transport.');
     if (!startup.local_ui_url) {
       throw new Error('Gateway session is missing its external Local UI URL.');
     }
     return {
-      kind: options.gatewayProxy ? options.gatewayBridge ? 'gateway_bridge' : 'gateway_proxy' : 'external_local_ui',
+      kind: 'gateway_member',
       baseURL: rootURL(startup.local_ui_url),
       entryURL: buildLocalUIEnvAppEntryURL(startup.local_ui_url, { gatewayEndpoint: true }),
       displayURL: startup.local_ui_url,
       allowedBaseURL: startup.local_ui_url,
-      proxyPolicy: options.gatewayProxy ? 'gateway' : 'system',
+      proxyPolicy: 'gateway',
       partition: directPartition(target),
     };
   }

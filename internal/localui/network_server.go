@@ -99,7 +99,7 @@ func (s *Server) createNetworkServers() error {
 }
 
 func (s *Server) authorizePublicWebSocketRequest(r *http.Request) bool {
-	return r != nil && s.isAllowedPublicAuthority(r.Host) && strictSameOriginWSRequest(r, true)
+	return r != nil && (s.isAllowedPublicAuthority(r.Host) || gatewayMemberOrigin(r) == "https://"+r.Host) && strictSameOriginWSRequest(r, true)
 }
 
 func (s *Server) serveNetwork() {

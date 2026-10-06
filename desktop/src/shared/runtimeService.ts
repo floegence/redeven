@@ -1,4 +1,4 @@
-import { normalizeRuntimeGatewayCloud, type RuntimeGatewayCloudAccess } from './runtimeGatewayCloud';
+import { normalizeRuntimeGatewayPublication, type RuntimeGatewayPublication } from './runtimeGatewayPublication';
 
 export type RuntimeServiceCompatibility =
   | 'compatible'
@@ -55,7 +55,6 @@ export type RuntimeServiceCapability = Readonly<{
 }>;
 
 export type RuntimeServiceCapabilities = Readonly<{
-  gateway_cloud_join?: RuntimeServiceCapability;
   desktop_model_source: RuntimeServiceCapability;
   provider_link: RuntimeServiceCapability;
   runtime_gateway?: RuntimeServiceCapability;
@@ -116,7 +115,7 @@ export type RuntimeServiceProviderLinkBinding = Readonly<{
 }>;
 
 export type RuntimeServiceSnapshot = Readonly<{
-  gateway_cloud?: RuntimeGatewayCloudAccess;
+  gateway_publication?: RuntimeGatewayPublication;
   runtime_version?: string;
   runtime_commit?: string;
   runtime_build_time?: string;
@@ -143,7 +142,7 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 40;
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 41;
 export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
@@ -379,9 +378,9 @@ export function normalizeRuntimeServiceSnapshot(
   const compatibilityEpochMismatch = observedCompatibilityEpoch === undefined
     || compatibility !== declaredCompatibility;
   const aiReadiness = normalizeAIReadiness(record.ai_readiness);
-  const gatewayCloud = normalizeRuntimeGatewayCloud(record.gateway_cloud);
+  const gatewayCloud = normalizeRuntimeGatewayPublication(record.gateway_publication);
   return {
-    ...(gatewayCloud ? { gateway_cloud: gatewayCloud } : {}),
+    ...(gatewayCloud ? { gateway_publication: gatewayCloud } : {}),
     runtime_version: compact(record.runtime_version) || undefined,
     runtime_commit: compact(record.runtime_commit) || undefined,
     runtime_build_time: compact(record.runtime_build_time) || undefined,
@@ -414,7 +413,6 @@ export function normalizeRuntimeServiceSnapshot(
       desktop_model_source: desktopModelSourceCapability,
       provider_link: providerLinkCapability,
       runtime_gateway: runtimeGatewayCapability,
-      gateway_cloud_join: normalizeCapability(capabilitiesRecord.gateway_cloud_join),
     },
     bindings: {
       desktop_model_source: normalizeBinding(bindingsRecord.desktop_model_source, desktopModelSourceCapability),

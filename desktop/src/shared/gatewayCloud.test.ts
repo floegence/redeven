@@ -3,15 +3,16 @@ import { normalizeGatewayCloudConfiguration, parseGatewayCloudSummary } from './
 import { normalizeDesktopLauncherActionRequest } from './desktopLauncherIPC';
 
 describe('Gateway Cloud trust boundary', () => {
-  const configuration = { cloud_origin: 'https://cloud.example', gateway_url: 'https://gateway.internal:7443', egress_listen: '0.0.0.0:7443' };
-  it('normalizes explicit HTTPS origins and rejects shell syntax and invalid ports before host execution', () => {
+  const configuration = { cloud_origin: 'https://cloud.example' };
+  it('uses the member endpoint and rejects retired route configuration', () => {
     expect(normalizeGatewayCloudConfiguration(configuration)).toEqual(configuration);
     for (const invalid of ['http://gateway.internal', 'https://user:pass@gateway.internal', 'https://gateway.internal/path', 'https://gateway.internal#fragment']) {
-      expect(normalizeGatewayCloudConfiguration({ ...configuration, gateway_url: invalid })).toBeNull();
+      expect(normalizeGatewayCloudConfiguration({ ...configuration, cloud_origin: invalid })).toBeNull();
     }
-    for (const invalid of ['0.0.0.0:0', '0.0.0.0:65536', '0.0.0.0:7443;touch /tmp/unwanted', '$(id):7443']) {
-      expect(normalizeGatewayCloudConfiguration({ ...configuration, egress_listen: invalid })).toBeNull();
-    }
+    expect(normalizeGatewayCloudConfiguration({ ...configuration, gateway_url: 'https://gateway.internal' })).toBeNull();
+    expect(normalizeGatewayCloudConfiguration({ ...configuration, egress_listen: '0.0.0.0:7443' })).toBeNull();
+    expect(normalizeGatewayCloudConfiguration({ ...configuration, reauthorize: 'yes' })).toBeNull();
+    expect(normalizeGatewayCloudConfiguration({ ...configuration, reauthorize: true })).toEqual({ ...configuration, reauthorize: true });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'configure_gateway_cloud', gateway_id: 'gateway-1', configuration })).toEqual({ kind: 'configure_gateway_cloud', gateway_id: 'gateway-1', configuration });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'configure_gateway_cloud', gateway_id: 'gateway-1', configuration: { ...configuration, cloud_origin: 'file:///tmp' } })).toBeNull();
   });
