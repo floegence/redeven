@@ -6645,14 +6645,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         </Show>
         <Show when={tessivenVisited()}><div class="h-full min-h-0" style={{ display: tessivenVisible() ? undefined : 'none' }} data-desktop-page="tessiven" aria-hidden={!tessivenVisible() ? 'true' : undefined} inert={!tessivenVisible()}>
           <TessivenPage locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
-            onSendFlower={async (input, threadID) => {
-              const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
-                client_request_id: input.client_request_id,
-                thread_id: threadID,
-                prompt: input.prompt,
-                context_action: input.intent.context_action,
+            renderFlower={surface => {
+              const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
+                get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
+                onSettingsChanged: refreshSnapshot,
               });
-              return receipt.thread_id;
+              return <FlowerSurface adapter={adapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
+                engaged={surface.engaged} transcriptVisible={surface.transcriptVisible}
+                embeddedConversation={surface.embeddedConversation} copy={flowerSurfaceCopy()}
+                filesystemScopeKey={flowerFilesystemScopeKey()}
+                notify={notice => showActionToast(notice.message, notice.tone, notice.title ? { title: notice.title } : {})} />;
             }}
             onOpenFlower={openFlowerConversation}
             onOpenService={async () => { throw new Error(tessivenCopy()('openUnavailable')); }}/>

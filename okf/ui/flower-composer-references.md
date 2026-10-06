@@ -9,7 +9,7 @@ timestamp: 2026-08-10T00:00:00Z
 
 - Authority: Redeven owns reference discovery and unadmitted draft editing; Floret is the sole canonical source after admission.
 - Outcome: a whitespace-boundary `@` token selects one working-directory file or directory as an ordered reference chip without adding prompt text or file content.
-- Invariants: discovery uses the host's authorized filesystem adapter, all visible placements in one connection share one in-memory scope, and one strict `flower_composer` context action preserves the frozen order and directory kind.
+- Invariants: discovery uses the host's authorized filesystem adapter, all visible placements in one connection share one in-memory scope, and one strict context action preserves the frozen order and directory kind.
 - Failure boundary: stale search generations, malformed wire data, or admission mismatches fail without discarding the connection-local editor, creating a different queued command, or writing canonical Floret state.
 
 # Contract
@@ -32,7 +32,7 @@ The index bounds recursion depth, listed directories, entries per directory, tot
 
 The connection-local composer stores ordered file/directory chips with a product-local identity, host-derived label, and opaque normalized path. It is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.
 
-Send freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer`; each context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. The typed Send mapping converts that one frozen action into canonical Floret references whether the runtime accepts an immediate turn or canonical queue input.
+Send freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer` for the ordinary chat. An embedded Tessiven conversation preserves its exact `tessiven` selection envelope and appends the frozen file references to that same action; each file context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. The typed Send mapping converts that one frozen action into canonical Floret references whether the runtime accepts an immediate turn or canonical queue input.
 
 The browser transport outbox may retain the original ordinary launch input under its exact `client_request_id` until canonical confirmation. Retry uses that same transport identity; it does not create a Redeven backend command row or use Floret's queue item ID as an idempotency key. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and current-turn supplemental context.
 

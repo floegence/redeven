@@ -585,8 +585,29 @@ export type FlowerSurfaceNotification = Readonly<{
   message: string;
 }>;
 
+/** Two placements over the same Flower conversation, drafts and live runtime. */
+export type FlowerEmbeddedConversation = Readonly<{
+  scope: string;
+  contextAction?: ContextActionEnvelope;
+  request?: Readonly<{ nonce: number; prompt?: string }>;
+  placeholder?: string;
+  emptyContent?: JSX.Element;
+  composerContext?: JSX.Element;
+  onSubmit?: () => void;
+  render: (parts: FlowerConversationParts) => JSX.Element;
+}>;
+
+export type FlowerConversationParts = Readonly<{
+  conversation: JSX.Element;
+  composer: JSX.Element;
+  actions: JSX.Element;
+  threadID: Accessor<string>;
+  newConversation: () => void;
+}>;
+
 export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
+  embeddedConversation?: FlowerEmbeddedConversation;
   filesystemScopeKey?: string;
   filesystemScrollViewportProps?: JSX.HTMLAttributes<HTMLDivElement>;
   approvalScrollViewportProps?: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'style'> & { style?: JSX.CSSProperties } & Readonly<Record<`data-${string}`, string>>;
@@ -685,6 +706,12 @@ const FlowerCompanionLiveTailText: Component<Readonly<{
 
 export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const presentation = () => props.presentation ?? 'full';
+  const [embeddedDraftKeys, setEmbeddedDraftKeys] = createSignal<Record<string, string>>({});
+  const pendingDraftKey = () => props.embeddedConversation
+    ? embeddedDraftKeys()[props.embeddedConversation.scope] ?? `${PENDING_NEW_THREAD_ID}:${props.embeddedConversation.scope}`
+    : PENDING_NEW_THREAD_ID;
+  const isPendingDraftKey = (key: string) => key === PENDING_NEW_THREAD_ID || key.startsWith(`${PENDING_NEW_THREAD_ID}:`);
+  const embeddedThreads = new Map<string, string>();
   const mobileInteraction = useMobileLayout();
   const [surfaceElement, setSurfaceElement] = createSignal<HTMLElement>();
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
@@ -792,7 +819,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 	const outboxResendInFlight = new Set<string>();
 	const pendingAdmissionHandoffs = new Map<string, PendingAdmissionHandoff>();
 	const canConfirmOutboxEntry = (entry: TransportOutboxEntry): boolean => (
-		entry.threadId !== PENDING_NEW_THREAD_ID
+		!isPendingDraftKey(entry.threadId)
 		|| pendingAdmissionHandoffs.has(entry.requestId)
 	);
 	let transportOutboxDisposed = false;
@@ -1546,7 +1573,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadLoading = createMemo(() => (
     threadDetailLoadingIDs().has(trimString(selectedThreadID()))
   ));
-  const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || PENDING_NEW_THREAD_ID);
+  const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || pendingDraftKey());
 	const attachmentControllers = new Map<string, FlowerAttachmentController>();
 	const attachmentControllerUnsubscribers = new Map<string, () => void>();
 	const draftSessions = new Map<string, FlowerComposerDraftSession>();
@@ -1554,7 +1581,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 	const draftSessionUnsubscribers = new Map<string, () => void>();
 	const hydratedDraftSessionRevisions = new Map<string, number>();
 	const draftSessionFor = (rawSessionKey: string): FlowerComposerDraftSession => {
-		const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+		const sessionKey = trimString(rawSessionKey) || pendingDraftKey();
 		const existing = draftSessions.get(sessionKey);
 		if (existing) return existing;
 		const session = draftCoordinator.open(sessionKey);
@@ -1565,7 +1592,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		return session;
 	};
 	const reactiveDraftSnapshotFor = (rawSessionKey: string): FlowerComposerDraftSnapshot => {
-		const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+		const sessionKey = trimString(rawSessionKey) || pendingDraftKey();
 		draftSessionFor(sessionKey);
 		const draftSnapshot = draftSessionSnapshots.get(sessionKey);
 		if (!draftSnapshot) throw new Error('Flower composer draft session snapshot is unavailable.');
@@ -1620,7 +1647,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const pending = pendingPermissionPatch();
     if (!pending) return false;
     const threadID = selectedThreadID();
-    return threadID ? pending.threadID === threadID : pending.threadID === PENDING_NEW_THREAD_ID;
+    return threadID ? pending.threadID === threadID : pending.threadID === pendingDraftKey();
   });
   const permissionSelectorTitle = createMemo(() => {
     if (permissionPatchPending()) return copy().chat.permissionSelectorSaving;
@@ -1630,8 +1657,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : copy().chat.permissionSelectorLabel;
   });
   const updateComposerSessionDraft = (sessionKey: string, updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
-    const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
-    if (key !== PENDING_NEW_THREAD_ID && retiredThreadIDs.has(key)) return;
+    const key = trimString(sessionKey) || pendingDraftKey();
+    if (key !== pendingDraftKey() && retiredThreadIDs.has(key)) return;
     draftSessionFor(key).mutate((value) => {
       const previous = composerSessionDraftFromValue(value);
       const next = updater(previous);
@@ -1668,7 +1695,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     value.mode === 'preparing_long_text_submission'
   );
   const updateComposerSessionText = (rawSessionKey: string, text: string) => {
-    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    const sessionKey = trimString(rawSessionKey) || pendingDraftKey();
     if (draftSubmissionActive(draftSessionFor(sessionKey).snapshot().value)) return;
     updateComposerSessionDraft(sessionKey, (draft) => (
       draft.chatDraft === text ? draft : { ...draft, chatDraft: text }
@@ -1681,7 +1708,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     | Readonly<{ kind: 'add'; files: readonly File[]; source: 'file' | 'paste' | 'drop' }>
     | Readonly<{ kind: 'reselect'; localID: string; file: File }>;
   const attachmentControllerFor = (rawSessionKey: string): FlowerAttachmentController => {
-    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    const sessionKey = trimString(rawSessionKey) || pendingDraftKey();
     const existing = attachmentControllers.get(sessionKey);
     const controller = draftCoordinator.attachmentController(sessionKey, () => createFlowerAttachmentController({
       stagingScope: draftCoordinator.attachmentStagingScope(sessionKey),
@@ -1698,12 +1725,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return controller;
   };
   const ensureAttachmentStagingScope = (rawSessionKey: string): Promise<FlowerAttachmentStagingScope> => {
-    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    const sessionKey = trimString(rawSessionKey) || pendingDraftKey();
     if (!props.adapter.createAttachmentStagingScope) {
       return Promise.reject(new Error('Attachment staging is unavailable.'));
     }
     const session = draftSessionFor(sessionKey);
-    const targetID = sessionKey === PENDING_NEW_THREAD_ID
+    const targetID = isPendingDraftKey(sessionKey)
       ? session.mutate((value) => value.client_request_id
         ? value
         : { ...value, client_request_id: createFlowerClientRequestID() }).snapshot.value.client_request_id
@@ -1716,7 +1743,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
   const releaseAttachmentStagingScope = (rawSessionKey: string) => {
-    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    const sessionKey = trimString(rawSessionKey) || pendingDraftKey();
     draftCoordinator.releaseAttachmentStagingScope(sessionKey);
   };
   const currentAttachmentController = (): FlowerAttachmentController => attachmentControllerFor(currentComposerSessionKey());
@@ -1894,8 +1921,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		return Boolean(tid && selectedThreadID() === tid && threadCache().views.has(tid));
 	};
 	const composerSessionStillCurrent = (sessionKey: string): boolean => {
-		const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
-		if (key === PENDING_NEW_THREAD_ID) return !selectedThreadID();
+		const key = trimString(sessionKey) || pendingDraftKey();
+		if (key === pendingDraftKey()) return !selectedThreadID();
     return selectedThreadDetailMatches(key);
   };
   const warmupState = createMemo(() => props.warmup?.active ? props.warmup : null);
@@ -2062,7 +2089,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ));
       if (!persistsRemoteDefault) return;
       const previousSnapshot = snapshot();
-      setPendingModelPatch({ threadID: PENDING_NEW_THREAD_ID, requested: mid, previous });
+      const pendingSessionKey = pendingDraftKey();
+      setPendingModelPatch({ threadID: pendingSessionKey, requested: mid, previous });
       applyPersistedDefaultModelLocally(mid);
       try {
         const next = await props.adapter.persistDefaultModel(mid);
@@ -2078,7 +2106,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         notifyModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
       } finally {
         setPendingModelPatch((current) => (
-          current?.threadID === PENDING_NEW_THREAD_ID && current.requested === mid ? null : current
+          current?.threadID === pendingSessionKey && current.requested === mid ? null : current
         ));
       }
       return;
@@ -2786,7 +2814,7 @@ webSearch: model.web_search,
     const pending = pendingModelPatch();
     if (!pending) return false;
     const threadID = selectedThreadID();
-    return threadID ? pending.threadID === threadID : pending.threadID === PENDING_NEW_THREAD_ID;
+    return threadID ? pending.threadID === threadID : pending.threadID === pendingDraftKey();
   });
   const composerModelInteractive = createMemo(() => (
     selectedThreadPreferenceEditable()
@@ -2894,6 +2922,7 @@ webSearch: model.web_search,
   });
   const companionCompactComposer = createMemo(() => (
     presentation() === 'companion'
+    && !props.embeddedConversation
     && !companionCollapsed()
     && !needsSetup()
     && !selectedInputRequest()
@@ -3316,12 +3345,13 @@ webSearch: model.web_search,
     let nextCache = result.cache;
     let selectionTransferred = false;
     const admittedHandoffs = reconciliation.admitted.flatMap((entry) => {
+      if (entry.threadId.startsWith(`${PENDING_NEW_THREAD_ID}:`)) embeddedThreads.set(entry.threadId, threadID);
       const handoff = pendingAdmissionHandoffs.get(entry.requestId);
       if (!handoff) return [];
       const transferDraftScope = Boolean(
         !selectionTransferred
-        && entry.threadId === PENDING_NEW_THREAD_ID
-        && handoff.sessionKey === PENDING_NEW_THREAD_ID
+        && isPendingDraftKey(entry.threadId)
+        && isPendingDraftKey(handoff.sessionKey)
         && handoff.selectionSequence === threadLoadSequence
         && !nextCache.selectedId
       );
@@ -4475,11 +4505,12 @@ webSearch: model.web_search,
         new Error('Flower send returned a different thread identity.'),
       );
     }
+    if (entry.threadId.startsWith(`${PENDING_NEW_THREAD_ID}:`)) embeddedThreads.set(entry.threadId, threadID);
     const handoff = pendingAdmissionHandoffs.get(requestID);
     const transferDraftScope = Boolean(
       handoff
-      && entry.threadId === PENDING_NEW_THREAD_ID
-      && handoff.sessionKey === PENDING_NEW_THREAD_ID
+      && isPendingDraftKey(entry.threadId)
+      && isPendingDraftKey(handoff.sessionKey)
       && handoff.selectionSequence === threadLoadSequence
       && !threadCache().selectedId
     );
@@ -4529,10 +4560,10 @@ webSearch: model.web_search,
 			if (outboxResendInFlight.has(entry.requestId)) continue;
 			if (entry.terminalError) continue;
 			if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
-			if (entry.threadId === PENDING_NEW_THREAD_ID && !pendingAdmissionHandoffs.has(entry.requestId)) {
+			if (isPendingDraftKey(entry.threadId) && !pendingAdmissionHandoffs.has(entry.requestId)) {
 				pendingAdmissionHandoffs.set(entry.requestId, {
-					sessionKey: PENDING_NEW_THREAD_ID,
-					selectionSequence: threadLoadSequence,
+					sessionKey: entry.threadId,
+					selectionSequence: entry.threadId === pendingDraftKey() ? threadLoadSequence : -1,
 					settle: () => undefined,
 				});
 			}
@@ -4553,9 +4584,7 @@ webSearch: model.web_search,
 				if (flowerTurnAdmissionFailureKind(error) !== 'unknown') {
 					pendingAdmissionHandoffs.delete(entry.requestId);
 					setTransportOutbox((outbox) => outbox.drop(entry.requestId));
-					const sessionKey = entry.threadId === PENDING_NEW_THREAD_ID
-						? PENDING_NEW_THREAD_ID
-						: entry.threadId;
+					const sessionKey = entry.threadId;
 					updateComposerSessionDraft(sessionKey, (draft) => ({
 						...draft,
 						chatDraft: draft.chatDraft || entry.input.prompt,
@@ -5018,6 +5047,7 @@ webSearch: model.web_search,
       ? 'preparing_long_text_submission' as const
       : 'ordinary' as const;
     const selectedID = trimString(selectedThreadID());
+    const frozenContextAction = props.embeddedConversation?.contextAction;
     const frozenModelID = selectedComposerModelID();
     const frozenPermissionType = composerPermissionType();
     const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
@@ -5050,6 +5080,7 @@ webSearch: model.web_search,
       || operationClaim.snapshot.value.client_request_id !== clientRequestID
       || !composerDraftOperationCurrent(operation)
     ) return;
+    props.embeddedConversation?.onSubmit?.();
     const launchController = operation.controller;
     const launchSessionKey = operation.sessionKey;
     const frozenDraft = operationClaim.snapshot.value;
@@ -5084,19 +5115,20 @@ webSearch: model.web_search,
       launchController.consumeReady(consumedAttachmentLocalIDs);
       const remainingAttachments = flowerComposerDraftAttachments(launchController.snapshot().items);
       const canonicalSessionKey = trimString(canonicalThreadID);
+      const moveDraft = transferDraftScope || launchSessionKey.startsWith(`${PENDING_NEW_THREAD_ID}:`);
       if (
-        transferDraftScope
-        && launchSessionKey === PENDING_NEW_THREAD_ID
+        moveDraft
+        && isPendingDraftKey(launchSessionKey)
         && canonicalSessionKey
         && canonicalSessionKey !== launchSessionKey
       ) {
         draftCoordinator.moveScope(launchSessionKey, canonicalSessionKey);
       }
-      const acceptedSessionKeys = new Set((transferDraftScope
+      const acceptedSessionKeys = new Set((moveDraft
         ? [launchSessionKey, canonicalSessionKey]
         : [launchSessionKey]
-      ).map((value) => trimString(value) || PENDING_NEW_THREAD_ID));
-      const retainedSessionKey = transferDraftScope && canonicalSessionKey
+      ).map((value) => trimString(value) || pendingDraftKey()));
+      const retainedSessionKey = moveDraft && canonicalSessionKey
         ? canonicalSessionKey
         : launchSessionKey;
       if (composerDraftOperationActive(operation)) {
@@ -5269,8 +5301,11 @@ webSearch: model.web_search,
         }
         if (!submissionCurrent()) return;
         if (!submissionCurrent()) return;
-        const contextAction: ContextActionEnvelope | undefined = frozenReferences.length > 0
-          ? {
+        const contextAction: ContextActionEnvelope | undefined = frozenContextAction
+          ? { ...frozenContextAction, context: [...frozenContextAction.context, ...frozenReferences.map(reference => ({
+              kind: 'file_path' as const, path: reference.path, is_directory: reference.kind === 'directory',
+            }))] }
+          : frozenReferences.length > 0 ? {
             schema_version: CONTEXT_ACTION_SCHEMA_VERSION,
             action_id: 'assistant.ask.flower',
             provider: 'flower',
@@ -5323,7 +5358,7 @@ webSearch: model.web_search,
         setTransportOutbox((outbox) => {
           durableOutbox = outbox.put({
             requestId: clientRequestID,
-            threadId: selectedID || PENDING_NEW_THREAD_ID,
+            threadId: selectedID || launchSessionKey,
             input: launchInput,
             attachmentLabels: readyItems.map((attachment) => attachment.name),
             createdAtMs: Date.now(),
@@ -5524,9 +5559,13 @@ webSearch: model.web_search,
     cancelSelectedThreadTailReveal();
     closeSubagentOverlays();
     setSelectedThreadID('');
+    if (props.embeddedConversation) {
+      const scope = props.embeddedConversation.scope;
+      setEmbeddedDraftKeys(keys => ({ ...keys, [scope]: `${PENDING_NEW_THREAD_ID}:${scope}:${createFlowerClientRequestID()}` }));
+    }
 	// A new chat must not inherit a slash command or transient input state
 	// from the previously selected thread.
-    updateComposerSessionDraft(PENDING_NEW_THREAD_ID, (draft) => ({
+    updateComposerSessionDraft(pendingDraftKey(), (draft) => ({
 		...draft,
 		chatDraft: '',
 		references: [],
@@ -5660,6 +5699,38 @@ webSearch: model.web_search,
     setSelectedThreadID(tid);
     scheduleThreadSelectionAfterPaint(tid, claimedSequence);
   };
+
+  let embeddedSessionKey = '';
+  createEffect(() => {
+    const sessionKey = props.embeddedConversation ? pendingDraftKey() : '';
+    if (!sessionKey || sessionKey === embeddedSessionKey) return;
+    untrack(() => {
+      if (embeddedSessionKey && selectedThreadID()) embeddedThreads.set(embeddedSessionKey, selectedThreadID());
+      embeddedSessionKey = sessionKey;
+      const threadID = embeddedThreads.get(sessionKey);
+      if (threadID) selectThread(threadID);
+      else {
+        cancelDeferredThreadSelection();
+        cancelThreadSelectionTransaction();
+        threadLoadSequence += 1;
+        cancelPresentedSelectionSchedule();
+        setPresentedSelection(null);
+        closeSubagentOverlays();
+        setSelectedThreadID('');
+        setThreadLoadError('');
+        returnToChat();
+      }
+    });
+  });
+  createEffect(on(() => props.embeddedConversation?.request?.nonce, (nonce) => {
+    const request = props.embeddedConversation?.request;
+    if (!nonce || !request) return;
+    untrack(() => {
+      if (request.prompt !== undefined) updateComposerSessionText(currentComposerSessionKey(), request.prompt);
+      returnToChat();
+      requestComposerFocus();
+    });
+  }));
 
   const updateTranscriptNearBottom = (event?: Event) => {
     if (selectedThreadTailPreparing() && event?.isTrusted) {
@@ -6811,7 +6882,7 @@ webSearch: model.web_search,
         const retained = operation.session.mutate((value) => ({
           ...value,
           text: retainedPaste.value,
-          ...(operation.sessionKey === PENDING_NEW_THREAD_ID && !value.client_request_id
+          ...(operation.sessionKey === pendingDraftKey() && !value.client_request_id
             ? { client_request_id: createFlowerClientRequestID() }
             : {}),
         }));
@@ -10517,6 +10588,7 @@ webSearch: model.web_search,
     }
     if (selectedThreadLoading() || (selectedThreadID() && !selectedThread())) return threadLoadingState();
     if (selectedThread()) return threadEmptyState();
+    if (props.embeddedConversation?.emptyContent && !needsSetup() && !surfaceWarmupActive()) return props.embeddedConversation.emptyContent;
     if (showSetupWelcome()) return (
       <FlowerSetupWelcome copy={copy()} actions={noModelProfileSetupActions()} onOpenSettings={openSettings}
         refreshing={modelSourceRefreshing()} onRefresh={() => void refreshModelSource()}
@@ -11138,7 +11210,7 @@ webSearch: model.web_search,
             if (companionCollapsed()) composerAutosizeController.suspend();
           }}
           class="w-full flower-body-copy leading-6 text-foreground placeholder:text-muted-foreground"
-          placeholder={composerPlaceholder()}
+          placeholder={bottomActionMode() === 'chat' && props.embeddedConversation?.placeholder ? props.embeddedConversation.placeholder : composerPlaceholder()}
           value={composerTextValue()}
           disabled={composerTextareaDisabled()}
           readOnly={composerTextareaReadOnly()}
@@ -11205,7 +11277,7 @@ webSearch: model.web_search,
         }}
         type="password"
         class="w-full flower-body-copy leading-6 text-foreground placeholder:text-muted-foreground"
-        placeholder={composerPlaceholder()}
+        placeholder={bottomActionMode() === 'chat' && props.embeddedConversation?.placeholder ? props.embeddedConversation.placeholder : composerPlaceholder()}
         value={composerTextValue()}
         disabled={composerTextareaDisabled()}
         readOnly={composerTextareaReadOnly()}
@@ -11222,208 +11294,7 @@ webSearch: model.web_search,
     </Show>
   );
 
-  const chatPanel = () => (
-    <div class="flower-chat-shell flower-chat-shell">
-      <div
-        class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md"
-        aria-hidden={companionCollapsed() ? 'true' : undefined}
-        inert={companionCollapsed()}
-      >
-        <div class="flower-chat-header-row">
-          <Show
-            when={presentation() === 'companion'}
-            fallback={(
-              <div class="flex min-w-0 items-center gap-3">
-                <button
-                  type="button"
-                  class="flower-mobile-navigation-button flower-header-icon-button"
-                  ref={mobileThreadsTrigger}
-                  aria-label={copy().chat.conversationsAria}
-                  title={copy().chat.conversationsAria}
-                  aria-haspopup="dialog"
-                  aria-expanded={threadNavigationOpen()}
-                  onClick={(event) => {
-                    event.currentTarget.focus({ preventScroll: true });
-                    setThreadNavigationOpen(true);
-                  }}
-                >
-                  <span aria-hidden="true"><Menu class="h-5 w-5" /></span>
-                </button>
-                <FlowerIcon class="h-5 w-5 text-primary" />
-                <div class="flower-chat-header-identity min-w-0">
-				  <div class="flower-chat-header-title truncate">{selectedThreadTitle()}</div>
-                </div>
-              </div>
-            )}
-          >
-            <Show when={!companionCollapsed()}>{companionHeaderIdentity()}</Show>
-          </Show>
-          <div class="flower-chat-header-actions">
-            <FlowerWorkingDirectoryControl
-              variant="browse"
-              name={displayedWorkingDirectoryLabel()}
-              title={workingDirectoryBrowseTitle()}
-              disabled={Boolean(workingDirectoryBrowseDisabledReason())}
-              onClick={(event) => {
-                const path = displayedWorkingDirectory();
-                if (workingDirectoryBrowseDisabledReason()) return;
-                const threadID = selectedThreadID();
-                void browseWorkingDirectory({ path, ...(threadID ? { thread_id: threadID } : {}) }, event.currentTarget);
-              }}
-            />
-            <Show when={selectedThreadID() && props.adapter.computerManagement}>
-              <button type="button" class="flower-header-icon-button" aria-label={copy().computer.title} title={copy().computer.title}
-                aria-haspopup="dialog" aria-expanded={computerDialog() !== null} onClick={() => setComputerDialog('settings')}><Link class="h-4 w-4" aria-hidden="true" /></button>
-            </Show>
-            <Show when={computerStageAvailable() && selectedComputerStage()}>
-              <button type="button" class="flower-computer-entry" aria-expanded={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? computerDialog() !== null : computerStageOpen()}
-                data-session-state={computerStageSessionState()}
-                data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'surface' : undefined}
-                title={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? selectedComputerAssistance().title : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
-                aria-label={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? selectedComputerAssistance().title : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
-                onClick={(event) => {
-                  if (isBrowserInstallInput(selectedInputRequest())) { setComputerDialog('installation'); return; }
-                  if (isBrowserConnectionInput(selectedInputRequest())) { setComputerDialog('connection'); return; }
-                  if (selectedThread()?.status === 'running') setComputerFrameSelection(undefined);
-                  restoreComputerStage(event.currentTarget);
-                }}>
-                <MonitorPointer size={15} aria-hidden="true" />
-                <span class="flower-computer-entry-label" role="status" data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'text' : undefined}>{computerStageEntryLabel()}</span>
-              </button>
-            </Show>
-            <Show when={presentation() === 'companion'}>
-              <button
-                type="button"
-                class="flower-header-icon-button"
-                aria-label={copy().chat.newChat}
-                title={copy().chat.newChat}
-                disabled={surfaceWarmupActive()}
-                onClick={startCompose}
-              >
-                <Plus class="h-4 w-4" />
-              </button>
-            </Show>
-            <div class="flower-subagents-anchor">
-              <button
-                ref={subagentTriggerRef}
-                type="button"
-                class={cn('flower-header-icon-button', (subagentDropdownOpen() || activeSubagentID()) && 'flower-header-icon-button-active')}
-                aria-label={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
-                title={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
-                aria-haspopup="dialog"
-                aria-expanded={subagentDropdownOpen()}
-                aria-controls="flower-subagents-dropdown"
-                onClick={openSubagents}
-              >
-                <Bot class="h-4 w-4" />
-                <Show when={selectedSubagentItems().length > 0}>
-                  <span
-                    class="flower-header-icon-badge"
-                    data-running={selectedRunningSubagentCount() > 0 && !subagentDropdownOpen() ? 'true' : 'false'}
-                    aria-hidden="true"
-                  >
-                    {subagentBadgeText()}
-                  </span>
-                </Show>
-              </button>
-              {subagentDropdown()}
-            </div>
-            <button
-              type="button"
-              class="flower-header-icon-button"
-              aria-label={copy().chat.settingsLabel}
-              title={copy().chat.settingsLabel}
-              onClick={openSettings}
-            >
-              <Settings class="h-4 w-4" />
-            </button>
-            {props.headerTrailingActions}
-          </div>
-        </div>
-      </div>
-      <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
-      <FlowerComputerConnections open={computerDialog() !== null} onOpenChange={open => { if (!open) setComputerDialog(null); }}
-        continuationKey={`${selectedThreadID()}:${selectedInputRequest()?.prompt_id ?? ''}`}
-        connectionOnly={computerDialog() === 'connection'} installationOnly={computerDialog() === 'installation'} onContinue={async (enabled) => {
-          const request = selectedInputRequest();
-          if ((!isBrowserConnectionInput(request) && !isBrowserInstallInput(request)) || !request) return;
-          const question = request.questions[0], choice = question.choices?.[isBrowserInstallInput(request) && enabled === false ? 1 : 0];
-          if (!choice) return;
-          selectInputChoice(question, choice);
-          setComputerDialog(null);
-          await submitInputRequest();
-        }}
-        permissionLabel={composerPermissionCopy()?.label} onEditPermissionMode={() => { queueMicrotask(() => openPermissionMenu()); }}
-        threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
-      <FlowerChatContextPreview
-        preview={contextSnapshotPreview()}
-        open={contextSnapshotPreview() !== null}
-				truncatedLabel={copy().chat.truncatedLabel}
-        zIndex={FLOWER_SURFACE_LAYER.contextPreview}
-        onClose={() => setContextSnapshotPreview(null)}
-      />
-      <FlowerAttachmentPreviewWindow
-        source={attachmentPreview()}
-        zIndex={FLOWER_SURFACE_LAYER.attachmentPreview}
-        loadingLabel={attachmentCopy().uploading}
-        unavailableLabel={attachmentCopy().errorUnavailable}
-        onClose={() => setAttachmentPreview(null)}
-      />
-      <div class="flower-chat-main" data-flower-action-layout={bottomActionMode()} data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>
-        <div
-          ref={(node) => {
-            setComputerLauncherBoundary(node);
-            transcriptScroll.bind(node);
-          }}
-          class="flower-chat-transcript flower-chat-transcript"
-          data-computer-launcher={computerStageAvailable() && !computerStageHistorical() && !computerStageOpen() ? 'true' : undefined}
-          aria-hidden={companionCollapsed() ? 'true' : undefined}
-          inert={companionCollapsed()}
-          onPointerDown={transcriptScroll.onPointerDown}
-          onContextMenu={openTranscriptMenu}
-          onKeyDown={(event) => {
-            if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openTranscriptMenu(event);
-            if (!event.defaultPrevented) transcriptScroll.onKeyDown(event);
-          }}
-          tabIndex={0}
-          data-flower-tail-preparing={selectedThreadTailPreparing() ? 'true' : undefined}
-          aria-busy={selectedThreadTailPreparing() ? 'true' : undefined}
-          onScroll={updateTranscriptNearBottom}
-          onWheel={(event) => {
-            if (transcriptMenu()) closeTranscriptMenu();
-            transcriptScroll.onWheel(event);
-          }}
-          onTouchMove={(event) => {
-            if (transcriptMenu()) closeTranscriptMenu();
-            transcriptScroll.onTouchMove(event);
-          }}
-        >
-          <div class="flower-transcript-stack">
-            <Show when={loadError()}>
-              {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
-            </Show>
-            <Show when={selectedThreadTerminalSyncing() && !threadLoadError()}>
-              {threadSyncingLatestState()}
-            </Show>
-            <Show
-              when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
-              fallback={selectedThreadFallbackState()}
-            >
-              <For each={visibleTimelineEntryKeys()}>
-                {(entryKey) => {
-                  const entry = createMemo(() => visibleTimelineEntriesByKey().get(entryKey) ?? null);
-                  return (
-                    <Show when={entry()}>
-                      {(value) => timelineEntry(value, transcriptScroll)}
-                    </Show>
-                  );
-                }}
-              </For>
-              <For each={visibleTransportOutbox()}>{(submission) => transportOutboxEntry(() => submission)}</For>
-              {threadLevelApprovalPanel()}
-            </Show>
-          </div>
-        </div>
+  const composerPanel = () => (
         <div class="flower-chat-bottom-dock" data-flower-action-layout={bottomActionMode()}>
           <Show when={showScrollToLatestButton()}>
             <div class="flower-scroll-to-latest-float">
@@ -11634,6 +11505,7 @@ webSearch: model.web_search,
                     {props.companionSummary?.accessibleText}
                   </span>
                 </Show>
+                <Show when={bottomActionMode() === 'chat'}>{props.embeddedConversation?.composerContext}</Show>
                 <div
                   class="flower-composer-content"
                   aria-hidden={companionActionVisible() || companionSummaryVisible() ? 'true' : undefined}
@@ -11995,7 +11867,218 @@ webSearch: model.web_search,
           </div>
         </div>
       </div>
-    </div>
+  );
+
+  const chatHeaderActions = () => (
+          <div class="flower-chat-header-actions">
+            <Show when={!props.embeddedConversation}><FlowerWorkingDirectoryControl
+              variant="browse"
+              name={displayedWorkingDirectoryLabel()}
+              title={workingDirectoryBrowseTitle()}
+              disabled={Boolean(workingDirectoryBrowseDisabledReason())}
+              onClick={(event) => {
+                const path = displayedWorkingDirectory();
+                if (workingDirectoryBrowseDisabledReason()) return;
+                const threadID = selectedThreadID();
+                void browseWorkingDirectory({ path, ...(threadID ? { thread_id: threadID } : {}) }, event.currentTarget);
+              }}
+            /></Show>
+            <Show when={selectedThreadID() && props.adapter.computerManagement}>
+              <button type="button" class="flower-header-icon-button" aria-label={copy().computer.title} title={copy().computer.title}
+                aria-haspopup="dialog" aria-expanded={computerDialog() !== null} onClick={() => setComputerDialog('settings')}><Link class="h-4 w-4" aria-hidden="true" /></button>
+            </Show>
+            <Show when={computerStageAvailable() && selectedComputerStage()}>
+              <button type="button" class="flower-computer-entry" aria-expanded={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? computerDialog() !== null : computerStageOpen()}
+                data-session-state={computerStageSessionState()}
+                data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'surface' : undefined}
+                title={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? selectedComputerAssistance().title : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
+                aria-label={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? selectedComputerAssistance().title : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
+                onClick={(event) => {
+                  if (isBrowserInstallInput(selectedInputRequest())) { setComputerDialog('installation'); return; }
+                  if (isBrowserConnectionInput(selectedInputRequest())) { setComputerDialog('connection'); return; }
+                  if (selectedThread()?.status === 'running') setComputerFrameSelection(undefined);
+                  restoreComputerStage(event.currentTarget);
+                }}>
+                <MonitorPointer size={15} aria-hidden="true" />
+                <span class="flower-computer-entry-label" role="status" data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'text' : undefined}>{computerStageEntryLabel()}</span>
+              </button>
+            </Show>
+            <Show when={presentation() === 'companion' && !props.embeddedConversation}>
+              <button
+                type="button"
+                class="flower-header-icon-button"
+                aria-label={copy().chat.newChat}
+                title={copy().chat.newChat}
+                disabled={surfaceWarmupActive()}
+                onClick={startCompose}
+              >
+                <Plus class="h-4 w-4" />
+              </button>
+            </Show>
+            <div class="flower-subagents-anchor">
+              <button
+                ref={subagentTriggerRef}
+                type="button"
+                class={cn('flower-header-icon-button', (subagentDropdownOpen() || activeSubagentID()) && 'flower-header-icon-button-active')}
+                aria-label={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
+                title={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
+                aria-haspopup="dialog"
+                aria-expanded={subagentDropdownOpen()}
+                aria-controls="flower-subagents-dropdown"
+                onClick={openSubagents}
+              >
+                <Bot class="h-4 w-4" />
+                <Show when={selectedSubagentItems().length > 0}>
+                  <span
+                    class="flower-header-icon-badge"
+                    data-running={selectedRunningSubagentCount() > 0 && !subagentDropdownOpen() ? 'true' : 'false'}
+                    aria-hidden="true"
+                  >
+                    {subagentBadgeText()}
+                  </span>
+                </Show>
+              </button>
+              {subagentDropdown()}
+            </div>
+            <button
+              type="button"
+              class="flower-header-icon-button"
+              aria-label={copy().chat.settingsLabel}
+              title={copy().chat.settingsLabel}
+              onClick={openSettings}
+            >
+              <Settings class="h-4 w-4" />
+            </button>
+            {props.headerTrailingActions}
+          </div>
+  );
+
+  const chatPanel = () => (
+    <div class="flower-chat-shell flower-chat-shell">
+      <Show when={!props.embeddedConversation}>
+      <div
+        class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md"
+        aria-hidden={companionCollapsed() ? 'true' : undefined}
+        inert={companionCollapsed()}
+      >
+        <div class="flower-chat-header-row">
+          <Show
+            when={presentation() === 'companion'}
+            fallback={(
+              <div class="flex min-w-0 items-center gap-3">
+                <button
+                  type="button"
+                  class="flower-mobile-navigation-button flower-header-icon-button"
+                  ref={mobileThreadsTrigger}
+                  aria-label={copy().chat.conversationsAria}
+                  title={copy().chat.conversationsAria}
+                  aria-haspopup="dialog"
+                  aria-expanded={threadNavigationOpen()}
+                  onClick={(event) => {
+                    event.currentTarget.focus({ preventScroll: true });
+                    setThreadNavigationOpen(true);
+                  }}
+                >
+                  <span aria-hidden="true"><Menu class="h-5 w-5" /></span>
+                </button>
+                <FlowerIcon class="h-5 w-5 text-primary" />
+                <div class="flower-chat-header-identity min-w-0">
+				  <div class="flower-chat-header-title truncate">{selectedThreadTitle()}</div>
+                </div>
+              </div>
+            )}
+          >
+            <Show when={!companionCollapsed()}>{companionHeaderIdentity()}</Show>
+          </Show>
+          {chatHeaderActions()}
+        </div>
+      </div>
+      </Show>
+      <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
+      <FlowerComputerConnections open={computerDialog() !== null} onOpenChange={open => { if (!open) setComputerDialog(null); }}
+        continuationKey={`${selectedThreadID()}:${selectedInputRequest()?.prompt_id ?? ''}`}
+        connectionOnly={computerDialog() === 'connection'} installationOnly={computerDialog() === 'installation'} onContinue={async (enabled) => {
+          const request = selectedInputRequest();
+          if ((!isBrowserConnectionInput(request) && !isBrowserInstallInput(request)) || !request) return;
+          const question = request.questions[0], choice = question.choices?.[isBrowserInstallInput(request) && enabled === false ? 1 : 0];
+          if (!choice) return;
+          selectInputChoice(question, choice);
+          setComputerDialog(null);
+          await submitInputRequest();
+        }}
+        permissionLabel={composerPermissionCopy()?.label} onEditPermissionMode={() => { queueMicrotask(() => openPermissionMenu()); }}
+        threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
+      <FlowerChatContextPreview
+        preview={contextSnapshotPreview()}
+        open={contextSnapshotPreview() !== null}
+				truncatedLabel={copy().chat.truncatedLabel}
+        zIndex={FLOWER_SURFACE_LAYER.contextPreview}
+        onClose={() => setContextSnapshotPreview(null)}
+      />
+      <FlowerAttachmentPreviewWindow
+        source={attachmentPreview()}
+        zIndex={FLOWER_SURFACE_LAYER.attachmentPreview}
+        loadingLabel={attachmentCopy().uploading}
+        unavailableLabel={attachmentCopy().errorUnavailable}
+        onClose={() => setAttachmentPreview(null)}
+      />
+      <div class="flower-chat-main" data-flower-action-layout={bottomActionMode()} data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>
+        <div
+          ref={(node) => {
+            setComputerLauncherBoundary(node);
+            transcriptScroll.bind(node);
+          }}
+          class="flower-chat-transcript flower-chat-transcript"
+          data-computer-launcher={computerStageAvailable() && !computerStageHistorical() && !computerStageOpen() ? 'true' : undefined}
+          aria-hidden={companionCollapsed() ? 'true' : undefined}
+          inert={companionCollapsed()}
+          onPointerDown={transcriptScroll.onPointerDown}
+          onContextMenu={openTranscriptMenu}
+          onKeyDown={(event) => {
+            if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openTranscriptMenu(event);
+            if (!event.defaultPrevented) transcriptScroll.onKeyDown(event);
+          }}
+          tabIndex={0}
+          data-flower-tail-preparing={selectedThreadTailPreparing() ? 'true' : undefined}
+          aria-busy={selectedThreadTailPreparing() ? 'true' : undefined}
+          onScroll={updateTranscriptNearBottom}
+          onWheel={(event) => {
+            if (transcriptMenu()) closeTranscriptMenu();
+            transcriptScroll.onWheel(event);
+          }}
+          onTouchMove={(event) => {
+            if (transcriptMenu()) closeTranscriptMenu();
+            transcriptScroll.onTouchMove(event);
+          }}
+        >
+          <div class="flower-transcript-stack">
+            <Show when={loadError()}>
+              {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
+            </Show>
+            <Show when={selectedThreadTerminalSyncing() && !threadLoadError()}>
+              {threadSyncingLatestState()}
+            </Show>
+            <Show
+              when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
+              fallback={selectedThreadFallbackState()}
+            >
+              <For each={visibleTimelineEntryKeys()}>
+                {(entryKey) => {
+                  const entry = createMemo(() => visibleTimelineEntriesByKey().get(entryKey) ?? null);
+                  return (
+                    <Show when={entry()}>
+                      {(value) => timelineEntry(value, transcriptScroll)}
+                    </Show>
+                  );
+                }}
+              </For>
+              <For each={visibleTransportOutbox()}>{(submission) => transportOutboxEntry(() => submission)}</For>
+              {threadLevelApprovalPanel()}
+            </Show>
+          </div>
+        </div>
+        <Show when={!props.embeddedConversation}>{composerPanel()}</Show>
+      </div>
     </div>
   );
 
@@ -12068,6 +12151,38 @@ webSearch: model.web_search,
       </aside>
   ));
 
+  const conversationPanel = () => (
+      <section class="flower-component-main" inert={threadDrawerPresent()}
+        aria-hidden={threadDrawerPresent() ? 'true' : undefined}>
+        <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
+        <div class={cn('h-full min-h-0', sidePanel() !== 'extensions' && 'hidden')} aria-hidden={sidePanel() !== 'extensions'} inert={sidePanel() !== 'extensions'}>
+          <Show when={extensionsOpened() && props.adapter.extensions}>{adapter => <Suspense fallback={<div class="p-6" role="status">{copy().extensions.t('loading')}</div>}>
+            <FlowerExtensionsSurface adapter={adapter()} i18n={copy().extensions} onBack={returnToChat} />
+          </Suspense>}</Show>
+        </div>
+        <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
+          <Show when={settingsOpened()}>
+            <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
+              <FlowerSettingsSurface
+                onDiscoverModels={props.adapter.discoverProviderModels}
+                snapshot={snapshot()}
+                copy={copy().settings}
+                onSaveDefaultPermission={saveDefaultPermission}
+                onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
+                computerCopy={copy().computer}
+                onOpenComputerSettings={props.adapter.computerManagement ? () => { returnToChat(); setComputerDialog('settings'); } : undefined}
+                onSaveModelProfile={saveModelProfile}
+                saveError={saveError()}
+                savedAt={savedAt()}
+                saving={settingsSaving()}
+                onBackToChat={returnToChat}
+              />
+            </Suspense>
+          </Show>
+        </div>
+      </section>
+  );
+
   return (
     <main
       id="redeven-flower-surface"
@@ -12082,6 +12197,7 @@ webSearch: model.web_search,
         presentation() === 'companion' && 'flower-surface-companion',
         companionCollapsed() && 'flower-surface-companion-collapsed',
         threadRailResizing() && 'flower-component-shell-resizing',
+        props.embeddedConversation && 'flower-surface-embedded',
         props.class,
       )}
       data-floe-dialog-surface-host={navigationOverlay() ? "true" : undefined}
@@ -12100,7 +12216,7 @@ webSearch: model.web_search,
       data-flower-side-panel={sidePanel()}
       style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
     >
-      <Show when={navigationOverlay()} fallback={<ThreadRail />}>
+      <Show when={!props.embeddedConversation}><Show when={navigationOverlay()} fallback={<ThreadRail />}>
         <DialogPlacementProvider mode="auto">
           <Dialog open={threadDrawerOpen() && surfaceEngaged()}
             onOpenChange={setThreadNavigationOpen}
@@ -12122,6 +12238,7 @@ webSearch: model.web_search,
             <ThreadRail />
           </Dialog>
         </DialogPlacementProvider>
+      </Show>
       </Show>
       <Show when={transcriptMenu()}>
         {(menu) => (
@@ -12283,35 +12400,10 @@ webSearch: model.web_search,
       >
         <GripVertical class="h-3.5 w-3.5" />
       </button>
-      <section class="flower-component-main" inert={threadDrawerPresent()}
-        aria-hidden={threadDrawerPresent() ? 'true' : undefined}>
-        <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
-        <div class={cn('h-full min-h-0', sidePanel() !== 'extensions' && 'hidden')} aria-hidden={sidePanel() !== 'extensions'} inert={sidePanel() !== 'extensions'}>
-          <Show when={extensionsOpened() && props.adapter.extensions}>{adapter => <Suspense fallback={<div class="p-6" role="status">{copy().extensions.t('loading')}</div>}>
-            <FlowerExtensionsSurface adapter={adapter()} i18n={copy().extensions} onBack={returnToChat} />
-          </Suspense>}</Show>
-        </div>
-        <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
-          <Show when={settingsOpened()}>
-            <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
-              <FlowerSettingsSurface
-                onDiscoverModels={props.adapter.discoverProviderModels}
-                snapshot={snapshot()}
-                copy={copy().settings}
-                onSaveDefaultPermission={saveDefaultPermission}
-                onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
-                computerCopy={copy().computer}
-                onOpenComputerSettings={props.adapter.computerManagement ? () => { returnToChat(); setComputerDialog('settings'); } : undefined}
-                onSaveModelProfile={saveModelProfile}
-                saveError={saveError()}
-                savedAt={savedAt()}
-                saving={settingsSaving()}
-                onBackToChat={returnToChat}
-              />
-            </Suspense>
-          </Show>
-        </div>
-      </section>
+      <Show when={props.embeddedConversation} fallback={conversationPanel()}>
+        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), actions: chatHeaderActions(),
+          threadID: selectedThreadID, newConversation: startCompose })}
+      </Show>
       <FlowerWorkingDirPickerDialog
         open={workingDirectoryPickerOpen() && canPickWorkingDirectory()}
         onOpenChange={(open) => {

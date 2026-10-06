@@ -245,7 +245,7 @@ function parseContextItem(value: unknown): ContextActionContextItem | null {
 
 function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean {
   switch (surface) {
-    case 'tessiven': return kind === 'tessiven_selection';
+    case 'tessiven': return kind === 'tessiven_selection' || kind === 'file_path';
     case 'terminal': return kind === 'terminal_selection';
     case 'monitoring': return kind === 'process_snapshot';
     case 'git_browser':
@@ -291,7 +291,7 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
 
   const context: ContextActionContextItem[] = [];
   for (const rawItem of value.context) {
-    if (value.source.surface === 'flower_composer' && (!isRecord(rawItem) || !hasOnlyKeys(rawItem, ['kind', 'path', 'is_directory']))) return null;
+    if ((value.source.surface === 'flower_composer' || (value.source.surface === 'tessiven' && isRecord(rawItem) && rawItem.kind === 'file_path')) && (!isRecord(rawItem) || !hasOnlyKeys(rawItem, ['kind', 'path', 'is_directory']))) return null;
     if (value.source.surface === 'terminal' && (!isRecord(rawItem) || !hasOnlyKeys(rawItem, ['kind', 'working_dir', 'selection', 'selection_chars']))) return null;
     const rawKind = isRecord(rawItem) && typeof rawItem.kind === 'string' ? rawItem.kind : '';
     if (!KNOWN_CONTEXT_KINDS.has(rawKind) || !surfaceAllowsKind(value.source.surface, rawKind)) return null;

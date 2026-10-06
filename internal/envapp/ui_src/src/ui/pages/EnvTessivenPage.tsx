@@ -1,5 +1,7 @@
 import type { TessivenOpenRequest } from '../../../../../tessiven_ui/src/navigation';
-import { createMemo } from 'solid-js';
+import { createMemo, onCleanup } from 'solid-js';
+import { createFlowerComposerDraftCoordinator } from '../../../../../flower_ui/src';
+import { EnvAIPage } from './EnvAIPage';
 import { TessivenPage } from '../../../../../tessiven_ui/src/TessivenPage';
 import { tessivenText } from '../../../../../tessiven_ui/src/i18n';
 import { createTessivenTransport } from '../../../../../tessiven_ui/src/transport';
@@ -20,6 +22,8 @@ export default function EnvTessivenPage(props: {
 }) {
   const env = useEnvContext(),
     i18n = useI18n();
+  const drafts = env.flowerDraftCoordinator ?? createFlowerComposerDraftCoordinator();
+  onCleanup(() => { if (!env.flowerDraftCoordinator) drafts.dispose(); });
   const t = createMemo(() => tessivenText(i18n.locale()));
   const transport = createTessivenTransport(
     (method, path, body, signal) =>
@@ -50,7 +54,9 @@ export default function EnvTessivenPage(props: {
       transport={transport}
       canWrite={env.env()?.permissions?.can_write === true}
       openRequest={props.openRequest ?? request}
-      onSendFlower={env.sendFlowerTurn}
+      renderFlower={surface => <EnvAIPage draftCoordinator={drafts} presentation="companion"
+        engaged={surface.engaged} transcriptVisible={surface.transcriptVisible} embeddedConversation={surface.embeddedConversation}
+        />}
       onOpenFlower={env.openFlowerConversation}
       onOpenService={async (opening, runtime) => {
         if (runtime !== 'local:local') throw new Error(t()('openUnavailable'));

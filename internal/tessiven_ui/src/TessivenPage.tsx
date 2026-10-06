@@ -1,3 +1,4 @@
+import type { JSX } from 'solid-js';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import {
   For,
@@ -22,9 +23,8 @@ import {
 import {
   TessivenFlowerPanel,
   type CanvasFlowerRequest,
-  type CanvasFlowerSend,
+  type CanvasFlowerSurfaceProps,
 } from './TessivenFlowerPanel';
-import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import { TessivenGraph, type GraphBrowseState } from './TessivenGraph';
 import { TessivenIcon } from './TessivenIcon';
 import { TessivenLibraryCard } from './TessivenLibraryCard';
@@ -50,7 +50,7 @@ export function TessivenPage(props: {
   locale?: string;
   visible?: boolean;
   canWrite: boolean;
-  onSendFlower: CanvasFlowerSend;
+  renderFlower: (props: CanvasFlowerSurfaceProps) => JSX.Element;
   onOpenFlower: (threadID: string) => void;
   onOpenService: (
     opening: { app_path: string; forward: unknown },
@@ -99,7 +99,7 @@ export function TessivenPage(props: {
           object_refs: [],
         }
       : null;
-  const [flowerOpen, setFlowerOpen] = createSignal(false);
+
   const [flowerSessions, setFlowerSessions] = createSignal<
     {
       id: string;
@@ -107,7 +107,11 @@ export function TessivenPage(props: {
       update: (value: CanvasFlowerRequest) => void;
     }[]
   >([]);
-  let flowerButton: HTMLButtonElement | undefined;
+
+  const flowerRequest = createMemo<CanvasFlowerRequest | undefined>(previous =>
+    flowerSessions().find(session => session.id === canvas()?.id)?.request() ?? previous,
+  );
+
   function askSelection(value: Selection, prompt?: string) {
     const doc = version()?.document;
     const names = value.object_refs.map((id) => {
@@ -143,7 +147,7 @@ export function TessivenPage(props: {
         { id: value.canvas_id, request, update },
       ]);
     }
-    setFlowerOpen(true);
+
   }
   const ask = (prompt?: string) => {
     const value = selection();
@@ -156,8 +160,15 @@ export function TessivenPage(props: {
       const session = flowerSessions().find(
         (item) => item.id === current.canvas_id,
       );
-      if (!session || session.request().selection.version_id === current.number)
+      if (!session) {
+        const [request, update] = createSignal<CanvasFlowerRequest>({
+          selection: { canvas_id: current.canvas_id, version_id: current.number, object_refs: [] },
+          label: current.document.metadata.title, nonce: 0,
+        });
+        setFlowerSessions(sessions => [...sessions, { id: current.canvas_id, request, update }]);
         return;
+      }
+      if (session.request().selection.version_id === current.number) return;
       const previous = session.request();
       session.update({
         ...previous,
@@ -169,10 +180,6 @@ export function TessivenPage(props: {
       });
     });
   });
-  function closeFlower() {
-    setFlowerOpen(false);
-    flowerButton?.focus({ preventScroll: true });
-  }
   const message = (cause: unknown) =>
     cause instanceof Error ? cause.message : String(cause);
   const request = props.transport.request;
@@ -226,7 +233,6 @@ export function TessivenPage(props: {
         ),
       ]);
       if (disposed || generation !== viewGeneration) return;
-      if (canvas()?.id !== nextCanvas.id) setFlowerOpen(false);
       setCanvas(nextCanvas);
       setVersion(nextVersion);
       setBrowseHistory(number !== undefined);
@@ -305,7 +311,6 @@ export function TessivenPage(props: {
   });
   function back() {
     viewGeneration++;
-    setFlowerOpen(false);
     setCanvas(undefined);
     setVersion(undefined);
     setError('');
@@ -490,16 +495,6 @@ export function TessivenPage(props: {
           </Show>
           <Show when={version()}>
             <button
-              ref={flowerButton}
-              class="tessiven-flower-toggle"
-              aria-label={props.t('canvasFlower')}
-              aria-expanded={flowerOpen()}
-              onClick={() => (flowerOpen() ? closeFlower() : ask())}
-            >
-              <FlowerIcon />
-              <span>Flower</span>
-            </button>
-            <button
               class="tessiven-icon-button"
               title={props.t('findObject')}
               aria-label={props.t('findObject')}
@@ -661,26 +656,15 @@ export function TessivenPage(props: {
             </div>
           </Show>
         </main>
-        <For each={flowerSessions()}>
-          {(session) => (
-            <TessivenFlowerPanel
-              request={session.request()}
-              version={
-                version()?.canvas_id === session.id ? version() : undefined
-              }
-              onCompareVersion={(number) => void compare(number)}
-              open={
-                flowerOpen() &&
-                props.visible !== false &&
-                canvas()?.id === session.id
-              }
-              t={props.t}
-              onSend={props.onSendFlower}
-              onOpenConversation={props.onOpenFlower}
-              onClose={closeFlower}
-            />
-          )}
-        </For>
+        <Show when={flowerSessions().length > 0}>
+          <TessivenFlowerPanel
+            request={flowerRequest()!}
+            visible={props.visible !== false && !!canvas()}
+            t={props.t}
+            renderSurface={props.renderFlower}
+            onOpenConversation={props.onOpenFlower}
+          />
+        </Show>
       </div>
       <Dialog
         closeLabel={props.t('close')}

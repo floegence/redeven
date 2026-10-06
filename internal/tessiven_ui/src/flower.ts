@@ -10,7 +10,7 @@ export function tessivenFlowerIntent(
   selection: Selection | null,
   t: TessivenText,
   prompt?: string,
-): FlowerTurnLauncherIntent {
+): FlowerTurnLauncherIntent & { context_action?: ContextActionEnvelope } {
   const action: ContextActionEnvelope | undefined = selection
     ? {
         schema_version: CONTEXT_ACTION_SCHEMA_VERSION,

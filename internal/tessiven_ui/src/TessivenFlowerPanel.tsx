@@ -1,18 +1,10 @@
-import { Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
-import {
-  ArrowRight,
-  ArrowUp,
-  Check,
-  X,
-} from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
-import {
-  createFlowerTurnLauncherPanelController,
-  type FlowerTurnLauncherSubmitInput,
-} from '../../flower_ui/src/FlowerTurnLauncherWindow';
+import { Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
+import { ExternalLink, MessageSquare, Plus } from '@floegence/floe-webapp-core/icons';
+import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import type { FlowerConversationParts, FlowerEmbeddedConversation } from '../../flower_ui/src/FlowerSurface';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import { tessivenFlowerIntent } from './flower';
-import type { Selection, TessivenText, Version } from './types';
+import type { Selection, TessivenText } from './types';
 
 export type CanvasFlowerRequest = {
   selection: Selection;
@@ -20,223 +12,69 @@ export type CanvasFlowerRequest = {
   prompt?: string;
   nonce: number;
 };
-export type CanvasFlowerSend = (
-  input: FlowerTurnLauncherSubmitInput,
-  threadID?: string,
-) => Promise<string>;
 
-/** Canvas-owned presentation; the shared Flower controller owns send identity and recovery. */
+export type CanvasFlowerSurfaceProps = {
+  embeddedConversation: FlowerEmbeddedConversation;
+  engaged: boolean;
+  transcriptVisible: boolean;
+};
+
+/** Canvas placement only. Flower owns the composer, transcript and every operation. */
 export function TessivenFlowerPanel(props: {
   request: CanvasFlowerRequest;
-  open: boolean;
-  version?: Version;
-  onCompareVersion?: (number: number) => void;
+  visible: boolean;
   t: TessivenText;
-  onSend: CanvasFlowerSend;
+  renderSurface: (props: CanvasFlowerSurfaceProps) => JSX.Element;
   onOpenConversation: (threadID: string) => void;
-  onClose: () => void;
 }) {
-  const [target, setTarget] = createSignal(props.request);
-  const [intent, setIntent] = createSignal(
-    tessivenFlowerIntent(
-      props.request.selection,
-      props.t,
-      props.request.prompt,
-    ),
-  );
-  const [draft, setDraft] = createSignal(props.request.prompt ?? '');
-  const [threadID, setThreadID] = createSignal<string>();
-  const [accepted, setAccepted] = createSignal(false);
-  const [submittedVersion, setSubmittedVersion] = createSignal<number>();
-  const savedUpdate = () => {
-    const current = props.version,
-      base = submittedVersion();
-    return current && base !== undefined && current.number > base
-      ? current
-      : undefined;
+  const [repliesOpen, setRepliesOpen] = createSignal(true);
+  const [boundary, setBoundary] = createSignal<HTMLDivElement>();
+  createEffect(on(() => props.request.nonce, nonce => { if (nonce) setRepliesOpen(true); }));
+  const contextAction = createMemo(() => tessivenFlowerIntent(props.request.selection, props.t).context_action);
+  const renderConversation = (parts: FlowerConversationParts) => <>
+    <div class="tessiven-flower-output-boundary" ref={setBoundary} />
+    <Show when={!repliesOpen()}>
+      <button type="button" class="tessiven-flower-restore" onClick={() => setRepliesOpen(true)}
+        aria-label={props.t('showReplies')}><FlowerIcon /><span>{props.t('showReplies')}</span></button>
+    </Show>
+    <FloatingWindow open={props.visible && repliesOpen()} onOpenChange={setRepliesOpen}
+      boundary={boundary()} defaultPosition={{ x: 0, y: 0 }}
+      defaultSize={{ width: 400, height: 440 }} minSize={{ width: 300, height: 220 }}
+      viewportInsets={{ top: 16, right: 16, bottom: 12, left: 16 }} compactBelow={480}
+      title="Flower" class="tessiven-flower-output" zIndex={25}
+      labels={{ close: props.t('hideReplies'), maximize: props.t('expandReplies'), restore: props.t('restoreReplies') }}
+      headerActions={<>
+        {parts.actions}
+        <button type="button" class="tessiven-icon-button" onClick={parts.newConversation}
+          title={props.t('newConversation')} aria-label={props.t('newConversation')}><Plus /></button>
+        <Show when={parts.threadID()}><button type="button" class="tessiven-icon-button"
+          title={props.t('flowerConversation')} aria-label={props.t('flowerConversation')}
+          onClick={() => props.onOpenConversation(parts.threadID())}><ExternalLink /></button></Show>
+      </>}>
+      <div class="tessiven-flower-conversation flower-surface flower-surface-companion">{parts.conversation}</div>
+    </FloatingWindow>
+    <div class="tessiven-flower-composer">{parts.composer}</div>
+  </>;
+  const embedded: FlowerEmbeddedConversation = {
+    get scope() { return `tessiven:${props.request.selection.canvas_id}`; },
+    get contextAction() { return contextAction(); },
+    get request() { return props.request.nonce ? props.request : undefined; },
+    get placeholder() { return props.t('flowerPlaceholder'); },
+    emptyContent: <div class="tessiven-flower-welcome"><FlowerIcon />
+      <strong>{props.t('flowerWelcome')}</strong><p>{props.t('flowerWelcomeHint')}</p></div>,
+    composerContext: <div class="tessiven-flower-context"><MessageSquare />
+      <span title={props.request.label}>{props.request.label}</span>
+      <small>{props.t('version', { version: props.request.selection.version_id })}</small>
+    </div>,
+    onSubmit: () => setRepliesOpen(true),
+    render: renderConversation,
   };
-  const [targetHeld, setTargetHeld] = createSignal(false);
-  let textarea: HTMLTextAreaElement | undefined;
-  const controller = createFlowerTurnLauncherPanelController({
-    open: true,
-    get intent() {
-      return intent();
-    },
-    autoFocus: false,
-    get draft() {
-      return draft();
-    },
-    onDraftChange: setDraft,
-    get copy() {
-      return { empty_message: props.t('flowerPlaceholder') };
-    },
-    onClose: props.onClose,
-    onSubmit: async (input) => {
-      const baseVersion = target().selection.version_id;
-      const id = await props.onSend(input, threadID());
-      setSubmittedVersion(baseVersion);
-      setThreadID(id);
-      setAccepted(true);
-      setDraft('');
-      setTarget(props.request);
-      setTargetHeld(false);
-      setIntent(tessivenFlowerIntent(props.request.selection, props.t));
-    },
-  });
-  createEffect(() => {
-    const request = props.request;
-    untrack(() => {
-      if (controller.sending() || controller.admissionUnknown()) {
-        setTargetHeld(true);
-        return;
-      }
-      setTarget(request);
-      setTargetHeld(false);
-      if (request.prompt !== undefined) setDraft(request.prompt);
-      setIntent(tessivenFlowerIntent(request.selection, props.t));
-    });
-  });
-  createEffect(() => {
-    if (props.open) {
-      const frame = requestAnimationFrame(() =>
-        textarea?.focus({ preventScroll: true }),
-      );
-      onCleanup(() => cancelAnimationFrame(frame));
-    }
-  });
-  return (
-    <aside
-      class="tessiven-flower-panel"
-      aria-label={props.t('canvasFlower')}
-      hidden={!props.open}
-    >
-      <header>
-        <FlowerIcon />
-        <strong>Flower</strong>
-        <button
-          class="tessiven-icon-button"
-          onClick={props.onClose}
-          aria-label={props.t('close')}
-        >
-          <X />
-        </button>
-      </header>
-      <div class="tessiven-flower-scope">
-        <span title={target().label}>{target().label}</span>
-        <small>
-          {props.t('version', { version: target().selection.version_id })}
-        </small>
-      </div>
-      <label class="tessiven-flower-input" data-floe-input-surface>
-        <textarea
-          ref={(element) => {
-            textarea = element;
-            controller.setTextareaEl(element);
-          }}
-          aria-label={props.t('flowerPlaceholder')}
-          placeholder={props.t('flowerPlaceholder')}
-          value={controller.visiblePrompt()}
-          disabled={controller.sending() || controller.admissionUnknown()}
-          onInput={(event) => {
-            controller.setUserPrompt(event.currentTarget.value);
-            controller.setValidationError('');
-            controller.setLaunchError('');
-            setAccepted(false);
-          }}
-          onCompositionStart={() => controller.setIsComposing(true)}
-          onCompositionEnd={() => {
-            controller.setIsComposing(false);
-            controller.setUserPrompt(textarea?.value ?? '');
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              props.onClose();
-            }
-            if (
-              event.key === 'Enter' &&
-              !event.shiftKey &&
-              !event.isComposing &&
-              !controller.isComposing() &&
-              event.keyCode !== 229
-            ) {
-              event.preventDefault();
-              void controller.submit();
-            }
-          }}
-        />
-        <div class="tessiven-flower-send-row">
-          <span>{props.t('flowerEnter')}</span>
-          <Button
-            size="icon"
-            icon={ArrowUp}
-            aria-label={props.t(
-              controller.admissionUnknown() ? 'flowerRetry' : 'flowerSend',
-            )}
-            title={props.t(
-              controller.admissionUnknown() ? 'flowerRetry' : 'flowerSend',
-            )}
-            loading={controller.sending()}
-            disabled={!controller.canSubmit()}
-            onClick={() => void controller.submit()}
-          />
-        </div>
-      </label>
-      <Show when={controller.launchError() || controller.validationError()}>
-        <p
-          class="tessiven-flower-error"
-          role={controller.admissionUnknown() ? 'status' : 'alert'}
-        >
-          <Show when={controller.admissionUnknown()}>
-            {props.t('flowerUnknown')}{' '}
-          </Show>
-          {controller.launchError() || controller.validationError()}
-        </p>
-      </Show>
-      <Show when={targetHeld()}>
-        <p class="tessiven-flower-hint" role="status">
-          {props.t('flowerTargetHeld')}
-        </p>
-      </Show>
-      <Show when={threadID()}>
-        <div class="tessiven-flower-receipt">
-          <Show when={accepted() && !savedUpdate()}>
-            <span role="status">
-              <Check />
-              {props.t('flowerAccepted')}
-            </span>
-          </Show>
-          <Show when={savedUpdate()}>
-            {(saved) => (
-              <div class="tessiven-flower-update" role="status">
-                <strong>
-                  <Check />
-                  <span>{props.t('canvasUpdated')}</span>
-                  <small>
-                    {props.t('version', { version: saved().number })}
-                  </small>
-                </strong>
-                <p>{saved().summary}</p>
-                <Show when={props.onCompareVersion}>
-                  <button
-                    onClick={() =>
-                      props.onCompareVersion?.(submittedVersion()!)
-                    }
-                  >
-                    {props.t('reviewChanges')}
-                    <ArrowRight />
-                  </button>
-                </Show>
-              </div>
-            )}
-          </Show>
-          <button onClick={() => props.onOpenConversation(threadID()!)}>
-            {props.t('flowerConversation')}
-            <ArrowRight />
-          </button>
-        </div>
-      </Show>
-      <p class="tessiven-flower-hint">{props.t('flowerWorkflow')}</p>
-    </aside>
-  );
+  return <div class="tessiven-flower-canvas" hidden={!props.visible} inert={!props.visible}
+    data-floe-dialog-surface-host="true" data-floe-surface-portal-layer="true">
+    {props.renderSurface({
+      get engaged() { return props.visible; },
+      get transcriptVisible() { return props.visible && repliesOpen(); },
+      embeddedConversation: embedded,
+    })}
+  </div>;
 }

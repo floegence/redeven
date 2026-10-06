@@ -30,11 +30,13 @@ outcome, so the user must inspect the original manager before trying again.
   never guesses a management identity from a name, address, or process.
 - Ask Flower carries `canvas_id`, `version_id`, and bounded object references;
   historical selections stay historical during the discussion.
-- Canvas editing uses the existing typed Flower send adapters, permission checks,
-  and admission controller. Sending does not navigate away from the canvas;
-  opening the returned conversation is explicit. Follow-up messages retain its
-  thread identity, and unconfirmed delivery retries retain the request identity
-  and payload. The canvas does not mirror provider progress or approval state.
+- Canvas editing embeds the canonical Flower surface with its existing typed
+  adapters and permission checks. Composer and floating output share one thread
+  runtime. Sending, reading replies, answering questions and approving actions
+  stay on the canvas. Opening the full conversation is optional. Follow-up
+  messages retain the canvas conversation, and unconfirmed delivery retries
+  retain the frozen request identity and payload. Tessiven owns placement and
+  exact selection context; it does not mirror provider or approval state.
 - Selection summaries prioritize requested objects and include node, instance,
   and external-resource observation evidence. Truncation is explicit; Flower
   reads the exact saved version for additional detail.

@@ -22,6 +22,7 @@ const INTERACTIVE_CLASS = 'cursor-pointer disabled:cursor-not-allowed disabled:o
 export type AIReadinessBoundaryProps = Readonly<{
   controller: AIReadinessController;
   presentation?: 'full' | 'companion';
+  embedded?: boolean;
   onOpenUpdate: () => void;
   onOpenPermissions: () => void;
   onReviewIssues: () => void;
@@ -233,7 +234,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   );
 
   return (
-    <div ref={boundaryRoot} class="ai-readiness-boundary h-full min-h-0" data-ai-readiness-state={props.controller.snapshot().state}>
+    <div ref={boundaryRoot} class="ai-readiness-boundary h-full min-h-0" data-ai-readiness-state={props.controller.snapshot().state} data-embedded={props.embedded ? 'true' : undefined}>
       <Show when={operational()}>
         <div
           ref={surfaceRoot}
