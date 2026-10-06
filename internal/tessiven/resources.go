@@ -15,7 +15,7 @@ import (
 
 var (
 	ErrOutcomeUnknown       = errors.New("the service action outcome is unknown; inspect the original manager before issuing another action")
-	ErrPermissionDenied     = errors.New("Tessiven resource permission denied")
+	ErrPermissionDenied     = errors.New("tessiven resource permission denied")
 	ErrTargetUnavailable    = errors.New("the exact Runtime target has no available authorized connection")
 	ErrHistoricalOperation  = errors.New("service operations are disabled for historical or archived canvases")
 	ErrResourceChanged      = errors.New("the resource identity changed; inspect it again before acting")

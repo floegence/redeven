@@ -78,7 +78,7 @@ func TestConcurrentSendReplayRejectsDifferentContent(t *testing.T) {
 		}
 	}
 	errs := ollamaConcurrent(commands...)
-	if !(errs[0] == nil && errors.Is(errs[1], ErrTurnIdempotencyConflict) || errs[1] == nil && errors.Is(errs[0], ErrTurnIdempotencyConflict)) {
+	if (errs[0] != nil || !errors.Is(errs[1], ErrTurnIdempotencyConflict)) && (errs[1] != nil || !errors.Is(errs[0], ErrTurnIdempotencyConflict)) {
 		t.Fatalf("concurrent different input: %v", errs)
 	}
 }

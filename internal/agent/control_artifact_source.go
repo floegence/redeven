@@ -20,7 +20,19 @@ import (
 )
 
 type controlArtifactSource struct {
-	agent *Agent
+	agent          *Agent
+	expectedConfig *config.Config
+}
+
+func sameControlBinding(expected, current *config.Config) bool {
+	if expected == nil || current == nil || expected.EnvironmentID != current.EnvironmentID || expected.BindingGeneration != current.BindingGeneration || expected.ControlplaneBaseURL != current.ControlplaneBaseURL {
+		return false
+	}
+	left, right := gatewayFence(expected), gatewayFence(current)
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right && !current.GatewayCloud.Revoked
 }
 
 type controlArtifactSessionBinding struct {
@@ -49,7 +61,25 @@ func (source *controlArtifactSource) Acquire(ctx context.Context) (flowersec.Art
 	if err := ctx.Err(); err != nil {
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(err)
 	}
+	if source.expectedConfig != nil && !sameControlBinding(source.expectedConfig, source.agent.remoteConfigSnapshot()) {
+		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(errors.New("control binding changed"))
+	}
 	entry, generation, err := source.agent.acquireControlArtifactEntry()
+	if errors.Is(err, errControlArtifactPoolEmpty) || errors.Is(err, errControlArtifactPoolRelinkRequired) {
+		cfg := source.agent.remoteConfigSnapshot()
+		if cfg != nil && cfg.GatewayCloud != nil && !cfg.GatewayCloud.Revoked {
+			if recoveryErr := source.agent.recoverGatewayCredentials(ctx); recoveryErr != nil {
+				return flowersec.ArtifactLease{}, flowersec.NewRetryableArtifactSourceError(recoveryErr)
+			}
+			if source.expectedConfig != nil && !sameControlBinding(source.expectedConfig, source.agent.remoteConfigSnapshot()) {
+				return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(errors.New("control binding changed during recovery"))
+			}
+			entry, generation, err = source.agent.acquireControlArtifactEntry()
+			if errors.Is(err, errControlArtifactPoolEmpty) {
+				return flowersec.ArtifactLease{}, flowersec.NewRetryableArtifactSourceError(err)
+			}
+		}
+	}
 	if err != nil {
 		source.agent.mu.Lock()
 		source.agent.controlCredentialsUnavailable = errors.Is(err, errControlArtifactPoolEmpty) || errors.Is(err, errControlArtifactPoolRelinkRequired)

@@ -36,13 +36,14 @@ import (
 )
 
 type runOptions struct {
-	Log              *slog.Logger
-	StateDir         string
-	AgentHomeDir     string
-	WorkingDir       string
-	FilesystemScope  *filesystemscope.Registry
-	Shell            string
-	HostCapabilities runHostCapabilities
+	PlatformHTTPTransport func() (http.RoundTripper, error)
+	Log                   *slog.Logger
+	StateDir              string
+	AgentHomeDir          string
+	WorkingDir            string
+	FilesystemScope       *filesystemscope.Registry
+	Shell                 string
+	HostCapabilities      runHostCapabilities
 
 	AIConfig *config.AIConfig
 
@@ -93,7 +94,8 @@ type runOptions struct {
 }
 
 type run struct {
-	log *slog.Logger
+	platformHTTPTransport func() (http.RoundTripper, error)
+	log                   *slog.Logger
 
 	stateDir       string
 	agentHomeDir   string
@@ -308,6 +310,7 @@ func newRun(opts runOptions) *run {
 		effectAuthorizations = newFloretEffectAuthorizationRegistry()
 	}
 	r := &run{
+		platformHTTPTransport:       opts.PlatformHTTPTransport,
 		log:                         opts.Log,
 		stateDir:                    strings.TrimSpace(opts.StateDir),
 		agentHomeDir:                agentHomeDir,
@@ -895,7 +898,7 @@ func (r *run) resolveModelGatewayForModel(modelID string, providerID string, pro
 			// A local display profile may name only a public alias; Edge owns its routing.
 			alias = strings.TrimSpace(model.WireModelName)
 		}
-		adapter, err := newPlatformGatewayProvider(gatewayURL, r.sessionMeta.PlatformAIGrant, alias, r.sessionMeta.PlatformAIEntitlementVersion)
+		adapter, err := platformGatewayWithTransport(r.platformHTTPTransport, gatewayURL, r.sessionMeta.PlatformAIGrant, alias, r.sessionMeta.PlatformAIEntitlementVersion)
 		if err != nil {
 			return resolvedRunModelGateway{}, err
 		}

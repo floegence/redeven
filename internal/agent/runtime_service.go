@@ -25,6 +25,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 
 	capabilities := runtimeservice.Capabilities{
+		GatewayCloudJoin: runtimeservice.Capability{Supported: true, BindMethod: runtimeservice.RuntimeControlBindMethodV2},
 		DesktopModelSource: runtimeservice.Capability{
 			Supported:  false,
 			ReasonCode: "ai_service_unavailable",
@@ -38,6 +39,10 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			Supported:  true,
 			BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 		},
+	}
+	gatewayCloud := a.gatewayCloudAccessSnapshot()
+	if gatewayCloud != nil {
+		capabilities.ProviderLink = runtimeservice.Capability{ReasonCode: "gateway_cloud_managed", Message: "Manage this Namespace-owned connection in Redeven Cloud."}
 	}
 	bindings := runtimeservice.Bindings{
 		DesktopModelSource: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
@@ -64,6 +69,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 
 	return runtimeservice.ApplyCompatibilityContract(runtimeservice.Snapshot{
+		GatewayCloud:     gatewayCloud,
 		RuntimeVersion:   strings.TrimSpace(a.version),
 		RuntimeCommit:    strings.TrimSpace(a.commit),
 		RuntimeBuildTime: strings.TrimSpace(a.buildTime),
@@ -80,6 +86,27 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		Capabilities: capabilities,
 		Bindings:     bindings,
 	})
+}
+
+func (a *Agent) gatewayCloudAccessSnapshot() *runtimeservice.GatewayCloudAccess {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg == nil || a.cfg.GatewayCloud == nil {
+		return nil
+	}
+	route := a.cfg.GatewayCloud
+	state := "connecting"
+	switch {
+	case route.Revoked:
+		state = "revoked"
+	case route.Binding == nil:
+		state = "pending"
+	case !a.remoteEnabled:
+		state = "disabled"
+	case a.controlRegistered:
+		state = "connected"
+	}
+	return &runtimeservice.GatewayCloudAccess{ProtocolVersion: route.ProtocolVersion, CloudOrigin: route.CloudOrigin, NamespacePublicID: route.NamespacePublicID, GatewayPublicID: route.GatewayPublicID, State: state}
 }
 
 func (a *Agent) CurrentRuntimeServiceSnapshot() runtimeservice.Snapshot {

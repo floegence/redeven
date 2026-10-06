@@ -63,7 +63,7 @@ func LoadAccessIdentity(stateDir string) (*AccessIdentity, error) {
 		return nil, err
 	}
 	if len(seed) != ed25519.SeedSize {
-		return nil, errors.New("Runtime access identity changed while reading")
+		return nil, errors.New("runtime access identity changed while reading")
 	}
 	return &AccessIdentity{key: ed25519.NewKeyFromSeed(seed)}, nil
 }
@@ -74,7 +74,7 @@ func (i *AccessIdentity) Prove(challenge string) (AccessIdentityProof, error) {
 		return AccessIdentityProof{}, errors.New("invalid Runtime identity challenge")
 	}
 	if i == nil || len(i.key) != ed25519.PrivateKeySize {
-		return AccessIdentityProof{}, errors.New("Runtime access identity unavailable")
+		return AccessIdentityProof{}, errors.New("runtime access identity unavailable")
 	}
 	return AccessIdentityProof{
 		Version: "redeven-runtime-access-v1", Challenge: challenge,

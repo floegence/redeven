@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/floegence/redeven/internal/gatewaycloud"
 	"io"
 	"log/slog"
 	"net"
@@ -173,6 +174,26 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 		s.closeAllProfileSessions()
 	}()
 	go s.sweepLoop(ctx)
+	go func() {
+		// A running Gateway can receive Cloud configuration without restarting
+		// Desktop access or implicitly starting any Runtime process.
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			if _, err := os.Stat(gatewaycloud.GatewayConfigPath(s.stateRoot)); err == nil {
+				if err := gatewaycloud.StartGateway(ctx, s.stateRoot, slog.Default()); err == nil {
+					return
+				} else {
+					slog.Warn("Gateway Cloud listener could not start", "error", err)
+				}
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 	return srv, listeners, nil
 }
 

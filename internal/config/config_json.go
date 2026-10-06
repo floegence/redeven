@@ -15,6 +15,8 @@ var configKnownJSONFields = map[string]struct{}{
 	"binding_generation":          {},
 	"agent_instance_id":           {},
 	"direct":                      {},
+	"gateway_cloud_migration":     {},
+	"gateway_cloud":               {},
 	"control_artifact_pool":       {},
 	"ai":                          {},
 	"permission_policy":           {},

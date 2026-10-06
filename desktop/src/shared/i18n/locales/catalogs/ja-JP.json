@@ -3107,5 +3107,34 @@
     "preparingEditor": "エディターサービスに接続しています",
     "editorUnavailableDetail": "エディターを開けませんでした。Codespaces に戻って再試行してください。",
     "technicalDetails": "技術情報"
+  },
+  "gatewayCloud": {
+    "title": "Redeven Cloud",
+    "description": "このゲートウェイを Redeven Cloud に接続します。名前空間の管理者がクラウドでアクセスを承認します。各ランタイムでもローカルでの同意が必要です。",
+    "cloudOrigin": "クラウドのアドレス",
+    "gatewayURL": "ランタイムから接続できるゲートウェイのアドレス",
+    "listenAddress": "ゲートウェイの待ち受けアドレス",
+    "configure": "クラウドに接続",
+    "manage": "クラウドで管理",
+    "unconfigured": "クラウド接続は未設定です。",
+    "pending": "クラウドでの承認を待っています。",
+    "active": "クラウド接続が承認されています。",
+    "revoked": "クラウド接続は取り消されました。",
+    "unavailable": "クラウド接続の状態を確認できませんでした。設定は保持されています。再試行するか操作の詳細を確認してください。",
+    "invalid": "HTTPS のオリジンと、ポートを含む有効な待ち受けアドレスを入力してください。",
+    "working": "ゲートウェイとクラウドに接続しています…",
+    "viaGateway": "Gateway 経由",
+    "runtimeDisabled": "この Runtime ではリモートアクセスが無効です。"
+  },
+  "gatewayJoin": {
+    "title": "Gateway 経由で接続",
+    "resume": "登録を再開",
+    "material": "参加情報ファイル",
+    "consent": "この Runtime が選択した Gateway 経由で接続し、指定の Namespace への公開を申請することを許可します。Cloud 管理者の承認が必要です。",
+    "approve": "同意して接続",
+    "pauseDetail": "閉じると設定を一時停止します。同意は保存され、この Runtime で再開できます。既存の Cloud バインドは CLI で明示的に移行してください。",
+    "invalid": "参加情報が無効です。Cloud から取得した元の JSON ファイルを選択してください。",
+    "failed": "登録を進められません。Gateway の接続を確認して再試行してください。保存済みの同意は保持されます。",
+    "namespace": "名前空間"
   }
 }

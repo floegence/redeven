@@ -92,7 +92,7 @@ func (s *Service) sessionModelConfig(ctx context.Context, meta *session.Meta, cf
 	if !platformSessionAvailable(meta) {
 		return cfg, nil
 	}
-	gateway, err := newPlatformGatewayProvider(meta.PlatformAIGatewayURL, meta.PlatformAIGrant, "catalog", meta.PlatformAIEntitlementVersion)
+	gateway, err := platformGatewayWithTransport(s.platformHTTPTransport, meta.PlatformAIGatewayURL, meta.PlatformAIGrant, "catalog", meta.PlatformAIEntitlementVersion)
 	if err != nil {
 		return nil, err
 	}

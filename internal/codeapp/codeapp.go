@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,9 +46,10 @@ const (
 )
 
 type Options struct {
-	Logger    *slog.Logger
-	StateDir  string
-	StateRoot string
+	PlatformHTTPTransport func() (http.RoundTripper, error)
+	Logger                *slog.Logger
+	StateDir              string
+	StateRoot             string
 	// ConfigPath is the absolute path to the runtime config file (used to persist settings updates from the Env App UI).
 	ConfigPath             string
 	PermissionPolicy       *config.PermissionPolicy
@@ -285,7 +287,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	tessivenResources := &tessiven.ResourceBackend{Broker: tessivenBroker, Library: tessivenSvc, Managed: managedSvc, Containers: containerResourceSvc}
 
 	aiReady := newAIReadinessController(ctx, ai.Options{
-		Tessiven: tessivenSvc, TessivenResources: tessivenResources,
+		PlatformHTTPTransport: opts.PlatformHTTPTransport,
+		Tessiven:              tessivenSvc, TessivenResources: tessivenResources,
 		Logger:            logger,
 		StateDir:          stateAbs,
 		AgentHomeDir:      agentHomeDir,

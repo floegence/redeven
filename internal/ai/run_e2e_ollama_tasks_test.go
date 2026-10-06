@@ -854,13 +854,13 @@ func newOllamaTaskFault(t *testing.T, base string) *ollamaTaskFault {
 		}
 		u, err := http.NewRequestWithContext(r.Context(), r.Method, base+r.URL.RequestURI(), bytes.NewReader(body))
 		if err != nil {
-			http.Error(w, "create request", 502)
+			http.Error(w, "create request", http.StatusBadGateway)
 			return
 		}
 		u.Header = r.Header.Clone()
 		resp, err := client.Do(u)
 		if err != nil {
-			http.Error(w, "upstream unavailable", 502)
+			http.Error(w, "upstream unavailable", http.StatusBadGateway)
 			return
 		}
 		defer resp.Body.Close()
@@ -928,7 +928,6 @@ func newOllamaTaskFault(t *testing.T, base string) *ollamaTaskFault {
 					return
 				case <-unblock:
 				}
-				mode = ""
 				break
 			}
 		}

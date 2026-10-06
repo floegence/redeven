@@ -3107,5 +3107,34 @@
     "preparingEditor": "正在連線至編輯器服務",
     "editorUnavailableDetail": "無法開啟編輯器。請返回 Codespaces 後重試。",
     "technicalDetails": "技術詳細資料"
+  },
+  "gatewayCloud": {
+    "title": "Redeven Cloud",
+    "description": "將此閘道連線至 Redeven Cloud，由命名空間管理員在雲端核准存取。每個執行環境也必須在本機同意加入。",
+    "cloudOrigin": "雲端位址",
+    "gatewayURL": "執行環境可連線的閘道位址",
+    "listenAddress": "閘道監聽位址",
+    "configure": "連線至雲端",
+    "manage": "前往雲端管理",
+    "unconfigured": "尚未設定雲端存取。",
+    "pending": "等待雲端核准。",
+    "active": "雲端存取已核准。",
+    "revoked": "雲端存取已撤銷。",
+    "unavailable": "無法檢查雲端存取狀態。已保留現有設定，請重試或查看操作詳細資訊。",
+    "invalid": "請輸入 HTTPS 來源位址及包含連接埠的有效監聽位址。",
+    "working": "正在聯繫閘道與雲端…",
+    "viaGateway": "透過 Gateway 連線",
+    "runtimeDisabled": "此 Runtime 已停用遠端存取。"
+  },
+  "gatewayJoin": {
+    "title": "透過 Gateway 連線",
+    "resume": "繼續接入",
+    "material": "加入資料檔案",
+    "consent": "允許此 Runtime 透過所選 Gateway 連線，並申請發佈至指定 Namespace。仍需 Cloud 管理員核准。",
+    "approve": "同意並連線",
+    "pauseDetail": "關閉對話框將暫停設定。本機同意已儲存，可在此 Runtime 繼續。既有 Cloud 綁定請透過 CLI 明確遷移。",
+    "invalid": "加入資料無效。請選擇從 Cloud 下載的原始 JSON 檔案。",
+    "failed": "接入暫時無法繼續。請檢查 Gateway 連線後重試，已儲存的同意將保留。",
+    "namespace": "命名空間"
   }
 }

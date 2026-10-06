@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,6 +44,7 @@ const (
 )
 
 type Options struct {
+	PlatformHTTPTransport  func() (http.RoundTripper, error)
 	Tessiven               *tessiven.Service
 	TessivenResources      *tessiven.ResourceBackend
 	Logger                 *slog.Logger
@@ -102,6 +104,7 @@ type Options struct {
 }
 
 type Service struct {
+	platformHTTPTransport  func() (http.RoundTripper, error)
 	tessiven               *tessiven.Service
 	tessivenResources      *tessiven.ResourceBackend
 	buildVersion           string
@@ -406,8 +409,9 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	svc := &Service{
-		buildVersion: strings.TrimSpace(opts.BuildVersion),
-		tessiven:     opts.Tessiven, tessivenResources: opts.TessivenResources,
+		platformHTTPTransport: opts.PlatformHTTPTransport,
+		buildVersion:          strings.TrimSpace(opts.BuildVersion),
+		tessiven:              opts.Tessiven, tessivenResources: opts.TessivenResources,
 		activateFloret:                  floretBootstrap.activate,
 		prepareFloretRestore:            floretBootstrap.prepareRestore,
 		readState:                       reads,
@@ -1506,7 +1510,8 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		return nil, err
 	}
 	builder := newRun(runOptions{
-		Log: s.log, StateDir: s.stateDir, AgentHomeDir: s.agentHomeDir,
+		PlatformHTTPTransport: s.platformHTTPTransport,
+		Log:                   s.log, StateDir: s.stateDir, AgentHomeDir: s.agentHomeDir,
 		WorkingDir: workingDir, FilesystemScope: s.scope, Shell: s.shell,
 		HostCapabilities: hostCapabilities, AIConfig: cfg, SessionMeta: metaRef,
 		ResolveProviderKey: s.resolveProviderKey, ResolveWebSearchKey: s.resolveWebSearchKey,

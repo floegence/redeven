@@ -154,6 +154,7 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v2/tessiven/host", s.handleTessivenHost)
 	mux.HandleFunc("/v2/tessiven/resources", s.handleTessivenTarget)
 	mux.HandleFunc("/v2/provider-link", s.handleProviderLink)
+	mux.HandleFunc("/v2/gateway-cloud/join", s.handleGatewayCloudJoin)
 	mux.HandleFunc("/v2/provider-link/connect", s.handleProviderLinkConnect)
 	mux.HandleFunc("/v2/provider-link/disconnect", s.handleProviderLinkDisconnect)
 	mux.HandleFunc("/v2/code-workspace-engine/status", s.handleCodeWorkspaceEngineStatus)

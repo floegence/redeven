@@ -60,7 +60,7 @@ func floretContextProjectionForInputWithAuthority(input RunInput, authority *flo
 		switch strings.TrimSpace(item.Kind) {
 		case contextActionKindTessiven:
 			if len(resolvers) != 1 || resolvers[0] == nil {
-				return floretContextProjection{}, errors.New("Tessiven context resolver is unavailable")
+				return floretContextProjection{}, errors.New("tessiven context resolver is unavailable")
 			}
 			var text string
 			text, err = resolvers[0](item)
@@ -155,7 +155,7 @@ func floretContextProjectionForInputWithAuthority(input RunInput, authority *flo
 func tessivenContextResolver(ctx context.Context, library *tessiven.Service) func(ContextActionContextItem) (string, error) {
 	return func(item ContextActionContextItem) (string, error) {
 		if library == nil {
-			return "", errors.New("Tessiven is unavailable")
+			return "", errors.New("tessiven is unavailable")
 		}
 		return library.SelectionContext(ctx, tessiven.Selection{CanvasID: item.CanvasID, VersionID: item.VersionID, ObjectRefs: item.ObjectRefs})
 	}

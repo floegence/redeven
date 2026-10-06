@@ -1,3 +1,5 @@
+import { normalizeGatewayJoinMaterial, type GatewayJoinMaterial, type GatewayJoinPhase } from './gatewayJoin';
+import { normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from './gatewayCloud';
 import type { EnvironmentAccessRoute } from './environmentAccess';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
@@ -107,6 +109,7 @@ export type DesktopLauncherOperationSubjectKind =
   | 'gateway'
   | 'control_plane';
 export type DesktopLauncherActionOutcome =
+  | 'gateway_cloud_updated'
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
@@ -199,6 +202,9 @@ export type DesktopLauncherActionFailureCode =
   | 'operation_not_cancelable'
   | 'action_invalid';
 export type DesktopLauncherActionKind =
+  | 'join_runtime_gateway_cloud'
+  | 'configure_gateway_cloud'
+  | 'inspect_gateway_cloud'
   | 'open_local_environment'
   | 'open_provider_environment'
   | 'open_gateway_environment'
@@ -685,6 +691,9 @@ export type DesktopLauncherOperationNextAction = Readonly<
 >;
 
 export type DesktopLauncherActionRequest = Readonly<
+  | { kind: 'join_runtime_gateway_cloud'; runtime_target_id: DesktopProviderRuntimeLinkTargetID; material?: GatewayJoinMaterial }
+  | { kind: 'configure_gateway_cloud'; gateway_id: string; configuration: GatewayCloudConfiguration }
+  | { kind: 'inspect_gateway_cloud'; gateway_id: string }
   | {
       kind: 'open_local_environment';
       environment_id: string;
@@ -904,6 +913,8 @@ export type DesktopLauncherActionRequest = Readonly<
 >;
 
 export type DesktopLauncherActionSuccess = Readonly<{
+  gateway_cloud?: GatewayCloudSummary;
+  gateway_join_phase?: GatewayJoinPhase;
   ok: true;
   outcome: DesktopLauncherActionOutcome;
   environment_id?: string;
@@ -1517,6 +1528,22 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         kind,
         gateway_id: gatewayID,
       };
+    }
+    case 'join_runtime_gateway_cloud': {
+      const runtimeTargetID = compact((candidate as { runtime_target_id?: unknown }).runtime_target_id);
+      const raw = (candidate as { material?: unknown }).material;
+      const material = raw === undefined ? undefined : normalizeGatewayJoinMaterial(raw);
+      if (!/^(local|ssh|wsl):.+$/.test(runtimeTargetID) || material === null) return null;
+      return { kind, runtime_target_id: runtimeTargetID as DesktopProviderRuntimeLinkTargetID, ...(material ? { material } : {}) };
+    }
+    case 'configure_gateway_cloud': {
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const configuration = normalizeGatewayCloudConfiguration((candidate as { configuration?: unknown }).configuration);
+      return gatewayID && configuration ? { kind, gateway_id: gatewayID, configuration } : null;
+    }
+    case 'inspect_gateway_cloud': {
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      return gatewayID ? { kind, gateway_id: gatewayID } : null;
     }
     case 'start_gateway':
     case 'stop_gateway':

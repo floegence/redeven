@@ -124,7 +124,7 @@ func (b *Broker) Execute(ctx context.Context, meta *session.Meta, req ResourceRe
 	c.mu.Lock()
 	if len(c.pending) >= 32 {
 		c.mu.Unlock()
-		return ResourceResult{}, errors.New("Tessiven host request capacity reached")
+		return ResourceResult{}, errors.New("tessiven host request capacity reached")
 	}
 	c.pending[id] = reply
 	c.mu.Unlock()

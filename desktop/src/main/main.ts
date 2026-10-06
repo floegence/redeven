@@ -1,3 +1,4 @@
+import { joinRuntimeGatewayCloud } from './runtimeControlClient';
 import { connectTessivenHost, type TessivenHost } from './tessivenHost';
 import { requestTessivenTarget } from './runtimeControlClient';
 import { isTessivenRuntimePath } from './runtimeTessivenRoutes';
@@ -18170,6 +18171,11 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return checkGatewayFromLauncher(request);
     case 'set_gateway_enabled':
       return setGatewayEnabledFromLauncher(request);
+    case 'join_runtime_gateway_cloud':
+      return joinRuntimeGatewayCloudFromLauncher(request);
+    case 'configure_gateway_cloud':
+    case 'inspect_gateway_cloud':
+      return runGatewayCloudActionFromLauncher(request);
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
@@ -19640,4 +19646,47 @@ if (!app.requestSingleInstanceLock()) {
     desktopUpdateCoordinatorCache?.dispose();
     linuxPackageUpdateAdapterCache?.dispose();
   });
+}
+
+async function runGatewayCloudActionFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'configure_gateway_cloud' | 'inspect_gateway_cloud' }>): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record || record.connection.kind === 'url') return launcherActionFailure('action_invalid', 'gateway', 'This Gateway requires a trusted host management connection.', { gatewayID: request.gateway_id });
+  const key = `${record.gateway_id}:cloud`;
+  if (launcherOperationIsActive(launcherOperations.get(key))) return launcherActionFailure('action_invalid', 'gateway', 'A Gateway Cloud operation is already running.', { gatewayID: request.gateway_id });
+  const operation = launcherOperations.create({ operation_key: key, action: request.kind, subject_kind: 'gateway', subject_id: record.gateway_id, gateway_id: record.gateway_id, active_progress_surface: 'gateway', phase: 'connecting_cloud', title: 'Redeven Cloud', title_key: 'gatewayCloud.title', detail: '', cancelable: true });
+  const owner = { action: operation.action, started_at_unix_ms: operation.started_at_unix_ms };
+  const signal = launcherOperations.operationSignal(key) ?? undefined;
+  try {
+    const status = await gatewayLifecycleManager().manageCloud(record, request.kind === 'configure_gateway_cloud' ? request.configuration : undefined, signal, key);
+    launcherOperations.finishCurrentAttempt(key, owner, 'succeeded', { phase: 'cloud_ready', detail: '' });
+    scheduleCurrentLauncherOperationRemoval(key, owner);
+    return { ok: true, outcome: 'gateway_cloud_updated', gateway_cloud: status };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Gateway Cloud operation failed.';
+    launcherOperations.finishCurrentAttempt(key, owner, signal?.aborted ? 'canceled' : 'failed', { phase: 'cloud_failed', detail: message });
+    return launcherActionFailure('action_invalid', 'gateway', message, { gatewayID: request.gateway_id, operationKey: key });
+  }
+}
+
+async function joinRuntimeGatewayCloudFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'join_runtime_gateway_cloud' }>): Promise<DesktopLauncherActionResult> {
+  if (explicitProviderLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('provider_link_failed', 'environment', 'A Cloud connection action is already in progress.');
+  explicitProviderLinkTargets.add(request.runtime_target_id);
+  providerLinkIntentVersions.set(request.runtime_target_id, (providerLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
+  let target: ProviderRuntimeLinkTargetRecord | null = null;
+  try {
+    await providerCredentialRecovery.settled(request.runtime_target_id);
+    providerCredentialRecovery.forget(request.runtime_target_id);
+    target = await resolveProviderRuntimeLinkTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
+    const endpoint = target?.record.startup.runtime_control;
+    if (!target || !endpoint) return launcherActionFailure('runtime_not_started', 'environment', 'Start this Runtime through its trusted management connection first.');
+    const result = await joinRuntimeGatewayCloud(endpoint, request.material);
+    if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('provider_link_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');
+    updateProviderRuntimeTargetStartup(target, { runtime_service: result.runtime_service });
+    return { ...launcherActionSuccess('connected_provider_runtime'), gateway_join_phase: result.phase };
+  } catch {
+    return launcherActionFailure('provider_link_failed', 'environment', 'Gateway enrollment could not advance. Check the Gateway and retry the saved enrollment.');
+  } finally {
+    await target?.bridge_lease?.release();
+    explicitProviderLinkTargets.delete(request.runtime_target_id);
+  }
 }

@@ -3113,5 +3113,34 @@
     "preparingEditor": "Connexion au service de l’éditeur",
     "editorUnavailableDetail": "L’éditeur n’a pas pu s’ouvrir. Revenez à Codespaces et réessayez.",
     "technicalDetails": "Détails techniques"
+  },
+  "gatewayCloud": {
+    "title": "Redeven Cloud",
+    "description": "Connectez cette passerelle à Redeven Cloud. Un administrateur de l’espace de noms approuve l’accès dans le cloud. Chaque runtime doit aussi donner son accord localement.",
+    "cloudOrigin": "Adresse du cloud",
+    "gatewayURL": "Adresse de la passerelle accessible aux runtimes",
+    "listenAddress": "Adresse d’écoute de la passerelle",
+    "configure": "Connecter au cloud",
+    "manage": "Gérer dans le cloud",
+    "unconfigured": "L’accès au cloud n’est pas configuré.",
+    "pending": "En attente d’approbation dans le cloud.",
+    "active": "L’accès au cloud est approuvé.",
+    "revoked": "L’accès au cloud a été révoqué.",
+    "unavailable": "Impossible de vérifier l’accès au cloud. Les paramètres sont conservés. Réessayez ou consultez les détails de l’opération.",
+    "invalid": "Saisissez des origines HTTPS et une adresse d’écoute valide avec un port.",
+    "working": "Connexion à la passerelle et au cloud…",
+    "viaGateway": "Via Gateway",
+    "runtimeDisabled": "L’accès à distance est désactivé sur ce Runtime."
+  },
+  "gatewayJoin": {
+    "title": "Connexion via Gateway",
+    "resume": "Reprendre l’inscription",
+    "material": "Fichier d’adhésion",
+    "consent": "Autoriser ce Runtime à se connecter via le Gateway sélectionné et à demander sa publication dans le Namespace. Une approbation Cloud est requise.",
+    "approve": "Accepter et connecter",
+    "pauseDetail": "Fermer suspend la configuration. Le consentement local est conservé. Les liaisons Cloud existantes doivent être migrées avec la CLI.",
+    "invalid": "Données d’adhésion invalides. Sélectionnez le fichier JSON original téléchargé depuis Cloud.",
+    "failed": "Impossible de poursuivre. Vérifiez la connexion au Gateway puis réessayez. Le consentement est conservé.",
+    "namespace": "Espace de noms"
   }
 }

@@ -194,7 +194,7 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 			}
 			model.ReasoningCapability, err = config.OllamaReasoningCapability(detail.Thinking, slices.Contains(detail.Capabilities, "thinking"))
 			if err != nil {
-				return nil, fmt.Errorf("Ollama model %q thinking metadata: %w", m.Name, err)
+				return nil, fmt.Errorf("ollama model %q thinking metadata: %w", m.Name, err)
 			}
 			out = append(out, model)
 		}

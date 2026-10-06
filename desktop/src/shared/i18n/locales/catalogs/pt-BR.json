@@ -3113,5 +3113,34 @@
     "preparingEditor": "Conectando ao serviço do editor",
     "editorUnavailableDetail": "Não foi possível abrir o editor. Volte para Codespaces e tente novamente.",
     "technicalDetails": "Detalhes técnicos"
+  },
+  "gatewayCloud": {
+    "title": "Redeven Cloud",
+    "description": "Conecte este gateway ao Redeven Cloud. Um administrador do namespace aprova o acesso na nuvem. Cada runtime também precisa consentir localmente.",
+    "cloudOrigin": "Endereço da nuvem",
+    "gatewayURL": "Endereço do gateway acessível pelos runtimes",
+    "listenAddress": "Endereço de escuta do gateway",
+    "configure": "Conectar à nuvem",
+    "manage": "Gerenciar na nuvem",
+    "unconfigured": "O acesso à nuvem não está configurado.",
+    "pending": "Aguardando aprovação na nuvem.",
+    "active": "O acesso à nuvem foi aprovado.",
+    "revoked": "O acesso à nuvem foi revogado.",
+    "unavailable": "Não foi possível verificar o acesso à nuvem. As configurações foram mantidas. Tente novamente ou consulte os detalhes da operação.",
+    "invalid": "Informe origens HTTPS e um endereço de escuta válido com porta.",
+    "working": "Conectando ao gateway e à nuvem…",
+    "viaGateway": "Via Gateway",
+    "runtimeDisabled": "O acesso remoto está desativado neste Runtime."
+  },
+  "gatewayJoin": {
+    "title": "Conectar via Gateway",
+    "resume": "Retomar cadastro",
+    "material": "Arquivo de ingresso",
+    "consent": "Permitir que este Runtime se conecte pelo Gateway selecionado e solicite publicação no Namespace. É necessária aprovação no Cloud.",
+    "approve": "Aceitar e conectar",
+    "pauseDetail": "Fechar pausa a configuração. O consentimento local é salvo. Vínculos existentes com o Cloud devem ser migrados pela CLI.",
+    "invalid": "Dados de ingresso inválidos. Selecione o JSON original do Cloud.",
+    "failed": "Não foi possível continuar. Verifique a conexão com o Gateway e tente novamente. O consentimento permanece salvo.",
+    "namespace": "Espaço de nomes"
   }
 }
