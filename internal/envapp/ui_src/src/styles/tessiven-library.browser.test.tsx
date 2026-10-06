@@ -2,6 +2,8 @@ import '../index.css';
 import { render } from 'solid-js/web';
 import { page } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
+import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
 import { TessivenPage } from '../../../../tessiven_ui/src/TessivenPage';
 import { TessivenResourceDialog } from '../../../../tessiven_ui/src/TessivenResourceDialog';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
@@ -16,6 +18,8 @@ afterEach(() => {
   dispose?.();
   host?.remove();
   vi.unstubAllGlobals();
+  document.documentElement.removeAttribute('style');
+  document.documentElement.classList.remove('dark', 'light');
 });
 const canvas: Canvas = {
   id: 'commerce',
@@ -46,24 +50,132 @@ function createHost() {
   host.style.cssText = 'width:1100px;height:700px';
   document.body.append(host);
 }
-it('opens exact history for Ask Flower and retains conflicting DSL edits', async () => {
+it('creates immediately, delegates edits to Flower, and follows current versions without changing history', async () => {
   await page.viewport(1200, 800);
   createHost();
   const ask = vi.fn();
-  let rejected = false;
-  const request = vi.fn(async (_method: string, path: string) => {
-    if (path.startsWith('/canvases?')) return { canvases: [canvas] };
-    if (path === '/canvases/commerce') return canvas;
-    if (path === '/canvases/commerce/versions/latest') return version(2);
-    if (path === '/canvases/commerce/versions/1') return version(1);
-    if (path === '/canvases/commerce/versions') {
-      rejected = true;
-      throw new Error('Canvas version conflict');
+  let current = { ...canvas };
+  let changed: () => void = () => {};
+  const request = vi.fn(async (method: string, path: string) => {
+    if (path.startsWith('/canvases?')) return { canvases: [current] };
+    if (path === '/canvases' && method === 'POST')
+      return {
+        canvas: { ...canvas, title: 'Untitled canvas', latest_version: 1 },
+        version: {
+          ...version(1),
+          source: 'created',
+          document: {
+            ...version(1).document,
+            metadata: { title: 'Untitled canvas' },
+          },
+        },
+      };
+    if (path === '/canvases/commerce') return current;
+    if (path.startsWith('/canvases/commerce/versions/')) {
+      const number = path.endsWith('/latest')
+        ? current.latest_version
+        : Number(path.split('/').at(-1));
+      return {
+        ...version(number),
+        document: {
+          ...version(number).document,
+          metadata: { title: `Commerce v${number}` },
+          ...(number >= 2
+            ? {
+                nodes: [
+                  {
+                    id: 'new-runtime',
+                    name: 'Mapped Runtime',
+                    runtimeRef: 'local:local',
+                  },
+                ],
+                presentation: {
+                  positions: [{ objectRef: 'new-runtime', x: 5000, y: 3000 }],
+                },
+              }
+            : {}),
+        },
+      };
     }
-    if (path === '/validate') return { valid: true, diagnostics: [] };
     throw new Error(`Unexpected path ${path}`);
   });
-  const transport = { request, subscribe: () => () => {} } as TessivenTransport;
+  const transport = {
+    request,
+    subscribe: (notify: () => void) => {
+      changed = notify;
+      return () => {};
+    },
+  } as TessivenTransport;
+  dispose = render(
+    () => (
+      <TessivenPage
+        t={tessivenText('en-US')}
+        canWrite
+        transport={transport}
+        onAsk={ask}
+        onOpenService={() => {}}
+      />
+    ),
+    host,
+  );
+  await expect
+    .element(page.getByRole('button', { name: 'New canvas', exact: true }))
+    .toBeVisible();
+  vi.stubGlobal('crypto', {
+    getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto),
+  });
+  await page.getByRole('button', { name: 'New canvas', exact: true }).click();
+  await expect
+    .element(
+      page.getByRole('heading', { name: 'Untitled canvas', exact: true }),
+    )
+    .toBeVisible();
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(
+    request.mock.calls.filter(([method]) => method === 'POST'),
+  ).toHaveLength(1);
+  await page
+    .getByRole('button', { name: 'Map connected services', exact: true })
+    .click();
+  expect(ask.mock.calls.at(-1)?.[0]).toEqual({
+    canvas_id: 'commerce',
+    version_id: 1,
+    object_refs: [],
+  });
+  expect(ask.mock.calls.at(-1)?.[1]).toContain('save the canvas');
+  changed();
+  await expect
+    .element(page.getByRole('heading', { name: 'Commerce v2', exact: true }))
+    .toBeVisible();
+  await expect
+    .poll(() => {
+      const card = host
+        .querySelector('.tessiven-node')
+        ?.getBoundingClientRect();
+      const viewport = host
+        .querySelector('.tessiven-canvas')
+        ?.getBoundingClientRect();
+      return (
+        !!card &&
+        !!viewport &&
+        card.left >= viewport.left &&
+        card.right <= viewport.right &&
+        card.top >= viewport.top &&
+        card.bottom <= viewport.bottom
+      );
+    })
+    .toBe(true);
+  await page
+    .getByRole('button', { name: 'Canvas actions', exact: true })
+    .first()
+    .click();
+  await page
+    .getByRole('menuitem', { name: 'View document', exact: true })
+    .click();
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  expect(document.querySelector('textarea')).toBeNull();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  dispose();
   dispose = render(
     () => (
       <TessivenPage
@@ -78,38 +190,26 @@ it('opens exact history for Ask Flower and retains conflicting DSL edits', async
     host,
   );
   await expect
-    .element(
-      page.getByText(
-        'You are viewing a saved version. Service changes are disabled.',
-      ),
-    )
+    .element(page.getByRole('heading', { name: 'Commerce v1', exact: true }))
     .toBeVisible();
-  await expect.element(page.getByRole('heading', { name: 'Commerce', exact: true })).toBeVisible();
+  current = { ...current, latest_version: 3 };
+  changed();
+  await expect
+    .poll(
+      () =>
+        request.mock.calls.filter(([, path]) => path === '/canvases/commerce')
+          .length,
+    )
+    .toBeGreaterThan(1);
   await page.getByRole('button', { name: 'Ask Flower', exact: true }).click();
-  expect(ask).toHaveBeenCalledWith({
+  expect(ask.mock.calls.at(-1)?.[0]).toEqual({
     canvas_id: 'commerce',
     version_id: 1,
     object_refs: [],
   });
-  await page
-    .getByRole('button', { name: 'Open latest version', exact: true })
-    .click();
   await expect
-    .poll(() => host.textContent?.includes('You are viewing a saved version.'))
-    .toBe(false);
-  // Public HTTP contexts expose secure random bytes but not randomUUID.
-  vi.stubGlobal('crypto', {
-    getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto),
-  });
-  await page.getByRole('button', { name: 'DSL document', exact: true }).click();
-  const editor = page.getByRole('textbox', { name: 'Canvas YAML document' });
-  await editor.fill('my unsaved document');
-  await page.getByRole('button', { name: 'Save version', exact: true }).click();
-  await expect.poll(() => rejected).toBe(true);
-  await expect.element(editor).toHaveValue('my unsaved document');
-  await expect
-    .element(page.getByRole('dialog').getByRole('alert'))
-    .toHaveTextContent('Canvas version conflict');
+    .element(page.getByRole('heading', { name: 'Commerce v1', exact: true }))
+    .toBeVisible();
 });
 it('requires a user gesture to open a prepared service and never mutates history', async () => {
   createHost();
@@ -190,4 +290,87 @@ it('requires a user gesture to open a prepared service and never mutates history
   await expect
     .element(page.getByRole('button', { name: 'Open service', exact: true }))
     .toBeDisabled();
+});
+
+it('keeps global navigation and library text visible in every published theme', async () => {
+  await page.viewport(1200, 800);
+  createHost();
+  const transport = {
+    request: async (_method: string, path: string) =>
+      path.startsWith('/canvases?') ? { canvases: [canvas] } : version(2),
+    subscribe: () => () => {},
+  } as TessivenTransport;
+  dispose = render(
+    () => (
+      <>
+        <button
+          class="global-tessiven-navigation"
+          style={{
+            color: 'var(--foreground)',
+            background: 'var(--background)',
+          }}
+          aria-label="Open Tessiven"
+        >
+          <TessivenIcon kind="tessiven" />
+        </button>
+        <TessivenPage
+          t={tessivenText('en-US')}
+          canWrite
+          transport={transport}
+          onAsk={() => {}}
+          onOpenService={() => {}}
+        />
+      </>
+    ),
+    host,
+  );
+  await expect
+    .element(page.getByRole('heading', { name: canvas.title }))
+    .toBeVisible();
+  function luminance(color: string) {
+    const context = document.createElement('canvas').getContext('2d')!;
+    context.fillStyle = color;
+    context.fillRect(0, 0, 1, 1);
+    const values = [...context.getImageData(0, 0, 1, 1).data]
+      .slice(0, 3)
+      .map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045
+          ? value / 12.92
+          : ((value + 0.055) / 1.055) ** 2.4;
+      });
+    return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+  }
+  for (const preset of builtInShellThemePresets) {
+    document.documentElement.classList.toggle('dark', preset.mode === 'dark');
+    for (const [name, value] of Object.entries(preset.semanticTokens ?? {}))
+      if (value) document.documentElement.style.setProperty(name, value);
+    for (const [selector, background, property, minimum] of [
+      [
+        '.global-tessiven-navigation .glyph-main',
+        '.global-tessiven-navigation',
+        'fill',
+        3,
+      ],
+      ['.tessiven-library-heading h2', '.tessiven', 'color', 4.5],
+      ['.tessiven-library-heading p', '.tessiven', 'color', 4.5],
+      ['.tessiven-card-information h3', '.tessiven-library-card', 'color', 4.5],
+      ['.tessiven-card-information p', '.tessiven-library-card', 'color', 4.5],
+      ['.tessiven-library-flower button', '.tessiven', 'color', 4.5],
+    ] as const) {
+      const foreground = getComputedStyle(
+        host.querySelector(selector)!,
+      ).getPropertyValue(property);
+      const surface = getComputedStyle(
+        host.querySelector(background)!,
+      ).backgroundColor;
+      const [light, dark] = [luminance(foreground), luminance(surface)].sort(
+        (a, b) => b - a,
+      );
+      expect(
+        (light + 0.05) / (dark + 0.05),
+        `${preset.name}: ${selector}`,
+      ).toBeGreaterThanOrEqual(minimum);
+    }
+  }
 });

@@ -51,8 +51,8 @@ export default function EnvTessivenPage(props: {
       transport={transport}
       canWrite={env.env()?.permissions?.can_write === true}
       openRequest={props.openRequest ?? request}
-      onAsk={(selection) =>
-        env.openFlowerTurnLauncher(tessivenFlowerIntent(selection, t()))
+      onAsk={(selection, prompt) =>
+        env.openFlowerTurnLauncher(tessivenFlowerIntent(selection, t(), prompt))
       }
       onOpenService={async (opening, runtime) => {
         if (runtime !== 'local:local') throw new Error(t()('openUnavailable'));

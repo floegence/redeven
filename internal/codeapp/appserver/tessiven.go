@@ -85,26 +85,14 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 			return true
 		case http.MethodPost:
 			var req struct {
-				tessiven.SaveRequest
-				Source string `json:"source,omitempty"`
+				RequestID string `json:"request_id"`
+				Title     string `json:"title"`
 			}
 			if err := decodeTessivenJSON(r, &req); err != nil {
 				writeTessivenError(w, err)
 				return true
 			}
-			if req.CanvasID != "" {
-				writeTessivenError(w, tessiven.ErrInvalidRequest)
-				return true
-			}
-			source := req.Source
-			if source == "" {
-				source = "manual"
-			}
-			if source != "manual" && source != "import" {
-				writeTessivenError(w, tessiven.ErrInvalidRequest)
-				return true
-			}
-			result, err := g.tessiven.Save(r.Context(), req.SaveRequest, source)
+			result, err := g.tessiven.Create(r.Context(), req.RequestID, req.Title)
 			writeTessivenResult(w, result, err)
 			return true
 		}
@@ -127,52 +115,6 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 						return true
 					}
 					result, err := g.tessiven.Versions(r.Context(), id, before)
-					writeTessivenResult(w, result, err)
-					return true
-				}
-				if r.Method == http.MethodPost {
-					var req struct {
-						tessiven.SaveRequest
-						Source string `json:"source,omitempty"`
-					}
-					if err := decodeTessivenJSON(r, &req); err != nil {
-						writeTessivenError(w, err)
-						return true
-					}
-					if req.CanvasID != "" && req.CanvasID != id {
-						writeTessivenError(w, tessiven.ErrInvalidRequest)
-						return true
-					}
-					req.CanvasID = id
-					source := req.Source
-					if source == "" {
-						source = "manual"
-					}
-					if source != "manual" && source != "import" {
-						writeTessivenError(w, tessiven.ErrInvalidRequest)
-						return true
-					}
-					result, err := g.tessiven.Save(r.Context(), req.SaveRequest, source)
-					writeTessivenResult(w, result, err)
-					return true
-				}
-			case "rename", "duplicate", "restore":
-				if r.Method == http.MethodPost {
-					var req tessiven.RevisionRequest
-					if err := decodeTessivenJSON(r, &req); err != nil {
-						writeTessivenError(w, err)
-						return true
-					}
-					var result tessiven.SaveResult
-					var err error
-					switch parts[2] {
-					case "rename":
-						result, err = g.tessiven.Rename(r.Context(), id, req)
-					case "duplicate":
-						result, err = g.tessiven.Duplicate(r.Context(), id, req)
-					case "restore":
-						result, err = g.tessiven.Restore(r.Context(), id, req)
-					}
 					writeTessivenResult(w, result, err)
 					return true
 				}

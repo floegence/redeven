@@ -9,6 +9,7 @@ import type { Selection, TessivenText } from './types';
 export function tessivenFlowerIntent(
   selection: Selection | null,
   t: TessivenText,
+  prompt?: string,
 ): FlowerTurnLauncherIntent {
   const action: ContextActionEnvelope | undefined = selection
     ? {
@@ -24,6 +25,7 @@ export function tessivenFlowerIntent(
   return {
     id: `tessiven-${secureRandomUUID()}`,
     source_surface: 'tessiven',
+    opening_question: t('flowerEntry'),
     context_items: selection
       ? [
           {
@@ -35,6 +37,10 @@ export function tessivenFlowerIntent(
         ]
       : [],
     context_action: action,
-    ...(selection ? {} : { initial_prompt: t('createWithFlowerPrompt') }),
+    ...(prompt
+      ? { initial_prompt: prompt }
+      : selection
+        ? {}
+        : { initial_prompt: t('createWithFlowerPrompt') }),
   };
 }

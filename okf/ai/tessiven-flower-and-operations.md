@@ -3,12 +3,13 @@ type: AI Product Contract
 title: Tessiven Flower and operations
 description: Generate canvas versions and route service actions through their original owners.
 tags: [ai, tessiven, flower]
-timestamp: 2026-10-05T00:00:00Z
+timestamp: 2026-10-06T00:00:00Z
 ---
 # Summary
 
 Flower maps authorized code, configuration, and connected Runtime facts into
-Tessiven versions through the `redeven-tessiven` system skill. Resource actions
+Tessiven versions through the `redeven-tessiven` system skill. Flower owns canvas
+content editing as a core workflow. Resource actions
 remain owned by the existing Managed Services and Containers managers. A
 transport failure after a mutation is dispatched is terminal with an unknown
 outcome, so the user must inspect the original manager before trying again.
@@ -18,6 +19,13 @@ outcome, so the user must inspect the original manager before trying again.
 - Tessiven tools read the canonical schema, list/read/validate versions, save a
   complete new version, inspect explicit targets, and execute one exact bound
   instance when the existing permission and approval checks allow it.
+- A selected canvas is the update target, including a newly created empty
+  canvas. Flower creates another canvas only when the user requests one.
+  Renaming and restoring content use read/validate/save against the latest
+  version, while discussion of historical selections retains that identity.
+- Example targets and inference evidence are fictional. Mapping actual
+  infrastructure requires inspecting real targets rather than assigning
+  management bindings to example identities.
 - Flower preserves stable object IDs, adds evidence and observation times, and
   never guesses a management identity from a name, address, or process.
 - Ask Flower carries `canvas_id`, `version_id`, and bounded object references;

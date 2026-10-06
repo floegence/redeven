@@ -47,7 +47,7 @@ export const TESSIVEN_RUNTIME_ROUTES = [
   },
   {
     path: new RegExp(`^${TESSIVEN_RUNTIME_BASE}/canvases/${canvas}/versions$`),
-    methods: ['GET', 'POST'],
+    methods: ['GET'],
     allowsQuery: query({ before: (value) => /^[1-9][0-9]{0,14}$/.test(value) }),
   },
   {
@@ -59,7 +59,7 @@ export const TESSIVEN_RUNTIME_ROUTES = [
   },
   {
     path: new RegExp(
-      `^${TESSIVEN_RUNTIME_BASE}/canvases/${canvas}/(rename|duplicate|restore|archive)$`,
+      `^${TESSIVEN_RUNTIME_BASE}/canvases/${canvas}/archive$`,
     ),
     methods: ['POST'],
     allowsQuery: noQuery,

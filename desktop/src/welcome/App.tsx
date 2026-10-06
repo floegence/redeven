@@ -6641,7 +6641,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         </Show>
         <Show when={tessivenVisited()}><div class="h-full min-h-0" style={{ display: tessivenVisible() ? undefined : 'none' }} data-desktop-page="tessiven" aria-hidden={!tessivenVisible() ? 'true' : undefined} inert={!tessivenVisible()}>
           <TessivenPage locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
-            onAsk={selection => { setFlowerTurnLauncherIntent(tessivenFlowerIntent(selection, tessivenCopy())); setFlowerTurnLauncherAnchor(null); setFlowerTurnLauncherOpen(true); }}
+            onAsk={(selection, prompt) => { setFlowerTurnLauncherIntent(tessivenFlowerIntent(selection, tessivenCopy(), prompt)); setFlowerTurnLauncherAnchor(null); setFlowerTurnLauncherOpen(true); }}
             onOpenService={async () => { throw new Error(tessivenCopy()('openUnavailable')); }}/>
         </div></Show>
         <Show when={flowerVisited()}>
