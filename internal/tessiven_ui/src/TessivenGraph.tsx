@@ -556,7 +556,7 @@ export function TessivenGraph(props: {
         onContextMenu={(event) => show(event, undefined, true)}
         onInteractionStart={() => close()}
       />
-      <div class="tessiven-canvas-tools">
+      <div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
         <button onClick={fit}>{props.t('fit')}</button>
         <span>{Math.round(viewport().scale * 100)}%</span>
         <button
@@ -575,14 +575,6 @@ export function TessivenGraph(props: {
         >
           ⋯
         </button>
-      </div>
-      <div class="tessiven-canvas-key">
-        <span class="tessiven-group-mark" />
-        {props.t('logicalGroup')}
-        <span class="tessiven-key-node" />
-        {props.t('runtimeNode')}
-        <span class="tessiven-key-resource" />
-        {props.t('externalResource')}
       </div>
       <Show when={popup()} keyed>
         {(value) => (

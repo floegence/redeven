@@ -170,5 +170,18 @@
   "emptyLibraryTitle": "Ainda não há quadros",
   "searchHint": "Tente outro nome ou limpe a pesquisa.",
   "source.example": "Exemplo",
-  "source.created": "Criado"
+  "source.created": "Criado",
+  "canvasFlower": "Editar com Flower",
+  "libraryMenu": "Ações da biblioteca",
+  "flowerPlaceholder": "Descreva uma alteração ou pergunte sobre este canvas…",
+  "flowerEnter": "Enter para enviar · Shift+Enter para nova linha",
+  "flowerRetry": "Tentar enviar novamente",
+  "flowerSend": "Enviar para Flower",
+  "flowerUnknown": "Entrega não confirmada. Tente novamente para verificar a mesma solicitação.",
+  "flowerTargetHeld": "Resolva a solicitação pendente antes de selecionar outro objeto.",
+  "flowerAccepted": "Enviado para Flower",
+  "flowerConversation": "Abrir conversa",
+  "flowerWorkflow": "As alterações aparecem aqui. Respostas e aprovações ficam na conversa.",
+  "canvasUpdated": "Canvas atualizado",
+  "reviewChanges": "Ver alterações"
 }

@@ -170,5 +170,18 @@
   "emptyLibraryTitle": "Aún no hay lienzos",
   "searchHint": "Prueba otro nombre o borra la búsqueda.",
   "source.example": "Ejemplo",
-  "source.created": "Creado"
+  "source.created": "Creado",
+  "canvasFlower": "Editar con Flower",
+  "libraryMenu": "Acciones de la biblioteca",
+  "flowerPlaceholder": "Describe un cambio o pregunta sobre este lienzo…",
+  "flowerEnter": "Enter para enviar · Shift+Enter para salto de línea",
+  "flowerRetry": "Reintentar envío",
+  "flowerSend": "Enviar a Flower",
+  "flowerUnknown": "Entrega sin confirmar. Reintenta para comprobar la misma solicitud.",
+  "flowerTargetHeld": "Resuelve la solicitud pendiente antes de seleccionar otro objeto.",
+  "flowerAccepted": "Enviado a Flower",
+  "flowerConversation": "Abrir conversación",
+  "flowerWorkflow": "Los cambios aparecen aquí. Las respuestas y aprobaciones están en la conversación.",
+  "canvasUpdated": "Lienzo actualizado",
+  "reviewChanges": "Ver cambios"
 }

@@ -170,5 +170,18 @@
   "emptyLibraryTitle": "Aucun canevas pour le moment",
   "searchHint": "Essayez un autre nom ou effacez la recherche.",
   "source.example": "Exemple",
-  "source.created": "Créé"
+  "source.created": "Créé",
+  "canvasFlower": "Modifier avec Flower",
+  "libraryMenu": "Actions de la bibliothèque",
+  "flowerPlaceholder": "Décrivez une modification ou posez une question sur ce canevas…",
+  "flowerEnter": "Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne",
+  "flowerRetry": "Réessayer l’envoi",
+  "flowerSend": "Envoyer à Flower",
+  "flowerUnknown": "Envoi non confirmé. Réessayez pour vérifier la même demande.",
+  "flowerTargetHeld": "Terminez la demande en attente avant de sélectionner un autre objet.",
+  "flowerAccepted": "Envoyé à Flower",
+  "flowerConversation": "Ouvrir la conversation",
+  "flowerWorkflow": "Les modifications apparaissent ici. Les réponses et approbations sont dans la conversation.",
+  "canvasUpdated": "Canevas mis à jour",
+  "reviewChanges": "Voir les modifications"
 }

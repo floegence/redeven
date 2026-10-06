@@ -3,6 +3,7 @@ import { render } from 'solid-js/web';
 import { page } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
+import type { FlowerTurnLauncherSubmitInput } from '../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
 import { TessivenPage } from '../../../../tessiven_ui/src/TessivenPage';
 import { TessivenResourceDialog } from '../../../../tessiven_ui/src/TessivenResourceDialog';
@@ -53,7 +54,9 @@ function createHost() {
 it('creates immediately, delegates edits to Flower, and follows current versions without changing history', async () => {
   await page.viewport(1200, 800);
   createHost();
-  const ask = vi.fn();
+  const ask = vi.fn(
+    async (_input: FlowerTurnLauncherSubmitInput) => 'canvas-thread',
+  );
   let current = { ...canvas };
   let changed: () => void = () => {};
   const request = vi.fn(async (method: string, path: string) => {
@@ -112,7 +115,8 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         t={tessivenText('en-US')}
         canWrite
         transport={transport}
-        onAsk={ask}
+        onSendFlower={ask}
+        onOpenFlower={() => {}}
         onOpenService={() => {}}
       />
     ),
@@ -137,12 +141,25 @@ it('creates immediately, delegates edits to Flower, and follows current versions
   await page
     .getByRole('button', { name: 'Map connected services', exact: true })
     .click();
-  expect(ask.mock.calls.at(-1)?.[0]).toEqual({
-    canvas_id: 'commerce',
-    version_id: 1,
-    object_refs: [],
+  await expect
+    .element(page.getByRole('textbox'))
+    .toHaveValue(tessivenText('en-US')('mapPrompt'));
+  expect(ask).not.toHaveBeenCalled();
+  await page
+    .getByRole('button', { name: 'Send to Flower', exact: true })
+    .click();
+  await expect.poll(() => ask.mock.calls.length).toBe(1);
+  expect(ask.mock.calls.at(-1)?.[0].intent.context_action).toMatchObject({
+    context: [
+      {
+        kind: 'tessiven_selection',
+        canvas_id: 'commerce',
+        version_id: 1,
+        object_refs: [],
+      },
+    ],
   });
-  expect(ask.mock.calls.at(-1)?.[1]).toContain('save the canvas');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   changed();
   await expect
     .element(page.getByRole('heading', { name: 'Commerce v2', exact: true }))
@@ -173,7 +190,7 @@ it('creates immediately, delegates edits to Flower, and follows current versions
     .getByRole('menuitem', { name: 'View document', exact: true })
     .click();
   await expect.element(page.getByRole('dialog')).toBeVisible();
-  expect(document.querySelector('textarea')).toBeNull();
+  expect(document.querySelector('[role="dialog"] textarea')).toBeNull();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   dispose();
   dispose = render(
@@ -182,7 +199,8 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         t={tessivenText('en-US')}
         canWrite
         transport={transport}
-        onAsk={ask}
+        onSendFlower={ask}
+        onOpenFlower={() => {}}
         onOpenService={() => {}}
         openRequest={{ canvasID: 'commerce', version: 1, nonce: 1 }}
       />
@@ -201,11 +219,23 @@ it('creates immediately, delegates edits to Flower, and follows current versions
           .length,
     )
     .toBeGreaterThan(1);
-  await page.getByRole('button', { name: 'Ask Flower', exact: true }).click();
-  expect(ask.mock.calls.at(-1)?.[0]).toEqual({
-    canvas_id: 'commerce',
-    version_id: 1,
-    object_refs: [],
+  await page
+    .getByRole('button', { name: 'Edit with Flower', exact: true })
+    .click();
+  await page.getByRole('textbox').fill('Explain this historical version');
+  await page
+    .getByRole('button', { name: 'Send to Flower', exact: true })
+    .click();
+  await expect.poll(() => ask.mock.calls.length).toBe(2);
+  expect(ask.mock.calls.at(-1)?.[0].intent.context_action).toMatchObject({
+    context: [
+      {
+        kind: 'tessiven_selection',
+        canvas_id: 'commerce',
+        version_id: 1,
+        object_refs: [],
+      },
+    ],
   });
   await expect
     .element(page.getByRole('heading', { name: 'Commerce v1', exact: true }))
@@ -317,7 +347,8 @@ it('keeps global navigation and library text visible in every published theme', 
           t={tessivenText('en-US')}
           canWrite
           transport={transport}
-          onAsk={() => {}}
+          onSendFlower={async () => 'canvas-thread'}
+          onOpenFlower={() => {}}
           onOpenService={() => {}}
         />
       </>
@@ -352,11 +383,9 @@ it('keeps global navigation and library text visible in every published theme', 
         'fill',
         3,
       ],
-      ['.tessiven-library-heading h2', '.tessiven', 'color', 4.5],
-      ['.tessiven-library-heading p', '.tessiven', 'color', 4.5],
+      ['.tessiven-heading h1', '.tessiven', 'color', 4.5],
       ['.tessiven-card-information h3', '.tessiven-library-card', 'color', 4.5],
-      ['.tessiven-card-information p', '.tessiven-library-card', 'color', 4.5],
-      ['.tessiven-library-flower button', '.tessiven', 'color', 4.5],
+      ['.tessiven-card-meta', '.tessiven-library-card', 'color', 4.5],
     ] as const) {
       const foreground = getComputedStyle(
         host.querySelector(selector)!,

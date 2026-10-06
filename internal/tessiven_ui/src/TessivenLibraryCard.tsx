@@ -1,5 +1,4 @@
 import { For, Show, createResource } from 'solid-js';
-import { ArrowUp, ArrowRight } from '@floegence/floe-webapp-core/icons';
 import { TessivenIcon } from './TessivenIcon';
 import type { Canvas, TessivenText, TessivenTransport, Version } from './types';
 
@@ -87,17 +86,9 @@ export function TessivenLibraryCard(props: {
               </div>
             </Show>
           </Show>
-          <span class="tessiven-card-open">
-            <ArrowUp />
-          </span>
         </div>
         <div class="tessiven-card-information">
           <h3>{props.canvas.title}</h3>
-          <p>
-            {preview()?.source === 'example'
-              ? props.t('exampleDescription')
-              : props.canvas.description || props.t('canvasDescription')}
-          </p>
           <div class="tessiven-card-meta">
             <span>
               {props.t('version', { version: props.canvas.latest_version })}
@@ -108,7 +99,6 @@ export function TessivenLibraryCard(props: {
                 { month: 'short', day: 'numeric' },
               )}
             </time>
-            <ArrowRight />
           </div>
         </div>
       </button>

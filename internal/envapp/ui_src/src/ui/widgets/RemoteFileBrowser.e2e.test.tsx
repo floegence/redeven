@@ -1336,6 +1336,8 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canWrit
     openDebugConsole: () => {},
     settingsFocusSeq: () => 0,
     settingsFocusSection: () => null,
+    sendFlowerTurn: async () => 'fixture-thread',
+    openFlowerConversation: () => {},
     openFlowerTurnLauncher: envActionSpies.openFlowerTurnLauncher,
     openTerminalInDirectoryRequestSeq: () => 0,
     openTerminalInDirectoryRequest: () => null,

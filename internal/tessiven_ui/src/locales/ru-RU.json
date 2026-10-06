@@ -170,5 +170,18 @@
   "emptyLibraryTitle": "Здесь пока нет схем",
   "searchHint": "Попробуйте другое имя или очистите поиск.",
   "source.example": "Пример",
-  "source.created": "Создано"
+  "source.created": "Создано",
+  "canvasFlower": "Редактировать с Flower",
+  "libraryMenu": "Действия с библиотекой",
+  "flowerPlaceholder": "Опишите изменение или задайте вопрос об этом холсте…",
+  "flowerEnter": "Enter — отправить · Shift+Enter — новая строка",
+  "flowerRetry": "Повторить отправку",
+  "flowerSend": "Отправить в Flower",
+  "flowerUnknown": "Доставка не подтверждена. Повторите попытку, чтобы проверить тот же запрос.",
+  "flowerTargetHeld": "Завершите ожидающий запрос, прежде чем выбрать другой объект.",
+  "flowerAccepted": "Отправлено в Flower",
+  "flowerConversation": "Открыть беседу",
+  "flowerWorkflow": "Изменения появляются здесь. Ответы и запросы на подтверждение — в беседе.",
+  "canvasUpdated": "Холст обновлён",
+  "reviewChanges": "Посмотреть изменения"
 }

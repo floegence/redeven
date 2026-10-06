@@ -2,7 +2,6 @@ import { handleTessivenLink, type TessivenOpenRequest } from '../../../internal/
 import { TessivenPage } from '../../../internal/tessiven_ui/src/TessivenPage';
 import { TessivenIcon } from '../../../internal/tessiven_ui/src/TessivenIcon';
 import { tessivenText } from '../../../internal/tessiven_ui/src/i18n';
-import { tessivenFlowerIntent } from '../../../internal/tessiven_ui/src/flower';
 import { createDesktopTessivenTransport } from './tessivenTransport';
 import type { ContextActionEnvelope } from '../../../internal/flower_ui/src/contextActionWire';
 import { EnvironmentAccessSettings } from './EnvironmentAccessSettings';
@@ -6338,12 +6337,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!threadID) {
       throw new Error('Missing thread id.');
     }
+    closeFlowerTurnLauncher();
+    openFlowerConversation(threadID);
+  }
+
+  function openFlowerConversation(threadID: string): void {
     flowerFocusThreadRequestSequence += 1;
     setFlowerFocusThreadRequest({
       request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`,
       thread_id: threadID,
     });
-    closeFlowerTurnLauncher();
     openFlowerSurface();
   }
 
@@ -6641,7 +6644,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         </Show>
         <Show when={tessivenVisited()}><div class="h-full min-h-0" style={{ display: tessivenVisible() ? undefined : 'none' }} data-desktop-page="tessiven" aria-hidden={!tessivenVisible() ? 'true' : undefined} inert={!tessivenVisible()}>
           <TessivenPage locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
-            onAsk={(selection, prompt) => { setFlowerTurnLauncherIntent(tessivenFlowerIntent(selection, tessivenCopy(), prompt)); setFlowerTurnLauncherAnchor(null); setFlowerTurnLauncherOpen(true); }}
+            onSendFlower={async (input, threadID) => {
+              const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
+                client_request_id: input.client_request_id,
+                thread_id: threadID,
+                prompt: input.prompt,
+                context_action: input.intent.context_action,
+              });
+              return receipt.thread_id;
+            }}
+            onOpenFlower={openFlowerConversation}
             onOpenService={async () => { throw new Error(tessivenCopy()('openUnavailable')); }}/>
         </div></Show>
         <Show when={flowerVisited()}>

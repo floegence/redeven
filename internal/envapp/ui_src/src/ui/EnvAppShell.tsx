@@ -2602,7 +2602,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     });
   };
 
-  const submitFlowerTurnLauncher = async (input: FlowerTurnLauncherSubmitInput): Promise<void> => {
+  const sendFlowerTurn = async (input: FlowerTurnLauncherSubmitInput, threadID?: string): Promise<string> => {
     if (protocol.status() !== 'connected') {
       const message = i18n.t('shell.notifications.connectingToRuntime');
       throw new Error(message);
@@ -2618,76 +2618,87 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       throw new Error(message);
     }
 
-    const handoffContext = flowerTurnLauncherHandoff();
     const clientRequestID = trimString(input.client_request_id);
     if (!clientRequestID) {
       throw new Error('Missing Flower launcher request identity.');
     }
     const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
-      const adapter = createEnvLocalFlowerSurfaceAdapter({
-        envPublicID: trimString(envId()),
-        envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
-        desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
-        rpc,
-        canMutate: true,
-        copy: {
-          currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),
-          usingCurrentEnvironment: i18n.t('flowerChat.router.currentEnvHandler'),
-          environmentLocalSubtitle: i18n.t('flowerChat.router.envLocalSubtitle'),
-          missingThreadID: i18n.t('flowerChat.router.missingThreadID'),
-          enterMessageBeforeSending: i18n.t('flowerChat.router.enterMessageBeforeSending'),
-          selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
-          failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
-        },
-        onSettingsChanged: () => { bumpSettingsSeq(); },
-        revealHostApplication,
-        openMessageFile: openFlowerMessageFile,
-        openFileBrowser: openFlowerFileBrowser,
-        openFilePreview: openFlowerFilePreview,
-        openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
-        openLinkedFilePreview: openFlowerLinkedFilePreview,
-        openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: trimString(envId()),
+      envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
+      desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
+      rpc,
+      canMutate: true,
+      copy: {
+        currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),
+        usingCurrentEnvironment: i18n.t('flowerChat.router.currentEnvHandler'),
+        environmentLocalSubtitle: i18n.t('flowerChat.router.envLocalSubtitle'),
+        missingThreadID: i18n.t('flowerChat.router.missingThreadID'),
+        enterMessageBeforeSending: i18n.t('flowerChat.router.enterMessageBeforeSending'),
+        selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
+        failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
+      },
+      onSettingsChanged: () => { bumpSettingsSeq(); },
+      revealHostApplication,
+      openMessageFile: openFlowerMessageFile,
+      openFileBrowser: openFlowerFileBrowser,
+      openFilePreview: openFlowerFilePreview,
+      openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
+      openLinkedFilePreview: openFlowerLinkedFilePreview,
+      openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
+    });
+    const attachmentIDs: string[] = [];
+    const stagingScope = (input.intent.pending_attachments?.length ?? 0) > 0
+      ? await adapter.createAttachmentStagingScope?.(clientRequestID)
+      : undefined;
+    if ((input.intent.pending_attachments?.length ?? 0) > 0 && !stagingScope) {
+      throw new Error('Attachment staging is unavailable for this Flower surface.');
+    }
+    for (const [index, file] of (input.intent.pending_attachments ?? []).entries()) {
+      if (!adapter.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
+      const requestID = `${input.intent.id}:attachment:${index}`;
+      const staged = await adapter.uploadAttachment({
+        attempt_id: requestID,
+        request_id: requestID,
+        staging_scope: stagingScope!,
+        model_id: '',
+        capability_revision: '',
+        source: 'file',
+        file,
+        signal: new AbortController().signal,
+        on_progress: () => undefined,
       });
-      const attachmentIDs: string[] = [];
-      const stagingScope = (input.intent.pending_attachments?.length ?? 0) > 0
-        ? await adapter.createAttachmentStagingScope?.(clientRequestID)
-        : undefined;
-      if ((input.intent.pending_attachments?.length ?? 0) > 0 && !stagingScope) {
-        throw new Error('Attachment staging is unavailable for this Flower surface.');
-      }
-      for (const [index, file] of (input.intent.pending_attachments ?? []).entries()) {
-        if (!adapter.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
-        const requestID = `${input.intent.id}:attachment:${index}`;
-        const staged = await adapter.uploadAttachment({
-          attempt_id: requestID,
-          request_id: requestID,
-          staging_scope: stagingScope!,
-          model_id: '',
-          capability_revision: '',
-          source: 'file',
-          file,
-          signal: new AbortController().signal,
-          on_progress: () => undefined,
-        });
-        attachmentIDs.push(staged.attachment_id);
-      }
-      const receipt = await adapter.launchTurn({
-        client_request_id: clientRequestID,
-        prompt: trimmedPrompt,
-        context_action: input.intent.context_action,
-        working_dir: input.intent.suggested_working_dir,
-        attachment_ids: attachmentIDs,
-        ...(stagingScope ? { staging_scope: stagingScope } : {}),
-      });
-      const threadId = trimString(receipt.thread_id);
-      if (!threadId) {
-        throw new Error(i18n.t('flowerChat.router.missingThreadID'));
-      }
-      if (!handoffContext) {
-        throw new Error(i18n.t('shell.notifications.failedToSendToFlowerTitle'));
-      }
-      closeFlowerTurnLauncher(false);
-    handoffFlowerTurn(handoffContext, threadId);
+      attachmentIDs.push(staged.attachment_id);
+    }
+    const receipt = await adapter.launchTurn({
+      client_request_id: clientRequestID,
+      thread_id: threadID,
+      prompt: trimmedPrompt,
+      context_action: input.intent.context_action,
+      working_dir: input.intent.suggested_working_dir,
+      attachment_ids: attachmentIDs,
+      ...(stagingScope ? { staging_scope: stagingScope } : {}),
+    });
+    const threadId = trimString(receipt.thread_id);
+    if (!threadId) {
+      throw new Error(i18n.t('flowerChat.router.missingThreadID'));
+    }
+    return threadId;
+  };
+
+  const submitFlowerTurnLauncher = async (input: FlowerTurnLauncherSubmitInput): Promise<void> => {
+    const handoffContext = flowerTurnLauncherHandoff();
+    if (!handoffContext) throw new Error(i18n.t('shell.notifications.failedToSendToFlowerTitle'));
+    const threadID = await sendFlowerTurn(input);
+    closeFlowerTurnLauncher(false);
+    handoffFlowerTurn(handoffContext, threadID);
+  };
+
+  const openFlowerConversation = (threadID: string) => {
+    setTessivenOpen(false);
+    if (viewMode() === 'activity' || layout.isMobile()) focusActivityFlowerThread(threadID);
+    else focusAIThread(threadID);
+    openSurface('ai', { focus: true, openStrategy: 'focus_latest_or_create' });
   };
 
   let accessResumeClient: unknown = null;
@@ -5303,6 +5314,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         settingsFocusSeq,
         settingsFocusSection,
         openFlowerTurnLauncher,
+        sendFlowerTurn: (input, threadID) => sendFlowerTurn({ ...input, intent: withFlowerTurnExecutionContext(input.intent) }, threadID),
+        openFlowerConversation,
         revealHostApplication,
         revealHostApplicationRequest,
         consumeRevealHostApplicationRequest,
