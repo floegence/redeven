@@ -3107,5 +3107,34 @@
     "preparingEditor": "正在连接编辑器服务",
     "editorUnavailableDetail": "编辑器未能打开。请返回 Codespaces 后重试。",
     "technicalDetails": "技术详情"
+  },
+  "gatewayCloud": {
+    "title": "Redeven Cloud",
+    "description": "将此网关连接到 Redeven Cloud，由命名空间管理员在云端批准接入。每个运行时还须在本机同意接入。",
+    "cloudOrigin": "云端地址",
+    "gatewayURL": "运行时可访问的网关地址",
+    "listenAddress": "网关监听地址",
+    "configure": "连接云端",
+    "manage": "前往云端管理",
+    "unconfigured": "尚未配置云端接入。",
+    "pending": "等待云端批准。",
+    "active": "云端接入已获批准。",
+    "revoked": "云端接入已撤销。",
+    "unavailable": "无法检查云端接入状态。现有设置已保留，请重试或查看操作详情。",
+    "invalid": "请输入 HTTPS 源地址及带端口的有效监听地址。",
+    "working": "正在联系网关和云端…",
+    "viaGateway": "通过 Gateway 接入",
+    "runtimeDisabled": "此 Runtime 已停用远程访问。"
+  },
+  "gatewayJoin": {
+    "title": "通过 Gateway 连接",
+    "resume": "继续接入",
+    "material": "加入材料文件",
+    "consent": "允许此 Runtime 通过所选 Gateway 连接，并申请发布到指定 Namespace。仍需 Cloud 管理员批准。",
+    "approve": "同意并连接",
+    "pauseDetail": "关闭对话框将暂停设置。本地同意已保存，可在此 Runtime 继续。已有 Cloud 绑定请通过 CLI 显式迁移。",
+    "invalid": "加入材料无效。请选择从 Cloud 下载的原始 JSON 文件。",
+    "failed": "接入暂时无法继续。请检查 Gateway 连接后重试，已保存的同意会保留。",
+    "namespace": "命名空间"
   }
 }

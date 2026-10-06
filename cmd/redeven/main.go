@@ -72,6 +72,14 @@ func (c *cli) run(args []string) int {
 	switch strings.TrimSpace(strings.ToLower(args[0])) {
 	case "help":
 		return c.helpCmd(args[1:])
+	case "gateway-address":
+		return c.gatewayAddressCmd(args[1:])
+	case "gateway-reauthorize":
+		return c.gatewayReauthorizeCmd(args[1:])
+	case "gateway-migrate":
+		return c.gatewayMigrateCmd(args[1:])
+	case "gateway-join":
+		return c.gatewayJoinCmd(args[1:])
 	case "bootstrap":
 		return c.bootstrapCmd(args[1:])
 	case "run":
@@ -689,7 +697,10 @@ func (c *cli) runCmd(args []string) int {
 		Title: "runtime config loaded",
 	})
 	remoteErr := cfg.ValidateRemoteStrict()
-	remoteEnabled := remoteErr == nil
+	// An explicitly configured Gateway path may need to recover an empty pool
+	// or observe a new approval after restart. Strict validation still gates the
+	// control loop and every credential spend; this only starts its observer.
+	remoteEnabled := remoteErr == nil || cfg.ValidateGatewayManagement() == nil
 
 	launchPolicy := resolveRuntimeLaunchPolicy(mode, remoteEnabled)
 	controlChannelEnabled := launchPolicy.controlChannelEnabled

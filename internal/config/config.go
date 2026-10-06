@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/floegence/redeven/internal/gatewaycloud"
 	"math"
 	"strings"
 	"time"
@@ -271,16 +272,18 @@ func (c *RemoteDesktopConfig) RememberApproval() bool {
 // artifacts remain opaque but are intentionally persisted here for recovery;
 // user-provided provider keys are loaded separately from secrets.json.
 type Config struct {
-	RemoteDesktop            *RemoteDesktopConfig `json:"remote_desktop,omitempty"`
-	ProviderOrigin           string               `json:"provider_origin"`
-	ControlplaneBaseURL      string               `json:"controlplane_base_url"`
-	ControlplaneProviderID   string               `json:"controlplane_provider_id,omitempty"`
-	EnvironmentID            string               `json:"environment_id"`
-	LocalEnvironmentPublicID string               `json:"local_environment_public_id"`
-	BindingGeneration        int64                `json:"binding_generation,omitempty"`
-	AgentInstanceID          string               `json:"agent_instance_id"`
-	Direct                   *DirectConnectInfo   `json:"direct"`
-	ControlArtifactPool      *ControlArtifactPool `json:"control_artifact_pool,omitempty"`
+	GatewayCloudMigration    *gatewaycloud.RuntimeConfig `json:"gateway_cloud_migration,omitempty"`
+	GatewayCloud             *gatewaycloud.RuntimeConfig `json:"gateway_cloud,omitempty"`
+	RemoteDesktop            *RemoteDesktopConfig        `json:"remote_desktop,omitempty"`
+	ProviderOrigin           string                      `json:"provider_origin"`
+	ControlplaneBaseURL      string                      `json:"controlplane_base_url"`
+	ControlplaneProviderID   string                      `json:"controlplane_provider_id,omitempty"`
+	EnvironmentID            string                      `json:"environment_id"`
+	LocalEnvironmentPublicID string                      `json:"local_environment_public_id"`
+	BindingGeneration        int64                       `json:"binding_generation,omitempty"`
+	AgentInstanceID          string                      `json:"agent_instance_id"`
+	Direct                   *DirectConnectInfo          `json:"direct"`
+	ControlArtifactPool      *ControlArtifactPool        `json:"control_artifact_pool,omitempty"`
 
 	// AI config controls optional Flower AI assistant features.
 	AI *AIConfig `json:"ai,omitempty"`
@@ -326,6 +329,11 @@ func (c *Config) ValidateLocalMinimal() error {
 	if c == nil {
 		return errors.New("nil config")
 	}
+	if c.GatewayCloud != nil {
+		if _, err := c.GatewayCloud.Identity(); err != nil {
+			return err
+		}
+	}
 	if c.PermissionPolicy != nil {
 		if err := c.PermissionPolicy.Validate(); err != nil {
 			return fmt.Errorf("invalid permission_policy: %w", err)
@@ -352,6 +360,9 @@ func (c *Config) ValidateRemoteStrict() error {
 		return errors.New("nil config")
 	}
 	if err := c.ValidateLocalMinimal(); err != nil {
+		return err
+	}
+	if err := c.validateGatewayBinding(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.ControlplaneBaseURL) == "" {

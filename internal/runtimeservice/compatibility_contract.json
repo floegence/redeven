@@ -5,7 +5,7 @@
     "previous_release": "v0.13.11",
     "reviewed_at": "2026-10-06",
     "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Advance the Runtime Service compatibility epoch to 38 for Flower-owned Tessiven editing and immediate canvas creation.",
+    "summary": "Gateway Cloud adds Namespace-owned access presentation and explicit authenticated Runtime-control enrollment. Epoch 39 requires matching Desktop capabilities; user bindings retain their original ownership.",
     "same_window_rationale": "Epoch 38 changes canvas creation to a title-only request and removes manual document, rename, duplicate, and restore HTTP mutations. Flower remains the authorized document writer. Older Desktop clients must upgrade instead of submitting obsolete write contracts.",
     "checked_surfaces": [
       "Epoch 38 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, title-only Tessiven creation, exact Desktop method admission, seeded example attribution, and Flower version updates. Existing canvas documents and database schema remain unchanged.",
@@ -86,7 +86,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 38,
+  "compatibility_epoch": 39,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -116,7 +116,8 @@
     34,
     35,
     36,
-    37
+    37,
+    38
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

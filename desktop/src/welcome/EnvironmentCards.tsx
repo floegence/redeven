@@ -1,4 +1,6 @@
+import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { environmentAccessPresentation } from './environmentAccessPresentation';
+import { RuntimeGatewayCloudStatus } from './RuntimeGatewayCloudStatus';
 import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -752,6 +754,7 @@ function EnvironmentOwnerSurface(
       'set_environment_registration_pinned',
     ]),
   );
+  let ownerElement: HTMLElement | undefined;
   const deleteTitle = createMemo(() => props.i18n.t('environmentCenter.removeEnvironment'));
   const runOpenWithPreflight = async (action: EnvironmentActionModel): Promise<void> => {
     const nextSession = startEnvironmentGuidanceIntent(
@@ -770,6 +773,8 @@ function EnvironmentOwnerSurface(
 
   return (
     <section
+      ref={ownerElement}
+      tabIndex={-1}
       class="redeven-environment-owner"
       data-owner-id={props.environment.id}
       data-owner-role={props.relationshipRole ?? 'standalone'}
@@ -861,6 +866,10 @@ function EnvironmentOwnerSurface(
           selectedEndpointID={props.selectedEndpointID} selectEndpointForQRCode={props.selectEndpointForQRCode}
         />
         <Show when={props.paired}>{props.connectionStatus()}</Show>
+        <Show when={props.environment.kind !== 'provider_environment' && props.environment.runtime_service?.capabilities?.gateway_cloud_join?.supported && props.environment.provider_runtime_link_target}>
+          <RuntimeGatewayJoinPanel focusOwner={() => ownerElement?.focus()} targetID={props.environment.provider_runtime_link_target!.id} i18n={props.i18n} pending={props.environment.runtime_service?.gateway_cloud?.state === 'pending'} disabled={operationState().actionsDisabled} available={(!props.environment.runtime_service?.gateway_cloud || props.environment.runtime_service.gateway_cloud.state === 'pending') && props.environment.runtime_service?.bindings?.provider_link?.state !== 'linked'} />
+        </Show>
+        <Show when={props.environment.runtime_service?.gateway_cloud}>{access => <RuntimeGatewayCloudStatus access={access()} i18n={props.i18n} openInBrowser={props.openInBrowser} />}</Show>
       </CardContent>
       <Show when={!props.environment.pinned && props.otherPinnedOwner}>
         <div class="redeven-other-owner-pin"><Pin class="h-3 w-3" />

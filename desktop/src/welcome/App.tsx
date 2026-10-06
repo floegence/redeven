@@ -1,3 +1,4 @@
+import { GatewayCloudPanel } from './GatewayCloudPanel';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../internal/tessiven_ui/src/navigation';
 import { TessivenPage } from '../../../internal/tessiven_ui/src/TessivenPage';
 import { TessivenIcon } from '../../../internal/tessiven_ui/src/TessivenIcon';
@@ -12017,6 +12018,7 @@ function GatewaySourceCard(props: Readonly<{
           </div>
         </div>
         <div class="redeven-gateway-card__actions">
+          <Show when={props.gateway.connection_kind !== 'url'}><GatewayCloudPanel gatewayID={props.gateway.gateway_id} gatewayName={row().label} i18n={props.i18n} disabled={primaryActionRunning()} /></Show>
           <Button size="sm" variant="outline" class="redeven-gateway-card__add"
             icon={canAuthorizeProfiles() ? Lock : Plus}
             disabled={primaryActionRunning() || (!canAddEnvironment() && !canAuthorizeProfiles())}

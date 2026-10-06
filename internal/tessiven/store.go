@@ -19,10 +19,10 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("Tessiven canvas or version not found")
-	ErrConflict        = errors.New("Tessiven canvas has a newer version; read it before saving")
-	ErrRequestConflict = errors.New("Tessiven request identity was already used with different content")
-	ErrArchived        = errors.New("Tessiven canvas is archived")
+	ErrNotFound        = errors.New("tessiven canvas or version not found")
+	ErrConflict        = errors.New("tessiven canvas has a newer version; read it before saving")
+	ErrRequestConflict = errors.New("tessiven request identity was already used with different content")
+	ErrArchived        = errors.New("tessiven canvas is archived")
 	ErrInvalidRequest  = errors.New("invalid Tessiven request")
 )
 
@@ -202,7 +202,7 @@ func readVersion(ctx context.Context, q interface {
 	}
 	validation := Validate(v.DocumentYAML)
 	if !validation.Valid || digest(v.DocumentYAML) != v.Digest {
-		return v, errors.New("Tessiven stored version failed integrity validation")
+		return v, errors.New("tessiven stored version failed integrity validation")
 	}
 	v.Document = validation.Document
 	return v, nil
@@ -269,7 +269,7 @@ func (s *Service) Save(ctx context.Context, req SaveRequest, source string) (Sav
 	if err != nil {
 		return SaveResult{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var oldFingerprint, oldResult string
 	err = tx.QueryRowContext(ctx, `SELECT fingerprint,result_json FROM requests WHERE request_id=?`, req.RequestID).Scan(&oldFingerprint, &oldResult)
 	if err == nil {

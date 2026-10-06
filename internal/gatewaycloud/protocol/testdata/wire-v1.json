@@ -1,0 +1,169 @@
+{
+  "gateway_status": {
+    "pending_closure_count": 51,
+    "next_closure_cursor": "50",
+    "gateway": {
+      "directory_synced_at_unix_ms": 1900000000000,
+      "identity_expires_at_unix_ms": 1910000000000,
+      "public_id": "gw_fixture",
+      "namespace_public_id": "ns_fixture",
+      "region": "sg",
+      "name": "Fixture Gateway",
+      "state": "active",
+      "public_key_sha256": "fixture-digest",
+      "listener_url": "https://gateway.internal:7443",
+      "tls_root_pem": "fixture-root",
+      "version": "test",
+      "directory_revision": 12,
+      "last_seen_at_unix_ms": 1900000000000
+    },
+    "region_origin": "https://sg.cloud.example",
+    "join_permits": [],
+    "enrollment_destinations": [
+      "cloud.example:443"
+    ],
+    "members": [
+      {
+        "request_public_id": "grq_fixture",
+        "runtime_public_id": "rt_fixture",
+        "client_certificate_sha256": "fixture-cert",
+        "generation": 7,
+        "destinations": [
+          "cloud.example:443",
+          "sg.cloud.example:443",
+          "tn-1.sg.cloud.example:443"
+        ]
+      }
+    ],
+    "management_members": [
+      {
+        "request_public_id": "grq_fixture",
+        "runtime_public_id": "rt_fixture",
+        "client_certificate_sha256": "fixture-cert",
+        "generation": 7,
+        "destinations": [
+          "cloud.example:443",
+          "sg.cloud.example:443",
+          "tn-1.sg.cloud.example:443"
+        ]
+      }
+    ],
+    "closures": [
+      {
+        "reason": "unpublish",
+        "public_id": "gcl_fixture",
+        "binding_public_id": "nrb_fixture",
+        "gateway_public_id": "gw_fixture",
+        "runtime_public_id": "rt_fixture",
+        "generation": 6,
+        "runtime_closed": false,
+        "gateway_closed": true
+      }
+    ]
+  },
+  "runtime_status": {
+    "next_closure_cursor": "50",
+    "candidate": {
+      "new_environment": false,
+      "request_public_id": "grq_fixture",
+      "runtime_public_id": "rt_fixture",
+      "state": "published",
+      "proven": true,
+      "reachable": true,
+      "binding": {
+        "public_id": "nrb_fixture",
+        "namespace_public_id": "ns_fixture",
+        "gateway_public_id": "gw_fixture",
+        "runtime_public_id": "rt_fixture",
+        "env_public_id": "env_fixture",
+        "region": "sg",
+        "generation": 7,
+        "state": "active"
+      },
+      "metadata": {
+        "hostname": "Fixture Runtime",
+        "os": "linux",
+        "arch": "arm64",
+        "version": "test"
+      },
+      "authorization_expires_at_unix_ms": 1910000000000
+    },
+    "closures": [
+      {
+        "reason": "unpublish",
+        "public_id": "gcl_fixture",
+        "binding_public_id": "nrb_fixture",
+        "gateway_public_id": "gw_fixture",
+        "runtime_public_id": "rt_fixture",
+        "generation": 6,
+        "runtime_closed": false,
+        "gateway_closed": true
+      }
+    ]
+  },
+  "publish_response": {
+    "items": [
+      {
+        "request_public_id": "grq_fixture",
+        "binding": {
+          "public_id": "nrb_fixture",
+          "namespace_public_id": "ns_fixture",
+          "gateway_public_id": "gw_fixture",
+          "runtime_public_id": "rt_fixture",
+          "env_public_id": "env_fixture",
+          "region": "sg",
+          "generation": 7,
+          "state": "active"
+        }
+      },
+      {
+        "request_public_id": "grq_other",
+        "error_code": "GATEWAY_PROOF_REQUIRED"
+      }
+    ]
+  },
+  "directory_sync": {
+    "listener_url": "https://gateway.internal:7443",
+    "base_revision": 11,
+    "revision": 12,
+    "full": true,
+    "members": [
+      {
+        "request_public_id": "grq_fixture",
+        "runtime_public_id": "rt_fixture",
+        "client_certificate_sha256": "fixture-cert",
+        "reachable": true
+      }
+    ]
+  },
+  "runtime_join": {
+    "new_environment": true,
+    "request_public_id": "grq_fixture",
+    "join_token": "fixture-only",
+    "runtime_public_id": "rt_fixture",
+    "public_key_b64u": "fixture-only",
+    "client_certificate_sha256": "fixture-cert",
+    "local_consent": true,
+    "metadata": {
+      "hostname": "Fixture Runtime",
+      "os": "linux",
+      "arch": "arm64",
+      "version": "test"
+    }
+  },
+  "closure_list": {
+    "next_cursor": "50",
+    "items": [
+      {
+        "reason": "unpublish",
+        "public_id": "gcl_fixture",
+        "binding_public_id": "nrb_fixture",
+        "gateway_public_id": "gw_fixture",
+        "runtime_public_id": "rt_fixture",
+        "generation": 6,
+        "runtime_closed": false,
+        "gateway_closed": true
+      }
+    ]
+  }
+}

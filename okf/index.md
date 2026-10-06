@@ -135,6 +135,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Gateway
 
+- [Gateway Cloud access](gateway/gateway-cloud-access.md) - Enroll private Runtimes through Namespace approval, preserve fixed transport paths, and recover or revoke independent identities.
 - [Gateway service](gateway/gateway-service.md) - Run the optional standalone identity, catalog, open-session, and access forwarding service.
 - [Gateway Desktop interactions](gateway/gateway-desktop-interactions.md) - Manage environments in place and verify clear counts, contextual forms, access actions and operation feedback.
 - [Gateway access sessions](gateway/gateway-access-sessions.md) - Choose Direct URL or Gateway proxy access while preserving Runtime login, target isolation, and session revocation.

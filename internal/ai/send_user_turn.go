@@ -358,7 +358,8 @@ func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta
 	}
 	metaCopy := *meta
 	r := newRun(runOptions{
-		Log: s.log, AgentHomeDir: s.agentHomeDir, WorkingDir: workingDir, FilesystemScope: s.scope, Shell: s.shell,
+		PlatformHTTPTransport: s.platformHTTPTransport,
+		Log:                   s.log, AgentHomeDir: s.agentHomeDir, WorkingDir: workingDir, FilesystemScope: s.scope, Shell: s.shell,
 		SessionMeta: &metaCopy, EndpointID: strings.TrimSpace(meta.EndpointID), ThreadID: strings.TrimSpace(req.ThreadID),
 		NoUserInteraction: req.Options.NoUserInteraction, FloretThreadRuntime: s.threadRuntime, SkillManager: s.skillManager, MCPManager: s.mcpManager,
 	})

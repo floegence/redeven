@@ -2,6 +2,35 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  gatewayJoin: {
+    "title": "Connect via Gateway",
+    "resume": "Resume enrollment",
+    "material": "Join material file",
+    "consent": "Allow this Runtime to connect through the selected Gateway and request publication in its Namespace. Cloud approval is required.",
+    "approve": "Agree and connect",
+    "pauseDetail": "Closing this dialog pauses setup. Local consent is saved; resume with this Runtime. Existing Cloud bindings must be migrated with the CLI.",
+    "invalid": "The join material is invalid. Select the original JSON file from Cloud.",
+    "failed": "Enrollment could not advance. Check the Gateway connection, then retry. Saved consent is preserved.",
+    "namespace": "Namespace"
+},
+  gatewayCloud: {
+    viaGateway: "Via Gateway",
+    runtimeDisabled: "Remote access is disabled on this Runtime.",
+    "title": "Redeven Cloud",
+    "description": "Connect this Gateway to Redeven Cloud. A Namespace administrator approves access in Cloud. Each Runtime must also consent locally.",
+    "cloudOrigin": "Cloud address",
+    "gatewayURL": "Gateway address reachable by Runtimes",
+    "listenAddress": "Gateway listener address",
+    "configure": "Connect to Cloud",
+    "manage": "Manage in Cloud",
+    "unconfigured": "Cloud access is not configured.",
+    "pending": "Waiting for Cloud approval.",
+    "active": "Cloud access is approved.",
+    "revoked": "Cloud access has been revoked.",
+    "unavailable": "Cloud access could not be checked. Existing settings are preserved. Retry or review the operation details.",
+    "invalid": "Enter HTTPS origins and a valid listener address with a port.",
+    "working": "Contacting Gateway and Cloud…"
+},
   accessFlow: {
     exportCertificate: 'Export public certificate…',
     certificateExported: 'Public certificate exported.',

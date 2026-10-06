@@ -3107,5 +3107,34 @@
     "preparingEditor": "편집기 서비스에 연결 중",
     "editorUnavailableDetail": "편집기를 열지 못했습니다. Codespaces로 돌아가 다시 시도하세요.",
     "technicalDetails": "기술 세부 정보"
+  },
+  "gatewayCloud": {
+    "title": "Redeven Cloud",
+    "description": "이 게이트웨이를 Redeven Cloud에 연결합니다. 네임스페이스 관리자가 클라우드에서 접근을 승인하며 각 런타임에서도 로컬 동의가 필요합니다.",
+    "cloudOrigin": "클라우드 주소",
+    "gatewayURL": "런타임에서 접근할 수 있는 게이트웨이 주소",
+    "listenAddress": "게이트웨이 수신 주소",
+    "configure": "클라우드에 연결",
+    "manage": "클라우드에서 관리",
+    "unconfigured": "클라우드 접근이 설정되지 않았습니다.",
+    "pending": "클라우드 승인을 기다리는 중입니다.",
+    "active": "클라우드 접근이 승인되었습니다.",
+    "revoked": "클라우드 접근이 취소되었습니다.",
+    "unavailable": "클라우드 접근 상태를 확인할 수 없습니다. 기존 설정은 유지됩니다. 다시 시도하거나 작업 세부 정보를 확인하세요.",
+    "invalid": "HTTPS 출처 주소와 포트가 포함된 유효한 수신 주소를 입력하세요.",
+    "working": "게이트웨이와 클라우드에 연결 중…",
+    "viaGateway": "Gateway 경유",
+    "runtimeDisabled": "이 Runtime에서 원격 액세스가 비활성화되어 있습니다."
+  },
+  "gatewayJoin": {
+    "title": "Gateway로 연결",
+    "resume": "등록 계속",
+    "material": "가입 자료 파일",
+    "consent": "이 Runtime이 선택한 Gateway로 연결하고 지정된 Namespace에 게시를 요청하도록 허용합니다. Cloud 관리자 승인이 필요합니다.",
+    "approve": "동의하고 연결",
+    "pauseDetail": "닫으면 설정이 일시 중지됩니다. 동의는 저장되며 이 Runtime에서 계속할 수 있습니다. 기존 Cloud 바인딩은 CLI로 명시적으로 이전하세요.",
+    "invalid": "가입 자료가 유효하지 않습니다. Cloud에서 받은 원본 JSON 파일을 선택하세요.",
+    "failed": "등록을 진행할 수 없습니다. Gateway 연결을 확인하고 다시 시도하세요. 저장된 동의는 유지됩니다.",
+    "namespace": "네임스페이스"
   }
 }

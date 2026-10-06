@@ -59,6 +59,7 @@ type Capability struct {
 }
 
 type Capabilities struct {
+	GatewayCloudJoin   Capability `json:"gateway_cloud_join"`
 	DesktopModelSource Capability `json:"desktop_model_source"`
 	ProviderLink       Capability `json:"provider_link"`
 	RuntimeGateway     Capability `json:"runtime_gateway"`
@@ -119,23 +120,33 @@ type ProviderLinkBinding struct {
 }
 
 type Snapshot struct {
-	RuntimeVersion        string        `json:"runtime_version,omitempty"`
-	RuntimeCommit         string        `json:"runtime_commit,omitempty"`
-	RuntimeBuildTime      string        `json:"runtime_build_time,omitempty"`
-	ProtocolVersion       string        `json:"protocol_version,omitempty"`
-	CompatibilityEpoch    int           `json:"compatibility_epoch,omitempty"`
-	EffectiveRunMode      string        `json:"effective_run_mode,omitempty"`
-	RemoteEnabled         bool          `json:"remote_enabled"`
-	Compatibility         Compatibility `json:"compatibility,omitempty"`
-	CompatibilityMessage  string        `json:"compatibility_message,omitempty"`
-	MinimumDesktopVersion string        `json:"minimum_desktop_version,omitempty"`
-	MinimumRuntimeVersion string        `json:"minimum_runtime_version,omitempty"`
-	CompatibilityReviewID string        `json:"compatibility_review_id,omitempty"`
-	OpenReadiness         OpenReadiness `json:"open_readiness"`
-	AIReadiness           AIReadiness   `json:"ai_readiness"`
-	ActiveWorkload        Workload      `json:"active_workload"`
-	Capabilities          Capabilities  `json:"capabilities"`
-	Bindings              Bindings      `json:"bindings"`
+	GatewayCloud          *GatewayCloudAccess `json:"gateway_cloud,omitempty"`
+	RuntimeVersion        string              `json:"runtime_version,omitempty"`
+	RuntimeCommit         string              `json:"runtime_commit,omitempty"`
+	RuntimeBuildTime      string              `json:"runtime_build_time,omitempty"`
+	ProtocolVersion       string              `json:"protocol_version,omitempty"`
+	CompatibilityEpoch    int                 `json:"compatibility_epoch,omitempty"`
+	EffectiveRunMode      string              `json:"effective_run_mode,omitempty"`
+	RemoteEnabled         bool                `json:"remote_enabled"`
+	Compatibility         Compatibility       `json:"compatibility,omitempty"`
+	CompatibilityMessage  string              `json:"compatibility_message,omitempty"`
+	MinimumDesktopVersion string              `json:"minimum_desktop_version,omitempty"`
+	MinimumRuntimeVersion string              `json:"minimum_runtime_version,omitempty"`
+	CompatibilityReviewID string              `json:"compatibility_review_id,omitempty"`
+	OpenReadiness         OpenReadiness       `json:"open_readiness"`
+	AIReadiness           AIReadiness         `json:"ai_readiness"`
+	ActiveWorkload        Workload            `json:"active_workload"`
+	Capabilities          Capabilities        `json:"capabilities"`
+	Bindings              Bindings            `json:"bindings"`
+}
+
+// GatewayCloudAccess contains presentation metadata only, never admission keys.
+type GatewayCloudAccess struct {
+	ProtocolVersion   int    `json:"protocol_version"`
+	CloudOrigin       string `json:"cloud_origin"`
+	NamespacePublicID string `json:"namespace_public_id"`
+	GatewayPublicID   string `json:"gateway_public_id"`
+	State             string `json:"state"`
 }
 
 // NormalizeSnapshotForEndpoint applies endpoint-level facts that older or
@@ -230,6 +241,7 @@ func NormalizeAIReadiness(readiness AIReadiness) AIReadiness {
 }
 
 func NormalizeCapabilities(capabilities Capabilities) Capabilities {
+	capabilities.GatewayCloudJoin = NormalizeCapability(capabilities.GatewayCloudJoin)
 	capabilities.DesktopModelSource = NormalizeCapability(capabilities.DesktopModelSource)
 	capabilities.ProviderLink = NormalizeCapability(capabilities.ProviderLink)
 	capabilities.RuntimeGateway = NormalizeCapability(capabilities.RuntimeGateway)

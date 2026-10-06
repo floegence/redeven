@@ -3112,5 +3112,34 @@
     "preparingEditor": "Verbindung zum Editordienst wird hergestellt",
     "editorUnavailableDetail": "Der Editor konnte nicht geöffnet werden. Kehren Sie zu Codespaces zurück und versuchen Sie es erneut.",
     "technicalDetails": "Technische Details"
+  },
+  "gatewayCloud": {
+    "title": "Redeven Cloud",
+    "description": "Dieses Gateway mit Redeven Cloud verbinden. Ein Namespace-Administrator genehmigt den Zugriff in der Cloud. Jede Runtime muss außerdem lokal zustimmen.",
+    "cloudOrigin": "Cloud-Adresse",
+    "gatewayURL": "Für Runtimes erreichbare Gateway-Adresse",
+    "listenAddress": "Gateway-Listen-Adresse",
+    "configure": "Mit Cloud verbinden",
+    "manage": "In der Cloud verwalten",
+    "unconfigured": "Cloud-Zugriff ist nicht eingerichtet.",
+    "pending": "Warten auf Cloud-Genehmigung.",
+    "active": "Cloud-Zugriff ist genehmigt.",
+    "revoked": "Cloud-Zugriff wurde widerrufen.",
+    "unavailable": "Cloud-Zugriff konnte nicht geprüft werden. Vorhandene Einstellungen bleiben erhalten. Erneut versuchen oder die Vorgangsdetails prüfen.",
+    "invalid": "HTTPS-Ursprungsadressen und eine gültige Listen-Adresse mit Port eingeben.",
+    "working": "Gateway und Cloud werden kontaktiert…",
+    "viaGateway": "Über Gateway",
+    "runtimeDisabled": "Der Fernzugriff ist auf diesem Runtime deaktiviert."
+  },
+  "gatewayJoin": {
+    "title": "Über Gateway verbinden",
+    "resume": "Registrierung fortsetzen",
+    "material": "Beitrittsdatei",
+    "consent": "Diesem Runtime erlauben, sich über das ausgewählte Gateway zu verbinden und die Veröffentlichung im Namespace zu beantragen. Eine Cloud-Freigabe ist erforderlich.",
+    "approve": "Zustimmen und verbinden",
+    "pauseDetail": "Schließen pausiert die Einrichtung. Die lokale Zustimmung bleibt gespeichert. Bestehende Cloud-Bindungen müssen über die CLI migriert werden.",
+    "invalid": "Ungültige Beitrittsdaten. Wählen Sie die ursprüngliche JSON-Datei aus Cloud.",
+    "failed": "Registrierung nicht möglich. Prüfen Sie die Gateway-Verbindung und versuchen Sie es erneut. Die Zustimmung bleibt gespeichert.",
+    "namespace": "Namensraum"
   }
 }

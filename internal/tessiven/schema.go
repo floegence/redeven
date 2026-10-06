@@ -85,20 +85,20 @@ func verifySchema(tx *sql.Tx) error {
 		return err
 	}
 	if integrity != "ok" {
-		return fmt.Errorf("Tessiven integrity check failed: %s", integrity)
+		return fmt.Errorf("tessiven integrity check failed: %s", integrity)
 	}
 	var invalid int
 	if err = tx.QueryRow(`SELECT COUNT(*) FROM canvases c WHERE latest_version <> (SELECT COALESCE(MAX(number),0) FROM versions v WHERE v.canvas_id=c.id) OR latest_version <> (SELECT COUNT(*) FROM versions v WHERE v.canvas_id=c.id)`).Scan(&invalid); err != nil {
 		return err
 	}
 	if invalid != 0 {
-		return fmt.Errorf("Tessiven version lineage is inconsistent")
+		return fmt.Errorf("tessiven version lineage is inconsistent")
 	}
 	if err = tx.QueryRow(`SELECT COUNT(*) FROM versions v LEFT JOIN canvases c ON c.id=v.canvas_id WHERE c.id IS NULL`).Scan(&invalid); err != nil {
 		return err
 	}
 	if invalid != 0 {
-		return fmt.Errorf("Tessiven version owner is missing")
+		return fmt.Errorf("tessiven version owner is missing")
 	}
 	return nil
 }

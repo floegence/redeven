@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/desktopbridge"
+	"github.com/floegence/redeven/internal/gatewaycloud"
 	"github.com/floegence/redeven/internal/gatewayservice"
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/processenv"
@@ -74,6 +75,10 @@ func (c *cli) run(args []string) int {
 		return 0
 	}
 	switch strings.TrimSpace(strings.ToLower(args[0])) {
+	case "cloud-status":
+		return c.cloudStatusCmd(args[1:])
+	case "cloud-connect":
+		return c.cloudConnectCmd(args[1:])
 	case "serve":
 		return c.serveCmd(args[1:])
 	case "desktop-bridge":
@@ -91,6 +96,38 @@ func (c *cli) run(args []string) int {
 		writeError(c.stderr, fmt.Sprintf("unknown command: %s", strings.TrimSpace(args[0])))
 		return 2
 	}
+}
+
+func (c *cli) cloudConnectCmd(args []string) int {
+	fs := newFlagSet("cloud-connect")
+	jsonOutput := fs.Bool("json", false, "Return machine-readable approval details without starting the service.")
+	reauthorize := fs.Bool("reauthorize", false, "Register a new identity after revocation or expiry; requires Cloud approval and new Runtime consent.")
+	stateRoot := fs.String("state-root", "", "Gateway state root.")
+	cloudOrigin := fs.String("cloud", "", "Redeven Cloud HTTPS origin (required).")
+	listenerURL := fs.String("gateway-url", "", "Internal HTTPS origin reachable by Runtime members.")
+	listen := fs.String("egress-listen", "0.0.0.0:7443", "Internal TLS listener address.")
+	if err := parseFlags(fs, args); err != nil || fs.NArg() != 0 || *listenerURL == "" || strings.TrimSpace(*cloudOrigin) == "" {
+		writeError(c.stderr, "Usage: redeven-gateway cloud-connect --cloud https://cloud.example.com --gateway-url https://gateway.internal:7443 [--state-root path]")
+		return 2
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	root := normalizeStateRoot(*stateRoot)
+	configure := gatewaycloud.ConfigureGateway
+	if *reauthorize {
+		configure = gatewaycloud.ReauthorizeGateway
+	}
+	gateway, err := configure(ctx, root, *cloudOrigin, *listenerURL, *listen, Version)
+	if err != nil {
+		writeError(c.stderr, err.Error())
+		return 1
+	}
+	if *jsonOutput {
+		_ = json.NewEncoder(c.stdout).Encode(gatewaycloud.Summary{Configured: true, CloudOrigin: *cloudOrigin, GatewayPublicID: gateway.PublicID, NamespacePublicID: gateway.NamespacePublicID, Region: gateway.Region, State: gateway.State, ManagementURL: gatewaycloud.GatewayManagementURL(*cloudOrigin, gateway.NamespacePublicID, gateway.PublicID, gateway.PublicKeySHA256)})
+		return 0
+	}
+	fmt.Fprintf(c.stdout, "Approve Gateway access in Redeven Cloud:\n%s\n", gatewaycloud.GatewayManagementURL(*cloudOrigin, gateway.NamespacePublicID, gateway.PublicID, gateway.PublicKeySHA256))
+	return c.serviceStartCmd([]string{"--state-root", root})
 }
 
 func (c *cli) serveCmd(args []string) int {
@@ -738,3 +775,22 @@ func serviceStartHelpText() string {
 	return "redeven-gateway service-start --state-root <path> [--listen <addr>] [--allow-private-profile-targets] [--enable-profile-write]\n"
 }
 func serviceStopHelpText() string { return "redeven-gateway service-stop --state-root <path>\n" }
+
+func (c *cli) cloudStatusCmd(args []string) int {
+	fs := newFlagSet("cloud-status")
+	root := fs.String("state-root", "", "Gateway state root.")
+	if parseFlags(fs, args) != nil || fs.NArg() != 0 {
+		return 2
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	status, err := gatewaycloud.InspectGateway(ctx, normalizeStateRoot(*root))
+	if err != nil {
+		writeError(c.stderr, err.Error())
+		return 1
+	}
+	if json.NewEncoder(c.stdout).Encode(status) != nil {
+		return 1
+	}
+	return 0
+}

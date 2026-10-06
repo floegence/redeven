@@ -1,3 +1,4 @@
+import { parseGatewayCloudSummary, normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from '../shared/gatewayCloud';
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
@@ -950,4 +951,21 @@ export function gatewayReleasePackageName(platform: DesktopSSHRemotePlatform): s
 
 export function gatewayReleasePackageURL(rawReleaseBaseURL: string, releaseTag: string, platform: DesktopSSHRemotePlatform): string {
   return buildDesktopSSHReleaseAssetURL(rawReleaseBaseURL, normalizeReleaseTag(releaseTag), gatewayReleasePackageName(platform));
+}
+
+export async function manageGatewayCloud(options: GatewayServiceHostOptions, configuration?: GatewayCloudConfiguration): Promise<GatewayCloudSummary> {
+  if (configuration && !normalizeGatewayCloudConfiguration(configuration)) throw new Error('Invalid Gateway Cloud configuration.');
+  return withGatewayExecutor(options, async executor => {
+    const script = [
+      'set -eu', rootShellForPlacement(options.placement), managedGatewayPathShell(),
+      configuration ? 'exec "$binary" cloud-connect --json --state-root "$state_root" --cloud "$4" --gateway-url "$5" --egress-listen "$6"' : 'exec "$binary" cloud-status --state-root "$state_root"',
+    ].join('\n');
+    const result = await executor.run(commandForPlacement(options.placement, script, [
+      options.placement.runtime_root, options.stateRoot, normalizeReleaseTag(options.releaseTag),
+      ...(configuration ? [configuration.cloud_origin, configuration.gateway_url, configuration.egress_listen] : []),
+    ]), { signal: options.signal });
+    const summary = parseGatewayCloudSummary(result.stdout.trim());
+    if (configuration && summary.cloud_origin !== configuration.cloud_origin) throw new Error('Gateway Cloud origin mismatch.');
+    return summary;
+  });
 }

@@ -41,13 +41,13 @@ func TestOllamaAutomaticTitleUsesCapabilityAndSurvivesRestart(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
 				case "/api/tags":
-					io.WriteString(w, `{"models":[{"name":"local-alias"}]}`)
+					_, _ = io.WriteString(w, `{"models":[{"name":"local-alias"}]}`)
 					return
 				case "/api/ps":
-					io.WriteString(w, `{"models":[]}`)
+					_, _ = io.WriteString(w, `{"models":[]}`)
 					return
 				case "/api/show":
-					json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"tools", "thinking"}, "thinking": json.RawMessage(tc.metadata), "parameters": "num_ctx 131072"})
+					_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"tools", "thinking"}, "thinking": json.RawMessage(tc.metadata), "parameters": "num_ctx 131072"})
 					return
 				case "/v1/chat/completions":
 				default:
@@ -219,7 +219,7 @@ func TestLiveOllamaAutomaticTitle(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer host.Shutdown(context.Background())
+			defer func() { _ = host.Shutdown(context.Background()) }()
 			service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) { return agent, nil }))
 			if err != nil {
 				t.Fatal(err)

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import net from 'node:net';
 import welcomeConfig from '../vite.welcome.config.mjs';
 
-export async function createSSHSettingsPreviewServer(port) {
+export async function createSSHSettingsPreviewServer(port, entries) {
   // Vite treats zero as its default port; choose an isolated port explicitly.
   if (port === 0) {
     const probe = net.createServer();
@@ -23,6 +23,7 @@ export async function createSSHSettingsPreviewServer(port) {
     root: fileURLToPath(new URL('./fixtures/', import.meta.url)),
     plugins: [solid(), tailwindcss()],
     resolve: welcomeConfig.resolve,
+    optimizeDeps: entries ? { entries, rolldownOptions: { transform: { jsx: 'preserve' } } } : undefined,
     server: {
       host: '127.0.0.1',
       port,

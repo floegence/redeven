@@ -1,3 +1,4 @@
+import type { GatewayJoinMaterial, GatewayJoinPhase } from '../shared/gatewayJoin';
 import { parseSecurityResult, type SecurityRequest, type SecurityResult } from '../shared/runtimeSecurity';
 import http from 'node:http';
 import https from 'node:https';
@@ -31,6 +32,7 @@ type RuntimeControlEnvelope = Readonly<{
 }>;
 
 type RuntimeControlServiceRoute =
+  | 'v2/gateway-cloud/join'
   | 'v2/tessiven/host'
   | 'v2/tessiven/resources'
 	| 'v2/provider-link'
@@ -300,4 +302,12 @@ export async function manageRuntimeSecurity(endpoint: DesktopRuntimeControlEndpo
 
 export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpoint, payload: unknown, signal?: AbortSignal): Promise<unknown> {
   return (await requestRuntimeControl(endpoint, 'v2/tessiven/resources', { method: 'POST', body: payload, signal, timeoutMs: 30000 })).data;
+}
+
+export async function joinRuntimeGatewayCloud(endpoint: DesktopRuntimeControlEndpoint, material?: GatewayJoinMaterial): Promise<Readonly<{ phase: GatewayJoinPhase; runtime_service: RuntimeServiceSnapshot }>> {
+  const result = (await requestRuntimeControl(endpoint, 'v2/gateway-cloud/join', { method: 'POST', body: { material }, timeoutMs: 90_000 })).data as Record<string, unknown> | undefined;
+  if (!result || !['verifying', 'awaiting_approval', 'connecting', 'connected'].includes(String(result.phase)) || !result.runtime_service) {
+    throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE', 'The Runtime did not return Gateway enrollment status.');
+  }
+  return { phase: result.phase as GatewayJoinPhase, runtime_service: normalizeRuntimeServiceSnapshot(result.runtime_service) };
 }

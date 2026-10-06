@@ -332,6 +332,11 @@ func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs
 	var prev *Config
 	if c, loadErr := Load(cfgPath); loadErr == nil {
 		prev = c
+	} else if !errors.Is(loadErr, os.ErrNotExist) {
+		return nil, fmt.Errorf("load existing runtime configuration: %w", loadErr)
+	}
+	if prev != nil && prev.GatewayCloud != nil {
+		return nil, errors.New("gateway Cloud access requires explicit migration before changing the provider binding")
 	}
 	attempt, attemptPath, err := prepareBootstrapDeliveryAttempt(cfgPath, providerOrigin, baseURL, envID, prev)
 	if err != nil {
@@ -880,6 +885,10 @@ func validCanonicalBase64URL32(value string) bool {
 }
 
 func controlArtifactPoolFromBootstrap(delivery bootstrapControlArtifactPool, generation int64, now time.Time) (*ControlArtifactPool, error) {
+	return controlArtifactPoolFromDelivery(delivery, generation, now, true)
+}
+
+func controlArtifactPoolFromDelivery(delivery bootstrapControlArtifactPool, generation int64, now time.Time, initial bool) (*ControlArtifactPool, error) {
 	if delivery.Version != ControlArtifactPoolContractVersion || delivery.BindingGeneration != generation ||
 		strings.TrimSpace(delivery.LogicalProviderBindingID) == "" ||
 		delivery.TargetWaterline != ControlArtifactTargetWaterline ||
@@ -910,7 +919,7 @@ func controlArtifactPoolFromBootstrap(delivery bootstrapControlArtifactPool, gen
 	var previous uint64
 	for index, delivered := range delivery.Entries {
 		if delivered.BindingGeneration != generation || delivered.ArtifactSequence == 0 ||
-			(index == 0 && delivered.ArtifactSequence != 1) ||
+			(initial && index == 0 && delivered.ArtifactSequence != 1) ||
 			(previous != 0 && delivered.ArtifactSequence != previous+1) ||
 			strings.TrimSpace(delivered.ArtifactChannelID) == "" || len(delivered.ArtifactJSON) == 0 ||
 			len(delivered.ArtifactJSON) > ControlArtifactMaxJSONBytes ||

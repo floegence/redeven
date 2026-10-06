@@ -25,6 +25,13 @@ Usage:
   redeven help [command]
 
 Commands:
+  gateway-migrate
+  gateway-address
+    Update the address of the same verified Gateway.
+  gateway-reauthorize
+              Move an existing Namespace binding to a different Gateway.
+  gateway-join
+              Connect through a Gateway using locally approved join material.
   bootstrap   Bind the Local Environment to a control-plane environment.
   run         Start the runtime in remote, hybrid, local, or desktop mode.
   desktop-bridge
@@ -809,6 +816,14 @@ func lookupHelpText(args []string) (string, bool) {
 	switch strings.Join(normalizeHelpTopic(args), " ") {
 	case "":
 		return rootHelpText(), true
+	case "gateway-address":
+		return gatewayAddressHelp, true
+	case "gateway-reauthorize":
+		return gatewayReauthorizeHelp, true
+	case "gateway-migrate":
+		return gatewayMigrateHelp, true
+	case "gateway-join":
+		return gatewayJoinHelp, true
 	case "bootstrap":
 		return bootstrapHelpText(), true
 	case "run":

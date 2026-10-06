@@ -3113,5 +3113,34 @@
     "preparingEditor": "Conectando con el servicio del editor",
     "editorUnavailableDetail": "No se pudo abrir el editor. Vuelve a Codespaces e inténtalo de nuevo.",
     "technicalDetails": "Detalles técnicos"
+  },
+  "gatewayCloud": {
+    "title": "Redeven Cloud",
+    "description": "Conecta esta puerta de enlace a Redeven Cloud. Un administrador del espacio de nombres aprueba el acceso en la nube. Cada entorno de ejecución también debe dar su consentimiento localmente.",
+    "cloudOrigin": "Dirección de la nube",
+    "gatewayURL": "Dirección de la puerta de enlace accesible desde los entornos",
+    "listenAddress": "Dirección de escucha de la puerta de enlace",
+    "configure": "Conectar a la nube",
+    "manage": "Gestionar en la nube",
+    "unconfigured": "El acceso a la nube no está configurado.",
+    "pending": "Esperando la aprobación en la nube.",
+    "active": "El acceso a la nube está aprobado.",
+    "revoked": "Se ha revocado el acceso a la nube.",
+    "unavailable": "No se pudo comprobar el acceso a la nube. Se conservan los ajustes. Reintenta o consulta los detalles de la operación.",
+    "invalid": "Introduce orígenes HTTPS y una dirección de escucha válida con puerto.",
+    "working": "Contactando con la puerta de enlace y la nube…",
+    "viaGateway": "A través de Gateway",
+    "runtimeDisabled": "El acceso remoto está desactivado en este Runtime."
+  },
+  "gatewayJoin": {
+    "title": "Conectar mediante Gateway",
+    "resume": "Reanudar registro",
+    "material": "Archivo de incorporación",
+    "consent": "Permitir que este Runtime se conecte mediante el Gateway seleccionado y solicite publicación en su Namespace. Se requiere aprobación de Cloud.",
+    "approve": "Aceptar y conectar",
+    "pauseDetail": "Cerrar pausa la configuración. El consentimiento local se conserva. Las vinculaciones de Cloud existentes deben migrarse con la CLI.",
+    "invalid": "Datos de incorporación no válidos. Seleccione el JSON original de Cloud.",
+    "failed": "No se puede continuar. Compruebe la conexión al Gateway y vuelva a intentarlo. El consentimiento se conserva.",
+    "namespace": "Espacio de nombres"
   }
 }

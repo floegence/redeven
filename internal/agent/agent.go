@@ -32,6 +32,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/fs"
+	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gitrepo"
 	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/logsafe"
@@ -53,6 +54,7 @@ const (
 	controlRPCTypeHeartbeat         uint32 = 41002
 	controlRPCTypeGrantServer       uint32 = 41003 // notify
 	controlRPCTypeRuntimeDisconnect uint32 = 41005
+	controlRPCTypeGatewayMigration  uint32 = 41008
 )
 
 func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolver) {
@@ -239,8 +241,10 @@ type Options struct {
 }
 
 type Agent struct {
-	cfg *config.Config
-	log *slog.Logger
+	gatewayRecoveryMu   sync.Mutex
+	gatewayObserverOnce sync.Once
+	cfg                 *config.Config
+	log                 *slog.Logger
 
 	audit *auditlog.Store
 	diag  *diagnostics.Store
@@ -318,13 +322,15 @@ type Agent struct {
 //
 // NOTE: This is an in-memory registry used for UI/auditing; it must not be used for authorization decisions.
 type activeSession struct {
-	cancel            context.CancelFunc
-	meta              session.Meta
-	grantDigest       [sha256.Size]byte
-	grantExpiresAt    int64
-	connectedAtUnixMs int64 // set after the Flowersec connection succeeds
-	pluginGeneration  PluginSessionGeneration
-	runtimeLease      *runtimeservice.WorkloadLease
+	gatewayBindingPublicID   string
+	gatewayBindingGeneration int64
+	cancel                   context.CancelFunc
+	meta                     session.Meta
+	grantDigest              [sha256.Size]byte
+	grantExpiresAt           int64
+	connectedAtUnixMs        int64 // set after the Flowersec connection succeeds
+	pluginGeneration         PluginSessionGeneration
+	runtimeLease             *runtimeservice.WorkloadLease
 }
 
 func New(opts Options) (*Agent, error) {
@@ -486,6 +492,7 @@ func New(opts Options) (*Agent, error) {
 	computerExecutor, computerTargets := computerUseRuntime(stateDir)
 	a.browserRuntime, _ = computerExecutor.(*ai.ComputerUseRuntime)
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
+		PlatformHTTPTransport:  a.platformHTTPTransport,
 		Logger:                 logger,
 		StateDir:               stateDir,
 		StateRoot:              stateRoot,
@@ -600,6 +607,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.runCtx = ctx
 	a.mu.Unlock()
 	if a.controlChannelEnabled {
+		if a.cfg.GatewayCloud != nil {
+			a.startGatewayCloudObserver()
+		}
 		a.startControlChannel(ctx)
 	} else {
 		a.log.Info("control channel disabled; running without remote connection")
@@ -725,14 +735,20 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 	}
 	handlers := flowersec.NewRPCHandlers()
 	if err := handlers.HandleNotification(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) error {
-		a.handleGrantNotify(handlerCtx, payload)
+		a.handleGrantNotifyForConfig(handlerCtx, payload, cfg)
 		return nil
 	}); err != nil {
 		a.log.Error("control channel not started: register grant handler", "error", err)
 		return
 	}
-	controller, err := flowersec.NewConnectionController(&controlArtifactSource{agent: a}, flowersec.ConnectionControllerOptions{
+	proxy, err := gatewayProxy(cfg)
+	if err != nil {
+		a.log.Warn("Gateway path unavailable")
+		return
+	}
+	controller, err := flowersec.NewConnectionController(&controlArtifactSource{agent: a, expectedConfig: cfg}, flowersec.ConnectionControllerOptions{
 		Connector: flowersec.ConnectorOptions{
+			HTTPSProxy: proxy,
 			// Nil selects platform trust, including macOS Keychain roots.
 			Origin:         strings.TrimSuffix(cfg.ControlplaneBaseURL, "/"),
 			ConnectTimeout: 15 * time.Second,
@@ -881,7 +897,7 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 
 	// Register is the Portal-side active-owner fence for this exact artifact.
 	_, err := callControlJSON[registerReq, registerResp](ctx, a, rpcC, controlRPCTypeRegister, &registerReq{
-		EnvPublicID:              cfg.EnvironmentID,
+		NamespaceBinding: gatewayFence(cfg), EnvPublicID: cfg.EnvironmentID,
 		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        cfg.BindingGeneration,
 		ControlArtifactSequence:  artifactBinding.Sequence,
@@ -958,6 +974,8 @@ func (a *Agent) remoteConfigSnapshot() *config.Config {
 		return nil
 	}
 	cfg := *a.cfg
+	cfg.GatewayCloud = a.cfg.GatewayCloud.Clone()
+	cfg.GatewayCloudMigration = a.cfg.GatewayCloudMigration.Clone()
 	if a.cfg.Direct != nil {
 		direct := *a.cfg.Direct
 		direct.ArtifactJSON = append([]byte(nil), a.cfg.Direct.ArtifactJSON...)
@@ -1075,6 +1093,19 @@ func requireJSONEOF(decoder *json.Decoder) error {
 }
 
 func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) {
+	a.handleGrantNotifyForConfig(ctx, payload, a.remoteConfigSnapshot())
+}
+
+func (a *Agent) handleGrantNotifyForConfig(ctx context.Context, payload json.RawMessage, cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	current := a.remoteConfigSnapshot()
+	if !sameControlBinding(cfg, current) {
+		return
+	}
+	// Keep the connection identity frozen while applying current local policy.
+	cfg = current
 	if a != nil && a.maintenanceOp.Load() != maintenanceOpNone {
 		a.log.Debug("maintenance in progress; ignoring grant_server notify", "op", a.maintenanceOp.Load())
 		return
@@ -1091,7 +1122,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		a.log.Warn("invalid grant_server notify json", "error", err)
 		return
 	}
-	if err := session.ValidateGrantServerNotifyRemote(&n, a.cfg.EnvironmentID); err != nil {
+	if err := session.ValidateGrantServerNotifyRemote(&n, cfg.EnvironmentID); err != nil {
 		a.log.Warn("invalid remote grant_server notify", "error", logsafe.Error(err))
 		return
 	}
@@ -1118,7 +1149,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		Write:   meta.CanWrite,
 		Execute: meta.CanExecute,
 	}
-	localCap := a.cfg.PermissionPolicy.ResolveCap(meta.UserPublicID, meta.FloeApp)
+	localCap := cfg.PermissionPolicy.ResolveCap(meta.UserPublicID, meta.FloeApp)
 	effective := declared.Intersect(localCap)
 	if effective != declared {
 		a.log.Info("session permissions clamped by local policy",
@@ -1197,7 +1228,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	}
 	grantDigest := sha256.Sum256(n.GrantServer.ArtifactJSON)
 	a.mu.Lock()
-	if a.sessionStopping {
+	if a.sessionStopping || a.cfg.EnvironmentID != cfg.EnvironmentID || a.cfg.BindingGeneration != cfg.BindingGeneration || (a.cfg.GatewayCloud != nil && a.cfg.GatewayCloud.Revoked) {
 		a.mu.Unlock()
 		runtimeLease.Release()
 		return
@@ -1212,13 +1243,23 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		// not replace the already-authorized owner for this channel.
 		return
 	}
-	sessCtx, cancel := context.WithCancel(ctx)
+	// Control availability does not own an already authorized data session.
+	// Runtime shutdown and explicit session cancellation still terminate it.
+	parent := a.runCtx
+	if parent == nil {
+		parent = ctx
+	}
+	sessCtx, cancel := context.WithCancel(parent)
 	a.sessions[channelID] = &activeSession{
 		cancel:         cancel,
 		meta:           metaCopy,
 		grantDigest:    grantDigest,
 		grantExpiresAt: n.GrantServer.ArtifactExpiresAtUnixS,
 		runtimeLease:   runtimeLease,
+	}
+	if fence := gatewayFence(cfg); fence != nil {
+		a.sessions[channelID].gatewayBindingPublicID = fence.PublicID
+		a.sessions[channelID].gatewayBindingGeneration = fence.Generation
 	}
 	a.sessionWG.Add(1)
 	a.mu.Unlock()
@@ -1356,9 +1397,15 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 		}
 		defer remotePlan.cleanup()
 	}
+	cfg := a.remoteConfigSnapshot()
+	proxy, err := gatewayProxy(cfg)
+	if err != nil {
+		return err
+	}
 	connectorOptions := flowersec.ConnectorOptions{
+		HTTPSProxy: proxy,
 		// Do not enumerate platform roots: macOS verifies them natively.
-		Origin:         strings.TrimSuffix(a.cfg.ControlplaneBaseURL, "/"),
+		Origin:         strings.TrimSuffix(cfg.ControlplaneBaseURL, "/"),
 		ConnectTimeout: 15 * time.Second,
 		RPCHandlers:    flowersec.NewRPCHandlers(),
 	}
@@ -1382,6 +1429,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 	}
 
 	a.log.Info("data session opened",
+		"connect_duration_ms", time.Since(startedAt).Milliseconds(),
 		"channel_id", channelID,
 		"env_public_id", endpointID,
 		"floe_app", floeApp,
@@ -1940,18 +1988,19 @@ func hostnameBestEffort() string {
 // --- control channel types (wire JSON) ---
 
 type registerReq struct {
-	EnvPublicID              string `json:"env_public_id,omitempty"`
-	LocalEnvironmentPublicID string `json:"local_environment_public_id,omitempty"`
-	BindingGeneration        int64  `json:"binding_generation,omitempty"`
-	ControlArtifactSequence  uint64 `json:"control_artifact_sequence"`
-	ControlArtifactChannelID string `json:"control_artifact_channel_id"`
-	AgentInstanceID          string `json:"agent_instance_id,omitempty"`
-	Version                  string `json:"version,omitempty"`
-	OS                       string `json:"os,omitempty"`
-	Arch                     string `json:"arch,omitempty"`
-	Hostname                 string `json:"hostname,omitempty"`
-	EffectiveRunMode         string `json:"effective_run_mode,omitempty"`
-	RemoteEnabled            bool   `json:"remote_enabled,omitempty"`
+	NamespaceBinding         *gc.BindingFence `json:"namespace_binding,omitempty"`
+	EnvPublicID              string           `json:"env_public_id,omitempty"`
+	LocalEnvironmentPublicID string           `json:"local_environment_public_id,omitempty"`
+	BindingGeneration        int64            `json:"binding_generation,omitempty"`
+	ControlArtifactSequence  uint64           `json:"control_artifact_sequence"`
+	ControlArtifactChannelID string           `json:"control_artifact_channel_id"`
+	AgentInstanceID          string           `json:"agent_instance_id,omitempty"`
+	Version                  string           `json:"version,omitempty"`
+	OS                       string           `json:"os,omitempty"`
+	Arch                     string           `json:"arch,omitempty"`
+	Hostname                 string           `json:"hostname,omitempty"`
+	EffectiveRunMode         string           `json:"effective_run_mode,omitempty"`
+	RemoteEnabled            bool             `json:"remote_enabled,omitempty"`
 }
 
 type registerResp struct {

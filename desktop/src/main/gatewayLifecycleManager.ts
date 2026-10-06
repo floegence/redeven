@@ -1,3 +1,4 @@
+import type { GatewayCloudConfiguration, GatewayCloudSummary } from '../shared/gatewayCloud';
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
@@ -31,6 +32,7 @@ import type { GatewaySecretStore } from './gatewayTrust';
 import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
+  manageGatewayCloud,
   gatewayServiceBinaryPath,
   probeManagedGatewayServiceDeep,
   probeManagedGatewayServiceStatus,
@@ -489,6 +491,15 @@ export class GatewayLifecycleManager {
     if (state.status === 'needs_reinstall') {
       throw new GatewayReinstallRequiredError(state, state.message);
     }
+  }
+
+  async manageCloud(record: GatewayRecord, configuration?: GatewayCloudConfiguration, signal?: AbortSignal, operationKey?: string): Promise<GatewayCloudSummary> {
+    if (record.connection.kind === 'url') throw new GatewayNotManageableError();
+    return this.runLifecycle(record, 'start', { signal, operationKey }, async currentSignal => {
+      const options = await this.serviceOptions(record, { signal: currentSignal });
+      if (configuration) await this.ensureBridgeSession(record, { signal: currentSignal });
+      return manageGatewayCloud(options, configuration);
+    });
   }
 
   private async serviceOptions(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }>) {

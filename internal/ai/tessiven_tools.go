@@ -53,7 +53,7 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 	}
 	library := r.host.tessiven
 	if library == nil {
-		return nil, errors.New("Tessiven is unavailable")
+		return nil, errors.New("tessiven is unavailable")
 	}
 	switch name {
 	case "tessiven.schema":

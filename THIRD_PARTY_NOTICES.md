@@ -1412,7 +1412,7 @@ SOFTWARE.
 | github.com/floegence/floe-native-apps | v0.22.14 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.22.14 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.25.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.25.2 | Detected from LICENSE. |
-| github.com/floegence/flowersec/flowersec-go/v5 | v5.7.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.7.1 | Floegence first-party dependency. |
+| github.com/floegence/flowersec/flowersec-go/v5 | v5.9.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.9.0 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.6.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.33 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.33 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
@@ -1621,12 +1621,12 @@ SOFTWARE.
 | @floegence/floe-webapp-protocol | 0.84.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.84.0 |  |
 | @floegence/floebrowser | 0.1.27 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.27 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
-| @floegence/flowersec-core | 5.7.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.7.1 |  |
-| @floegence/flowersec-node-native-darwin-arm64 | 5.7.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.7.1 |  |
-| @floegence/flowersec-node-native-darwin-x64 | 5.7.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.7.1 |  |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 5.7.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.7.1 |  |
-| @floegence/flowersec-node-native-linux-x64-gnu | 5.7.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.7.1 |  |
-| @floegence/flowersec-node-native | 5.7.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.7.1 |  |
+| @floegence/flowersec-core | 5.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.9.0 |  |
+| @floegence/flowersec-node-native-darwin-arm64 | 5.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.9.0 |  |
+| @floegence/flowersec-node-native-darwin-x64 | 5.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.9.0 |  |
+| @floegence/flowersec-node-native-linux-arm64-gnu | 5.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.9.0 |  |
+| @floegence/flowersec-node-native-linux-x64-gnu | 5.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.9.0 |  |
+| @floegence/flowersec-node-native | 5.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.9.0 |  |
 | @floegence/redeven-service-templates | 0.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fredeven-service-templates/v/0.6.0 | Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.6.0 source release. The SDK manifest omits its license field. |
 | @floegence/redevplugin-contracts | 3.0.33 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.33 |  |
 | @floegence/redevplugin-ui | 3.0.33 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.33 | License inherited from floegence/redevplugin root LICENSE. |
@@ -1947,7 +1947,8 @@ SOFTWARE.
 | bl | 4.1.0 | MIT | Env App UI | https://www.npmjs.com/package/bl/v/4.1.0 |  |
 | bluebird | 3.7.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/bluebird/v/3.7.2 |  |
 | boolean | 3.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/boolean/v/3.2.0 |  |
-| brace-expansion | 5.0.9 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.9 |  |
+| brace-expansion | 5.0.12 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.12 |  |
+| brace-expansion | 5.0.9 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.9 | License verified from the exact registry package manifest. |
 | browserslist | 4.29.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/browserslist/v/4.29.2 |  |
 | buffer-crc32 | 0.2.13 | MIT | Env App UI | https://www.npmjs.com/package/buffer-crc32/v/0.2.13 |  |
 | buffer-from | 1.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/buffer-from/v/1.1.2 |  |
@@ -2165,7 +2166,8 @@ SOFTWARE.
 | html-entities | 2.3.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/html-entities/v/2.3.3 |  |
 | html-tags | 3.3.1 | MIT | Env App UI | https://www.npmjs.com/package/html-tags/v/3.3.1 |  |
 | html-void-elements | 3.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/html-void-elements/v/3.0.0 |  |
-| http-cache-semantics | 4.2.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/http-cache-semantics/v/4.2.0 |  |
+| http-cache-semantics | 4.2.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/http-cache-semantics/v/4.2.0 | License verified from the exact registry package manifest. |
+| http-cache-semantics | 4.3.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/http-cache-semantics/v/4.3.0 |  |
 | http-proxy-agent | 7.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/http-proxy-agent/v/7.0.2 |  |
 | http2-wrapper | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/http2-wrapper/v/1.0.3 |  |
 | https-proxy-agent | 7.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/https-proxy-agent/v/7.0.6 |  |
@@ -2428,7 +2430,8 @@ SOFTWARE.
 | seroval-plugins | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.5.4 | License verified from the exact registry package manifest. |
 | seroval-plugins | 1.5.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.5.6 |  |
 | seroval | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.5.4 | License verified from the exact registry package manifest. |
-| seroval | 1.5.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.5.6 |  |
+| seroval | 1.5.6 | MIT | Desktop shell | https://www.npmjs.com/package/seroval/v/1.5.6 |  |
+| seroval | 1.6.8 | MIT | Env App UI | https://www.npmjs.com/package/seroval/v/1.6.8 |  |
 | setimmediate | 1.0.5 | MIT | Env App UI | https://www.npmjs.com/package/setimmediate/v/1.0.5 |  |
 | shebang-command | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/shebang-command/v/2.0.0 |  |
 | shebang-regex | 3.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/shebang-regex/v/3.0.0 |  |
@@ -2437,12 +2440,13 @@ SOFTWARE.
 | signal-exit | 3.0.7 | ISC | Desktop shell | https://www.npmjs.com/package/signal-exit/v/3.0.7 |  |
 | simple-update-notifier | 2.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/simple-update-notifier/v/2.0.0 |  |
 | sirv | 3.0.2 | MIT | Env App UI | https://www.npmjs.com/package/sirv/v/3.0.2 |  |
-| solid-js | 1.9.11 | MIT | Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.11 |  |
-| solid-js | 1.9.12 | MIT | Desktop shell | https://www.npmjs.com/package/solid-js/v/1.9.12 |  |
 | solid-js | 1.9.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.13 | License verified from the exact registry package manifest. |
+| solid-js | 1.9.15 | MIT | Desktop shell | https://www.npmjs.com/package/solid-js/v/1.9.15 |  |
+| solid-js | 1.9.6 | MIT | Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.6 |  |
 | solid-motionone | 1.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-motionone/v/1.0.4 |  |
 | solid-refresh | 0.6.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-refresh/v/0.6.3 |  |
-| source-map-js | 1.2.1 | BSD-3-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/source-map-js/v/1.2.1 |  |
+| source-map-js | 1.2.1 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/source-map-js/v/1.2.1 | License verified from the exact registry package manifest. |
+| source-map-js | 1.2.2 | BSD-3-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/source-map-js/v/1.2.2 |  |
 | source-map-support | 0.5.21 | MIT | Desktop shell | https://www.npmjs.com/package/source-map-support/v/0.5.21 |  |
 | source-map | 0.6.1 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/source-map/v/0.6.1 |  |
 | space-separated-tokens | 2.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/space-separated-tokens/v/2.0.2 |  |
@@ -2511,7 +2515,8 @@ SOFTWARE.
 | ufo | 1.6.3 | MIT | Env App UI | https://www.npmjs.com/package/ufo/v/1.6.3 |  |
 | undici-types | 7.16.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici-types/v/7.16.0 |  |
 | undici-types | 8.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/8.3.0 |  |
-| undici | 7.29.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.29.0 |  |
+| undici | 7.29.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.29.0 | License verified from the exact registry package manifest. |
+| undici | 7.30.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.30.0 |  |
 | unist-util-is | 6.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-is/v/6.0.1 |  |
 | unist-util-position | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-position/v/5.0.0 |  |
 | unist-util-stringify-position | 4.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-stringify-position/v/4.0.0 |  |

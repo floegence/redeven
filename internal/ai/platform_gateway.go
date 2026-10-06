@@ -229,3 +229,34 @@ func (p *platformGatewayProvider) catalog(ctx context.Context) (platformModelCat
 	}
 	return catalog, nil
 }
+
+func platformGatewayWithTransport(factory func() (http.RoundTripper, error), baseURL, grantToken, modelID string, version int64) (ModelGateway, error) {
+	gateway, err := newPlatformGatewayProvider(baseURL, grantToken, modelID, version)
+	if err != nil {
+		return nil, err
+	}
+	if factory != nil {
+		gateway.(*platformGatewayProvider).httpClient.Transport = platformExplicitTransport{factory: factory}
+	}
+	return gateway, nil
+}
+
+type platformExplicitTransport struct {
+	factory func() (http.RoundTripper, error)
+}
+
+func (t platformExplicitTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	transport, err := t.factory()
+	if err != nil {
+		return nil, err
+	}
+	if transport == nil {
+		return nil, errors.New("platform AI route unavailable")
+	}
+	// The factory captures current rotated credentials. Disable idle reuse so no
+	// request survives a later local route revocation through an old connection.
+	if native, ok := transport.(*http.Transport); ok {
+		native.DisableKeepAlives = true
+	}
+	return transport.RoundTrip(request)
+}

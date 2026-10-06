@@ -9,6 +9,9 @@ export type RuntimeProgressEnvironmentMatch = Pick<
 >;
 
 export type BusyAction =
+  | 'join_runtime_gateway_cloud'
+  | 'configure_gateway_cloud'
+  | 'inspect_gateway_cloud'
   | ''
   | 'open_local_environment'
   | 'open_provider_environment'
