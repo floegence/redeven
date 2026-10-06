@@ -3,73 +3,69 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
-import { decorateEnvironmentAccess, environmentAccessBinding, rememberEnvironmentIdentity, selectEnvironmentAccessRoute, removalNeedsAccessReplacement } from './environmentAccess';
+import { decorateEnvironmentAccess, environmentAccessBinding, rememberEnvironmentIdentity, selectEnvironmentAccessRoute, removalNeedsAccessReplacement, normalizeEnvironmentAccessPreferences } from './environmentAccess';
 import { defaultDesktopPreferences, defaultDesktopPreferencesPaths, createPlaintextSecretCodec, saveDesktopPreferences, loadDesktopPreferences } from './desktopPreferences';
+import { memberFixture } from '../testSupport/gatewayMembershipFixture';
 const identity = `runtime:${'a'.repeat(64)}`;
-const direct = { id: 'direct', kind: 'external_local_ui', label: 'Same', local_ui_url: 'https://runtime.example', created_at_ms: 1 } as unknown as DesktopEnvironmentEntry;
-const gateway = { id: 'gw', kind: 'gateway_environment', label: 'Same', gateway_id: 'gateway', gateway_env_id: 'env',
-  gateway_endpoint_label: 'https://gateway.example', gateway_trust_state: 'paired', gateway_environment_profile: { access_mode: 'gateway_proxy' },
-  gateway_environment_profile_access_route: { kind: 'url', url: 'https://runtime.example' },
-  gateway_environment_access_capabilities: ['open_direct', 'open_via_gateway'], created_at_ms: 2 } as unknown as DesktopEnvironmentEntry;
+const direct = { id: 'direct', kind: 'external_local_ui', label: 'Same', local_ui_url: 'https://runtime.example', created_at_ms: 1 } as DesktopEnvironmentEntry;
+const other = { ...direct, id: 'other', created_at_ms: 2 };
+const gateway = { id: 'gateway:gw:env:member', kind: 'gateway_environment', label: 'Same', gateway_id: 'gw', gateway_env_id: 'member',
+  gateway_identity_fingerprint: 'fingerprint', gateway_member: memberFixture, created_at_ms: 2 } as DesktopEnvironmentEntry;
 
 describe('environment access ownership', () => {
- it('never groups by label or URL, and preserves direct default when a verified Gateway is added', () => {
-  let prefs = defaultDesktopPreferences();
-  expect(decorateEnvironmentAccess([direct, gateway], prefs)[1]?.access_group_id).not.toBe('direct');
-  prefs = rememberEnvironmentIdentity(prefs, direct, identity);
-  prefs = rememberEnvironmentIdentity(prefs, gateway, identity);
-  const entries = decorateEnvironmentAccess([direct, gateway], prefs);
-  expect(entries[1]?.access_group_id).toBe('direct');
-  expect(entries[0]?.default_access_route_id).toBe('direct:direct');
-  expect(entries[0]?.access_routes).toHaveLength(3);
- });
- it('keeps the original registration default regardless of probe completion order', () => {
-  const prefs = rememberEnvironmentIdentity(rememberEnvironmentIdentity(defaultDesktopPreferences(), gateway, identity), direct, identity);
-  expect(decorateEnvironmentAccess([gateway, direct], prefs)[0]?.default_access_route_id).toBe('direct:direct');
-  const earlierGateway = { ...gateway, created_at_ms: 0 };
-  const earlierPrefs = rememberEnvironmentIdentity(rememberEnvironmentIdentity(defaultDesktopPreferences(), earlierGateway, identity), direct, identity);
-  expect(decorateEnvironmentAccess([earlierGateway, direct], earlierPrefs)[0]?.default_access_route_id).toBe('gw:gateway_proxy');
-  expect(decorateEnvironmentAccess([{ ...earlierGateway, created_at_ms: 9999 }, direct], earlierPrefs)[0]?.default_access_route_id).toBe('gw:gateway_proxy');
- });
- it('only changes default on explicit save and rejects unrelated route choices', () => {
-  let prefs = rememberEnvironmentIdentity(rememberEnvironmentIdentity(defaultDesktopPreferences(), direct, identity), gateway, identity);
-  const entries = decorateEnvironmentAccess([direct, gateway], prefs);
-  prefs = selectEnvironmentAccessRoute(prefs, entries, 'direct', 'gw:gateway_proxy');
-  expect(decorateEnvironmentAccess([direct, gateway], prefs)[0]?.default_access_route_id).toBe('gw:gateway_proxy');
-  expect(() => selectEnvironmentAccessRoute(prefs, entries, 'direct', 'missing')).toThrow();
- });
- it('detaches edited targets and changed identities without transferring a saved default', () => {
-  let prefs = rememberEnvironmentIdentity(rememberEnvironmentIdentity(defaultDesktopPreferences(), direct, identity), gateway, identity);
-  prefs = selectEnvironmentAccessRoute(prefs, decorateEnvironmentAccess([direct, gateway], prefs), 'direct', 'gw:gateway_proxy');
-  const changed = { ...gateway, gateway_environment_profile_access_route: { kind: 'url' as const, url: 'https://other.example' } };
-  expect(environmentAccessBinding(changed)).not.toBe(environmentAccessBinding(gateway));
-  const entries = decorateEnvironmentAccess([direct, changed], prefs);
-  expect(entries[1]?.access_group_id).not.toBe('direct');
-  expect(entries[0]?.default_access_route_missing).toBe(true);
-  prefs = rememberEnvironmentIdentity(prefs, gateway, `runtime:${'b'.repeat(64)}`);
-  expect(decorateEnvironmentAccess([direct, gateway], prefs)[1]?.access_group_id).not.toBe('direct');
- });
+  it('keeps member authority isolated from public health and independent Runtime routes', () => {
+    let prefs = rememberEnvironmentIdentity(defaultDesktopPreferences(), direct, identity);
+    expect(rememberEnvironmentIdentity(prefs, gateway, identity)).toBe(prefs);
+    prefs = rememberEnvironmentIdentity(prefs, other, identity);
+    const entries = decorateEnvironmentAccess([direct, other, gateway], prefs);
+    expect(entries[0]?.access_routes).toHaveLength(2);
+    expect(entries[1]?.access_group_id).toBe(direct.id);
+    expect(entries[2]?.access_group_id).toBe(gateway.id);
+    expect(entries[2]?.access_routes).toEqual([expect.objectContaining({ id: `${gateway.id}:member`, kind: 'gateway_member' })]);
+    expect(() => selectEnvironmentAccessRoute(prefs, entries, direct.id, `${gateway.id}:member`)).toThrow();
+  });
+  it('preserves independently verified direct routing and explicit replacement', () => {
+    let prefs = rememberEnvironmentIdentity(rememberEnvironmentIdentity(defaultDesktopPreferences(), other, identity), direct, identity);
+    let entries = decorateEnvironmentAccess([other, direct], prefs);
+    expect(entries[0]?.default_access_route_id).toBe('direct:direct');
+    prefs = selectEnvironmentAccessRoute(prefs, entries, direct.id, 'other:direct');
+    entries = decorateEnvironmentAccess([direct, other], prefs);
+    expect(entries[0]?.default_access_route_id).toBe('other:direct');
+    expect(removalNeedsAccessReplacement(entries[1]!, ['other'])).toBe(true);
+    expect(removalNeedsAccessReplacement(entries[1]!, ['direct'])).toBe(false);
+    expect(decorateEnvironmentAccess([direct], prefs)[0]?.default_access_route_missing).toBe(true);
+  });
+  it('fences member identity and version changes and detaches edited direct destinations', () => {
+    for (const patch of [{ gateway_identity_fingerprint: 'other' }, { gateway_member: { ...memberFixture, member_version: 2 } }, { gateway_env_id: 'other' }]) {
+      expect(environmentAccessBinding({ ...gateway, ...patch })).not.toBe(environmentAccessBinding(gateway));
+    }
+    const prefs = rememberEnvironmentIdentity(rememberEnvironmentIdentity(defaultDesktopPreferences(), other, identity), direct, identity);
+    expect(decorateEnvironmentAccess([{ ...direct, local_ui_url: 'https://other.example' }, other], prefs)[0]?.access_group_id).toBe(direct.id);
+    expect(decorateEnvironmentAccess([{ ...direct, local_ui_url: 'https://other.example' }, other], prefs)[0]?.access_routes).toHaveLength(1);
+  });
+  it('deletes legacy Gateway observations and defaults once without losing direct preferences', () => {
+    const observation = { binding: 'a'.repeat(64), identity, observed_at_ms: 1 };
+    expect(normalizeEnvironmentAccessPreferences({ version: 1,
+      observations: { [gateway.id]: observation, direct: observation },
+      defaults: { [identity]: `${gateway.id}:gateway_proxy`, direct: 'direct:direct', [gateway.id]: `${gateway.id}:direct` },
+    })).toEqual({ version: 2, observations: { direct: observation }, defaults: { direct: 'direct:direct' } });
+  });
 });
 
-
 describe('access preference persistence', () => {
-  it('preserves observations and explicit defaults, upgrades missing state, and rejects malformed state read-only', async () => {
+  it('preserves current state and rejects malformed or future state read-only', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-access-preferences-'));
     const paths = defaultDesktopPreferencesPaths(dir, { stateRoot: path.join(dir, 'runtime') });
     const codec = createPlaintextSecretCodec();
     try {
-      let preferences = rememberEnvironmentIdentity(rememberEnvironmentIdentity(defaultDesktopPreferences(), direct, identity), gateway, identity);
-      const entries = decorateEnvironmentAccess([direct, gateway], preferences);
-      preferences = selectEnvironmentAccessRoute(preferences, entries, direct.id, 'gw:gateway_proxy');
-      expect(removalNeedsAccessReplacement(decorateEnvironmentAccess([direct, gateway], preferences)[1], [gateway.id])).toBe(true);
-      expect(removalNeedsAccessReplacement(entries[1], [gateway.id])).toBe(false);
+      const preferences = rememberEnvironmentIdentity(defaultDesktopPreferences(), direct, identity);
       await saveDesktopPreferences(paths, preferences, codec);
       expect((await loadDesktopPreferences(paths, codec)).environment_access).toEqual(preferences.environment_access);
       const stored = JSON.parse(await fs.readFile(paths.preferencesFile, 'utf8'));
       delete stored.environment_access; stored.version = 14;
       await fs.writeFile(paths.preferencesFile, JSON.stringify(stored));
       expect((await loadDesktopPreferences(paths, codec)).environment_access).toBeUndefined();
-      for (const state of [{ version: 2, observations: {}, defaults: {} }, { version: 1, observations: [], defaults: {} }, { version: 1, observations: {}, defaults: { x: false } }]) {
+      for (const state of [{ version: 3, observations: {}, defaults: {} }, { version: 1, observations: [], defaults: {} }, { version: 2, observations: {}, defaults: { x: false } }]) {
         const bytes = JSON.stringify({ ...stored, environment_access: state });
         await fs.writeFile(paths.preferencesFile, bytes);
         await expect(loadDesktopPreferences(paths, codec)).rejects.toThrow('original file has been preserved');

@@ -24,7 +24,7 @@ func (c *Config) EnsureRuntimeIDs() error {
 
 // ApplyGatewayDelivery validates the same pool contract used by Runtime-link.
 func (c *Config) ApplyGatewayDelivery(delivery *gatewaycloud.CredentialDelivery) error {
-	if c == nil || c.GatewayCloud == nil || c.GatewayCloud.Binding == nil || delivery == nil || delivery.Binding != *c.GatewayCloud.Binding || delivery.DeliveryRequestID != c.GatewayCloud.DeliveryRequestID || delivery.CloudOrigin != c.GatewayCloud.CloudOrigin || delivery.RegionOrigin != c.GatewayCloud.RegionOrigin {
+	if c == nil || c.GatewayPublication == nil || c.GatewayPublication.Binding == nil || delivery == nil || delivery.Binding != *c.GatewayPublication.Binding || delivery.DeliveryRequestID != c.GatewayPublication.DeliveryRequestID || delivery.CloudOrigin != c.GatewayPublication.CloudOrigin || delivery.RegionOrigin != c.GatewayPublication.RegionOrigin {
 		return errors.New("gateway delivery binding mismatch")
 	}
 	var raw bootstrapControlArtifactPool
@@ -35,7 +35,7 @@ func (c *Config) ApplyGatewayDelivery(delivery *gatewaycloud.CredentialDelivery)
 	if err != nil {
 		return err
 	}
-	if pool.LogicalBindingID != "gateway-cloud-v1:"+delivery.Binding.PublicID {
+	if pool.LogicalBindingID != "gateway-cloud-v2:"+delivery.Binding.PublicID {
 		return errors.New("gateway control pool identity mismatch")
 	}
 	if c.ControlArtifactPool != nil && c.ControlArtifactPool.LogicalBindingID == pool.LogicalBindingID && c.ControlArtifactPool.BindingGeneration == pool.BindingGeneration {
@@ -57,12 +57,14 @@ func (c *Config) ApplyGatewayDelivery(delivery *gatewaycloud.CredentialDelivery)
 	c.BindingGeneration = delivery.Binding.Generation
 	c.ControlArtifactPool = pool
 	c.Direct = nil
-	next := *c.GatewayCloud
+	next := *c.GatewayPublication
 	next.DeliveryRequestID = ""
-	next.JoinToken = ""
-	next.EnrollmentToken = ""
+	next.Proven = true
 
-	c.GatewayCloud = &next
+	c.GatewayPublication = &next
+	c.GatewayRejoinRequired = false
+	c.GatewayMigrationEvidence = nil
+	c.GatewayEnvironmentChoice = ""
 	return nil
 }
 
@@ -74,20 +76,42 @@ func (c *Config) validateGatewayBinding() error {
 // ValidateGatewayManagement permits the process to observe revocation or retry
 // authenticated credential recovery. It does not authorize control or sessions.
 func (c *Config) ValidateGatewayManagement() error {
-	if c == nil || c.GatewayCloud == nil || c.AgentInstanceID == "" {
+	if c == nil || c.Gateway == nil || c.AgentInstanceID == "" {
 		return errors.New("gateway management is not configured")
 	}
 	if err := c.ValidateLocalMinimal(); err != nil {
+		return err
+	}
+	if err := c.Gateway.Validate(c.LocalEnvironmentPublicID); err != nil {
+		return err
+	}
+	if c.GatewayPublication == nil {
+		return nil
+	}
+	if c.GatewayPublication.Binding == nil {
+		if err := c.GatewayPublication.ValidateMember(c.Gateway); err != nil {
+			return err
+		}
+		_, err := c.GatewayPublication.Identity()
 		return err
 	}
 	return c.validateGatewayPath(true)
 }
 
 func (c *Config) validateGatewayPath(allowRevoked bool) error {
-	if c.GatewayCloud == nil {
+	if c.GatewayPublication == nil {
+		if c.Gateway != nil || c.GatewayMigrationEvidence != nil || c.GatewayRejoinRequired {
+			return errors.New("gateway publication requires explicit binding approval")
+		}
 		return nil
 	}
-	r := c.GatewayCloud
+	r := c.GatewayPublication
+	if err := r.ValidateMember(c.Gateway); err != nil {
+		return err
+	}
+	if c.Gateway.Leaving && !allowRevoked {
+		return errors.New("gateway membership is leaving")
+	}
 	if _, err := r.Identity(); err != nil {
 		return err
 	}
@@ -95,7 +119,7 @@ func (c *Config) validateGatewayPath(allowRevoked bool) error {
 	if (r.Revoked && !allowRevoked) || b == nil || c.ProviderOrigin != r.CloudOrigin || c.ControlplaneBaseURL != r.RegionOrigin || c.ControlplaneProviderID != "redeven" || c.EnvironmentID != b.EnvPublicID || c.LocalEnvironmentPublicID != b.RuntimePublicID || c.BindingGeneration != b.Generation || c.Direct != nil {
 		return errors.New("gateway path and runtime binding do not match")
 	}
-	if c.ControlArtifactPool != nil && (c.ControlArtifactPool.LogicalBindingID != "gateway-cloud-v1:"+b.PublicID || c.ControlArtifactPool.BindingGeneration != b.Generation) {
+	if c.ControlArtifactPool != nil && (c.ControlArtifactPool.LogicalBindingID != "gateway-cloud-v2:"+b.PublicID || c.ControlArtifactPool.BindingGeneration != b.Generation) {
 		return errors.New("gateway path and control pool do not match")
 	}
 	return nil

@@ -1,9 +1,10 @@
 import { Duplex } from 'node:stream';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
+import type { RuntimePlacementBridgeSurface } from './runtimePlacementBridgeProtocol';
 
 /** Adapt one owned Gateway bridge stream to Node HTTP/WebSocket without a TCP listener. */
-export function openGatewayBridgeSocket(bridge: RuntimePlacementBridgeSessionHandle): Duplex {
-  const stream = bridge.openStream('gateway_protocol');
+export function openGatewayBridgeSocket(bridge: RuntimePlacementBridgeSessionHandle, surface: Extract<RuntimePlacementBridgeSurface, 'gateway_protocol' | 'gateway_member'> = 'gateway_protocol'): Duplex {
+  const stream = bridge.openStream(surface);
   let resumeRead: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timeoutMS = 0;

@@ -134,18 +134,14 @@ describe('resolveDesktopSessionTransport', () => {
       gateway_env_id: 'one',
       gateway_session_id: 'token',
     };
-    expect(() => resolveDesktopSessionTransport(target, localStartup)).toThrow('Gateway session requires an explicit access mode.');
+    expect(() => resolveDesktopSessionTransport(target, localStartup)).toThrow('Gateway session requires a member transport.');
     const startup = { local_ui_url: 'https://runtime.example/', local_ui_urls: ['https://runtime.example/'] };
-    const proxy = resolveDesktopSessionTransport(target, startup, { gatewayProxy: true });
-    expect(proxy).toMatchObject({ kind: 'gateway_proxy', proxyPolicy: 'gateway', allowedBaseURL: 'https://runtime.example/' });
+    const proxy = resolveDesktopSessionTransport(target, startup, { gatewayMember: true });
+    expect(proxy).toMatchObject({ kind: 'gateway_member', proxyPolicy: 'gateway', allowedBaseURL: 'https://runtime.example/' });
     expect(proxy.entryURL).toBe('https://runtime.example/_redeven_proxy/env/');
     expect(proxy.partition).not.toBe('');
     expect(proxy.partition.startsWith('persist:')).toBe(false);
-    expect(resolveDesktopSessionTransport(target, startup, { gatewayProxy: true, gatewayBridge: true }))
-      .toMatchObject({ kind: 'gateway_bridge', proxyPolicy: 'gateway' });
-    const direct = resolveDesktopSessionTransport({ ...target, session_key: `${target.session_key}:direct` }, startup, { gatewayDirect: true });
-    expect(direct).toMatchObject({ kind: 'external_local_ui', proxyPolicy: 'system' });
-    expect(direct.partition).not.toBe(proxy.partition);
+
   });
 
   it('keeps Provider remote sessions on system proxy policy', () => {

@@ -241,10 +241,14 @@ type Options struct {
 }
 
 type Agent struct {
-	gatewayRecoveryMu   sync.Mutex
-	gatewayObserverOnce sync.Once
-	cfg                 *config.Config
-	log                 *slog.Logger
+	gatewayMember        gatewayMemberOwner
+	gatewayRecoveryMu    sync.Mutex
+	gatewayObserverOnce  sync.Once
+	gatewayCloudError    string
+	gatewayCloudState    string
+	gatewayCloudMemberID string
+	cfg                  *config.Config
+	log                  *slog.Logger
 
 	audit *auditlog.Store
 	diag  *diagnostics.Store
@@ -606,10 +610,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.mu.Lock()
 	a.runCtx = ctx
 	a.mu.Unlock()
+	a.startGatewayCloudObserver()
 	if a.controlChannelEnabled {
-		if a.cfg.GatewayCloud != nil {
-			a.startGatewayCloudObserver()
-		}
 		a.startControlChannel(ctx)
 	} else {
 		a.log.Info("control channel disabled; running without remote connection")
@@ -974,8 +976,9 @@ func (a *Agent) remoteConfigSnapshot() *config.Config {
 		return nil
 	}
 	cfg := *a.cfg
-	cfg.GatewayCloud = a.cfg.GatewayCloud.Clone()
-	cfg.GatewayCloudMigration = a.cfg.GatewayCloudMigration.Clone()
+	cfg.Gateway = a.cfg.Gateway.Clone()
+	cfg.GatewayPublication = a.cfg.GatewayPublication.Clone()
+	cfg.GatewayMigrationEvidence = a.cfg.GatewayMigrationEvidence.Clone()
 	if a.cfg.Direct != nil {
 		direct := *a.cfg.Direct
 		direct.ArtifactJSON = append([]byte(nil), a.cfg.Direct.ArtifactJSON...)
@@ -1228,7 +1231,7 @@ func (a *Agent) handleGrantNotifyForConfig(ctx context.Context, payload json.Raw
 	}
 	grantDigest := sha256.Sum256(n.GrantServer.ArtifactJSON)
 	a.mu.Lock()
-	if a.sessionStopping || a.cfg.EnvironmentID != cfg.EnvironmentID || a.cfg.BindingGeneration != cfg.BindingGeneration || (a.cfg.GatewayCloud != nil && a.cfg.GatewayCloud.Revoked) {
+	if a.sessionStopping || a.cfg.EnvironmentID != cfg.EnvironmentID || a.cfg.BindingGeneration != cfg.BindingGeneration || (a.cfg.GatewayPublication != nil && a.cfg.GatewayPublication.Revoked) {
 		a.mu.Unlock()
 		runtimeLease.Release()
 		return

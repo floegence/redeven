@@ -447,7 +447,7 @@ function gatewayServiceStartScript(rootShell: string): string {
     'set -eu',
     rootShell,
     managedGatewayPathShell(),
-    'exec "$binary" service-start --state-root "$state_root" --enable-profile-write',
+    'exec "$binary" service-start --state-root "$state_root"',
   ].join('\n');
 }
 
@@ -958,11 +958,11 @@ export async function manageGatewayCloud(options: GatewayServiceHostOptions, con
   return withGatewayExecutor(options, async executor => {
     const script = [
       'set -eu', rootShellForPlacement(options.placement), managedGatewayPathShell(),
-      configuration ? 'exec "$binary" cloud-connect --json --state-root "$state_root" --cloud "$4" --gateway-url "$5" --egress-listen "$6"' : 'exec "$binary" cloud-status --state-root "$state_root"',
+      configuration ? `exec "$binary" cloud-connect --json --state-root "$state_root" --cloud "$4"${configuration.reauthorize ? ' --reauthorize' : ''}` : 'exec "$binary" cloud-status --state-root "$state_root"',
     ].join('\n');
     const result = await executor.run(commandForPlacement(options.placement, script, [
       options.placement.runtime_root, options.stateRoot, normalizeReleaseTag(options.releaseTag),
-      ...(configuration ? [configuration.cloud_origin, configuration.gateway_url, configuration.egress_listen] : []),
+      ...(configuration ? [configuration.cloud_origin] : []),
     ]), { signal: options.signal });
     const summary = parseGatewayCloudSummary(result.stdout.trim());
     if (configuration && summary.cloud_origin !== configuration.cloud_origin) throw new Error('Gateway Cloud origin mismatch.');

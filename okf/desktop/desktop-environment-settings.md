@@ -30,8 +30,8 @@ running; opening settings or automatic loading never starts a stopped distro.
 The error surface offers the existing explicit Start action.
 
 URL registrations edit their name, address and automatic status detection.
-Gateway Environment profiles retain their existing Gateway write permissions and
-connection fields. Neither provides Runtime access management. Cloud shows its
+Gateway members expose their member identity and Gateway-authorized membership
+settings. Neither entry provides Runtime access management. Cloud shows its
 connection information and the existing Redeven Cloud management entry. None of
 these sections grants additional lifecycle or access authority.
 

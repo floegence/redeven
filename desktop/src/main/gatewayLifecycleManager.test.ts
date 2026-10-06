@@ -115,7 +115,7 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
 
 function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
   return {
-    schema_version: 3,
+    schema_version: 4,
     gateway_id: 'gw_bastion',
     display_name: 'Bastion',
     local_enabled: true,
@@ -137,7 +137,7 @@ function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
 
 function containerGateway(): GatewayRecord {
   return {
-    schema_version: 3,
+    schema_version: 4,
     gateway_id: 'gw_container',
     display_name: 'Container Gateway',
     local_enabled: true,
@@ -159,7 +159,7 @@ function containerGateway(): GatewayRecord {
 
 function localGateway(): GatewayRecord {
   return {
-    schema_version: 3,
+    schema_version: 4,
     gateway_id: 'gw_local',
     display_name: 'Local Environment service',
     local_enabled: true,
@@ -177,11 +177,11 @@ describe('GatewayLifecycleManager', () => {
     const lifecycle = manager();
     lifecycleMocks.ensureManagedGatewayServiceReady.mockRejectedValueOnce(new DesktopOperationFailureError(desktopOperationFailurePresentation({
       code: 'runtime_host_command_failed', title: 'Host command failed', summary: 'Gateway installation failed.',
-      diagnostics: [{ channel: 'stderr', label: 'Command stderr', text: `Missing target directory /gateway/v3/access/${'a'.repeat(43)}/` }],
+      diagnostics: [{ channel: 'stderr', label: 'Command stderr', text: `Gateway request failed: Authorization: Bearer ${'a'.repeat(43)}` }],
     })));
     await expect(lifecycle.startGateway(localGateway())).rejects.toMatchObject({
       code: 'gateway_service_start_failed', message: 'Gateway installation failed.',
-      presentation: { diagnostics: [{ channel: 'stderr', text: 'Missing target directory /gateway/v3/access/[redacted]/' }] },
+      presentation: { diagnostics: [{ channel: 'stderr', text: 'Gateway request failed: Authorization: [redacted]' }] },
     });
   });
   beforeEach(() => {
@@ -210,13 +210,9 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.startRuntimePlacementBridgeSession.mockResolvedValue(fakeBridgeSession());
   });
 
-  it.each(['save', 'delete'] as const)('requires a ready Gateway for profile %s without mutating its service', async action => {
+  it('requires a ready Gateway for member administration without mutating its service', async () => {
     const lifecycle = manager();
-    const record = sshGateway();
-    const request = action === 'save'
-      ? lifecycle.upsertEnvironmentProfile(record, { display_name: 'Runtime', access_route: { kind: 'url', url: 'https://runtime.example' } })
-      : lifecycle.deleteEnvironmentProfile(record, { gateway_env_id: 'env_fixture' });
-    await expect(request).rejects.toBeInstanceOf(GatewayServiceStartRequiredError);
+    await expect(lifecycle.client(sshGateway(), { startPolicy: 'require_ready' })).rejects.toBeInstanceOf(GatewayServiceStartRequiredError);
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
     expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
@@ -226,7 +222,7 @@ describe('GatewayLifecycleManager', () => {
     const progress: string[] = [];
     const record = sshGateway();
 
-    await manager(progress).bridgeClient(record, { startPolicy: 'start_if_needed' });
+    await manager(progress).client(record, { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(1);
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
@@ -274,7 +270,7 @@ describe('GatewayLifecycleManager', () => {
       '/Users/test/.redeven/gateways/gw_local/state/managed/bin/redeven-gateway',
     );
 
-    await manager().bridgeClient(localGateway(), { startPolicy: 'start_if_needed' });
+    await manager().client(localGateway(), { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       hostAccess: { kind: 'local_host' },
@@ -302,7 +298,7 @@ describe('GatewayLifecycleManager', () => {
       },
     });
 
-    await manager().bridgeClient(record, { startPolicy: 'start_if_needed' });
+    await manager().client(record, { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       placement: expect.objectContaining({
@@ -351,8 +347,8 @@ describe('GatewayLifecycleManager', () => {
       session_cache: sessionCache,
     });
 
-    await lifecycle.bridgeClient(first, { startPolicy: 'start_if_needed' });
-    await lifecycle.bridgeClient(second, { startPolicy: 'start_if_needed' });
+    await lifecycle.client(first, { startPolicy: 'start_if_needed' });
+    await lifecycle.client(second, { startPolicy: 'start_if_needed' });
 
     const regularSSHRuntimeTarget = desktopRuntimeTargetID({
       kind: 'ssh_host',
@@ -396,7 +392,7 @@ describe('GatewayLifecycleManager', () => {
 
     await manager([], memorySecretStore([
       ['gateway-ssh-password:gw_password', 'secret-password'],
-    ])).bridgeClient(record, { startPolicy: 'start_if_needed' });
+    ])).client(record, { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       target: expect.objectContaining({
@@ -515,7 +511,7 @@ describe('GatewayLifecycleManager', () => {
     });
     const record = containerGateway();
 
-    await manager(progress).bridgeClient(record, { startPolicy: 'start_if_needed' });
+    await manager(progress).client(record, { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       target: expect.objectContaining({
@@ -567,7 +563,7 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.ensureManagedGatewayServiceReady.mockRejectedValue(new Error('host unavailable'));
     const record = sshGateway();
 
-    await expect(manager().bridgeClient(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
+    await expect(manager().client(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
       code: 'gateway_service_start_failed',
       message: 'host unavailable',
     } satisfies Partial<GatewayServiceUnavailableError>);
@@ -579,7 +575,7 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.ensureManagedGatewayServiceReady.mockRejectedValue(new Error('container unavailable'));
     const record = containerGateway();
 
-    await expect(manager().bridgeClient(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
+    await expect(manager().client(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
       code: 'gateway_container_unavailable',
       message: 'container unavailable',
     } satisfies Partial<GatewayServiceUnavailableError>);
@@ -591,7 +587,7 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.startRuntimePlacementBridgeSession.mockRejectedValue(new Error('bridge refused'));
     const record = sshGateway();
 
-    await expect(manager().bridgeClient(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
+    await expect(manager().client(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
       code: 'gateway_bridge_unavailable',
       message: 'bridge refused',
     } satisfies Partial<GatewayServiceUnavailableError>);
@@ -755,7 +751,7 @@ describe('GatewayLifecycleManager', () => {
 
   it('does not allow Desktop to manage URL Gateways as local services', async () => {
     const record: GatewayRecord = {
-      schema_version: 3,
+      schema_version: 4,
       gateway_id: 'gw_url',
       display_name: 'URL Gateway',
     local_enabled: true,

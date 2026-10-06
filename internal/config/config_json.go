@@ -15,8 +15,13 @@ var configKnownJSONFields = map[string]struct{}{
 	"binding_generation":          {},
 	"agent_instance_id":           {},
 	"direct":                      {},
-	"gateway_cloud_migration":     {},
-	"gateway_cloud":               {},
+	"gateway":                     {},
+	"gateway_migration_evidence":  {},
+	"gateway_rejoin_required":     {},
+	"gateway_removal_outbox":      {},
+	"gateway_closure_outbox":      {},
+	"gateway_environment_choice":  {},
+	"gateway_publication":         {},
 	"control_artifact_pool":       {},
 	"ai":                          {},
 	"permission_policy":           {},
@@ -40,6 +45,9 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if err := (*Config)(&decoded).retireLegacyGateway(raw); err != nil {
 		return err
 	}
 	for key := range configKnownJSONFields {

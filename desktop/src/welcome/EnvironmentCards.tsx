@@ -1,12 +1,14 @@
+import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { environmentAccessPresentation } from './environmentAccessPresentation';
-import { RuntimeGatewayCloudStatus } from './RuntimeGatewayCloudStatus';
+import { RuntimeGatewayPublicationStatus } from './RuntimeGatewayPublicationStatus';
 import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../internal/flower_ui/src';
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton } from './App';
@@ -87,6 +89,7 @@ function readDocumentRootFontSizePx(): number {
 export function EnvironmentCardsPanel(
   props: Readonly<{
     i18n: DesktopI18n;
+    gateways?: readonly DesktopGatewaySource[];
     groups: readonly EnvironmentLibraryDisplayGroup[];
     allGroups: readonly EnvironmentLibraryDisplayGroup[];
     viewScope: string;
@@ -420,6 +423,7 @@ export function EnvironmentCardsPanel(
   };
   const renderOwner = (environmentID: string, groupID: string) => (
     <EnvironmentOwnerSurface
+      gateways={props.gateways}
       i18n={props.i18n}
       presentation={props.presentation}
       Facts={props.Facts}
@@ -662,6 +666,7 @@ function EnvironmentLibrarySection(props: Readonly<{
 function EnvironmentOwnerSurface(
   props: Readonly<{
     i18n: DesktopI18n;
+    gateways?: readonly DesktopGatewaySource[];
     presentation: EnvironmentOwnerPresentation;
     Facts: typeof EnvironmentCardFactsBlock;
     Actions: typeof EnvironmentSplitActionButton;
@@ -771,6 +776,8 @@ function EnvironmentOwnerSurface(
     }
   };
 
+  const [gatewaySetupOpen, setGatewaySetupOpen] = createSignal(false);
+
   return (
     <section
       ref={ownerElement}
@@ -780,6 +787,13 @@ function EnvironmentOwnerSurface(
       data-owner-role={props.relationshipRole ?? 'standalone'}
       aria-label={ownerLabel()}
     >
+      <RuntimeGatewaySetupDialog environment={gatewaySetupOpen() ? props.environment : undefined} gateways={props.gateways ?? []} i18n={props.i18n}
+        close={() => { setGatewaySetupOpen(false); queueMicrotask(() => ownerElement?.focus()); }}
+        start={async environment => {
+          const started = await props.runLocalEnvironmentAction(environment, { intent: 'start_runtime', label: props.i18n.t('gatewayJoin.startAndContinue'), enabled: true, variant: 'default' }, 'dialog');
+          await props.refreshEnvironmentRuntime(environment, 'dialog');
+          return started;
+        }} />
       <CardHeader class="redeven-environment-owner-heading">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
@@ -866,10 +880,17 @@ function EnvironmentOwnerSurface(
           selectedEndpointID={props.selectedEndpointID} selectEndpointForQRCode={props.selectEndpointForQRCode}
         />
         <Show when={props.paired}>{props.connectionStatus()}</Show>
-        <Show when={props.environment.kind !== 'provider_environment' && props.environment.runtime_service?.capabilities?.gateway_cloud_join?.supported && props.environment.provider_runtime_link_target}>
-          <RuntimeGatewayJoinPanel focusOwner={() => ownerElement?.focus()} targetID={props.environment.provider_runtime_link_target!.id} i18n={props.i18n} pending={props.environment.runtime_service?.gateway_cloud?.state === 'pending'} disabled={operationState().actionsDisabled} available={(!props.environment.runtime_service?.gateway_cloud || props.environment.runtime_service.gateway_cloud.state === 'pending') && props.environment.runtime_service?.bindings?.provider_link?.state !== 'linked'} />
+        <Show when={props.environment.kind === 'local_environment' && !props.environment.runtime_service && props.environment.runtime_operations.start.availability === 'available'}>
+          <fieldset class="mt-3 space-y-2 rounded-md border border-border p-3 text-sm" disabled={operationState().actionsDisabled}>
+            <legend class="px-1 text-xs font-medium">{props.i18n.t('gatewayJoin.title')}</legend>
+            <label class="flex cursor-pointer items-center gap-2"><input class="cursor-pointer disabled:cursor-not-allowed" type="radio" name={`gateway-setup-${props.environment.id}`} checked={!gatewaySetupOpen()} onChange={() => setGatewaySetupOpen(false)} />{props.i18n.t('gatewayJoin.notNow')}</label>
+            <label class="flex cursor-pointer items-center gap-2"><input class="cursor-pointer disabled:cursor-not-allowed" type="radio" name={`gateway-setup-${props.environment.id}`} checked={gatewaySetupOpen()} onChange={() => setGatewaySetupOpen(true)} />{props.i18n.t('gatewayJoin.joinGateway')}</label>
+          </fieldset>
         </Show>
-        <Show when={props.environment.runtime_service?.gateway_cloud}>{access => <RuntimeGatewayCloudStatus access={access()} i18n={props.i18n} openInBrowser={props.openInBrowser} />}</Show>
+        <Show when={props.environment.kind !== 'provider_environment' && props.environment.runtime_service?.capabilities?.runtime_gateway?.supported && props.environment.provider_runtime_link_target}>
+          <RuntimeGatewayJoinPanel gateways={props.gateways} focusOwner={() => ownerElement?.focus()} targetID={props.environment.provider_runtime_link_target!.id} i18n={props.i18n} disabled={operationState().actionsDisabled} />
+        </Show>
+        <Show when={props.environment.runtime_service?.gateway_publication}>{access => <RuntimeGatewayPublicationStatus access={access()} i18n={props.i18n} openInBrowser={props.openInBrowser} />}</Show>
       </CardContent>
       <Show when={!props.environment.pinned && props.otherPinnedOwner}>
         <div class="redeven-other-owner-pin"><Pin class="h-3 w-3" />
@@ -1011,11 +1032,8 @@ function EnvironmentOwnerSurface(
               </ConsoleActionIconButton>
             </DesktopTooltip>
           </Show>
-          <Show when={props.environment.can_edit || props.environment.gateway_environment_profile?.managed}>
-            <DesktopTooltip content={props.i18n.t(props.environment.kind === 'gateway_environment'
-              ? props.environment.can_edit ? 'gatewayAccess.editProfile'
-                : props.environment.gateway_environment_profile?.access_route_kind !== 'url' ? 'gatewayAccess.unsupported' : 'gatewayAccess.writePermission'
-              : 'common.settings')} placement="top">
+          <Show when={props.environment.can_edit}>
+            <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
               <ConsoleActionIconButton
                 title={props.i18n.t('environmentCenter.environmentSettings')}
                 aria-label={props.i18n.t('environmentCenter.settingsForLabel', { label: ownerLabel() })}
@@ -1027,7 +1045,7 @@ function EnvironmentOwnerSurface(
             </DesktopTooltip>
           </Show>
           <Show when={props.environment.can_delete}>
-            <DesktopTooltip content={props.i18n.t(props.environment.kind === 'gateway_environment' ? 'gatewayAccess.deleteProfile' : 'common.delete')} placement="top">
+            <DesktopTooltip content={props.i18n.t('common.delete')} placement="top">
               <ConsoleActionIconButton
                 title={deleteTitle()}
                 aria-label={props.i18n.t('environmentCenter.removeLabel', {

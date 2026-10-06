@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 	"testing"
 
 	"github.com/floegence/redeven/internal/gatewaycloud"
@@ -15,8 +16,10 @@ func TestGatewayManagementCanRestartWithoutAuthorizingControl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := &gatewaycloud.RuntimeConfig{ProtocolVersion: gc.ProtocolVersion, LocalConsentAtUnixMS: 1, CloudOrigin: "https://cloud.example", RegionOrigin: "https://sg.cloud.example", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", RequestPublicID: "request", PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), Binding: &gc.Binding{PublicID: "binding", EnvPublicID: "env", Region: "sg", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Generation: 2, State: "active"}}
-	cfg := &Config{GatewayCloud: path, ProviderOrigin: path.CloudOrigin, ControlplaneBaseURL: path.RegionOrigin, ControlplaneProviderID: "redeven", EnvironmentID: "env", LocalEnvironmentPublicID: "runtime", AgentInstanceID: "instance", BindingGeneration: 2}
+	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
+	member := gatewayfixture.Enroll(t, store, "runtime")
+	path := &gatewaycloud.RuntimeConfig{MemberID: member.MemberID, MemberVersion: member.MemberVersion, ProtocolVersion: gc.ProtocolVersion, CloudOrigin: "https://cloud.example", RegionOrigin: "https://sg.cloud.example", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", RequestPublicID: gc.CandidateID("gateway", member.MemberID), PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), Binding: &gc.Binding{MemberID: member.MemberID, MemberVersion: member.MemberVersion, PublicID: "binding", EnvPublicID: "env", Region: "sg", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Generation: 2, State: "active"}}
+	cfg := &Config{Gateway: member, GatewayPublication: path, ProviderOrigin: path.CloudOrigin, ControlplaneBaseURL: path.RegionOrigin, ControlplaneProviderID: "redeven", EnvironmentID: "env", LocalEnvironmentPublicID: "runtime", AgentInstanceID: "instance", BindingGeneration: 2}
 	for _, revoked := range []bool{false, true} {
 		path.Revoked = revoked
 		if err := cfg.ValidateGatewayManagement(); err != nil {

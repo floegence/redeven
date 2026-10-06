@@ -72,14 +72,8 @@ func (c *cli) run(args []string) int {
 	switch strings.TrimSpace(strings.ToLower(args[0])) {
 	case "help":
 		return c.helpCmd(args[1:])
-	case "gateway-address":
-		return c.gatewayAddressCmd(args[1:])
-	case "gateway-reauthorize":
-		return c.gatewayReauthorizeCmd(args[1:])
-	case "gateway-migrate":
-		return c.gatewayMigrateCmd(args[1:])
-	case "gateway-join":
-		return c.gatewayJoinCmd(args[1:])
+	case "gateway":
+		return c.gatewayCmd(args[1:])
 	case "bootstrap":
 		return c.bootstrapCmd(args[1:])
 	case "run":
@@ -841,6 +835,25 @@ func (c *cli) runCmd(args []string) int {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	var localUIServer *localui.Server
+	if !localUIEnabled && cfg.Gateway != nil {
+		// Gateway membership is independent of the optional public Local UI
+		// listener. Inner TLS uses the member's signed service identity.
+		srv, err := localui.New(localui.Options{
+			Logger: localUILogger, Protocol: config.LocalUIProtocolHTTPS,
+			EffectiveRunMode: string(effectiveRunMode), RemoteEnabled: processRemoteEnabled,
+			AppServer: a.CodeAppServer(), Agent: a, ConfigPath: stateLayout.ConfigPath,
+			StateRoot: stateLayout.StateRoot, RuntimeControlSocketPath: stateLayout.RuntimeControlSocketPath,
+			Version: Version, Diagnostics: a.DiagnosticsStore(), AccessGate: accessGate,
+		})
+		if err != nil {
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to initialize Gateway application: %v", err))
+		}
+		localUIServer = srv
+		if err := srv.StartGatewayOnly(ctx); err != nil {
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to start Gateway membership: %v", err))
+		}
+		announce()
+	}
 
 	// Start the Local UI server before running the control channel loop so users can open
 	// the local page immediately.

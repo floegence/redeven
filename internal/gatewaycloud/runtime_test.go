@@ -1,160 +1,74 @@
 package gatewaycloud
 
 import (
-	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/base64"
-	"net/http"
-	"net/http/httptest"
-	"path/filepath"
+	"encoding/json"
+	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
+	"strings"
 	"testing"
 	"time"
-
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
-	"github.com/floegence/redeven/internal/gatewayegress"
 )
 
-func newEnrollmentFixture(t *testing.T) (*Gateway, *RuntimeConfig) {
+func newMembershipFixture(t *testing.T) (*gatewaymembership.Store, *gatewaymembership.RuntimeConfig, *RuntimeConfig) {
 	t.Helper()
-	cfg := GatewayConfig{SchemaVersion: 1, ListenerURL: "https://127.0.0.1", GatewayPublicID: "gateway", NamespacePublicID: "namespace", Members: map[string]LocalMember{}}
-	if err := createGatewayTLS(&cfg); err != nil {
-		t.Fatal(err)
-	}
-	forwarding, err := gatewayegress.New(gatewayegress.Options{})
+	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
+	member := gatewayfixture.Enroll(t, store, "runtime")
+	publication, err := PrepareRuntime(member, gp.MemberCloudContext{ProtocolVersion: gp.Version, Allowed: true, GatewayID: member.GatewayID, MemberID: member.MemberID, MemberVersion: member.MemberVersion, CloudOrigin: "https://cloud.example", RegionOrigin: "https://region.example", NamespacePublicID: "namespace", GatewayPublicID: "cloud_gateway"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = forwarding.Close() })
-	g := &Gateway{path: filepath.Join(t.TempDir(), "gateway.json"), config: cfg, egress: forwarding, status: &gc.GatewayStatus{Gateway: gc.Gateway{PublicID: "gateway", NamespacePublicID: "namespace", State: "active"}, JoinPermits: []gc.JoinPermit{{RequestPublicID: "request", TokenSHA256: digestBytes([]byte("enrollment-secret")), ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}}, EnrollmentDestinations: []string{"cloud.example:443"}}}
-	material := gc.JoinMaterial{ProtocolVersion: gc.ProtocolVersion, CloudOrigin: "https://cloud.example", RegionOrigin: "https://region.example", GatewayURL: cfg.ListenerURL, GatewayTLSRootPEM: cfg.RootPEM, GatewayPublicID: "gateway", NamespacePublicID: "namespace", RequestPublicID: "request", JoinToken: "cloud-secret", GatewayEnrollmentToken: "enrollment-secret", ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}
-	runtime, err := PrepareRuntime(material, "runtime")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return g, runtime
+	return store, member, publication
 }
 
-func TestEnrollmentSeparatesCloudIdentityAndResumesExactCertificate(t *testing.T) {
-	g, r := newEnrollmentFixture(t)
-	request := gc.LocalEnrollment{RequestPublicID: r.RequestPublicID, EnrollmentToken: r.EnrollmentToken, RuntimePublicID: r.RuntimePublicID, CSRPEM: r.ClientCSRPEM}
-	first, err := g.enroll(request)
+func TestCloudAssociationUsesOnlyExistingMembership(t *testing.T) {
+	_, member, publication := newMembershipFixture(t)
+	identity, err := publication.Identity()
 	if err != nil {
 		t.Fatal(err)
 	}
-	replay, err := g.enroll(request)
+	tlsConfig, err := member.TLSConfig(true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *first != *replay {
-		t.Fatal("retry returned a different certificate")
+	memberKey, _ := gc.DecodeKey(member.PrivateKeyB64u)
+	if identity.PrivateKey.Equal(tlsConfig.Certificates[0].PrivateKey) || identity.PrivateKey.Equal(ed25519.PrivateKey(memberKey)) {
+		t.Fatal("Cloud key is shared with member or transport identity")
 	}
-	r.ClientCertificatePEM = first.ClientCertificatePEM
-	r.ClientExpiresAtUnixMS = first.ExpiresAtUnixMS
-	if _, err := r.Proxy(); err != nil {
+	if _, err := publication.Proxy(member); err != nil {
 		t.Fatal(err)
 	}
-	changed := request
-	changed.RuntimePublicID = "other"
-	if _, err := g.enroll(changed); err == nil {
-		t.Fatal("consumed token admitted another runtime")
+	for _, change := range []func(*gatewaymembership.RuntimeConfig){
+		func(m *gatewaymembership.RuntimeConfig) { m.MemberVersion++ },
+		func(m *gatewaymembership.RuntimeConfig) { m.MemberID = "other" },
+		func(m *gatewaymembership.RuntimeConfig) { m.Leaving = true },
+		func(m *gatewaymembership.RuntimeConfig) { m.GatewayTLSRootPEM = "untrusted" },
+	} {
+		changed := member.Clone()
+		change(changed)
+		if _, err := publication.Proxy(changed); err == nil {
+			t.Fatal("mismatched member authorized Cloud forwarding")
+		}
 	}
-	changed = request
-	changed.EnrollmentToken = r.JoinToken
-	if _, err := g.enroll(changed); err == nil {
-		t.Fatal("Cloud token accepted by Gateway")
+	if _, err := publication.Proxy(nil); err == nil {
+		t.Fatal("missing member fell back to direct access")
 	}
-	identity, err := r.Identity()
+	publication.Revoked = true
+	if _, err := publication.Proxy(member); err == nil {
+		t.Fatal("revoked publication authorized forwarding")
+	}
+	encoded, err := json.Marshal(publication)
 	if err != nil {
 		t.Fatal(err)
 	}
-	certificate, err := tls.X509KeyPair([]byte(r.ClientCertificatePEM), []byte(r.ClientPrivateKeyPEM))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if identity.PrivateKey.Equal(certificate.PrivateKey) {
-		t.Fatal("Cloud access and mTLS shared a key")
-	}
-	r.Revoked = true
-	if _, err := r.Proxy(); err == nil {
-		t.Fatal("revoked route accepted")
-	}
-}
-
-func TestLocalCertificateRenewalRequiresCurrentCertificateAndKeepsPendingStable(t *testing.T) {
-	g, r := newEnrollmentFixture(t)
-	first, err := g.enroll(gc.LocalEnrollment{RequestPublicID: r.RequestPublicID, EnrollmentToken: r.EnrollmentToken, RuntimePublicID: r.RuntimePublicID, CSRPEM: r.ClientCSRPEM})
-	if err != nil {
-		t.Fatal(err)
-	}
-	local := g.config.Members[r.RequestPublicID]
-	g.status.Members = []gc.EgressMember{{RequestPublicID: r.RequestPublicID, RuntimePublicID: r.RuntimePublicID, ClientCertificateSHA256: local.Fingerprint, Generation: 1, Destinations: []string{"cloud.example:443"}}}
-	server := httptest.NewUnstartedServer(g)
-	roots, err := r.proxyTLS(false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	certificate, err := tls.X509KeyPair([]byte(g.config.ServerCertificatePEM), []byte(g.config.ServerKeyPEM))
-	if err != nil {
-		t.Fatal(err)
-	}
-	server.TLS = &tls.Config{Certificates: []tls.Certificate{certificate}, ClientCAs: roots.RootCAs, ClientAuth: tls.VerifyClientCertIfGiven, MinVersion: tls.VersionTLS13}
-	server.StartTLS()
-	defer server.Close()
-	r.GatewayURL = server.URL
-	r.ClientCertificatePEM = first.ClientCertificatePEM
-	r.ClientExpiresAtUnixMS = first.ExpiresAtUnixMS
-	cfg, err := r.proxyTLS(true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	transport := server.Client().Transport.(*http.Transport).Clone()
-	transport.TLSClientConfig = cfg
-	defer transport.CloseIdleConnections()
-	client, err := NewClient(server.URL, transport)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, replacement := newEnrollmentFixture(t)
-	request := gc.LocalCertificateRenewal{RequestPublicID: r.RequestPublicID, CSRPEM: replacement.ClientCSRPEM}
-	renewed, err := cloudCallPath[gc.LocalCertificateRenewal, gc.LocalEnrollmentResponse](client, context.Background(), "/gateway/cloud/v1/renew", request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	replay, err := cloudCallPath[gc.LocalCertificateRenewal, gc.LocalEnrollmentResponse](client, context.Background(), "/gateway/cloud/v1/renew", request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if *renewed != *replay || renewed.ClientCertificatePEM == first.ClientCertificatePEM {
-		t.Fatal("replacement certificate was not durable and distinct")
-	}
-	if _, err := tls.X509KeyPair([]byte(renewed.ClientCertificatePEM), []byte(replacement.ClientPrivateKeyPEM)); err != nil {
-		t.Fatal("renewed certificate did not use the staged private key", err)
-	}
-	if _, err := tls.X509KeyPair([]byte(renewed.ClientCertificatePEM), []byte(r.ClientPrivateKeyPEM)); err == nil {
-		t.Fatal("renewed certificate still uses the old private key")
-	}
-	conflicting := gc.LocalCertificateRenewal{RequestPublicID: r.RequestPublicID, CSRPEM: r.ClientCSRPEM}
-	if _, err := cloudCallPath[gc.LocalCertificateRenewal, gc.LocalEnrollmentResponse](client, context.Background(), "/gateway/cloud/v1/renew", conflicting); err == nil {
-		t.Fatal("different CSR replaced a pending renewal")
-	}
-	var saved GatewayConfig
-	if err := ReadState(g.path, &saved); err != nil {
-		t.Fatal(err)
-	}
-	if saved.Members[r.RequestPublicID].PendingCertificatePEM != renewed.ClientCertificatePEM || saved.Members[r.RequestPublicID].PendingCSRHash == "" {
-		t.Fatal("pending renewal cannot survive Gateway restart")
-	}
-	if g.config.Members[r.RequestPublicID].CertificatePEM != first.ClientCertificatePEM {
-		t.Fatal("Gateway promoted a certificate without Cloud proof")
-	}
-	anonymous := server.Client().Transport.(*http.Transport).Clone()
-	anonymous.TLSClientConfig = roots
-	defer anonymous.CloseIdleConnections()
-	unauthenticated, _ := NewClient(server.URL, anonymous)
-	if _, err := cloudCallPath[gc.LocalCertificateRenewal, gc.LocalEnrollmentResponse](unauthenticated, context.Background(), "/gateway/cloud/v1/renew", request); err == nil {
-		t.Fatal("unauthenticated renewal succeeded")
+	for _, field := range []string{"gateway_url", "certificate_pem", "join_token", "enrollment_token", "local_consent"} {
+		if strings.Contains(string(encoded), field) {
+			t.Fatalf("Cloud association retained a second membership field: %s", field)
+		}
 	}
 }
 
@@ -193,8 +107,8 @@ func TestExpiredDeliveryRequiresAuthoritativeRejection(t *testing.T) {
 }
 
 func TestRuntimeGatewayIdentityRejectsMismatchedBinding(t *testing.T) {
-	_, runtime := newEnrollmentFixture(t)
-	binding := gc.Binding{PublicID: "binding", EnvPublicID: "env", Region: "sg", NamespacePublicID: runtime.NamespacePublicID, GatewayPublicID: runtime.GatewayPublicID, RuntimePublicID: runtime.RuntimePublicID, Generation: 1, State: "active"}
+	_, _, runtime := newMembershipFixture(t)
+	binding := gc.Binding{MemberID: runtime.MemberID, MemberVersion: runtime.MemberVersion, PublicID: "binding", EnvPublicID: "env", Region: "sg", NamespacePublicID: runtime.NamespacePublicID, GatewayPublicID: runtime.GatewayPublicID, RuntimePublicID: runtime.RuntimePublicID, Generation: 1, State: "active"}
 	runtime.Binding = &binding
 	if _, err := runtime.Identity(); err != nil {
 		t.Fatal(err)
@@ -213,20 +127,5 @@ func TestRuntimeGatewayIdentityRejectsMismatchedBinding(t *testing.T) {
 		if _, err := runtime.Identity(); err == nil {
 			t.Fatalf("accepted inconsistent binding: %+v", changed)
 		}
-	}
-}
-
-func TestGatewayPruningRetainsEnrollmentAndReceiptPaths(t *testing.T) {
-	cfg := GatewayConfig{Members: map[string]LocalMember{"active": {}, "joining": {}, "receipt": {}, "retired": {}}}
-	pruneGatewayMembers(&cfg, &gc.GatewayStatus{
-		Members:           []gc.EgressMember{{RequestPublicID: "active"}},
-		ManagementMembers: []gc.EgressMember{{RequestPublicID: "receipt"}},
-		JoinPermits:       []gc.JoinPermit{{RequestPublicID: "joining"}},
-	})
-	if len(cfg.Members) != 3 {
-		t.Fatal("complete policy pruned a retained member")
-	}
-	if _, ok := cfg.Members["retired"]; ok {
-		t.Fatal("retired membership still consumes capacity")
 	}
 }

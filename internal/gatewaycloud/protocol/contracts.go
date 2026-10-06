@@ -5,6 +5,7 @@ import "encoding/json"
 const MaxGatewayMembers = 1024
 const ClosurePageSize = 50
 
+// SignedRequest preserves the original payload bytes for signature verification.
 type SignedRequest struct {
 	Proof   Proof           `json:"proof"`
 	Payload json.RawMessage `json:"payload"`
@@ -22,10 +23,11 @@ type ChallengeResponse struct {
 }
 
 type GatewayRegistration struct {
-	PublicKeyB64u string `json:"public_key_b64u"`
-	ListenerURL   string `json:"listener_url"`
-	TLSRootPEM    string `json:"tls_root_pem"`
-	Version       string `json:"version"`
+	Identity      GatewayMachineIdentity `json:"identity"`
+	PublicKeyB64u string                 `json:"public_key_b64u"`
+	ListenerURL   string                 `json:"listener_url"`
+	TLSRootPEM    string                 `json:"tls_root_pem"`
+	Version       string                 `json:"version"`
 }
 
 type GatewayApproval struct {
@@ -37,44 +39,33 @@ type GatewayApproval struct {
 }
 
 type Gateway struct {
-	DirectorySyncedAtUnixMS int64  `json:"directory_synced_at_unix_ms"`
-	IdentityExpiresAtUnixMS int64  `json:"identity_expires_at_unix_ms"`
-	PublicID                string `json:"public_id"`
-	NamespacePublicID       string `json:"namespace_public_id"`
-	Region                  string `json:"region"`
-	Name                    string `json:"name"`
-	State                   string `json:"state"`
-	PublicKeySHA256         string `json:"public_key_sha256"`
-	ListenerURL             string `json:"listener_url"`
-	TLSRootPEM              string `json:"tls_root_pem"`
-	Version                 string `json:"version"`
-	DirectoryRevision       int64  `json:"directory_revision"`
-	LastSeenAtUnixMS        int64  `json:"last_seen_at_unix_ms"`
+	GatewayID                      string        `json:"gateway_id"`
+	Policy                         GatewayPolicy `json:"policy"`
+	AutomaticPublicationAuthorized bool          `json:"automatic_publication_authorized"`
+	AuthorizationRevision          int64         `json:"authorization_revision"`
+	DirectorySyncedAtUnixMS        int64         `json:"directory_synced_at_unix_ms"`
+	IdentityExpiresAtUnixMS        int64         `json:"identity_expires_at_unix_ms"`
+	PublicID                       string        `json:"public_id"`
+	NamespacePublicID              string        `json:"namespace_public_id"`
+	Region                         string        `json:"region"`
+	Name                           string        `json:"name"`
+	State                          string        `json:"state"`
+	PublicKeySHA256                string        `json:"public_key_sha256"`
+	ListenerURL                    string        `json:"listener_url"`
+	TLSRootPEM                     string        `json:"tls_root_pem"`
+	Version                        string        `json:"version"`
+	DirectoryRevision              int64         `json:"directory_revision"`
+	LastSeenAtUnixMS               int64         `json:"last_seen_at_unix_ms"`
 }
 
-type JoinMaterial struct {
-	ProtocolVersion        int    `json:"protocol_version"`
-	CloudOrigin            string `json:"cloud_origin"`
-	RegionOrigin           string `json:"region_origin"`
-	NamespacePublicID      string `json:"namespace_public_id"`
-	GatewayPublicID        string `json:"gateway_public_id"`
-	RequestPublicID        string `json:"request_public_id"`
-	GatewayURL             string `json:"gateway_url"`
-	GatewayTLSRootPEM      string `json:"gateway_tls_root_pem"`
-	JoinToken              string `json:"join_token"`
-	GatewayEnrollmentToken string `json:"gateway_enrollment_token"`
-	ExpiresAtUnixMS        int64  `json:"expires_at_unix_ms"`
-}
-
+// RuntimeJoin requires both member delegation and an independent Runtime Cloud key.
 type RuntimeJoin struct {
-	NewEnvironment          bool            `json:"new_environment"`
-	RequestPublicID         string          `json:"request_public_id"`
-	JoinToken               string          `json:"join_token"`
-	RuntimePublicID         string          `json:"runtime_public_id"`
-	PublicKeyB64u           string          `json:"public_key_b64u"`
-	ClientCertificateSHA256 string          `json:"client_certificate_sha256"`
-	LocalConsent            bool            `json:"local_consent"`
-	Metadata                RuntimeMetadata `json:"metadata"`
+	NewEnvironment      bool             `json:"new_environment"`
+	MemberVersion       int64            `json:"member_version"`
+	Delegation          MemberDelegation `json:"delegation"`
+	PublicKeyB64u       string           `json:"public_key_b64u"`
+	MemberAuthorization string           `json:"member_authorization"`
+	Metadata            RuntimeMetadata  `json:"metadata"`
 }
 
 type RuntimeMetadata struct {
@@ -85,6 +76,7 @@ type RuntimeMetadata struct {
 }
 
 type DirectorySync struct {
+	Policy       GatewayPolicy     `json:"policy"`
 	ListenerURL  string            `json:"listener_url,omitempty"`
 	BaseRevision int64             `json:"base_revision"`
 	Revision     int64             `json:"revision"`
@@ -93,13 +85,23 @@ type DirectorySync struct {
 }
 
 type DirectoryMember struct {
-	RequestPublicID         string `json:"request_public_id"`
-	RuntimePublicID         string `json:"runtime_public_id"`
-	ClientCertificateSHA256 string `json:"client_certificate_sha256"`
-	Reachable               bool   `json:"reachable"`
+	MemberID        string           `json:"member_id"`
+	MemberVersion   int64            `json:"member_version"`
+	Delegation      MemberDelegation `json:"delegation"`
+	State           string           `json:"state"`
+	CloudPermission string           `json:"cloud_permission"`
+	HookAllowed     bool             `json:"hook_allowed"`
+	Reachable       bool             `json:"reachable"`
+	Metadata        RuntimeMetadata  `json:"metadata"`
 }
 
 type Candidate struct {
+	PublicationErrorCode         string               `json:"publication_error_code,omitempty"`
+	PublicationApprovalSource    string               `json:"publication_approval_source,omitempty"`
+	CloudAllowed                 bool                 `json:"cloud_allowed"`
+	PolicyRevision               int64                `json:"policy_revision"`
+	MemberID                     string               `json:"member_id"`
+	MemberVersion                int64                `json:"member_version"`
 	AuthorizationExpiresAtUnixMS int64                `json:"authorization_expires_at_unix_ms"`
 	NewEnvironment               bool                 `json:"new_environment"`
 	Reauthorization              bool                 `json:"reauthorization,omitempty"`
@@ -131,6 +133,8 @@ type PublishResult struct {
 }
 
 type Binding struct {
+	MemberID          string `json:"member_id"`
+	MemberVersion     int64  `json:"member_version"`
 	PublicID          string `json:"public_id"`
 	NamespacePublicID string `json:"namespace_public_id"`
 	GatewayPublicID   string `json:"gateway_public_id"`
@@ -174,7 +178,10 @@ type RevokeRequest struct {
 	Reason string `json:"reason"`
 }
 
+// Closure persists independent receipts. Control disconnection never proves data-session closure.
 type Closure struct {
+	MemberID        string `json:"member_id"`
+	MemberVersion   int64  `json:"member_version"`
 	Reason          string `json:"reason"`
 	PublicID        string `json:"public_id"`
 	BindingPublicID string `json:"binding_public_id"`
@@ -200,30 +207,26 @@ type GatewayStatusRequest struct {
 	ClosureAfter string `json:"closure_after,omitempty"`
 }
 
-type JoinPermit struct {
-	RequestPublicID string `json:"request_public_id"`
-	TokenSHA256     string `json:"token_sha256"`
-	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms"`
-}
-
 type EgressMember struct {
-	RequestPublicID         string   `json:"request_public_id"`
-	RuntimePublicID         string   `json:"runtime_public_id"`
-	ClientCertificateSHA256 string   `json:"client_certificate_sha256"`
-	Generation              int64    `json:"generation"`
-	Destinations            []string `json:"destinations"`
+	State           string   `json:"state"`
+	MemberID        string   `json:"member_id"`
+	MemberVersion   int64    `json:"member_version"`
+	RequestPublicID string   `json:"request_public_id"`
+	RuntimePublicID string   `json:"runtime_public_id"`
+	Generation      int64    `json:"generation"`
+	Destinations    []string `json:"destinations"`
 }
 
 type GatewayStatus struct {
-	PendingClosureCount    int64          `json:"pending_closure_count"`
-	NextClosureCursor      string         `json:"next_closure_cursor,omitempty"`
-	ManagementMembers      []EgressMember `json:"management_members"`
-	Gateway                Gateway        `json:"gateway"`
-	RegionOrigin           string         `json:"region_origin"`
-	JoinPermits            []JoinPermit   `json:"join_permits"`
-	EnrollmentDestinations []string       `json:"enrollment_destinations"`
-	Members                []EgressMember `json:"members"`
-	Closures               []Closure      `json:"closures"`
+	PendingClosureCount   int64            `json:"pending_closure_count"`
+	NextClosureCursor     string           `json:"next_closure_cursor,omitempty"`
+	ManagementMembers     []EgressMember   `json:"management_members"`
+	Gateway               Gateway          `json:"gateway"`
+	RegionOrigin          string           `json:"region_origin"`
+	Commands              []GatewayCommand `json:"commands"`
+	AdmissionDestinations []string         `json:"admission_destinations"`
+	Members               []EgressMember   `json:"members"`
+	Closures              []Closure        `json:"closures"`
 }
 
 type RuntimeStatusRequest struct {
@@ -265,24 +268,14 @@ type Response[T any] struct {
 	Error   *Error `json:"error,omitempty"`
 }
 
-type LocalEnrollment struct {
-	RequestPublicID string `json:"request_public_id"`
-	EnrollmentToken string `json:"enrollment_token"`
-	RuntimePublicID string `json:"runtime_public_id"`
-	CSRPEM          string `json:"csr_pem"`
-}
-
-type LocalEnrollmentResponse struct {
-	ClientCertificatePEM string `json:"client_certificate_pem"`
-	ExpiresAtUnixMS      int64  `json:"expires_at_unix_ms"`
-}
-
+// MigrationApproval consumes the Runtime-signed, persisted migration consent.
 type MigrationApproval struct {
 	Reauthorize           bool         `json:"reauthorize"`
 	Current               BindingFence `json:"current"`
 	TargetRequestPublicID string       `json:"target_request_public_id"`
 }
 
+// GenerationRenewal advances credentials for the same path without changing ownership or environment.
 type GenerationRenewal struct {
 	Current BindingFence `json:"current"`
 }

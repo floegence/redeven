@@ -10,23 +10,23 @@ import (
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 )
 
-func TestRuntimeGatewayCloudStatusDoesNotConfuseApprovalWithControlRegistration(t *testing.T) {
-	a := &Agent{remoteEnabled: true, cfg: &config.Config{GatewayCloud: &gatewaycloud.RuntimeConfig{
+func TestRuntimeGatewayPublicationStatusDoesNotConfuseApprovalWithControlRegistration(t *testing.T) {
+	a := &Agent{remoteEnabled: true, cfg: &config.Config{GatewayPublication: &gatewaycloud.RuntimeConfig{
 		ProtocolVersion: gc.ProtocolVersion, CloudOrigin: "https://cloud.example", NamespacePublicID: "ns", GatewayPublicID: "gateway", PrivateKeyB64u: "secret",
 	}}}
-	if a.gatewayCloudAccessSnapshot().State != "pending" {
+	if a.gatewayPublicationSnapshot().State != "pending" {
 		t.Fatal("unapproved access must be pending")
 	}
-	a.cfg.GatewayCloud.Binding = &gc.Binding{State: "active"}
-	if a.gatewayCloudAccessSnapshot().State != "connecting" {
+	a.cfg.GatewayPublication.Binding = &gc.Binding{State: "active"}
+	if a.gatewayPublicationSnapshot().State != "connecting" {
 		t.Fatal("approval does not establish control readiness")
 	}
 	a.controlRegistered = true
-	if a.gatewayCloudAccessSnapshot().State != "connected" {
+	if a.gatewayPublicationSnapshot().State != "connected" {
 		t.Fatal("control registration should be observable")
 	}
-	a.cfg.GatewayCloud.Revoked = true
-	status := a.gatewayCloudAccessSnapshot()
+	a.cfg.GatewayPublication.Revoked = true
+	status := a.gatewayPublicationSnapshot()
 	if status.State != "revoked" {
 		t.Fatal("revocation must take precedence over stale control registration")
 	}

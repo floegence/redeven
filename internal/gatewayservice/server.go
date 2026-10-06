@@ -1,10 +1,13 @@
 package gatewayservice
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
+	"crypto/ed25519"
+	"crypto/subtle"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"github.com/floegence/redeven/internal/gatewaycloud"
@@ -12,69 +15,54 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
-	"net/netip"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven/internal/gatewayflow"
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	"github.com/floegence/redeven/internal/gatewaystate"
 	gatewayauth "github.com/floegence/redeven/internal/runtimegateway/auth"
-	gatewaycatalog "github.com/floegence/redeven/internal/runtimegateway/catalog"
-	gatewayenvprofiles "github.com/floegence/redeven/internal/runtimegateway/envprofiles"
-	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
-	gatewaysession "github.com/floegence/redeven/internal/runtimegateway/session"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	gatewaytrust "github.com/floegence/redeven/internal/runtimegateway/trust"
 )
 
 const (
-	gatewayConnectArtifactTTL = 10 * time.Minute
-
+	HostAdminHeader              = "X-Redeven-Gateway-Host-Token"
 	managedBridgeTransportHeader = "X-Redeven-Gateway-Transport"
 	managedBridgeTokenHeader     = "X-Redeven-Gateway-Managed-Bridge-Token"
 )
 
 type Options struct {
-	StateRoot                  string
-	DesktopBridgeTransport     bool
-	AllowPrivateProfileTargets bool
-	ProfileWriteEnabled        bool
-	PairingCode                string
-	ManagedBridgeToken         string
+	Version                string
+	StateRoot              string
+	DesktopBridgeTransport bool
+	PairingCode            string
+	ManagedBridgeToken     string
+	HostAdminToken         string
+	MemberURL              string
+	MemberListen           string
+	Hooks                  gatewaymembership.HookConfig
 }
 
 type Server struct {
+	cloud                  *gatewaycloud.Gateway
+	version                string
 	stateRoot              string
 	desktopBridgeTransport bool
-	profileWriteEnabled    bool
 	pairingCode            string
 	managedBridgeToken     string
-
-	trust   *gatewaytrust.Store
-	auth    *gatewayauth.Verifier
-	profile *gatewayenvprofiles.Store
-
-	profileSessionsMu sync.Mutex
-	profileSessions   map[string]*profileSession
-	closed            bool
-	proxyTransport    http.RoundTripper
-}
-
-type profileSession struct {
-	ID              string
-	GatewayID       string
-	GatewayEnvID    string
-	ClientKeyID     string
-	TargetBaseURL   string
-	AccessToken     string
-	ExpiresAtUnixMS int64
-	EntryURL        string
-	CookieJar       *cookiejar.Jar
-	Context         context.Context
-	Cancel          context.CancelFunc
-	ExpireTimer     *time.Timer
+	hostAdminToken         string
+	trust                  *gatewaytrust.Store
+	auth                   *gatewayauth.Verifier
+	members                *gatewaymembership.Store
+	connections            *gatewaymembership.Connections
+	memberListener         *gatewaymembership.Listener
+	hooks                  *gatewaymembership.PolicyHooks
+	migrationMu            sync.Mutex
+	rebuildRequired        bool
 }
 
 type envelope struct {
@@ -82,41 +70,144 @@ type envelope struct {
 	Data  any         `json:"data,omitempty"`
 	Error *errorShape `json:"error,omitempty"`
 }
-
 type errorShape struct {
-	Code           string `json:"code,omitempty"`
-	Message        string `json:"message"`
-	Retryable      bool   `json:"retryable,omitempty"`
-	RedactedDetail string `json:"redacted_detail,omitempty"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
 }
 
 func New(options Options) (*Server, error) {
-	stateRoot := strings.TrimSpace(options.StateRoot)
-	if stateRoot == "" {
-		stateRoot = filepath.Join(defaultStateRoot(), "gateways", "default", "state")
+	if options.HostAdminToken != "" && len(options.HostAdminToken) < 32 {
+		return nil, errors.New("invalid Gateway host administrator token")
 	}
-	server := &Server{
-		stateRoot:              stateRoot,
-		desktopBridgeTransport: options.DesktopBridgeTransport,
-		profileWriteEnabled:    options.ProfileWriteEnabled,
-		pairingCode:            strings.TrimSpace(options.PairingCode),
-		managedBridgeToken:     strings.TrimSpace(options.ManagedBridgeToken),
-		trust:                  gatewaytrust.NewStore(filepath.Join(stateRoot, "gateway-trust.json")),
-		profile: gatewayenvprofiles.NewStoreWithOptions(filepath.Join(stateRoot, "environments.json"), gatewayenvprofiles.StoreOptions{
-			URLTargetPolicy: gatewayenvprofiles.URLTargetPolicy{
-				AllowPrivateNetworkTargets: options.AllowPrivateProfileTargets,
-			},
-		}),
-		profileSessions: make(map[string]*profileSession),
-		proxyTransport: gatewayProfileProxyTransport(gatewayenvprofiles.URLTargetPolicy{
-			AllowPrivateNetworkTargets: options.AllowPrivateProfileTargets,
-		}),
+	root := strings.TrimSpace(options.StateRoot)
+	if root == "" {
+		root = filepath.Join(defaultStateRoot(), "gateways", "default", "state")
 	}
-	server.auth = gatewayauth.NewVerifier(server.trust)
-	if _, err := server.profile.List(context.Background()); err != nil {
-		return nil, fmt.Errorf("gateway profiles could not be loaded: %w", err)
+	trust := gatewaytrust.NewStore(filepath.Join(root, "gateway-trust.json"))
+	if err := trust.Initialize(); err != nil {
+		return nil, err
+	}
+	metadata, _, err := trust.GatewayMetadata("")
+	if err != nil {
+		return nil, err
+	}
+	private, err := trust.GatewayPrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode([]byte(private))
+	if block == nil {
+		return nil, errors.New("invalid Gateway machine identity")
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	key, ok := parsed.(ed25519.PrivateKey)
+	if !ok {
+		return nil, errors.New("invalid Gateway identity key")
+	}
+	hookConfig := options.Hooks
+	if hookConfig == nil {
+		hookConfig = gatewaymembership.HookConfig{}
+		if err := gatewaystate.Read(filepath.Join(root, "policy-hooks.json"), &hookConfig); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
+	hooks, err := gatewaymembership.NewPolicyHooks(hookConfig)
+	if err != nil {
+		return nil, err
+	}
+	memberURL, memberListen := options.MemberURL, options.MemberListen
+	if memberURL == "" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return nil, err
+		}
+		memberURL = "https://" + net.JoinHostPort(hostname, "7443")
+	}
+	if memberListen == "" {
+		memberListen = ":7443"
+	}
+	members, err := gatewaymembership.NewStore(filepath.Join(root, "members.json"), gatewaymembership.GatewayIdentity{ID: metadata.GatewayID, PrivateKey: key}, memberURL, memberListen, hooks)
+	if err != nil {
+		return nil, err
+	}
+	if err := members.Readdress(options.MemberURL, options.MemberListen); err != nil {
+		return nil, err
+	}
+	budget := gatewayflow.New(0, 0)
+	connections := gatewaymembership.NewConnections(budget)
+	cloud, err := gatewaycloud.NewGateway(root, gatewaymembership.GatewayIdentity{ID: metadata.GatewayID, PrivateKey: key}, members, connections, budget, slog.Default())
+	if err != nil {
+		return nil, err
+	}
+	members.SetCommitHandler(func(records []gatewaymembership.MemberRecord, policy gp.GatewayPolicy) {
+		connections.Apply(records, policy)
+		cloud.Apply(records, policy)
+	})
+	listener, err := gatewaymembership.NewListener(members, connections, func(keyID string) bool { return trust.ClientPermissions(keyID).Access })
+	if err != nil {
+		return nil, err
+	}
+	server := &Server{cloud: cloud, version: options.Version, stateRoot: root, desktopBridgeTransport: options.DesktopBridgeTransport, pairingCode: strings.TrimSpace(options.PairingCode), managedBridgeToken: strings.TrimSpace(options.ManagedBridgeToken), hostAdminToken: options.HostAdminToken, trust: trust, auth: gatewayauth.NewVerifier(trust), members: members, connections: connections, memberListener: listener, hooks: hooks}
+	if err := server.migrateProfiles(); err != nil {
+		return nil, err
 	}
 	return server, nil
+}
+
+// ReloadHooks is called only by the owning host process. Remote interfaces may
+// request evaluation, but cannot select or change executable configuration.
+func (s *Server) ReloadHooks() error {
+	configuration := gatewaymembership.HookConfig{}
+	err := gatewaystate.Read(filepath.Join(s.stateRoot, "policy-hooks.json"), &configuration)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		// An unreadable replacement invalidates previous grants immediately.
+		return errors.Join(err, s.members.InvalidateHooks())
+	}
+	return s.members.RefreshHooks(configuration)
+}
+
+// Retired URL profiles are deleted once. Only a dismissible rebuild notice is
+// retained; no target address can be imported into the active member store.
+type membershipMigration struct {
+	Version         int  `json:"version"`
+	RebuildRequired bool `json:"rebuild_required"`
+}
+
+func (s *Server) migrateProfiles() error {
+	marker := filepath.Join(s.stateRoot, "membership-migration.json")
+	var state membershipMigration
+	if err := gatewaystate.Read(marker, &state); err == nil {
+		if state.Version != 1 {
+			return errors.New("unsupported Gateway membership migration")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	path := filepath.Join(s.stateRoot, "environments.json")
+	if _, err := os.Lstat(path); err == nil {
+		state.RebuildRequired = true
+		state.Version = 1
+		// Persist the notice before deletion so an interrupted migration cannot
+		// erase the only evidence that the administrator must rebuild members.
+		if err := gatewaystate.Write(marker, state); err != nil {
+			return err
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	state.Version = 1
+	if err := gatewaystate.Write(marker, state); err != nil {
+		return err
+	}
+	s.rebuildRequired = state.RebuildRequired
+	return nil
 }
 
 func defaultStateRoot() string {
@@ -131,839 +222,362 @@ func defaultStateRoot() string {
 }
 
 func (s *Server) Handler() http.Handler {
-	if s == nil {
-		return http.NotFoundHandler()
-	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /gateway/v3/pairing/challenge", s.handlePairingChallenge)
-	mux.HandleFunc("POST /gateway/v3/pairing/complete", s.handlePairingComplete)
-	mux.HandleFunc("POST /gateway/v3/catalog", s.handleCatalog)
-	mux.HandleFunc("POST /gateway/v3/open-session", s.handleOpenSession)
-	mux.HandleFunc("POST /gateway/v3/close-session", s.handleCloseSession)
-	mux.HandleFunc("POST /gateway/v3/env-profiles/upsert", s.handleEnvProfileUpsert)
-	mux.HandleFunc("POST /gateway/v3/env-profiles/check", s.handleEnvProfileCheck)
-	mux.HandleFunc("POST /gateway/v3/env-profiles/delete", s.handleEnvProfileDelete)
-	mux.Handle("/gateway/v3/access/", http.HandlerFunc(s.handleProfileAccess))
-	return mux
+	mux.HandleFunc("POST /gateway/v4/pairing/challenge", s.handlePairingChallenge)
+	mux.HandleFunc("POST /gateway/v4/pairing/complete", s.handlePairingComplete)
+	mux.HandleFunc("POST /gateway/v4/catalog", s.handleCatalog)
+	mux.HandleFunc("POST /gateway/v4/identity", s.handleIdentity)
+	mux.HandleFunc("POST /gateway/v4/cloud/configure", s.handleConfigureCloud)
+	mux.HandleFunc("POST /gateway/v4/cloud/status", s.handleCloudStatus)
+	mux.HandleFunc("POST /gateway/v4/members/reevaluate", s.handleReevaluate)
+	mux.HandleFunc("POST /gateway/v4/invitations", s.handleInvitation)
+	mux.HandleFunc("POST /gateway/v4/members/remove", s.handleRemove)
+	mux.HandleFunc("POST /gateway/v4/members/policy", s.handleMemberPolicy)
+	mux.HandleFunc("POST /gateway/v4/policy", s.handlePolicy)
+	mux.HandleFunc("POST /gateway/v4/access/open", s.handleOpen)
+	mux.HandleFunc("POST /gateway/v4/access/service", s.handleServiceIdentity)
+	mux.HandleFunc("POST /gateway/v4/migration/dismiss", s.handleDismissMigration)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// This API is a signed native-client surface, never a browser endpoint.
+		if r.Header.Get("Origin") != "" {
+			writeError(w, http.StatusForbidden, "BROWSER_REQUEST_DENIED")
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.Listener, error) {
-	if ctx == nil {
-		ctx = context.Background()
+	if listen == "" {
+		listen = "127.0.0.1:0"
 	}
-	addr := strings.TrimSpace(listen)
-	if addr == "" {
-		addr = "127.0.0.1:0"
-	}
-	ln, err := net.Listen("tcp", addr)
+	admin, err := net.Listen("tcp", listen)
 	if err != nil {
 		return nil, nil, err
 	}
-	srv := &http.Server{
-		Handler:           s.Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
+	member, err := net.Listen("tcp", s.members.Endpoint().ListenAddress)
+	if err != nil {
+		_ = admin.Close()
+		return nil, nil, err
 	}
-	listeners := []net.Listener{ln}
+	tlsConfig, err := s.members.TLSConfig()
+	if err != nil {
+		_ = admin.Close()
+		_ = member.Close()
+		return nil, nil, err
+	}
+	adminServer := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	memberServer, err := s.memberListener.Server(tlsConfig, s.cloud)
+	if err != nil {
+		_ = admin.Close()
+		_ = member.Close()
+		return nil, nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	go s.cloud.Run(ctx)
+	go func() { <-ctx.Done(); s.connections.Close(); _ = adminServer.Close(); _ = memberServer.Close() }()
+	go func() { defer cancel(); _ = adminServer.Serve(admin); s.connections.Close(); _ = memberServer.Close() }()
 	go func() {
-		<-ctx.Done()
-		s.closeAllProfileSessions()
-		_ = srv.Close()
+		defer cancel()
+		_ = memberServer.Serve(member)
+		s.connections.Close()
+		_ = adminServer.Close()
 	}()
-	go func() {
-		_ = srv.Serve(ln)
-		s.closeAllProfileSessions()
-	}()
-	go s.sweepLoop(ctx)
-	go func() {
-		// A running Gateway can receive Cloud configuration without restarting
-		// Desktop access or implicitly starting any Runtime process.
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			if _, err := os.Stat(gatewaycloud.GatewayConfigPath(s.stateRoot)); err == nil {
-				if err := gatewaycloud.StartGateway(ctx, s.stateRoot, slog.Default()); err == nil {
-					return
-				} else {
-					slog.Warn("Gateway Cloud listener could not start", "error", err)
-				}
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
-	return srv, listeners, nil
-}
-
-func (s *Server) trustStore() *gatewaytrust.Store {
-	return s.trust
-}
-
-func (s *Server) profileStore() *gatewayenvprofiles.Store {
-	return s.profile
-}
-
-func (s *Server) authVerifier() *gatewayauth.Verifier {
-	return s.auth
-}
-
-func bindingAudience(r *http.Request) string {
-	if r == nil {
-		return ""
-	}
-	if header := strings.TrimSpace(r.Header.Get("X-Redeven-Gateway-Binding-Audience")); header != "" {
-		return header
-	}
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	host := strings.TrimSpace(r.Host)
-	if host == "" {
-		host = strings.TrimSpace(r.Header.Get("Host"))
-	}
-	if host == "" {
-		return ""
-	}
-	return (&url.URL{Scheme: scheme, Host: host, Path: "/"}).String()
-}
-
-func (s *Server) handlePairingChallenge(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var req gatewayprotocol.PairingChallengeRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	if !s.pairingAllowed(r, req.PairingCode) {
-		writeGatewayError(w, http.StatusLocked, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway pairing requires an authorized pairing code.", false)
-		return
-	}
-	resp, err := s.trustStore().PairingChallenge(req)
-	if err != nil {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway pairing challenge request is invalid.", false)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, resp)
-}
-
-func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var req gatewayprotocol.PairingCompleteRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	req = gatewayprotocol.NormalizePairingCompleteRequest(req)
-	if err := gatewayprotocol.ValidatePairingCompleteRequest(req); err != nil {
-		writePairingCompleteRequestError(w, err)
-		return
-	}
-	if !s.pairingAllowedForChallenge(r, req.GatewayNonce) {
-		writeGatewayError(w, http.StatusLocked, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway pairing requires an authorized pairing code.", false)
-		return
-	}
-	if req.ClientCapability == string(gatewayprotocol.GatewayCapabilityEnvProfileWrite) && !s.profileWritePairingAllowed(r) {
-		writeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway profile write pairing is not available on this transport.", false)
-		return
-	}
-	resp, err := s.trustStore().CompletePairing(req)
-	if err != nil {
-		writeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway pairing completion was rejected.", false)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, resp)
-}
-
-func writePairingCompleteRequestError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, gatewayprotocol.ErrUnsupportedProtocolVersion):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
-	case errors.Is(err, gatewayprotocol.ErrInvalidClientCapability):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "client_capability is invalid.", false)
-	default:
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway pairing completion request is invalid.", false)
-	}
-}
-
-func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.CatalogRequest
-	if !decodeJSONBytes(w, body, &req) {
-		return
-	}
-	resp, err := s.catalogService(r, verified).ListEnvironments(r.Context(), req)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleOpenSession(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.OpenSessionRequest
-	if !decodeJSONBytes(w, body, &req) {
-		return
-	}
-	// Log identifiers only after validation; request payloads and artifacts are secrets.
-	req = gatewayprotocol.NormalizeOpenSessionRequest(req)
-	if err := gatewayprotocol.ValidateOpenSessionRequest(req); err != nil {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway open-session request is invalid.", false)
-		return
-	}
-	environmentID := safeAuditIdentifier(req.GatewayEnvID)
-	slog.Info("gateway.session.open_requested", "gateway_id", verified.GatewayID, "environment_id", environmentID, "access_mode", req.AccessMode)
-	resp, err := s.sessionService(w, r).OpenSession(r.Context(), req)
-	if err != nil {
-		slog.Info("gateway.session.open_failed", "gateway_id", verified.GatewayID, "environment_id", environmentID, "access_mode", req.AccessMode)
-		writeServiceError(w, err)
-		return
-	}
-	slog.Info("gateway.session.opened", "gateway_id", verified.GatewayID, "environment_id", environmentID, "session_id", resp.GatewaySessionID)
-	writeGatewayData(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleCloseSession(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.CloseSessionRequest
-	if !decodeJSONBytes(w, body, &req) {
-		return
-	}
-	if err := gatewayprotocol.ValidateCloseSessionRequest(req); err != nil {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, err.Error(), false)
-		return
-	}
-	req = gatewayprotocol.NormalizeCloseSessionRequest(req)
-	closed := s.closeProfileSessionForClient(req.GatewaySessionID, verified.ClientKeyID)
-	writeGatewayData(w, http.StatusOK, gatewayprotocol.CloseSessionResponse{
-		ProtocolVersion:  gatewayprotocol.Version,
-		GatewaySessionID: req.GatewaySessionID,
-		Closed:           closed,
-	})
-}
-
-func (s *Server) handleEnvProfileUpsert(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.EnvProfileUpsertRequest
-	if !decodeJSONBytes(w, body, &req) {
-		return
-	}
-	if !s.profileWriteEnabled {
-		writeGatewayError(w, http.StatusForbidden, gatewayprotocol.GatewayErrorCodeCapabilityUnsupported, "Gateway environment profile writes are not enabled.", false)
-		return
-	}
-	if !verified.ProfileWrite {
-		writeGatewayError(w, http.StatusForbidden, gatewayprotocol.GatewayErrorCodeUnauthorized, "This Gateway client is not allowed to write environment profiles.", false)
-		return
-	}
-	env, err := s.profileStore().Upsert(r.Context(), req)
-	if err != nil {
-		writeProfileError(w, err)
-		return
-	}
-	s.revokeProfileSessions(env.GatewayEnvID)
-	slog.Info("gateway.profile.updated", "gateway_id", verified.GatewayID, "environment_id", env.GatewayEnvID)
-	writeGatewayData(w, http.StatusOK, gatewayprotocol.EnvProfileUpsertResponse{
-		ProtocolVersion: gatewayprotocol.Version,
-		Environment:     env,
-	})
-}
-
-func (s *Server) handleEnvProfileDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.EnvProfileDeleteRequest
-	if !decodeJSONBytes(w, body, &req) {
-		return
-	}
-	if !s.profileWriteEnabled {
-		writeGatewayError(w, http.StatusForbidden, gatewayprotocol.GatewayErrorCodeCapabilityUnsupported, "Gateway environment profile writes are not enabled.", false)
-		return
-	}
-	if !verified.ProfileWrite {
-		writeGatewayError(w, http.StatusForbidden, gatewayprotocol.GatewayErrorCodeUnauthorized, "This Gateway client is not allowed to write environment profiles.", false)
-		return
-	}
-	resp, err := s.profileStore().Delete(r.Context(), req)
-	if err != nil {
-		writeProfileError(w, err)
-		return
-	}
-	if resp.Deleted {
-		s.revokeProfileSessions(resp.GatewayEnvID)
-		slog.Info("gateway.profile.deleted", "gateway_id", verified.GatewayID, "environment_id", resp.GatewayEnvID)
-	}
-	writeGatewayData(w, http.StatusOK, resp)
-}
-
-func safeAuditIdentifier(value string) string {
-	if len(value) > 128 {
-		return "invalid"
-	}
-	for _, ch := range value {
-		if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '_' || ch == '-' || ch == '.' {
-			continue
-		}
-		return "invalid"
-	}
-	return value
-}
-
-func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
-	if r == nil {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request is invalid.", false)
-		return false
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request body is invalid.", false)
-		return false
-	}
-	return decodeJSONBytes(w, body, out)
-}
-
-func decodeJSONBytes(w http.ResponseWriter, body []byte, out any) bool {
-	dec := json.NewDecoder(strings.NewReader(string(body)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(out); err != nil {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request JSON is invalid.", false)
-		return false
-	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request JSON is invalid.", false)
-		return false
-	}
-	return true
-}
-
-func (s *Server) readAuthenticatedBody(w http.ResponseWriter, r *http.Request) ([]byte, gatewayauth.VerifiedRequest, bool) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request body is invalid.", false)
-		return nil, gatewayauth.VerifiedRequest{}, false
-	}
-	verified, err := s.authVerifier().Verify(r.Context(), r, body, bindingAudience(r))
-	if err != nil {
-		writeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Pair this Gateway before listing or opening environments.", false)
-		return nil, gatewayauth.VerifiedRequest{}, false
-	}
-	return body, verified, true
-}
-
-func (s *Server) catalogService(r *http.Request, verified gatewayauth.VerifiedRequest) *gatewaycatalog.Service {
-	metadata, _, err := s.trustStore().GatewayMetadata(bindingAudience(r))
-	if err != nil {
-		metadata = gatewayprotocol.GatewayMetadata{
-			GatewayID:    "local-gateway",
-			DisplayName:  "Redeven Gateway",
-			Status:       gatewayprotocol.GatewayStatusError,
-			Capabilities: []gatewayprotocol.GatewayCapability{},
-		}
-	}
-	if s.profileWriteEnabled && verified.ProfileWrite {
-		metadata.Capabilities = append(metadata.Capabilities, gatewayprotocol.GatewayCapabilityEnvProfileWrite)
-	}
-	includeEditableProfiles := s.profileWriteEnabled && verified.ProfileWrite
-	return gatewaycatalog.NewService(
-		gatewaycatalog.WithGatewayMetadata(metadata),
-		gatewaycatalog.WithEnvironmentSource(gatewaycatalog.EnvironmentSourceFunc(func(ctx context.Context) ([]gatewayprotocol.Environment, error) {
-			profiles, err := s.profileStore().List(ctx)
-			if err != nil {
-				return nil, err
-			}
-			environments := make([]gatewayprotocol.Environment, 0, len(profiles))
-			for _, profile := range profiles {
-				var environment gatewayprotocol.Environment
-				if includeEditableProfiles {
-					environment = gatewayenvprofiles.EnvironmentFromProfileWithEditableRoute(profile)
-				} else {
-					environment = gatewayenvprofiles.EnvironmentFromProfile(profile)
-				}
-				environments = append(environments, environment)
-			}
-			return environments, nil
-		})),
-	)
-}
-
-func (s *Server) profileWritePairingAllowed(r *http.Request) bool {
-	if s == nil || !s.profileWriteEnabled {
-		return false
-	}
-	return s.isManagedDesktopBridgeRequest(r) || s.pairingCode != ""
-}
-
-func isDesktopBridgeTransport(r *http.Request) bool {
-	return r != nil && strings.EqualFold(strings.TrimSpace(r.Header.Get(managedBridgeTransportHeader)), "desktop_bridge")
+	return adminServer, []net.Listener{admin, member}, nil
 }
 
 func (s *Server) isManagedDesktopBridgeRequest(r *http.Request) bool {
-	if s == nil || !s.desktopBridgeTransport || !isDesktopBridgeTransport(r) {
-		return false
-	}
-	expected := strings.TrimSpace(s.managedBridgeToken)
-	if expected == "" {
-		return false
-	}
-	return strings.TrimSpace(r.Header.Get(managedBridgeTokenHeader)) == expected
+	return s.desktopBridgeTransport && s.managedBridgeToken != "" && r.Header.Get(managedBridgeTransportHeader) == "desktop_bridge" && r.Header.Get(managedBridgeTokenHeader) == s.managedBridgeToken
 }
-
-func (s *Server) pairingAllowed(r *http.Request, pairingCode string) bool {
-	if s == nil {
-		return false
-	}
-	if s.isManagedDesktopBridgeRequest(r) {
-		return true
-	}
-	return s.pairingCode != "" && strings.TrimSpace(pairingCode) == s.pairingCode
+func (s *Server) pairingAllowed(r *http.Request, code string) bool {
+	return s.isManagedDesktopBridgeRequest(r) || (s.pairingCode != "" && code == s.pairingCode)
 }
-
-func (s *Server) pairingAllowedForChallenge(r *http.Request, gatewayNonce string) bool {
-	if s == nil {
-		return false
+func (s *Server) handlePairingChallenge(w http.ResponseWriter, r *http.Request) {
+	var request gp.PairingChallengeRequest
+	if !decodeJSON(w, r, &request) {
+		return
 	}
-	if s.isManagedDesktopBridgeRequest(r) {
-		return true
+	if !s.pairingAllowed(r, request.PairingCode) {
+		writeError(w, http.StatusForbidden, "PAIRING_REQUIRED")
+		return
 	}
-	challenge, ok := s.trustStore().PendingChallenge(gatewayNonce)
-	return ok && s.pairingCode != "" && strings.TrimSpace(challenge.PairingCode) == s.pairingCode
+	response, err := s.trust.PairingChallenge(request)
+	writeResult(w, response, err)
 }
-
-func (s *Server) sessionService(_ http.ResponseWriter, r *http.Request) *gatewaysession.Service {
-	return gatewaysession.NewService(gatewaysession.WithConnectArtifactIssuer(artifactIssuer{
-		server:          s,
-		request:         r,
-		bindingAudience: bindingAudience(r),
-	}))
+func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
+	var request gp.PairingCompleteRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	challenge, ok := s.trust.PendingChallenge(request.GatewayNonce)
+	if !ok || !s.pairingAllowed(r, challenge.PairingCode) {
+		writeError(w, http.StatusForbidden, "PAIRING_REQUIRED")
+		return
+	}
+	response, err := s.trust.CompletePairing(request)
+	writeResult(w, response, err)
 }
-
-type artifactIssuer struct {
-	server          *Server
-	request         *http.Request
-	bindingAudience string
-}
-
-func (i artifactIssuer) IssueGatewayConnectArtifact(ctx context.Context, req gatewayprotocol.OpenSessionRequest) (gatewaysession.GatewayConnectArtifactIssue, error) {
-	if err := ctx.Err(); err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	if req.RequestedCapability != gatewayprotocol.RequestedCapabilityEnvApp {
-		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
-			Code:    gatewaysession.ErrorCodeCapabilityUnsupported,
-			Message: "Gateway environment capability is not supported.",
-		}
-	}
-	// Publication and revocation share one lock so a concurrent profile deletion
-	// cannot leave a newly issued session pointing at the removed profile.
-	i.server.profileSessionsMu.Lock()
-	defer i.server.profileSessionsMu.Unlock()
-	if i.server.closed {
-		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("gateway service is stopping")
-	}
-	profile, ok, err := i.server.profileStore().Get(ctx, req.GatewayEnvID)
+func (s *Server) authenticated(w http.ResponseWriter, r *http.Request, value any) (gatewayauth.VerifiedRequest, bool) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
 	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST")
+		return gatewayauth.VerifiedRequest{}, false
 	}
+	audience := strings.TrimSpace(r.Header.Get("X-Redeven-Gateway-Binding-Audience"))
+	var verified gatewayauth.VerifiedRequest
+	if s.isHostAdminRequest(r) {
+		// Host administration uses a separate private credential. Loopback alone
+		// and the Desktop bridge token never grant member management privileges.
+		verified = gatewayauth.VerifiedRequest{ClientKeyID: "gateway_host", Permissions: gp.GatewayPermissions{Access: true, ManageMembers: true, ConfigureCloud: true}}
+	} else {
+		verified, err = s.auth.Verify(r.Context(), r, raw, audience)
+	}
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED")
+		return verified, false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(value) != nil || decoder.Decode(new(any)) != io.EOF {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST")
+		return verified, false
+	}
+	var version struct {
+		ProtocolVersion string `json:"protocol_version"`
+	}
+	if json.Unmarshal(raw, &version) != nil || version.ProtocolVersion != gp.Version {
+		writeError(w, http.StatusBadRequest, "PROTOCOL_MISMATCH")
+		return verified, false
+	}
+	return verified, true
+}
+
+func (s *Server) isHostAdminRequest(r *http.Request) bool {
+	if s.hostAdminToken == "" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !net.ParseIP(host).IsLoopback() {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(r.Header.Get(HostAdminHeader)), []byte(s.hostAdminToken)) == 1
+}
+func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
+	var request gp.CatalogRequest
+	client, ok := s.authenticated(w, r, &request)
 	if !ok {
-		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
-			Code:    gatewaysession.ErrorCodeNotFound,
-			Message: "Gateway environment was not found.",
+		return
+	}
+	records, policy, revision := s.members.Snapshot()
+	metadata, _, err := s.trust.GatewayMetadata(client.BindingAudience)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	endpoint := s.members.Endpoint()
+	metadata.MemberURL, metadata.MemberTLSRootPEM, metadata.Permissions = endpoint.URL, endpoint.RootPEM, client.Permissions
+	members := make([]gp.Member, 0, len(records))
+	for _, record := range records {
+		if record.Member.State != "active" {
+			continue
 		}
+		member := record.Member
+		member.Connected = s.connections.IsConnected(member.MemberID)
+		member.EffectiveCloudAllowed = gatewaymembership.EffectiveCloudAllowed(record, policy)
+		member.CloudState = s.cloud.MemberContext(record).State
+		members = append(members, member)
 	}
-	if profile.AccessRoute.Kind != gatewayprotocol.EnvProfileAccessRouteKindURL {
-		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
-			Code:    gatewaysession.ErrorCodeCapabilityUnsupported,
-			Message: "Gateway environment opening is not available for this profile yet.",
+	s.migrationMu.Lock()
+	rebuildRequired := s.rebuildRequired
+	s.migrationMu.Unlock()
+	writeResult(w, gp.CatalogResponse{ProtocolVersion: gp.Version, Gateway: metadata, Members: members, Policy: policy, Revision: revision, RebuildRequired: rebuildRequired, HookStatus: s.hooks.Status()}, nil)
+}
+
+func (s *Server) handleDismissMigration(w http.ResponseWriter, r *http.Request) {
+	var request gp.CatalogRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
+		return
+	}
+	s.migrationMu.Lock()
+	defer s.migrationMu.Unlock()
+	err := gatewaystate.Write(filepath.Join(s.stateRoot, "membership-migration.json"), membershipMigration{Version: 1})
+	if err == nil {
+		s.rebuildRequired = false
+	}
+	writeResult(w, struct{}{}, err)
+}
+func (s *Server) handleInvitation(w http.ResponseWriter, r *http.Request) {
+	var request gp.InvitationRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
+		return
+	}
+	invitation, err := s.members.Invite(client.ClientKeyID)
+	writeResult(w, invitation, err)
+}
+func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {
+	var request gp.RemoveMemberRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
+		return
+	}
+	writeResult(w, struct{}{}, s.members.Remove(request.MemberID, request.ExpectedMemberVersion))
+}
+func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
+	var request gp.UpdatePolicyRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ConfigureCloud {
+		writeError(w, http.StatusForbidden, "CLOUD_CONFIGURATION_REQUIRED")
+		return
+	}
+	writeResult(w, struct{}{}, s.members.UpdatePolicy(r.Context(), request.ExpectedRevision, request.Policy))
+}
+func (s *Server) handleMemberPolicy(w http.ResponseWriter, r *http.Request) {
+	var request gp.UpdateMembersRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ConfigureCloud {
+		writeError(w, http.StatusForbidden, "CLOUD_CONFIGURATION_REQUIRED")
+		return
+	}
+	if len(request.Items) == 0 || len(request.Items) > gp.MaxMembers {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST")
+		return
+	}
+	results := make([]gp.MemberOperationResult, 0, len(request.Items))
+	for _, update := range request.Items {
+		result := gp.MemberOperationResult{MemberID: update.MemberID}
+		if err := s.members.UpdateMemberPolicy(r.Context(), update); err != nil {
+			result.ErrorCode = memberErrorCode(err)
 		}
+		results = append(results, result)
 	}
-	mode := req.AccessMode
-	if !i.server.isManagedDesktopBridgeRequest(i.request) {
-		req.BridgeSessionID, req.RouteID = "", ""
+	writeResult(w, results, nil)
+}
+func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
+	var request gp.OpenSessionRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
 	}
-	if mode == "" {
-		mode = profile.AccessMode
+	if !client.Permissions.Access {
+		writeError(w, http.StatusForbidden, "ACCESS_REQUIRED")
+		return
 	}
-	if mode == gatewayprotocol.AccessModeDirectURL {
-		return i.issueSignedArtifact(req, profile.AccessRoute.URL, "gateway_direct")
+	if !s.connections.IsActive(request.MemberID) {
+		writeError(w, http.StatusForbidden, "MEMBER_DENIED")
+		return
 	}
-	session, err := i.server.openProfileSession(profile, i.request)
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
+	if !s.connections.IsConnected(request.MemberID) {
+		writeError(w, http.StatusConflict, "MEMBER_OFFLINE")
+		return
 	}
-	metadata, _, err := i.server.trustStore().GatewayMetadata(i.bindingAudience)
-	if err != nil {
-		closeProfileSession(session)
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
+	response, err := s.members.AccessOffer(r.Context(), request.MemberID, client.ClientKeyID)
+	writeResult(w, response, err)
+}
+func (s *Server) handleServiceIdentity(w http.ResponseWriter, r *http.Request) {
+	var request gp.MemberServiceRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
 	}
-	privateKey, err := i.server.trustStore().GatewayPrivateKey()
-	if err != nil {
-		closeProfileSession(session)
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
+	if !client.Permissions.Access {
+		writeError(w, http.StatusForbidden, "ACCESS_REQUIRED")
+		return
 	}
-	issue, err := gatewaysession.NewSignedGatewayProxyIssue(struct {
-		GatewayID           string
-		GatewayEnvID        string
-		BindingAudience     string
-		RequestedCapability gatewayprotocol.RequestedCapability
-		ClientNonce         string
-		GatewaySessionID    string
-		AccessURL           string
-		BridgeSessionID     string
-		RouteID             string
-		GatewayPrivateKey   string
-		TTL                 time.Duration
-	}{
-		GatewayID: metadata.GatewayID, GatewayEnvID: req.GatewayEnvID,
-		BindingAudience: i.bindingAudience, RequestedCapability: req.RequestedCapability,
-		ClientNonce: req.ClientNonce, GatewaySessionID: session.ID,
-		AccessURL: session.EntryURL, GatewayPrivateKey: privateKey, TTL: gatewayConnectArtifactTTL,
-		BridgeSessionID: req.BridgeSessionID, RouteID: req.RouteID,
-	})
-	if err != nil {
-		closeProfileSession(session)
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	session.ExpiresAtUnixMS = issue.ConnectArtifact.ExpiresAtUnixMS
-	i.server.profileSessions[session.ID] = session
-	session.ExpireTimer = time.AfterFunc(time.Until(time.UnixMilli(session.ExpiresAtUnixMS)), func() {
-		i.server.closeProfileSessionForClient(session.ID, session.ClientKeyID)
-	})
-	return issue, nil
+	response, err := s.members.ServiceIdentity(request.MemberID, request.ExpectedMemberVersion)
+	writeResult(w, response, err)
 }
 
-func (i artifactIssuer) issueSignedArtifact(req gatewayprotocol.OpenSessionRequest, directURL string, connectionKind string) (gatewaysession.GatewayConnectArtifactIssue, error) {
-	metadata, _, err := i.server.trustStore().GatewayMetadata(i.bindingAudience)
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	privateKey, err := i.server.trustStore().GatewayPrivateKey()
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	if strings.TrimSpace(directURL) == "" {
-		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("gateway Env App entry URL is unavailable")
-	}
-	issue, err := gatewaysession.NewSignedLocalDirectIssue(struct {
-		GatewayID           string
-		GatewayEnvID        string
-		BindingAudience     string
-		RequestedCapability gatewayprotocol.RequestedCapability
-		ClientNonce         string
-		URL                 string
-		GatewayPrivateKey   string
-		TTL                 time.Duration
-	}{
-		GatewayID:           metadata.GatewayID,
-		GatewayEnvID:        req.GatewayEnvID,
-		BindingAudience:     i.bindingAudience,
-		RequestedCapability: req.RequestedCapability,
-		ClientNonce:         req.ClientNonce,
-		URL:                 directURL,
-		GatewayPrivateKey:   privateKey,
-		TTL:                 gatewayConnectArtifactTTL,
-	})
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	if issue.DiagnosticsHint != nil {
-		issue.DiagnosticsHint.ConnectionKind = strings.TrimSpace(connectionKind)
-	}
-	return issue, nil
-}
-
-func (s *Server) revokeProfileSessions(gatewayEnvID string) {
-	var sessions []*profileSession
-	s.profileSessionsMu.Lock()
-	for id, session := range s.profileSessions {
-		if session != nil && session.GatewayEnvID == gatewayEnvID {
-			delete(s.profileSessions, id)
-			sessions = append(sessions, session)
-		}
-	}
-	s.profileSessionsMu.Unlock()
-	for _, session := range sessions {
-		closeProfileSession(session)
-	}
-}
-
-func (s *Server) closeAllProfileSessions() {
-	s.profileSessionsMu.Lock()
-	s.closed = true
-	sessions := s.profileSessions
-	s.profileSessions = make(map[string]*profileSession)
-	s.profileSessionsMu.Unlock()
-	for _, session := range sessions {
-		closeProfileSession(session)
-	}
-}
-
-func (s *Server) closeProfileSessionForClient(id, clientKeyID string) bool {
-	s.profileSessionsMu.Lock()
-	session := s.profileSessions[id]
-	if session == nil || session.ClientKeyID != clientKeyID {
-		s.profileSessionsMu.Unlock()
+func decodeJSON(w http.ResponseWriter, r *http.Request, value any) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(value) != nil || decoder.Decode(new(any)) != io.EOF {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST")
 		return false
 	}
-	delete(s.profileSessions, id)
-	s.profileSessionsMu.Unlock()
-	closeProfileSession(session)
 	return true
 }
-
-func requestOrigin(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	return (&url.URL{Scheme: scheme, Host: r.Host}).String()
-}
-
-func targetOrigin(target *url.URL) string {
-	return (&url.URL{Scheme: target.Scheme, Host: target.Host}).String()
-}
-
-func gatewayProfileProxyTransport(policy gatewayenvprofiles.URLTargetPolicy) http.RoundTripper {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	baseDialer := (&net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-	})
-	transport.DialContext = gatewayProfileDialer(policy, net.DefaultResolver.LookupIPAddr, baseDialer.DialContext)
-	return transport
-}
-
-func gatewayProfileDialer(policy gatewayenvprofiles.URLTargetPolicy,
-	lookup func(context.Context, string) ([]net.IPAddr, error),
-	dial func(context.Context, string, string) (net.Conn, error),
-) func(context.Context, string, string) (net.Conn, error) {
-	return func(ctx context.Context, network string, address string) (net.Conn, error) {
-		host, port, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, err
-		}
-		if !gatewayenvprofiles.URLTargetAllowed(host, policy) {
-			return nil, fmt.Errorf("gateway profile target host is not allowed")
-		}
-		ips, err := lookup(ctx, host)
-		if err != nil {
-			return nil, err
-		}
-		if len(ips) == 0 {
-			return nil, fmt.Errorf("gateway profile target did not resolve")
-		}
-		var lastErr error
-		for _, resolved := range ips {
-			if !gatewayenvprofiles.URLTargetIPAllowed(resolved.IP, policy) {
-				lastErr = fmt.Errorf("gateway profile target resolved to a blocked address")
-				continue
-			}
-			addr, ok := netip.AddrFromSlice(resolved.IP)
-			if !ok {
-				lastErr = fmt.Errorf("gateway profile target resolved to an invalid address")
-				continue
-			}
-			conn, err := dial(ctx, network, net.JoinHostPort(addr.Unmap().String(), port))
-			if err == nil {
-				return conn, nil
-			}
-			lastErr = err
-		}
-		if lastErr != nil {
-			return nil, lastErr
-		}
-		return nil, fmt.Errorf("gateway profile target is not reachable")
-	}
-}
-
-func writeServiceError(w http.ResponseWriter, err error) {
-	var sessionErr *gatewaysession.GatewayError
-	if errors.As(err, &sessionErr) {
-		switch sessionErr.Code {
-		case gatewaysession.ErrorCodeNotFound:
-			writeGatewayError(w, http.StatusNotFound, gatewayprotocol.GatewayErrorCodeNotFound, sessionErr.Message, false)
-		case gatewaysession.ErrorCodeCapabilityUnsupported:
-			writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeCapabilityUnsupported, sessionErr.Message, false)
-		case gatewaysession.ErrorCodeNotImplemented:
-			writeGatewayError(w, http.StatusNotImplemented, gatewayprotocol.GatewayErrorCodeNotImplemented, sessionErr.Message, false)
-		default:
-			writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, sessionErr.Message, false)
-		}
-		return
-	}
-	if errors.Is(err, gatewayprotocol.ErrUnsupportedProtocolVersion) {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
-		return
-	}
-	writeGatewayError(w, http.StatusInternalServerError, gatewayprotocol.GatewayErrorCodeUnavailable, "Gateway request could not be completed.", true)
-}
-
-func writeProfileError(w http.ResponseWriter, err error) {
+func memberErrorCode(err error) string {
 	switch {
-	case errors.Is(err, gatewayprotocol.ErrInvalidAccessMode):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_mode is invalid for this profile.", false)
-	case errors.Is(err, gatewayprotocol.ErrUnsupportedProtocolVersion):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
-	case errors.Is(err, gatewayprotocol.ErrMissingDisplayName):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "display_name is required.", false)
-	case errors.Is(err, gatewayprotocol.ErrMissingAccessRoute):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_route is required.", false)
-	case errors.Is(err, gatewayprotocol.ErrMissingGatewayEnvID):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is required.", false)
-	case errors.Is(err, gatewayprotocol.ErrInvalidSSHSecretMode):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_secret.mode is invalid.", false)
-	case errors.Is(err, gatewayprotocol.ErrSSHSecretUnsupported):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_secret is not supported.", false)
-	case errors.Is(err, gatewayprotocol.ErrInvalidAccessRouteFields):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_route contains fields outside its kind.", false)
-	case errors.Is(err, gatewayprotocol.ErrInvalidSSHAuthMode):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_route.auth_mode is invalid.", false)
-	case errors.Is(err, gatewayprotocol.ErrSSHPasswordAuthUnsupported):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh password auth is not supported.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrGatewayEnvIDReserved):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is reserved.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrGatewayEnvIDInvalid):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is invalid.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLRequired):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url is required.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLMustBeAbsoluteHTTP):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must be an absolute http or https URL.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLSchemeUnsupported):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must use http or https.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLCredentialsUnsupported):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must not include embedded credentials.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLTargetUnsafe):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url target is not allowed by this Gateway.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrSSHDestinationRequired):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_destination is required.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrSSHPortInvalid):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_port must be between 1 and 65535.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrContainerEngineInvalid):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_engine must be docker or podman.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrContainerIDRequired):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_id is required.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrContainerRuntimeRootRequired):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_runtime_root is required.", false)
+	case errors.Is(err, gatewaymembership.ErrConflict):
+		return "MEMBER_VERSION_CONFLICT"
+	case errors.Is(err, gatewaymembership.ErrDenied):
+		return "MEMBER_DENIED"
+	case errors.Is(err, gatewaymembership.ErrCapacity):
+		return "MEMBER_CAPACITY"
 	default:
-		writeGatewayError(w, http.StatusInternalServerError, gatewayprotocol.GatewayErrorCodeUnavailable, "Gateway environment profile request could not be completed.", true)
+		return "GATEWAY_UNAVAILABLE"
 	}
 }
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func writeResult(w http.ResponseWriter, value any, err error) {
+	if err != nil {
+		writeError(w, http.StatusConflict, memberErrorCode(err))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(envelope{OK: true, Data: value})
+}
+func writeError(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(envelope{Error: &errorShape{Code: code, Message: fmt.Sprintf("Gateway request failed (%s).", code)}})
 }
 
-func writeGatewayData(w http.ResponseWriter, status int, data any) {
-	writeJSON(w, status, envelope{OK: true, Data: data})
-}
-
-func writeGatewayError(w http.ResponseWriter, status int, code gatewayprotocol.GatewayErrorCode, message string, retryable bool) {
-	writeJSON(w, status, envelope{
-		OK: false,
-		Error: &errorShape{
-			Code:           string(code),
-			Message:        strings.TrimSpace(message),
-			Retryable:      retryable,
-			RedactedDetail: strings.TrimSpace(message),
-		},
-	})
-}
-
-func (s *Server) sweepLoop(ctx context.Context) {
-	t := time.NewTicker(30 * time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			s.sweepExpired()
-		}
-	}
-}
-
-func (s *Server) sweepExpired() {
-	now := time.Now().UnixMilli()
-	var sessions []*profileSession
-	s.profileSessionsMu.Lock()
-	for k, v := range s.profileSessions {
-		if v == nil {
-			delete(s.profileSessions, k)
-			continue
-		}
-		if v.ExpiresAtUnixMS > 0 && now > v.ExpiresAtUnixMS {
-			delete(s.profileSessions, k)
-			sessions = append(sessions, v)
-		}
-	}
-	s.profileSessionsMu.Unlock()
-	for _, session := range sessions {
-		closeProfileSession(session)
-	}
-}
-
-func closeProfileSession(session *profileSession) {
-	if session == nil {
+func (s *Server) handleConfigureCloud(w http.ResponseWriter, r *http.Request) {
+	var request gp.ConfigureCloudRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
 		return
 	}
-	if session.ExpireTimer != nil {
-		session.ExpireTimer.Stop()
+	if !client.Permissions.ConfigureCloud {
+		writeError(w, http.StatusForbidden, "CLOUD_CONFIGURATION_REQUIRED")
+		return
 	}
-	session.Cancel()
-	slog.Info("gateway.session.closed", "gateway_id", session.GatewayID, "environment_id", session.GatewayEnvID, "session_id", session.ID)
+	result, err := s.cloud.Configure(r.Context(), request.CloudOrigin, s.version, request.Reauthorize)
+	writeResult(w, result, err)
 }
-
-func randomB64u(n int) (string, error) {
-	if n <= 0 {
-		return "", fmt.Errorf("invalid random byte length %d", n)
+func (s *Server) handleCloudStatus(w http.ResponseWriter, r *http.Request) {
+	var request gp.CatalogRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
 	}
-	buf := make([]byte, n)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
+	if !client.Permissions.ConfigureCloud {
+		writeError(w, http.StatusForbidden, "CLOUD_CONFIGURATION_REQUIRED")
+		return
 	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
+	writeResult(w, s.cloud.Summary(), nil)
+}
+func (s *Server) handleReevaluate(w http.ResponseWriter, r *http.Request) {
+	var request gp.RemoveMemberRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
+		return
+	}
+	writeResult(w, struct{}{}, s.members.ReevaluateCloud(r.Context(), request.MemberID))
 }

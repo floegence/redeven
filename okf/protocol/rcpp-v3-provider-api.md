@@ -72,4 +72,4 @@ RCPP v3 does not mirror Desktop Launcher Operations or Gateway state. Provider m
 - `redeven:desktop/src/main/main.ts:4003` - Startup persistence and authorization-boundary enforcement.
 - `redeven:desktop/src/welcome/viewModel.ts:646` - Unsupported legacy Runtime-link presentation and manual recovery boundary.
 - `spec/openapi/rcpp-v3.yaml:1` - Machine-readable RCPP v3 and isolated manual-bootstrap contract.
-- `spec/openapi/gateway-v3.yaml:1` - Gateway access-only protocol surface.
+- `spec/openapi/gateway-v4.yaml:1` - Gateway access-only protocol surface.

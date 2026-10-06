@@ -55,19 +55,19 @@ try {
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
   const page = browser.contexts()[0].pages().find(p => p.url().includes('/gateway-cloud.html'));
   assert.ok(page, 'Owned Gateway renderer was not found');
-  const trigger = page.getByRole('button', { name: 'Connect via Gateway', exact: true });
+  const trigger = page.getByRole('button', { name: 'Gateway connection', exact: true });
   await trigger.click();
   const dialog = page.getByRole('dialog');
   await dialog.locator('input[type=file]').setInputFiles({ name: 'join.json', mimeType: 'application/json',
     buffer: await readFile(process.env.REDEVEN_GATEWAY_JOIN_MATERIAL) });
-  await dialog.getByRole('button', { name: 'Agree and connect', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Agree and join', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[role=status]')?.textContent?.includes('approval'), null, { timeout: 120_000 });
   await page.keyboard.press('Escape');
   assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
   await trigger.click();
-  await dialog.getByRole('button', { name: 'Resume enrollment', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Refresh', exact: true }).click();
   console.log('Gateway Desktop: durable local consent submitted; awaiting Cloud approval.');
-  await page.waitForFunction(() => document.querySelector('[role=status]')?.textContent?.trim() === 'Connected', null, { timeout: 180_000 });
+  await page.waitForFunction(() => document.querySelector('[role=status]')?.textContent?.includes('Cloud accessible'), null, { timeout: 180_000 });
   assert.equal(await dialog.getByRole('alert').count(), 0);
   await page.screenshot({ path: path.resolve('dist/gateway-cloud-acceptance/electron-connected.png') });
   console.log('PASS Gateway Desktop: real Electron consent, pause/resume, trusted container bridge and Cloud registration.');

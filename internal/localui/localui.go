@@ -759,6 +759,10 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		return fmt.Errorf("start runtime management socket: %w", err)
 	}
 	s.startPublicAddressRefresh(ctx)
+	if err := s.a.StartGatewayMembership(ctx, s.gatewayMemberApplication); err != nil {
+		_ = s.Close()
+		return err
+	}
 
 	go func() {
 		<-ctx.Done()
@@ -825,6 +829,9 @@ func (s *Server) startRuntimeStatusServer(ctx context.Context) error {
 		return err
 	}
 	statusServer.NativeBridge = http.HandlerFunc(s.handleNativeRuntimeBridge)
+	if s.runtimeControl != nil {
+		statusServer.Control = s.runtimeControl.ownerSocketHandler()
+	}
 	if err := statusServer.Start(ctx); err != nil {
 		return err
 	}
@@ -894,6 +901,7 @@ func (s *Server) Close() error {
 	}
 	s.closeMu.Lock()
 	defer s.closeMu.Unlock()
+	s.a.CloseGatewayMembership()
 	s.closeNativeRuntimeBridges()
 	s.stopPublicAddressRefresh()
 	s.closeNativeCodeAccess("")
@@ -1858,6 +1866,9 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if bridge := nativeRuntimeRequest(r); bridge != nil {
 		return bridge.endpoint, nil
 	}
+	if origin := gatewayMemberOrigin(r); origin != "" && r.TLS != nil && origin == "https://"+r.Host {
+		return "wss://" + r.Host + flowersec.WebSocketDirectPath, nil
+	}
 	requestAuthority, err := canonicalPublicAuthority(r.Host, s.protocol)
 	if err != nil {
 		return "", errors.New("invalid Local UI authority")
@@ -2054,6 +2065,14 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 	if err != nil || endpointURL == nil || strings.TrimSpace(endpointURL.Host) == "" {
 		return localIssuedPending{}, errors.New("invalid direct endpoint authority")
 	}
+	upstreamAddress := endpointURL.Host
+	if endpointURL.Port() == "" {
+		port := "443"
+		if endpointURL.Scheme == "ws" {
+			port = "80"
+		}
+		upstreamAddress = net.JoinHostPort(endpointURL.Hostname(), port)
+	}
 	payload, projection, target := localSessionProxyScope(meta, spendOrigin)
 	metadata := controlplane.ArtifactMetadata{Scopes: []controlplane.Scope{{
 		Name: "proxy.runtime", Version: 2, Critical: true, Payload: json.RawMessage(payload),
@@ -2075,7 +2094,7 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 			Endpoint:          strings.TrimSpace(wsURL),
 			RendezvousGroupID: "local-ui-" + channelID,
 			ListenerAudience:  "redeven-local-ui",
-			UpstreamAddress:   endpointURL.Host,
+			UpstreamAddress:   upstreamAddress,
 			Metadata:          metadata,
 		})
 		if issueErr != nil {
@@ -2083,11 +2102,11 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 		}
 		artifact = json.RawMessage(issued.ArtifactJSON())
 		authorizationRecord = issued.AuthorizationRecord()
-	} else if s.protocol == config.LocalUIProtocolHTTP || strings.HasPrefix(accessSessionID, "native:") {
+	} else if endpointURL.Scheme == "ws" {
 		issued, issueErr := controlplane.NewIssuer().IssueHTTPDirect(controlplane.HTTPDirectIssueOptions{
 			Session: sessionOptions, Endpoint: strings.TrimSpace(wsURL),
 			RendezvousGroupID: "local-ui-" + channelID, ListenerAudience: "redeven-local-ui",
-			UpstreamAddress: endpointURL.Host, Metadata: metadata,
+			UpstreamAddress: upstreamAddress, Metadata: metadata,
 		})
 		if issueErr != nil {
 			return localIssuedPending{}, issueErr
@@ -2106,7 +2125,7 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 			Endpoints:         endpoints,
 			RendezvousGroupID: "local-ui-" + channelID,
 			ListenerAudience:  "redeven-local-ui",
-			UpstreamAddress:   endpointURL.Host,
+			UpstreamAddress:   upstreamAddress,
 			Metadata:          metadata,
 		})
 		if issueErr != nil {
@@ -2280,7 +2299,7 @@ func (s *Server) localSpendOriginFromRequest(r *http.Request) (string, error) {
 	if s == nil || r == nil || !s.isTrustedOrAllowedAuthority(r) {
 		return "", errors.New("invalid Local UI authority")
 	}
-	authority, err := canonicalPublicAuthority(r.Host, requestProtocol(r))
+	authority, err := canonicalRequestAuthority(r, r.Host)
 	if err != nil {
 		return "", errors.New("invalid Local UI authority")
 	}

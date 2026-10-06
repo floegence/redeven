@@ -1,4 +1,5 @@
-import type { GatewayJoinMaterial, GatewayJoinPhase } from '../shared/gatewayJoin';
+import type { GatewayMemberInvitation } from '../shared/gatewayMembership';
+import type { GatewayMembershipStatus, GatewayMembershipOperation } from '../shared/gatewayJoin';
 import { parseSecurityResult, type SecurityRequest, type SecurityResult } from '../shared/runtimeSecurity';
 import http from 'node:http';
 import https from 'node:https';
@@ -32,7 +33,12 @@ type RuntimeControlEnvelope = Readonly<{
 }>;
 
 type RuntimeControlServiceRoute =
-  | 'v2/gateway-cloud/join'
+  | 'v2/gateway/join'
+  | 'v2/gateway/replace'
+  | 'v2/gateway/update-address'
+  | 'v2/gateway/status'
+  | 'v2/gateway/retry'
+  | 'v2/gateway/leave'
   | 'v2/tessiven/host'
   | 'v2/tessiven/resources'
 	| 'v2/provider-link'
@@ -304,10 +310,18 @@ export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpo
   return (await requestRuntimeControl(endpoint, 'v2/tessiven/resources', { method: 'POST', body: payload, signal, timeoutMs: 30000 })).data;
 }
 
-export async function joinRuntimeGatewayCloud(endpoint: DesktopRuntimeControlEndpoint, material?: GatewayJoinMaterial): Promise<Readonly<{ phase: GatewayJoinPhase; runtime_service: RuntimeServiceSnapshot }>> {
-  const result = (await requestRuntimeControl(endpoint, 'v2/gateway-cloud/join', { method: 'POST', body: { material }, timeoutMs: 90_000 })).data as Record<string, unknown> | undefined;
-  if (!result || !['verifying', 'awaiting_approval', 'connecting', 'connected'].includes(String(result.phase)) || !result.runtime_service) {
-    throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE', 'The Runtime did not return Gateway enrollment status.');
-  }
-  return { phase: result.phase as GatewayJoinPhase, runtime_service: normalizeRuntimeServiceSnapshot(result.runtime_service) };
+export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, invitation?: GatewayMemberInvitation, choice?: 'preserve' | 'new'): Promise<GatewayMembershipStatus> {
+  if ((operation === 'join' || operation === 'replace' || operation === 'update-address') !== Boolean(invitation)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Join requires an invitation.');
+  const result = (await requestRuntimeControl(endpoint, `v2/gateway/${operation}`, {
+    method: operation === 'status' ? 'GET' : 'POST', ...((operation === 'join' || operation === 'replace' || operation === 'update-address') ? { body: { invitation, ...(choice ? { environment_choice: choice } : {}) } } : {}), timeoutMs: 30_000,
+  })).data as Record<string, unknown> | undefined;
+  if (!result || !['not_joined', 'joining', 'gateway_offline', 'joined', 'reauthorization_required', 'removal_pending', 'cloud_denied', 'cloud_pending', 'cloud_control_offline', 'accessible', 'migration_pending'].includes(String(result.phase))
+    || typeof result.joined !== 'boolean') throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE', 'The Runtime did not return Gateway membership status.');
+  return { joined: result.joined, phase: result.phase as GatewayMembershipStatus['phase'],
+    ...(typeof result.gateway_id === 'string' ? { gateway_id: result.gateway_id } : {}),
+    ...(typeof result.gateway_url === 'string' ? { gateway_url: result.gateway_url } : {}),
+    ...(typeof result.member_id === 'string' ? { member_id: result.member_id } : {}),
+    ...(typeof result.existing_environment_id === 'string' ? { existing_environment_id: result.existing_environment_id } : {}),
+    ...(typeof result.rejoin_required === 'boolean' ? { rejoin_required: result.rejoin_required } : {}),
+  };
 }

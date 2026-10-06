@@ -296,7 +296,7 @@ describe('desktopLauncherIPC', () => {
       connection_kind: 'url',
       gateway_url: 'https://gateway.example/path?token=leak',
       allow_loopback_http: true,
-      profile_write: false,
+      permissions: undefined,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_gateway',

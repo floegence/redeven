@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 	"path/filepath"
 	"testing"
 
@@ -14,19 +15,21 @@ import (
 )
 
 func TestGatewayReapprovalAdoptsOnlySamePathAndRetiresOldCredentials(t *testing.T) {
-	binding := gc.Binding{PublicID: "binding", EnvPublicID: "env", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Region: "sg", Generation: 1, State: "active"}
-	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{BindingGeneration: 1, ControlArtifactPool: config.NewControlArtifactPool(1), GatewayCloud: &gatewaycloud.RuntimeConfig{RequestPublicID: "request", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Binding: &binding, Revoked: true, DeliveryRequestID: "retired"}}}
+	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
+	member := gatewayfixture.Enroll(t, store, "runtime")
+	requestID := gc.CandidateID("gateway", member.MemberID)
+	binding := gc.Binding{MemberID: member.MemberID, MemberVersion: member.MemberVersion, PublicID: "binding", EnvPublicID: "env", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Region: "sg", Generation: 1, State: "active"}
+	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateway: member, LocalEnvironmentPublicID: member.RuntimePublicID, BindingGeneration: 1, ControlArtifactPool: config.NewControlArtifactPool(1), GatewayPublication: &gatewaycloud.RuntimeConfig{MemberID: member.MemberID, MemberVersion: member.MemberVersion, RequestPublicID: requestID, GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Binding: &binding, Revoked: true, DeliveryRequestID: "retired"}}}
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.cfg.GatewayCloud.ProtocolVersion = gc.ProtocolVersion
-	a.cfg.GatewayCloud.LocalConsentAtUnixMS = 1
-	a.cfg.GatewayCloud.CloudOrigin, a.cfg.GatewayCloud.RegionOrigin = "https://cloud.example", "https://sg.cloud.example"
-	a.cfg.GatewayCloud.PrivateKeyB64u = base64.RawURLEncoding.EncodeToString(key)
+	a.cfg.GatewayPublication.ProtocolVersion = gc.ProtocolVersion
+	a.cfg.GatewayPublication.CloudOrigin, a.cfg.GatewayPublication.RegionOrigin = "https://cloud.example", "https://sg.cloud.example"
+	a.cfg.GatewayPublication.PrivateKeyB64u = base64.RawURLEncoding.EncodeToString(key)
 	approved := binding
 	approved.Generation = 3
-	status := gc.RuntimeStatus{Candidate: gc.Candidate{RequestPublicID: "request", State: "published", Binding: &approved}}
+	status := gc.RuntimeStatus{Candidate: gc.Candidate{RequestPublicID: requestID, State: "published", Binding: &approved}}
 	for _, mutate := range []func(*gc.Binding){
 		func(b *gc.Binding) { b.EnvPublicID = "another-env" },
 		func(b *gc.Binding) { b.GatewayPublicID = "another-gateway" },
@@ -49,7 +52,7 @@ func TestGatewayReapprovalAdoptsOnlySamePathAndRetiresOldCredentials(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.BindingGeneration != 3 || loaded.ControlArtifactPool != nil || loaded.GatewayCloud.Revoked || loaded.GatewayCloud.DeliveryRequestID != "" {
+	if loaded.BindingGeneration != 3 || loaded.ControlArtifactPool != nil || loaded.GatewayPublication.Revoked || loaded.GatewayPublication.DeliveryRequestID != "" {
 		t.Fatal("reapproval did not persist a clean new generation")
 	}
 }
@@ -79,13 +82,13 @@ func TestGatewayClosureLeavesLocalAndNewlyApprovedSessionsRunning(t *testing.T) 
 }
 
 func TestGatewayControlSourceRejectsChangedGenerationBeforeSpending(t *testing.T) {
-	a := &Agent{cfg: &config.Config{EnvironmentID: "env", BindingGeneration: 1, GatewayCloud: &gatewaycloud.RuntimeConfig{
+	a := &Agent{cfg: &config.Config{EnvironmentID: "env", BindingGeneration: 1, GatewayPublication: &gatewaycloud.RuntimeConfig{
 		Binding: &gc.Binding{PublicID: "binding", Generation: 1},
 	}}}
 	expected := a.remoteConfigSnapshot()
 	a.cfg.BindingGeneration = 2
-	a.cfg.GatewayCloud.Binding.Generation = 2
-	if expected.GatewayCloud.Binding.Generation != 1 {
+	a.cfg.GatewayPublication.Binding.Generation = 2
+	if expected.GatewayPublication.Binding.Generation != 1 {
 		t.Fatal("controller snapshot was mutated by the new binding")
 	}
 	source := controlArtifactSource{agent: a, expectedConfig: expected}
@@ -93,8 +96,8 @@ func TestGatewayControlSourceRejectsChangedGenerationBeforeSpending(t *testing.T
 		t.Fatal("old controller acquired a credential for the new generation")
 	}
 	a.cfg.BindingGeneration = 1
-	a.cfg.GatewayCloud.Binding.Generation = 1
-	a.cfg.GatewayCloud.Revoked = true
+	a.cfg.GatewayPublication.Binding.Generation = 1
+	a.cfg.GatewayPublication.Revoked = true
 	if _, err := source.Acquire(t.Context()); err == nil {
 		t.Fatal("revoked controller acquired a credential")
 	}

@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-func TestProofV1SharedFixture(t *testing.T) {
-	raw, err := os.ReadFile("testdata/proof-v1.json")
+func TestProofV2SharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("testdata/proof-v2.json")
 	if err != nil {
 		t.Fatal(err)
 	}

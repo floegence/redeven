@@ -81,38 +81,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
   ].filter(connection => kinds.length === 0 || kinds.includes(connection.kind))) {
     // Deliberately preserve a local registration ID unrelated to the wire ID,
     // as happens after editing a host, URL, container or data-root coordinate.
-    let record = { schema_version: 3, gateway_id: `qualification-${connection.kind}`, display_name: connection.kind,
+    let record = { schema_version: 4, gateway_id: `qualification-${connection.kind}`, display_name: connection.kind,
       local_enabled: true, connection, created_at_ms: 1, updated_at_ms: 1 };
     activeRecord = record;
     const initial = await lifecycle.inspectService(record);
     assert.equal(initial.can_start, true, JSON.stringify(initial));
-    await assert.rejects(lifecycle.bridgeClient(record, { startPolicy: 'require_ready' }), { name: 'GatewayServiceStartRequiredError' });
+    await assert.rejects(lifecycle.client(record, { startPolicy: 'require_ready' }), { name: 'GatewayServiceStartRequiredError' });
     const session = await lifecycle.startGateway(record);
     const material = trust.createGatewayPairingMaterial(record);
     const challenge = await session.client.pairingChallenge(record, trust.pairingChallengeRequest(material));
     trust.assertGatewayPairingChallenge({ record, material, challenge });
-    const request = trust.buildPairingCompleteRequest(material, challenge, { profileWrite: true });
+    const request = trust.buildPairingCompleteRequest(material, challenge, { access: true, manage_members: true, configure_cloud: true });
     const completion = await session.client.completePairing(record, request);
-    trust.assertGatewayPairingCompleteResponse(material, challenge, completion, { client_capability: request.client_capability });
+    trust.assertGatewayPairingCompleteResponse(material, challenge, completion, request.permissions);
     record = { ...record, trust_profile: await trust.completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }) };
     activeRecord = record;
-    assert.ok((await lifecycle.catalog(record)).gateway.capabilities.includes('env_profile_write'));
-    const profile = await lifecycle.upsertEnvironmentProfile(record, { display_name: 'Managed host acceptance', access_mode: 'gateway_proxy', access_route: { kind: 'url', url: 'https://example.com/' } });
-    const envID = profile.environment.gateway_env_id;
-    for (const accessMode of ['direct_url', 'gateway_proxy']) {
-      const opened = await lifecycle.openSession(record, { gateway_env_id: envID, requested_capability: 'env_app', access_mode: accessMode, client_nonce: randomUUID() });
-      assert.equal(opened.connect_artifact.kind, accessMode === 'direct_url' ? 'local_direct_artifact' : 'desktop_bridge_artifact');
-      await session.client.closeSession(record, opened.gateway_session_id);
-    }
+    const catalog = await lifecycle.catalog(record);
+    assert.deepEqual(catalog.gateway.permissions, request.permissions);
+    const invitation = await session.client.invite(record);
+    assert.equal(invitation.protocol_version, 'redeven-gateway-v4');
+    assert.equal(invitation.gateway_id, catalog.gateway.gateway_id);
+    assert.equal(invitation.expires_at_unix_ms - invitation.issued_at_unix_ms, 600_000);
+    assert.equal(catalog.members.length, 0, 'Only a Runtime can complete membership');
+    await session.client.updatePolicy(record, { ...catalog.policy, default_cloud_allowed: true });
     await lifecycle.restartGateway(record);
-    assert.ok((await lifecycle.catalog(record)).environments.some(item => item.gateway_env_id === envID));
-    await lifecycle.deleteEnvironmentProfile(record, { gateway_env_id: envID });
-    assert.equal((await lifecycle.catalog(record)).environments.length, 0);
+    const restored = await lifecycle.catalog(record);
+    assert.equal(restored.policy.default_cloud_allowed, true);
+    assert.equal(restored.gateway.gateway_id, invitation.gateway_id);
     await lifecycle.stopGateway(record);
     assert.equal((await lifecycle.inspectService(record)).status, 'not_started');
     await lifecycle.clear(record);
     activeRecord = undefined;
-    report.cases.push(`${connection.kind}: empty state, explicit install/start, pair/write grant, catalog, profile, direct/proxy signed artifacts, restart persistence, delete, stop`);
+    report.cases.push(`${connection.kind}: empty state, explicit install/start, explicit permissions, signed invitation, policy restart persistence, stable identity, stop`);
     console.log(`PASS ${connection.kind}`);
   }
   report.status = 'passed';

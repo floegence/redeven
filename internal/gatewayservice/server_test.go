@@ -24,7 +24,7 @@ func TestGatewayDoesNotExposeRuntimeLifecycleRoutes(t *testing.T) {
 
 func TestGatewayStartsWithoutRuntimeState(t *testing.T) {
 	stateRoot := t.TempDir()
-	server, err := New(Options{StateRoot: stateRoot})
+	server, err := New(Options{StateRoot: stateRoot, MemberListen: "127.0.0.1:0"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -135,11 +135,11 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Gateway
 
-- [Gateway Cloud access](gateway/gateway-cloud-access.md) - Enroll private Runtimes through Namespace approval, preserve fixed transport paths, and recover or revoke independent identities.
-- [Gateway service](gateway/gateway-service.md) - Run the optional standalone identity, catalog, open-session, and access forwarding service.
+- [Gateway Cloud access](gateway/gateway-cloud-access.md) - Publish unified Runtime members through Namespace approval and track recovery and independent closure receipts.
+- [Gateway service](gateway/gateway-service.md) - Manage invitations, membership and policy without Runtime lifecycle authority.
 - [Gateway Desktop interactions](gateway/gateway-desktop-interactions.md) - Manage environments in place and verify clear counts, contextual forms, access actions and operation feedback.
-- [Gateway access sessions](gateway/gateway-access-sessions.md) - Choose Direct URL or Gateway proxy access while preserving Runtime login, target isolation, and session revocation.
-- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md) - Verify isolated-network access through HTTPS Nginx and keep installer checks with the release workflow.
+- [Gateway access sessions](gateway/gateway-access-sessions.md) - Open outbound members with isolated TLS, Runtime authentication and bounded reverse streams.
+- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md) - Verify outbound-only LAN and Cloud application access with real Electron and network isolation.
 
 ## Code
 
@@ -264,7 +264,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Protocol
 
-- [Gateway v3 protocol](protocol/gateway-v1-protocol.md) - Define explicit access modes, signed artifacts, and owner-scoped close-session on the Gateway wire contract.
+- [Gateway v4 protocol](protocol/gateway-v4-protocol.md) - Define signed invitations, member identity, independent permissions and reverse access.
 - [RCPP v3 provider API](protocol/rcpp-v3-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.
 
 ## Release

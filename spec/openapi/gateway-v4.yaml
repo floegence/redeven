@@ -1,0 +1,2498 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Redeven Gateway membership and access",
+    "version": "redeven-gateway-v4",
+    "description": "Runtime is the active member initiator. Gateway never dials Runtime URLs. The administration listener rejects browser Origin headers. Runtime membership uses a separately authenticated HTTPS listener; inner Runtime TLS and Flowersec application authorization remain end to end. Member limits are 1,024 members, 32 business streams per member and 1,024 business streams globally, including pending opens and Cloud egress. No Runtime lifecycle or legacy HTTP proxy routes are exposed."
+  },
+  "paths": {
+    "/gateway/v4/identity": {
+      "post": {
+        "operationId": "gateway_v4_identity",
+        "description": "Prove the stable Gateway key at a changed address using fresh caller input and the existing paired identity.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/IdentityResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/pairing/challenge": {
+      "post": {
+        "operationId": "gateway_v4_pairing_challenge",
+        "description": "Authorize Desktop pairing through an administrator code or trusted host bridge.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PairingChallengeResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/pairing/complete": {
+      "post": {
+        "operationId": "gateway_v4_pairing_complete",
+        "description": "Complete signed pairing with explicit access, member management and Cloud configuration grants.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PairingCompleteResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/cloud/configure": {
+      "post": {
+        "operationId": "gateway_v4_cloud_configure",
+        "description": "Configure the Cloud association using explicit Cloud configuration authority. Reauthorization cannot restore a retired registration.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureCloudRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Gateway"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/cloud/status": {
+      "post": {
+        "operationId": "gateway_v4_cloud_status",
+        "description": "Read the live Cloud association without credentials.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Summary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/members/reevaluate": {
+      "post": {
+        "operationId": "gateway_v4_members_reevaluate",
+        "description": "Reevaluate the current configured Cloud policy hook for a member.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveMemberRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Empty"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/catalog": {
+      "post": {
+        "operationId": "gateway_v4_catalog",
+        "description": "Read members, policy, hook status and observed connectivity. This does not issue Runtime lifecycle authority.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CatalogResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/invitations": {
+      "post": {
+        "operationId": "gateway_v4_invitations",
+        "description": "Issue a ten-minute one-use invitation. Requires member management permission.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MemberInvitation"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/members/remove": {
+      "post": {
+        "operationId": "gateway_v4_members_remove",
+        "description": "Remove the exact member version; fence LAN and Cloud connections and persist Cloud revocation work.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveMemberRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Empty"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/members/policy": {
+      "post": {
+        "operationId": "gateway_v4_members_policy",
+        "description": "Update Cloud permission independently for each member; successful items survive partial failure.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMembersRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MemberOperationResult"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/policy": {
+      "post": {
+        "operationId": "gateway_v4_policy",
+        "description": "Update Gateway Cloud policy using an expected revision. Automatic mode requires separate Namespace authorization.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Empty"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/access/open": {
+      "post": {
+        "operationId": "gateway_v4_access_open",
+        "description": "Authorize a reverse member access connection. Ticket expiry limits redemption, not application session duration.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ConnectionOffer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/access/service": {
+      "post": {
+        "operationId": "gateway_v4_access_service",
+        "description": "Refresh signed Runtime TLS service identity for the exact member version, without interrupting established streams.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberServiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MemberServiceResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gateway/v4/migration/dismiss": {
+      "post": {
+        "operationId": "gateway_v4_migration_dismiss",
+        "description": "Dismiss the one-time member rebuilding notice.",
+        "security": [
+          {
+            "GatewaySignature": []
+          },
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Empty"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v4/member/join": {
+      "post": {
+        "operationId": "v4_member_join",
+        "description": "Redeem the Gateway invitation with Runtime-signed local consent; repeated delivery retains the same member.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberJoinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberJoinResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v4/member/cancel-join": {
+      "post": {
+        "operationId": "v4_member_cancel_join",
+        "description": "Cancel a pending join with the original signed request, including a lost successful response.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberJoinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogRequest"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v4/member/rotate": {
+      "post": {
+        "operationId": "v4_member_rotate",
+        "description": "Rotate current member client credentials and signed service certificate without changing established session lifetime.",
+        "security": [
+          {
+            "MemberTLS": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberRotateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRotateResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v4/member/leave": {
+      "post": {
+        "operationId": "v4_member_leave",
+        "description": "Leave as the current authenticated member. Removal remains idempotent for the same version.",
+        "security": [
+          {
+            "MemberTLS": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveMemberRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogRequest"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v4/member/cloud-closure": {
+      "post": {
+        "operationId": "v4_member_cloud_closure",
+        "description": "Relay a bounded signed observation or terminal closure receipt to the configured Cloud. Requires an independent Runtime signature; provides no connection or recovery authority.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeClosureExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeClosureExchangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v4/member/cloud": {
+      "post": {
+        "operationId": "v4_member_cloud",
+        "description": "Observe the optional Cloud publication context of the sole authenticated member.",
+        "security": [
+          {
+            "MemberTLS": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberCloudContext"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v4/member/connect": {
+      "post": {
+        "operationId": "v4_member_connect",
+        "description": "Obtain a one-use ticket for the Runtime-initiated persistent membership connection.",
+        "security": [
+          {
+            "MemberTLS": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOffer"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "GatewaySignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Redeven-Request-Signature",
+        "description": "Requires the paired client key ID, Gateway ID, binding audience, timestamp and one-use nonce headers. Signature covers the canonical JSON digest, method, route, audience, Gateway identity and protocol version."
+      },
+      "HostAdministrator": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Redeven-Gateway-Host-Token",
+        "description": "Private host credential; accepted only on the administration listener from loopback. Separate from Desktop bridge credentials. Never accepted on Runtime member endpoints."
+      },
+      "MemberTLS": {
+        "type": "mutualTLS",
+        "description": "Gateway-issued current Runtime member client certificate, checked against member state and version."
+      }
+    },
+    "schemas": {
+      "CloudPermission": {
+        "type": "string",
+        "enum": [
+          "inherit",
+          "allow",
+          "deny"
+        ]
+      },
+      "PublicationMode": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "automatic"
+        ]
+      },
+      "HookAction": {
+        "type": "string",
+        "enum": [
+          "member.admit",
+          "access.open",
+          "cloud.publish"
+        ]
+      },
+      "HookStatus": {
+        "type": "string",
+        "enum": [
+          "not_configured",
+          "configured",
+          "invalid"
+        ]
+      },
+      "IdentityRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "nonce": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "nonce"
+        ]
+      },
+      "IdentityResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "binding_audience": {
+            "type": "string"
+          },
+          "expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string"
+          },
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding_audience",
+          "expires_at_unix_ms",
+          "gateway_id",
+          "nonce",
+          "protocol_version",
+          "signature"
+        ]
+      },
+      "GatewayPermissions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "type": "boolean"
+          },
+          "manage_members": {
+            "type": "boolean"
+          },
+          "configure_cloud": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "access",
+          "manage_members",
+          "configure_cloud"
+        ]
+      },
+      "GatewayMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "gateway_public_key_fingerprint": {
+            "type": "string"
+          },
+          "member_url": {
+            "type": "string"
+          },
+          "member_tls_root_pem": {
+            "type": "string"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/GatewayPermissions"
+          }
+        },
+        "required": [
+          "gateway_id",
+          "display_name",
+          "gateway_public_key_fingerprint",
+          "member_url",
+          "member_tls_root_pem",
+          "permissions"
+        ]
+      },
+      "CatalogRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          }
+        },
+        "required": [
+          "protocol_version"
+        ]
+      },
+      "CatalogResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "gateway": {
+            "$ref": "#/components/schemas/GatewayMetadata"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "policy": {
+            "$ref": "#/components/schemas/GatewayPolicy"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rebuild_required": {
+            "type": "boolean"
+          },
+          "hook_status": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/HookStatus"
+            }
+          }
+        },
+        "required": [
+          "protocol_version",
+          "gateway",
+          "members",
+          "policy",
+          "revision",
+          "rebuild_required",
+          "hook_status"
+        ]
+      },
+      "OpenSessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "member_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "member_id"
+        ]
+      },
+      "MemberServiceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "expected_member_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "member_id",
+          "expected_member_version"
+        ]
+      },
+      "MemberServiceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "service": {
+            "$ref": "#/components/schemas/MemberService"
+          },
+          "delegation": {
+            "$ref": "#/components/schemas/MemberDelegation"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "member_id",
+          "member_version",
+          "service",
+          "delegation"
+        ]
+      },
+      "InvitationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          }
+        },
+        "required": [
+          "protocol_version"
+        ]
+      },
+      "RemoveMemberRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "expected_member_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "member_id",
+          "expected_member_version"
+        ]
+      },
+      "UpdatePolicyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/GatewayPolicy"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "expected_revision",
+          "policy"
+        ]
+      },
+      "UpdateMembersRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberPolicyUpdate"
+            }
+          }
+        },
+        "required": [
+          "protocol_version",
+          "items"
+        ]
+      },
+      "PairingChallengeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "client_nonce": {
+            "type": "string"
+          },
+          "client_public_key": {
+            "type": "string"
+          },
+          "binding_audience": {
+            "type": "string"
+          },
+          "pairing_code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "client_nonce",
+          "client_public_key",
+          "binding_audience"
+        ]
+      },
+      "PairingChallengeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "gateway_public_key": {
+            "type": "string"
+          },
+          "gateway_public_key_fingerprint": {
+            "type": "string"
+          },
+          "gateway_nonce": {
+            "type": "string"
+          },
+          "pairing_code": {
+            "type": "string"
+          },
+          "expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "gateway_id",
+          "gateway_public_key",
+          "gateway_public_key_fingerprint",
+          "gateway_nonce",
+          "expires_at_unix_ms",
+          "signature"
+        ]
+      },
+      "PairingCompleteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "client_nonce": {
+            "type": "string"
+          },
+          "gateway_nonce": {
+            "type": "string"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "binding_audience": {
+            "type": "string"
+          },
+          "client_key_id": {
+            "type": "string"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/GatewayPermissions"
+          },
+          "proof": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "client_nonce",
+          "gateway_nonce",
+          "gateway_id",
+          "binding_audience",
+          "client_key_id",
+          "permissions",
+          "proof"
+        ]
+      },
+      "PairingCompleteResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "client_key_id": {
+            "type": "string"
+          },
+          "paired_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/GatewayPermissions"
+          },
+          "proof": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "gateway_id",
+          "client_key_id",
+          "paired_at_unix_ms",
+          "permissions",
+          "proof"
+        ]
+      },
+      "MemberInvitation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "invitation_id": {
+            "type": "string"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "gateway_url": {
+            "type": "string"
+          },
+          "gateway_public_key": {
+            "type": "string"
+          },
+          "gateway_tls_root_pem": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "issued_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "invitation_id",
+          "gateway_id",
+          "gateway_url",
+          "gateway_public_key",
+          "gateway_tls_root_pem",
+          "token",
+          "issued_at_unix_ms",
+          "expires_at_unix_ms",
+          "signature"
+        ]
+      },
+      "MemberDelegation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "runtime_public_id": {
+            "type": "string"
+          },
+          "public_key_b64u": {
+            "type": "string"
+          },
+          "invitation_id": {
+            "type": "string"
+          },
+          "consented_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "manage_access": {
+            "type": "boolean"
+          },
+          "manage_cloud_publication": {
+            "type": "boolean"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "gateway_id",
+          "member_id",
+          "runtime_public_id",
+          "public_key_b64u",
+          "invitation_id",
+          "consented_at_unix_ms",
+          "manage_access",
+          "manage_cloud_publication",
+          "signature"
+        ]
+      },
+      "MemberService": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "certificate_pem": {
+            "type": "string"
+          },
+          "certificate_sha256": {
+            "type": "string"
+          },
+          "expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "origin",
+          "certificate_pem",
+          "certificate_sha256",
+          "expires_at_unix_ms",
+          "signature"
+        ]
+      },
+      "MemberMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hostname": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "arch": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hostname",
+          "os",
+          "arch",
+          "version"
+        ]
+      },
+      "MemberJoinRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "invitation_id": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "delegation": {
+            "$ref": "#/components/schemas/MemberDelegation"
+          },
+          "client_csr_pem": {
+            "type": "string"
+          },
+          "service": {
+            "$ref": "#/components/schemas/MemberService"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/MemberMetadata"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "invitation_id",
+          "token",
+          "delivery_id",
+          "delegation",
+          "client_csr_pem",
+          "service",
+          "metadata",
+          "signature"
+        ]
+      },
+      "MemberJoinResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "client_certificate_pem": {
+            "type": "string"
+          },
+          "client_expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "gateway_id",
+          "member_id",
+          "member_version",
+          "delivery_id",
+          "client_certificate_pem",
+          "client_expires_at_unix_ms"
+        ]
+      },
+      "MemberRotateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "client_csr_pem": {
+            "type": "string"
+          },
+          "service": {
+            "$ref": "#/components/schemas/MemberService"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "gateway_id",
+          "member_id",
+          "member_version",
+          "delivery_id",
+          "client_csr_pem",
+          "service",
+          "signature"
+        ]
+      },
+      "MemberRotateResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "client_certificate_pem": {
+            "type": "string"
+          },
+          "client_expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "member_id",
+          "member_version",
+          "delivery_id",
+          "client_certificate_pem",
+          "client_expires_at_unix_ms"
+        ]
+      },
+      "Member": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "member_id": {
+            "type": "string"
+          },
+          "runtime_public_id": {
+            "type": "string"
+          },
+          "member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "last_seen_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cloud_permission": {
+            "$ref": "#/components/schemas/CloudPermission"
+          },
+          "effective_cloud_allowed": {
+            "type": "boolean"
+          },
+          "cloud_state": {
+            "type": "string"
+          },
+          "cloud_revocation_pending": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/MemberMetadata"
+          }
+        },
+        "required": [
+          "member_id",
+          "runtime_public_id",
+          "member_version",
+          "display_name",
+          "state",
+          "connected",
+          "last_seen_at_unix_ms",
+          "cloud_permission",
+          "effective_cloud_allowed",
+          "cloud_state",
+          "cloud_revocation_pending",
+          "metadata"
+        ]
+      },
+      "GatewayPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "default_cloud_allowed": {
+            "type": "boolean"
+          },
+          "publication_mode": {
+            "$ref": "#/components/schemas/PublicationMode"
+          }
+        },
+        "required": [
+          "revision",
+          "default_cloud_allowed",
+          "publication_mode"
+        ]
+      },
+      "MemberPolicyUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "member_id": {
+            "type": "string"
+          },
+          "expected_member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cloud_permission": {
+            "$ref": "#/components/schemas/CloudPermission"
+          }
+        },
+        "required": [
+          "member_id",
+          "expected_member_version",
+          "cloud_permission"
+        ]
+      },
+      "MemberOperationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "member_id": {
+            "type": "string"
+          },
+          "member": {
+            "$ref": "#/components/schemas/Member"
+          },
+          "error_code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id"
+        ]
+      },
+      "HookInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "action": {
+            "$ref": "#/components/schemas/HookAction"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "runtime_public_id": {
+            "type": "string"
+          },
+          "desktop_key_id": {
+            "type": "string"
+          },
+          "namespace_public_id": {
+            "type": "string"
+          },
+          "policy_revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "version",
+          "action",
+          "gateway_id",
+          "member_id",
+          "runtime_public_id",
+          "policy_revision"
+        ]
+      },
+      "HookResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "reason_code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "allowed",
+          "reason_code"
+        ]
+      },
+      "MemberCloudContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "gateway_id": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cloud_origin": {
+            "type": "string"
+          },
+          "region_origin": {
+            "type": "string"
+          },
+          "namespace_public_id": {
+            "type": "string"
+          },
+          "gateway_public_id": {
+            "type": "string"
+          },
+          "policy_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "gateway_id",
+          "member_id",
+          "member_version",
+          "policy_revision",
+          "allowed",
+          "state"
+        ]
+      },
+      "ConfigureCloudRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "cloud_origin": {
+            "type": "string"
+          },
+          "reauthorize": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "cloud_origin",
+          "reauthorize"
+        ]
+      },
+      "ConnectionOffer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v4"
+          },
+          "channel_id": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "artifact": {
+            "type": "object",
+            "description": "Opaque published Flowersec v5 connect artifact; consumed by the public SDK."
+          },
+          "service": {
+            "$ref": "#/components/schemas/MemberService"
+          },
+          "delegation": {
+            "$ref": "#/components/schemas/MemberDelegation"
+          },
+          "expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "channel_id",
+          "member_id",
+          "member_version",
+          "generation",
+          "artifact",
+          "service",
+          "delegation",
+          "expires_at_unix_ms"
+        ]
+      },
+      "Gateway": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/GatewayPolicy"
+          },
+          "automatic_publication_authorized": {
+            "type": "boolean"
+          },
+          "authorization_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "directory_synced_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "identity_expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "public_id": {
+            "type": "string"
+          },
+          "namespace_public_id": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "public_key_sha256": {
+            "type": "string"
+          },
+          "listener_url": {
+            "type": "string"
+          },
+          "tls_root_pem": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "directory_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_seen_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "gateway_id",
+          "policy",
+          "automatic_publication_authorized",
+          "authorization_revision",
+          "directory_synced_at_unix_ms",
+          "identity_expires_at_unix_ms",
+          "public_id",
+          "namespace_public_id",
+          "region",
+          "name",
+          "state",
+          "public_key_sha256",
+          "listener_url",
+          "tls_root_pem",
+          "version",
+          "directory_revision",
+          "last_seen_at_unix_ms"
+        ]
+      },
+      "BindingFence": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "integer",
+            "const": 2
+          },
+          "public_id": {
+            "type": "string"
+          },
+          "namespace_public_id": {
+            "type": "string"
+          },
+          "gateway_public_id": {
+            "type": "string"
+          },
+          "runtime_public_id": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "public_id",
+          "namespace_public_id",
+          "gateway_public_id",
+          "runtime_public_id",
+          "generation"
+        ]
+      },
+      "Closure": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "member_id": {
+            "type": "string"
+          },
+          "member_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "public_id": {
+            "type": "string"
+          },
+          "binding_public_id": {
+            "type": "string"
+          },
+          "gateway_public_id": {
+            "type": "string"
+          },
+          "runtime_public_id": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "runtime_closed": {
+            "type": "boolean"
+          },
+          "gateway_closed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "member_id",
+          "member_version",
+          "reason",
+          "public_id",
+          "binding_public_id",
+          "gateway_public_id",
+          "runtime_public_id",
+          "generation",
+          "runtime_closed",
+          "gateway_closed"
+        ]
+      },
+      "Summary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "cloud_origin": {
+            "type": "string"
+          },
+          "gateway_public_id": {
+            "type": "string"
+          },
+          "namespace_public_id": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "management_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "state"
+        ]
+      },
+      "RuntimeClosureExchangeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cloud_origin": {
+            "type": "string"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/BindingFence"
+          },
+          "issued_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cloud_origin",
+          "binding",
+          "issued_at_unix_ms",
+          "closed",
+          "signature"
+        ]
+      },
+      "RuntimeClosureExchangeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "closure": {
+            "$ref": "#/components/schemas/Closure"
+          },
+          "accepted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "ok",
+          "error"
+        ],
+        "properties": {
+          "ok": {
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "Empty": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  }
+}

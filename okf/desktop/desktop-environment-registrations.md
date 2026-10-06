@@ -7,7 +7,7 @@ timestamp: 2026-09-19T00:00:00Z
 ---
 # Summary
 
-Each Environment action surface has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. A linked Runtime and Provider Environment may share one visual relationship card, but every action surface still names the exact owner entry and Renderer display grouping never selects storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.
+Each Environment action surface has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use the member identity held by their Gateway. A linked Runtime and Provider Environment may share one visual relationship card, but every action surface still names the exact owner entry and Renderer display grouping never selects storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.
 
 # Contract
 

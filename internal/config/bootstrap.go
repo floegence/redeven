@@ -335,7 +335,7 @@ func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs
 	} else if !errors.Is(loadErr, os.ErrNotExist) {
 		return nil, fmt.Errorf("load existing runtime configuration: %w", loadErr)
 	}
-	if prev != nil && prev.GatewayCloud != nil {
+	if prev != nil && (prev.Gateway != nil || prev.GatewayPublication != nil || prev.GatewayMigrationEvidence != nil || prev.GatewayRejoinRequired) {
 		return nil, errors.New("gateway Cloud access requires explicit migration before changing the provider binding")
 	}
 	attempt, attemptPath, err := prepareBootstrapDeliveryAttempt(cfgPath, providerOrigin, baseURL, envID, prev)

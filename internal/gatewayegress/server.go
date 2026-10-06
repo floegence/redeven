@@ -18,30 +18,38 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/floegence/redeven/internal/gatewayflow"
 )
 
 var ErrInvalidPolicy = errors.New("invalid Gateway egress policy")
 
 type Member struct {
-	ID                string
-	Generation        uint64
-	CertificateSHA256 string
-	Destinations      []string
+	AdmissionExpiresAtUnixMS int64
+	MemberVersion            uint64
+	ID                       string
+	Generation               uint64
+	CertificateSHA256        string
+	Destinations             []string
 }
 
 type Options struct {
+	Budget                   *gatewayflow.Budget
 	MaxConnectionsPerMember  int
 	MaxConnections           int
 	AllowPrivateDestinations bool
 }
 
 type memberPolicy struct {
-	id           string
-	generation   uint64
-	destinations map[string]struct{}
+	admissionExpiresAtUnixMS int64
+	memberVersion            uint64
+	id                       string
+	generation               uint64
+	destinations             map[string]struct{}
 }
 
 type connection struct {
+	reservation *gatewayflow.Reservation
 	memberID    string
 	fingerprint string
 	generation  uint64
@@ -71,6 +79,9 @@ func New(options Options) (*Server, error) {
 	if options.MaxConnections == 0 {
 		options.MaxConnections = 1024
 	}
+	if options.Budget == nil {
+		options.Budget = gatewayflow.New(options.MaxConnectionsPerMember, options.MaxConnections)
+	}
 	return &Server{members: make(map[string]memberPolicy), active: make(map[*connection]struct{}), options: options}, nil
 }
 
@@ -90,7 +101,7 @@ func (s *Server) ReplaceMembers(members []Member) error {
 	ids := make(map[string]struct{}, len(members))
 	for _, member := range members {
 		raw, err := hex.DecodeString(member.CertificateSHA256)
-		if member.ID == "" || member.Generation == 0 || err != nil || len(raw) != sha256.Size || hex.EncodeToString(raw) != member.CertificateSHA256 || len(member.Destinations) == 0 {
+		if member.ID == "" || member.MemberVersion == 0 || member.Generation == 0 || err != nil || len(raw) != sha256.Size || hex.EncodeToString(raw) != member.CertificateSHA256 || len(member.Destinations) == 0 {
 			return ErrInvalidPolicy
 		}
 		if _, exists := next[member.CertificateSHA256]; exists {
@@ -100,7 +111,7 @@ func (s *Server) ReplaceMembers(members []Member) error {
 			return ErrInvalidPolicy
 		}
 		ids[member.ID] = struct{}{}
-		policy := memberPolicy{id: member.ID, generation: member.Generation, destinations: make(map[string]struct{}, len(member.Destinations))}
+		policy := memberPolicy{admissionExpiresAtUnixMS: member.AdmissionExpiresAtUnixMS, id: member.ID, memberVersion: member.MemberVersion, generation: member.Generation, destinations: make(map[string]struct{}, len(member.Destinations))}
 		for _, address := range member.Destinations {
 			if !validAuthority(address) {
 				return ErrInvalidPolicy
@@ -115,10 +126,14 @@ func (s *Server) ReplaceMembers(members []Member) error {
 		return net.ErrClosed
 	}
 	s.members = next
+	byID := make(map[string]memberPolicy, len(next))
+	for _, policy := range next {
+		byID[policy.id] = policy
+	}
 	for current := range s.active {
-		policy, exists := next[current.fingerprint]
+		policy, exists := byID[current.memberID]
 		_, allowed := policy.destinations[current.destination]
-		if !exists || !allowed || policy.id != current.memberID || policy.generation != current.generation {
+		if !exists || !allowed || policy.id != current.memberID || policy.generation != current.generation || policy.memberVersion != current.reservation.Version {
 			current.cancel()
 		}
 	}
@@ -193,7 +208,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	defer func() { s.mu.Lock(); delete(s.active, current); s.mu.Unlock() }()
+	defer func() { s.mu.Lock(); delete(s.active, current); s.mu.Unlock(); current.reservation.Release() }()
 	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
 	upstream, err := s.dialDestination(dialCtx, r.Host)
 	dialCancel()
@@ -249,25 +264,17 @@ func (s *Server) reserve(fingerprint, destination string, cancel context.CancelF
 		return nil, http.StatusServiceUnavailable
 	}
 	member, ok := s.members[fingerprint]
-	if !ok {
+	if !ok || (member.admissionExpiresAtUnixMS != 0 && time.Now().UnixMilli() >= member.admissionExpiresAtUnixMS) {
 		return nil, http.StatusForbidden
 	}
 	if _, ok := member.destinations[destination]; !ok {
 		return nil, http.StatusForbidden
 	}
-	if len(s.active) >= s.options.MaxConnections {
+	reservation, err := s.options.Budget.Reserve(member.id, member.memberVersion, gatewayflow.Cloud, cancel)
+	if err != nil {
 		return nil, http.StatusTooManyRequests
 	}
-	count := 0
-	for current := range s.active {
-		if current.memberID == member.id {
-			count++
-		}
-	}
-	if count >= s.options.MaxConnectionsPerMember {
-		return nil, http.StatusTooManyRequests
-	}
-	current := &connection{memberID: member.id, fingerprint: fingerprint, generation: member.generation, destination: destination, cancel: cancel}
+	current := &connection{reservation: reservation, memberID: member.id, fingerprint: fingerprint, generation: member.generation, destination: destination, cancel: cancel}
 	s.active[current] = struct{}{}
 	return current, http.StatusOK
 }

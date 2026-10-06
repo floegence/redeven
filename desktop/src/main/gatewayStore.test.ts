@@ -1,3 +1,4 @@
+import { memberFixture } from '../testSupport/gatewayMembershipFixture';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -93,13 +94,13 @@ describe('GatewayStore', () => {
     });
   });
 
-  it('initializes fresh stores at schema v3', async () => {
+  it('initializes fresh stores at schema v4', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     const store = new GatewayStore(filePath);
 
-    expect(await store.load()).toEqual({ schema_version: 3, gateways: [] });
+    expect(await store.load()).toEqual({ schema_version: 4, gateways: [] });
     await store.upsert({
       gateway_id: 'gw_fresh',
       display_name: 'Fresh Gateway',
@@ -108,8 +109,8 @@ describe('GatewayStore', () => {
     });
 
     expect(JSON.parse(await fs.readFile(filePath, 'utf8'))).toMatchObject({
-      schema_version: 3,
-      gateways: [expect.objectContaining({ schema_version: 3, gateway_id: 'gw_fresh' })],
+      schema_version: 4,
+      gateways: [expect.objectContaining({ schema_version: 4, gateway_id: 'gw_fresh' })],
     });
   });
 
@@ -134,10 +135,9 @@ describe('GatewayStore', () => {
     const reopened = new GatewayStore(filePath);
     expect((await reopened.list()).map(record => record.gateway_id).sort()).toEqual(['gw_container', 'gw_direct']);
     expect(await reopened.get('gw_direct')).toMatchObject({ connection: { kind: 'ssh_host' } });
-    expect(await reopened.listLegacyDirectEnvironmentRecords()).toEqual([]);
   });
 
-  it.each([1, 2, 3])('preserves pending direct migration records across v%s reads and unrelated writes', async (version) => {
+  it.each([1, 2, 3])('discards retired Runtime mappings during v%s migration without creating new targets', async (version) => {
     const root = await createTempRoot(); cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -152,14 +152,11 @@ describe('GatewayStore', () => {
     await store.upsert({ gateway_id: 'gw_other', connection: { kind: 'url', base_url: 'https://gateway.example/' } });
     const reopened = new GatewayStore(filePath);
     expect(await reopened.get('gw_old')).toBeNull();
-    expect(await reopened.listLegacyDirectEnvironmentRecords()).toMatchObject([
-      { runtime_environment_id: 'env_preserved', record: { gateway_id: 'gw_old', display_name: 'My Runtime', created_at_ms: 10, updated_at_ms: 20 } },
-    ]);
-    expect(JSON.parse(await fs.readFile(filePath, 'utf8')).gateways.find((record: GatewayRecord) => record.gateway_id === 'gw_old'))
-      .toMatchObject({ runtime_environment_id: 'env_preserved' });
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8')).gateways.map((record: GatewayRecord) => record.gateway_id))
+      .toEqual(['gw_other']);
   });
 
-  it('migrates the exact v1 store to v3 and preserves user records', async () => {
+  it('migrates the exact v1 store to v4 and preserves user records', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
@@ -180,9 +177,9 @@ describe('GatewayStore', () => {
     const snapshot = await new GatewayStore(filePath).load();
 
     expect(snapshot).toMatchObject({
-      schema_version: 3,
+      schema_version: 4,
       gateways: [{
-        schema_version: 3,
+        schema_version: 4,
         gateway_id: 'gw_v1',
         display_name: 'Existing Gateway',
         local_enabled: false,
@@ -234,7 +231,7 @@ describe('GatewayStore', () => {
     const failing = new GatewayStore(filePath, async () => { throw Object.assign(new Error('atomic migration failure'), { code: 'ENOENT' }); });
     await expect(failing.load()).rejects.toThrow('atomic migration failure');
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
-    expect(await new GatewayStore(filePath).load()).toEqual(expected);
+    expect(await new GatewayStore(filePath).load()).toEqual({ ...expected, gateways: expected.gateways.map(record => ({ ...record, trust_profile: { ...record.trust_profile, gateway_id: stableGatewayID('https://gateway.example/office/') } })) });
   });
 
   it('rejects future schemas without changing the file', async () => {
@@ -242,7 +239,7 @@ describe('GatewayStore', () => {
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const original = '{"schema_version":4,"gateways":[]}\n';
+    const original = '{"schema_version":5,"gateways":[]}\n';
     await fs.writeFile(filePath, original, 'utf8');
 
     await expect(new GatewayStore(filePath).load()).rejects.toMatchObject({
@@ -251,7 +248,7 @@ describe('GatewayStore', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
   });
 
-  it('leaves v1 bytes intact when the v3 migration cannot commit', async () => {
+  it('leaves v1 bytes intact when the v4 migration cannot commit', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
@@ -266,15 +263,15 @@ describe('GatewayStore', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
   });
 
-  it('keeps the last committed snapshot when a v3 mutation cannot persist', async () => {
+  it('keeps the last committed snapshot when a v4 mutation cannot persist', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     const original = `${JSON.stringify({
-      schema_version: 3,
+      schema_version: 4,
       gateways: [{
-        schema_version: 3,
+        schema_version: 4,
         gateway_id: 'gw_committed',
         display_name: 'Committed Gateway',
         local_enabled: true,
@@ -639,20 +636,13 @@ describe('GatewayStore', () => {
 
     const source = gatewayRecordToSourceWithCatalog(record, {
       status: 'online',
-      environments: [{
-        gateway_env_id: 'env_demo',
-        display_name: 'Demo Env',
-        env_kind: 'reachable_env',
-        state: 'available',
-        capabilities: ['open'],
-        origin: { kind: 'network_target', label: '10.0.0.10' },
-      }],
+      environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Demo Env' }],
     });
 
     expect(source).toMatchObject({
       display_name: 'Stored Gateway',
       status: 'online',
-      environments: [expect.objectContaining({ gateway_env_id: 'env_demo' })],
+      environments: [expect.objectContaining({ member_id: 'env_demo' })],
     });
     expect(JSON.stringify(source)).not.toContain('paired_client_private_key_ref');
     expect(gatewayRecordToSourceWithError(record, 'token proof signature private_key')).toMatchObject({

@@ -19,7 +19,7 @@ func localAuthCookieName(r *http.Request, prefix string) string {
 		return ""
 	}
 	protocol := requestProtocol(r)
-	authority, err := canonicalPublicAuthority(r.Host, protocol)
+	authority, err := canonicalRequestAuthority(r, r.Host)
 	if err != nil {
 		return ""
 	}

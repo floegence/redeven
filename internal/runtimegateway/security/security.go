@@ -1,6 +1,7 @@
 package security
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -10,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -82,7 +84,21 @@ func CanonicalJSON(value any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(data), nil
+	// Sort nested structs just like maps so Node and Go sign the same object.
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var normalized any
+	if err := decoder.Decode(&normalized); err != nil {
+		return "", err
+	}
+	var output bytes.Buffer
+	encoder := json.NewEncoder(&output)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(normalized); err != nil {
+		return "", err
+	}
+	canonical := strings.TrimSuffix(output.String(), "\n")
+	return canonical, nil
 }
 
 func CanonicalJSONDigestFromBytes(body []byte) (string, error) {
@@ -90,8 +106,13 @@ func CanonicalJSONDigestFromBytes(body []byte) (string, error) {
 		return SHA256Base64URL(""), nil
 	}
 	var value any
-	if err := json.Unmarshal(body, &value); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
 		return "", err
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		return "", errors.New("invalid trailing JSON content")
 	}
 	canonical, err := CanonicalJSON(value)
 	if err != nil {

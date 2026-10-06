@@ -22,7 +22,7 @@ export function EnvironmentAccessSettings(props: {
             <input type="radio" name={`access-route-${props.environment.id}`} value={route.id} checked={draft() === route.id}
               onChange={() => setDraft(route.id)} />
             <span><strong>{environmentAccessRouteLabel(route, props.i18n)}</strong>
-              <small>{props.i18n.t(route.kind === 'gateway_proxy' ? 'gatewayAccess.routeIsolation' : 'gatewayAccess.directManagementUnchanged')}</small></span>
+              <small>{props.i18n.t(route.kind === 'gateway_member' ? 'gatewayAccess.routeIsolation' : 'gatewayAccess.directManagementUnchanged')}</small></span>
           </label>
         )}</For>
       </div>

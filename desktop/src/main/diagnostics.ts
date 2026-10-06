@@ -1,3 +1,4 @@
+import { redactGatewayDiagnosticText } from '../shared/gatewayDiagnostics';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -138,8 +139,7 @@ function cloneHeaders(headers: DiagnosticsHeaders | null | undefined): Diagnosti
 }
 
 function sanitizeText(value: unknown, max = 240): string {
-  const text = String(value ?? '').trim().replace(/\r/g, ' ').replace(/\n/g, ' ')
-    .replace(/(\/gateway\/v3\/access\/)[A-Za-z0-9_-]+/gu, '$1[redacted]');
+  const text = redactGatewayDiagnosticText(String(value ?? '')).trim().replace(/\r/g, ' ').replace(/\n/g, ' ');
   if (!max || text.length <= max) {
     return text;
   }

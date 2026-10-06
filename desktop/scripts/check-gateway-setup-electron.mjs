@@ -81,7 +81,7 @@ try {
   assert.equal((await snapshot()).gateway_sources.find(item => item.gateway_id === id).runtime_root, dataRoot,
     'Editing the Gateway data root must be reflected in the authoritative snapshot');
   report.cases.push('Editing the default data root updates the saved source');
-  const needsStart = await action({ ...registration, profile_write: true });
+  const needsStart = await action({ ...registration, permissions: { access: true, manage_members: true, configure_cloud: true } });
   assert.equal(needsStart.ok, false);
   assert.equal(needsStart.code, 'gateway_start_required');
   assert.equal(needsStart.gateway_id, id);
@@ -95,34 +95,22 @@ try {
   await run('start_gateway');
   await run('pair_gateway');
   await run('refresh_gateway_catalog');
-  const profile = { registration_ref: { kind: 'gateway_environment', gateway_id: id, gateway_env_id: '' },
-    display_name: 'Qualification target', access_mode: 'gateway_proxy', access_route: { kind: 'url', url: 'https://example.com/' } };
-  const write = registration => action({ kind: 'upsert_environment_registration', registration });
-  assert.equal((await write(profile)).ok, false, 'Basic pairing must not grant profile write');
-  assert.equal((await action({ ...registration, profile_write: true })).ok, true);
-  assert.ok((await snapshot()).gateway_sources.find(item => item.gateway_id === id).capabilities.includes('env_profile_write'));
-  report.cases.push('Explicit write grant is reflected immediately; basic pairing denies writes');
-  const savedProfile = await write(profile);
-  assert.equal(savedProfile.ok, true, JSON.stringify(savedProfile));
-  let environment = (await snapshot()).environments.find(item => item.id === savedProfile.environment_id);
-  assert.equal(environment.kind, 'gateway_environment');
-  assert.equal(environment.gateway_environment_profile.access_mode, 'gateway_proxy');
-  const edited = { ...profile, registration_ref: environment.registration_ref, display_name: 'Edited qualification', access_mode: 'direct_url' };
-  assert.equal((await write(edited)).ok, true);
-  environment = (await snapshot()).environments.find(item => item.id === savedProfile.environment_id);
-  assert.equal(environment.label, edited.display_name);
-  assert.equal(environment.gateway_environment_profile.access_mode, 'direct_url');
-  for (const url of ['http://127.0.0.1:9999/', 'http://192.168.1.10/', 'https://user:password@example.com/']) {
-    assert.equal((await write({ ...profile, access_route: { kind: 'url', url } })).ok, false,
-      'Managed Gateway must retain its default target security policy');
-  }
-  report.cases.push('Create/edit profile preserves Gateway ownership and explicit access mode; unsafe targets fail closed');
+  assert.equal((await action({ kind: 'invite_gateway_runtime', gateway_id: id })).ok, false, 'Basic pairing grants access only');
+  assert.equal((await action({ ...registration, permissions: { access: true, manage_members: true, configure_cloud: true } })).ok, true);
+  const paired = (await snapshot()).gateway_sources.find(item => item.gateway_id === id);
+  assert.deepEqual(paired.permissions, { access: true, manage_members: true, configure_cloud: true });
+  const invited = await action({ kind: 'invite_gateway_runtime', gateway_id: id });
+  assert.equal(invited.ok, true);
+  assert.equal(invited.gateway_invitation.protocol_version, 'redeven-gateway-v4');
+  assert.equal(invited.gateway_invitation.expires_at_unix_ms - invited.gateway_invitation.issued_at_unix_ms, 600_000);
+  assert.equal((await snapshot()).environments.some(item => item.kind === 'gateway_environment'), false, 'Invitation does not manufacture a member');
+  const policy = { ...paired.policy, default_cloud_allowed: true };
+  assert.equal((await action({ kind: 'update_gateway_policy', gateway_id: id, policy })).ok, true);
   await run('restart_gateway');
-  assert.ok((await snapshot()).environments.some(item => item.id === savedProfile.environment_id), 'Profiles survive restart');
-  const deleted = await action({ kind: 'delete_environment_registration', registration_ref: environment.registration_ref });
-  assert.equal(deleted.ok, true, JSON.stringify(deleted));
-  assert.equal((await snapshot()).environments.some(item => item.id === savedProfile.environment_id), false);
-  report.cases.push('Profile survives restart and explicit deletion refreshes the directory');
+  const restored = (await snapshot()).gateway_sources.find(item => item.gateway_id === id);
+  assert.equal(restored.policy.default_cloud_allowed, true);
+  assert.equal(restored.permissions.manage_members, true);
+  report.cases.push('Access-only pairing denies invitations; explicit permissions and policy survive restart');
   current = await snapshot();
   await writeFile(path.join(output, 'snapshot.json'), JSON.stringify(current, null, 2));
   await run('stop_gateway');

@@ -100,14 +100,14 @@ func NewTrustedBridgeSurfaceDialer(localUIBridgeURL string, runtimeControlURL st
 	if err != nil {
 		return nil, fmt.Errorf("invalid trusted Local UI bridge URL: %w", err)
 	}
-	return newSurfaceDialer(localUIAddr, dialAddrFromURL(runtimeControlURL), "", ""), nil
+	return newSurfaceDialer(localUIAddr, dialAddrFromURL(runtimeControlURL), "", "", ""), nil
 }
 
-func NewGatewaySurfaceDialer(gatewayURL string, managedGatewayBridgeToken string) SurfaceDialer {
-	return newSurfaceDialer("", "", dialAddrFromURL(gatewayURL), managedGatewayBridgeToken)
+func NewGatewaySurfaceDialer(gatewayURL, memberURL, managedGatewayBridgeToken string) SurfaceDialer {
+	return newSurfaceDialer("", "", dialAddrFromURL(gatewayURL), dialAddrFromURL(memberURL), managedGatewayBridgeToken)
 }
 
-func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr string, managedGatewayBridgeToken string) SurfaceDialer {
+func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr string, memberAddr string, managedGatewayBridgeToken string) SurfaceDialer {
 	return func(ctx context.Context, surface StreamSurface) (net.Conn, error) {
 		addr := ""
 		switch surface {
@@ -117,6 +117,8 @@ func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr
 			addr = runtimeControlAddr
 		case StreamSurfaceGatewayProtocol:
 			addr = gatewayAddr
+		case StreamSurfaceGatewayMember:
+			addr = memberAddr
 		default:
 			return nil, fmt.Errorf("unknown bridge surface %q", surface)
 		}

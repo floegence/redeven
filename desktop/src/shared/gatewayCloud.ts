@@ -4,14 +4,13 @@ export type GatewayCloudSummary = Readonly<{
   gateway_public_id?: string;
   namespace_public_id?: string;
   region?: string;
-  state: 'unconfigured' | 'pending' | 'active' | 'revoked';
+  state: 'unconfigured' | 'pending' | 'active' | 'revoked' | 'expired' | 'retired' | 'rejoin_required' | 'registering';
   management_url?: string;
 }>;
 
 export type GatewayCloudConfiguration = Readonly<{
   cloud_origin: string;
-  gateway_url: string;
-  egress_listen: string;
+  reauthorize?: boolean;
 }>;
 
 export function normalizeGatewayCloudConfiguration(value: unknown): GatewayCloudConfiguration | null {
@@ -25,19 +24,22 @@ export function normalizeGatewayCloudConfiguration(value: unknown): GatewayCloud
     } catch { return null; }
   };
   const cloud = origin(input.cloud_origin);
-  const gateway = origin(input.gateway_url);
-  const listen = input.egress_listen;
-  if (!cloud || !gateway || typeof listen !== 'string' || listen.length > 255 || !/^(?:\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):[0-9]{1,5}$/u.test(listen)) return null;
-  const port = Number(listen.slice(listen.lastIndexOf(':') + 1));
-  if (port < 1 || port > 65535) return null;
-  return { cloud_origin: cloud, gateway_url: gateway, egress_listen: listen };
+  if (!cloud || Object.keys(input).some(key => !['cloud_origin', 'reauthorize'].includes(key))
+    || (input.reauthorize !== undefined && typeof input.reauthorize !== 'boolean')) return null;
+  return { cloud_origin: cloud, ...(input.reauthorize === true ? { reauthorize: true } : {}) };
+
 }
 
 export function parseGatewayCloudSummary(raw: string): GatewayCloudSummary {
   if (raw.length > 32 * 1024) throw new Error('Invalid Gateway Cloud response.');
   const value = JSON.parse(raw) as GatewayCloudSummary;
-  if (!value || typeof value !== 'object' || typeof value.configured !== 'boolean' || !['unconfigured', 'pending', 'active', 'revoked'].includes(value.state)) throw new Error('Invalid Gateway Cloud response.');
+  if (!value || typeof value !== 'object' || typeof value.configured !== 'boolean' || !['unconfigured', 'pending', 'active', 'revoked', 'expired', 'retired', 'rejoin_required', 'registering'].includes(value.state)) throw new Error('Invalid Gateway Cloud response.');
   if (!value.configured) return { configured: false, state: 'unconfigured' };
+  if (value.state === 'registering') {
+    const origin = new URL(value.cloud_origin ?? '');
+    if (origin.protocol !== 'https:' || origin.origin !== value.cloud_origin || origin.username || origin.password) throw new Error('Invalid Gateway Cloud origin.');
+    return { configured: true, state: 'registering', cloud_origin: origin.origin };
+  }
   const validID = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,64}$/u.test(id);
   if (value.state === 'unconfigured' || !validID(value.gateway_public_id)
     || (value.namespace_public_id !== undefined && value.namespace_public_id !== '' && !validID(value.namespace_public_id))

@@ -9,7 +9,7 @@ describe('access routes in the existing Env split button', () => {
  it('preserves lifecycle actions and Cloud action ownership', () => {
   const { runtime, cloud } = linkedEnvironmentFixture();
   const routes = [{ id: 'direct', environment_id: runtime.id, kind: 'direct' as const, label: runtime.label, is_open: false },
-    { id: 'proxy', environment_id: 'gateway', kind: 'gateway_proxy' as const, label: 'Office', gateway_label: 'Office', is_open: false }];
+    { id: 'proxy', environment_id: 'gateway', kind: 'gateway_member' as const, label: 'Office', gateway_label: 'Office', is_open: false }];
   const entry = { ...runtime, access_routes: routes, default_access_route_id: 'proxy' };
   const before = buildProviderBackedEnvironmentActionModel(runtime).action_presentation;
   const after = environmentAccessPresentation(entry, before, i18n);

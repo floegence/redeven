@@ -24,7 +24,7 @@ func TestJoinResumesAfterBindingWasPersisted(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/console/v1/gateway-cloud/v1/challenges":
+		case "/api/console/v1/gateway-cloud/v2/challenges":
 			var request gc.ChallengeRequest
 			if json.NewDecoder(r.Body).Decode(&request) != nil || request.BindingPublicID != "" || request.Purpose != gc.PurposeRuntimeJoin {
 				t.Error("join requested a binding-scoped challenge")
@@ -32,7 +32,7 @@ func TestJoinResumesAfterBindingWasPersisted(t *testing.T) {
 				return
 			}
 			_ = json.NewEncoder(w).Encode(gc.Response[gc.ChallengeResponse]{Success: true, Data: gc.ChallengeResponse{Proof: gc.Proof{ProtocolVersion: gc.ProtocolVersion, CloudOrigin: origin, Purpose: request.Purpose, GatewayPublicID: request.GatewayPublicID, RuntimePublicID: request.RuntimePublicID, ChallengeID: "resume-challenge", ChallengeB64u: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}}})
-		case "/api/console/v1/gateway-cloud/v1/join":
+		case "/api/console/v1/gateway-cloud/v2/join":
 			var signed gc.SignedRequest
 			if json.NewDecoder(r.Body).Decode(&signed) != nil || signed.Proof.BindingPublicID != "" || signed.Proof.BindingGeneration != 0 || signed.Proof.NamespacePublicID != "namespace" {
 				t.Error("join carried partially saved binding claims")
@@ -57,8 +57,8 @@ func TestJoinResumesAfterBindingWasPersisted(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	identity := Identity{PrivateKey: private, NamespacePublicID: "namespace", GatewayPublicID: "gateway", RuntimePublicID: "runtime", BindingPublicID: "binding", BindingGeneration: 7}
-	result, err := client.Join(context.Background(), identity, gc.RuntimeJoin{RequestPublicID: "request", LocalConsent: true})
+	identity := Identity{PrivateKey: private, MemberKey: private, NamespacePublicID: "namespace", GatewayPublicID: "gateway", RuntimePublicID: "runtime", BindingPublicID: "binding", BindingGeneration: 7}
+	result, err := client.Join(context.Background(), identity, gc.RuntimeJoin{MemberVersion: 1})
 	if err != nil || !joined || result.State != "published" {
 		t.Fatalf("resume did not complete: %v", err)
 	}

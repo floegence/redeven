@@ -112,11 +112,14 @@ type StatusProvider func(context.Context) (RuntimeAttachStatus, error)
 type Server struct {
 	// NativeBridge is reachable only through the owner-only Unix socket.
 	NativeBridge http.Handler
-	lifecycleMu  sync.Mutex
-	socketPath   string
-	provider     StatusProvider
-	httpServer   *http.Server
-	listener     net.Listener
+	// Control shares the owner-only socket with status; it is never an HTTP
+	// listener reachable from Gateway member application streams.
+	Control     http.Handler
+	lifecycleMu sync.Mutex
+	socketPath  string
+	provider    StatusProvider
+	httpServer  *http.Server
+	listener    net.Listener
 }
 
 func NewServer(socketPath string, provider StatusProvider) (*Server, error) {
@@ -157,6 +160,9 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc(StatusPath, s.handleStatus)
 	if s.NativeBridge != nil {
 		mux.Handle(NativeBridgePath, s.NativeBridge)
+	}
+	if s.Control != nil {
+		mux.Handle("/v2/", s.Control)
 	}
 	srv := &http.Server{
 		Handler:           mux,

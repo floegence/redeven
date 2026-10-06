@@ -1,62 +1,49 @@
 package gatewaycloud
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
-	"io"
-	"net/http"
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/v5/egress"
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
+	"github.com/floegence/redeven/internal/gatewayflow"
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-// RuntimeConfig is the locally consented path. No other profile enables it.
+var ErrState = errors.New("Gateway Cloud state is invalid or unavailable")
+
+// RuntimeConfig is an optional Cloud association of the sole Gateway member.
+// It stores no Gateway address, CA, client certificate, invitation or join token.
 type RuntimeConfig struct {
-	NewEnvironment                    bool           `json:"new_environment,omitempty"`
-	PendingClientPrivateKeyPEM        string         `json:"pending_client_private_key_pem,omitempty"`
-	PendingClientCSRPEM               string         `json:"pending_client_csr_pem,omitempty"`
-	PendingGenerationRenewal          bool           `json:"pending_generation_renewal,omitempty"`
-	PendingPrivateKeyB64u             string         `json:"pending_private_key_b64u,omitempty"`
-	KeyRotatedAtUnixMS                int64          `json:"key_rotated_at_unix_ms"`
-	PreviousPath                      *RuntimeConfig `json:"previous_path,omitempty"`
-	PendingCertificatePEM             string         `json:"pending_certificate_pem,omitempty"`
-	PendingCertificateExpiresAtUnixMS int64          `json:"pending_certificate_expires_at_unix_ms,omitempty"`
-	ProtocolVersion                   int            `json:"protocol_version"`
-	CloudOrigin                       string         `json:"cloud_origin"`
-	RegionOrigin                      string         `json:"region_origin"`
-	NamespacePublicID                 string         `json:"namespace_public_id"`
-	GatewayPublicID                   string         `json:"gateway_public_id"`
-	RequestPublicID                   string         `json:"request_public_id"`
-	RuntimePublicID                   string         `json:"runtime_public_id"`
-	GatewayURL                        string         `json:"gateway_url"`
-	GatewayTLSRootPEM                 string         `json:"gateway_tls_root_pem"`
-	PrivateKeyB64u                    string         `json:"private_key_b64u"`
-	ClientPrivateKeyPEM               string         `json:"client_private_key_pem"`
-	ClientCSRPEM                      string         `json:"client_csr_pem,omitempty"`
-	ClientCertificatePEM              string         `json:"client_certificate_pem"`
-	ClientExpiresAtUnixMS             int64          `json:"client_expires_at_unix_ms"`
-	LocalConsentAtUnixMS              int64          `json:"local_consent_at_unix_ms"`
-	Binding                           *gc.Binding    `json:"binding,omitempty"`
-	DeliveryRequestID                 string         `json:"delivery_request_id,omitempty"`
-	JoinToken                         string         `json:"join_token,omitempty"`
-	EnrollmentToken                   string         `json:"enrollment_token,omitempty"`
-	Revoked                           bool           `json:"revoked"`
+	ProtocolVersion          int                `json:"protocol_version"`
+	MemberID                 string             `json:"member_id"`
+	MemberVersion            int64              `json:"member_version"`
+	CloudOrigin              string             `json:"cloud_origin"`
+	RegionOrigin             string             `json:"region_origin"`
+	NamespacePublicID        string             `json:"namespace_public_id"`
+	GatewayPublicID          string             `json:"gateway_public_id"`
+	RequestPublicID          string             `json:"request_public_id"`
+	RuntimePublicID          string             `json:"runtime_public_id"`
+	PrivateKeyB64u           string             `json:"private_key_b64u"`
+	PendingPrivateKeyB64u    string             `json:"pending_private_key_b64u,omitempty"`
+	KeyRotatedAtUnixMS       int64              `json:"key_rotated_at_unix_ms"`
+	Proven                   bool               `json:"proven"`
+	NewEnvironment           bool               `json:"new_environment"`
+	Binding                  *gc.Binding        `json:"binding,omitempty"`
+	DeliveryRequestID        string             `json:"delivery_request_id,omitempty"`
+	PendingGenerationRenewal bool               `json:"pending_generation_renewal,omitempty"`
+	PreviousBinding          *MigrationEvidence `json:"previous_binding,omitempty"`
+	Revoked                  bool               `json:"revoked"`
 }
 
-func (RuntimeConfig) String() string   { return "GatewayCloud.RuntimeConfig" }
-func (RuntimeConfig) GoString() string { return "GatewayCloud.RuntimeConfig" }
-
-// Clone separates mutable binding and previous-path state from readers.
+func (RuntimeConfig) String() string   { return "Gateway.RuntimeCloudAssociation" }
+func (RuntimeConfig) GoString() string { return "Gateway.RuntimeCloudAssociation" }
 func (r *RuntimeConfig) Clone() *RuntimeConfig {
 	if r == nil {
 		return nil
@@ -66,57 +53,41 @@ func (r *RuntimeConfig) Clone() *RuntimeConfig {
 		binding := *r.Binding
 		next.Binding = &binding
 	}
-	next.PreviousPath = r.PreviousPath.Clone()
+	next.PreviousBinding = r.PreviousBinding.Clone()
 	return &next
 }
 
-func PrepareRuntime(material gc.JoinMaterial, runtimeID string) (*RuntimeConfig, error) {
-	if material.ProtocolVersion != gc.ProtocolVersion || !gc.ValidOrigin(material.CloudOrigin) || !gc.ValidOrigin(material.RegionOrigin) || !gc.ValidOrigin(material.GatewayURL) || material.GatewayPublicID == "" || material.NamespacePublicID == "" || material.RequestPublicID == "" || runtimeID == "" || material.JoinToken == "" || material.GatewayEnrollmentToken == "" || material.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+func PrepareRuntime(member *gatewaymembership.RuntimeConfig, association gp.MemberCloudContext) (*RuntimeConfig, error) {
+	if member == nil || member.Leaving || member.PendingJoin != nil || association.ProtocolVersion != gp.Version || association.GatewayID != member.GatewayID || association.MemberID != member.MemberID || association.MemberVersion != member.MemberVersion || !association.Allowed || !gc.ValidOrigin(association.CloudOrigin) || !gc.ValidOrigin(association.RegionOrigin) || association.NamespacePublicID == "" || association.GatewayPublicID == "" {
 		return nil, ErrState
 	}
-	_, identity, err := ed25519.GenerateKey(rand.Reader)
+	if err := member.Validate(member.RuntimePublicID); err != nil {
+		return nil, err
+	}
+	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	_, clientKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	keyPEM, err := privateKeyPEM(clientKey)
-	if err != nil {
-		return nil, err
-	}
-	csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{Subject: pkix.Name{CommonName: runtimeID}}, clientKey)
-	if err != nil {
-		return nil, err
-	}
-	result := &RuntimeConfig{KeyRotatedAtUnixMS: time.Now().UnixMilli(), ProtocolVersion: gc.ProtocolVersion, CloudOrigin: material.CloudOrigin, RegionOrigin: material.RegionOrigin, NamespacePublicID: material.NamespacePublicID, GatewayPublicID: material.GatewayPublicID, RequestPublicID: material.RequestPublicID, RuntimePublicID: runtimeID, GatewayURL: material.GatewayURL, GatewayTLSRootPEM: material.GatewayTLSRootPEM, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(identity), ClientPrivateKeyPEM: keyPEM, ClientCSRPEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})), LocalConsentAtUnixMS: time.Now().UnixMilli(), JoinToken: material.JoinToken, EnrollmentToken: material.GatewayEnrollmentToken}
-	if _, err := result.proxyTLS(false); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return &RuntimeConfig{ProtocolVersion: gc.ProtocolVersion, MemberID: member.MemberID, MemberVersion: member.MemberVersion, CloudOrigin: association.CloudOrigin, RegionOrigin: association.RegionOrigin, NamespacePublicID: association.NamespacePublicID, GatewayPublicID: association.GatewayPublicID, RuntimePublicID: member.RuntimePublicID, RequestPublicID: gc.CandidateID(association.GatewayPublicID, member.MemberID), PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), KeyRotatedAtUnixMS: time.Now().UnixMilli()}, nil
 }
 
 func (r *RuntimeConfig) Identity() (Identity, error) {
-	if r == nil || r.ProtocolVersion != gc.ProtocolVersion || r.LocalConsentAtUnixMS <= 0 || !gc.ValidOrigin(r.CloudOrigin) || !gc.ValidOrigin(r.RegionOrigin) || r.NamespacePublicID == "" || r.GatewayPublicID == "" || r.RuntimePublicID == "" || r.RequestPublicID == "" {
+	if r == nil || r.ProtocolVersion != gc.ProtocolVersion || r.MemberID == "" || r.MemberVersion < 1 || !gc.ValidOrigin(r.CloudOrigin) || !gc.ValidOrigin(r.RegionOrigin) || r.NamespacePublicID == "" || r.GatewayPublicID == "" || r.RuntimePublicID == "" || r.RequestPublicID != gc.CandidateID(r.GatewayPublicID, r.MemberID) {
 		return Identity{}, ErrState
 	}
 	key, err := gc.DecodeKey(r.PrivateKeyB64u)
 	if err != nil || len(key) != ed25519.PrivateKeySize {
 		return Identity{}, ErrState
 	}
-	id := Identity{PrivateKey: ed25519.PrivateKey(key), NamespacePublicID: r.NamespacePublicID, GatewayPublicID: r.GatewayPublicID, RuntimePublicID: r.RuntimePublicID}
-	if r.Binding != nil {
-		b := r.Binding
-		if b.PublicID == "" || b.EnvPublicID == "" || b.Region == "" || b.Generation <= 0 || b.State != "active" || b.NamespacePublicID != r.NamespacePublicID || b.GatewayPublicID != r.GatewayPublicID || b.RuntimePublicID != r.RuntimePublicID {
+	identity := Identity{PrivateKey: ed25519.PrivateKey(key), NamespacePublicID: r.NamespacePublicID, GatewayPublicID: r.GatewayPublicID, RuntimePublicID: r.RuntimePublicID}
+	if b := r.Binding; b != nil {
+		if b.MemberID != r.MemberID || b.MemberVersion != r.MemberVersion || b.PublicID == "" || b.EnvPublicID == "" || b.Region == "" || b.Generation <= 0 || b.State != "active" || b.NamespacePublicID != r.NamespacePublicID || b.GatewayPublicID != r.GatewayPublicID || b.RuntimePublicID != r.RuntimePublicID {
 			return Identity{}, ErrState
 		}
-		id.BindingPublicID = r.Binding.PublicID
-		id.BindingGeneration = r.Binding.Generation
+		identity.BindingPublicID, identity.BindingGeneration = b.PublicID, b.Generation
 	}
-	return id, nil
+	return identity, nil
 }
-
 func (r *RuntimeConfig) Fence() *gc.BindingFence {
 	if r == nil || r.Binding == nil {
 		return nil
@@ -124,120 +95,63 @@ func (r *RuntimeConfig) Fence() *gc.BindingFence {
 	b := r.Binding
 	return &gc.BindingFence{ProtocolVersion: gc.ProtocolVersion, PublicID: b.PublicID, NamespacePublicID: b.NamespacePublicID, GatewayPublicID: b.GatewayPublicID, RuntimePublicID: b.RuntimePublicID, Generation: b.Generation}
 }
-
-func (r *RuntimeConfig) proxyTLS(requireClient bool) (*tls.Config, error) {
-	if r == nil || !gc.ValidOrigin(r.GatewayURL) {
-		return nil, ErrState
+func (r *RuntimeConfig) ValidateMember(member *gatewaymembership.RuntimeConfig) error {
+	if r == nil || member == nil || member.MemberID != r.MemberID || member.MemberVersion != r.MemberVersion || member.RuntimePublicID != r.RuntimePublicID || member.PendingJoin != nil {
+		return ErrState
 	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM([]byte(r.GatewayTLSRootPEM)) {
-		return nil, ErrState
-	}
-	cfg := &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13}
-	if requireClient {
-		cert, err := tls.X509KeyPair([]byte(r.ClientCertificatePEM), []byte(r.ClientPrivateKeyPEM))
-		if err != nil {
-			return nil, ErrState
-		}
-		leaf, err := x509.ParseCertificate(cert.Certificate[0])
-		if err != nil || time.Now().Before(leaf.NotBefore) || !time.Now().Before(leaf.NotAfter) {
-			return nil, ErrState
-		}
-		cfg.Certificates = []tls.Certificate{cert}
-	}
-	return cfg, nil
+	return member.Validate(r.RuntimePublicID)
 }
-
-func (r *RuntimeConfig) Proxy() (*egress.HTTPSProxy, error) {
+func (r *RuntimeConfig) Proxy(member *gatewaymembership.RuntimeConfig) (*egress.HTTPSProxy, error) {
 	if _, err := r.Identity(); err != nil {
 		return nil, err
 	}
-	if r.Revoked {
+	if r.Revoked || member == nil || member.Leaving {
 		return nil, ErrState
 	}
-	cfg, err := r.proxyTLS(true)
+	if err := r.ValidateMember(member); err != nil {
+		return nil, err
+	}
+	tlsConfig, err := member.TLSConfig(true)
 	if err != nil {
 		return nil, err
 	}
-	return egress.NewHTTPSProxy(egress.HTTPSProxyOptions{URL: r.GatewayURL, TLSConfig: cfg, ConnectTimeout: 15 * time.Second})
+	return egress.NewHTTPSProxy(egress.HTTPSProxyOptions{URL: member.GatewayURL, TLSConfig: tlsConfig})
 }
-
-func (r *RuntimeConfig) Client() (*Client, error) {
-	p, err := r.Proxy()
+func (r *RuntimeConfig) Client(member *gatewaymembership.RuntimeConfig) (*Client, error) {
+	proxy, err := r.Proxy(member)
 	if err != nil {
 		return nil, err
 	}
-	return NewClient(r.CloudOrigin, p.HTTPTransport())
+	return NewClient(r.CloudOrigin, proxy.HTTPTransport())
 }
-
-// Enroll sends only the Gateway enrollment token. The Cloud token stays inside inner TLS.
-func (r *RuntimeConfig) Enroll(ctx context.Context) error {
-	tlsConfig, err := r.proxyTLS(false)
-	if err != nil {
-		return err
-	}
-	transport := &http.Transport{TLSClientConfig: tlsConfig, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 15 * time.Second}
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	body, err := json.Marshal(gc.LocalEnrollment{RequestPublicID: r.RequestPublicID, EnrollmentToken: r.EnrollmentToken, RuntimePublicID: r.RuntimePublicID, CSRPEM: r.ClientCSRPEM})
-	if err != nil {
-		return ErrState
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.GatewayURL+"/gateway/cloud/v1/enroll", bytes.NewReader(body))
-	if err != nil {
-		return ErrState
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return ErrCloudRequest
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 32<<10))
-	if err != nil {
-		return ErrCloudRequest
-	}
-	var result gc.Response[gc.LocalEnrollmentResponse]
-	if resp.StatusCode != 200 || json.Unmarshal(raw, &result) != nil || !result.Success {
-		return ErrCloudRequest
-	}
-	r.ClientCertificatePEM = result.Data.ClientCertificatePEM
-	r.ClientExpiresAtUnixMS = result.Data.ExpiresAtUnixMS
-	if _, err := r.proxyTLS(true); err != nil {
-		r.ClientCertificatePEM = ""
-		return err
-	}
-	return nil
-}
-
-func (r *RuntimeConfig) Join(ctx context.Context, metadata gc.RuntimeMetadata) (*gc.Candidate, error) {
-	identity, err := r.Identity()
-	if err != nil {
-		return nil, err
-	}
-	client, err := r.Client()
+func (r *RuntimeConfig) Join(ctx context.Context, member *gatewaymembership.RuntimeConfig, metadata gc.RuntimeMetadata) (*gc.Candidate, error) {
+	client, err := r.Client(member)
 	if err != nil {
 		return nil, err
 	}
 	defer client.Close()
-	block, _ := pem.Decode([]byte(r.ClientCertificatePEM))
-	if block == nil {
-		return nil, ErrState
-	}
-	// Enrollment proof is deliberately separate from both public health identity and mTLS.
-	return client.Join(ctx, identity, gc.RuntimeJoin{NewEnvironment: r.NewEnvironment, RequestPublicID: r.RequestPublicID, JoinToken: r.JoinToken, RuntimePublicID: r.RuntimePublicID, PublicKeyB64u: base64.RawURLEncoding.EncodeToString(identity.PrivateKey.Public().(ed25519.PublicKey)), ClientCertificateSHA256: digestBytes(block.Bytes), LocalConsent: true, Metadata: metadata})
-}
-
-func (r *RuntimeConfig) Status(ctx context.Context) (*gc.RuntimeStatus, error) {
-	return r.StatusPage(ctx, "")
-}
-
-func (r *RuntimeConfig) StatusPage(ctx context.Context, after string) (*gc.RuntimeStatus, error) {
 	identity, err := r.Identity()
 	if err != nil {
 		return nil, err
 	}
-	client, err := r.Client()
+	memberKey, err := gc.DecodeKey(member.PrivateKeyB64u)
+	if err != nil || len(memberKey) != ed25519.PrivateKeySize {
+		return nil, ErrState
+	}
+	identity.MemberKey = ed25519.PrivateKey(memberKey)
+	return client.Join(ctx, identity, gc.RuntimeJoin{NewEnvironment: r.NewEnvironment, MemberVersion: r.MemberVersion, Delegation: gc.MemberDelegation(member.Delegation), PublicKeyB64u: base64.RawURLEncoding.EncodeToString(identity.PrivateKey.Public().(ed25519.PublicKey)), Metadata: metadata})
+}
+
+func (r *RuntimeConfig) Status(ctx context.Context, member *gatewaymembership.RuntimeConfig) (*gc.RuntimeStatus, error) {
+	return r.StatusPage(ctx, member, "")
+}
+
+func (r *RuntimeConfig) StatusPage(ctx context.Context, member *gatewaymembership.RuntimeConfig, after string) (*gc.RuntimeStatus, error) {
+	identity, err := r.Identity()
+	if err != nil {
+		return nil, err
+	}
+	client, err := r.Client(member)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +179,9 @@ func NewDeliveryID() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
-func (r *RuntimeConfig) Recover(ctx context.Context) (*CredentialDelivery, error) {
+func (r *RuntimeConfig) Recover(ctx context.Context, member *gatewaymembership.RuntimeConfig) (_ *CredentialDelivery, resultErr error) {
+	start := time.Now()
+	defer func() { gatewayflow.Observe(ctx, "cloud.recover", start, resultErr) }()
 	identity, err := r.Identity()
 	if err != nil {
 		return nil, err
@@ -274,7 +190,7 @@ func (r *RuntimeConfig) Recover(ctx context.Context) (*CredentialDelivery, error
 	if fence == nil || !fence.Valid() || r.DeliveryRequestID == "" {
 		return nil, ErrState
 	}
-	proxy, err := r.Proxy()
+	proxy, err := r.Proxy(member)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +208,7 @@ func (r *RuntimeConfig) Recover(ctx context.Context) (*CredentialDelivery, error
 	if err != nil {
 		return nil, err
 	}
-	delivery, err := cloudCallPath[gc.SignedRequest, CredentialDelivery](region, ctx, "/api/gateway-cloud/v1/credentials", signed)
+	delivery, err := cloudCallPath[gc.SignedRequest, CredentialDelivery](region, ctx, "/api/gateway-cloud/v2/credentials", signed)
 	if err != nil {
 		return nil, err
 	}
@@ -300,96 +216,6 @@ func (r *RuntimeConfig) Recover(ctx context.Context) (*CredentialDelivery, error
 		return nil, errors.New("Gateway credential binding mismatch")
 	}
 	return delivery, nil
-}
-
-// RenewCertificate persists the replacement before promoting Cloud policy. A
-// lost response resumes using the same replacement certificate and proof key.
-func (r *RuntimeConfig) RenewCertificate(ctx context.Context, persist func(*RuntimeConfig) error) error {
-	if r == nil || r.Revoked || persist == nil {
-		return ErrState
-	}
-	if r.PendingClientPrivateKeyPEM == "" {
-		_, key, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			return err
-		}
-		keyPEM, err := privateKeyPEM(key)
-		if err != nil {
-			return err
-		}
-		csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{Subject: pkix.Name{CommonName: r.RuntimePublicID}}, key)
-		if err != nil {
-			return err
-		}
-		r.PendingClientPrivateKeyPEM, r.PendingClientCSRPEM = keyPEM, string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr}))
-		if err := persist(r); err != nil {
-			return err
-		}
-	}
-	if r.PendingCertificatePEM == "" {
-		tlsConfig, err := r.proxyTLS(true)
-		if err != nil {
-			return err
-		}
-		transport := &http.Transport{TLSClientConfig: tlsConfig, TLSHandshakeTimeout: 10 * time.Second}
-		defer transport.CloseIdleConnections()
-		client, err := NewClient(r.GatewayURL, transport)
-		if err != nil {
-			return err
-		}
-		issued, err := cloudCallPath[gc.LocalCertificateRenewal, gc.LocalEnrollmentResponse](client, ctx, "/gateway/cloud/v1/renew", gc.LocalCertificateRenewal{RequestPublicID: r.RequestPublicID, CSRPEM: r.PendingClientCSRPEM})
-		if err != nil {
-			return err
-		}
-		r.PendingCertificatePEM = issued.ClientCertificatePEM
-		r.PendingCertificateExpiresAtUnixMS = issued.ExpiresAtUnixMS
-		next := *r
-		next.ClientCertificatePEM = issued.ClientCertificatePEM
-		next.ClientPrivateKeyPEM = r.PendingClientPrivateKeyPEM
-		if _, err := next.proxyTLS(true); err != nil {
-			return err
-		}
-		if err := persist(r); err != nil {
-			return err
-		}
-	}
-	identity, err := r.Identity()
-	if err != nil {
-		return err
-	}
-	old, _ := pem.Decode([]byte(r.ClientCertificatePEM))
-	next, _ := pem.Decode([]byte(r.PendingCertificatePEM))
-	if old == nil || next == nil {
-		return ErrState
-	}
-	request := gc.CertificateRotation{RequestPublicID: r.RequestPublicID, PreviousCertificateSHA256: digestBytes(old.Bytes), ClientCertificateSHA256: digestBytes(next.Bytes)}
-	client, err := r.Client()
-	if err == nil {
-		defer client.Close()
-		_, err = signedCloudCall[gc.CertificateRotation, gc.EmptyRequest](client, ctx, identity, gc.PurposeCertificateRotate, "rotate-certificate", request)
-	}
-	if err != nil {
-		// Only the explicitly staged new credential is retried after a lost commit response.
-		staged := *r
-		staged.ClientCertificatePEM = r.PendingCertificatePEM
-		staged.ClientPrivateKeyPEM = r.PendingClientPrivateKeyPEM
-		staged.ClientExpiresAtUnixMS = r.PendingCertificateExpiresAtUnixMS
-		client, err = staged.Client()
-		if err != nil {
-			return err
-		}
-		defer client.Close()
-		if _, err = signedCloudCall[gc.CertificateRotation, gc.EmptyRequest](client, ctx, identity, gc.PurposeCertificateRotate, "rotate-certificate", request); err != nil {
-			return err
-		}
-	}
-	r.ClientCertificatePEM = r.PendingCertificatePEM
-	r.ClientPrivateKeyPEM, r.ClientCSRPEM = r.PendingClientPrivateKeyPEM, r.PendingClientCSRPEM
-	r.PendingClientPrivateKeyPEM, r.PendingClientCSRPEM = "", ""
-	r.ClientExpiresAtUnixMS = r.PendingCertificateExpiresAtUnixMS
-	r.PendingCertificatePEM = ""
-	r.PendingCertificateExpiresAtUnixMS = 0
-	return persist(r)
 }
 
 // ForgetExpiredDelivery changes the idempotency key only after the authority
@@ -403,51 +229,18 @@ func (r *RuntimeConfig) ForgetExpiredDelivery(err error) bool {
 	return true
 }
 
-// ConsentMigration sends the old path proof through the new path. Losing the
-// old Gateway does not invalidate the Runtime's independently held identity.
-func (r *RuntimeConfig) ConsentMigration(ctx context.Context, target *RuntimeConfig) error {
-	return r.consentPathChange(ctx, target, false)
-}
-
-// ConsentReauthorization proves ownership through the new route without
-// restoring the removed membership or using its forwarding credentials.
-func (r *RuntimeConfig) ConsentReauthorization(ctx context.Context, target *RuntimeConfig) error {
-	return r.consentPathChange(ctx, target, true)
-}
-
-func (r *RuntimeConfig) consentPathChange(ctx context.Context, target *RuntimeConfig, reauthorize bool) error {
-	if r == nil || target == nil || (!reauthorize && r.Revoked) || r.Fence() == nil || r.CloudOrigin != target.CloudOrigin || r.NamespacePublicID != target.NamespacePublicID || r.RegionOrigin != target.RegionOrigin || r.RuntimePublicID != target.RuntimePublicID || (!reauthorize && r.GatewayPublicID == target.GatewayPublicID) || r.RequestPublicID == target.RequestPublicID {
-		return ErrState
-	}
-	identity, err := r.Identity()
-	if err != nil {
-		return err
-	}
-	client, err := target.Client()
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-	purpose := gc.PurposeRuntimeMigrate
-	if reauthorize {
-		purpose = gc.PurposeRuntimeReauthorize
-	}
-	_, err = signedCloudCall[gc.MigrationConsent, gc.Candidate](client, ctx, identity, purpose, "migration-consent", gc.MigrationConsent{Current: *r.Fence(), TargetRequestPublicID: target.RequestPublicID, Reauthorize: reauthorize})
-	return err
-}
-
-// AcknowledgePreviousPath runs after the old Runtime process has stopped. The
+// AcknowledgePreviousBinding runs after the old Runtime process has stopped. The
 // target route carries acknowledgements only; the old identity cannot recover.
-func (r *RuntimeConfig) AcknowledgePreviousPath(ctx context.Context) error {
-	if r == nil || r.PreviousPath == nil {
+func (r *RuntimeConfig) AcknowledgePreviousBinding(ctx context.Context, member *gatewaymembership.RuntimeConfig) error {
+	if r == nil || r.PreviousBinding == nil {
 		return nil
 	}
-	old := r.PreviousPath
+	old := r.PreviousBinding
 	identity, err := old.Identity()
 	if err != nil {
 		return err
 	}
-	client, err := r.Client()
+	client, err := r.Client(member)
 	if err != nil {
 		return err
 	}
@@ -483,7 +276,7 @@ func (r *RuntimeConfig) AcknowledgePreviousPath(ctx context.Context) error {
 
 // RotateIdentity stages the next private key before submitting either proof.
 // A lost response is resolved by testing only that staged key against Cloud.
-func (r *RuntimeConfig) RotateIdentity(ctx context.Context, persist func(*RuntimeConfig) error) error {
+func (r *RuntimeConfig) RotateIdentity(ctx context.Context, member *gatewaymembership.RuntimeConfig, persist func(*RuntimeConfig) error) error {
 	if r == nil || r.Revoked || r.Binding == nil || persist == nil {
 		return ErrState
 	}
@@ -506,7 +299,7 @@ func (r *RuntimeConfig) RotateIdentity(ctx context.Context, persist func(*Runtim
 	if err != nil {
 		return err
 	}
-	client, err := r.Client()
+	client, err := r.Client(member)
 	if err != nil {
 		return err
 	}
@@ -514,7 +307,7 @@ func (r *RuntimeConfig) RotateIdentity(ctx context.Context, persist func(*Runtim
 	if err := client.RotateKey(ctx, identity, ed25519.PrivateKey(pending)); err != nil {
 		next := *r
 		next.PrivateKeyB64u = encoded
-		if _, statusErr := next.Status(ctx); statusErr != nil {
+		if _, statusErr := next.Status(ctx, member); statusErr != nil {
 			return err
 		}
 	}
@@ -526,12 +319,12 @@ func (r *RuntimeConfig) RotateIdentity(ctx context.Context, persist func(*Runtim
 
 // RenewGeneration advances only an exhausted, still-authorized binding. The
 // old fence remains durable until the exact new generation is accepted locally.
-func (r *RuntimeConfig) RenewGeneration(ctx context.Context) (*gc.Binding, error) {
+func (r *RuntimeConfig) RenewGeneration(ctx context.Context, member *gatewaymembership.RuntimeConfig) (*gc.Binding, error) {
 	identity, err := r.Identity()
 	if err != nil || r.Binding == nil || r.Revoked {
 		return nil, ErrState
 	}
-	client, err := r.Client()
+	client, err := r.Client(member)
 	if err != nil {
 		return nil, err
 	}

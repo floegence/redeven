@@ -7,7 +7,7 @@ timestamp: 2026-10-05T00:00:00Z
 ---
 # Summary
 
-Desktop owns display association and default access selection. A Gateway profile
+Desktop owns display association and default access selection. A Gateway member route
 joins an existing Runtime card only after the main process verifies possession
 of the same Runtime state identity over the selected transport. Names, URLs,
 catalog availability and renderer claims never establish this relationship.
@@ -45,8 +45,8 @@ Runtime authentication remain authoritative.
 ## Observation and grouping
 
 Main-process observations bind an entry ID to its configured connection and
-verified identity. Gateway bindings include Gateway and profile IDs, endpoint,
-Gateway key fingerprint, and target route; direct bindings include the saved
+verified identity. Gateway bindings include Gateway and member IDs, logical origin,
+Gateway key fingerprint, and signed service identity; direct bindings include the saved
 connection owner. Display labels and transient health do not invalidate a
 binding. Editing coordinates or changing trust invalidates it immediately.
 An asynchronous probe commits only while its configured binding still matches.
@@ -65,7 +65,7 @@ binding, card layout, search and perspective selection.
 Desktop preferences version 15 adds optional versioned observations and route
 defaults. Missing access state preserves existing behavior. Malformed access
 state is rejected with the original file preserved. Existing registrations,
-Gateway profiles and Cloud bindings remain in their current stores.
+Gateway member and Cloud binding authority remain in their respective stores.
 
 ## Explicit default and one-time opening
 
@@ -75,13 +75,11 @@ Connection settings commit a new default only on Save; closing the dialog drops
 its unsaved selection. Adding a verified route preserves an established default. Implicit defaults use
 stable registration / first-observation order, never probe completion order or
 a newly rebuilt Gateway catalog timestamp.
-New Gateway profiles use proxy access; existing direct-mode profiles retain
-their setting. Desktop's explicit default is local to this Desktop and does not
-rewrite shared Gateway profile access modes.
+Gateway member routes always use the joined Gateway. Desktop's explicit default is local to this Desktop and cannot rewrite member or Cloud policy.
 
 A Gateway environment row always opens through its own Gateway. Its catalog
-capabilities govern availability. Direct URL remains an explicit option in the
-environment access menu where advertised, including retained direct profiles.
+capabilities govern availability. Independently registered direct routes remain explicit alternatives in the
+environment access menu. A Gateway member itself has no direct URL mode.
 Failures never trigger another route, start Runtime, or change Cloud selection.
 Missing or detached default routes disable the default Open action while
 allowing explicit choices and connection settings.
@@ -89,33 +87,25 @@ allowing explicit choices and connection settings.
 Deleting the default registration while alternatives remain requires an explicit
 replacement. Desktop saves that choice only after deletion succeeds. Removing
 an entire Gateway is blocked until affected environments choose replacement
-defaults in their connection settings. Profile deletion and session revocation
+defaults in their connection settings. Member removal and session closure
 retain their existing owner scope. Changing the default neither closes nor
 shares existing sessions. [Gateway access sessions](../gateway/gateway-access-sessions.md)
 owns transport isolation and same-route session reuse.
 
-## Gateway draft verification
+## Membership discovery and migration
 
-The contextual profile dialog stays over its Gateway page. It fixes the Gateway
-identity and asks for a Runtime URL reachable from that Gateway. It has no
-Direct / Proxy choice. Verify connection calls the signed v3
-`env-profiles/check` endpoint with a fresh nonce. Independent profile-write
-permission and the Gateway enable-profile-write policy are required on both URL
-and managed bridge transports.
+Members are discovered from the signed v4 directory. Desktop can verify public
+Runtime health only through an authorized reverse connection with the signed
+member TLS identity. No draft URL probe or target enrollment form exists.
+Public health proof continues to associate display cards only; it cannot merge
+Cloud environments, approve publication, or grant Runtime management.
 
-The Gateway uses its existing HTTP/HTTPS target policy, DNS checks and TLS
-validation to request health. It forwards no credentials, follows no redirects,
-bounds response size and time, publishes no profile and creates no access
-session. The Desktop verifies the returned proof and reports whether it matches
-a known environment. Reachable targets without proof remain separate.
-
-New or changed targets require verification before Save. Saving performs a fresh
-check, preventing a stale preview from establishing an association. Label-only
-edits retain existing access mode and do not require target availability.
-Changing the target invalidates the visible preview. Failure retains the draft;
-a stopped Gateway offers the existing explicit Start-and-retry continuation.
-A late result cannot reopen or modify another dialog. Local default selection
-remains available even without permission to edit the shared Gateway profile.
+The one-time Gateway schema migration removes legacy URL entries, observations
+and route preferences. Installation coordinates and valid paired access identity
+survive; larger administrative grants require new pairing consent. Existing
+Cloud-only Runtime configurations must rejoin and cannot silently gain the new
+member delegation. [Gateway Cloud access](../gateway/gateway-cloud-access.md)
+owns proof-based preservation of a formal environment ID.
 
 # Boundaries
 
@@ -127,10 +117,9 @@ existing authorities. Proof observation never upgrades those permissions.
 
 - `redeven:internal/runtimeidentity/access_identity.go` - State identity, exclusive initialization and nonce proof.
 - `redeven:internal/localui/access_identity_test.go` - Public/private identity agreement and independent Runtime authentication.
-- `redeven:internal/gatewayservice/profile_check.go` - Authorized, bounded target check with no publication or session.
-- `redeven:spec/openapi/gateway-v3.yaml` - Signed check and proof schemas.
+- `redeven:spec/openapi/gateway-v4.yaml` - Signed membership and service identity schemas.
 - `redeven:desktop/src/main/runtimeAccessIdentity.test.ts` - Signature verification, tampering and replay rejection.
 - `redeven:desktop/src/main/environmentAccess.test.ts` - Binding invalidation, explicit defaults, persistence and malformed-state preservation.
 - `redeven:desktop/src/welcome/environmentRelation.test.ts` - Existing Cloud perspective ownership with Gateway membership.
 - `redeven:desktop/scripts/check-environment-access-routes.mjs` - Production components, ten locales, explicit routes, Save/Cancel, narrow dark layouts and enlarged text.
-- `redeven:desktop/scripts/fixtures/gateway-access-electron.ts` - Real Runtime proof through signed Gateway verification and Desktop proxy readiness, separate login and session lifetimes.
+- `redeven:desktop/scripts/fixtures/gateway-access-electron.ts` - Real member access over reverse TLS with independent Runtime login and session lifetimes.

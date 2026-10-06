@@ -1,112 +1,83 @@
-package protocol
+package protocol_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-func TestGatewayOpenAPIContractExposesAccessOnlySurface(t *testing.T) {
-	root := filepath.Join("..", "..", "..")
-	raw, err := os.ReadFile(filepath.Join(root, "spec", "openapi", "gateway-v3.yaml"))
+func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Join(filepath.Dir(file), "../../..")
+	raw, err := os.ReadFile(filepath.Join(root, "spec/openapi/gateway-v4.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var document struct {
-		Paths map[string]map[string]any `yaml:"paths"`
-	}
-	if err := yaml.Unmarshal(raw, &document); err != nil {
-		t.Fatal(err)
-	}
-	want := []string{
-		"/gateway/v3/pairing/challenge",
-		"/gateway/v3/pairing/complete",
-		"/gateway/v3/catalog",
-		"/gateway/v3/open-session",
-		"/gateway/v3/close-session",
-		"/gateway/v3/access/{token}/{path}",
-		"/gateway/v3/access/{token}/_tunnel",
-		"/gateway/v3/env-profiles/upsert",
-		"/gateway/v3/env-profiles/check",
-		"/gateway/v3/env-profiles/delete",
-	}
-	if len(document.Paths) != len(want) {
-		t.Fatalf("Gateway OpenAPI path count = %d, want %d", len(document.Paths), len(want))
-	}
-	for _, path := range want {
-		if _, ok := document.Paths[path]; !ok {
-			t.Fatalf("Gateway OpenAPI contract is missing access path %q", path)
-		}
-	}
-	for path := range document.Paths {
-		if !strings.HasPrefix(path, "/gateway/v3/") {
-			t.Fatalf("Gateway OpenAPI exposes an obsolete wire path %q", path)
-		}
-		if strings.Contains(path, "runtime") || strings.Contains(path, "lifecycle") {
-			t.Fatalf("Gateway OpenAPI contract exposes Runtime lifecycle path %q", path)
-		}
-	}
-}
-
-func TestGatewayOpenAPIContractAccessModesAndArtifacts(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "spec", "openapi", "gateway-v3.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var doc struct {
+	var spec struct {
 		Info struct {
-			Version string `yaml:"version"`
-		} `yaml:"info"`
+			Version string `json:"version"`
+		} `json:"info"`
+		Paths      map[string]json.RawMessage `json:"paths"`
 		Components struct {
 			Schemas map[string]struct {
-				Enum       []string       `yaml:"enum"`
-				Required   []string       `yaml:"required"`
-				Properties map[string]any `yaml:"properties"`
-			} `yaml:"schemas"`
-		} `yaml:"components"`
+				Properties map[string]json.RawMessage `json:"properties"`
+			} `json:"schemas"`
+		} `json:"components"`
 	}
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
+	if err := json.Unmarshal(raw, &spec); err != nil {
 		t.Fatal(err)
 	}
-	if doc.Info.Version != Version {
-		t.Fatal("OpenAPI and Go protocol versions differ")
+	if spec.Info.Version != gp.Version {
+		t.Fatal("OpenAPI protocol version differs from the executable")
 	}
-	modes := doc.Components.Schemas["AccessMode"].Enum
-	if strings.Join(modes, ",") != "direct_url,gateway_proxy" {
-		t.Fatalf("access modes: %v", modes)
-	}
-	for schema, required := range map[string][]string{
-		"EnvProfileCheckRequest":       {"protocol_version", "target_url", "client_nonce"},
-		"RuntimeAccessIdentityProof":   {"version", "challenge", "public_key", "signature"},
-		"EnvironmentProfile":           {"access_mode"},
-		"GatewayProxyConnectArtifact":  {"kind", "url", "gateway_session_id", "expires_at_unix_ms", "artifact_nonce", "proof"},
-		"DesktopBridgeConnectArtifact": {"url", "gateway_session_id", "bridge_session_id", "route_id"},
-		"CloseSessionRequest":          {"protocol_version", "gateway_session_id"},
+	for _, value := range []any{
+		gc.RuntimeClosureExchangeRequest{}, gc.RuntimeClosureExchangeResponse{}, gc.BindingFence{}, gc.Closure{}, gp.IdentityRequest{}, gp.IdentityResponse{}, gp.ConfigureCloudRequest{}, gp.MemberCloudContext{}, gp.GatewayPermissions{}, gp.GatewayMetadata{}, gp.CatalogRequest{}, gp.CatalogResponse{}, gp.OpenSessionRequest{}, gp.MemberServiceRequest{}, gp.MemberServiceResponse{},
+		gp.InvitationRequest{}, gp.RemoveMemberRequest{}, gp.UpdatePolicyRequest{}, gp.UpdateMembersRequest{}, gp.PairingChallengeRequest{}, gp.PairingChallengeResponse{}, gp.PairingCompleteRequest{}, gp.PairingCompleteResponse{},
+		gp.MemberInvitation{}, gp.MemberDelegation{}, gp.MemberService{}, gp.MemberMetadata{}, gp.MemberJoinRequest{}, gp.MemberJoinResponse{}, gp.MemberRotateRequest{}, gp.MemberRotateResponse{},
+		gp.Member{}, gp.GatewayPolicy{}, gp.MemberPolicyUpdate{}, gp.MemberOperationResult{}, gp.HookInput{}, gp.HookResult{}, gatewaymembership.ConnectionOffer{},
 	} {
-		value, ok := doc.Components.Schemas[schema]
+		typ := reflect.TypeOf(value)
+		schema, ok := spec.Components.Schemas[typ.Name()]
 		if !ok {
-			t.Fatalf("missing %s", schema)
+			t.Errorf("missing schema %s", typ.Name())
+			continue
 		}
-		for _, key := range required {
-			found := false
-			for _, field := range value.Required {
-				found = found || field == key
+		expected := map[string]bool{}
+		for field := range typ.NumField() {
+			name := strings.Split(typ.Field(field).Tag.Get("json"), ",")[0]
+			if name != "" && name != "-" {
+				expected[name] = true
 			}
-			if !found || value.Properties[key] == nil {
-				t.Fatalf("%s does not require %s", schema, key)
+		}
+		if len(schema.Properties) != len(expected) {
+			t.Errorf("schema %s has %d fields, expected %d", typ.Name(), len(schema.Properties), len(expected))
+		}
+		for name := range expected {
+			if _, ok := schema.Properties[name]; !ok {
+				t.Errorf("missing %s.%s", typ.Name(), name)
 			}
 		}
 	}
-	capabilities := strings.Join(doc.Components.Schemas["GatewayCapability"].Enum, ",")
-	for _, capability := range []string{"env_catalog", "env_direct_open", "env_proxy_open", "env_profile_write"} {
-		if !strings.Contains(capabilities, capability) {
-			t.Fatalf("missing capability %s", capability)
+	expected := []string{"/gateway/v4/identity", "/v4/member/cloud-closure", "/gateway/v4/cloud/configure", "/gateway/v4/cloud/status", "/gateway/v4/members/reevaluate", "/v4/member/cloud", "/gateway/v4/pairing/challenge", "/gateway/v4/pairing/complete", "/gateway/v4/catalog", "/gateway/v4/invitations", "/gateway/v4/members/remove", "/gateway/v4/members/policy", "/gateway/v4/policy", "/gateway/v4/access/open", "/gateway/v4/access/service", "/gateway/v4/migration/dismiss", "/v4/member/join", "/v4/member/cancel-join", "/v4/member/rotate", "/v4/member/leave", "/v4/member/connect"}
+	if len(spec.Paths) != len(expected) {
+		t.Fatal("OpenAPI contains unexpected routes")
+	}
+	for _, route := range expected {
+		if _, ok := spec.Paths[route]; !ok {
+			t.Errorf("missing route %s", route)
 		}
 	}
-	if strings.Contains(capabilities, "env_open_session") {
-		t.Fatal("obsolete ambiguous opening capability")
+	for _, retired := range []string{"gateway_proxy", "direct_url", "profile_write", "target_url", "cookie_jar", "runtime-operations"} {
+		if strings.Contains(string(raw), retired) {
+			t.Errorf("retired contract remains: %s", retired)
+		}
 	}
 }

@@ -28,7 +28,7 @@ func TestGatewayMetadataDoesNotInitializeGatewayIdentity(t *testing.T) {
 	}
 }
 
-func TestPairingChallengeUsesBindingAudienceForGatewayID(t *testing.T) {
+func TestPairingChallengePreservesStableMachineIdentity(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gateway-trust.json")
 	store := NewStore(path)
 	audience := "https://gateway.example.internal"
@@ -47,8 +47,12 @@ func TestPairingChallengeUsesBindingAudienceForGatewayID(t *testing.T) {
 		t.Fatalf("PairingChallenge() error = %v", err)
 	}
 
-	if want := security.StableGatewayID(audience); challenge.GatewayID != want {
-		t.Fatalf("GatewayID = %q, want %q", challenge.GatewayID, want)
+	if challenge.GatewayID == security.StableGatewayID(audience) {
+		t.Fatal("Gateway identity still depends on its address")
+	}
+	changed, err := store.PairingChallenge(protocol.PairingChallengeRequest{ProtocolVersion: protocol.Version, ClientNonce: "other", ClientPublicKey: keys.PublicKeyPEM, BindingAudience: "https://new-address.internal"})
+	if err != nil || changed.GatewayID != challenge.GatewayID || changed.GatewayPublicKey != challenge.GatewayPublicKey {
+		t.Fatal("address change replaced identity", err)
 	}
 	persisted := readTestState(t, path)
 	if persisted.Gateway.GatewayID != challenge.GatewayID {
@@ -56,7 +60,7 @@ func TestPairingChallengeUsesBindingAudienceForGatewayID(t *testing.T) {
 	}
 }
 
-func TestPairingIsAudienceScoped(t *testing.T) {
+func TestPairedMachineIdentitySurvivesAddressChange(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "gateway-trust.json"))
 	audience := "https://gateway.example.internal"
 	otherAudience := "https://other-gateway.example.internal"
@@ -65,13 +69,13 @@ func TestPairingIsAudienceScoped(t *testing.T) {
 	if !store.IsPaired(clientKeyID, audience) {
 		t.Fatalf("IsPaired(%q, %q) = false, want true", clientKeyID, audience)
 	}
-	if store.IsPaired(clientKeyID, otherAudience) {
+	if !store.IsPaired(clientKeyID, otherAudience) {
 		t.Fatalf("IsPaired(%q, %q) = true, want false", clientKeyID, otherAudience)
 	}
 	if got, ok := store.ClientPublicKey(clientKeyID, audience); !ok || got != clientPublicKey {
 		t.Fatalf("ClientPublicKey(%q, %q) = (%q, %v), want paired public key", clientKeyID, audience, got, ok)
 	}
-	if got, ok := store.ClientPublicKey(clientKeyID, otherAudience); ok || got != "" {
+	if got, ok := store.ClientPublicKey(clientKeyID, otherAudience); !ok || got != clientPublicKey {
 		t.Fatalf("ClientPublicKey(%q, %q) = (%q, %v), want not paired", clientKeyID, otherAudience, got, ok)
 	}
 }
@@ -142,6 +146,7 @@ func pairTrustTestClient(t *testing.T, store *Store, audience string) (string, s
 		"gateway_id":       challenge.GatewayID,
 		"gateway_nonce":    challenge.GatewayNonce,
 		"protocol_version": protocol.Version,
+		"permissions":      protocol.GatewayPermissions{Access: true},
 	})
 	if err != nil {
 		t.Fatalf("CanonicalJSON() error = %v", err)
@@ -157,6 +162,7 @@ func pairTrustTestClient(t *testing.T, store *Store, audience string) (string, s
 		GatewayID:       challenge.GatewayID,
 		BindingAudience: audience,
 		ClientKeyID:     clientKeyID,
+		Permissions:     protocol.GatewayPermissions{Access: true},
 		Proof:           proof,
 	}); err != nil {
 		t.Fatalf("CompletePairing() error = %v", err)
@@ -190,7 +196,7 @@ func TestConcurrentPairingAndAuthorization(t *testing.T) {
 				return
 			default:
 				store.ClientPublicKey(id, audience)
-				store.ClientCanWriteProfiles(id, audience)
+				store.ClientPermissions(id)
 			}
 		}
 	}()
@@ -233,10 +239,10 @@ func TestFailedPairingDoesNotPublishTrust(t *testing.T) {
 	}
 	clientID := security.ClientKeyID(strings.TrimSpace(keys.PublicKeyPEM))
 	payload, err := security.CanonicalJSON(map[string]any{
-		"protocol_version": protocol.Version, "client_nonce": "review-client",
+		"protocol_version": protocol.Version,
+		"permissions":      protocol.GatewayPermissions{Access: true}, "client_nonce": "review-client",
 		"gateway_nonce": challenge.GatewayNonce, "gateway_id": challenge.GatewayID,
 		"binding_audience": audience, "client_key_id": clientID,
-		"client_capability": "env_profile_write",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -254,13 +260,13 @@ func TestFailedPairingDoesNotPublishTrust(t *testing.T) {
 	_, err = store.CompletePairing(protocol.PairingCompleteRequest{
 		ProtocolVersion: protocol.Version, ClientNonce: "review-client",
 		GatewayNonce: challenge.GatewayNonce, GatewayID: challenge.GatewayID,
-		BindingAudience: audience, ClientKeyID: clientID, ClientCapability: "env_profile_write", Proof: proof,
+		BindingAudience: audience, ClientKeyID: clientID, Permissions: protocol.GatewayPermissions{Access: true}, Proof: proof,
 	})
 	if err == nil {
 		t.Fatal("expected injected persistence failure")
 	}
-	if store.IsPaired(clientID, audience) || store.ClientCanWriteProfiles(clientID, audience) {
-		t.Fatal("failed pairing published client trust and profile-write permission in memory")
+	if store.IsPaired(clientID, audience) || store.ClientPermissions(clientID).ManageMembers {
+		t.Fatal("failed pairing published client trust and member-management permission in memory")
 	}
 	retained, err := os.ReadFile(statePath + ".retained")
 	if err != nil || !bytes.Equal(before, retained) {

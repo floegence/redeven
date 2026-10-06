@@ -26,6 +26,21 @@ import (
 
 const runtimeControlProtocolVersion = "redeven-runtime-control-v2"
 
+type ownerSocketControlKey struct{}
+
+// ownerSocketHandler is mounted only on the mode-0600 management socket. Keep
+// this capability out of the Runtime application and native bridge handlers.
+func (s *runtimeControlServer) ownerSocketHandler() http.Handler {
+	routes := s.routes()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != "" {
+			writeRuntimeControlError(w, http.StatusForbidden, "RUNTIME_CONTROL_FORBIDDEN", "Runtime control requires a trusted local channel.")
+			return
+		}
+		routes.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ownerSocketControlKey{}, s)))
+	})
+}
+
 type runtimeControlServer struct {
 	lifecycleMu                  sync.Mutex
 	log                          logger
@@ -154,7 +169,12 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v2/tessiven/host", s.handleTessivenHost)
 	mux.HandleFunc("/v2/tessiven/resources", s.handleTessivenTarget)
 	mux.HandleFunc("/v2/provider-link", s.handleProviderLink)
-	mux.HandleFunc("/v2/gateway-cloud/join", s.handleGatewayCloudJoin)
+	mux.HandleFunc("/v2/gateway/join", s.handleGatewayJoin)
+	mux.HandleFunc("/v2/gateway/replace", s.handleGatewayJoin)
+	mux.HandleFunc("/v2/gateway/update-address", s.handleGatewayJoin)
+	mux.HandleFunc("/v2/gateway/status", s.handleGatewayStatus)
+	mux.HandleFunc("/v2/gateway/retry", s.handleGatewayRetry)
+	mux.HandleFunc("/v2/gateway/leave", s.handleGatewayLeave)
 	mux.HandleFunc("/v2/provider-link/connect", s.handleProviderLinkConnect)
 	mux.HandleFunc("/v2/provider-link/disconnect", s.handleProviderLinkDisconnect)
 	mux.HandleFunc("/v2/code-workspace-engine/status", s.handleCodeWorkspaceEngineStatus)
@@ -234,6 +254,9 @@ type runtimeControlError struct {
 func (s *runtimeControlServer) require(w http.ResponseWriter, r *http.Request) bool {
 	if s == nil || w == nil || r == nil {
 		return false
+	}
+	if owner, ok := r.Context().Value(ownerSocketControlKey{}).(*runtimeControlServer); ok && owner == s {
+		return true
 	}
 	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
 	if err != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() {

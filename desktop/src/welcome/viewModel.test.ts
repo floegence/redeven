@@ -1,3 +1,4 @@
+import { memberFixture } from '../testSupport/gatewayMembershipFixture';
 import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
 import { createDesktopI18n } from '../shared/i18n';
 import { buildEnvironmentLibraryDisplayGroups } from './environmentLibraryProjection';
@@ -327,7 +328,7 @@ describe('environment open flow decisions', () => {
         presentation_state: 'allowed' as const,
         target: { lifecycle_target_id: 'rlt_local', target_generation: 1 },
         compatibility: {
-          gateway_protocol: 'redeven-gateway-v3',
+          gateway_protocol: 'redeven-gateway-v4',
           runtime_platform: 'darwin' as const,
           runtime_architecture: 'arm64' as const,
           runtime_service_protocol: 'redeven-runtime-v2',
@@ -617,6 +618,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     connection_kind: 'url',
     management_capability: 'access_only',
     capabilities: [],
+    permissions: { access: true, manage_members: false, configure_cloud: false },
     status: 'online',
     trust_state: 'paired',
     endpoint_label: 'https://gateway.example.invalid',
@@ -630,16 +632,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     },
     created_at_ms: 10,
     updated_at_ms: 20,
-    environments: [{
-      gateway_env_id: 'finance',
-      display_name: 'Finance Dashboard',
-      env_kind: 'reachable_env',
-      state: 'available',
-      capabilities: ['open'],
-      access_capabilities: ['open_direct', 'open_via_gateway'],
-      access_endpoint: { kind: 'url', url: 'https://runtime.example.invalid/' },
-      origin: { kind: 'network_target', label: 'Finance subnet' },
-    }],
+    environments: [{ ...memberFixture, member_id: 'finance', display_name: 'Finance Dashboard' }],
     ...overrides,
   };
 }
@@ -3447,14 +3440,7 @@ describe('Gateway view models', () => {
           gateway_id: 'office',
           display_name: 'Office',
           endpoint_label: 'ssh://office',
-          environments: [{
-            gateway_env_id: 'office-demo',
-            display_name: 'Office Demo',
-            env_kind: 'reachable_env',
-            state: 'available',
-            capabilities: ['open'],
-            origin: { kind: 'ssh_target', label: 'Office bastion' },
-          }],
+          environments: [{ ...memberFixture, member_id: 'office-demo', display_name: 'Office Demo' }],
         }),
       ],
     });
@@ -3938,9 +3924,9 @@ describe('Gateway view models', () => {
     expect(row.secondary_actions.map((action) => action.intent)).toEqual([]);
   });
 
-  it('guides writable empty Gateway catalogs toward adding Gateway-backed environments', () => {
+  it('guides member administrators toward invitations', () => {
     const writableEmptyRow = buildGatewaySourceRowModel(gatewaySource({
-      capabilities: ['env_profile_write'],
+      capabilities: ['member_manage'], permissions: { access: true, manage_members: true, configure_cloud: false },
       environments: [],
     }));
     const readOnlyEmptyRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3951,7 +3937,7 @@ describe('Gateway view models', () => {
     expect(writableEmptyRow).toMatchObject({
       environment_count: 0,
       environment_summary_label: 'No environments synced',
-      environment_summary_detail: 'Add a Gateway-backed Environment to make it available from every Desktop paired with this Gateway.',
+      environment_summary_detail: 'Invite a Runtime to join this Gateway. Paired Desktops with access permission can open its members.',
       primary_action: expect.objectContaining({
         intent: 'refresh_gateway',
         label: 'Refresh',
@@ -3960,7 +3946,7 @@ describe('Gateway view models', () => {
     expect(readOnlyEmptyRow).toMatchObject({
       environment_count: 0,
       environment_summary_label: 'No environments synced',
-      environment_summary_detail: 'No environments are currently exposed by this Gateway catalog.',
+      environment_summary_detail: 'No Runtime members are currently registered with this Gateway.',
       primary_action: expect.objectContaining({
         intent: 'refresh_gateway',
         label: 'Refresh',

@@ -121,26 +121,14 @@ function buildGatewayEnvironmentEntry(
   source: DesktopEnvironmentSource,
   createdAtMS: number,
 ): DesktopEnvironmentEntry | null {
-  const id = desktopGatewayEnvironmentEntryID(gateway.gateway_id, environment.gateway_env_id);
+  const id = desktopGatewayEnvironmentEntryID(gateway.gateway_id, environment.member_id);
   if (!id) {
     return null;
   }
-  const displayName = compact(environment.display_name) || environment.gateway_env_id;
+  const displayName = compact(environment.display_name) || environment.member_id;
   const gatewayLabel = compact(gateway.display_name) || gateway.gateway_id;
-  const accessCapabilities = (environment.access_capabilities ?? []).filter(capability =>
-    environment.access_endpoint?.kind === 'url' && !!environment.access_endpoint.url
-    && (capability === 'open_direct' ? gateway.capabilities.includes('env_direct_open')
-      : capability === 'open_via_gateway' && gateway.capabilities.includes('env_proxy_open')));
   const isOpenable = desktopGatewayCanOpenEnvironment(gateway, environment);
   const needsResolve = desktopGatewayNeedsResolution(gateway.status);
-  const canWriteGatewayProfile = gateway.status === 'online'
-    && gateway.capabilities.includes('env_profile_write');
-  const hasManagedGatewayProfile = environment.profile?.managed === true
-    && !!environment.profile.access_route_kind;
-  const hasEditableGatewayProfile = hasManagedGatewayProfile
-    && !!environment.profile_access_route
-    && environment.profile_access_route.kind === environment.profile?.access_route_kind;
-  const canEditGatewayProfile = canWriteGatewayProfile && hasEditableGatewayProfile && environment.profile?.access_route_kind === 'url';
   const runtimeOperations = gatewayRuntimeOperations({
     openable: isOpenable,
     needsResolve,
@@ -151,27 +139,21 @@ function buildGatewayEnvironmentEntry(
     registration_ref: {
       kind: 'gateway_environment',
       gateway_id: gateway.gateway_id,
-      gateway_env_id: environment.gateway_env_id,
+      gateway_env_id: environment.member_id,
     },
     label: displayName,
     local_ui_url: '',
-    secondary_text: environment.origin.label || gatewayLabel,
+    secondary_text: environment.metadata.hostname || gatewayLabel,
     gateway_id: gateway.gateway_id,
     gateway_identity_fingerprint: gateway.identity_fingerprint,
     gateway_label: gatewayLabel,
-    gateway_env_id: environment.gateway_env_id,
+    gateway_env_id: environment.member_id,
     gateway_status: gateway.status,
     gateway_connection_kind: gateway.connection_kind,
     gateway_trust_state: gateway.trust_state,
     gateway_status_message: gateway.status_message,
     gateway_endpoint_label: gateway.endpoint_label,
-    gateway_environment_state: environment.state,
-    gateway_environment_kind: environment.env_kind,
-    gateway_environment_capabilities: environment.capabilities,
-    gateway_environment_access_capabilities: accessCapabilities,
-    gateway_environment_profile: environment.profile,
-    gateway_environment_profile_access_route: environment.profile_access_route,
-    gateway_environment_origin: environment.origin,
+    gateway_member: environment,
     gateway_access_result: environment.last_access_result,
     gateway_sync_state: gateway.sync_state,
     environment_source: source,
@@ -186,15 +168,15 @@ function buildGatewayEnvironmentEntry(
       checked_at_unix_ms: 0,
       source: 'gateway_service_probe',
       freshness: 'unknown',
-      offline_reason_code: gatewayOfflineReasonCode(gateway.status, environment.state),
+      offline_reason_code: gatewayOfflineReasonCode(gateway.status, environment),
       offline_reason: gatewayOfflineReason(gateway, environment),
     },
     runtime_operations: runtimeOperations,
     open_session_key: '',
     open_session_lifecycle: undefined,
     open_action: 'open',
-    can_edit: canEditGatewayProfile,
-    can_delete: canWriteGatewayProfile && hasManagedGatewayProfile,
+    can_edit: false,
+    can_delete: false,
     created_at_ms: createdAtMS,
     last_used_at_ms: environment.last_seen_at_unix_ms ?? gateway.updated_at_ms,
   };
@@ -241,9 +223,9 @@ function gatewayRuntimeOperations(input: Readonly<{
 
 function gatewayOfflineReasonCode(
   gatewayStatus: DesktopGatewaySource['status'],
-  environmentState: DesktopGatewayEnvironment['state'],
+  member: DesktopGatewayEnvironment,
 ): NonNullable<DesktopEnvironmentEntry['runtime_health']['offline_reason_code']> | undefined {
-  if (gatewayStatus === 'online' && (environmentState === 'available' || environmentState === 'stopped')) {
+  if (gatewayStatus === 'online' && member.state === 'active' && member.connected) {
     return undefined;
   }
   switch (gatewayStatus) {
@@ -266,7 +248,7 @@ function gatewayOfflineReason(
   gateway: DesktopGatewaySource,
   environment: DesktopGatewayEnvironment,
 ): string | undefined {
-  if (gateway.status === 'online' && environment.state === 'available') {
+  if (gateway.status === 'online' && environment.state === 'active' && environment.connected) {
     return undefined;
   }
   const message = compact(gateway.status_message);
@@ -291,7 +273,7 @@ function gatewayOfflineReason(
     case 'unknown':
       return 'Gateway status has not been checked yet.';
     case 'online':
-      return 'This Gateway profile does not support opening yet.';
+      return 'This Runtime member is not connected to its Gateway.';
   }
 }
 

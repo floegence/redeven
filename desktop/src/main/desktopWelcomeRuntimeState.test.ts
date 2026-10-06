@@ -26,7 +26,7 @@ async function startRuntimeServer(healthData: Record<string, unknown>) {
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({
         ok: true,
-        data: healthData,
+        data: { local_ui_url: `http://${request.headers.host}/`, local_ui_urls: [`http://${request.headers.host}/`], ...healthData },
       }));
       return;
     }
@@ -92,6 +92,8 @@ describe('desktopWelcomeRuntimeState', () => {
         response.end(JSON.stringify({
           ok: true,
           data: {
+            local_ui_url: `http://${request.headers.host}/`,
+            local_ui_urls: [`http://${request.headers.host}/`, 'http://192.0.2.10:23998/'],
             status: 'online',
             password_required: true,
             exposure: {
@@ -332,6 +334,8 @@ describe('desktopWelcomeRuntimeState', () => {
         response.end(JSON.stringify({
           ok: true,
           data: {
+            local_ui_url: `http://${request.headers.host}/`,
+            local_ui_urls: [`http://${request.headers.host}/`],
             status: 'online',
             password_required: false,
             exposure: loopbackExposure,

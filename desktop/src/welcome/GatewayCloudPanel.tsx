@@ -9,8 +9,8 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
   const [status, setStatus] = createSignal<GatewayCloudSummary>();
   const [error, setError] = createSignal('');
   const [cloud, setCloud] = createSignal('');
-  const [gatewayURL, setGatewayURL] = createSignal('');
-  const [listen, setListen] = createSignal('0.0.0.0:7443');
+  const needsAuthorization = () => ['revoked', 'retired', 'expired'].includes(status()?.state ?? '');
+  const needsConfiguration = () => !status()?.configured || needsAuthorization() || status()?.state === 'registering';
   let generation = 0;
   let trigger: HTMLButtonElement | undefined;
   function cancel() {
@@ -22,7 +22,7 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
   async function load(configure = false) {
     const bridge = window.redevenDesktopLauncher;
     if (!bridge || busy()) return;
-    const configuration = normalizeGatewayCloudConfiguration({ cloud_origin: cloud(), gateway_url: gatewayURL(), egress_listen: listen() });
+    const configuration = normalizeGatewayCloudConfiguration({ cloud_origin: cloud(), ...(needsAuthorization() ? { reauthorize: true } : {}) });
     if (configure && !configuration) { setError(props.i18n.t('gatewayCloud.invalid')); return; }
     const current = ++generation;
     setBusy(true);
@@ -53,15 +53,13 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
         <p class="font-medium">{props.gatewayName}</p>
         <Show when={status()}>{value => <p role="status" class="text-sm text-muted-foreground">{props.i18n.t(`gatewayCloud.${value().state}`)}<Show when={value().namespace_public_id}><span class="ml-2 font-mono text-xs">{value().namespace_public_id}</span></Show></p>}</Show>
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
-        <Show when={!status()?.configured}>
+        <Show when={needsConfiguration()}>
           <label class="block space-y-1 text-sm"><span>{props.i18n.t('gatewayCloud.cloudOrigin')}</span><Input value={cloud()} onInput={event => setCloud(event.currentTarget.value)} placeholder="https://cloud.example.com" disabled={busy()} /></label>
-          <label class="block space-y-1 text-sm"><span>{props.i18n.t('gatewayCloud.gatewayURL')}</span><Input value={gatewayURL()} onInput={event => setGatewayURL(event.currentTarget.value)} placeholder="https://gateway.internal:7443" disabled={busy()} /></label>
-          <label class="block space-y-1 text-sm"><span>{props.i18n.t('gatewayCloud.listenAddress')}</span><Input value={listen()} onInput={event => setListen(event.currentTarget.value)} disabled={busy()} /></label>
         </Show>
         <div class="flex flex-wrap justify-end gap-2">
           <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t(busy() ? 'common.cancel' : 'common.close')}</Button>
           <Button class="cursor-pointer" variant="outline" disabled={busy()} onClick={() => void load()}>{props.i18n.t('common.refresh')}</Button>
-          <Show when={status()?.configured} fallback={<Button class="cursor-pointer" disabled={busy() || !cloud().trim() || !gatewayURL().trim()} onClick={() => void load(true)}>{props.i18n.t('gatewayCloud.configure')}</Button>}>
+          <Show when={!needsConfiguration()} fallback={<Button class="cursor-pointer" disabled={busy() || !cloud().trim()} onClick={() => void load(true)}>{props.i18n.t('gatewayCloud.configure')}</Button>}>
             <Button class="cursor-pointer" disabled={busy()} onClick={() => void manage()}>{props.i18n.t('gatewayCloud.manage')}</Button>
           </Show>
         </div>

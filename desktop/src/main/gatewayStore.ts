@@ -24,7 +24,7 @@ import {
 } from '../shared/desktopSSH';
 import type { DesktopContainerEngine } from '../shared/desktopRuntimePlacement';
 
-export const GATEWAY_STORE_SCHEMA_VERSION = 3;
+export const GATEWAY_STORE_SCHEMA_VERSION = 4;
 
 export type GatewayURLConnection = Readonly<{
   kind: 'url';
@@ -87,8 +87,7 @@ export type GatewayConnection =
   | GatewaySSHHostConnection
   | GatewaySSHContainerConnection;
 
-// A connection locates the Gateway service. Only the explicit legacy Runtime
-// marker below identifies an old direct-Environment registration.
+// A connection locates only the standalone Gateway service.
 
 export type GatewayTrustProfile = Readonly<{
   trust_profile_id: string;
@@ -104,7 +103,7 @@ export type GatewayTrustProfile = Readonly<{
 }>;
 
 export type GatewayRecord = Readonly<{
-  schema_version: 3;
+  schema_version: 4;
   gateway_id: string;
   display_name: string;
   local_enabled: boolean;
@@ -113,18 +112,11 @@ export type GatewayRecord = Readonly<{
   created_at_ms: number;
   updated_at_ms: number;
   last_catalog_sync_at_ms?: number;
-  /** Migration input only; retained until the Runtime target journal commits. */
-  runtime_environment_id?: string;
 }>;
 
 export type GatewayStoreSnapshot = Readonly<{
-  schema_version: 3;
+  schema_version: 4;
   gateways: readonly GatewayRecord[];
-}>;
-
-export type LegacyDirectGatewayRecord = Readonly<{
-  record: GatewayRecord;
-  runtime_environment_id: string;
 }>;
 
 type GatewayStoreFile = Readonly<{
@@ -431,16 +423,17 @@ export function gatewayEndpointLabel(connection: GatewayConnection): string {
 }
 
 // The local registration ID remains stable when its connection is edited.
-// The wire identity is always bound to the current connection audience.
-export function gatewayProtocolID(record: Pick<GatewayRecord, 'connection'>): string {
-  return stableGatewayID(gatewayBindingAudience(record.connection));
+// The wire identity is pinned at pairing and does not change with an address.
+export function gatewayProtocolID(record: Pick<GatewayRecord, 'trust_profile'>): string {
+  return record.trust_profile?.gateway_id ?? '';
 }
 
-function normalizeTrustProfile(value: unknown, gatewayID: string): GatewayTrustProfile | undefined {
+function normalizeTrustProfile(value: unknown): GatewayTrustProfile | undefined {
   if (!value || typeof value !== 'object') {
     return undefined;
   }
   const candidate = value as Record<string, unknown>;
+  const gatewayID = normalizeGatewayID(candidate.gateway_id);
   const trustProfileID = compact(candidate.trust_profile_id);
   const pairedClientKeyID = compact(candidate.paired_client_key_id);
   const pairedClientPrivateKeyRef = compact(candidate.paired_client_private_key_ref);
@@ -476,7 +469,7 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
     return null;
   }
   connection = normalizeGatewaySSHPasswordRefForRecord(connection, gatewayID);
-  const rawTrustProfile = normalizeTrustProfile(candidate.trust_profile, gatewayID);
+  const rawTrustProfile = normalizeTrustProfile(candidate.trust_profile);
   const trustProfile = rawTrustProfile?.binding_audience === gatewayBindingAudience(connection)
     ? rawTrustProfile
     : undefined;
@@ -489,7 +482,6 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
     ...(trustProfile ? { trust_profile: trustProfile } : {}),
     created_at_ms: timestampMS(candidate.created_at_ms, now),
     updated_at_ms: timestampMS(candidate.updated_at_ms, now),
-    ...(compact(candidate.runtime_environment_id) ? { runtime_environment_id: compact(candidate.runtime_environment_id) } : {}),
     ...(positiveInteger(candidate.last_catalog_sync_at_ms) ? { last_catalog_sync_at_ms: positiveInteger(candidate.last_catalog_sync_at_ms) } : {}),
   };
 }
@@ -568,6 +560,11 @@ export function gatewayRecordToSourceWithCatalog(
     status_message?: string;
     capabilities?: readonly DesktopGatewayCapability[];
     environments?: readonly DesktopGatewayEnvironment[];
+    permissions?: DesktopGatewaySource['permissions'];
+    policy?: DesktopGatewaySource['policy'];
+    catalog_revision?: number;
+    rebuild_required?: boolean;
+    hook_status?: DesktopGatewaySource['hook_status'];
   }>,
 ): DesktopGatewaySource {
   const base = gatewayRecordToSource(record);
@@ -586,6 +583,8 @@ export function gatewayRecordToSourceWithCatalog(
         : 'Gateway catalog could not be refreshed.'),
     capabilities: [...new Set(catalog.capabilities ?? [])],
     environments: [...(catalog.environments ?? [])],
+    permissions: catalog.permissions, policy: catalog.policy,
+    catalog_revision: catalog.catalog_revision, rebuild_required: catalog.rebuild_required, hook_status: catalog.hook_status,
   };
 }
 
@@ -663,7 +662,7 @@ function migrateGatewayStoreFile(value: unknown, now = Date.now()): Readonly<{
   if (schemaVersion > GATEWAY_STORE_SCHEMA_VERSION) {
     throw new GatewayStoreError('GATEWAY_STORE_FUTURE_SCHEMA', 'Gateway store was created by a newer Redeven Desktop.');
   }
-  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== GATEWAY_STORE_SCHEMA_VERSION) {
+  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== 3 && schemaVersion !== GATEWAY_STORE_SCHEMA_VERSION) {
     throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_UNSUPPORTED', 'Gateway store schema version is unsupported.');
   }
   if (!Array.isArray(candidate.gateways)) {
@@ -684,9 +683,11 @@ function migrateGatewayStoreFile(value: unknown, now = Date.now()): Readonly<{
       || !positiveInteger(persisted.updated_at_ms)) {
       throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store record shape does not match its schema version.');
     }
-    if (persisted.runtime_environment_id !== undefined
-      && (typeof persisted.runtime_environment_id !== 'string' || !persisted.runtime_environment_id.trim())) {
-      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway legacy Runtime mapping is invalid.');
+    // Retired direct Runtime entries cannot become Gateway service targets or
+    // silently restore an independent access route during this cutover.
+    if (persisted.runtime_environment_id !== undefined) {
+      if (schemaVersion < 4) continue;
+      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store contains a retired Runtime mapping.');
     }
     const rawConnection = persisted.connection && typeof persisted.connection === 'object'
       ? persisted.connection as Record<string, unknown>
@@ -698,7 +699,16 @@ function migrateGatewayStoreFile(value: unknown, now = Date.now()): Readonly<{
     if (schemaVersion === 1 && connectionKind !== 'url' && connectionKind !== 'ssh_host' && connectionKind !== 'ssh_container') {
       throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store v1 contains a connection kind that did not exist in v1.');
     }
-    const record = normalizeGatewayRecord(rawRecord, now);
+    // Older stores persisted a Desktop registration ID in the trust profile.
+    // Recover the former wire ID only in this one-time migration; never derive
+    // identities from an address for current protocol traffic.
+    const migratedRecord = schemaVersion < 4 && persisted.trust_profile
+      ? { ...persisted, trust_profile: {
+        ...(persisted.trust_profile as Record<string, unknown>),
+        gateway_id: stableGatewayID(compact((persisted.trust_profile as Record<string, unknown>).binding_audience)),
+      }, last_catalog_sync_at_ms: undefined }
+      : persisted;
+    const record = normalizeGatewayRecord(migratedRecord, now);
     if (!record || (persisted.trust_profile !== undefined && record.trust_profile === undefined)) {
       throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store contains data that cannot be normalized without loss.');
     }
@@ -799,20 +809,7 @@ export class GatewayStore {
   }
 
   async list(): Promise<readonly GatewayRecord[]> {
-    // Gateway Store owns standalone Gateways only. Legacy direct Environment
-    // records remain readable through listLegacyDirectEnvironmentRecords()
-    // until the startup migration can move them to Runtime Target storage.
-    return (await this.load()).gateways.filter((record) => !record.runtime_environment_id);
-  }
-
-  /**
-   * Read legacy direct-Environment mappings without making them Gateway
-   * records. Callers must migrate them to the Environment target store before
-   * deleting the old record; an incomplete mapping is left untouched.
-   */
-  async listLegacyDirectEnvironmentRecords(): Promise<readonly LegacyDirectGatewayRecord[]> {
-    return (await this.load()).gateways.flatMap(record => record.runtime_environment_id
-      ? [{ record, runtime_environment_id: record.runtime_environment_id }] : []);
+    return (await this.load()).gateways;
   }
 
   async get(gatewayID: string): Promise<GatewayRecord | null> {
@@ -838,9 +835,6 @@ export class GatewayStore {
       }
       const snapshot = await this.load();
       const existing = snapshot.gateways.find((record) => record.gateway_id === gatewayID);
-      if (existing?.runtime_environment_id) {
-        throw new GatewayStoreError('GATEWAY_MIGRATION_PENDING', 'This legacy Runtime registration must finish migration before its identity can be reused.');
-      }
       const nextBindingAudience = gatewayBindingAudience(input.connection);
       const connectionIdentityUnchanged = existing ? gatewayBindingAudience(existing.connection) === nextBindingAudience : false;
       const existingTrustProfile = existing?.trust_profile?.binding_audience === nextBindingAudience
@@ -945,20 +939,6 @@ export class GatewayStore {
       };
       await this.commitSnapshot(nextSnapshot);
       return existing;
-    });
-  }
-
-  async removeMigratedDirectRecords(entries: readonly Readonly<{ gateway_id: string; environment_id: string }>[]): Promise<void> {
-    return this.mutate(async () => {
-      const snapshot = await this.load();
-      const ids = new Set(entries.map(entry => entry.gateway_id));
-      for (const entry of entries) {
-        const existing = snapshot.gateways.find(record => record.gateway_id === entry.gateway_id);
-        if (existing && existing.runtime_environment_id !== entry.environment_id) {
-          throw new GatewayStoreError('GATEWAY_MIGRATION_SOURCE_CHANGED', 'Gateway migration source changed; no records were removed.');
-        }
-      }
-      await this.commitSnapshot({ ...snapshot, gateways: snapshot.gateways.filter(record => !ids.has(record.gateway_id)) });
     });
   }
 

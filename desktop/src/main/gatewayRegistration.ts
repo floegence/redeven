@@ -1,12 +1,22 @@
 import type { DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
-import { normalizeGatewayBaseURL, type GatewayConnection } from './gatewayStore';
+import { gatewayBindingAudience, normalizeGatewayBaseURL, type GatewayConnection, type GatewayRecord, type GatewayTrustProfile } from './gatewayStore';
+
+/** Save a changed address only after it proves the existing pinned identity. */
+export async function verifyGatewayConnectionChange(existing: GatewayRecord | null, connection: GatewayConnection,
+  verify: (candidate: GatewayRecord) => Promise<void>): Promise<GatewayTrustProfile | undefined> {
+  const profile = existing?.trust_profile;
+  if (!existing || !profile || gatewayBindingAudience(existing.connection) === gatewayBindingAudience(connection)) return profile;
+  const candidate = { ...existing, connection, trust_profile: { ...profile, binding_audience: gatewayBindingAudience(connection) } };
+  await verify(candidate);
+  return { ...candidate.trust_profile, last_verified_at_unix_ms: Date.now() };
+}
 
 export function gatewayConnectionFromSetup(
   request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway' }>,
 ): GatewayConnection {
   if (request.connection_kind === 'url') {
-    if (request.profile_write && !request.pairing_code?.trim()) {
-      throw new Error('A Gateway pairing code is required to authorize environment profile changes.');
+    if ((request.permissions?.manage_members || request.permissions?.configure_cloud) && !request.pairing_code?.trim()) {
+      throw new Error('A Gateway pairing code is required to authorize Gateway management.');
     }
     return { kind: 'url', base_url: normalizeGatewayBaseURL(request.gateway_url), allow_loopback_http: request.allow_loopback_http };
   }

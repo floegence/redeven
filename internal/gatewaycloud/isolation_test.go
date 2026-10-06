@@ -2,11 +2,14 @@ package gatewaycloud
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"github.com/floegence/redeven/internal/gatewaystate"
 	"io"
 	"net"
 	"net/http"
@@ -17,8 +20,11 @@ import (
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/flowersec/flowersec-go/v5/controlplane"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayegress"
+	"github.com/floegence/redeven/internal/gatewayflow"
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 )
 
 // TestGatewayNetworkIsolationProcess runs only through check_gateway_cloud_isolation.sh.
@@ -34,29 +40,35 @@ func TestGatewayNetworkIsolationProcess(t *testing.T) {
 	}
 	switch role {
 	case "prepare":
-		g, r := newEnrollmentFixture(t)
-		g.config.ListenerURL = "https://10.242.73.2:7443"
-		if err := createGatewayTLS(&g.config); err != nil {
-			t.Fatal(err)
-		}
-		r.GatewayURL, r.GatewayTLSRootPEM = g.config.ListenerURL, g.config.RootPEM
-		issued, err := g.enroll(gc.LocalEnrollment{RequestPublicID: r.RequestPublicID, EnrollmentToken: r.EnrollmentToken, RuntimePublicID: r.RuntimePublicID, CSRPEM: r.ClientCSRPEM})
+		_, key, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			t.Fatal(err)
 		}
-		r.ClientCertificatePEM, r.ClientExpiresAtUnixMS = issued.ClientCertificatePEM, issued.ExpiresAtUnixMS
-		cloud := GatewayConfig{ListenerURL: "https://cloud.gateway.test:8443"}
-		if err := createGatewayTLS(&cloud); err != nil {
+		stable := gatewaymembership.GatewayIdentity{ID: "gateway_isolation", PrivateKey: key}
+		hooks, _ := gatewaymembership.NewPolicyHooks(gatewaymembership.HookConfig{})
+		members, err := gatewaymembership.NewStore(filepath.Join(root, "members.json"), stable, "https://10.242.73.2:7443", ":7443", hooks)
+		if err != nil {
 			t.Fatal(err)
 		}
-		for name, value := range map[string]any{"gateway.json": g.config, "runtime.json": r, "cloud.json": cloud} {
-			if err := WriteState(filepath.Join(root, name), value); err != nil {
+		invitation, err := members.Invite("isolation_admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		member, err := gatewaymembership.PrepareRuntime(invitation, "runtime_isolation", gp.MemberMetadata{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cloud, _ := gatewayfixture.New(t, "https://cloud.gateway.test:8443", ":8443")
+		endpoint := cloud.Endpoint()
+		for name, value := range map[string]any{"gateway.json": stable, "runtime.json": member, "cloud.json": endpoint} {
+			if err := gatewaystate.Write(filepath.Join(root, name), value); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := os.WriteFile(filepath.Join(root, "cloud-root.pem"), []byte(cloud.RootPEM), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "cloud-root.pem"), []byte(endpoint.RootPEM), 0600); err != nil {
 			t.Fatal(err)
 		}
+
 	case "cloud":
 		runIsolationCloud(t, root)
 	case "gateway":
@@ -69,11 +81,11 @@ func TestGatewayNetworkIsolationProcess(t *testing.T) {
 }
 
 func runIsolationCloud(t *testing.T, root string) {
-	var cfg GatewayConfig
-	if err := ReadState(filepath.Join(root, "cloud.json"), &cfg); err != nil {
+	var cfg gatewaymembership.Endpoint
+	if err := gatewaystate.Read(filepath.Join(root, "cloud.json"), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	cert, err := tls.X509KeyPair([]byte(cfg.ServerCertificatePEM), []byte(cfg.ServerKeyPEM))
+	cert, err := tls.X509KeyPair([]byte(cfg.CertificatePEM), []byte(cfg.PrivateKeyPEM))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,35 +147,53 @@ func runIsolationCloud(t *testing.T, root string) {
 }
 
 func runIsolationGateway(t *testing.T, root string) {
-	var cfg GatewayConfig
-	if err := ReadState(filepath.Join(root, "gateway.json"), &cfg); err != nil {
+	var stable gatewaymembership.GatewayIdentity
+	if err := gatewaystate.Read(filepath.Join(root, "gateway.json"), &stable); err != nil {
 		t.Fatal(err)
 	}
-	proxy, err := gatewayegress.New(gatewayegress.Options{AllowPrivateDestinations: true})
+	hooks, _ := gatewaymembership.NewPolicyHooks(gatewaymembership.HookConfig{})
+	members, err := gatewaymembership.NewStore(filepath.Join(root, "members.json"), stable, "https://10.242.73.2:7443", ":7443", hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := gatewayflow.New(gp.MaxMemberConnections, gp.MaxGatewayConnections)
+	connections := gatewaymembership.NewConnections(budget)
+	proxy, err := gatewayegress.New(gatewayegress.Options{Budget: budget, AllowPrivateDestinations: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
-	local := cfg.Members["request"]
-	if err := proxy.ReplaceMembers([]gatewayegress.Member{{ID: local.RuntimePublicID, Generation: 1, CertificateSHA256: local.Fingerprint, Destinations: []string{"cloud.gateway.test:8443"}}}); err != nil {
-		t.Fatal(err)
-	}
-	roots := x509.NewCertPool()
-	roots.AppendCertsFromPEM([]byte(cfg.RootPEM))
-	cert, err := tls.X509KeyPair([]byte(cfg.ServerCertificatePEM), []byte(cfg.ServerKeyPEM))
+	members.SetCommitHandler(func(records []gatewaymembership.MemberRecord, policy gp.GatewayPolicy) {
+		connections.Apply(records, policy)
+		policies := []gatewayegress.Member{}
+		for _, record := range records {
+			m := record.Member
+			if m.State == "active" {
+				policies = append(policies, gatewayegress.Member{ID: m.MemberID, MemberVersion: uint64(m.MemberVersion), Generation: 1, CertificateSHA256: record.ClientCertificateSHA256, Destinations: []string{"cloud.gateway.test:8443"}})
+			}
+		}
+		if err := proxy.ReplaceMembers(policies); err != nil {
+			t.Error(err)
+		}
+	})
+	memberListener, err := gatewaymembership.NewListener(members, connections, func(string) bool { return false })
 	if err != nil {
 		t.Fatal(err)
 	}
-	tlsConfig, err := gatewayegress.TLSConfig(cert, roots)
+	tlsConfig, err := members.TLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	listener, err := tls.Listen("tcp", ":7443", tlsConfig)
+	server, err := memberListener.Server(tlsConfig, proxy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := &http.Server{Handler: proxy, ReadHeaderTimeout: 5 * time.Second}
 	defer server.Close()
+	listener, err := net.Listen("tcp", ":7443")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if err := os.WriteFile(filepath.Join(root, "gateway.ready"), []byte("ready"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -186,11 +216,20 @@ func runIsolationRuntime(t *testing.T, root string) {
 	if err == nil {
 		t.Fatal("Runtime unexpectedly resolved Cloud DNS")
 	}
-	var cfg RuntimeConfig
-	if err := ReadState(filepath.Join(root, "runtime.json"), &cfg); err != nil {
+	var cfg gatewaymembership.RuntimeConfig
+	if err := gatewaystate.Read(filepath.Join(root, "runtime.json"), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	proxy, err := cfg.Proxy()
+	if err := cfg.Enroll(ctx, func(member *gatewaymembership.RuntimeConfig) error {
+		return gatewaystate.Write(filepath.Join(root, "runtime.json"), member)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	association, err := PrepareRuntime(&cfg, gp.MemberCloudContext{ProtocolVersion: gp.Version, Allowed: true, GatewayID: cfg.GatewayID, MemberID: cfg.MemberID, MemberVersion: cfg.MemberVersion, CloudOrigin: "https://cloud.gateway.test:8443", RegionOrigin: "https://cloud.gateway.test:8443", NamespacePublicID: "namespace", GatewayPublicID: "cloud_gateway"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy, err := association.Proxy(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

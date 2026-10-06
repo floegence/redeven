@@ -1,3 +1,4 @@
+import { catalogFixture, memberFixture } from '../testSupport/gatewayMembershipFixture';
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
@@ -20,20 +21,13 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     connection_kind: 'url',
     management_capability: 'access_only',
     capabilities: [],
+    permissions: catalogFixture.gateway.permissions,
     status: 'online',
     trust_state: 'paired',
     endpoint_label: 'https://gateway.example.invalid',
     created_at_ms: 10,
     updated_at_ms: 20,
-    environments: [{
-      gateway_env_id: 'env_demo',
-      display_name: 'Demo',
-      env_kind: 'reachable_env',
-      state: 'available',
-      capabilities: [],
-      access_capabilities: ['open'],
-      origin: { kind: 'network_target', label: 'Bastion network' },
-    }],
+    environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Demo' }],
     ...overrides,
   };
 }

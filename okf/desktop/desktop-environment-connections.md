@@ -45,18 +45,16 @@ by the [Gateway service contract](../gateway/gateway-service.md). They never
 appear as Runtime lifecycle actions on catalog Environment cards. Setup keeps
 credentials local, and editing a saved SSH password preserves it unless the
 user replaces, clears, or changes its SSH identity. URL pairing opens the code
-form; independent profile-write consent is available during creation and editing.
+form. Access, member management and Cloud configuration are separate explicit
+pairing permissions. Saving connection coordinates alone does not start or pair
+a Gateway; granting permissions requires the service to be available.
 
-Gateway Environment cards show source, Gateway connection, trust, catalog sync,
-default access mode and the latest attempted access result separately. No access
-attempt means target not checked, even when the catalog is available. Explicit
-Direct URL and Gateway proxy actions appear only with their specific published
-capabilities. Profile information remains visible without write permission;
-disabled editing explains the independent authorization requirement. Unsupported
-SSH/container profile kinds remain visible without fabricated opening support.
-Runtime login state is never labeled as Gateway connectivity. The
-[Gateway access owner](../gateway/gateway-access-sessions.md) defines transports,
-revocation and error distinctions. Session tokens and private loopback proxy
+Gateway member cards show the owning Gateway, member connection, trust,
+directory synchronization, Cloud publication and the latest access result.
+Runtime login state is distinct from Gateway connectivity. Desktop opens only
+active connected members over their outbound member connection. The
+[Gateway access owner](../gateway/gateway-access-sessions.md) defines certificate
+trust, cancellation and revocation. Session tokens and private loopback proxy
 credentials never enter card facts, clipboard actions or QR data.
 
 ## Environment library presentation

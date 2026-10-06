@@ -1,3 +1,4 @@
+import { memberFixture } from '../testSupport/gatewayMembershipFixture';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -176,14 +177,7 @@ describe('environment Flower context envelope', () => {
         endpoint_label: 'https://gateway.example.invalid',
         created_at_ms: 10,
         updated_at_ms: 20,
-        environments: [{
-          gateway_env_id: 'env_demo',
-          display_name: 'Demo Gateway',
-          env_kind: 'reachable_env',
-          state: 'available',
-          capabilities: ['open'],
-          origin: { kind: 'network_target', label: 'Gateway network' },
-        }],
+        environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Demo Gateway' }],
       }],
     });
     const environment = snapshot.environments.find((entry) => entry.kind === 'gateway_environment');

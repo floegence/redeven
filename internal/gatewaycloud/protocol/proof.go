@@ -1,3 +1,4 @@
+// Package gatewaycloud defines Cloud v2 enrollment, independently of user access authorization.
 package gatewaycloud
 
 import (
@@ -13,7 +14,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 
 var ErrInvalidProof = errors.New("GATEWAY_PROOF_INVALID")
 
@@ -31,10 +32,12 @@ const (
 	PurposeRuntimeReauthorize Purpose = "runtime_reauthorize"
 	PurposeRuntimeMigrate     Purpose = "runtime_migrate"
 	PurposeIdentityRotate     Purpose = "identity_rotate"
-	PurposeCertificateRotate  Purpose = "certificate_rotate"
+	PurposeCommandResult      Purpose = "command_result"
 	PurposeClosureAck         Purpose = "closure_ack"
 )
 
+// Proof signs every original field. Servers consume challenges atomically and check authoritative identity.
+// Public health signatures use a separate domain and cannot authorize enrollment, recovery or migration.
 type Proof struct {
 	ProtocolVersion   int     `json:"protocol_version"`
 	Purpose           Purpose `json:"purpose"`
@@ -51,6 +54,7 @@ type Proof struct {
 	SignatureB64u     string  `json:"signature_b64u"`
 }
 
+// SigningBytes uses fixed order, length prefixes and big-endian integers independently of JSON order.
 func (p Proof) SigningBytes() ([]byte, error) {
 	if p.ProtocolVersion != ProtocolVersion || !p.Purpose.Valid() || !ValidOrigin(p.CloudOrigin) ||
 		p.ChallengeID == "" || p.ExpiresAtUnixMS <= 0 || p.BindingGeneration < 0 {
@@ -65,7 +69,7 @@ func (p Proof) SigningBytes() ([]byte, error) {
 		return nil, ErrInvalidProof
 	}
 	var out bytes.Buffer
-	out.WriteString("redeven.gateway-cloud.proof.v1\x00")
+	out.WriteString("redeven.gateway-cloud.proof.v2\x00")
 	for _, value := range []string{string(p.Purpose), p.CloudOrigin, p.NamespacePublicID, p.GatewayPublicID, p.RuntimePublicID, p.BindingPublicID, p.ChallengeID, p.ChallengeB64u, p.BodySHA256} {
 		if len(value) > 512 || strings.ContainsAny(value, "\x00\r\n") {
 			return nil, ErrInvalidProof
@@ -122,7 +126,7 @@ func DecodeKey(value string) ([]byte, error) {
 
 func (p Purpose) Valid() bool {
 	switch p {
-	case PurposeRuntimeReauthorize, PurposeUserMigration, PurposeGenerationRenew, PurposeCertificateRotate, PurposeGatewayRegister, PurposeGatewayStatus, PurposeRuntimeStatus, PurposeGatewaySync, PurposeRuntimeJoin, PurposeRuntimeRecover, PurposeRuntimeMigrate, PurposeIdentityRotate, PurposeClosureAck:
+	case PurposeCommandResult, PurposeRuntimeReauthorize, PurposeUserMigration, PurposeGenerationRenew, PurposeGatewayRegister, PurposeGatewayStatus, PurposeRuntimeStatus, PurposeGatewaySync, PurposeRuntimeJoin, PurposeRuntimeRecover, PurposeRuntimeMigrate, PurposeIdentityRotate, PurposeClosureAck:
 		return true
 	default:
 		return false
@@ -134,6 +138,7 @@ func ValidOrigin(value string) bool {
 	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && u.Path == "" && u.RawPath == "" && u.RawQuery == "" && !u.ForceQuery && u.Fragment == "" && u.Opaque == "" && u.String() == value
 }
 
+// RotationSigningBytes binds new-key possession to the challenge and complete enrollment context.
 func RotationSigningBytes(proof Proof, newPublicKeyB64u string) ([]byte, error) {
 	if proof.Purpose != PurposeIdentityRotate {
 		return nil, ErrInvalidProof
@@ -148,5 +153,5 @@ func RotationSigningBytes(proof Proof, newPublicKeyB64u string) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	return append([]byte("redeven.gateway-cloud.key-rotation.v1\x00"), raw...), nil
+	return append([]byte("redeven.gateway-cloud.key-rotation.v2\x00"), raw...), nil
 }

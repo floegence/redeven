@@ -19,7 +19,7 @@ export const RUNTIME_PLACEMENT_BRIDGE_MAX_SESSION_MEMORY_MB = 32;
 export const RUNTIME_PLACEMENT_BRIDGE_MAX_HEADER_PAIRS = 16;
 export const RUNTIME_PLACEMENT_BRIDGE_MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 
-export type RuntimePlacementBridgeSurface = 'local_ui' | 'runtime_control' | 'gateway_protocol';
+export type RuntimePlacementBridgeSurface = 'local_ui' | 'runtime_control' | 'gateway_protocol' | 'gateway_member';
 
 export type RuntimePlacementBridgeHello = Readonly<{
   protocol_version: typeof RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION;
@@ -71,6 +71,8 @@ export function runtimePlacementBridgeSurfaceAuthority(surface: RuntimePlacement
       return 'runtime-control';
     case 'gateway_protocol':
       return 'gateway-protocol';
+    case 'gateway_member':
+      return 'gateway-member';
   }
 }
 
