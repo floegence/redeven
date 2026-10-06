@@ -50,6 +50,39 @@
   container-type: inline-size;
 }
 
+/* Embedded Flower keeps the surrounding canvas visible and interactive. */
+.ai-readiness-boundary[data-embedded='true'] {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  pointer-events: none;
+}
+.ai-readiness-boundary[data-embedded='true'] > [data-ai-readiness-content] {
+  flex: 1;
+  position: relative;
+}
+.ai-readiness-boundary[data-embedded='true'] > .ai-readiness-surface {
+  width: min(640px, calc(100% - 32px));
+  height: auto;
+  max-height: calc(100% - 32px);
+  align-self: center;
+  margin: auto 0 18px;
+  pointer-events: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px var(--redeven-shadow-color);
+}
+.ai-readiness-boundary[data-embedded='true'] .ai-readiness-degraded {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  max-width: min(480px, calc(100% - 32px));
+  z-index: 1;
+  pointer-events: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 .ai-readiness-surface {
   display: flex;
   flex-direction: column;

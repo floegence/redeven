@@ -1,9 +1,10 @@
 import '../index.css';
+import '../ui/flower-feature.css';
+import { CanvasFlowerTestSurface, canvasFlowerAdapter } from './tessiven-flower.test-support';
 import { render } from 'solid-js/web';
 import { page } from 'vitest/browser';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
-import type { FlowerTurnLauncherSubmitInput } from '../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
 import { TessivenPage } from '../../../../tessiven_ui/src/TessivenPage';
 import { TessivenResourceDialog } from '../../../../tessiven_ui/src/TessivenResourceDialog';
@@ -13,6 +14,7 @@ import type {
   Version,
   TessivenTransport,
 } from '../../../../tessiven_ui/src/types';
+beforeEach(async () => { await new Promise<void>((resolve, reject) => { const request = indexedDB.deleteDatabase('redeven-flower-transport'); request.onsuccess = () => resolve(); request.onerror = () => reject(request.error); }); });
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => {
@@ -54,9 +56,7 @@ function createHost() {
 it('creates immediately, delegates edits to Flower, and follows current versions without changing history', async () => {
   await page.viewport(1200, 800);
   createHost();
-  const ask = vi.fn(
-    async (_input: FlowerTurnLauncherSubmitInput) => 'canvas-thread',
-  );
+  const ask = vi.fn(canvasFlowerAdapter().launchTurn);
   let current = { ...canvas };
   let changed: () => void = () => {};
   const request = vi.fn(async (method: string, path: string) => {
@@ -115,7 +115,7 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         t={tessivenText('en-US')}
         canWrite
         transport={transport}
-        onSendFlower={ask}
+        renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={{ ...canvasFlowerAdapter(), launchTurn: ask }} />}
         onOpenFlower={() => {}}
         onOpenService={() => {}}
       />
@@ -134,7 +134,7 @@ it('creates immediately, delegates edits to Flower, and follows current versions
       page.getByRole('heading', { name: 'Untitled canvas', exact: true }),
     )
     .toBeVisible();
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('.tessiven-dialog')).toBeNull();
   expect(
     request.mock.calls.filter(([method]) => method === 'POST'),
   ).toHaveLength(1);
@@ -146,10 +146,10 @@ it('creates immediately, delegates edits to Flower, and follows current versions
     .toHaveValue(tessivenText('en-US')('mapPrompt'));
   expect(ask).not.toHaveBeenCalled();
   await page
-    .getByRole('button', { name: 'Send to Flower', exact: true })
+    .getByRole('button', { name: 'Send', exact: true })
     .click();
   await expect.poll(() => ask.mock.calls.length).toBe(1);
-  expect(ask.mock.calls.at(-1)?.[0].intent.context_action).toMatchObject({
+  expect(ask.mock.calls.at(-1)?.[0].context_action).toMatchObject({
     context: [
       {
         kind: 'tessiven_selection',
@@ -159,7 +159,7 @@ it('creates immediately, delegates edits to Flower, and follows current versions
       },
     ],
   });
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
   changed();
   await expect
     .element(page.getByRole('heading', { name: 'Commerce v2', exact: true }))
@@ -189,8 +189,8 @@ it('creates immediately, delegates edits to Flower, and follows current versions
   await page
     .getByRole('menuitem', { name: 'View document', exact: true })
     .click();
-  await expect.element(page.getByRole('dialog')).toBeVisible();
-  expect(document.querySelector('[role="dialog"] textarea')).toBeNull();
+  await expect.element(page.getByRole('dialog', { name: 'View document' })).toBeVisible();
+  expect(document.querySelector('.tessiven-dialog textarea')).toBeNull();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   dispose();
   dispose = render(
@@ -199,7 +199,7 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         t={tessivenText('en-US')}
         canWrite
         transport={transport}
-        onSendFlower={ask}
+        renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={{ ...canvasFlowerAdapter(), launchTurn: ask }} />}
         onOpenFlower={() => {}}
         onOpenService={() => {}}
         openRequest={{ canvasID: 'commerce', version: 1, nonce: 1 }}
@@ -219,15 +219,12 @@ it('creates immediately, delegates edits to Flower, and follows current versions
           .length,
     )
     .toBeGreaterThan(1);
-  await page
-    .getByRole('button', { name: 'Edit with Flower', exact: true })
-    .click();
   await page.getByRole('textbox').fill('Explain this historical version');
   await page
-    .getByRole('button', { name: 'Send to Flower', exact: true })
+    .getByRole('button', { name: 'Send', exact: true })
     .click();
   await expect.poll(() => ask.mock.calls.length).toBe(2);
-  expect(ask.mock.calls.at(-1)?.[0].intent.context_action).toMatchObject({
+  expect(ask.mock.calls.at(-1)?.[0].context_action).toMatchObject({
     context: [
       {
         kind: 'tessiven_selection',
@@ -347,7 +344,7 @@ it('keeps global navigation and library text visible in every published theme', 
           t={tessivenText('en-US')}
           canWrite
           transport={transport}
-          onSendFlower={async () => 'canvas-thread'}
+          renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={canvasFlowerAdapter()} />}
           onOpenFlower={() => {}}
           onOpenService={() => {}}
         />

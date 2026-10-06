@@ -5,6 +5,7 @@ import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { FlowerSurface } from '../../../../../flower_ui/src';
 import type {
   FlowerCompanionPresenceProjection,
+  FlowerEmbeddedConversation,
   FlowerComposerDraftCoordinator,
   FlowerCompanionProgressKind,
   FlowerCompanionPriorityStatus,
@@ -44,6 +45,7 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers, locale: string) {
 
 export type EnvAIPageProps = Readonly<{
   draftCoordinator: FlowerComposerDraftCoordinator;
+  embeddedConversation?: FlowerEmbeddedConversation;
   presentation?: 'full' | 'companion';
   engaged?: boolean;
   transcriptVisible?: boolean;
@@ -177,6 +179,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
   return (
     <AIReadinessBoundary
       controller={readinessController}
+      embedded={Boolean(props.embeddedConversation)}
       presentation={props.presentation}
       onOpenUpdate={() => env.openSettings('agent', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
       onOpenPermissions={() => env.openSettings('runtime', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
@@ -185,6 +188,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       canRetryGeneration={Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
       focusEnabled={props.engaged ?? true}
       renderContent={() => <FlowerSurface
+        embeddedConversation={props.embeddedConversation}
         adapter={adapter()}
         filesystemScopeKey={filesystemPicker.scopeKey}
         filesystemScrollViewportProps={filesystemPicker.scrollViewportProps}
@@ -216,7 +220,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
         companionCopy={companionCopy()}
         headerTrailingActions={props.headerTrailingActions}
         onPresenceChange={props.onPresenceChange}
-        focusThreadRequest={props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
+        focusThreadRequest={props.embeddedConversation ? null : props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
         focusComposerRequest={props.focusComposerRequest}
         mobileThreadsOpen={props.mobileThreadsOpen}
         onMobileThreadsOpenChange={props.onMobileThreadsOpenChange}

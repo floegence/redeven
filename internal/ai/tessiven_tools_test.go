@@ -101,3 +101,20 @@ func TestTessivenContextPreservesHistoryAndBoundedReferenceParts(t *testing.T) {
 		t.Fatal("missing skill guidance")
 	}
 }
+
+func TestTessivenComposerFileReferences(t *testing.T) {
+	for _, extra := range []string{``, `,"root_label":"forged"`, `,"content":"hidden"`} {
+		raw := `{"schema_version":2,"action_id":"assistant.ask.flower","provider":"flower","target":{"target_id":"local:local","locality":"current_runtime"},"source":{"surface":"tessiven"},"context":[{"kind":"tessiven_selection","canvas_id":"commerce","version_id":2,"object_refs":["orders"]},{"kind":"file_path","path":"/workspace/orders.ts","is_directory":false` + extra + `}],"presentation":{"label":"Tessiven","priority":100}}`
+		var action ContextActionEnvelope
+		if err := json.Unmarshal([]byte(raw), &action); err != nil {
+			t.Fatal(err)
+		}
+		_, err := normalizeAskFlowerContextActionEnvelope(&action)
+		if extra == "" && err != nil {
+			t.Fatalf("canonical file reference rejected: %v", err)
+		}
+		if extra != "" && err == nil {
+			t.Fatal("forged file metadata accepted")
+		}
+	}
+}

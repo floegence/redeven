@@ -302,8 +302,11 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 			return nil, ErrInvalidContextAction
 		}
 	}
-	if out.Source.Surface == contextActionSurfaceComposer {
+	if out.Source.Surface == contextActionSurfaceComposer || out.Source.Surface == contextActionSurfaceTessiven {
 		for index := range out.Context {
+			if out.Source.Surface == contextActionSurfaceTessiven && out.Context[index].Kind != contextActionKindFilePath {
+				continue
+			}
 			if !contextActionComposerItemWireShapeAllowed(out.Context[index]) {
 				return nil, ErrInvalidContextAction
 			}
@@ -378,7 +381,7 @@ func validateAskFlowerContextActionItems(action *ContextActionEnvelope) error {
 func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 	switch strings.TrimSpace(surface) {
 	case contextActionSurfaceTessiven:
-		return kind == contextActionKindTessiven
+		return kind == contextActionKindTessiven || kind == contextActionKindFilePath
 	case contextActionSurfaceComposer, contextActionSurfaceFile:
 		return kind == contextActionKindFilePath
 	case contextActionSurfacePreview, contextActionSurfaceEditor:

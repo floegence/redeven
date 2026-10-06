@@ -98,3 +98,15 @@ describe('Terminal Ask Flower context action wire contract', () => {
     }))).toBeNull();
   });
 });
+
+describe('Tessiven composer context', () => {
+  const selection = { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: ['orders'] };
+  const action = (file: unknown) => ({ ...composerAction([selection, file]), source: { surface: 'tessiven' } });
+  it('combines immutable canvas context with canonical file references', () => {
+    const file = { kind: 'file_path', path: '/workspace/orders.ts', is_directory: false };
+    expect(parseAskFlowerContextActionEnvelope(action(file))?.context).toEqual([selection, file]);
+  });
+  it('rejects forged metadata in embedded file references', () => {
+    expect(parseAskFlowerContextActionEnvelope(action({ kind: 'file_path', path: '/workspace/orders.ts', is_directory: false, root_label: 'forged' }))).toBeNull();
+  });
+});

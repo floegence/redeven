@@ -339,6 +339,13 @@ export default mergeConfig(viteConfig, defineConfig({
           const frame = await frameForSelector(page, '.flower-computer-stage');
           return qualifyComputerViewer({ page, root: frame });
         },
+        moveTessivenReplies: async ({ page }, resize: boolean) => {
+          const frame = await frameForSelector(page, '.tessiven-flower-output');
+          const handle = resize
+            ? frame.locator('[data-floe-floating-window-resize-handle="se"]')
+            : frame.locator('.tessiven-flower-output [data-floe-floating-window-titlebar] h2');
+          await dragViewerHandle(page, handle, resize ? 80 : 120, resize ? -60 : 30);
+        },
         resizeComputerViewer: async ({ page }) => {
           const frame = await frameForSelector(page, '.flower-computer-stage');
           const handle = frame.locator('[data-floe-floating-window-resize-handle="se"]');

@@ -5,9 +5,10 @@
     "previous_release": "v0.13.11",
     "reviewed_at": "2026-10-06",
     "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Gateway Cloud adds Namespace-owned access presentation and explicit authenticated Runtime-control enrollment. Epoch 39 requires matching Desktop capabilities; user bindings retain their original ownership.",
-    "same_window_rationale": "Epoch 38 changes canvas creation to a title-only request and removes manual document, rename, duplicate, and restore HTTP mutations. Flower remains the authorized document writer. Older Desktop clients must upgrade instead of submitting obsolete write contracts.",
+    "summary": "Epoch 40 admits canonical file references alongside exact Tessiven canvas selections in the embedded Flower composer. Desktop and Runtime require matching strict context validation; authorization and storage lineage are unchanged.",
+    "same_window_rationale": "Epoch 40 allows strict canonical file references with Tessiven selections. Earlier Runtime validators reject these mixed contexts, so Desktop and Runtime must upgrade together; no database or authorization boundary changes.",
     "checked_surfaces": [
+      "Epoch 40 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, mixed Tessiven selection/file context validation, and canonical Flower composer delivery. No database schema changes.",
       "Epoch 38 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, title-only Tessiven creation, exact Desktop method admission, seeded example attribution, and Flower version updates. Existing canvas documents and database schema remain unchanged.",
       "Epoch 37 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, Tessiven request and event admission, canonical Flower context, and target-bound resource operations. Runtime-owned Tessiven storage is a new independent versioned database; existing database lineages remain unchanged.",
       "Epoch 36 requires explicit selected_models for catalog providers and discovery alias metadata. Startup freezes earlier selections without expanding explicit lists; offline legacy Ollama profiles remain intact for settings recovery. Desktop attach/start, Local UI, startup reports, sys.ping, Env App maintenance and SSH bootstrap reject old Flower clients before they can widen model selection. Floret and product database schemas are unchanged.",
@@ -86,7 +87,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 39,
+  "compatibility_epoch": 40,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -117,7 +118,8 @@
     35,
     36,
     37,
-    38
+    38,
+    39
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

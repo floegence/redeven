@@ -69,7 +69,7 @@ function mountHarness(
   initial = blocked(),
   pending = false,
   retryResult?: Promise<AIReadinessSnapshot>,
-  options: Readonly<{ presentation?: 'full' | 'companion'; elapsedMs?: number }> = {},
+  options: Readonly<{ presentation?: 'full' | 'companion'; elapsedMs?: number; embedded?: boolean }> = {},
 ): Readonly<{ host: HTMLElement; setSnapshot: (snapshot: AIReadinessSnapshot) => void }> {
   writeStoredLanguagePreference('en-US');
   const [snapshot, setSnapshot] = createSignal(initial);
@@ -108,6 +108,7 @@ function mountHarness(
       <AIReadinessBoundary
         controller={controller}
         presentation={options.presentation}
+        embedded={options.embedded}
         onOpenUpdate={() => undefined}
         onOpenPermissions={() => undefined}
 	        onReviewIssues={() => undefined}
@@ -400,4 +401,20 @@ describe('AIReadinessBoundary browser layout', () => {
     expect(host.querySelector('.ai-readiness-surface')).toBeNull();
     await expectAuditedVisualEvidence(1280, 720);
   });
+});
+
+it('keeps an embedded canvas visible during readiness and confines recovery to the bottom card', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mountHarness(blocked(), false, undefined, { presentation: 'companion', embedded: true });
+  const root = runtime.host.querySelector<HTMLElement>('.ai-readiness-boundary')!;
+  expect(getComputedStyle(root).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  const recovery = runtime.host.querySelector<HTMLElement>('.ai-readiness-surface')!;
+  const rect = recovery.getBoundingClientRect();
+  expect(rect.width).toBeLessThanOrEqual(640);
+  expect(rect.bottom).toBeLessThanOrEqual(800);
+  expect(rect.bottom).toBeGreaterThan(750);
+  expect(getComputedStyle(recovery).pointerEvents).toBe('auto');
+  runtime.setSnapshot({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false });
+  await expect.element(page.getByRole('button', { name: 'Flower child' })).toBeVisible();
+  expect(getComputedStyle(root).backgroundColor).toBe('rgba(0, 0, 0, 0)');
 });
