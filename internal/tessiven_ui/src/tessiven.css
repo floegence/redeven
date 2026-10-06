@@ -1116,9 +1116,13 @@
   box-shadow: 0 12px 36px -8px var(--redeven-shadow-color), 0 2px 6px var(--redeven-shadow-color);
 }
 .tessiven-flower-output .flower-chat-header-actions { display: flex; align-items: center; gap: 2px; }
-.tessiven-flower-output [data-floe-floating-window-titlebar] { height: 40px; }
+.tessiven-flower-output [data-floe-floating-window-titlebar] {
+  height: 40px;
+  /* Keep the reply surface continuous through Floe's active and inactive chrome. */
+  background: var(--redeven-surface-main, var(--background)) !important;
+  border-bottom: 1px solid var(--border);
+}
 .tessiven-flower-output [data-floe-floating-window-content] { padding: 0; overflow: hidden; }
-.tessiven-flower-output [data-floe-floating-window-titlebar] { border-bottom: 1px solid var(--border); }
 .tessiven-flower-output .tessiven-icon-button { width: 28px; height: 28px; color: var(--muted-foreground); }
 .tessiven-flower-output .tessiven-icon-button svg { width: 15px; height: 15px; }
 .tessiven-flower-conversation,
