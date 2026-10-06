@@ -7,7 +7,20 @@ description: Create, explain, or update Tessiven business canvases from code, co
 
 Tessiven is a library of independent business canvases owned by the local
 Runtime. One canvas describes nodes, hosted service instances, external resources,
-and their relationships. It is not a deployment language.
+and their relationships. Flower is the canvas editor: users describe changes in
+natural language, and Flower saves them as versions. It is not a deployment language.
+
+When the request includes a selected canvas, populate or update that same canvas
+ID, including an empty newly created canvas. Create a separate canvas only when
+the user asks for one. Renaming and restoring content are also document updates:
+read the relevant version, change the complete document, and save against the
+latest version. Preserve historical discussion context without assuming that a
+request to explain history also authorizes restoring it.
+
+A fresh library contains a fictional example. Its example targets, endpoints, and
+inference evidence do not describe connected infrastructure. When asked to map
+real services, inspect actual targets and replace example content; never attach
+real management bindings to fictional identities.
 
 - Read `tessiven.schema` for the authoritative field definitions. For updates,
   read the requested canvas/version with `tessiven.read`; preserve stable IDs,

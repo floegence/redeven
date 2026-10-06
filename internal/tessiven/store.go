@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -72,6 +73,9 @@ type Service struct {
 	closed      bool
 }
 
+//go:embed example.yaml
+var exampleCanvasYAML string
+
 func Open(path string) (*Service, error) {
 	if _, err := sqliteutil.Inspect(path, schemaSpec()); err != nil {
 		return nil, err
@@ -80,7 +84,30 @@ func Open(path string) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{db: db, subscribers: map[chan struct{}]struct{}{}}, nil
+	s := &Service{db: db, subscribers: map[chan struct{}]struct{}{}}
+	var count int
+	if err = db.QueryRow(`SELECT COUNT(*) FROM canvases`).Scan(&count); err == nil && count == 0 {
+		// This runs before the library accepts requests. The stable request ID
+		// makes concurrent startup idempotent; archived canvases still count.
+		_, err = s.Save(context.Background(), SaveRequest{RequestID: "tessiven-starter-example-v1", DocumentYAML: exampleCanvasYAML, Summary: "Create illustrative starter canvas"}, "example")
+	}
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// Create starts an empty canvas immediately. Canvas content is edited by Flower.
+func (s *Service) Create(ctx context.Context, requestID, title string) (SaveResult, error) {
+	if strings.TrimSpace(title) == "" {
+		return SaveResult{}, ErrInvalidRequest
+	}
+	source, err := documentYAML(&Document{APIVersion: "redeven.io/tessiven/v1", Kind: "ServiceCanvas", Metadata: Metadata{Title: title}})
+	if err != nil {
+		return SaveResult{}, err
+	}
+	return s.Save(ctx, SaveRequest{RequestID: requestID, DocumentYAML: source, Summary: "Create canvas"}, "created")
 }
 func (s *Service) Close() error {
 	if s == nil {
@@ -225,7 +252,7 @@ func (s *Service) Save(ctx context.Context, req SaveRequest, source string) (Sav
 		return SaveResult{}, ErrInvalidRequest
 	}
 	switch source {
-	case "manual", "flower", "import", "restore", "duplicate", "rename":
+	case "manual", "flower", "import", "restore", "duplicate", "rename", "created", "example":
 	default:
 		return SaveResult{}, ErrInvalidRequest
 	}

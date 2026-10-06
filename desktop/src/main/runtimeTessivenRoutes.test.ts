@@ -16,6 +16,11 @@ describe('Tessiven Desktop request authority', () => {
       expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(true);
     }
     expect(runtimeFlowerMethodAllowed(`${base}/resources`, 'POST')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(`${base}/canvases`, 'POST')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(`${base}/canvases/c/versions`, 'POST')).toBe(false);
+    for (const action of ['rename', 'duplicate', 'restore']) {
+      expect(() => runtimeFlowerPath(`${base}/canvases/c/${action}`)).toThrow();
+    }
   });
   it('rejects alternate authorities and arbitrary methods or queries', () => {
     for (const path of [

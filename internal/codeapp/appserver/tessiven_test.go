@@ -20,13 +20,30 @@ func TestTessivenWorksWithoutAIAndEnforcesPermissions(t *testing.T) {
 	defer svc.Close()
 	cap := config.PermissionSet{Read: true, Write: true, Execute: true}
 	srv := &Server{tessiven: svc, localPermissionCap: &cap}
-	source := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Test business}\n"
-	payload, _ := json.Marshal(tessiven.SaveRequest{RequestID: "create-1", DocumentYAML: source})
+	payload, _ := json.Marshal(map[string]string{"request_id": "create-1", "title": "Test business"})
 	created := performWorkbenchLayoutRequest(t, srv, http.MethodPost, tessivenAPIBase+"/canvases", string(payload))
 	if created.Code != 200 {
 		t.Fatalf("create: %s", created.Body.String())
 	}
 	value := decodeWorkbenchLayoutResponse[tessiven.SaveResult](t, created)
+	retried := performWorkbenchLayoutRequest(t, srv, http.MethodPost, tessivenAPIBase+"/canvases", string(payload))
+	retry := decodeWorkbenchLayoutResponse[tessiven.SaveResult](t, retried)
+	if retry.Canvas.ID != value.Canvas.ID || retry.Version.Number != 1 {
+		t.Fatal("creation retry must return the original empty canvas")
+	}
+	if len(value.Version.Document.Nodes) != 0 || value.Version.Source != "created" {
+		t.Fatal("new canvas must start empty")
+	}
+	manual := performWorkbenchLayoutRequest(t, srv, http.MethodPost, tessivenAPIBase+"/canvases", `{"request_id":"manual","title":"Manual","document_yaml":"invalid"}`)
+	if manual.Code != 400 {
+		t.Fatalf("manual content rejected: %s", manual.Body.String())
+	}
+	for _, route := range []string{"versions", "rename", "duplicate", "restore"} {
+		response := performWorkbenchLayoutRequest(t, srv, http.MethodPost, tessivenAPIBase+"/canvases/"+value.Canvas.ID+"/"+route, `{}`)
+		if response.Code != 404 {
+			t.Fatalf("manual %s must be unavailable: %d", route, response.Code)
+		}
+	}
 	cap.Write = false
 	denied := performWorkbenchLayoutRequest(t, srv, http.MethodPost, tessivenAPIBase+"/canvases", string(payload))
 	if denied.Code != 403 {
@@ -44,7 +61,7 @@ func TestTessivenWorksWithoutAIAndEnforcesPermissions(t *testing.T) {
 	cap.Read = true
 	cap.Write = true
 	bad := performWorkbenchLayoutRequest(t, srv, http.MethodPost, tessivenAPIBase+"/canvases/"+value.Canvas.ID+"/versions", `{"request_id":"bad","expected_version":1,"document_yaml":"invalid"}`)
-	if bad.Code != 422 || !strings.Contains(bad.Body.String(), "diagnostics") {
+	if bad.Code != 404 {
 		t.Fatalf("validation: %s", bad.Body.String())
 	}
 	current, err := svc.Canvas(context.Background(), value.Canvas.ID)

@@ -1952,7 +1952,7 @@
               "tessiven",
               "ui"
             ],
-            "summary": "Tessiven presents one progressively detailed canvas for understanding where\nbusiness services run. Solid Runtime node cards sit inside tinted dashed visual\ngroups; external dependencies use a separate card treatment. Edges are muted\nuntil a related group or object is focused. Wheel zoom and drag pan belong to\nthe canvas, while object details and DSL editing remain normal selectable text.",
+            "summary": "Tessiven presents one progressively detailed canvas for understanding where\nbusiness services run. Solid Runtime node cards sit inside tinted dashed visual\ngroups; external dependencies use a separate card treatment. Edges are muted\nuntil a related group or object is focused. Wheel zoom and drag pan belong to\nthe canvas, while object details and the read-only document remain normal selectable\ntext. Flower is the editing surface; the canvas has no manual content editor.",
             "section_count": 2
           },
           {
@@ -2846,7 +2846,7 @@
               "flower",
               "tessiven"
             ],
-            "summary": "Flower maps authorized code, configuration, and connected Runtime facts into\nTessiven versions through the `redeven-tessiven` system skill. Resource actions\nremain owned by the existing Managed Services and Containers managers. A\ntransport failure after a mutation is dispatched is terminal with an unknown\noutcome, so the user must inspect the original manager before trying again.",
+            "summary": "Flower maps authorized code, configuration, and connected Runtime facts into\nTessiven versions through the `redeven-tessiven` system skill. Flower owns canvas\ncontent editing as a core workflow. Resource actions\nremain owned by the existing Managed Services and Containers managers. A\ntransport failure after a mutation is dispatched is terminal with an unknown\noutcome, so the user must inspect the original manager before trying again.",
             "section_count": 2
           },
           {
@@ -10098,7 +10098,7 @@
         "flower",
         "tessiven"
       ],
-      "timestamp": "2026-10-05T00:00:00Z",
+      "timestamp": "2026-10-06T00:00:00Z",
       "frontmatter": {
         "description": "Generate canvas versions and route service actions through their original owners.",
         "tags": [
@@ -10106,19 +10106,19 @@
           "flower",
           "tessiven"
         ],
-        "timestamp": "2026-10-05T00:00:00Z",
+        "timestamp": "2026-10-06T00:00:00Z",
         "title": "Tessiven Flower and operations",
         "type": "AI Product Contract"
       },
-      "body_length": 2051,
-      "summary": "Flower maps authorized code, configuration, and connected Runtime facts into\nTessiven versions through the `redeven-tessiven` system skill. Resource actions\nremain owned by the existing Managed Services and Containers managers. A\ntransport failure after a mutation is dispatched is terminal with an unknown\noutcome, so the user must inspect the original manager before trying again.",
+      "body_length": 2592,
+      "summary": "Flower maps authorized code, configuration, and connected Runtime facts into\nTessiven versions through the `redeven-tessiven` system skill. Flower owns canvas\ncontent editing as a core workflow. Resource actions\nremain owned by the existing Managed Services and Containers managers. A\ntransport failure after a mutation is dispatched is terminal with an unknown\noutcome, so the user must inspect the original manager before trying again.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Tessiven tools read the canonical schema, list/read/validate versions, save a\n  complete new version, inspect explicit targets, and execute one exact bound\n  instance when the existing permission and approval checks allow it.\n- Flower preserves stable object IDs, adds evidence and observation times, and\n  never guesses a management identity from a name, address, or process.\n- Ask Flower carries `canvas_id`, `version_id`, and bounded object references;\n  historical selections stay historical during the discussion.\n- Selection summaries prioritize requested objects and include node, instance,\n  and external-resource observation evidence. Truncation is explicit; Flower\n  reads the exact saved version for additional detail.\n- The UI shows confirmed, refused, and unknown outcomes distinctly. Unknown\n  mutation outcomes disable another mutation until the original manager has\n  been inspected.",
-          "char_count": 901
+          "body": "- Tessiven tools read the canonical schema, list/read/validate versions, save a\n  complete new version, inspect explicit targets, and execute one exact bound\n  instance when the existing permission and approval checks allow it.\n- A selected canvas is the update target, including a newly created empty\n  canvas. Flower creates another canvas only when the user requests one.\n  Renaming and restoring content use read/validate/save against the latest\n  version, while discussion of historical selections retains that identity.\n- Example targets and inference evidence are fictional. Mapping actual\n  infrastructure requires inspecting real targets rather than assigning\n  management bindings to example identities.\n- Flower preserves stable object IDs, adds evidence and observation times, and\n  never guesses a management identity from a name, address, or process.\n- Ask Flower carries `canvas_id`, `version_id`, and bounded object references;\n  historical selections stay historical during the discussion.\n- Selection summaries prioritize requested objects and include node, instance,\n  and external-resource observation evidence. Truncation is explicit; Flower\n  reads the exact saved version for additional detail.\n- The UI shows confirmed, refused, and unknown outcomes distinctly. Unknown\n  mutation outcomes disable another mutation until the original manager has\n  been inspected.",
+          "char_count": 1387
         },
         {
           "id": "boundaries",
@@ -10128,7 +10128,7 @@
           "char_count": 534
         }
       ],
-      "snippet": "Flower maps authorized code, configuration, and connected Runtime facts into Tessiven versions through the `redeven-tessiven` system skill. Resource actions remain owned by the existing Managed Services and Containers managers. A",
+      "snippet": "Flower maps authorized code, configuration, and connected Runtime facts into Tessiven versions through the `redeven-tessiven` system skill. Flower owns canvas content editing as a core workflow. Resource actions remain owned by the existing",
       "backlinks": [
         {
           "label": "Tessiven canvas contract",
@@ -17371,7 +17371,7 @@
         "persistence",
         "tessiven"
       ],
-      "timestamp": "2026-10-05T00:00:00Z",
+      "timestamp": "2026-10-06T00:00:00Z",
       "frontmatter": {
         "description": "Store immutable service canvases in one Runtime-owned library.",
         "tags": [
@@ -17379,19 +17379,19 @@
           "persistence",
           "tessiven"
         ],
-        "timestamp": "2026-10-05T00:00:00Z",
+        "timestamp": "2026-10-06T00:00:00Z",
         "title": "Tessiven canvas contract",
         "type": "Architecture Contract"
       },
-      "body_length": 1869,
+      "body_length": 2399,
       "summary": "Tessiven is the Runtime-owned library of immutable service canvases. Each\ncanvas stores a complete `redeven.io/tessiven/v1` YAML document and every save\ncreates a new version. The Runtime is the single owner of canvas data; the\nDesktop Welcome surface and the local Env App render that same library. A\nfailed validation or version conflict leaves the last saved document intact.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- A canvas document contains stable IDs for Runtime nodes, visual groups,\n  business services, instances, external resources, relations, and evidence.\n- Groups are visual membership only. Instance bindings and Runtime references\n  are data references and do not grant permission or create a connection.\n- Relations require evidence and may form cycles. Missing observations remain\n  explicitly unknown.\n- The schema accepts data and presentation hints only. It does not accept\n  executable scripts, credentials, arbitrary styles, or management commands.\n- Saves use an expected latest version and an idempotent request ID. A restore,\n  rename, or duplicate produces a new complete version or canvas identity.\n- Historical and archived versions are readable but cannot mutate resources.",
-          "char_count": 785
+          "body": "- A canvas document contains stable IDs for Runtime nodes, visual groups,\n  business services, instances, external resources, relations, and evidence.\n- Groups are visual membership only. Instance bindings and Runtime references\n  are data references and do not grant permission or create a connection.\n- Relations require evidence and may form cycles. Missing observations remain\n  explicitly unknown.\n- The schema accepts data and presentation hints only. It does not accept\n  executable scripts, credentials, arbitrary styles, or management commands.\n- Saves use an expected latest version and an idempotent request ID. Flower\n  content changes produce complete new versions; history is immutable.\n- A fresh empty library receives one fictional example before accepting\n  requests. Archived canvases count as existing data, so archiving the example\n  does not recreate it on restart. Existing user canvases remain intact.\n- UI creation accepts only a request ID and title, and saves an empty first\n  version. Network retries return the same canvas. User-authored document\n  mutations use the authorized Flower tools, not manual HTTP write routes.\n- Historical and archived versions are readable but cannot mutate resources.",
+          "char_count": 1226
         },
         {
           "id": "boundaries",
@@ -32416,7 +32416,7 @@
         "tessiven",
         "ui"
       ],
-      "timestamp": "2026-10-05T00:00:00Z",
+      "timestamp": "2026-10-06T00:00:00Z",
       "frontmatter": {
         "description": "Render progressively detailed service topology and exact object context.",
         "tags": [
@@ -32424,19 +32424,19 @@
           "tessiven",
           "ui"
         ],
-        "timestamp": "2026-10-05T00:00:00Z",
+        "timestamp": "2026-10-06T00:00:00Z",
         "title": "Tessiven canvas",
         "type": "UI Contract"
       },
-      "body_length": 1755,
-      "summary": "Tessiven presents one progressively detailed canvas for understanding where\nbusiness services run. Solid Runtime node cards sit inside tinted dashed visual\ngroups; external dependencies use a separate card treatment. Edges are muted\nuntil a related group or object is focused. Wheel zoom and drag pan belong to\nthe canvas, while object details and DSL editing remain normal selectable text.",
+      "body_length": 2976,
+      "summary": "Tessiven presents one progressively detailed canvas for understanding where\nbusiness services run. Solid Runtime node cards sit inside tinted dashed visual\ngroups; external dependencies use a separate card treatment. Edges are muted\nuntil a related group or object is focused. Wheel zoom and drag pan belong to\nthe canvas, while object details and the read-only document remain normal selectable\ntext. Flower is the editing surface; the canvas has no manual content editor.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Up to 15 Runtime nodes in a group are shown individually. Larger groups use\n  a name or ordinal selector and render only the selected node's details.\n- Clicking opens object details. Hover tracks related edges without opening\n  explanatory UI; right-click, keyboard context menu, and touch context entry\n  open Ask Flower with the exact immutable canvas/version selection.\n- Layout hints are read from the saved document and applied only to visible\n  graph objects; hidden members retain their hints for later expansion.\n- Theme tokens, high contrast, product locale, and accessible names are used\n  for every card, edge, menu, and action.",
-          "char_count": 641
+          "body": "- The library shows canvas previews, search, and active/archive filters. New\n  canvas immediately creates and opens an empty saved canvas without a form.\n- A persistent Flower entry includes the current canvas/version context. Empty\n  canvases offer code and connected-service prompts through the same launcher.\n  These shortcuts prepare a draft and do not send it. The owning surface supplies\n  a localized opening question through the shared launcher intent; it is\n  presentation copy and never becomes execution authority.\n- The built-in example is identified in its library preview and open canvas.\n  It demonstrates topology without claiming actual connections or health.\n- Flower saves update a canvas being viewed as current. Explicit historical\n  views remain pinned; the user can choose to open the latest version.\n- The document viewer and export are read-only. Content changes, including\n  renaming and restoring earlier content, are made through Flower.\n\n- Up to 15 Runtime nodes in a group are shown individually. Larger groups use\n  a name or ordinal selector and render only the selected node's details.\n- Clicking opens object details. Hover tracks related edges without opening\n  explanatory UI; right-click, keyboard context menu, and touch context entry\n  open Ask Flower with the exact immutable canvas/version selection.\n- Layout hints are read from the saved document and applied only to visible\n  graph objects; hidden members retain their hints for later expansion.\n- Theme tokens, high contrast, product locale, and accessible names are used\n  for every card, edge, menu, and action.",
+          "char_count": 1608
         },
         {
           "id": "boundaries",
@@ -33464,5 +33464,5 @@
       ]
     }
   ],
-  "source_sha256": "97c3d1680a323ee8c8e73d2e26f66a3d8d160d11a36d388cda0bee7f3711b926"
+  "source_sha256": "6f38f30eef15ba8f3ab7772a2fd573b23c735fe1ab2928a6e52aaf6707acd475"
 }

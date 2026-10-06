@@ -23,8 +23,9 @@ import (
 // Exercise provider dispatch, canonical tool execution, durable canvas writes,
 // and unknown-effect settlement together without touching a user's services.
 func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
-	for _, action := range []bool{false, true} {
-		t.Run(map[bool]string{false: "save", true: "unknown_action"}[action], func(t *testing.T) {
+	for _, scenario := range []string{"save", "populate_selected_canvas", "unknown_action"} {
+		t.Run(scenario, func(t *testing.T) {
+			action := scenario == "unknown_action"
 			state := t.TempDir()
 			library, err := tessiven.Open(filepath.Join(state, "canvases.sqlite"))
 			if err != nil {
@@ -42,6 +43,16 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 			}}
 			name := "tessiven_save"
 			args := map[string]any{"request_id": "provider-save", "expected_version": 0, "document_yaml": document, "summary": "Observed fixture"}
+			var selectedID string
+			if scenario == "populate_selected_canvas" {
+				empty, err := library.Create(t.Context(), "ui-create", "Untitled canvas")
+				if err != nil {
+					t.Fatal(err)
+				}
+				selectedID = empty.Canvas.ID
+				args["canvas_id"] = selectedID
+				args["expected_version"] = 1
+			}
 			if action {
 				saved, err := library.Save(t.Context(), tessiven.SaveRequest{RequestID: "seed", DocumentYAML: document}, "manual")
 				if err != nil {
@@ -113,11 +124,28 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 				if runErr != nil {
 					t.Fatal(runErr)
 				}
-				canvases, err := library.List(t.Context(), "", "", false)
-				if err != nil || len(canvases.Canvases) != 1 {
+				canvases, err := library.List(t.Context(), "Commerce", "", false)
+				var generated []tessiven.Canvas
+				for _, canvas := range canvases.Canvases {
+					if canvas.Title == "Commerce" {
+						generated = append(generated, canvas)
+					}
+				}
+				if err != nil || len(generated) != 1 {
 					t.Fatal("provider did not save one canvas", canvases, err)
 				}
-				v, err := library.Version(t.Context(), canvases.Canvases[0].ID, 1)
+				version := int64(1)
+				if selectedID != "" {
+					version = 2
+					if generated[0].ID != selectedID {
+						t.Fatal("Flower must populate the selected canvas")
+					}
+					prior, err := library.Version(t.Context(), selectedID, 1)
+					if err != nil || prior.Document.Metadata.Title != "Untitled canvas" || len(prior.Document.Nodes) != 0 {
+						t.Fatal("original version changed")
+					}
+				}
+				v, err := library.Version(t.Context(), generated[0].ID, version)
 				if err != nil || v.Source != "flower" || v.Document.Metadata.Title != "Commerce" {
 					t.Fatal("saved version lost", v, err)
 				}

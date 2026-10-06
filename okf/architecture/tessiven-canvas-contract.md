@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Tessiven canvas contract
 description: Store immutable service canvases in one Runtime-owned library.
 tags: [architecture, tessiven, persistence]
-timestamp: 2026-10-05T00:00:00Z
+timestamp: 2026-10-06T00:00:00Z
 ---
 # Summary
 
@@ -23,8 +23,14 @@ failed validation or version conflict leaves the last saved document intact.
   explicitly unknown.
 - The schema accepts data and presentation hints only. It does not accept
   executable scripts, credentials, arbitrary styles, or management commands.
-- Saves use an expected latest version and an idempotent request ID. A restore,
-  rename, or duplicate produces a new complete version or canvas identity.
+- Saves use an expected latest version and an idempotent request ID. Flower
+  content changes produce complete new versions; history is immutable.
+- A fresh empty library receives one fictional example before accepting
+  requests. Archived canvases count as existing data, so archiving the example
+  does not recreate it on restart. Existing user canvases remain intact.
+- UI creation accepts only a request ID and title, and saves an empty first
+  version. Network retries return the same canvas. User-authored document
+  mutations use the authorized Flower tools, not manual HTTP write routes.
 - Historical and archived versions are readable but cannot mutate resources.
 
 # Boundaries
@@ -43,3 +49,5 @@ background, or synchronize libraries between devices.
 - `internal/tessiven/document.go`
 - `internal/tessiven/store.go`
 - `internal/tessiven/store_test.go`
+- `internal/tessiven/onboarding_test.go`
+- `internal/codeapp/appserver/tessiven_test.go`

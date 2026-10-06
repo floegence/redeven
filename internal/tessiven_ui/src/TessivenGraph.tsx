@@ -84,13 +84,15 @@ export function TessivenGraph(props: {
     initialized = !!props.browseState;
   let host: HTMLDivElement | undefined;
   onCleanup(() => engine.dispose());
-  onCleanup(() =>
+  onCleanup(() => {
+    // Empty canvases have no meaningful viewport to restore after Flower maps them.
+    if (!layout().nodes.length) return;
     props.onBrowseState?.({
       expanded: [...expanded()],
       selectedNodes: selectedNodes(),
       viewport: viewport(),
-    }),
-  );
+    });
+  });
   const projection = createMemo(() =>
     projectCanvas(props.version.document, expanded(), selectedNodes()),
   );
@@ -705,7 +707,7 @@ export function TessivenGraph(props: {
                               · {instance?.shard}
                             </Show>
                           </p>
-                          <Button
+                          <Show when={instance?.binding}><Button
                             size="sm"
                             variant="outline"
                             onClick={() => {
@@ -714,7 +716,7 @@ export function TessivenGraph(props: {
                             }}
                           >
                             {props.t('inspectService')}
-                          </Button>
+                          </Button></Show>
                         </Show>
                         <Show when={item && 'runtimeRef' in item}>
                           <code>{String(item?.runtimeRef)}</code>

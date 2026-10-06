@@ -601,7 +601,7 @@ export function buildFlowerTurnLauncherCopy(
   const prompt = sourcePrompt(intent, contextEntries, projectionCopy);
   return {
     placeholder: prompt.placeholder,
-    question: prompt.question,
+    question: compact(intent.opening_question) || prompt.question,
     context_entries: contextEntries,
   };
 }

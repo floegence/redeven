@@ -1,0 +1,35 @@
+apiVersion: redeven.io/tessiven/v1
+kind: ServiceCanvas
+metadata:
+  title: Commerce / Example
+  description: An illustrative storefront, application node, and shared data services. Ask Flower to replace these fictional objects with your own business.
+nodes:
+  - {id: demo-app, name: app-01, runtimeRef: 'demo:application'}
+groups:
+  - {id: demo-application, name: Application, nodeRefs: [demo-app]}
+services:
+  - {id: demo-storefront, name: Storefront, kind: web}
+  - {id: demo-orders, name: Orders API, kind: api}
+  - {id: demo-worker, name: Background jobs, kind: worker}
+instances:
+  - {id: demo-storefront-01, nodeRef: demo-app, serviceRef: demo-storefront, role: standalone}
+  - {id: demo-orders-01, nodeRef: demo-app, serviceRef: demo-orders, role: standalone}
+  - {id: demo-worker-01, nodeRef: demo-app, serviceRef: demo-worker, role: standalone}
+resources:
+  - {id: demo-domain, name: shop.example.com, kind: domain, endpoint: 'https://shop.example.com'}
+  - {id: demo-cdn, name: Content delivery, kind: cdn}
+  - {id: demo-database, name: Orders database, kind: database, endpoint: 'postgresql://db.example.test/commerce'}
+  - {id: demo-assets, name: Product assets, kind: object_store, endpoint: 's3://example-product-assets'}
+relations:
+  - {id: demo-dns-route, from: demo-domain, to: demo-cdn, kind: resolves, evidenceRefs: [demo-design]}
+  - {id: demo-delivery, from: demo-cdn, to: demo-storefront, kind: forwards, protocol: HTTPS, evidenceRefs: [demo-design]}
+  - {id: demo-api-call, from: demo-storefront, to: demo-orders, kind: calls, protocol: HTTP, evidenceRefs: [demo-design]}
+  - {id: demo-read-orders, from: demo-orders, to: demo-database, kind: reads, protocol: PostgreSQL, evidenceRefs: [demo-design]}
+  - {id: demo-process-assets, from: demo-worker, to: demo-assets, kind: writes, protocol: S3, evidenceRefs: [demo-design]}
+evidence:
+  - id: demo-design
+    source: inference
+    locator: 'example://tessiven/commerce'
+    summary: Fictional product example, not discovered code or an observed runtime. No management bindings or live health claims are present.
+presentation:
+  initiallyExpanded: [demo-application]
