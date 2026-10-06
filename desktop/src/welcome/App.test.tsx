@@ -283,10 +283,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("class={cn('rounded-full'");
     expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
     expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
-    expect(appSrc).toContain('copy={createDesktopFlowerSurfaceCopy(i18n())}');
+    expect(appSrc).toContain('const flowerSurfaceCopy = createMemo(() => createDesktopFlowerSurfaceCopy(i18n()));');
+    expect(appSrc).toContain('copy={flowerSurfaceCopy()}');
     expect(appSrc).toContain('notify={(notice) => {');
     expect(appSrc).toContain('showActionToast(notice.message, notice.tone');
-    expect(appSrc).toContain("runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment')");
+    expect(appSrc).toContain("get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); }");
     expect(appSrc).toContain('sidebarLeadingAction={(');
     expect(appSrc).toContain('class="flower-sidebar-leading-action"');
     expect(appSrc).toContain("aria-label={i18n().t('shell.backToEnvironments')}");
@@ -1341,7 +1342,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`');
     expect(appSrc).toContain('onFocusThreadRequestConsumed={(requestID) => {');
     expect(appSrc).toContain('current?.request_id === requestID ? null : current');
-    expect(appSrc).toMatch(/closeFlowerTurnLauncher\(\);\s*openFlowerSurface\(\);/u);
+    expect(appSrc).toMatch(/closeFlowerTurnLauncher\(\);\s*openFlowerConversation\(threadID\);/u);
+    expect(appSrc).toContain('onOpenFlower={openFlowerConversation}');
     expect(appSrc).not.toContain("showActionToast(i18n().t('toast.flowerPromptQueued')");
     expect(appSrc).toContain(
       'context_action: buildEnvironmentFlowerContextAction(environment, contextSummary, cleanLabel)',

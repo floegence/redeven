@@ -12,7 +12,6 @@ import {
 import { Button, Dialog, Dropdown } from '@floegence/floe-webapp-core/ui';
 import {
   ArrowLeft,
-  ArrowRight,
   Clock,
   Download,
   FileCode,
@@ -20,6 +19,11 @@ import {
   Plus,
   Search,
 } from '@floegence/floe-webapp-core/icons';
+import {
+  TessivenFlowerPanel,
+  type CanvasFlowerRequest,
+  type CanvasFlowerSend,
+} from './TessivenFlowerPanel';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import { TessivenGraph, type GraphBrowseState } from './TessivenGraph';
 import { TessivenIcon } from './TessivenIcon';
@@ -46,7 +50,8 @@ export function TessivenPage(props: {
   locale?: string;
   visible?: boolean;
   canWrite: boolean;
-  onAsk: (selection: Selection | null, prompt?: string) => void;
+  onSendFlower: CanvasFlowerSend;
+  onOpenFlower: (threadID: string) => void;
   onOpenService: (
     opening: { app_path: string; forward: unknown },
     runtime: string,
@@ -94,7 +99,80 @@ export function TessivenPage(props: {
           object_refs: [],
         }
       : null;
-  const ask = (prompt?: string) => props.onAsk(selection(), prompt);
+  const [flowerOpen, setFlowerOpen] = createSignal(false);
+  const [flowerSessions, setFlowerSessions] = createSignal<
+    {
+      id: string;
+      request: () => CanvasFlowerRequest;
+      update: (value: CanvasFlowerRequest) => void;
+    }[]
+  >([]);
+  let flowerButton: HTMLButtonElement | undefined;
+  function askSelection(value: Selection, prompt?: string) {
+    const doc = version()?.document;
+    const names = value.object_refs.map((id) => {
+      const item = (doc?.instances ?? []).find((item) => item.id === id);
+      return (
+        item?.name ??
+        (item &&
+          doc?.services?.find((service) => service.id === item.serviceRef)
+            ?.name) ??
+        [
+          ...(doc?.nodes ?? []),
+          ...(doc?.groups ?? []),
+          ...(doc?.services ?? []),
+          ...(doc?.resources ?? []),
+        ].find((item) => item.id === id)?.name ??
+        id
+      );
+    });
+    const next = {
+      selection: value,
+      label: names.length ? names.join(', ') : (doc?.metadata.title ?? ''),
+      prompt,
+      nonce: Date.now(),
+    };
+    const existing = flowerSessions().find(
+      (session) => session.id === value.canvas_id,
+    );
+    if (existing) existing.update(next);
+    else {
+      const [request, update] = createSignal(next);
+      setFlowerSessions((sessions) => [
+        ...sessions,
+        { id: value.canvas_id, request, update },
+      ]);
+    }
+    setFlowerOpen(true);
+  }
+  const ask = (prompt?: string) => {
+    const value = selection();
+    if (value) askSelection(value, prompt);
+  };
+  createEffect(() => {
+    const current = version();
+    if (!current) return;
+    untrack(() => {
+      const session = flowerSessions().find(
+        (item) => item.id === current.canvas_id,
+      );
+      if (!session || session.request().selection.version_id === current.number)
+        return;
+      const previous = session.request();
+      session.update({
+        ...previous,
+        prompt: undefined,
+        selection: { ...previous.selection, version_id: current.number },
+        label: previous.selection.object_refs.length
+          ? previous.label
+          : current.document.metadata.title,
+      });
+    });
+  });
+  function closeFlower() {
+    setFlowerOpen(false);
+    flowerButton?.focus({ preventScroll: true });
+  }
   const message = (cause: unknown) =>
     cause instanceof Error ? cause.message : String(cause);
   const request = props.transport.request;
@@ -148,6 +226,7 @@ export function TessivenPage(props: {
         ),
       ]);
       if (disposed || generation !== viewGeneration) return;
+      if (canvas()?.id !== nextCanvas.id) setFlowerOpen(false);
       setCanvas(nextCanvas);
       setVersion(nextVersion);
       setBrowseHistory(number !== undefined);
@@ -226,6 +305,7 @@ export function TessivenPage(props: {
   });
   function back() {
     viewGeneration++;
+    setFlowerOpen(false);
     setCanvas(undefined);
     setVersion(undefined);
     setError('');
@@ -334,10 +414,16 @@ export function TessivenPage(props: {
     <section class="tessiven" aria-label="Tessiven">
       <header class="tessiven-toolbar">
         <div class="tessiven-title">
-          <Show when={canvas()} fallback={<TessivenIcon kind="tessiven" />}>
+          <Show
+            when={canvas() || archived()}
+            fallback={<TessivenIcon kind="tessiven" />}
+          >
             <button
               class="tessiven-icon-button"
-              onClick={back}
+              onClick={() => {
+                back();
+                setArchived(false);
+              }}
               aria-label={props.t('library')}
               title={props.t('library')}
             >
@@ -346,20 +432,36 @@ export function TessivenPage(props: {
           </Show>
           <div class="tessiven-heading">
             <h1 title={version()?.document.metadata.title}>
-              {version()?.document.metadata.title ?? 'Tessiven'}
+              {version()?.document.metadata.title ??
+                (archived() ? props.t('showArchived') : 'Tessiven')}
             </h1>
-            <span>
-              {canvas()
-                ? props.t('version', { version: version()?.number ?? 0 })
-                : props.t('subtitle')}
-            </span>
+            <Show when={version()}>
+              <button
+                class="tessiven-version-link"
+                title={props.t('history')}
+                onClick={() => void loadHistory()}
+              >
+                {props.t('version', { version: version()?.number ?? 0 })}
+              </button>
+            </Show>
           </div>
           <Show when={version()?.source === 'example'}>
-            <span class="tessiven-badge">{props.t('example')}</span>
+            <span class="tessiven-badge" title={props.t('exampleNotice')}>
+              {props.t('example')}
+            </span>
           </Show>
         </div>
         <div class="tessiven-actions">
           <Show when={!canvas()}>
+            <label class="tessiven-search" data-floe-input-surface>
+              <Search />
+              <input
+                aria-label={props.t('searchCanvases')}
+                placeholder={props.t('searchCanvases')}
+                value={query()}
+                onInput={(event) => setQuery(event.currentTarget.value)}
+              />
+            </label>
             <Button
               size="sm"
               disabled={!props.canWrite || busy()}
@@ -369,8 +471,34 @@ export function TessivenPage(props: {
               <Plus class="h-4 w-4" />
               {props.t('newCanvas')}
             </Button>
+            <Dropdown
+              align="end"
+              triggerClass="tessiven-icon-button"
+              triggerAriaLabel={props.t('libraryMenu')}
+              trigger={<MoreHorizontal />}
+              items={[
+                {
+                  id: 'archive',
+                  label: props.t(archived() ? 'library' : 'showArchived'),
+                },
+              ]}
+              onSelect={() => {
+                setArchived(!archived());
+                setQuery('');
+              }}
+            />
           </Show>
           <Show when={version()}>
+            <button
+              ref={flowerButton}
+              class="tessiven-flower-toggle"
+              aria-label={props.t('canvasFlower')}
+              aria-expanded={flowerOpen()}
+              onClick={() => (flowerOpen() ? closeFlower() : ask())}
+            >
+              <FlowerIcon />
+              <span>Flower</span>
+            </button>
             <button
               class="tessiven-icon-button"
               title={props.t('findObject')}
@@ -378,14 +506,6 @@ export function TessivenPage(props: {
               onClick={() => setObjectsOpen(true)}
             >
               <Search />
-            </button>
-            <button
-              class="tessiven-icon-button"
-              title={props.t('history')}
-              aria-label={props.t('history')}
-              onClick={() => void loadHistory()}
-            >
-              <Clock />
             </button>
             <Dropdown
               align="end"
@@ -449,163 +569,119 @@ export function TessivenPage(props: {
           </Show>
         </div>
       </Show>
-      <Show
-        when={!canvas()}
-        fallback={
-          <div class="tessiven-workspace">
-            <Show when={version()} keyed>
-              {(current) => (
-                <TessivenGraph
-                  browseState={browseStates.get(current.canvas_id)}
-                  onBrowseState={(state) =>
-                    browseStates.set(current.canvas_id, state)
-                  }
-                  visible={props.visible}
-                  version={current}
-                  historical={historical()}
-                  t={props.t}
-                  onAsk={props.onAsk}
-                  onInspect={setInstance}
-                  locate={locate()}
-                />
-              )}
-            </Show>
-            <Show when={version()?.source === 'example'}>
-              <div class="tessiven-example-note">
-                <span>{props.t('exampleNotice')}</span>
-              </div>
-            </Show>
-            <Show when={emptyCanvas()}>
-              <div class="tessiven-canvas-welcome">
-                <div class="tessiven-welcome-mark">
-                  <TessivenIcon kind="tessiven" />
-                </div>
-                <h2>{props.t('emptyCanvasTitle')}</h2>
-                <p>{props.t('emptyCanvasDescription')}</p>
-                <div class="tessiven-suggestions">
-                  <button onClick={() => ask(props.t('mapPrompt'))}>
-                    <TessivenIcon kind="node" />
-                    <span>{props.t('mapSuggestion')}</span>
-                    <ArrowRight />
-                  </button>
-                  <button onClick={() => ask(props.t('codePrompt'))}>
-                    <FileCode />
-                    <span>{props.t('codeSuggestion')}</span>
-                    <ArrowRight />
-                  </button>
-                </div>
-              </div>
-            </Show>
-            <div class="tessiven-flower-dock">
-              <button
-                class="tessiven-flower-entry"
-                onClick={() => ask()}
-                aria-label={props.t('askFlower')}
-              >
-                <FlowerIcon />
-                <span>
-                  <strong>{props.t('flowerEntry')}</strong>
-                </span>
-                <ArrowRight />
-              </button>
-            </div>
-          </div>
-        }
-      >
-        <div class="tessiven-library">
-          <div class="tessiven-library-heading">
-            <div>
-              <h2>{props.t('libraryTitle')}</h2>
-              <p>{props.t('libraryDescription')}</p>
-            </div>
-          </div>
-          <div class="tessiven-library-controls">
-            <div
-              class="tessiven-library-tabs"
-              role="group"
-              aria-label={props.t('library')}
-            >
-              <button
-                aria-pressed={!archived()}
-                onClick={() => setArchived(false)}
-              >
-                {props.t('showActive')}
-              </button>
-              <button
-                aria-pressed={archived()}
-                onClick={() => setArchived(true)}
-              >
-                {props.t('showArchived')}
-              </button>
-            </div>
-            <label class="tessiven-search" data-floe-input-surface>
-              <Search />
-              <input
-                aria-label={props.t('searchCanvases')}
-                placeholder={props.t('searchCanvases')}
-                value={query()}
-                onInput={(event) => setQuery(event.currentTarget.value)}
-              />
-            </label>
-          </div>
+      <div class="tessiven-body">
+        <main class="tessiven-content">
           <Show
-            when={!loading()}
+            when={!canvas()}
             fallback={
-              <div class="tessiven-library-skeleton" role="status">
-                {props.t('loading')}
+              <div class="tessiven-workspace">
+                <Show when={version()} keyed>
+                  {(current) => (
+                    <TessivenGraph
+                      browseState={browseStates.get(current.canvas_id)}
+                      onBrowseState={(state) =>
+                        browseStates.set(current.canvas_id, state)
+                      }
+                      visible={props.visible}
+                      version={current}
+                      historical={historical()}
+                      t={props.t}
+                      onAsk={askSelection}
+                      onInspect={setInstance}
+                      locate={locate()}
+                    />
+                  )}
+                </Show>
+                <Show when={emptyCanvas()}>
+                  <div class="tessiven-canvas-welcome">
+                    <div class="tessiven-welcome-mark">
+                      <TessivenIcon kind="tessiven" />
+                    </div>
+                    <h2>{props.t('emptyCanvasTitle')}</h2>
+
+                    <div class="tessiven-suggestions">
+                      <button onClick={() => ask(props.t('mapPrompt'))}>
+                        <TessivenIcon kind="node" />
+                        <span>{props.t('mapSuggestion')}</span>
+                      </button>
+                      <button onClick={() => ask(props.t('codePrompt'))}>
+                        <FileCode />
+                        <span>{props.t('codeSuggestion')}</span>
+                      </button>
+                    </div>
+                  </div>
+                </Show>
               </div>
             }
           >
-            <Show
-              when={library().canvases.length}
-              fallback={
-                <div class="tessiven-empty">
-                  <Search />
-                  <h3>
-                    {props.t(query() ? 'noMatches' : 'emptyLibraryTitle')}
-                  </h3>
-                  <p>{props.t(query() ? 'searchHint' : 'emptyLibrary')}</p>
-                </div>
-              }
-            >
-              <div class="tessiven-library-grid">
-                <For each={library().canvases}>
-                  {(item) => (
-                    <TessivenLibraryCard
-                      canvas={item}
-                      transport={props.transport}
-                      t={props.t}
-                      locale={props.locale}
-                      onOpen={() => void openCanvas(item.id)}
-                    />
-                  )}
-                </For>
-              </div>
-              <Show when={library().next_cursor}>
-                <Button variant="ghost" onClick={() => void loadLibrary(true)}>
-                  {props.t('loadMore')}
-                </Button>
+            <div class="tessiven-library">
+              <Show
+                when={!loading()}
+                fallback={
+                  <div class="tessiven-library-skeleton" role="status">
+                    {props.t('loading')}
+                  </div>
+                }
+              >
+                <Show
+                  when={library().canvases.length}
+                  fallback={
+                    <div class="tessiven-empty">
+                      <Search />
+                      <h3>
+                        {props.t(query() ? 'noMatches' : 'emptyLibraryTitle')}
+                      </h3>
+                      <p>{props.t(query() ? 'searchHint' : 'emptyLibrary')}</p>
+                    </div>
+                  }
+                >
+                  <div class="tessiven-library-grid">
+                    <For each={library().canvases}>
+                      {(item) => (
+                        <TessivenLibraryCard
+                          canvas={item}
+                          transport={props.transport}
+                          t={props.t}
+                          locale={props.locale}
+                          onOpen={() => void openCanvas(item.id)}
+                        />
+                      )}
+                    </For>
+                  </div>
+                  <Show when={library().next_cursor}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => void loadLibrary(true)}
+                    >
+                      {props.t('loadMore')}
+                    </Button>
+                  </Show>
+                </Show>
               </Show>
-            </Show>
+            </div>
           </Show>
-          <div class="tessiven-library-flower">
-            <FlowerIcon />
-            <span>{props.t('libraryFlowerHint')}</span>
-            <button onClick={() => props.onAsk(null)}>
-              {props.t('askFlower')}
-              <ArrowRight />
-            </button>
-          </div>
-        </div>
-      </Show>
-      <Show when={version()}>
-        <footer class="tessiven-footer">
-          <span role="status">
-            {props.t('savedAt', { time: date(version()!.created_at) })}
-          </span>
-          <span>{props.t('canvasHint')}</span>
-        </footer>
-      </Show>
+        </main>
+        <For each={flowerSessions()}>
+          {(session) => (
+            <TessivenFlowerPanel
+              request={session.request()}
+              version={
+                version()?.canvas_id === session.id ? version() : undefined
+              }
+              onCompareVersion={(number) => void compare(number)}
+              open={
+                flowerOpen() &&
+                props.visible !== false &&
+                canvas()?.id === session.id
+              }
+              t={props.t}
+              onSend={props.onSendFlower}
+              onOpenConversation={props.onOpenFlower}
+              onClose={closeFlower}
+            />
+          )}
+        </For>
+      </div>
       <Dialog
         closeLabel={props.t('close')}
         open={props.visible !== false && sourceOpen()}

@@ -222,7 +222,7 @@ const FlowerLauncherAvatar: Component = () => (
   </div>
 );
 
-function createFlowerTurnLauncherPanelController(
+export function createFlowerTurnLauncherPanelController(
   props: FlowerTurnLauncherPanelProps,
   footerPlacement: 'panel' | 'window' = 'panel',
 ) {

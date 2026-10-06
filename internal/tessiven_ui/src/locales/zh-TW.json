@@ -170,5 +170,18 @@
   "emptyLibraryTitle": "這裡還沒有畫布",
   "searchHint": "試試其他名稱，或清除搜尋。",
   "source.example": "範例",
-  "source.created": "已建立"
+  "source.created": "已建立",
+  "canvasFlower": "與 Flower 編輯",
+  "libraryMenu": "畫布庫操作",
+  "flowerPlaceholder": "描述想做的修改，或詢問畫布中的內容…",
+  "flowerEnter": "Enter 傳送 · Shift+Enter 換行",
+  "flowerRetry": "重試傳送",
+  "flowerSend": "傳送給 Flower",
+  "flowerUnknown": "尚未確認送達，可重試確認同一則請求。",
+  "flowerTargetHeld": "請先處理待確認的請求，再選擇其他物件。",
+  "flowerAccepted": "已傳送給 Flower",
+  "flowerConversation": "開啟對話",
+  "flowerWorkflow": "修改會顯示在畫布上，回覆與核准請在對話中查看。",
+  "canvasUpdated": "畫布已更新",
+  "reviewChanges": "檢視變更"
 }

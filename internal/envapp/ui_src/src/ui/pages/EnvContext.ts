@@ -1,3 +1,4 @@
+import type { FlowerTurnLauncherSubmitInput } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type {
@@ -137,6 +138,8 @@ export type EnvContextValue = {
   settingsFocusSection: () => EnvSettingsSection | null;
 
   openFlowerTurnLauncher: (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => void;
+  sendFlowerTurn: (input: FlowerTurnLauncherSubmitInput, threadID?: string) => Promise<string>;
+  openFlowerConversation: (threadID: string) => void;
   revealHostApplication?: (applicationID: string) => void;
   revealHostApplicationRequest?: () => RevealHostApplicationRequest | null;
   consumeRevealHostApplicationRequest?: (requestID: string) => void;

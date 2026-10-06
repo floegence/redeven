@@ -170,5 +170,18 @@
   "emptyLibraryTitle": "Noch keine Arbeitsflächen",
   "searchHint": "Versuchen Sie einen anderen Namen oder leeren Sie die Suche.",
   "source.example": "Beispiel",
-  "source.created": "Erstellt"
+  "source.created": "Erstellt",
+  "canvasFlower": "Mit Flower bearbeiten",
+  "libraryMenu": "Aktionen für die Canvas-Bibliothek",
+  "flowerPlaceholder": "Eine Änderung beschreiben oder eine Frage zu diesem Canvas stellen…",
+  "flowerEnter": "Enter: senden · Shift+Enter: neue Zeile",
+  "flowerRetry": "Senden erneut versuchen",
+  "flowerSend": "An Flower senden",
+  "flowerUnknown": "Zustellung unbestätigt. Erneut versuchen, um dieselbe Anfrage zu prüfen.",
+  "flowerTargetHeld": "Die ausstehende Anfrage abschließen, bevor ein anderes Objekt ausgewählt wird.",
+  "flowerAccepted": "An Flower gesendet",
+  "flowerConversation": "Unterhaltung öffnen",
+  "flowerWorkflow": "Canvas-Änderungen erscheinen hier. Antworten und Freigaben stehen in der Unterhaltung.",
+  "canvasUpdated": "Canvas aktualisiert",
+  "reviewChanges": "Änderungen ansehen"
 }

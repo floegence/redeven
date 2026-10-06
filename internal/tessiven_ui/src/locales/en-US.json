@@ -170,5 +170,18 @@
   "emptyLibraryTitle": "No canvases here yet",
   "searchHint": "Try another name or clear the search.",
   "source.example": "Example",
-  "source.created": "Created"
+  "source.created": "Created",
+  "canvasFlower": "Edit with Flower",
+  "libraryMenu": "Library actions",
+  "flowerPlaceholder": "Describe a change or ask about this canvas…",
+  "flowerEnter": "Enter to send · Shift+Enter for a new line",
+  "flowerRetry": "Retry sending",
+  "flowerSend": "Send to Flower",
+  "flowerUnknown": "Delivery is unconfirmed. Retry to check the same request.",
+  "flowerTargetHeld": "Finish the pending request before selecting another object.",
+  "flowerAccepted": "Sent to Flower",
+  "flowerConversation": "Open conversation",
+  "flowerWorkflow": "Canvas updates appear here. Replies and approvals are in the conversation.",
+  "canvasUpdated": "Canvas updated",
+  "reviewChanges": "Review changes"
 }

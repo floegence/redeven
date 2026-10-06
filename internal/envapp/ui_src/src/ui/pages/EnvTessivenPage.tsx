@@ -2,7 +2,6 @@ import type { TessivenOpenRequest } from '../../../../../tessiven_ui/src/navigat
 import { createMemo } from 'solid-js';
 import { TessivenPage } from '../../../../../tessiven_ui/src/TessivenPage';
 import { tessivenText } from '../../../../../tessiven_ui/src/i18n';
-import { tessivenFlowerIntent } from '../../../../../tessiven_ui/src/flower';
 import { createTessivenTransport } from '../../../../../tessiven_ui/src/transport';
 import { TESSIVEN_API } from '../../../../../tessiven_ui/src/types';
 import { useEnvContext } from './EnvContext';
@@ -51,9 +50,8 @@ export default function EnvTessivenPage(props: {
       transport={transport}
       canWrite={env.env()?.permissions?.can_write === true}
       openRequest={props.openRequest ?? request}
-      onAsk={(selection, prompt) =>
-        env.openFlowerTurnLauncher(tessivenFlowerIntent(selection, t(), prompt))
-      }
+      onSendFlower={env.sendFlowerTurn}
+      onOpenFlower={env.openFlowerConversation}
       onOpenService={async (opening, runtime) => {
         if (runtime !== 'local:local') throw new Error(t()('openUnavailable'));
         const forward = opening.forward as {
