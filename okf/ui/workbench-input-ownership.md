@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench input ownership
 description: Wheel, pointer, local-scroll, and text-selection ownership.
 tags: [ui, workbench, interaction, accessibility]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -37,7 +37,7 @@ On mobile, the session list is a modal surface-local drawer over a full-width te
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchTextSelectionSurface.ts:12` - Text selection surfaces use a separate marker attribute.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51` - Tests enforce that text-selection props do not grant wheel ownership by themselves.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx:864` - Interaction tests cover selected text-selection surfaces versus widget-body activation.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.tsx:211` - File preview content uses the combined text-selection scroll viewport props.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.tsx` - File preview content uses the combined text-selection scroll viewport props.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/ImagePreviewPane.tsx:1` - Image previews keep fit, actual-size, and manual zoom state inside one scrollable viewport and expose bounded controls.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2110` - Env App activation requests preserve explicit centerViewport instead of deriving it from ensureVisible.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx:156` - Workbench activation resolves viewport policy from creation, anchor, visibility, and explicit request fields.

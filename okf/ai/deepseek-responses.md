@@ -3,12 +3,12 @@ type: AI Provider Contract
 title: DeepSeek Responses
 description: Flower consumes Floret stateless Responses transport with explicit web tool limits.
 tags: [ai, provider, deepseek]
-timestamp: 2026-10-03T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret v7.20.0 Responses gateway.
+Flower routes the DeepSeek provider to the published Floret v7.25.2 Responses gateway.
 Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
 function-call validation, and opaque provider history. Redeven only maps its
 model DTOs and canonical dotted tool names to provider-safe aliases.

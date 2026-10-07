@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower terminal activity presentation
 description: Terminal output, truthful result messages, safe input confirmation, and read-only controls.
 tags: [ai, flower, terminal, presentation]
-timestamp: 2026-09-10T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -13,9 +13,9 @@ Flower renders canonical Floret v7 Activity facts. Host-authored labels and desc
 
 ## Terminal facts
 
-Floret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Redeven maps the same typed presentation from bootstrap and live current replacement. Labels and descriptions are authoritative; the typed operation supplies localized fallback text. Existing v7 history without an operation retains the known terminal fallback. Redeven consumes the additions from published Floret v7.3.1. The public activity sanitizer preserves the existing `terminated` outcome so stopped-command details survive live delivery and history loading.
+Floret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Redeven maps the same typed presentation from bootstrap and live current replacement. Labels and descriptions are authoritative; the typed operation supplies localized fallback text. Existing v7 history without an operation retains the known terminal fallback. Redeven consumes the additions from published Floret v7.25.2. The public activity sanitizer preserves the existing `terminated` outcome so stopped-command details survive live delivery and history loading.
 
-Published Floret v7.9.2 publishes validated call presentation before tool output.
+Published Floret v7.25.2 publishes validated call presentation before tool output.
 The collapsed row immediately shows its description; expanding immediately
 reveals the sanitized command. All tool details remain collapsed until manually opened, including waiting and
 running calls with attention facts. Running titles retain the existing sweep.

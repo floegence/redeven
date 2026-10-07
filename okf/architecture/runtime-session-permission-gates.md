@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime session permission gates
 description: Redeven validates session metadata and clamps granted permissions before opening runtime sessions.
 tags: [architecture, security, session-security]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -26,6 +26,6 @@ Browser or UI-side permission claims remain non-authoritative. The Monitor page 
 - `redeven:internal/config/permission_policy.go:13` - PermissionPolicy clamps control-plane session metadata to a user-approved local maximum.
 - `redeven:internal/agent/agent.go:473` - Unsupported floe_app values are rejected before runtime session startup.
 - `redeven:internal/session/types.go:29` - Process launch is allowed only when write and execute are both effective.
-- `redeven:internal/ai/run.go:4325` - Hosted terminal command dispatch rechecks the process-launch capability before starting a process.
+- `redeven:internal/ai/run.go` - Hosted terminal command dispatch rechecks the process-launch capability before starting a process.
 - `redeven:internal/monitor/service.go:103` - Monitor protects snapshot reads with read permission and process termination with execute permission.
 - `redeven:internal/envapp/ui_src/src/ui/EnvironmentRuntimeStatusTooltip.tsx:268` - Env App warms one cached metrics snapshot, scopes repeated refresh to the Tooltip open state, and preserves valid information after later failures.

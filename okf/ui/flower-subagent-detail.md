@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower subagent detail presentation
 description: Parent header membership, canonical thread routing, and read-only child execution detail.
 tags: [ai, flower, subagents, ui]
-timestamp: 2026-08-15T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -43,7 +43,7 @@ Flower must not recover a missing child identity from activity sidecars, a title
 - `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:486` - UI contracts require `thread_id` and `task_name` without aliases.
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts:744` - Wire mapping accepts only canonical child thread identity.
 - `redeven:internal/flower_ui/src/flowerSubagentProjection.ts:128` - Header rows derive directly from canonical summaries.
-- `redeven:internal/flower_ui/src/flowerSubagentDetailThread.ts:304` - Child detail requires canonical summary identity and task name.
+- `redeven:internal/flower_ui/src/flowerSubagentDetailThread.ts` - Child detail requires canonical summary identity and task name.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Owns the stable detail selection, monotonic HTTP/SSE receiver, and explicit parent and child activity viewport scopes.
 - `redeven:internal/flower_ui/src/SubagentDetailWindow.tsx` - Reconciles ledger groups and nested entries by stable semantic key without a second open-state or sync path.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Proves streamed current replacement preserves the window, activity row, terminal viewport, disclosure motion, and parent scroll isolation.

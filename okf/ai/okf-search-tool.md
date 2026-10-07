@@ -3,13 +3,12 @@ type: AI Tool Contract
 title: OKF tool suite
 description: OKF tools expose read-only Redeven repository knowledge through index browsing, short search, and concept opening.
 tags: [ai, okf, ui]
-timestamp: 2026-06-17T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
-Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools. Redeven projects bounded safe results into Floret v7.1.4 structured Activity rows, and the shared Flower surface expands those rows without reading raw OKF result JSON.
+Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools. Redeven projects bounded safe results into Floret v7.25.2 structured Activity rows, and the shared Flower surface expands those rows without reading raw OKF result JSON.
 
-OKF tools expose read-only Redeven repository knowledge through index browsing, short search, and concept opening.
 
 # Contract
 

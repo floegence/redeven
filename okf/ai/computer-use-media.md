@@ -3,7 +3,7 @@ type: Media Contract
 title: Computer use media and visual requests
 description: Resolve authenticated keyframes and bounded live samples into decoded Flower pixels without persisting image bytes in model history.
 tags: [ai, computer-use, media, attachments]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -62,7 +62,7 @@ retains the last decoded pixels and requires the observer-bound recovery in the
 [takeover contract](computer-use-takeover.md). Both kinds of viewing share the
 sampler, authenticated workspace channel and decoding path.
 
-Screenshot identity uses Floret v7.12.0's `ActivityPresentation.target_refs`: `kind: computer_frame`, opaque `resource_ref: computer://<target>/<sha256>`, and target display label. Navigable `uri` is not a media reference. The renderer stays `structured` without custom frame fields. Public projection preserves hash-addressed frame references, bounded Computer target identities, and validated requested-access facts. Other opaque references remain private. A target reference enables semantic-only viewing; it does not grant site, application or media authority. Env App and Desktop Welcome resolve frames through the authenticated thread media endpoint into short-lived Blob URLs. Desktop's authorized Runtime IPC carries PNG `Uint8Array` bytes; credentials stay in main. Image sources cannot use opaque references directly or bypass authorization through an HTTP fallback.
+Screenshot identity uses Floret v7.25.2's `ActivityPresentation.target_refs`: `kind: computer_frame`, opaque `resource_ref: computer://<target>/<sha256>`, and target display label. Navigable `uri` is not a media reference. The renderer stays `structured` without custom frame fields. Public projection preserves hash-addressed frame references, bounded Computer target identities, and validated requested-access facts. Other opaque references remain private. A target reference enables semantic-only viewing; it does not grant site, application or media authority. Env App and Desktop Welcome resolve frames through the authenticated thread media endpoint into short-lived Blob URLs. Desktop's authorized Runtime IPC carries PNG `Uint8Array` bytes; credentials stay in main. Image sources cannot use opaque references directly or bypass authorization through an HTTP fallback.
 
 Opening a screenshot from Activity selects that canonical frame, including when
 newer semantic observations have no image. Historical viewing starts no live

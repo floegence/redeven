@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Git workspace inventory lifecycle
 description: Bound Git workspace capture, immutable revisions, resource admission, mutation coordination, and destructive linked-worktree removal.
 tags: [architecture, git, runtime, filesystem, transport]
-timestamp: 2026-07-28T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -29,7 +29,7 @@ Every collection required by the public Git wire DTO is encoded as a JSON array,
 
 Every Git request passes raw payload and structural admission before JSON DTO decoding. Every Git response, including errors and mutation output, passes a Git-domain envelope budget using the production envelope shape. Response encoding checks and emits JSON incrementally within the payload cap, so high-escape strings cannot allocate an oversized encoded buffer before rejection. Large parsers and command runners enforce byte and record limits while reading rather than constructing an oversized business object first. Stable numeric errors distinguish stale snapshots, inventory limits, response budgets, pagination requirements, destructive-scan limits, process resources, request budgets, and path encoding.
 
-The current Flowersec v5.7.1 integration admits at most four direct RPC streams and fixes each stream's request and notification scheduler limits before serving it. The reservation covers Flowersec-owned inbound frames and queues plus bounded Git outbound payload and final-marshal allowance. It does not claim a general bound for non-Git outbound responses or notifications; transport-wide lifecycle remains owned by the published Flowersec v5.7.1 release.
+The current Flowersec v5.10.3 integration admits at most four direct RPC streams and fixes each stream's request and notification scheduler limits before serving it. The reservation covers Flowersec-owned inbound frames and queues plus bounded Git outbound payload and final-marshal allowance. It does not claim a general bound for non-Git outbound responses or notifications; transport-wide lifecycle remains owned by the published Flowersec v5.10.3 release.
 
 ## Mutation coordination
 

@@ -3,7 +3,7 @@ type: Security Contract
 title: Permission policy and filesystem scope
 description: Runtime permissions are clamped by local policy and file features are scoped by directory root policy.
 tags: [security, permissions, filesystem, runtime]
-timestamp: 2026-10-02T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -62,7 +62,7 @@ Permission effects, resource kinds, tool names, arguments, file paths, shell tex
 - `redeven:internal/session/types.go:29` - General process launch is derived from write and execute permission together.
 - `redeven:internal/terminal/manager.go:169` - Every terminal RPC entry point uses the shared process-launch permission boundary.
 - `redeven:internal/ai/permission_snapshot.go:78` - Permission snapshot serialization and decoding accept only explicit strict v2.
-- `redeven:internal/ai/permission_type.go:427` - Permission snapshot hashing rejects missing or unsupported versions.
+- `redeven:internal/ai/permission_type.go` - Permission snapshot hashing rejects missing or unsupported versions.
 - `redeven:internal/ai/run.go:2957` - Final handler authorization refreshes current settings and rejects snapshot or decision drift.
 - `redeven:internal/ai/approval_command.go` - Approval commands validate product authority and resolve one typed Floret interaction.
 - `redeven:internal/ai/approval_conflict.go:9` - Approval state races have a dedicated sentinel and stable error code.

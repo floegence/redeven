@@ -3,7 +3,7 @@ type: Storage Contract
 title: Flower storage ownership and migrations
 description: Keep canonical Floret storage opaque and preserve every supported product migration through deterministic imports.
 tags: [ai, storage, sqlite, migrations, floret]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -16,7 +16,7 @@ timestamp: 2026-09-17T00:00:00Z
 
 ## Storage owners
 
-Redeven consumes published Floret v7.12.2 with `GOWORK=off`. Floret owns journal,
+Redeven consumes published Floret v7.25.2 with `GOWORK=off`. Floret owns journal,
 queue, interactions, context lineage, execution identity and recovery. Redeven
 uses public `InspectSQLite`, `BackupSQLite`, deferred `runtime.Open`, typed
 queue import, `Host.Activate` and `Host.PrepareRestore`; it neither queries nor

@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model reasoning capabilities and transport
 description: Discover verified reasoning controls, preserve explicit intent, and map thinking output and history to provider protocols.
 tags: [ai, models, reasoning, providers]
-timestamp: 2026-10-05T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -19,7 +19,7 @@ settings through continuation and restart.
 
 ## Capability and transport
 
-OpenAI-compatible Chat reasoning is capability-driven. Redeven computes model capability from the current provider type, model metadata, and [generated model directory](model-directory-and-selection.md) on each resolution; it does not persist a capability cache. Redeven reads only response fields named by that result, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text. Ollama metadata is parsed by published Floret v7.22.0, and its OpenAI-compatible stream and assistant history use the declared `reasoning` field. OpenRouter declares its response fields only when model metadata advertises reasoning, without inferring effort controls from aggregate parameter support. Generic provider identity never creates a reasoning capability. Qwen Responses preserves explicit On through its documented `enable_thinking` parameter, exact effort levels through `reasoning.effort`, and rejects unsupported token budgets. Assistant reasoning is replayed through provider-specific history fields only when the same capability declares that requirement; unsupported models receive no synthetic reasoning field.
+OpenAI-compatible Chat reasoning is capability-driven. Redeven computes model capability from the current provider type, model metadata, and [generated model directory](model-directory-and-selection.md) on each resolution; it does not persist a capability cache. Redeven reads only response fields named by that result, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text. Ollama metadata is parsed by published Floret v7.25.2, and its OpenAI-compatible stream and assistant history use the declared `reasoning` field. OpenRouter declares its response fields only when model metadata advertises reasoning, without inferring effort controls from aggregate parameter support. Generic provider identity never creates a reasoning capability. Qwen Responses preserves explicit On through its documented `enable_thinking` parameter, exact effort levels through `reasoning.effort`, and rejects unsupported token budgets. Assistant reasoning is replayed through provider-specific history fields only when the same capability declares that requirement; unsupported models receive no synthetic reasoning field.
 
 Ollama discovery delegates `/api/show.thinking` parsing and request mapping to
 Floret. Names and model families never imply controls. A declaration containing
@@ -62,7 +62,7 @@ Thread model, reasoning and permission settings are Redeven product state. Model
 
 ## Automatic titles
 
-Published Floret v7.22.1 owns title reasoning and output limits. Title requests
+Published Floret v7.25.2 owns title reasoning and output limits. Title requests
 disable thinking when the resolved capability permits it; otherwise they use
 the supported short-request effort or retain the model default. They never
 change the thread's saved reasoning choice or the main response policy.

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -47,15 +47,17 @@ pauses. Simple tools use localized action/object titles. Target names remain
 secondary, while opaque identifiers, execution-platform codes and operation
 counters do not become primary reading content.
 
-Published Floret v7.14.0 owns structured `inputs`, result `rows`, `rows_provided`,
-row `language` and `truncated` facts. Input rows are recorded at call time and
+Structured `inputs`, result `rows`, `rows_provided`, row `language` and
+`truncated` facts were introduced in published Floret v7.14.0 and remain owned by
+the current Floret v7.25.2 runtime. Input rows are recorded at call time and
 survive result-only updates. Redeven maps actual bounded tool data once, then
 uses the same sanitizer and wire mapper for live and historical views. Searches,
 multi-file reads, skills and saved sources retain meaningful content. Computer
 and browser activities use this common path, with authorized target/frame refs
 as supplemental controls. Text is never an attachment capability.
 
-Expanded inputs and results preserve literal whitespace. Floe Webapp v0.56.11's
+Expanded inputs and results preserve literal whitespace. The current Floe Webapp
+v0.84.0's
 public `CodeBlock` owns highlighting, clipboard writes and accessible copy
 feedback; Flower owns bounded layout and stable disclosure. Scripts start as one
 compact command-style preview with a copy action; clicking expands the complete

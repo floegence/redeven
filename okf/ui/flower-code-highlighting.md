@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower code highlighting
 description: Color stable Markdown code without disturbing streaming, selection, copy or layout.
 tags: [flower, markdown, syntax, performance]
-timestamp: 2026-10-05T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 
 # Summary
@@ -77,5 +77,5 @@ node scripts/check_flower_code_highlighting.mjs --output=/tmp/flower-code-highli
 - [Escaped fence metadata](../../internal/flower_ui/src/chat/markdown/markedConfig.ts)
 - [Browser interaction acceptance](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.highlight.browser.test.tsx)
 - [Production acceptance runner](../../scripts/check_flower_code_highlighting.mjs)
-- [Floe v0.82.0 enhancement contract](https://github.com/floegence/floe-webapp/blob/v0.82.0/docs/code-highlighting.md)
+- [Historical Floe v0.82.0 enhancement contract](https://github.com/floegence/floe-webapp/blob/v0.82.0/docs/code-highlighting.md) - The current package is v0.84.0; this link records the original upstream feature contract.
 - [Streaming stability](flower-streaming-stability.md)

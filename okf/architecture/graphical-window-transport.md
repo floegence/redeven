@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Flowersec transport for graphical windows
 description: Bind every remote desktop and host application data channel to one resource-scoped native Flowersec session in direct and tunnel modes.
 tags: [applications, desktop, transport, security]
-timestamp: 2026-10-02T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -49,12 +49,12 @@ viewer never acquires a direct endpoint or creates its own relay protocol.
 Flowersec's byte-stream bridge must honor partial writes in both directions;
 application media frames larger than a bridge chunk retain exact contents without
 raising its bounded outstanding-buffer limits. The proxy frame limit is 32 MiB.
-The minimum released bridge implementation is Flowersec 5.7.1; Redeven's Go and
+The minimum released bridge implementation is Flowersec 5.10.3; Redeven's Go and
 browser consumers use that same release. Oversized sends close their stream
 without forwarding the payload; callers must not depend on a synchronous throw.
 
 The prepared Xpra document opts into the upstream required-host-transport mode
-from floe-native-apps 0.22.8 before its client starts. Only the same-origin
+from floe-native-apps 0.22.19 before its client starts. Only the same-origin
 `application` iframe can inherit
 its parent's constructor. Xpra's protocol runs in that document realm, while its
 graphics decoder workers remain enabled. A missing injected constructor stops

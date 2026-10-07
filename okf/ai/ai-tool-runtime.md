@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: AI tool runtime
 description: Canonical navigation and ownership boundary for Redeven AI tools and Floret runtime integration.
 tags: [ai, tools, runtime, floret]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -33,7 +33,7 @@ Redeven must consume published Floret releases and must not persist a second cop
 # Evidence
 
 - `redeven:internal/ai/tools/registry.go:98` - Builtin tool definitions declare mutation, approval, and presentation specs.
-- `redeven:internal/ai/run.go:4166` - `terminal.exec` dispatch starts the hosted terminal process lifecycle.
+- `redeven:internal/ai/run.go` - `terminal.exec` dispatch starts the hosted terminal process lifecycle.
 - `redeven:internal/ai/tools/types.go:126` - `ToolPresentationSpec` carries renderer, operation, label, fallback, compact payload, result payload, and activity chip fields.
 - `redeven:internal/ai/builtin_tool_handlers.go:21` - Tool success summaries are normalized by builtin name or semantic activity category.
 - `redeven:internal/codeapp/appserver/server.go:4232` - Appserver exposes the parent-scoped subagent detail route.

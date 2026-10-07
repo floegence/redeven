@@ -3,7 +3,7 @@ type: Runtime and Product Contract
 title: Optional built-in browser installation
 description: Confirm browser acquisition, persist the environment capability switch, and resume through the canonical Flower input request.
 tags: [ai, computer-use, browser, installation, desktop]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -112,8 +112,9 @@ installable and report their unavailable browser capability through
 
 ### Archive acquisition ownership
 
-Released `floe-native-apps` v0.10.1 owns the reusable `artifactcache.Acquire` and
-`Verify` implementations. Redeven owns the Playwright-bound browser catalog,
+The reusable `artifactcache.Acquire` and `Verify` APIs were introduced in released
+`floe-native-apps` v0.10.1 and remain consumed from the current published v0.22.19
+module. Redeven owns the Playwright-bound browser catalog,
 consent and placement. Desktop invokes its bundled Runtime's `browser-package`
 command with the target package ID, expected SHA-256 and size; the compiled
 catalog must match before any cache or network access. Renderer input cannot

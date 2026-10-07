@@ -115,6 +115,7 @@ func ValidateBundleQuality(bundle Bundle, sourceRoot string, mode QualityMode) Q
 
 func validateEvidence(report *QualityReport, concept Concept, sourceRoot string, mode QualityMode) {
 	seen := make(map[string]struct{}, len(concept.Evidence))
+	lineCounts := make(map[string]int)
 	for _, ref := range concept.Evidence {
 		if _, ok := seen[ref.ID]; ok {
 			level := "warning"
@@ -132,9 +133,30 @@ func validateEvidence(report *QualityReport, concept Concept, sourceRoot string,
 			report.add("error", "OKF015", concept.Path, "evidence reference has an empty source")
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(sourceRoot, path)); err != nil {
-			if _, err := os.Stat(filepath.Join(filepath.Dir(sourceRoot), path)); err != nil {
+		resolvedPath := filepath.Join(sourceRoot, path)
+		if _, err := os.Stat(resolvedPath); err != nil {
+			resolvedPath = filepath.Join(filepath.Dir(sourceRoot), path)
+			if _, err := os.Stat(resolvedPath); err != nil {
 				report.add("error", "OKF016", concept.Path, "evidence source does not exist: "+ref.Source)
+				continue
+			}
+		}
+		if ref.Line > 0 {
+			lineCount, ok := lineCounts[resolvedPath]
+			if !ok {
+				data, err := os.ReadFile(resolvedPath)
+				if err != nil {
+					report.add("error", "OKF018", concept.Path, "evidence source cannot be read for line validation: "+ref.Source)
+					continue
+				}
+				lineCount = 1 + strings.Count(string(data), "\n")
+				if len(data) == 0 {
+					lineCount = 0
+				}
+				lineCounts[resolvedPath] = lineCount
+			}
+			if ref.Line > lineCount {
+				report.add("error", "OKF018", concept.Path, fmt.Sprintf("evidence line %d is outside source range 1-%d: %s", ref.Line, lineCount, ref.Source))
 			}
 		}
 	}
