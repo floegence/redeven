@@ -9,7 +9,7 @@ quality_exception: Cross-repository platform boundary spanning published artifac
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.33` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.35` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -52,22 +52,22 @@ short credential admission request before the session is ready.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v3.0.33` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.35` set:
 
 This adoption includes upstream filesystem and content-path validation fixes and
 patched Rust dependencies. Redeven verifies the public release manifest and
 registry artifact digests before product staging; Runtime Service protocol and
 compatibility epoch stay governed by the product compatibility contract.
 
-- `github.com/floegence/redevplugin/v3 v3.0.33`;
-- `@floegence/redevplugin-contracts@3.0.33` and
-  `@floegence/redevplugin-ui@3.0.33`;
-- `redevplugin-runtime@3.0.33` and `redevplugin-worker-sdk@3.0.33` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.35`;
+- `@floegence/redevplugin-contracts@3.0.35` and
+  `@floegence/redevplugin-ui@3.0.35`;
+- `redevplugin-runtime@3.0.35` and `redevplugin-worker-sdk@3.0.35` as the exact
   public Rust source-crate boundary;
 - the released contract registry, release-manifest contract, contract hashes, and
   attested `platform-release-manifest.json` registry readback, whose
   SHA-256 is
-  `2c9b96d7a8219ea8241ec87a651bbe4f86a90e9e22fb22175ef4a43a0be5f069`.
+  `60f5fa0f64ab78fdc21c8d92627bf0bd52c4593472835957cf4093a61bef1ff7`.
 
 Redeven release tooling verifies the exact-one publication manifest against its
 tag, source commit, workflow, GitHub attestation, Go proxy and SumDB sums, npm

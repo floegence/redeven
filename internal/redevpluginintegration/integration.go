@@ -20,6 +20,7 @@ import (
 	"github.com/floegence/redevplugin/v3/pkg/httpadapter"
 	rpobservability "github.com/floegence/redevplugin/v3/pkg/observability"
 	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
+	processruntime "github.com/floegence/redevplugin/v3/pkg/process"
 	"github.com/floegence/redevplugin/v3/pkg/remoterelease"
 	"github.com/floegence/redevplugin/v3/pkg/secrets"
 )
@@ -35,6 +36,7 @@ type Options struct {
 	Diagnostics          *diagnostics.Store
 	RuntimeAuthority     *RuntimeProcessAuthority
 	PluginMarket         *pluginmarket.Service
+	ResolveProcessSecret processruntime.SecretResolver
 }
 
 type pluginMarketService interface {
@@ -179,6 +181,12 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 	connectivityBroker := connectivity.NewMemoryBroker()
 	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{})
+	processSupervisor, err := newProcessSupervisor(sessions, opts.ResolveProcessSecret)
+	if err != nil {
+		_ = assetStore.Close()
+		closeOnError()
+		return nil, err
+	}
 	runtimeModule, err := newOfficialRuntimeModule(ctx, runtimeModuleDependencies{
 		Path:          opts.RuntimePath,
 		ExecutionRoot: filepath.Join(root, "runtime-exec"),
@@ -189,7 +197,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 
-	h, err := host.Open(ctx, host.Config{
+	hostConfig := host.Config{
 		StateRoot: root,
 		Core: host.CoreAdapters{
 			Policy:               sessions,
@@ -207,13 +215,16 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			Broker:          connectivityBroker,
 			NetworkExecutor: networkExecutor,
 		},
-		Secrets: &host.SecretsModule{Store: secretStore},
+		Secrets:    &host.SecretsModule{Store: secretStore},
+		Process:    &host.ProcessModule{Supervisor: processSupervisor},
+		Background: &host.BackgroundModule{RunnerFactory: host.NewBackgroundWorkerRunner},
 		ExternalPackage: &host.ExternalPackageModule{
 			SignatureAssessor: packageTrustVerifier,
 			SourceID:          "redeven.external-package",
 			GitHub:            externalsource.GitHubRESTReleaseClientOptions{UserAgent: "Redeven"},
 		},
-	})
+	}
+	h, err := host.Open(ctx, hostConfig)
 	if err != nil {
 		var configErr *host.HostConfigError
 		if runtimeModule != nil && errors.As(err, &configErr) && configErr.RuntimeModuleDisposition() == host.RuntimeModuleCallerOwned {

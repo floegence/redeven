@@ -12,6 +12,7 @@ import type {
   PluginInventoryProjection,
   PluginPanelModel,
   PluginPanelTile,
+  PluginProcessStatus,
   ReDevPluginRecord,
 } from './pluginTypes';
 import type {
@@ -27,6 +28,7 @@ export function projectPluginInventory(input: {
   permissionGrants?: readonly PluginPermissionGrant[];
   permissionRequirements?: readonly PluginPermissionRequirements[];
   securityPolicies?: readonly PluginSecurityPolicy[];
+  processStatusByInstanceID?: ReadonlyMap<string, PluginProcessStatus | undefined>;
 }): PluginInventoryProjection {
   const catalog = [...(input.officialCatalog ?? officialPluginCatalog())];
   const installedByPlugin = new Map<string, ReDevPluginRecord[]>();
@@ -58,6 +60,7 @@ export function projectPluginInventory(input: {
         grantsByPlugin.get(record.plugin_instance_id) ?? [],
         policyByPlugin.get(record.plugin_instance_id),
         requirementsByPlugin.get(record.plugin_instance_id),
+        input.processStatusByInstanceID?.get(record.plugin_instance_id),
       ));
       projectedInstances.add(record.plugin_instance_id);
     }
@@ -70,6 +73,7 @@ export function projectPluginInventory(input: {
       grantsByPlugin.get(installed.plugin_instance_id) ?? [],
       requirementsByPlugin.get(installed.plugin_instance_id),
       policyByPlugin.get(installed.plugin_instance_id),
+      input.processStatusByInstanceID?.get(installed.plugin_instance_id),
     ));
   }
 
@@ -105,6 +109,7 @@ function projectCatalogItem(
   grants: readonly PluginPermissionGrant[] = [],
   policy?: PluginSecurityPolicy,
   requirements?: PluginPermissionRequirements,
+  processStatus?: PluginProcessStatus,
 ): PluginInventoryItem {
   if (!installed) {
     return {
@@ -181,6 +186,7 @@ function projectCatalogItem(
     officialCatalog: catalogItem,
     presentation: installed.presentation,
     externalPackage,
+    ...(processStatus ? { processStatus } : {}),
   };
 }
 
@@ -189,6 +195,7 @@ function projectInstalledItem(
   grants: readonly PluginPermissionGrant[],
   requirements?: PluginPermissionRequirements,
   policy?: PluginSecurityPolicy,
+  processStatus?: PluginProcessStatus,
 ): PluginInventoryItem {
   const authorization = projectGenericAuthorization(installed, grants, requirements, policy);
   const runnable = isRunnableInstalledTrust(installed);
@@ -252,6 +259,7 @@ function projectInstalledItem(
     authorization,
     presentation: installed.presentation,
     externalPackage,
+    ...(processStatus ? { processStatus } : {}),
   };
 }
 

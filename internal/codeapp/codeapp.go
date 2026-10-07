@@ -37,6 +37,7 @@ import (
 	"github.com/floegence/redeven/internal/terminal"
 	"github.com/floegence/redeven/internal/tessiven"
 	"github.com/floegence/redeven/internal/workbenchlayout"
+	processruntime "github.com/floegence/redevplugin/v3/pkg/process"
 	redevpluginversion "github.com/floegence/redevplugin/v3/pkg/version"
 )
 
@@ -83,6 +84,7 @@ type Options struct {
 	AcquirePluginSession     func(channelID string) (*session.Meta, func(), bool)
 	EndPluginSession         func(channelID string)
 	PluginRuntimeAuthority   *redevpluginintegration.RuntimeProcessAuthority
+	ResolveProcessSecret     processruntime.SecretResolver
 
 	newAIService   aiServiceFactory
 	closeAIService aiServiceCloser
@@ -360,13 +362,14 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 			}
 			return space.WorkspacePath, true, nil
 		},
-		PermissionPolicy:   opts.PermissionPolicy,
-		RuntimePath:        strings.TrimSpace(opts.ReDevPluginRuntimePath),
-		ResolveSessionMeta: resolvePluginPlatformSessionMeta(opts),
-		Audit:              opts.Audit,
-		Diagnostics:        opts.Diagnostics,
-		RuntimeAuthority:   opts.PluginRuntimeAuthority,
-		PluginMarket:       pluginMarket,
+		PermissionPolicy:     opts.PermissionPolicy,
+		RuntimePath:          strings.TrimSpace(opts.ReDevPluginRuntimePath),
+		ResolveSessionMeta:   resolvePluginPlatformSessionMeta(opts),
+		Audit:                opts.Audit,
+		Diagnostics:          opts.Diagnostics,
+		RuntimeAuthority:     opts.PluginRuntimeAuthority,
+		PluginMarket:         pluginMarket,
+		ResolveProcessSecret: opts.ResolveProcessSecret,
 	})
 	if err != nil {
 		terminalLayoutCleanup()

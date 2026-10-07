@@ -12,7 +12,7 @@ Redeven admits only the coordinated ReDevPlugin release published through its ex
 # Contract
 
 
-Redeven consumes only the coordinated ReDevPlugin `v3.0.33` release manifest. The
+Redeven consumes only the coordinated ReDevPlugin `v3.0.35` release manifest. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree. Local-wiring scans cover maintained source, scripts,

@@ -47,6 +47,7 @@ import (
 	"github.com/floegence/redeven/internal/sessionrpc"
 	syssvc "github.com/floegence/redeven/internal/sys"
 	"github.com/floegence/redeven/internal/terminal"
+	processruntime "github.com/floegence/redevplugin/v3/pkg/process"
 )
 
 const (
@@ -238,6 +239,7 @@ type Options struct {
 
 	AccessGate             *accessgate.Gate
 	PluginRuntimeAuthority *redevpluginintegration.RuntimeProcessAuthority
+	ResolveProcessSecret   processruntime.SecretResolver
 }
 
 type Agent struct {
@@ -548,6 +550,7 @@ func New(opts Options) (*Agent, error) {
 		AcquirePluginSession:     a.AcquirePluginSession,
 		EndPluginSession:         a.EndPluginSession,
 		PluginRuntimeAuthority:   opts.PluginRuntimeAuthority,
+		ResolveProcessSecret:     opts.ResolveProcessSecret,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init codeapp: %w", err)

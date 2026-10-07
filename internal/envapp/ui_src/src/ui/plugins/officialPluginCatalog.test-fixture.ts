@@ -108,6 +108,11 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
             { permission_id: 'metrics.read', methods: ['metrics.status', 'metrics.list'], required: true, effects: ['read'] },
             { permission_id: 'metrics.execute', methods: ['metrics.start'], required: false, effects: ['execute'] },
           ],
+          process: {
+            resource_limits: { output_buffer_bytes: 65536, max_runtime_ms: 60000 },
+            method_access: [{ method: 'metrics.start', operations: ['start', 'read_stdout', 'terminate'] }],
+          },
+          background: { strategy: 'runtime_start', worker_id: 'metrics_background' },
         },
         release_identity_digest: 'sha256:824e51f410a597845d546835e61271b8a530044c51e2d14a098eb847adf1e181',
         manifest_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.manifest_sha256,

@@ -1348,6 +1348,9 @@ describe('PluginCenterView', () => {
     expect(review).not.toBeNull();
     expect(controlText(review)).toContain('Metrics');
     expect(controlText(review)).toContain('2.0.0');
+    expect(review.querySelector('[data-plugin-install-process-review]')).not.toBeNull();
+    expect(controlText(review)).toContain('Can start local processes');
+    expect(controlText(review)).toContain('Can run in the background');
     expect(controlText(review)).not.toContain('sha256:');
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();

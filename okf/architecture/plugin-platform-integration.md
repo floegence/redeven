@@ -1,16 +1,16 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v3.0.33 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts released ReDevPlugin v3 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-10-08T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v3.0.33` through one Go Host, one canonical HTTP
+Redeven integrates the released ReDevPlugin v3 through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
-released ProcessManager over a verified Redeven-built Linux or Darwin runtime. Redeven
+released Process Supervisor over a verified Redeven-built Linux or Darwin runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
 placement, and business adapters; ReDevPlugin retains package, state, protocol,
 trust, and runtime ownership. Activity supports Shell-root multi-window placement
@@ -82,10 +82,20 @@ handlers, and then invokes the released idempotent Host teardown path.
 
 Released package inspection, installation, source policy, and runtime readiness are owned by [Plugin package and runtime lifecycle](redevplugin-package-lifecycle.md).
 
+## Process and background boundary
+
+ReDevPlugin owns the Process Broker, Supervisor, process-tree containment,
+opaque handles, bounded binary streams, and headless background lifecycle.
+Redeven supplies only owner authorization, minimal base environment, Secret
+Store resolution, state root, and redacted audit/diagnostic projection. It does
+not persist complete stdout/stderr, expose OS process identity, or implement a
+Codex/MCP/debugger-specific protocol. See [Plugin process sessions](plugin-process-sessions.md)
+and [Plugin background entries](plugin-background-entries.md).
+
 ## Runtime boundary
 
-The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`v3.0.33`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
+The runtime module binds the canonical sibling executable, target, released ReDevPlugin
+v3 runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux and Darwin runtime bytes are built
 with Rust 1.88.0 from the attested release manifest and travel with SBOM,
 provenance, notices, and signature evidence. Linux admission requires the
@@ -138,7 +148,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v3.0.33` assembly.
+This concept owns only Redeven's concrete `v3.0.35` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout

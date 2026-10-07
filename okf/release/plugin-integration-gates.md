@@ -51,7 +51,7 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction and file export are releasable only through the `v3.0.33`
+Workbench plugin interaction and file export are releasable only through the `v3.0.35`
 source/port-bound interaction ownership and exact-surface close contracts. The
 gate rejects overlays, pointer-event switching, copied interaction DTOs, a
 second bridge, session-wide close fallback, placement persistence before close,

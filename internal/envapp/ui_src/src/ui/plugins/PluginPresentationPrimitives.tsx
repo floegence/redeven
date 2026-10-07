@@ -3,7 +3,7 @@ import { Settings } from '@floegence/floe-webapp-core/icons';
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
-import type { PluginInventoryItem } from './pluginTypes';
+import type { PluginInventoryItem, PluginProcessStatusState } from './pluginTypes';
 import { pluginLifecycleLabel, pluginTrustLabel } from './pluginPresentation';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { acquireCachedPluginIcon, loadPluginIcon, type LoadedPluginIcon, type PluginIconLoadState } from './pluginIconLoader';
@@ -134,6 +134,36 @@ export function PluginStatusBadge(props: { item: PluginInventoryItem; class?: st
   return (
     <span class={cn('inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold transition-[background-color,color,transform] duration-150 ease-out motion-reduce:transition-none', tone(), props.class)}>
       {pluginLifecycleLabel(props.item, i18n)}
+    </span>
+  );
+}
+
+export function PluginProcessStatusBadge(props: { state: PluginProcessStatusState; class?: string }): JSX.Element {
+  const i18n = useI18n();
+  const tone = () => {
+    if (props.state === 'running') return 'bg-[var(--redeven-status-success-soft)] text-[var(--redeven-status-success-foreground)]';
+    if (props.state === 'blocked' || props.state === 'crashed') return 'bg-destructive/10 text-destructive';
+    if (props.state === 'stream_gap') return 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]';
+    if (props.state === 'starting') return 'bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)]';
+    return 'bg-muted text-muted-foreground';
+  };
+  const label = () => {
+    switch (props.state) {
+      case 'starting': return i18n.t('uiCopy.plugin.external.processStatus.starting');
+      case 'running': return i18n.t('uiCopy.plugin.external.processStatus.running');
+      case 'exited': return i18n.t('uiCopy.plugin.external.processStatus.exited');
+      case 'blocked': return i18n.t('uiCopy.plugin.external.processStatus.blocked');
+      case 'crashed': return i18n.t('uiCopy.plugin.external.processStatus.crashed');
+      case 'stream_gap': return i18n.t('uiCopy.plugin.external.processStatus.streamGap');
+    }
+  };
+  return (
+    <span
+      data-plugin-process-status={props.state}
+      class={cn('inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-[background-color,color] duration-150 motion-reduce:transition-none', tone(), props.class)}
+    >
+      <span aria-hidden="true" class="h-1.5 w-1.5 rounded-full bg-current" />
+      {label()}
     </span>
   );
 }

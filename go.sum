@@ -69,8 +69,8 @@ github.com/floegence/flowersec/flowersec-go/v5 v5.10.3 h1:6RxFPPGVvL053yseBmi/zF
 github.com/floegence/flowersec/flowersec-go/v5 v5.10.3/go.mod h1:3wcvWklYumBaa/mlY/9TDMKlyJvi8ZziIy/NbEEmdsc=
 github.com/floegence/redeven-service-templates v0.6.0 h1:S1h1nRLAzjJ01r4mQ1A2AX/VK2SudkorjlwxZrLLIJQ=
 github.com/floegence/redeven-service-templates v0.6.0/go.mod h1:aEDVtML4eX6rTXe1DY5tsEUzl/vIw/qJcR6GWo1nK+c=
-github.com/floegence/redevplugin/v3 v3.0.33 h1:7StSsR4ZCP2bsPFlZPfjvdYwIgCRKb1WT9nVZAKzsh8=
-github.com/floegence/redevplugin/v3 v3.0.33/go.mod h1:nemc3jhLY4h1e2Jlnw1u7Pr+8i94DA2YY2NYraBCJBI=
+github.com/floegence/redevplugin/v3 v3.0.35 h1:ZAxMVgk5xwD4erhiRFH6sCbn7NX1J5/rM/rHfXWY0ks=
+github.com/floegence/redevplugin/v3 v3.0.35/go.mod h1:z2C2Rxo2OcYnID9LzFU9w1aTAMs32dsx3vyHqtAepK4=
 github.com/go-gl/glfw v0.0.0-20190409004039-e6da0acd62b1/go.mod h1:vR7hzQXu2zJy9AVAgeJqvqgH9Q5CA+iKCZ2gyEVpxRU=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20191125211704-12ad95a8df72/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/go-ole/go-ole v1.2.6 h1:/Fpf6oFPoeFik9ty7siob0G6Ke8QvQEuVcuChpwXzpY=

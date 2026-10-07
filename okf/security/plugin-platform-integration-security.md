@@ -18,6 +18,26 @@ runtime identity, and capability scope mismatches fail closed.
 
 # Contract
 
+## Local process boundary
+
+The `process.local` permission is an explicit high-risk grant and method-level
+Process Broker access is checked again for every Worker invocation. The Host
+does not inherit the complete Redeven environment and never injects session
+cookies, plugin tokens, or Host credentials. Only declared environment values,
+secret references, and the minimal platform environment reach a child process.
+
+Process responses contain opaque handles and public lifecycle facts only. PID,
+file descriptor, Windows HANDLE, executable path, argv, raw environment, and
+secret values are excluded from plugin, UI, audit, error, and diagnostic
+projections. Process output is binary and bounded; `stream_gap` is a visible
+fact rather than a silent replay or fallback. Disable, uninstall, revoke, and
+Host shutdown clean up the owning process tree.
+
+Redeven's adapter enforces authenticated user/environment ownership and
+projects only stable event types and failure codes into product diagnostics.
+See [Plugin process sessions](../architecture/plugin-process-sessions.md) for
+the lifecycle contract.
+
 ## Authenticated session boundary
 
 The session resolver accepts only a Redeven channel id whose stored metadata

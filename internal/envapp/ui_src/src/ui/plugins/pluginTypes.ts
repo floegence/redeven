@@ -27,6 +27,23 @@ export type PluginAttentionReason =
   | 'install_unavailable'
   | 'trust_unavailable';
 
+export type PluginProcessStatusState =
+  | 'starting'
+  | 'running'
+  | 'exited'
+  | 'blocked'
+  | 'crashed'
+  | 'stream_gap';
+
+export type PluginProcessStatus = Readonly<{
+  state: PluginProcessStatusState;
+  eventType: string;
+  occurredAt?: string;
+  operation?: string;
+  stream?: string;
+  code?: string;
+}>;
+
 export type PluginPresentationCategory =
   | 'development'
   | 'infrastructure'
@@ -83,6 +100,8 @@ export type PluginMarketInstallPreview = Readonly<{
       required: boolean;
       effects: readonly string[];
     }>[];
+    process?: PluginExternalPackageProcessSummary;
+    background?: PluginExternalPackageBackgroundSummary;
   }>;
   release_identity_digest: string;
   manifest_sha256: string;
@@ -272,6 +291,7 @@ export type PluginInventoryItem = {
     updateEligibility: PluginExternalPackageUpdateEligibility;
     securitySummary: PluginExternalPackageSecuritySummary;
   };
+  processStatus?: PluginProcessStatus;
 };
 
 export type PluginUpdateIntent = Readonly<{
@@ -444,9 +464,10 @@ export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentatio
 
 export type ReDevPluginCatalogResult = PluginCatalogResult;
 
-export type ExternalPluginInspection = Omit<PluginExternalPackageInspection, 'presentation' | 'presentation_sha256'> & {
+export type ExternalPluginInspection = Omit<PluginExternalPackageInspection, 'presentation' | 'presentation_sha256' | 'security_summary'> & {
   presentation?: PluginExternalPackageInspection['presentation'];
   presentation_sha256?: string;
+  security_summary: PluginExternalPackageSecuritySummary;
 };
 export type ExternalPluginCommitResult = Omit<PluginInstalledExternalPackage, 'plugin'> & {
   plugin: ReDevPluginRecord;
@@ -455,7 +476,29 @@ export type PluginExternalPackageSignatureAssessment = ExternalPluginInspection[
 export type PluginExternalPackageSourceProvenance = ExternalPluginInspection['source_provenance'];
 export type PluginExternalPackageExecutionApproval = ExternalPluginInspection['execution_approval'];
 export type PluginExternalPackageUpdateEligibility = ExternalPluginInspection['update_eligibility'];
-export type PluginExternalPackageSecuritySummary = ExternalPluginInspection['security_summary'];
+
+export type PluginExternalPackageProcessMethodAccessSummary = Readonly<{
+  method: string;
+  operations: readonly string[];
+}>;
+
+export type PluginExternalPackageProcessSummary = Readonly<{
+  resource_limits: Readonly<{
+    output_buffer_bytes: number;
+    max_runtime_ms: number;
+  }>;
+  method_access: readonly PluginExternalPackageProcessMethodAccessSummary[];
+}>;
+
+export type PluginExternalPackageBackgroundSummary = Readonly<{
+  strategy: 'runtime_start' | 'on_demand';
+  worker_id: string;
+}>;
+
+export type PluginExternalPackageSecuritySummary = PluginExternalPackageInspection['security_summary'] & Readonly<{
+  process?: PluginExternalPackageProcessSummary;
+  background?: PluginExternalPackageBackgroundSummary;
+}>;
 import type {
   PluginCatalogResult,
   PluginCatalogRecord,

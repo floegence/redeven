@@ -837,6 +837,8 @@ function InspectionReview(props: {
       <InspectionHighlights
         permissions={currentDeclarations().filter((declaration) => declaration.category === 'permissions')}
         methods={summary().methods}
+        process={summary().process}
+        background={summary().background}
         changes={changes()}
         highlights={highlights()}
         standardChanges={standardChanges()}
@@ -859,6 +861,8 @@ function InspectionReview(props: {
 function InspectionHighlights(props: {
   permissions: readonly SecurityDeclaration[];
   methods: PluginExternalPackageSecuritySummary['methods'];
+  process: PluginExternalPackageSecuritySummary['process'];
+  background: PluginExternalPackageSecuritySummary['background'];
   changes: readonly SecurityDeclaration[];
   highlights: readonly SecurityDeclaration[];
   standardChanges: readonly StandardChangeSummary[];
@@ -899,6 +903,33 @@ function InspectionHighlights(props: {
             <span class="min-w-0 flex-1 text-[length:var(--floe-type-control)] font-medium">{i18n.t('uiCopy.plugin.external.requestedPermissions')}</span>
             <span class="shrink-0 text-xs font-semibold tabular-nums">{props.permissions.length}</span>
           </div>
+        </Show>
+        <Show when={props.process}>
+          {(process) => (
+            <div data-external-plugin-process-access class="flex min-w-0 items-start gap-2 rounded-md border border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)] px-3 py-2.5">
+              <Shield class="mt-0.5 h-4 w-4 shrink-0 text-[var(--redeven-status-warning-foreground)]" />
+              <span class="min-w-0 flex-1">
+                <span class="block text-[length:var(--floe-type-control)] font-semibold">{i18n.t('uiCopy.plugin.external.localProcessAccess')}</span>
+                <span class="mt-0.5 block text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.localProcessAccessGuidance')}</span>
+                <code class="mt-1 block break-all text-[11px] text-muted-foreground">{i18n.t('uiCopy.plugin.external.processLimits', {
+                  output: process().resource_limits.output_buffer_bytes,
+                  runtime: process().resource_limits.max_runtime_ms,
+                })}</code>
+              </span>
+            </div>
+          )}
+        </Show>
+        <Show when={props.background}>
+          {(background) => (
+            <div data-external-plugin-background-access class="flex min-w-0 items-start gap-2 rounded-md border px-3 py-2.5">
+              <Loader2 class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <span class="min-w-0 flex-1">
+                <span class="block text-[length:var(--floe-type-control)] font-semibold">{i18n.t('uiCopy.plugin.external.backgroundEntry')}</span>
+                <span class="mt-0.5 block text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.backgroundEntryGuidance')}</span>
+                <code class="mt-1 block break-all text-[11px] text-muted-foreground">{i18n.t('uiCopy.plugin.external.backgroundStrategy', { strategy: background().strategy })}</code>
+              </span>
+            </div>
+          )}
         </Show>
         <div data-external-plugin-declared-operations class="contents">
           <For each={operationGroups()}>
@@ -1395,6 +1426,8 @@ function securityCategoryLabel(category: SecurityCategory, i18n: ReturnType<type
     permissions: 'uiCopy.plugin.external.permissions',
     methods: 'uiCopy.plugin.external.methods',
     capability_contracts: 'uiCopy.plugin.external.capabilityContracts',
+    process: 'uiCopy.plugin.external.process',
+    background: 'uiCopy.plugin.external.background',
     workers: 'uiCopy.plugin.external.workers',
     network: 'uiCopy.plugin.external.network',
     storage: 'uiCopy.plugin.external.storage',
@@ -1411,6 +1444,8 @@ function securityCategoryPurpose(category: SecurityCategory, i18n: ReturnType<ty
     permissions: 'uiCopy.plugin.external.purpose.permissions',
     methods: 'uiCopy.plugin.external.purpose.methods',
     capability_contracts: 'uiCopy.plugin.external.purpose.capabilityContracts',
+    process: 'uiCopy.plugin.external.purpose.process',
+    background: 'uiCopy.plugin.external.purpose.background',
     workers: 'uiCopy.plugin.external.purpose.workers',
     network: 'uiCopy.plugin.external.purpose.network',
     storage: 'uiCopy.plugin.external.purpose.storage',

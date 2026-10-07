@@ -59,7 +59,7 @@ affected authority, then the SDK tears down the shared scope for committed or
 unknown outcomes. Redeven must not issue a second close against those disposed
 slots or treat local disposal as the server-side revoke.
 
-The `v3.0.33` bridge delivers `keydown` and `keyup` from the focused plugin
+The `v3.0.35` bridge delivers `keydown` and `keyup` from the focused plugin
 Surface, including canvas, editable, control, and surface targets. Exact
 declarative bindings are evaluated synchronously inside the sandbox when a
 plugin must prevent a matching browser default; composition input never

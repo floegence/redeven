@@ -96,6 +96,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.
 - [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md) - Bind authenticated product sessions, source policy, and product surfaces to released platform contracts.
 - [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.
+- [Plugin process sessions](architecture/plugin-process-sessions.md) - Run user-configured local processes through the ReDevPlugin Process Broker with opaque ownership, bounded binary streams, and deterministic cleanup.
+- [Plugin background entries](architecture/plugin-background-entries.md) - Start, recover, diagnose, and stop headless plugin workers without coupling them to visible surfaces.
 - [Plugin package and runtime lifecycle](architecture/redevplugin-package-lifecycle.md) - Qualify released package sources, installation, runtime readiness, and cache ownership.
 - [Plugin surface recovery and permissions](architecture/redevplugin-surface-recovery.md) - Observe plugin inventory, installation, permissions, and reconnect recovery through one client scope.
 - [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.
