@@ -44,6 +44,13 @@ Unix process groups and Windows Job Objects contain process trees. Graceful
 termination is followed by forced cleanup when required. The platform removes
 the session after close and prevents access after owner revocation.
 
+# Boundaries
+
+This concept owns platform process-session ownership, isolation, stream-loss
+semantics, and cleanup. Background entry lifecycle is defined by [Plugin
+background entries](plugin-background-entries.md); Redeven product projection
+and installation review remain in [Plugin platform integration](plugin-platform-integration.md).
+
 # Evidence
 
 - ReDevPlugin `pkg/process/supervisor.go`, `pkg/process/supervisor_unix.go`, and `pkg/process/supervisor_windows.go` own session, stream, and process-tree behavior.
