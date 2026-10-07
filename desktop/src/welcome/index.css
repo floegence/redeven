@@ -4,6 +4,7 @@
 @import 'tailwindcss';
 @import '@floegence/floe-webapp-core/tailwind';
 @import '../../../internal/envapp/ui_src/src/styles/redeven.css';
+@import '../../../internal/envapp/ui_src/src/ui/pages/resource-header.css';
 @import '../../../internal/flower_ui/src/styles/flower.css';
 @import './EnvironmentSettingsDialog.css';
 
