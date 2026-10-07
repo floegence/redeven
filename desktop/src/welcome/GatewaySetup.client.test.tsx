@@ -16,10 +16,16 @@ async function openSetup(transport = 'Local host') {
   button('Add').click(); await settle();
   button(transport).click(); await settle();
 }
+async function openGatewayAccess() {
+  button('Gateways').click(); await settle();
+  const moreActions = document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]');
+  expect(moreActions).toBeTruthy(); moreActions!.click(); await settle();
+  button('Grant access').click(); await settle();
+}
 function grantMemberManagement() {
   const checkbox = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
-    .find(element => element.closest('label')?.textContent?.includes('Manage members and invitations')
-      || element.getAttribute('aria-label') === 'Manage members and invitations');
+    .find(element => element.closest('label')?.textContent?.includes('Invite and manage Runtimes')
+      || element.getAttribute('aria-label') === 'Invite and manage Runtimes');
   expect(checkbox).toBeTruthy(); checkbox!.click();
 }
 function button(label: string): HTMLButtonElement {
@@ -61,8 +67,7 @@ describe('Gateway setup and own-service actions', () => {
   it('offers explicit authorization for a read-only Gateway without granting it automatically', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount({ ...source, capabilities: ['member_access'], permissions: { access: true, manage_members: false, configure_cloud: false } });
-    button('Gateways').click(); await settle();
-    button('Pairing permissions').click(); await settle();
+    await openGatewayAccess();
     expect(document.getElementById('gateway-pairing-code')).toBeTruthy();
     expect(perform).not.toHaveBeenCalled();
   });
@@ -71,11 +76,10 @@ describe('Gateway setup and own-service actions', () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const permissions = { access: true, manage_members: false, configure_cloud: true };
     const perform = await mount({ ...source, permissions, gateway_url: 'https://gateway.example/' });
-    button('Gateways').click(); await settle();
-    button('Pairing permissions').click(); await settle();
+    await openGatewayAccess();
     const cloud = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
-      .find(element => element.closest('label')?.textContent?.includes('Configure Cloud access')
-        || element.getAttribute('aria-label') === 'Configure Cloud access');
+      .find(element => element.closest('label')?.textContent?.includes('Manage Cloud publishing')
+        || element.getAttribute('aria-label') === 'Manage Cloud publishing');
     expect(cloud?.getAttribute('aria-checked') === 'true' || (cloud as HTMLInputElement)?.checked).toBe(true);
     input('gateway-name', 'Renamed Gateway');
     button('Save Gateway').click(); await settle();
