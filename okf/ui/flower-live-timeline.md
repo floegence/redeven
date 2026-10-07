@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower live current state
 description: One workspace stream, typed current views, and bounded browser caches.
 tags: [ui, flower, live, threads]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 quality_exception: Cross-domain Flower live-state contract spanning transport, cache ownership, current-view publication, lifecycle identity, routing, and reconnect recovery.
 ---
 # Summary
@@ -56,7 +56,7 @@ cadence and publish immediately. The final current is always a complete Floret
 view; Flower never accumulates reasoning text or restores the retired block
 delta protocol.
 
-Floret v7.1.4 publishes the exact TurnID and RunID on every ordered current
+Floret v7.25.2 publishes the exact TurnID and RunID on every ordered current
 item and interaction, including historical rows after restart. It also retains
 the exact active RunID and one process-local `RunProgress` phase. Flower rejects
 an incomplete or conflicting identity before detail enters `ThreadCache`; it
@@ -73,7 +73,7 @@ Activity still provide transcript and collapsed-summary content, but never
 decide the lifecycle phase. Redeven has no model-I/O stream, message-content
 phase inference, TurnID-as-RunID fallback, polling, or second progress state.
 
-Floret v7.1.4 publishes an approval interaction and its cleared active progress
+Floret v7.25.2 publishes an approval interaction and its cleared active progress
 in one transition. Active summaries without an unresolved interaction retain
 `run_progress`, so the live summary mapper never observes an invalid state while
 an approval is being installed.
@@ -133,13 +133,13 @@ or bottom status lane.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. One detail request may run per thread and selection cycle. Updates received during that request retain only the greatest target revision and start at most one follow-up request. A cache hit with no newer summary renders immediately and does not revalidate. A failed revision is not retried automatically in the same display cycle; without cached detail Flower leaves loading and shows an explicit retry, while an update failure with valid cached detail is non-blocking. There is no retry delay, exhausted state, foreground reload, initial-request map, or message-content completeness guess.
 
-Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v7.1.4. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
+Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v7.25.2. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
 
 Summary revision and runtime state only trigger detail loading. Product settings revisions and message content shape do not. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, or an active-turn admission failure proves that a turn may still be active; an in-flight Stop request changes that control to its localized pending state without creating another lifecycle fact.
 
 Runtime failures are classified once at the Redeven projection boundary before
 summary, detail, and typed current responses reach Flower. Published Floret
-v7.1.4 supplies the canonical terminal `Failure.Code`; Redeven maps that code
+v7.25.2 supplies the canonical terminal `Failure.Code`; Redeven maps that code
 once for summary, detail, and live current, then removes the upstream failure
 payload before serializing Flower data. Known provider, gateway, control,
 canonical-authority, and unknown-effect failures use stable codes and localized

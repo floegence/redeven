@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret Redeven adapter and projection
 description: Map authorized Redeven requests and Floret typed views without creating a second thread lifecycle.
 tags: [ai, floret, adapter, projection]
-timestamp: 2026-10-07T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 ---
 # Summary
@@ -21,7 +21,7 @@ thread lifecycle stream.
 
 Redeven keeps one typed adapter over the published Floret v7 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
 
-Published Floret v7.5.0 exposes existing `ThreadSummary.TitleGeneration` with
+Published Floret v7.25.2 exposes existing `ThreadSummary.TitleGeneration` with
 canonical title text and status. Redeven forwards the complete snapshot in HTTP
 and live summaries, including child details. No product store owns title state;
 no schema migration or title regeneration is required. The UI ordering contract
@@ -52,7 +52,7 @@ decorates a command response with viewer read state, projects a second detail,
 or starts a follow-up read.
 
 Flower explicitly requests `CancelModeGraceful` with `IncludeDescendants` through
-published Floret v7.23.0. Stop therefore includes active child threads, while
+published Floret v7.25.2. Stop therefore includes active child threads, while
 independent roots and queued inputs remain untouched. Each thread publishes its
 own stopping and terminal views. Floret records the exact
 ThreadID, TurnID, RunID, source, and request time before cancelling execution.
@@ -66,9 +66,9 @@ plus cancellation means stopping. Floret installs terminal lifecycle and
 canonical results atomically, including direct View and Send reads. Its schema
 11 migration preserves older records without inventing missing Stop provenance.
 
-Redeven resolves a complete `ToolSurface` at provider and tool-dispatch boundaries. Nil provider definitions inherit registry definitions; an explicit empty slice exposes none. Floret fixes model, reasoning and context policy for a Turn and keeps each provider checkpoint immutable. Published v7.18.0 lets Redeven refresh current permission instructions and local tools on every request. The detached `InitialProviderSurface` preserves unrelated hosted search definitions from the first checkpoint. Pending invocations retain their authorization snapshot. Ask User, retries and restart use current thread permission without rewriting history. Unrelated profile changes retain their new-Turn boundary.
+Redeven resolves a complete `ToolSurface` at provider and tool-dispatch boundaries. Nil provider definitions inherit registry definitions; an explicit empty slice exposes none. Floret fixes model, reasoning and context policy for a Turn and keeps each provider checkpoint immutable. Published v7.25.2 lets Redeven refresh current permission instructions and local tools on every request. The detached `InitialProviderSurface` preserves unrelated hosted search definitions from the first checkpoint. Pending invocations retain their authorization snapshot. Ask User, retries and restart use current thread permission without rewriting history. Unrelated profile changes retain their new-Turn boundary.
 
-Redeven consumes Floret v7.1.4's public ordered `ThreadView.Items`, exact
+Redeven consumes Floret v7.25.2's public ordered `ThreadView.Items`, exact
 item and interaction `TurnID` plus `RunID`, exact active `ThreadView.RunID`,
 process-local `ThreadView.RunProgress`, and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
@@ -99,14 +99,14 @@ interaction and its cleared active progress are published in one transition.
 Active summaries without an unresolved interaction retain `run_progress`, so
 Redeven never maps a transiently invalid combination while the provider waits.
 
-Canonical terminal failure classification comes from Floret v7.1.4
+Canonical terminal failure classification comes from Floret v7.25.2
 `ThreadView.Failure` and `ThreadSummary.Failure`. Redeven maps the typed code
 once for list, detail, live current, and command responses, then removes the
 upstream failure payload from the Flower wire view. There is no error-text or
 historical-field classifier. `effect_outcome_unknown` has one product code and
 explains that execution stopped to avoid a duplicate operation.
 
-Floret v7.1.4 treats an interaction control call as waiting only when validation
+Floret v7.25.2 treats an interaction control call as waiting only when validation
 succeeds and `ask_user` contains at least one complete question. A
 `control_error` is terminal for both new facts and historical
 `waiting + control_error` facts, cannot create pending input, and ignores a
@@ -125,7 +125,7 @@ Every public Activity item passes through one host projection before it reaches
 current view, timeline pagination, live stream, or historical replay. The
 projection removes host paths, working directories, pending handles, and
 nested private values while keeping renderer, operation, status, summary,
-stable IDs, and display names. Floret v7.1.4 `StructuredActivityPayload.Rows`
+stable IDs, and display names. Floret v7.25.2 `StructuredActivityPayload.Rows`
 is the only generic rich-detail contract: Redeven creates bounded, ordered,
 safe display rows before admission, and Flower expands only those rows, a
 meaningful summary, or an error. It never rebuilds detail from raw tool JSON.
@@ -147,7 +147,7 @@ database. Redeven never reads, copies, replaces, or compacts opaque Floret
 records itself.
 
 Redeven reports the `verifying` readiness phase immediately before the single
-`runtime.Open` call. Floret v7.1.4 atomically converges the exact legacy
+`runtime.Open` call. Floret v7.25.2 atomically converges the exact legacy
 tool-result Raw representation produced before UTF-8 normalization and maps
 all remaining session-tree authority failures to public
 `runtime.ErrAuthorityCorrupt`. Redeven classifies only that public error; it

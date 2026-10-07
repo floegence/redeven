@@ -3,7 +3,7 @@ type: AI Configuration Contract
 title: Model directory and selection
 description: Maintain an offline Agent catalog, model-specific capabilities, and user selection preferences without duplicate inventories.
 tags: [ai, models, providers, settings]
-timestamp: 2026-10-05T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 
 # Summary
@@ -54,7 +54,7 @@ Include publicly callable Preview and Experimental models when the adapter suppo
 
 # Boundaries
 
-Gemini uses the supported OpenAI-compatible endpoint with model-specific effort or budget controls. Its tool thought signatures stay in the existing opaque provider state, bound to exact tool identity and arguments, and are pruned with projected history. DeepSeek uses published Floret v7.20.0, including current Flash/alias capabilities and prepared-image support, as described in [DeepSeek Responses](deepseek-responses.md). No public Floret catalog API, host credential contract, or domain schema is added by this change.
+Gemini uses the supported OpenAI-compatible endpoint with model-specific effort or budget controls. Its tool thought signatures stay in the existing opaque provider state, bound to exact tool identity and arguments, and are pruned with projected history. DeepSeek uses published Floret v7.25.2, including current Flash/alias capabilities and prepared-image support, as described in [DeepSeek Responses](deepseek-responses.md). No public Floret catalog API, host credential contract, or domain schema is added by this change.
 
 # Evidence
 

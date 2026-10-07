@@ -94,7 +94,10 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Whole-window status surfaces](ui/window-status-surfaces.md) - Present connection, access and standalone Desktop status while keeping glass out of movable content.
 - [Env App page asset recovery](ui/page-asset-recovery.md) - Detect frontend updates after reconnect and recover failed page modules without automatically discarding unsaved work.
 - [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.
+- [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md) - Bind authenticated product sessions, source policy, and product surfaces to released platform contracts.
 - [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.
+- [Plugin package and runtime lifecycle](architecture/redevplugin-package-lifecycle.md) - Qualify released package sources, installation, runtime readiness, and cache ownership.
+- [Plugin surface recovery and permissions](architecture/redevplugin-surface-recovery.md) - Observe plugin inventory, installation, permissions, and reconnect recovery through one client scope.
 - [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.
 - [Native container operation observation](architecture/containers-operation-observation.md) - Keep endpoint-bound native mutations locked until authoritative reconciliation proves a terminal outcome.
 - [Native container resources](architecture/container-resources-capability.md) - Manage Docker and Podman through one native engine, operation, permission, and product boundary.
@@ -253,6 +256,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
 - [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md) - Discover exact thinking controls and preserve selections, streaming output, and provider history.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
+- [Model provider surface and history](ai/model-provider-surface-and-history.md) - Keep provider-visible history, tool surfaces, and render lineage under one Floret owner.
+- [Model context usage and compaction](ai/model-context-usage-and-compaction.md) - Account usage, context pressure, compaction, and capacity failures through typed runtime facts.
 - [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md) - Verify the selected installed model's real compaction, token accounting, live context, and restart recovery in isolated state.
 - [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md) - Exercise real selected-model tasks, interruption, queue controls, approvals, restart, checkpoint retry, and child-agent handoffs.
 - [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport and enforce documented web tool limits.

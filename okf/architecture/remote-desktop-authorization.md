@@ -3,12 +3,12 @@ type: Runtime Contract
 title: Persistent remote desktop sharing approval
 description: Restore approved desktop sharing without conflating saved OS authorization, active sessions, or Runtime startup.
 tags: [desktop, runtime, authorization, wayland]
-timestamp: 2026-10-03T10:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
 Redeven owns the host's sharing preference and authenticated reset operation;
-published `floe-native-apps` v0.22.9 owns OS authorization and private recovery
+published `floe-native-apps` v0.22.19 owns OS authorization and private recovery
 credentials. With the Runtime running in a logged-in graphical desktop, sharing
 defaults to preserving first approval. Later connections attempt recovery before
 requesting consent again. A saved credential is a recovery opportunity, not proof
@@ -100,4 +100,4 @@ generations cannot transfer authority to it.
 - `internal/remotedesktop/authorization.go` and `internal/remotedesktop/authorization_test.go`: private native reset, cancellation and viewer exclusion.
 - `internal/remotedesktop/manager_test.go`: server preference wins over viewer input.
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.test.tsx`: truthful saved-state guidance and explicit reset confirmation.
-- Upstream v0.22.9 `host_desktop_portal.py` and `host_desktop_portal_test.py`: private credential transaction, request lifecycle and failure tests.
+- Current published host-desktop portal implementation and `host_desktop_portal_test.py`: private credential transaction, request lifecycle and failure tests.

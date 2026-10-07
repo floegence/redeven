@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower reasoning selection ownership
 description: Preserve explicit reasoning choices across cold loads, shared drafts, submission, and restart.
 tags: [ai, flower, reasoning, composer]
-timestamp: 2026-10-04T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -50,7 +50,7 @@ The shared Desktop and Env App control distinguishes these model contracts:
 | No reasoning | No reasoning control |
 
 On is a persisted choice distinct from Default and from effort names. Published
-Floret v7.22.0 advertises it only for verified boolean transports. Named effort
+Floret v7.25.2 advertises it only for verified boolean transports. Named effort
 and token-budget controls may coexist only when the provider permits it; Qwen's
 `qwen_reasoning_effort` clears the budget when a specific effort is chosen and
 shows the budget input only under Default. Off clears any budget.

@@ -19,8 +19,8 @@ applications, physical GPUs or every desktop version.
 
 ## Release identity and evidence layers
 
-Redeven consumes published `github.com/floegence/floe-native-apps` v0.21.0 at
-`a7f3b76a2a9dd64ba13b303c24d7bed645b33441`, with module checksum
+The retained qualification below consumed published `github.com/floegence/floe-native-apps`
+v0.21.0 at `a7f3b76a2a9dd64ba13b303c24d7bed645b33441`, with module checksum
 `h1:E1Wgl8aRB/h53ejCCDkUwlrj3uC2zx+SGcAODZZ5nWg=`. Go proxy, checksum database
 and release ZIP readback match. Formal tests set `GOWORK=off` and use that module.
 The upstream task branch/worktree is removed before product integration.
@@ -59,7 +59,7 @@ AppArmor/SELinux nor browser sandboxing is disabled.
 
 ## Product acceptance
 
-The v0.21.0 integration repeats production-viewer native input on Chromium,
+The retained v0.21.0 qualification repeats production-viewer native input on Chromium,
 Firefox and WebKit and actual Chrome/Firefox stream acceptance on udesk26.
 The [performance guide](host-application-performance.md) owns picture modes,
 bandwidth, latency, bounded decode work and explicit claim limits. New browser

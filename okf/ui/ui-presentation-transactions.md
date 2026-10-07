@@ -3,7 +3,7 @@ type: UI Contract
 title: UI presentation transactions
 description: Heavy selection changes present visual intent first, commit content after paint, and defer layout effects until content presentation.
 tags: [ui, interaction, performance, keep-alive]
-timestamp: 2026-09-21T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -23,7 +23,7 @@ Resource collections follow the same stable-presentation rule. A first Codespace
 
 ## Activity and retained content
 
-Activity uses the Shell UI-first mode and after-paint `ActivityAppsMain` activation. Activity and Workbench are also two kept-alive views with after-paint activation. Floe Webapp 0.60.2 exposes committed `visible()` separately from deferred `active()`, with visibility constrained by ancestor providers. Hidden views remain mounted, inert, and absent from accessibility navigation.
+Activity uses the Shell UI-first mode and after-paint `ActivityAppsMain` activation. Activity and Workbench are also two kept-alive views with after-paint activation. Floe Webapp 0.84.0 exposes committed `visible()` separately from deferred `active()`, with visibility constrained by ancestor providers. Hidden views remain mounted, inert, and absent from accessibility navigation.
 
 A retained terminal restores its latest atomic canvas during the visibility commit, without rebuilding a parser or replaying raw output. This minimal paint work runs after navigation intent and does not grant focus, input, or controller ownership. Activation effects remain deferred until the content paint opportunity.
 
@@ -55,5 +55,5 @@ Keep-alive does not mean eagerly loading every feature. Initial resources still 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Hidden navigation preserves toolbar layout, virtual rows, and exact scroll; returning after a resize updates the layout.
 - `redeven:internal/envapp/ui_src/src/ui/primitives/ActivityPageLoading.browser.test.tsx` - Published Activity loading stays local and a late module cannot replace the selected warm page.
 - `redeven:internal/envapp/ui_src/src/ui/debugConsole/createUIPerformanceTracker.test.ts:31` - Tests cover all transaction phases and percentile aggregation.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:1575` - Codespaces separates delayed initial collection loading from stable background refresh rendering.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx` - Codespaces separates delayed initial collection loading from stable background refresh rendering.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:934` - Web Services keeps resolved cards or its empty state mounted while a replacement snapshot loads.

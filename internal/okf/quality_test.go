@@ -1,6 +1,10 @@
 package okf
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestValidateBundleQualityModes(t *testing.T) {
 	t.Parallel()
@@ -78,5 +82,23 @@ func TestParseConceptBodyExtractsSectionsAndEvidence(t *testing.T) {
 	}
 	if len(parsed.Evidence) != 1 || parsed.Evidence[0].Source != "redeven:internal/okf/search.go" || parsed.Evidence[0].Line != 1 {
 		t.Fatalf("evidence=%#v", parsed.Evidence)
+	}
+}
+
+func TestValidateBundleQualityRejectsEvidenceLineOutsideSource(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "source.go")
+	if err := os.WriteFile(sourcePath, []byte("package source\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bundle := Bundle{Concepts: []Concept{{
+		Path:     "ai/example.md",
+		Evidence: []EvidenceRef{{Source: "redeven:source.go", Line: 3, Description: "source evidence"}},
+	}}}
+	report := ValidateBundleQuality(bundle, root, QualityReportMode)
+	issue, ok := findQualityIssue(report, "OKF018", "ai/example.md")
+	if !ok || issue.Level != "error" {
+		t.Fatalf("report=%#v", report)
 	}
 }

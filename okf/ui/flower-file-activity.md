@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower file activity presentation
 description: Typed file mutation statistics, diff disclosure, and action ownership.
 tags: [ai, flower, files, activity, presentation]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -16,7 +16,7 @@ the shared disclosure, without inventing a diff panel.
 
 # Contract
 
-Published Floret v7.1.4 owns the product-neutral file Activity payload. A read
+Published Floret v7.25.2 owns the product-neutral file Activity payload. A read
 carries bounded content and line metadata. A single-file mutation carries its
 display name, change type, added and deleted line counts, unified diff,
 unavailable reason, and truncation state. A patch carries aggregate counts and

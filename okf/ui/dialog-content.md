@@ -3,7 +3,7 @@ type: UI Contract
 title: Dialog content placement
 description: Keep dialog titles distinct from visible body guidance across Env App, Desktop, drawers, and window-local confirmations.
 tags: [ui, dialogs, accessibility, desktop]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -16,7 +16,7 @@ restore a header subtitle or hide the text.
 
 # Contract
 
-Floe Webapp 0.64.0 removes the ambiguous `description` parameter from `Dialog` and
+Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and
 `ConfirmDialog`. Plain-text guidance uses `bodyDescription`, which renders once
 at the start of the body and supplies the dialog's `aria-describedby` association.
 Rich content uses children in the content viewport. Custom headers and title JSX

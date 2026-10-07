@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Computer use safety pauses and user control
 description: Keep sensitive browser input outside model history and resume canonical tool-requested input only after fresh target observation.
 tags: [ai, computer-use, safety, takeover]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -60,7 +60,7 @@ successfully. Tool completion must not imply that the requested navigation ran.
 
 ## Canonical pause and return
 
-Published Floret v7.12.0 `tools.Result.InputRequired` pauses the provider after the
+Published Floret v7.25.2 `tools.Result.InputRequired` pauses the provider after the
 completed tool batch. Redeven maps a takeover decision into a non-secret select
 question. It preserves whether navigation already happened; a post-navigation
 pause must not claim the action was unexecuted. Floret persists the result and

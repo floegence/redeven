@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret thread runtime integration
 description: Typed Floret v7 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-10-07T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 quality_exception: Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.
 ---
 # Summary
@@ -14,7 +14,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Redeven consumes published Floret v7.18.4, preserving graceful-stop ownership
+Redeven consumes published Floret v7.25.2, preserving graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their
@@ -22,7 +22,7 @@ existing classification. The dependency gate requires the released dynamic tool 
 and preservation of its initial provider surface; live permission ownership is
 defined in [Tool permission runtime](tool-permission-runtime.md).
 
-Published Floret v7.16.2 retains every ordinary/control call in a mixed model
+Published Floret v7.25.2 retains every ordinary/control call in a mixed model
 response and pairs each with its result in provider order. Valid ordinary tools
 execute once; mixed controls receive bounded correction to submit separately
 after the ordinary results. Only a later valid independent control opens an
@@ -35,7 +35,7 @@ Redeven derives continuation support from the restored request protocol, not
 from newly edited settings; a pending native-search Turn keeps its frozen
 Responses transport across restart. No second capability cache is retained.
 
-Published Floret v7.14.0 applies sanitized tool Activity inside the existing
+Published Floret v7.25.2 applies sanitized tool Activity inside the existing
 thread actor using exact thread, turn, run, and tool-call identity. Validated
 calls publish description and command while pending; dispatch alone marks
 running, and results settle without waiting for output or the full turn.
@@ -108,7 +108,7 @@ interaction, including one atomic Answers batch for Reject All. `Cancel` is
 idempotent for every known thread and atomically clears pending interactions,
 closes unfinished tool work, and writes one terminal aborted turn before
 returning. Late provider, tool, or save-point work cannot reactivate a terminal
-turn. Published Floret v7.23.0 retries a failed turn from its latest existing
+turn. Published Floret v7.25.2 retries a failed turn from its latest existing
 save point so confirmed tool results remain in provider context across repeated
 failures and restart. Thread-level queue facts may interleave a pending question
 without corrupting its canonical turn. `Retry` preserves logical request lineage without appending another user
@@ -166,7 +166,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v7.1.4 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v7.25.2 typed runtime without local replacement.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.

@@ -3,7 +3,7 @@ type: AI Persistence Contract
 title: Flower thread fork coordination
 description: Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.
 tags: [ai, threads, persistence, floret]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -33,9 +33,9 @@ keeps the destination available and retries only detail, never the fork command.
 Untitled persisted threads use a localized display label plus a short ThreadID;
 that label is presentation only and never replaces the canonical title. Existing
 forks are not deleted or rewritten. New forks receive canonical fallback titles
-from published Floret v7.3.4 even when a caller omits an explicit product title.
+from published Floret v7.25.2 even when a caller omits an explicit product title.
 
-Published Floret v7.3.4 also owns canonical tool-call persistence across hosted
+Published Floret v7.25.2 also owns canonical tool-call persistence across hosted
 search boundaries. Engine execution and live projection use the same complete
 call message and assistant fragment boundaries. Redeven consumes this upstream
 correction without cleaning history, synthesizing results, or weakening tool
