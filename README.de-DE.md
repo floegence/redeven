@@ -149,7 +149,7 @@ Redeven stellt Funktionen in den Vordergrund. Die Laufzeit bleibt dennoch die Ve
 
 ## Dokumentation
 
-Redeven pflegt sein Repository-Wissen in [OKF v0.1](okf/index.md). Der OKF-Korpus wird aus dem aktuellen Verhalten des Quellcodes erzeugt und für `okf.search` in die Laufzeit eingebettet.
+Redeven pflegt sein Repository-Wissen in [OKF v0.2](okf/index.md). Der OKF-Korpus wird aus dem aktuellen Verhalten des Quellcodes erzeugt und für `okf.search` in die Laufzeit eingebettet.
 
 Die maschinenlesbare RCPP Provider-Integrationsoberfläche befindet sich in [spec/openapi/rcpp-v3.yaml](spec/openapi/rcpp-v3.yaml). Außerhalb von OKF ist gepflegtes Markdown bewusst auf `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, die maßgebliche `README.md` und die in `assets/readme/locales.json` deklarierten unterstützten Übersetzungen `README.<locale>.md` beschränkt.
 

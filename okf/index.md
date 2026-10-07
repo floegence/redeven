@@ -84,9 +84,13 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.
 - [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.
 - [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.
+- [Runtime artifact spend and control pool](architecture/runtime-artifact-spend-and-control-pool.md) - Burn opaque control artifacts once and recover bounded pool delivery.
+- [Runtime terminal lifecycle](architecture/runtime-terminal-lifecycle.md) - Delegate PTY, semantic history, and live terminal ownership to Floeterm.
 - [Product RPC request encoding](architecture/product-rpc-request-encoding.md) - Construct JSON requests that preserve optional filesystem operation semantics before transport dispatch.
 - [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md) - Bound revisioned workspace capture, transport resources, mutation coordination, and linked-worktree removal.
 - [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.
+- [Env App terminal and surface composition](architecture/env-app-terminal-and-surface-composition.md) - Compose semantic terminal and retained Activity/Workbench surfaces.
+- [Env App connection and recovery](architecture/env-app-connection-and-recovery.md) - Bind published artifact sources and structured reconnect recovery.
 - [Whole-window status surfaces](ui/window-status-surfaces.md) - Present connection, access and standalone Desktop status while keeping glass out of movable content.
 - [Env App page asset recovery](ui/page-asset-recovery.md) - Detect frontend updates after reconnect and recover failed page modules without automatically discarding unsaved work.
 - [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.
@@ -253,6 +257,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md) - Exercise real selected-model tasks, interruption, queue controls, approvals, restart, checkpoint retry, and child-agent handoffs.
 - [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport and enforce documented web tool limits.
 - [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.
+- [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md) - Authorize, sanitize, and project Floret views without a second lifecycle.
 - [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, bounded status previews, canonical membership, and complete handoffs.
 - [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.
 - [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.
@@ -270,5 +275,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## Release
 
 - [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.
+- [ReDevPlugin release artifact gate](release/redevplugin-release-gates.md) - Verify published runtime evidence, native packaging, and closed release inventory.
+- [Plugin integration gate](release/plugin-integration-gates.md) - Qualify released plugin Host, market, renderer, and Desktop integration.
 - [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.
 - [Automated service-template catalog updates](release/service-template-updates.md) - Adopt checksum-verified catalog tags through the final main gate without publishing product packages or upgrading instances.

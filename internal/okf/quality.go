@@ -96,7 +96,12 @@ func ValidateBundleQuality(bundle Bundle, sourceRoot string, mode QualityMode) Q
 		if bodyLength > 12000 && strings.TrimSpace(qualityException) == "" {
 			report.add(layoutLevel, "OKF010", path, fmt.Sprintf("contract and boundary body length is %d characters; split or document an exception", bodyLength))
 		}
-		if bodyLength > 20000 && strings.TrimSpace(qualityException) == "" {
+		// A quality exception can explain a concept that exceeds the normal
+		// 12,000-character budget, but it cannot make an over-20,000-character
+		// concept acceptable. The repository authoring contract treats that
+		// size as an absolute split boundary so the quality gate must continue
+		// reporting it even when an exception is present.
+		if bodyLength > 20000 {
 			report.add(layoutLevel, "OKF011", path, fmt.Sprintf("normal concept body length is %d characters; maximum is 20000", bodyLength))
 		}
 		if len(concept.Evidence) > 30 {

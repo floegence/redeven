@@ -26,6 +26,43 @@ func TestValidateBundleQualityModes(t *testing.T) {
 	}
 }
 
+func TestValidateBundleQualityRejectsOversizedConceptDespiteException(t *testing.T) {
+	t.Parallel()
+	bundle := Bundle{
+		Concepts: []Concept{{
+			Path: "architecture/oversized.md",
+			Frontmatter: map[string]any{
+				"quality_exception": "Cross-domain contract retained temporarily.",
+			},
+			Sections: []ConceptSection{{CharCount: 20001}},
+		}},
+	}
+
+	report := ValidateBundleQuality(bundle, t.TempDir(), QualityReportMode)
+	if !hasQualityIssue(report, "OKF011", "architecture/oversized.md") {
+		t.Fatalf("report mode did not flag absolute size boundary: %#v", report)
+	}
+	strict := ValidateBundleQuality(bundle, t.TempDir(), QualityStrict)
+	issue, ok := findQualityIssue(strict, "OKF011", "architecture/oversized.md")
+	if !ok || issue.Level != "error" {
+		t.Fatalf("strict mode did not reject absolute size boundary: %#v", strict)
+	}
+}
+
+func hasQualityIssue(report QualityReport, code, path string) bool {
+	_, ok := findQualityIssue(report, code, path)
+	return ok
+}
+
+func findQualityIssue(report QualityReport, code, path string) (QualityIssue, bool) {
+	for _, issue := range report.Issues {
+		if issue.Code == code && issue.Path == path {
+			return issue, true
+		}
+	}
+	return QualityIssue{}, false
+}
+
 func TestParseConceptBodyExtractsSectionsAndEvidence(t *testing.T) {
 	t.Parallel()
 	parsed := parseConceptBody("# Summary\n\n" +
