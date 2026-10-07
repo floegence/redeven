@@ -150,6 +150,115 @@ func desktopTransportFixture(t *testing.T) (*Manager, *linuxApplication, Session
 	return m, app, view, &count
 }
 
+func TestDesktopCloseWaitsForDelayedTopLevelWindow(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	endpoint := nativeapps.DesktopEndpoint{SocketPath: filepath.Join(dir, "control.sock"), Instance: "delayed-window", Token: strings.Repeat("a", 64)}
+	listener, err := net.Listen("unix", endpoint.SocketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(endpoint.SocketPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	var statusCount atomic.Uint64
+	var closeCount atomic.Uint64
+	var workers sync.WaitGroup
+	read := func(conn net.Conn, value any) error {
+		header := make([]byte, 5)
+		if _, err := io.ReadFull(conn, header); err != nil {
+			return err
+		}
+		size := binary.BigEndian.Uint32(header[1:])
+		if header[0] != 1 || size > 128*1024 {
+			return nativeapps.ErrDesktopProtocol
+		}
+		body := make([]byte, size)
+		if _, err := io.ReadFull(conn, body); err != nil {
+			return err
+		}
+		return json.Unmarshal(body, value)
+	}
+	write := func(conn net.Conn, value any) error {
+		body, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		header := make([]byte, 5)
+		header[0] = 1
+		binary.BigEndian.PutUint32(header[1:], uint32(len(body)))
+		_, err = conn.Write(append(header, body...))
+		return err
+	}
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				defer conn.Close()
+				var auth struct {
+					Version  int    `json:"version"`
+					Instance string `json:"instance"`
+					Token    string `json:"token"`
+				}
+				if read(conn, &auth) != nil || auth.Version != 1 || auth.Instance != endpoint.Instance || auth.Token != endpoint.Token {
+					return
+				}
+				initial := nativeapps.DesktopState{State: "waiting"}
+				if write(conn, nativeapps.DesktopEvent{Event: "attached", Version: 1, Connection: 1, State: &initial}) != nil {
+					return
+				}
+				for {
+					var request struct {
+						ID     uint64 `json:"id"`
+						Method string `json:"method"`
+					}
+					if read(conn, &request) != nil {
+						return
+					}
+					state := nativeapps.DesktopState{State: "waiting"}
+					if request.Method == "status" && statusCount.Add(1) >= 2 {
+						state.Windows = []nativeapps.DesktopWindow{{Window: 42}}
+					}
+					if request.Method == "close_window" {
+						closeCount.Add(1)
+					}
+					result, _ := json.Marshal(state)
+					if write(conn, nativeapps.DesktopEvent{ID: request.ID, Result: result}) != nil {
+						return
+					}
+				}
+			}()
+		}
+	}()
+	t.Cleanup(func() {
+		listener.Close()
+		workers.Wait()
+	})
+
+	m := macFixture(t)
+	app := &linuxApplication{record: linuxApplicationRecord{ID: strings.Repeat("b", 64), Backend: "wayland", Application: Application{ID: "delayed.desktop"}, Endpoint: &endpoint}, ready: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := m.controlDesktopApplication(ctx, app, false); err != nil {
+		t.Fatal(err)
+	}
+	if statusCount.Load() < 2 {
+		t.Fatalf("status probes = %d, want a retry after an empty window snapshot", statusCount.Load())
+	}
+	if closeCount.Load() != 1 {
+		t.Fatalf("close requests = %d, want one top-level close", closeCount.Load())
+	}
+}
+
 func desktopTestViewer(t *testing.T, m *Manager, view Session) (*websocket.Conn, nativeapps.DesktopEvent) {
 	t.Helper()
 	dialer := websocket.Dialer{Subprotocols: []string{"redeven-host-application-v1", m.Password(view.ID)}, HandshakeTimeout: 2 * time.Second}
