@@ -3,14 +3,14 @@ import { createEnvCachedResource } from '../services/envResourceCache';
 import { hostApplicationSnapshot } from '../services/envResourceSnapshots';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useViewActivation, useResizeObserver } from '@floegence/floe-webapp-core';
-import { Check, ChevronRight, Filter, HelpIcon, MonitorPointer, MoreHorizontal, ExternalLink, Plus, Refresh, Search, Settings, Stop } from '@floegence/floe-webapp-core/icons';
+import { Check, ChevronRight, Filter, HelpIcon, MonitorPointer, MoreHorizontal, ExternalLink, Plus, Refresh, Search, Settings } from '@floegence/floe-webapp-core/icons';
 import { hostApplicationPresentation, hostApplicationLaunchFailureCopy } from '../services/hostApplicationPresentation';
 import { renderHostApplicationLaunchDocument } from '../services/hostApplicationLaunchDocument';
 import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, getHostApplicationTransferPlan, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, terminateHostApplication, detachHostApplication, type RunningHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
+import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, getHostApplicationTransferPlan, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, terminateHostApplication, type RunningHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
 import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress, hostApplicationDesktopDetail, type HostApplicationDesktopProgress } from './HostApplicationSetupPanel';
 import type { HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 import { updateHostApplicationPreparationDocument, type HostApplicationPreparationView } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
@@ -102,9 +102,6 @@ export function EnvHostApplicationsPage() {
   let relaying = false;
   let relaySourceReceiving = false;
   let completingSetup = false;
-  const [ending, setEnding] = createSignal<HostApplicationSession | null>(null);
-  const [stopBusy, setStopBusy] = createSignal(false);
-  const [stopError, setStopError] = createSignal('');
   const [quitting, setQuitting] = createSignal<{ app: HostApplication; instances: string[]; force?: boolean } | null>(null);
   const [quitBusy, setQuitBusy] = createSignal(false);
   const [quitError, setQuitError] = createSignal('');
@@ -649,25 +646,6 @@ export function EnvHostApplicationsPage() {
     } finally { if (!disposed) setBusy(v => ({ ...v, [app.id]: false })); }
   };
 
-  const stop = async () => {
-    const target = ending(); if (!target || stopBusy()) return;
-    const operationResource = applicationResource.identity();
-    const operationCurrent = applicationResource.captureAuthority();
-    setStopBusy(true);
-    setStopError('');
-    try {
-      if (applicationResource.snapshot().stale || applicationResource.snapshot().refreshing) {
-        await refresh(true);
-        if (disposed || !operationCurrent() || applicationResource.snapshot().stale) return;
-        if (!catalog()?.sessions.some(session => session.id === target.id && ['starting', 'running'].includes(session.state))) { setEnding(null); return; }
-      }
-      await detachHostApplication(target.id);
-      invalidateCatalog(operationResource); setEnding(null); setStopError(''); await refresh(true);
-    }
-    catch (e) { if (!disposed) setStopError(translateError(e, 'hostApplications.operationRetry')); }
-    finally { setStopBusy(false); }
-  };
-
   const add = async () => {
     if ((!isMac() && !name().trim()) || !executable().trim() || addBusy()) return;
     setAddBusy(true); setAddError('');
@@ -726,9 +704,8 @@ export function EnvHostApplicationsPage() {
               <div class="host-apps-session-grid host-apps-process-grid"><For each={runningApplications().map(item => item.app.id)}>{appID => { const item = () => processesByID().get(appID)!; return  <div class={`host-app-session host-app-process ${redevenSurfaceRoleClass('panelInteractive')}`}>
                 <div class="host-app-process-row">
                   <button class="host-app-session-open" aria-label={`${i18n.t('hostApplications.resume')} · ${item().app.name}`} onClick={() => void open(item().app)} disabled={!canLaunch() || busy()[item().app.id]}>
-                    <ApplicationIcon app={item().app} /><span class="min-w-0"><strong class="block truncate">{item().app.name}</strong><span class="host-app-status"><span class="host-app-status-dot" />{i18n.t(runningByApp().has(item().app.id) ? 'hostApplications.macSharing' : 'hostApplications.macAppRunning')}</span></span>
+                    <ApplicationIcon app={item().app} /><span class="min-w-0"><strong class="block truncate">{item().app.name}</strong><span class="host-app-status"><span class="host-app-status-dot" />{i18n.t('hostApplications.macAppRunning')}</span></span>
                   </button>
-                  <Show when={runningByApp().get(item().app.id)}>{session => <button class="host-app-stop" onClick={() => { if (stopBusy()) return; setStopError(''); setEnding(session()); }} disabled={!canLaunch() || operationBusy(item().app.id) || stopBusy()} title={i18n.t('hostApplications.stopSharing')} aria-label={`${i18n.t('hostApplications.stopSharing')} · ${item().app.name}`}><Stop class="w-3.5 h-3.5" /></button>}</Show>
                   <button class="host-app-quit" aria-label={`${i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')} · ${item().app.name}`} disabled={!canLaunch() || operationBusy(item().app.id) || !(isMac() ? catalog()?.availability.native_ready : ready())} onClick={() => { setQuitError(''); setQuitting({ app: item().app, instances: [...item().instances] }); }}>{i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')}</button>
                 </div>
                 <Show when={quitNoticeKey(item())}>{notice => <p class="host-app-quit-notice" role="status">{i18n.t(notice())}</p>}</Show>
@@ -774,13 +751,11 @@ export function EnvHostApplicationsPage() {
                 </button>
                 <div class="host-app-mobile-actions">
                   <Show when={runningByApp().has(appID) || processesByID().has(appID)}>
-                    <span class="host-app-status">{i18n.t(starting(appID) ? 'hostApplications.starting' : runningByApp().has(appID) ? 'hostApplications.macSharing' : 'hostApplications.macAppRunning')}</span>
+                    <span class="host-app-status">{i18n.t(starting(appID) ? 'hostApplications.starting' : 'hostApplications.macAppRunning')}</span>
                     <Dropdown align="end" triggerAriaLabel={`${i18n.t('hostApplications.macControls')} · ${app().name}`} triggerClass="host-apps-filter-button" trigger={<MoreHorizontal class="h-4 w-4" />}
                       items={[
-                        ...(runningByApp().has(appID) ? [{ id: 'stop', label: i18n.t('hostApplications.stopSharing'), disabled: !canLaunch() || operationBusy(appID) }] : []),
                         ...(processesByID().has(appID) ? [{ id: 'quit', label: i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows'), disabled: !canLaunch() || operationBusy(appID) || (isMac() && !catalog()?.availability.native_ready) }] : []),
                       ]} onSelect={id => {
-                        if (id === 'stop' && !stopBusy()) { setStopError(''); setEnding(runningByApp().get(appID)!); }
                         if (id === 'quit') { setQuitError(''); setQuitting({ app: app(), instances: [...processesByID().get(appID)!.instances] }); }
                       }} />
                   </Show>
@@ -824,9 +799,6 @@ export function EnvHostApplicationsPage() {
       <p class="host-app-quit-description">{i18n.t(quitting()?.force ? 'hostApplications.forceQuitDescription' : isMac() ? 'hostApplications.macQuitDescription' : 'hostApplications.sessionQuitDescription')}</p>
       <Show when={quitError()}><p role="alert" class="host-app-error">{quitError()}</p></Show>
     </Dialog>
-    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) { setStopError(''); setEnding(null); } }} title={i18n.t('hostApplications.stopSharing')} bodyDescription={i18n.t('hostApplications.stopSharingDescription')} confirmText={i18n.t('hostApplications.stopSharing')} cancelText={i18n.t('hostApplications.cancel')} variant="default" loading={stopBusy()} onConfirm={() => void stop()}>
-      <Show when={stopError()}><p role="alert" class="host-app-error">{stopError()}</p></Show>
-    </ConfirmDialog>
     <Dialog class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} open={addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || (!isMac() && !name().trim()) || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
       <div class="space-y-4"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t(isMac() ? 'hostApplications.macAddDescription' : 'hostApplications.addDescription')}</p>
         <Show when={!isMac()}><label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.name')}</span><Input value={name()} onInput={e => setName(e.currentTarget.value)} maxLength={120} /></label></Show>

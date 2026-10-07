@@ -85,8 +85,9 @@ Closing the current application window uses its normal backend close request.
 Linux labels the confirmed operation Close all windows and asks top-level windows to close normally;
 application save dialogs remain operable and cancellation keeps the viewer open.
 It never sends server shutdown or force-kills the application. macOS quit retains
-its existing application-wide confirmation. The native outer close button still
-closes only the viewer and preserves the session. These distinct actions must not
+its existing application-wide confirmation. The native outer close button closes
+the viewer and releases only its client lease; the application process and other
+client viewers remain available. These distinct actions must not
 be collapsed into one destructive command.
 
 # Boundaries

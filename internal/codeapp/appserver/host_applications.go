@@ -8,7 +8,9 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	nativeapps "github.com/floegence/floe-native-apps"
 	"github.com/floegence/redeven/internal/hostapps"
@@ -76,16 +78,49 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 			writeHostAppError(w, hostapps.ErrNotFound)
 			return true
 		}
-		if err := g.hostApps.Detach(r.Context(), meta.UserPublicID, id); err != nil {
+		var err error
+		if rawGrace := r.URL.Query().Get("grace_ms"); rawGrace != "" {
+			graceMS, parseErr := strconv.Atoi(rawGrace)
+			if parseErr != nil || graceMS < 0 || graceMS > 60000 {
+				writeHostAppError(w, hostapps.ErrInvalid)
+				return true
+			}
+			if releaser, ok := g.hostApps.(hostapps.LeaseRelease); ok {
+				err = releaser.DetachWithGrace(r.Context(), meta.UserPublicID, id, time.Duration(graceMS)*time.Millisecond)
+			} else {
+				err = g.hostApps.Detach(r.Context(), meta.UserPublicID, id)
+			}
+		} else {
+			err = g.hostApps.Detach(r.Context(), meta.UserPublicID, id)
+		}
+		if err != nil {
 			writeHostAppError(w, err)
 			return true
 		}
 		g.appendAudit(meta, "host_application_detach", "success", map[string]any{"session_id": id}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true})
 	case r.Method == http.MethodGet && r.URL.Path == hostApplicationsAPI+"/sessions":
+		clientID := r.URL.Query().Get("client_id")
+		if clientID != "" {
+			if filtered, ok := g.hostApps.(hostapps.ClientSessions); ok {
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: filtered.SessionsForClient(meta.UserPublicID, clientID)})
+				break
+			}
+		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.hostApps.Sessions(meta.UserPublicID)})
 	case r.Method == http.MethodGet && r.URL.Path == hostApplicationsAPI:
-		catalog, err := g.hostApps.Catalog(r.Context(), meta.UserPublicID, r.URL.Query().Get("locale"))
+		locale, clientID := r.URL.Query().Get("locale"), r.URL.Query().Get("client_id")
+		var catalog hostapps.Catalog
+		var err error
+		if clientID != "" {
+			if filtered, ok := g.hostApps.(hostapps.ClientSessions); ok {
+				catalog, err = filtered.CatalogForClient(r.Context(), meta.UserPublicID, locale, clientID)
+			} else {
+				catalog, err = g.hostApps.Catalog(r.Context(), meta.UserPublicID, locale)
+			}
+		} else {
+			catalog, err = g.hostApps.Catalog(r.Context(), meta.UserPublicID, locale)
+		}
 		if err != nil {
 			writeHostAppError(w, err)
 		} else {
@@ -132,19 +167,6 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 		}
 		g.appendAudit(meta, "host_application_add", "success", map[string]any{"name": req.Name}, nil)
 		writeJSON(w, http.StatusCreated, apiResp{OK: true})
-	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, hostApplicationsAPI+"/sessions/"):
-		id := strings.TrimPrefix(r.URL.Path, hostApplicationsAPI+"/sessions/")
-		if strings.Contains(id, "/") {
-			writeHostAppError(w, hostapps.ErrNotFound)
-			return true
-		}
-		err := g.hostApps.Stop(r.Context(), meta.UserPublicID, id)
-		if err != nil {
-			writeHostAppError(w, err)
-			return true
-		}
-		g.appendAudit(meta, "host_application_stop", "success", map[string]any{"session_id": id}, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true})
 	default:
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, ErrorCode: "HOST_APP_NOT_FOUND", Error: "not found"})
 	}
@@ -236,7 +258,7 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, r *http.Request
 	_, _ = rand.Read(random[:])
 	nonce := base64.RawStdEncoding.EncodeToString(random[:])
 	forwardID, _ := portForwardIDFromRequest(r)
-	config, _ := json.Marshal(map[string]any{"base": base, "transport": graphicalWindowTransport(r, forwardID, base), "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend, "initial": map[string]string{"state": s.State, "end_reason": s.EndReason, "error_code": s.ErrorCode}})
+	config, _ := json.Marshal(map[string]any{"base": base, "transport": graphicalWindowTransport(r, forwardID, base), "release": hostApplicationsAPI + "/sessions/" + s.ID + "/detach?grace_ms=30000", "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend, "initial": map[string]string{"state": s.State, "end_reason": s.EndReason, "error_code": s.ErrorCode}})
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

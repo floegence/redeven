@@ -19,9 +19,9 @@ explicit end reason; the shared viewer owns whether an established page can clos
 ## Waiting and process lifetime
 
 A running process without its first shareable window remains attached indefinitely;
-there is no first-window termination deadline. Explicitly stopping sharing during
-this wait ends normally; missing pixels do not turn a user-requested stop into a
-launch failure. The helper-launch deadline ends when
+there is no first-window termination deadline. Releasing the current client lease
+during this wait ends that sharing lease normally; missing pixels do not turn a
+lease release into a launch failure. The helper-launch deadline ends when
 the bound process is reported, independently of pixel readiness. The viewer cancels
 its connection deadline on a waiting event, shows explicit waiting guidance and
 reconnect, and starts a separate bounded pixel deadline when a window appears.

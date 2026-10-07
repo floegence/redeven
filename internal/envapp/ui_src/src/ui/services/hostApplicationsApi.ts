@@ -1,4 +1,5 @@
 import { fetchSessionHTTP, fetchSessionJSON, readSessionEvents } from './sessionHTTP';
+import { readUIStorageItem, writeUIStorageItem } from './uiStorage';
 import type { HostApplicationTransferPlan } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 export type { HostApplicationTransferPlan };
 
@@ -151,18 +152,31 @@ export type HostApplicationPresentation = Readonly<{
 
 const base = '/_redeven_proxy/api/host-applications';
 
+let hostApplicationClientID: string | undefined;
+function currentHostApplicationClientID() {
+  if (hostApplicationClientID) return hostApplicationClientID;
+  try {
+    const key = 'redeven.host-applications.client-id.v1';
+    const existing = readUIStorageItem(key);
+    if (existing && /^[A-Za-z0-9._:-]{1,128}$/.test(existing)) hostApplicationClientID = existing;
+    else {
+      hostApplicationClientID = globalThis.crypto?.randomUUID?.() ?? `client-${Math.random().toString(36).slice(2)}`;
+      writeUIStorageItem(key, hostApplicationClientID);
+    }
+  } catch {
+    hostApplicationClientID = `client-${Math.random().toString(36).slice(2)}`;
+  }
+  return hostApplicationClientID!;
+}
+
 export function listHostApplications(locale: string, signal?: AbortSignal) {
-  return fetchSessionJSON<HostApplicationCatalog>(`${base}?locale=${encodeURIComponent(locale)}`, { method: 'GET', signal });
+  return fetchSessionJSON<HostApplicationCatalog>(`${base}?locale=${encodeURIComponent(locale)}&client_id=${encodeURIComponent(currentHostApplicationClientID())}`, { method: 'GET', signal });
 }
 
 export function launchHostApplication(applicationID: string, locale: string, presentation: HostApplicationPresentation, mode: 'native' | 'stream' = 'stream') {
   return fetchSessionJSON<HostApplicationSession>(`${base}/sessions`, {
-    method: 'POST', body: JSON.stringify({ application_id: applicationID, locale, presentation, mode }),
+    method: 'POST', body: JSON.stringify({ application_id: applicationID, client_id: currentHostApplicationClientID(), locale, presentation, mode }),
   });
-}
-
-export function stopHostApplication(sessionID: string) {
-  return fetchSessionJSON(`${base}/sessions/${encodeURIComponent(sessionID)}`, { method: 'DELETE' });
 }
 
 export function listRunningHostApplications(signal?: AbortSignal) {
@@ -186,7 +200,7 @@ export function addHostApplication(request: { name: string; executable: string; 
 }
 
 export function listHostApplicationSessions(signal?: AbortSignal) {
- return fetchSessionJSON<HostApplicationSession[]>(`${base}/sessions`, { method: 'GET', signal });
+ return fetchSessionJSON<HostApplicationSession[]>(`${base}/sessions?client_id=${encodeURIComponent(currentHostApplicationClientID())}`, { method: 'GET', signal });
 }
 
 export function requestHostApplicationPermission(permission: 'screen_recording' | 'accessibility') {

@@ -5,6 +5,7 @@ package hostapps
 import (
 	"context"
 	"errors"
+	"time"
 
 	nativeapps "github.com/floegence/floe-native-apps"
 	"github.com/floegence/redeven/internal/portforward"
@@ -58,6 +59,7 @@ type Session struct {
 	StartedAt           int64                       `json:"started_at_unix_ms"`
 	Forward             *portforward.ForwardSession `json:"forward,omitempty"`
 	Presentation        Presentation                `json:"presentation"`
+	ClientID            string                      `json:"-"`
 }
 
 // Presentation comes from the caller's explicit localized catalog. The window
@@ -167,6 +169,7 @@ type Presentation struct {
 type LaunchRequest struct {
 	Mode          string       `json:"mode,omitempty"`
 	ApplicationID string       `json:"application_id"`
+	ClientID      string       `json:"client_id,omitempty"`
 	Locale        string       `json:"locale"`
 	Presentation  Presentation `json:"presentation"`
 }
@@ -194,12 +197,26 @@ type Backend interface {
 	Quit(context.Context, string, QuitRequest) error
 	Terminate(context.Context, string, QuitRequest) error
 	Detach(context.Context, string, string) error
-	Stop(context.Context, string, string) error
 	Add(context.Context, AddRequest) error
 	ForTarget(string) (Session, string, bool)
 	ForForward(string) (Session, string, bool)
 	Password(string) string
 	Permissions(context.Context, string) error
+}
+
+// ClientSessions is an optional extension used by viewers that identify their
+// browser/Desktop client. Older control-plane callers keep the owner-wide
+// Sessions contract while new callers receive only their own leases.
+type ClientSessions interface {
+	SessionsForClient(string, string) []Session
+	CatalogForClient(context.Context, string, string, string) (Catalog, error)
+}
+
+// LeaseRelease is an optional extension used by the viewer's unload path. The
+// grace period preserves a lease across a browser reload while direct cleanup
+// remains immediate for callers that do not provide one.
+type LeaseRelease interface {
+	DetachWithGrace(context.Context, string, string, time.Duration) error
 }
 
 var (

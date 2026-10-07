@@ -25,7 +25,7 @@ for aligned operations and unavoidable OS differences.
 
 | Scenario | Expected outcome | Evidence |
 | --- | --- | --- |
-| Existing single-instance Mac app | Reuse its exact process; stop sharing preserves it | Real native fixture |
+| Existing single-instance Mac app | Reuse its exact process; releasing a client lease preserves it | Real native fixture |
 | First window delayed beyond 40 seconds | Keep waiting; display eventual pixels without relaunch | Real 48-second fixture, Go watchdog test |
 | Background app with no window | Keep native menu and reconnect available | Real menu/reopen fixtures, viewer tests |
 | Newly launched app stopped before first window | Normal sharing termination, no launch error | Real stop fixture, Go lifecycle test |
@@ -48,7 +48,7 @@ for aligned operations and unavoidable OS differences.
 | Scenario | Expected outcome | Evidence |
 | --- | --- | --- |
 | Direct native launch or no remaining window | Remain in the live OS list independently of sharing sessions | Real quit fixture, Env App interaction test |
-| Sharing stopped for a newly launched app | End only sharing; keep all native windows and process alive | Real multiple-window quit fixture |
+| Last client lease released for a newly launched app | End only sharing; keep all native windows and process alive | Real multiple-window quit fixture |
 | Quit confirmation while process restarts | Preserve the original selected generation; never silently retarget | Swift identity, native stale-selection and Env App tests |
 | One selected instance is stale | Reject the entire selection before any termination request | Real quit fixture |
 | App cancels quit | Preserve process, pixels and active sharing; allow another explicit request | Real cancellation and reconnect fixture |

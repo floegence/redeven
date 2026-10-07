@@ -35,10 +35,10 @@ main run loop and routes asynchronous pictures and events back to their exact
 channel. This private protocol requires a matching Runtime/helper bundle. It does
 not change the browser WebSocket or Computer Use protocols.
 
-Each application channel retains its own bound OS process, window generation,
+Each application channel retains its own client lease, bound OS process, window generation,
 capture/encoder, menu handles, held input and single-frame acknowledgement credit.
-Closing a viewer suspends only its application's capture and input delivery.
-Ending sharing detaches only that channel and releases its resources; neither
+Closing a viewer releases only that client's channel and input delivery.
+Ending one lease detaches only that channel and releases its resources; neither
 operation exits the shared helper or quits the native application. Normal startup
 keeps the existing immediate picture negotiation and low-latency first-frame path.
 

@@ -27,18 +27,21 @@ import (
 var desktopHelper []byte
 
 type ownedSession struct {
-	application *linuxApplication
-	viewer      *nativeapps.PreparedViewer
-	proxy       *applicationProxy
-	finishOnce  sync.Once
-	native      *macSession
-	view        Session
-	owner       string
-	password    string
-	done        chan struct{}
-	stopping    bool
-	socketDir   string
-	tools       hostTools
+	application       *linuxApplication
+	viewer            *nativeapps.PreparedViewer
+	proxy             *applicationProxy
+	finishOnce        sync.Once
+	native            *macSession
+	view              Session
+	owner             string
+	clientID          string
+	password          string
+	done              chan struct{}
+	stopping          bool
+	releaseTimer      *time.Timer
+	releaseGeneration uint64
+	socketDir         string
+	tools             hostTools
 }
 
 type Manager struct {
@@ -104,11 +107,39 @@ func (m *Manager) Sessions(owner string) []Session {
 	return result
 }
 
+func (m *Manager) SessionsForClient(owner, clientID string) []Session {
+	result := []Session{}
+	m.mu.Lock()
+	for _, s := range m.sessions {
+		if s.owner == owner && s.clientID == clientID {
+			result = append(result, cloneSession(s.view))
+		}
+	}
+	m.mu.Unlock()
+	sort.Slice(result, func(i, j int) bool { return result[i].StartedAt > result[j].StartedAt })
+	return result
+}
+
 func (m *Manager) Catalog(ctx context.Context, owner, locale string) (Catalog, error) {
+	return m.catalogForClient(ctx, owner, locale, "")
+}
+
+func (m *Manager) CatalogForClient(ctx context.Context, owner, locale, clientID string) (Catalog, error) {
+	return m.catalogForClient(ctx, owner, locale, clientID)
+}
+
+func (m *Manager) catalogForClient(ctx context.Context, owner, locale, clientID string) (Catalog, error) {
 	if runtime.GOOS == "darwin" {
-		return m.macCatalog(ctx, owner)
+		catalog, err := m.macCatalog(ctx, owner)
+		if clientID != "" {
+			catalog.Sessions = m.SessionsForClient(owner, clientID)
+		}
+		return catalog, err
 	}
 	catalog, _, err := m.catalog(ctx, owner, locale)
+	if clientID != "" {
+		catalog.Sessions = m.SessionsForClient(owner, clientID)
+	}
 	if err == nil && catalog.Availability.Supported {
 		catalog.Running, err = m.linuxRunning(ctx, owner)
 		// A removed desktop entry must not make a still-running owned instance
@@ -187,6 +218,14 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 	if owner == "" {
 		return Session{}, ErrInvalid
 	}
+	if req.ClientID != "" && !validClientID(req.ClientID) {
+		return Session{}, ErrInvalid
+	}
+	if req.ClientID == "" {
+		// Legacy callers do not have a stable browser identity. Give each launch
+		// an independent lease while keeping the application process reusable.
+		req.ClientID = randomID()
+	}
 	for _, s := range []string{req.Presentation.Starting, req.Presentation.Failed, req.Presentation.Ended, req.Presentation.Retry, req.Presentation.Connecting, req.Presentation.Reconnecting, req.Presentation.Disconnected, req.Presentation.ConnectionHint, req.Presentation.Reconnect, req.Presentation.Locale} {
 		if strings.TrimSpace(s) == "" || len(s) > 1024 {
 			return Session{}, ErrInvalid
@@ -209,6 +248,18 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 		return Session{}, ErrInvalid
 	}
 	return m.launchLinux(ctx, owner, req)
+}
+
+func validClientID(value string) bool {
+	if len(value) < 1 || len(value) > 128 {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._:-", r)) {
+			return false
+		}
+	}
+	return true
 }
 
 func sessionHasWindows(parent context.Context, xpra, socketDir string) bool {
@@ -250,6 +301,11 @@ func infoHasWindows(info string) bool {
 func (m *Manager) finish(s *ownedSession, code string, release func()) {
 	s.finishOnce.Do(func() {
 		m.mu.Lock()
+		if s.releaseTimer != nil {
+			s.releaseTimer.Stop()
+			s.releaseTimer = nil
+		}
+		s.releaseGeneration++
 		if s.view.ErrorCode == "" {
 			s.view.ErrorCode = code
 		}
@@ -262,7 +318,9 @@ func (m *Manager) finish(s *ownedSession, code string, release func()) {
 		s.stopping = true
 		s.password = ""
 		s.viewer = nil
-		m.forwards.ReleaseOwnedForwardSession(s.view.Forward.Forward.ForwardID)
+		if m.forwards != nil && s.view.Forward != nil {
+			m.forwards.ReleaseOwnedForwardSession(s.view.Forward.Forward.ForwardID)
+		}
 		_ = os.Remove(filepath.Join(m.state, "sessions", s.view.ID, "password"))
 		if s.application == nil {
 			_ = os.RemoveAll(s.socketDir)
@@ -302,6 +360,60 @@ func (m *Manager) requestStop(s *ownedSession) {
 	if native != nil {
 		native.cancel()
 	}
+}
+
+// DetachWithGrace releases a viewer lease after a short grace period. Browser
+// reloads emit pagehide before the replacement document can reconnect; keeping
+// the lease briefly lets that replacement retain the same route and password.
+// A state read or a launch for the same client cancels the pending release.
+func (m *Manager) DetachWithGrace(ctx context.Context, owner, id string, grace time.Duration) error {
+	if grace <= 0 {
+		return m.Detach(ctx, owner, id)
+	}
+	if grace > 60*time.Second {
+		return ErrInvalid
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	s := m.sessions[id]
+	if s == nil || s.owner != owner {
+		m.mu.Unlock()
+		return ErrNotFound
+	}
+	if s.stopping {
+		m.mu.Unlock()
+		return nil
+	}
+	if s.releaseTimer != nil {
+		s.releaseTimer.Stop()
+	}
+	s.releaseGeneration++
+	generation := s.releaseGeneration
+	s.releaseTimer = time.AfterFunc(grace, func() {
+		m.mu.Lock()
+		if s.releaseGeneration != generation || s.stopping {
+			m.mu.Unlock()
+			return
+		}
+		s.releaseTimer = nil
+		m.mu.Unlock()
+		m.requestStop(s)
+	})
+	m.mu.Unlock()
+	return nil
+}
+
+// retainSessionLocked cancels a browser-reload grace release. The caller holds
+// m.mu. It intentionally leaves the session and process untouched.
+func (m *Manager) retainSessionLocked(s *ownedSession) {
+	if s.releaseTimer == nil {
+		return
+	}
+	s.releaseTimer.Stop()
+	s.releaseTimer = nil
+	s.releaseGeneration++
 }
 
 func (m *Manager) Stop(ctx context.Context, owner, id string) error {
@@ -395,6 +507,7 @@ func (m *Manager) Password(id string) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s := m.sessions[id]; s != nil {
+		m.retainSessionLocked(s)
 		return s.password
 	}
 	return ""

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	nativeapps "github.com/floegence/floe-native-apps"
 	"github.com/floegence/redeven/internal/config"
@@ -45,6 +46,7 @@ type hostAppsStub struct {
 	state       string
 	setupDigest string
 	launch      hostapps.LaunchRequest
+	grace       time.Duration
 }
 
 func (s *hostAppsStub) Catalog(context.Context, string, string) (hostapps.Catalog, error) {
@@ -57,6 +59,16 @@ func (s *hostAppsStub) PrepareBrowser(context.Context, string, string, string) (
 	return hostapps.Application{}, nil
 }
 func (s *hostAppsStub) Sessions(string) []hostapps.Session { s.calls++; return nil }
+func (s *hostAppsStub) SessionsForClient(owner, clientID string) []hostapps.Session {
+	s.calls++
+	s.owner = owner
+	return []hostapps.Session{{ID: clientID, Application: hostapps.Application{ID: "editor.desktop"}, State: "running"}}
+}
+func (s *hostAppsStub) CatalogForClient(_ context.Context, owner, _ string, clientID string) (hostapps.Catalog, error) {
+	s.calls++
+	s.owner = owner
+	return hostapps.Catalog{Sessions: []hostapps.Session{{ID: clientID, Application: hostapps.Application{ID: "editor.desktop"}, State: "running"}}}, nil
+}
 func (s *hostAppsStub) Launch(_ context.Context, owner string, req hostapps.LaunchRequest) (hostapps.Session, error) {
 	s.calls++
 	s.owner = owner
@@ -116,10 +128,43 @@ func TestHostApplicationLaunchAcceptsEveryPublishedPresentationField(t *testing.
 		})
 	}
 }
-func (s *hostAppsStub) Stop(_ context.Context, owner, _ string) error {
-	s.calls++
-	s.owner = owner
-	return nil
+
+func TestHostApplicationClientQueriesStayScoped(t *testing.T) {
+	backend := &hostAppsStub{}
+	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	for _, path := range []string{hostApplicationsAPI + "/sessions?client_id=browser-a", hostApplicationsAPI + "?locale=en-US&client_id=browser-a"} {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
+		w := httptest.NewRecorder()
+		server.handleHostApplicationsAPI(w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("client query failed: %d %s", w.Code, w.Body.String())
+		}
+		var response struct {
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		var sessions []hostapps.Session
+		if strings.HasSuffix(path, "/sessions?client_id=browser-a") {
+			if err := json.Unmarshal(response.Data, &sessions); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			var catalog hostapps.Catalog
+			if err := json.Unmarshal(response.Data, &catalog); err != nil {
+				t.Fatal(err)
+			}
+			sessions = catalog.Sessions
+		}
+		if len(sessions) != 1 || sessions[0].ID != "browser-a" {
+			t.Fatalf("client session leaked or was omitted: %s", w.Body.String())
+		}
+	}
+	if backend.calls != 2 || backend.owner != "alice" {
+		t.Fatalf("client scope did not reach the authorized backend: calls=%d owner=%q", backend.calls, backend.owner)
+	}
 }
 func (s *hostAppsStub) Running(_ context.Context, owner string) ([]hostapps.RunningApplication, error) {
 	s.calls++
@@ -138,6 +183,30 @@ func (s *hostAppsStub) Detach(_ context.Context, owner, _ string) error {
 	s.calls++
 	s.owner = owner
 	return nil
+}
+func (s *hostAppsStub) DetachWithGrace(_ context.Context, owner, _ string, grace time.Duration) error {
+	s.calls++
+	s.owner = owner
+	s.grace = grace
+	return nil
+}
+
+func TestHostApplicationDetachGraceIsBoundedAndForwarded(t *testing.T) {
+	backend := &hostAppsStub{}
+	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	for _, test := range []struct {
+		path  string
+		code  int
+		grace time.Duration
+	}{{hostApplicationsAPI + "/sessions/one/detach?grace_ms=30000", http.StatusOK, 30 * time.Second}, {hostApplicationsAPI + "/sessions/one/detach?grace_ms=60001", http.StatusBadRequest, 0}} {
+		r := httptest.NewRequest(http.MethodPost, test.path, nil)
+		r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
+		w := httptest.NewRecorder()
+		server.handleHostApplicationsAPI(w, r)
+		if w.Code != test.code || (test.grace != 0 && backend.grace != test.grace) {
+			t.Fatalf("detach grace contract: status=%d body=%s calls=%d grace=%s", w.Code, w.Body.String(), backend.calls, backend.grace)
+		}
+	}
 }
 
 func TestHostApplicationQuitRequestsRemainAcceptedUntilLifecycleReconciliation(t *testing.T) {
@@ -206,7 +275,7 @@ func TestHostApplicationTerminalLocalRouteRetainsItsPrefix(t *testing.T) {
 	r := WithLocalUIPortForwardRoute(httptest.NewRequest(http.MethodGet, "http://localhost/pf/owned/_redeven_host_app/", nil), "owned")
 	w := httptest.NewRecorder()
 	server.handlePortForwardProxy(w, r)
-	if !strings.Contains(w.Body.String(), `"initial":{"end_reason":"application_exited","error_code":"window_unavailable","state":"failed"}`) {
+	if !strings.Contains(w.Body.String(), `"initial":{"end_reason":"application_exited","error_code":"window_unavailable","state":"failed"}`) || !strings.Contains(w.Body.String(), `/detach?grace_ms=30000`) {
 		t.Fatal("terminal document omitted the authoritative snapshot")
 	}
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"base":"/pf/owned"`) {
@@ -231,7 +300,7 @@ func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 			}
 		}
 		backend.calls = 0
-		for _, test := range []struct{ method, path string }{{"POST", hostApplicationsAPI}, {"POST", hostApplicationsAPI + "/sessions"}, {"POST", hostApplicationsAPI + "/permissions"}, {"DELETE", hostApplicationsAPI + "/sessions/one"}, {"POST", hostApplicationsAPI + "/quit"}, {"POST", hostApplicationsAPI + "/terminate"}, {"POST", hostApplicationsAPI + "/sessions/one/detach"}} {
+		for _, test := range []struct{ method, path string }{{"POST", hostApplicationsAPI}, {"POST", hostApplicationsAPI + "/sessions"}, {"POST", hostApplicationsAPI + "/permissions"}, {"POST", hostApplicationsAPI + "/quit"}, {"POST", hostApplicationsAPI + "/terminate"}, {"POST", hostApplicationsAPI + "/sessions/one/detach"}} {
 			r := httptest.NewRequest(test.method, test.path, strings.NewReader(`{}`))
 			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
 			w := httptest.NewRecorder()
@@ -249,6 +318,18 @@ func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 		if full && backend.owner != "alice" {
 			t.Fatal("session owner did not come from authorized metadata")
 		}
+	}
+}
+
+func TestHostApplicationLegacyStopRouteIsRemoved(t *testing.T) {
+	backend := &hostAppsStub{}
+	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	r := httptest.NewRequest(http.MethodDelete, hostApplicationsAPI+"/sessions/one", nil)
+	r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
+	w := httptest.NewRecorder()
+	server.handleHostApplicationsAPI(w, r)
+	if w.Code != http.StatusNotFound || backend.calls != 0 {
+		t.Fatalf("legacy stop route remained active: status=%d calls=%d body=%s", w.Code, backend.calls, w.Body.String())
 	}
 }
 

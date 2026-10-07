@@ -24,8 +24,9 @@ must not recreate the removed explanatory subtitle. WindowModal follows the same
 product content contract while retaining its existing window-local ownership.
 
 Description-only confirmations contain a populated body between the title and
-actions. In particular, Stop sharing explains that the Mac application's windows
-and unsaved work remain on the host; Cancel never invokes detach or quit.
+actions. Host application confirmations describe the explicit window-close or
+quit action and its effect on the running process; cancel never invokes either
+operation.
 
 Body layout customizations must include the description in their available space.
 Drawers reserve remaining height for their content after guidance; terminal,
@@ -47,5 +48,5 @@ Headers contain identity and controls only. Missing guidance must be repaired in
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Uses the published Dialog and ConfirmDialog contracts.
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppDrawer.tsx` - Allocates body guidance and remaining drawer content height.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Places window-local confirmation guidance in its scrollable body.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.browser.test.tsx` - Checks English and Simplified Chinese stop-sharing placement, narrow screens, and cancellation.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.browser.test.tsx` - Checks Host Applications controls, localized confirmation placement, narrow screens, and cancellation.
 - `redeven:desktop/scripts/check-environment-settings.mjs` - Verifies Desktop settings guidance and interaction geometry.
