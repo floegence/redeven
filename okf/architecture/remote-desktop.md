@@ -3,13 +3,14 @@ type: Runtime Contract
 title: Human remote desktop sessions
 description: Share the host's current graphical desktop with an authenticated viewer, exclusive remote input, and bounded media.
 tags: [runtime, desktop, applications, security, media]
-timestamp: 2026-10-04T13:20:00Z
+timestamp: 2026-10-07T10:00:00Z
 ---
 # Summary
 
 Redeven owns remote desktop authorization, ephemeral sessions, window placement,
-configuration and audit. Published `floe-native-apps` v0.22.10 owns current-desktop
-selection, OS authorization, native input, capture, codecs and bounded playback.
+configuration and audit. Published `floe-native-apps` v0.22.15 owns current-desktop
+selection, OS authorization, native input, capture, codecs, bounded playback and
+Linux component acquisition.
 A desktop session shares the existing signed-in macOS or Linux desktop. It never
 creates an application-private desktop, changes system security policy or grants
 access to a lower-permission user. Disconnect releases remote input and media;
@@ -72,6 +73,16 @@ chooses one authenticated current-user Wayland or X11 login. Wayland uses system
 RemoteDesktop/ScreenCast portals and PipeWire; X11 uses verified login credentials.
 Failure never selects an application-private display or silently changes backend.
 Preparation does not install system packages, modify drivers or use a container.
+
+When a Linux component archive is missing, `floe-native-apps` automatically probes
+the catalog's reviewed HTTPS mirror candidates with representative archive
+requests, measures their latency and resource availability, and downloads from
+the fastest validated source. A complete local archive is reused without network
+probing. The canonical official Alpine source remains the final fallback; every
+download still checks the expected size and SHA-256 before atomic cache publication,
+and a failed archive download can move to the next trusted source. Sources are
+fixed by the published catalog: neither administrators nor users configure or
+choose mirrors, and Redeven does not provide a mirror or download service.
 
 The [persistent authorization contract](remote-desktop-authorization.md) owns
 first approval, saved-grant recovery, explicit per-connection consent, and local
