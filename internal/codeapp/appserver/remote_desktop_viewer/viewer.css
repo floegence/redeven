@@ -95,3 +95,8 @@ kbd { color:var(--muted-foreground); font-family:inherit; font-size:11px; font-w
   .shortcut { flex-wrap:wrap; }
 }
 @media(prefers-reduced-motion:reduce) { #toolbar { transition:none; } }
+#unlock-bar { position: fixed; z-index: 5; inset-inline: 16px; bottom: 16px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--border) 75%, var(--primary)); border-radius: 10px; background: color-mix(in srgb, var(--background) 92%, var(--primary)); box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
+#unlock-bar[hidden] { display: none; }
+#unlock-bar p { margin: 2px 0 0; color: var(--muted-foreground); font-size: 12px; }
+#unlock-bar > div { display: flex; gap: 8px; margin-inline-start: auto; }
+@media (max-width: 560px) { #unlock-bar { align-items: stretch; flex-direction: column; } #unlock-bar > div { margin-inline-start: 0; } #unlock-bar button { flex: 1; } }

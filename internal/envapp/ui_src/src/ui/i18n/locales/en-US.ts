@@ -115,6 +115,26 @@ export const enUS = defineDictionary({
     "frameRate": "Painted frame rate",
     "bandwidth": "Bandwidth",
     "decoder": "Decoder preference"
+    ,"loginServiceTitle": "Login-screen access"
+    ,"loginServiceHint": "Optional administrator service for viewing and unlocking the login or lock screen. It listens only through Runtime’s private channel and cannot unlock encrypted disks."
+    ,"serviceActive": "Installed and ready for an authorized login-screen session."
+    ,"serviceNotInstalled": "Not installed. The host must be unlocked locally before a normal desktop session can start."
+    ,"serviceUnsupported": "Unavailable on this host or compositor."
+    ,"serviceAuthorizationRequired": "Administrator authorization is required to finish installation."
+    ,"serviceInstalling": "Waiting for the operating system to authorize installation…"
+    ,"serviceUninstalling": "Removing the login-screen service…"
+    ,"serviceFailed": "The service operation failed and was rolled back."
+    ,"installLoginService": "Install login-screen service"
+    ,"uninstallLoginService": "Uninstall service"
+    ,"install": "Install"
+    ,"loginServiceInstallConfirm": "This installs a root/administrator service that can read the lock screen and inject physical keyboard and pointer events. It does not listen on a public port, can be uninstalled at any time, and cannot unlock FileVault, BitLocker, or other encrypted disks. The operating system will ask for administrator authorization next."
+    ,"loginServiceUninstallConfirm": "Remove the administrator login-screen service? Existing desktop sessions will remain unchanged."
+    ,"serviceInstallFailed": "Could not change the login-screen service"
+    ,"unlockHint": "Unlock mode sends only physical keyboard and pointer events. Clipboard, paste, shortcuts, and ordinary controls stay disabled."
+    ,"startUnlock": "Start unlocking"
+    ,"unlocking": "Unlocking host…"
+    ,"unlockPhysicalOnly": "Unlock mode accepts physical keyboard and pointer input only."
+    ,"unlockFailed": "The unlock attempt failed. The host remains locked; try again or cancel."
 },
   sessionRestart: {
     preparing: 'Preparing to restart',

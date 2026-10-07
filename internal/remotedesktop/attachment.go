@@ -26,6 +26,7 @@ type attachment struct {
 	generation     uint64
 	sequence       uint64
 	painted        bool
+	paintedFrame   uint64
 	state          string
 	sent           map[uint64]bool
 }
@@ -160,7 +161,7 @@ func (m *Manager) runAttachment(s *ownedSession, a *attachment) {
 				a.mu.Lock()
 				// State may advance after the wait resolves. Never record an old
 				// frame ID in the successor generation's offered-frame set.
-				if a.closed || message.Generation != a.generation || a.state != "active" {
+				if a.closed || message.Generation != a.generation || a.state != "active" && a.state != "locked" {
 					a.mu.Unlock()
 					continue
 				}
@@ -210,6 +211,7 @@ func (m *Manager) runAttachment(s *ownedSession, a *attachment) {
 				a.mu.Lock()
 				if message.Generation != a.generation || message.State != "active" {
 					a.painted = false
+					a.paintedFrame = 0
 					a.sent = map[uint64]bool{}
 				}
 				if a.stateChanged != nil {
@@ -296,7 +298,7 @@ func (m *Manager) send(s *ownedSession, a *attachment, command nativeapps.HostDe
 			// transition. Ignore it without granting authority or reconnecting.
 			return nil
 		}
-		if command.Generation != a.generation || !a.sent[command.FrameID] || a.state != "active" {
+		if command.Generation != a.generation || !a.sent[command.FrameID] || a.state != "active" && a.state != "locked" {
 			return ErrInvalid
 		}
 		for id := range a.sent {
@@ -305,12 +307,21 @@ func (m *Manager) send(s *ownedSession, a *attachment, command nativeapps.HostDe
 			}
 		}
 		a.painted = true
+		a.paintedFrame = command.FrameID
 	case "input", "get_clipboard", "set_clipboard", "lock":
 		if s.view.Mode != "control" || m.controller != s.view.ID || !a.painted || a.state != "active" || command.Generation != a.generation {
 			return ErrForbidden
 		}
+	case "unlock_input":
+		if s.view.Mode != "control" || m.controller != s.view.ID || !a.painted || a.state != "locked" || command.Generation != a.generation || command.FrameID != a.paintedFrame {
+			return ErrForbidden
+		}
+	case "unlock_cancel":
+		if s.view.Mode != "control" || m.controller != s.view.ID || a.state != "locked" || command.Generation != a.generation {
+			return ErrForbidden
+		}
 	case "set_clipboard_sync":
-		if command.Enabled != nil && *command.Enabled && (s.view.Mode != "control" || m.controller != s.view.ID || !a.painted) {
+		if command.Enabled != nil && *command.Enabled && (s.view.Mode != "control" || m.controller != s.view.ID || !a.painted || a.state != "active") {
 			return ErrForbidden
 		}
 	case "release_input":
@@ -365,11 +376,11 @@ func (a *attachment) awaitMediaState(generation uint64) bool {
 			a.mu.Unlock()
 			return false
 		}
-		if generation == a.generation && a.state == "active" {
+		if generation == a.generation && (a.state == "active" || a.state == "locked") {
 			a.mu.Unlock()
 			return true
 		}
-		if generation == a.generation && a.state != "connecting" {
+		if generation == a.generation && a.state != "connecting" && a.state != "locked" {
 			a.mu.Unlock()
 			return false
 		}

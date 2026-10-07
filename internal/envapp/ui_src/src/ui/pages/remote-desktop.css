@@ -12,6 +12,9 @@
 .remote-desktop-state-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--muted-foreground); }
 .remote-desktop-state-dot[data-ready=true] { background: var(--success); }
 .remote-desktop-description { margin: 18px 0 0; color: var(--muted-foreground); line-height: 1.65; }
+.remote-desktop-service { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--background) 94%, var(--primary)); }
+.remote-desktop-service p, .remote-desktop-service-hint { margin: 4px 0 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+.remote-desktop-service-hint { margin-top: 6px; }
 .remote-desktop-guidance, .remote-desktop-setup { margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--muted); line-height: 1.65; }
 .remote-desktop-setup progress { display: block; width: 100%; height: 4px; margin-top: 14px; accent-color: var(--primary); }
 .remote-desktop-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -44,4 +47,8 @@
 @media (max-width: 380px) {
   .remote-desktop-panel { padding: 20px; }
   .remote-desktop-dialog > .border-b { padding-inline: 20px; }
+}
+@media (max-width: 520px) {
+  .remote-desktop-service { align-items: stretch; flex-direction: column; }
+  .remote-desktop-service button { width: 100%; }
 }

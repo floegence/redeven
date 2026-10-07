@@ -7253,6 +7253,26 @@
     "disconnecting": "Desconectando…",
     "disconnectFailed": "La entrada y la transmisión de pantalla se han detenido, pero no se pudo confirmar el cierre de la sesión. Pulsa Desconectar de nuevo.",
     "controlHint": "¿Permitir que esta conexión utilice el ratón, el teclado y el portapapeles de texto del host? Si otra conexión tiene el control, pasará al modo de solo visualización.",
-    "shortcutsHint": "Envía un atajo de teclado al host. Las combinaciones corresponden al sistema operativo del host."
+    "shortcutsHint": "Envía un atajo de teclado al host. Las combinaciones corresponden al sistema operativo del host.",
+    "loginServiceTitle": "Servicio de acceso a la pantalla de inicio de sesión",
+    "loginServiceHint": "Servicio opcional de administrador para ver y desbloquear la pantalla de inicio de sesión o bloqueo. Solo usa el canal privado de Runtime y no desbloquea discos cifrados.",
+    "serviceActive": "Instalado y listo para una sesión autorizada de la pantalla de inicio de sesión.",
+    "serviceNotInstalled": "No instalado. El host debe desbloquearse localmente antes de iniciar una sesión de escritorio normal.",
+    "serviceUnsupported": "No disponible en este host o compositor.",
+    "serviceAuthorizationRequired": "Se necesita autorización de administrador para completar la instalación.",
+    "serviceInstalling": "Esperando la autorización del sistema operativo para instalar…",
+    "serviceUninstalling": "Quitando el servicio de inicio de sesión…",
+    "serviceFailed": "La operación falló y se revirtió.",
+    "installLoginService": "Instalar servicio de inicio de sesión",
+    "uninstallLoginService": "Desinstalar servicio",
+    "install": "Instalar",
+    "loginServiceInstallConfirm": "Esto instala un servicio root/administrador que puede leer la pantalla bloqueada e inyectar eventos físicos de teclado y puntero. No escucha en puertos públicos, se puede desinstalar cuando quieras y no desbloquea FileVault, BitLocker ni otros discos cifrados. El sistema operativo pedirá autorización de administrador a continuación.",
+    "loginServiceUninstallConfirm": "¿Quitar el servicio administrador de inicio de sesión? Las sesiones de escritorio existentes no cambiarán.",
+    "serviceInstallFailed": "No se pudo cambiar el servicio de inicio de sesión",
+    "unlockHint": "El modo de desbloqueo solo envía eventos físicos de teclado y puntero. El portapapeles, pegar, atajos y controles normales permanecen desactivados.",
+    "startUnlock": "Iniciar desbloqueo",
+    "unlocking": "Desbloqueando el host…",
+    "unlockPhysicalOnly": "El modo de desbloqueo solo acepta teclado y puntero físicos.",
+    "unlockFailed": "No se pudo desbloquear. El host sigue bloqueado; vuelve a intentarlo o cancela."
   }
 }

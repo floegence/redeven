@@ -19,7 +19,7 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		return false
 	}
 	permission := requiredPermissionFull
-	if r.Method == http.MethodGet && (r.URL.Path == remoteDesktopAPI || r.URL.Path == remoteDesktopAPI+"/setup") {
+	if r.Method == http.MethodGet && (r.URL.Path == remoteDesktopAPI || r.URL.Path == remoteDesktopAPI+"/setup" || r.URL.Path == remoteDesktopAPI+"/service") {
 		permission = requiredPermissionRead
 	}
 	meta, ok := g.requireLocalAppPermission(w, r, localFloeAppAgent, permission)
@@ -92,6 +92,25 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		action = "remote_desktop_forget_authorization"
 	case r.URL.Path == remoteDesktopAPI+"/setup" && r.Method == http.MethodGet:
 		value, err = g.remoteDesktop.SetupStatus(owner)
+	case r.URL.Path == remoteDesktopAPI+"/service" && r.Method == http.MethodGet:
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		value, err = g.remoteDesktop.SystemServiceStatus(ctx, owner)
+	case r.URL.Path == remoteDesktopAPI+"/service/install" && r.Method == http.MethodPost:
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+		defer cancel()
+		value, err = g.remoteDesktop.InstallLoginService(ctx, owner)
+		action = "remote_desktop_service_install"
+	case r.URL.Path == remoteDesktopAPI+"/service/install" && r.Method == http.MethodDelete:
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		value, err = g.remoteDesktop.UninstallLoginService(ctx, owner)
+		action = "remote_desktop_service_install_cancel"
+	case r.URL.Path == remoteDesktopAPI+"/service" && r.Method == http.MethodDelete:
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+		defer cancel()
+		value, err = g.remoteDesktop.UninstallLoginService(ctx, owner)
+		action = "remote_desktop_service_uninstall"
 	case r.URL.Path == remoteDesktopAPI+"/setup" && r.Method == http.MethodPost:
 		var req struct {
 			RequestID string `json:"request_id"`
@@ -191,6 +210,12 @@ func writeDesktopError(w http.ResponseWriter, err error) {
 		status, code = http.StatusConflict, "DESKTOP_CONTROL_IN_USE"
 	case errors.Is(err, remotedesktop.ErrAuthorizationBusy):
 		status, code = http.StatusConflict, "DESKTOP_AUTHORIZATION_BUSY"
+	case errors.Is(err, remotedesktop.ErrServiceAuthorization):
+		status, code = http.StatusConflict, "DESKTOP_SERVICE_AUTHORIZATION_REQUIRED"
+	case errors.Is(err, remotedesktop.ErrServiceUnsupported):
+		status, code = http.StatusNotImplemented, "DESKTOP_SERVICE_UNSUPPORTED"
+	case errors.Is(err, remotedesktop.ErrServiceUnavailable):
+		status, code = http.StatusServiceUnavailable, "DESKTOP_SERVICE_UNAVAILABLE"
 	case errors.Is(err, nativeapps.ErrBusy):
 		status, code = http.StatusConflict, "DESKTOP_SETUP_BUSY"
 	}

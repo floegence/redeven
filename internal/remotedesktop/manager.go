@@ -21,12 +21,15 @@ import (
 const ViewerPath = "/_redeven_desktop/"
 
 var (
-	ErrAuthorizationBusy = errors.New("desktop authorization is in use")
-	ErrUnavailable       = errors.New("remote desktop unavailable")
-	ErrInvalid           = errors.New("invalid remote desktop request")
-	ErrForbidden         = errors.New("remote desktop owner required")
-	ErrNotFound          = errors.New("remote desktop session not found")
-	ErrControlInUse      = errors.New("remote desktop control requires takeover")
+	ErrAuthorizationBusy    = errors.New("desktop authorization is in use")
+	ErrUnavailable          = errors.New("remote desktop unavailable")
+	ErrInvalid              = errors.New("invalid remote desktop request")
+	ErrForbidden            = errors.New("remote desktop owner required")
+	ErrNotFound             = errors.New("remote desktop session not found")
+	ErrControlInUse         = errors.New("remote desktop control requires takeover")
+	ErrServiceUnsupported   = errors.New("login-screen service is unsupported")
+	ErrServiceAuthorization = errors.New("administrator authorization is required")
+	ErrServiceUnavailable   = errors.New("login-screen service is unavailable")
 )
 
 type CreateRequest struct {
@@ -54,6 +57,7 @@ type Status struct {
 	Unattended     bool                               `json:"unattended"`
 	ControlInUse   bool                               `json:"control_in_use"`
 	LastDisplayID  string                             `json:"last_display_id"`
+	LoginService   nativeapps.ServiceStatus           `json:"login_service"`
 }
 type ownedSession struct {
 	view       Session
@@ -100,7 +104,7 @@ func randomID() string {
 }
 
 func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
-	status := Status{Capabilities: nativeapps.HostDesktopCapabilities{State: "unsupported", Displays: []nativeapps.HostDesktopDisplay{}}}
+	status := Status{Capabilities: nativeapps.HostDesktopCapabilities{State: "unsupported", Displays: []nativeapps.HostDesktopDisplay{}}, LoginService: nativeapps.ServiceStatus{State: nativeapps.ServiceUnsupported}}
 	m.mu.Lock()
 	status.ControlInUse = m.controller != ""
 	closed := m.closed
@@ -132,6 +136,9 @@ func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
 	case message := <-connection.Control():
 		if message.Capabilities != nil {
 			status.Capabilities = *message.Capabilities
+			if status.Capabilities.Service != "" {
+				status.LoginService = nativeapps.ServiceStatus{State: status.Capabilities.Service, Backend: status.Capabilities.Backend}
+			}
 		} else {
 			status.Capabilities.State = "unavailable"
 			status.Capabilities.Reason = message.Code
@@ -146,6 +153,73 @@ func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
 		return status, ctx.Err()
 	}
 	return status, nil
+}
+
+func (m *Manager) SystemServiceStatus(ctx context.Context, owner string) (nativeapps.ServiceStatus, error) {
+	return m.serviceCommand(ctx, owner, "service_status")
+}
+
+func (m *Manager) InstallLoginService(ctx context.Context, owner string) (nativeapps.ServiceStatus, error) {
+	status, err := m.serviceCommand(ctx, owner, "service_install")
+	if err != nil && errors.Is(err, nativeapps.ErrServiceAuthorization) {
+		return status, ErrServiceAuthorization
+	}
+	if err != nil && errors.Is(err, nativeapps.ErrServiceUnsupported) {
+		return status, ErrServiceUnsupported
+	}
+	return status, err
+}
+
+func (m *Manager) UninstallLoginService(ctx context.Context, owner string) (nativeapps.ServiceStatus, error) {
+	status, err := m.serviceCommand(ctx, owner, "service_uninstall")
+	if err != nil && errors.Is(err, nativeapps.ErrServiceUnsupported) {
+		return status, ErrServiceUnsupported
+	}
+	return status, err
+}
+
+func (m *Manager) serviceCommand(ctx context.Context, owner, method string) (nativeapps.ServiceStatus, error) {
+	status := nativeapps.ServiceStatus{State: nativeapps.ServiceUnsupported}
+	if owner == "" {
+		return status, ErrForbidden
+	}
+	m.mu.Lock()
+	allowed, closed, factory := m.allowed, m.closed, m.factory
+	m.mu.Unlock()
+	if allowed != nil && !allowed(owner) {
+		return status, ErrForbidden
+	}
+	if closed || factory == nil {
+		return status, ErrServiceUnsupported
+	}
+	connection, err := factory(ctx)
+	if err != nil {
+		return status, ErrServiceUnavailable
+	}
+	defer connection.Close()
+	if err = connection.Send(nativeapps.HostDesktopCommand{Version: 1, ID: 1, Method: method, Service: nativeapps.LoginScreenService}, false); err != nil {
+		return status, err
+	}
+	select {
+	case message := <-connection.Control():
+		if message.ServiceStatus != nil {
+			status = *message.ServiceStatus
+		}
+		if message.Code == "ADMIN_AUTHORIZATION_REQUIRED" {
+			return status, nativeapps.ErrServiceAuthorization
+		}
+		if message.Code == "LOGIN_SERVICE_UNAVAILABLE" {
+			return status, ErrServiceUnavailable
+		}
+		if message.Code != "" && message.Type == "error" {
+			return status, ErrServiceUnavailable
+		}
+		return status, nil
+	case <-ctx.Done():
+		return status, ctx.Err()
+	case <-connection.Done():
+		return status, ErrServiceUnavailable
+	}
 }
 
 func (m *Manager) Create(ctx context.Context, owner string, req CreateRequest, unattended bool) (Session, error) {

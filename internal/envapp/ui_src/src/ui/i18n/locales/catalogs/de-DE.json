@@ -7253,6 +7253,26 @@
     "disconnecting": "Verbindung wird getrennt…",
     "disconnectFailed": "Eingabe und Bildschirmübertragung wurden gestoppt. Das Sitzungsende konnte nicht bestätigt werden. Versuchen Sie erneut, die Verbindung zu trennen.",
     "controlHint": "Darf diese Verbindung Maus, Tastatur und Textzwischenablage des Hosts verwenden? Falls eine andere Verbindung den Host steuert, wechselt sie in den Ansichtsmodus.",
-    "shortcutsHint": "Senden Sie einen Kurzbefehl an den Host. Die Tastenkombinationen entsprechen dem Betriebssystem des Hosts."
+    "shortcutsHint": "Senden Sie einen Kurzbefehl an den Host. Die Tastenkombinationen entsprechen dem Betriebssystem des Hosts.",
+    "loginServiceTitle": "Dienst für Anmeldebildschirmzugriff",
+    "loginServiceHint": "Optionaler Administratordienst zum Anzeigen und Entsperren des Anmelde- oder Sperrbildschirms. Er nutzt nur den privaten Runtime-Kanal und kann keine verschlüsselten Datenträger entsperren.",
+    "serviceActive": "Installiert und bereit für eine autorisierte Anmeldebildschirm-Sitzung.",
+    "serviceNotInstalled": "Nicht installiert. Der Host muss lokal entsperrt werden, bevor eine normale Desktopsitzung starten kann.",
+    "serviceUnsupported": "Auf diesem Host oder Compositor nicht verfügbar.",
+    "serviceAuthorizationRequired": "Für die Installation ist eine Administratorfreigabe erforderlich.",
+    "serviceInstalling": "Warte auf die Installationsfreigabe des Betriebssystems…",
+    "serviceUninstalling": "Anmeldebildschirmdienst wird entfernt…",
+    "serviceFailed": "Der Dienstvorgang ist fehlgeschlagen und wurde zurückgerollt.",
+    "installLoginService": "Dienst für Anmeldebildschirm installieren",
+    "uninstallLoginService": "Dienst deinstallieren",
+    "install": "Installieren",
+    "loginServiceInstallConfirm": "Dies installiert einen Root-/Administratordienst, der den Sperrbildschirm lesen und physische Tastatur- und Zeigerereignisse einspeisen kann. Er öffnet keinen öffentlichen Port, kann jederzeit deinstalliert werden und entsperrt keine verschlüsselten Datenträger wie FileVault oder BitLocker. Das Betriebssystem fordert danach eine Administratorfreigabe an.",
+    "loginServiceUninstallConfirm": "Administratordienst für den Anmeldebildschirm entfernen? Bestehende Desktopsitzungen bleiben unverändert.",
+    "serviceInstallFailed": "Anmeldebildschirmdienst konnte nicht geändert werden",
+    "unlockHint": "Im Entsperrmodus werden nur physische Tastatur- und Zeigerereignisse gesendet. Zwischenablage, Einfügen, Tastenkürzel und normale Steuerung bleiben deaktiviert.",
+    "startUnlock": "Entsperren starten",
+    "unlocking": "Host wird entsperrt…",
+    "unlockPhysicalOnly": "Im Entsperrmodus sind nur physische Tastatur- und Zeigereingaben möglich.",
+    "unlockFailed": "Entsperren fehlgeschlagen. Der Host bleibt gesperrt; erneut versuchen oder abbrechen."
   }
 }

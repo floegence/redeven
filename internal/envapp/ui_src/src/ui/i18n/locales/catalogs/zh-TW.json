@@ -7249,6 +7249,26 @@
     "disconnecting": "正在中斷連線…",
     "disconnectFailed": "遠端輸入與畫面傳輸已停止，但尚未確認工作階段已結束。請再次點選「中斷連線」。",
     "controlHint": "允許此連線使用主機的滑鼠、鍵盤及文字剪貼簿嗎？若其他連線正在控制主機，該連線將切換為僅檢視模式。",
-    "shortcutsHint": "傳送快速鍵至主機。組合鍵與主機的作業系統一致。"
+    "shortcutsHint": "傳送快速鍵至主機。組合鍵與主機的作業系統一致。",
+    "loginServiceTitle": "登入畫面存取服務",
+    "loginServiceHint": "可選的管理員服務，用於查看及解鎖登入或鎖定畫面。只透過 Runtime 私有通道通訊，無法解鎖加密磁碟。",
+    "serviceActive": "已安裝，可用於獲授權的登入畫面工作階段。",
+    "serviceNotInstalled": "未安裝。啟動一般桌面工作階段前，必須先在主機本機解鎖。",
+    "serviceUnsupported": "此主機或合成器不支援。",
+    "serviceAuthorizationRequired": "完成安裝需要管理員授權。",
+    "serviceInstalling": "正在等待作業系統授權安裝…",
+    "serviceUninstalling": "正在移除登入畫面服務…",
+    "serviceFailed": "服務操作失敗，已回復。",
+    "installLoginService": "安裝登入畫面服務",
+    "uninstallLoginService": "解除安裝服務",
+    "install": "安裝",
+    "loginServiceInstallConfirm": "這會安裝 root/管理員服務，以讀取鎖定畫面並注入實體鍵盤與指標事件。服務不會監聽公用連接埠，可隨時解除安裝，也無法解鎖 FileVault、BitLocker 或其他加密磁碟。接下來作業系統會要求管理員授權。",
+    "loginServiceUninstallConfirm": "移除管理員登入畫面服務？現有桌面工作階段不受影響。",
+    "serviceInstallFailed": "無法變更登入畫面服務",
+    "unlockHint": "解鎖模式只會傳送實體鍵盤與指標事件。剪貼簿、貼上、快速鍵及一般控制均已停用。",
+    "startUnlock": "開始解鎖",
+    "unlocking": "正在解鎖主機…",
+    "unlockPhysicalOnly": "解鎖模式只接受實體鍵盤與指標輸入。",
+    "unlockFailed": "解鎖失敗。主機仍保持鎖定，可重試或取消。"
   }
 }

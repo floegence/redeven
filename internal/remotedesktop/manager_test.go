@@ -119,6 +119,31 @@ func TestInputRequiresOwnerCurrentPaintAndControl(t *testing.T) {
 	}
 }
 
+func TestLockedSessionOnlyAcceptsPaintedPhysicalUnlockInput(t *testing.T) {
+	m := &Manager{sessions: map[string]*ownedSession{}}
+	s, native := testSession(m, "locked", "control")
+	s.pair.state = "locked"
+	s.pair.painted = true
+	s.pair.paintedFrame = 8
+	unlock := nativeapps.HostDesktopCommand{Version: 1, ID: 1, Method: "unlock_input", Generation: 3, FrameID: 8,
+		Input: &nativeapps.HostDesktopInput{Kind: "key", Code: "Enter", Key: "Enter", Pressed: true}}
+	if err := m.send(s, s.pair, unlock, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(native.commands) != 1 || native.commands[0].Method != "unlock_input" {
+		t.Fatal("unlock input did not reach native attachment")
+	}
+	ordinary := unlock
+	ordinary.Method, ordinary.FrameID = "input", 0
+	if err := m.send(s, s.pair, ordinary, false); !errors.Is(err, ErrForbidden) {
+		t.Fatal("ordinary input bypassed locked-state boundary")
+	}
+	unlock.FrameID = 7
+	if err := m.send(s, s.pair, unlock, false); !errors.Is(err, ErrForbidden) {
+		t.Fatal("unlock input accepted a stale painted frame")
+	}
+}
+
 func TestDesktopConnectMayDowngradeAfterNativeControlConflict(t *testing.T) {
 	m := &Manager{sessions: map[string]*ownedSession{}}
 	s, native := testSession(m, "desktop", "control")
