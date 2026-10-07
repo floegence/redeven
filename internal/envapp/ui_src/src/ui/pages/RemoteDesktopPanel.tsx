@@ -5,7 +5,7 @@ import { Dialog, ConfirmDialog } from '../primitives/EnvAppModal';
 import { useI18n } from '../i18n';
 import type { EnvAppTranslationKey } from '../i18n/locales/en-US';
 import { useEnvContext } from './EnvContext';
-import { cancelRemoteDesktopPreparation, forgetRemoteDesktopAuthorization, createRemoteDesktop, disconnectRemoteDesktop, getRemoteDesktopStatus, prepareRemoteDesktop, setRemoteDesktopUnattended, installRemoteDesktopLoginService, cancelRemoteDesktopLoginService, uninstallRemoteDesktopLoginService, type RemoteDesktopStatus } from '../services/remoteDesktopApi';
+import { cancelRemoteDesktopPreparation, forgetRemoteDesktopAuthorization, createRemoteDesktop, disconnectRemoteDesktop, getRemoteDesktopStatus, prepareRemoteDesktop, setRemoteDesktopUnattended, installRemoteDesktopLoginService, type RemoteDesktopStatus } from '../services/remoteDesktopApi';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
 import { openWebServiceRoute, resolveWebServiceOpenRoute, WebServiceWindowOpenError } from '../services/webServiceWindows';
@@ -14,7 +14,7 @@ import { LocalApiError } from '../services/localApi';
 import './remote-desktop.css';
 
 type Failure = { title: EnvAppTranslationKey; hint: EnvAppTranslationKey; diagnostic?: string };
-type Action = 'connect' | 'prepare' | 'settings' | 'permission' | 'cancel' | 'forget' | 'service-install' | 'service-uninstall';
+type Action = 'connect' | 'prepare' | 'settings' | 'permission' | 'cancel' | 'forget' | 'service-install';
 
 function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: EnvAppTranslationKey = 'remoteDesktop.connectionHint'): Failure {
   if (failure instanceof WebServiceWindowOpenError) {
@@ -59,7 +59,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const [opened, setOpened] = createSignal(false);
   const [pendingApproval, setPendingApproval] = createSignal<boolean>();
   const [serviceInstallConfirm, setServiceInstallConfirm] = createSignal(false);
-  const [serviceUninstallConfirm, setServiceUninstallConfirm] = createSignal(false);
+  const [pendingServiceClaim, setPendingServiceClaim] = createSignal(false);
   let disposed = false, refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   // The Desktop connection label names SSH/gateway targets. A local Runtime's
@@ -73,9 +73,15 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const displays = () => capabilities()?.displays ?? [];
   const preparing = () => ['checking', 'downloading', 'receiving', 'verifying', 'installing', 'validating'].includes(status()?.setup?.state ?? '');
   const authorization = () => capabilities()?.state === 'authorization_required' || capabilities()?.state === 'host_action_required';
-  const macPermission = () => capabilities()?.backend === 'macos' && (!capabilities()?.screen || (mode() === 'control' && !capabilities()?.input));
-  const available = () => !loadError() && !!capabilities()?.screen && (mode() === 'view' || !!capabilities()?.input)
-    && (capabilities()?.state === 'ready' || authorization());
+  const macPermission = () => capabilities()?.state !== 'locked' && capabilities()?.backend === 'macos' && (!capabilities()?.screen || (mode() === 'control' && !capabilities()?.input));
+  const lockedDesktopAvailable = () => capabilities()?.state === 'locked'
+    && capabilities()?.unlock !== false
+    && loginService()?.state !== 'unsupported';
+  const loginDesktopAvailable = () => ['locked', 'session_unavailable'].includes(capabilities()?.state ?? '')
+    && capabilities()?.unlock === true
+    && loginService()?.state !== 'unsupported';
+  const available = () => !loadError() && (!!capabilities()?.screen || loginDesktopAvailable()) && (mode() === 'view' || !!capabilities()?.input || loginDesktopAvailable())
+    && (capabilities()?.state === 'ready' || loginDesktopAvailable() || authorization());
   const canConnect = () => full() && available() && !preparing() && !busy() && !refreshing();
   const failure = () => actionError() ?? loadError();
 
@@ -123,25 +129,19 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (failure()) return undefined;
     if (!full()) return 'remoteDesktop.accessRequired';
     if (!status() || preparing() || capabilities()?.state === 'setup_required') return undefined;
-    if (capabilities()?.state === 'locked') return 'remoteDesktop.lockedHint';
+    if (capabilities()?.state === 'locked') return lockedDesktopAvailable() ? 'remoteDesktop.lockedHint' : 'remoteDesktop.serviceUnsupported';
     if (macPermission()) return 'remoteDesktop.permissionHint';
     if (available() && capabilities()?.backend === 'wayland' && (!status()?.unattended || !capabilities()?.unattended || capabilities()?.authorization === 'needs_consent')) return 'remoteDesktop.authorizationHint';
-    if (capabilities()?.state === 'session_unavailable') return 'remoteDesktop.sessionHint';
+    if (capabilities()?.state === 'session_unavailable') return loginDesktopAvailable() ? 'remoteDesktop.lockedHint' : 'remoteDesktop.sessionHint';
     if (capabilities()?.state === 'unsupported') return 'remoteDesktop.unsupportedHostHint';
     if (!available() && !loadError()) return 'remoteDesktop.connectionHint';
     return undefined;
   };
-  const serviceStateCopy = (): EnvAppTranslationKey => {
-    switch (loginService()?.state) {
-      case 'active': return 'remoteDesktop.serviceActive';
-      case 'authorization_required': return 'remoteDesktop.serviceAuthorizationRequired';
-      case 'failed': return 'remoteDesktop.serviceFailed';
-      case 'installing': return 'remoteDesktop.serviceInstalling';
-      case 'uninstalling': return 'remoteDesktop.serviceUninstalling';
-      case 'not_installed': return 'remoteDesktop.serviceNotInstalled';
-      default: return 'remoteDesktop.serviceUnsupported';
-    }
-  };
+  // Login-screen support is part of connecting. Keep the administrator service
+  // out of the normal desktop panel and ask only when the host actually needs it.
+  const needsLoginService = () => loginDesktopAvailable()
+    && loginService()?.state !== 'active'
+    && loginService()?.state !== 'unsupported';
 
   const runAction = async (action: Action, title: EnvAppTranslationKey, run: () => Promise<unknown>) => {
     if (busy() || !full()) return;
@@ -158,8 +158,13 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       if (!disposed) setStatus(current => current ? { ...current, unattended: enabled } : current);
     }).finally(() => { if (!disposed) setPendingApproval(undefined); });
   };
-  const open = async (claim: boolean) => {
+  const open = async (claim: boolean, serviceConfirmed = false) => {
     if (!canConnect()) return;
+    if (!serviceConfirmed && needsLoginService()) {
+      setPendingServiceClaim(claim);
+      setServiceInstallConfirm(true);
+      return;
+    }
     setBusy('connect'); setActionError(undefined); setTakeover(false); setOpened(false);
     const desktop = desktopShellWebServiceWindowOpenAvailable();
     let popup: Window | null = null, created: string | undefined;
@@ -168,6 +173,24 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       if (!desktop && !popup) {
         setActionError({ title: 'remoteDesktop.connectionFailed', hint: 'webServices.errors.popupBlocked' });
         return;
+      }
+      if (serviceConfirmed) {
+        setBusy('service-install');
+        try {
+          await installRemoteDesktopLoginService();
+          await refresh();
+        } catch (error) {
+          popup?.close();
+          if (!disposed) setActionError(desktopFailure('remoteDesktop.serviceInstallFailed', error));
+          return;
+        } finally {
+          if (!disposed) setBusy(undefined);
+        }
+        if (disposed || !available()) {
+          popup?.close();
+          return;
+        }
+        setBusy('connect');
       }
       const session = await createRemoteDesktop({ mode: mode(), display_id: display(), locale: i18n.locale(), theme: document.documentElement.dataset.floeShellTheme ?? '', host_name: hostName(), takeover: claim });
       created = session.id;
@@ -208,13 +231,6 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       <Button size="icon" variant="ghost" disabled={refreshing() || !!busy()} aria-label={i18n.t('remoteDesktop.refresh')} title={i18n.t('remoteDesktop.refresh')} onClick={() => void refresh()}><Refresh size={16} class={refreshing() ? 'animate-spin motion-reduce:animate-none' : ''} /></Button>
     </div>
     <p class="remote-desktop-description">{i18n.t('remoteDesktop.description')}</p>
-    <div class="remote-desktop-service" aria-label={i18n.t('remoteDesktop.loginServiceTitle')}>
-      <div><strong>{i18n.t('remoteDesktop.loginServiceTitle')}</strong><p>{i18n.t(serviceStateCopy())}</p></div>
-      <Show when={loginService()?.state === 'active'} fallback={<Show when={loginService()?.state === 'installing' || loginService()?.state === 'uninstalling'} fallback={<Button variant="outline" disabled={!full() || !!busy() || refreshing() || loginService()?.state === 'unsupported'} onClick={() => setServiceInstallConfirm(true)}>{i18n.t('remoteDesktop.installLoginService')}</Button>}><Button variant="ghost" disabled={!full() || !!busy() || refreshing()} onClick={() => void runAction('service-uninstall', 'remoteDesktop.serviceInstallFailed', cancelRemoteDesktopLoginService)}>{i18n.t('remoteDesktop.cancel')}</Button></Show>}>
-        <Button variant="ghost" disabled={!full() || !!busy() || refreshing()} onClick={() => setServiceUninstallConfirm(true)}>{i18n.t('remoteDesktop.uninstallLoginService')}</Button>
-      </Show>
-    </div>
-    <p class="remote-desktop-service-hint">{i18n.t('remoteDesktop.loginServiceHint')}</p>
     <Show when={stateHint()}>{key => <p class="remote-desktop-guidance">{i18n.t(key())}</p>}</Show>
     <Show when={status()?.capabilities.state === 'setup_required' || preparing()}>
       <div class="remote-desktop-setup">
@@ -263,7 +279,14 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     </div>
     <ConfirmDialog open={forgetApproval()} onOpenChange={setForgetApproval} title={i18n.t('remoteDesktop.approvalForget')} bodyDescription={i18n.t('remoteDesktop.approvalForgetHint')} confirmText={i18n.t('remoteDesktop.approvalForgetConfirm')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => { setForgetApproval(false); void runAction('forget', 'remoteDesktop.approvalForgetFailed', forgetRemoteDesktopAuthorization); }} />
     <ConfirmDialog open={takeover()} onOpenChange={setTakeover} title={i18n.t('remoteDesktop.takeover')} bodyDescription={i18n.t('remoteDesktop.takeoverHint')} confirmText={i18n.t('remoteDesktop.takeover')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => void open(true)} />
-    <ConfirmDialog open={serviceInstallConfirm()} onOpenChange={setServiceInstallConfirm} title={i18n.t('remoteDesktop.installLoginService')} bodyDescription={i18n.t('remoteDesktop.loginServiceInstallConfirm')} confirmText={i18n.t('remoteDesktop.install')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => { setServiceInstallConfirm(false); void runAction('service-install', 'remoteDesktop.serviceInstallFailed', installRemoteDesktopLoginService); }} />
-    <ConfirmDialog open={serviceUninstallConfirm()} onOpenChange={setServiceUninstallConfirm} title={i18n.t('remoteDesktop.uninstallLoginService')} bodyDescription={i18n.t('remoteDesktop.loginServiceUninstallConfirm')} confirmText={i18n.t('remoteDesktop.uninstallLoginService')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => { setServiceUninstallConfirm(false); void runAction('service-uninstall', 'remoteDesktop.serviceInstallFailed', uninstallRemoteDesktopLoginService); }} />
+    <ConfirmDialog
+      open={serviceInstallConfirm()}
+      onOpenChange={open => { setServiceInstallConfirm(open); if (!open) setPendingServiceClaim(false); }}
+      title={i18n.t('remoteDesktop.loginServiceTitle')}
+      bodyDescription={i18n.t('remoteDesktop.loginServiceInstallConfirm')}
+      confirmText={i18n.t('remoteDesktop.install')}
+      cancelText={i18n.t('remoteDesktop.cancel')}
+      onConfirm={() => { const claim = pendingServiceClaim(); setServiceInstallConfirm(false); void open(claim, true); }}
+    />
   </section>;
 }

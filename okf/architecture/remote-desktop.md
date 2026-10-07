@@ -8,9 +8,9 @@ timestamp: 2026-10-07T10:00:00Z
 # Summary
 
 Redeven owns remote desktop authorization, ephemeral sessions, window placement,
-configuration and audit. Published `floe-native-apps` v0.22.18 owns current-desktop
+configuration and audit. Published `floe-native-apps` v0.22.19 owns current-desktop
 selection, OS authorization, native input, capture, codecs, bounded playback and
-Linux component acquisition plus the optional login-screen service contract.
+Linux component acquisition plus the login-screen service contract.
 A desktop session shares the existing signed-in macOS or Linux desktop. It never
 creates an application-private desktop, changes system security policy or grants
 access to a lower-permission user. Disconnect releases remote input and media;
@@ -89,7 +89,17 @@ first approval, saved-grant recovery, explicit per-connection consent, and local
 credential reset. Product sessions remain ephemeral even when system approval
 is saved. Locking is an explicit operation. Locked, switched or uncapturable sessions cannot retain ordinary input, clipboard or audio authority. Where the authorized login-screen service is active, the attachment may forward lock-screen frames. The viewer must enter an explicit unlock mode before it can send physical key or pointer events; paste, clipboard, shortcuts and ordinary control remain disabled. Every unlock command carries the current generation and the frame that was painted, and successful unlock advances generation and requires a fresh active frame before normal control resumes. Disconnect, takeover, Runtime restart, user switching and service stop revoke the unlock lease immediately. Credentials are never sent as text, persisted, or written to audit or diagnostics. Disk unlock and a login without a supported graphical greeter remain outside this contract.
 
-The optional login-screen service is installed or removed only after an explicit UI confirmation and full environment read/write/execute permission. The UI states that installation grants root/administrator access to lock-screen capture and physical input, uses no public listener, can be removed, and cannot unlock FileVault, BitLocker or another encrypted disk. Cancellation or failed administrator authorization leaves no partial unit, LaunchDaemon or service state. Unsupported compositors return a fixed unsupported state instead of falling back to a private desktop.
+Login-screen access is part of the normal desktop connection flow. When the host
+supports it but the administrator service has not yet been authorized, the first
+connection that needs this capability presents one clear confirmation before
+opening the operating-system authorization prompt. The confirmation states that
+the service grants root/administrator access to lock-screen capture and physical
+input, uses no public listener, can be disabled later, and cannot unlock
+FileVault, BitLocker or another encrypted disk. The panel does not expose a
+separate service status or install/uninstall card. Cancellation or failed
+administrator authorization leaves no partial unit, LaunchDaemon or service
+state. A host that cannot provide login-screen access reports a user-facing
+local-unlock outcome and never falls back to a private desktop.
 
 When a Wayland display configuration retires the authorized PipeWire node,
 `DISPLAY_STREAM_LOST` revokes held input and old frame authority and requires
@@ -123,7 +133,8 @@ feedback. Native session and frame authority remain governed by this concept.
 
 # Boundaries
 
-There is no Windows host, virtual-desktop provisioning, implicit pre-login service,
+There is no Windows host, virtual-desktop provisioning or implicit privilege
+escalation,
 microphone/camera/printer redirection, WebRTC negotiation or new public port.
 Browser media requires WebCodecs and HTTPS or a trustworthy local origin. The
 [acceptance record](../operations/remote-desktop-results.md) owns measured
@@ -137,7 +148,7 @@ encoder selection and Wayland capture/input scheduling.
 - `internal/remotedesktop/manager.go`, `internal/remotedesktop/attachment.go` and `internal/remotedesktop/socket_test.go`: ownership, paired attachment credentials, current-frame input and socket retirement.
 - `internal/codeapp/appserver/remote_desktop.go` and `internal/codeapp/appserver/remote_desktop_test.go`: API/full-permission boundary, owner checks and private viewer bootstrap.
 - `internal/remotedesktop/manager.go` and `internal/remotedesktop/attachment.go`: login-screen service lifecycle, lock-screen frame forwarding, generation/frame binding and unlock-input revocation.
-- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.tsx`: explicit administrator-service confirmation and status card.
+- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.tsx`: connection-flow authorization for login-screen access and locked-host admission.
 - `internal/localui/localui.go` and `internal/localui/native_codespace.go`: Local UI access-session cancellation for desktop forwarding.
 - `desktop/native/computer-host/Package.swift` and `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplicationHost.swift`: exact upstream package and shared native control owner.
 - `internal/codeapp/appserver/remote_desktop_viewer/viewer.js` and `internal/envapp/ui_src/scripts/checkRemoteDesktopViewer.mjs`: published player integration and browser interaction acceptance.

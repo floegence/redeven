@@ -20,10 +20,10 @@ export const enUS = defineDictionary({
     "viewHint": "See the screen without sending mouse or keyboard input.",
     "openHint": "Closing the window keeps the host and its apps running.",
     "windowOpened": "Desktop opened in a separate window.",
-    "lockedHint": "Unlock the host locally, then refresh to connect.",
+    "lockedHint": "The host is locked. Connect to view the lock screen and unlock it remotely.",
     "authorizationHint": "Confirm screen sharing on the host after you click Connect to desktop.",
     "sessionHint": "Sign in to the host’s graphical desktop, then refresh.",
-    "unsupportedHostHint": "Remote desktop requires a supported macOS or Linux graphical session.",
+    "unsupportedHostHint": "Remote desktop is unavailable on this host. Unlock it locally and try again.",
     "accessTitle": "Access required",
     "accessRequired": "Read, write, and execute permissions for this environment are required, including for view-only connections.",
     "connectionFailed": "Could not connect to the desktop",
@@ -115,21 +115,21 @@ export const enUS = defineDictionary({
     "frameRate": "Painted frame rate",
     "bandwidth": "Bandwidth",
     "decoder": "Decoder preference"
-    ,"loginServiceTitle": "Login-screen access"
-    ,"loginServiceHint": "Optional administrator service for viewing and unlocking the login or lock screen. It listens only through Runtime’s private channel and cannot unlock encrypted disks."
-    ,"serviceActive": "Installed and ready for an authorized login-screen session."
-    ,"serviceNotInstalled": "Not installed. The host must be unlocked locally before a normal desktop session can start."
-    ,"serviceUnsupported": "Unavailable on this host or compositor."
-    ,"serviceAuthorizationRequired": "Administrator authorization is required to finish installation."
-    ,"serviceInstalling": "Waiting for the operating system to authorize installation…"
-    ,"serviceUninstalling": "Removing the login-screen service…"
-    ,"serviceFailed": "The service operation failed and was rolled back."
-    ,"installLoginService": "Install login-screen service"
-    ,"uninstallLoginService": "Uninstall service"
-    ,"install": "Install"
-    ,"loginServiceInstallConfirm": "This installs a root/administrator service that can read the lock screen and inject physical keyboard and pointer events. It does not listen on a public port, can be uninstalled at any time, and cannot unlock FileVault, BitLocker, or other encrypted disks. The operating system will ask for administrator authorization next."
-    ,"loginServiceUninstallConfirm": "Remove the administrator login-screen service? Existing desktop sessions will remain unchanged."
-    ,"serviceInstallFailed": "Could not change the login-screen service"
+    ,"loginServiceTitle": "Enable lock-screen access"
+    ,"loginServiceHint": "Remote desktop can show the login or lock screen and accept physical keyboard and pointer input after you authorize it."
+    ,"serviceActive": "Ready for login or lock-screen access."
+    ,"serviceNotInstalled": "Lock-screen access will be enabled automatically when it is needed."
+    ,"serviceUnsupported": "Login or lock-screen access is unavailable on this host. Unlock it locally and try again."
+    ,"serviceAuthorizationRequired": "Administrator authorization is required to enable lock-screen access."
+    ,"serviceInstalling": "Waiting for system authorization…"
+    ,"serviceUninstalling": "Disabling lock-screen access…"
+    ,"serviceFailed": "Lock-screen access could not be enabled."
+    ,"installLoginService": "Enable lock-screen access"
+    ,"uninstallLoginService": "Disable lock-screen access"
+    ,"install": "Allow and connect"
+    ,"loginServiceInstallConfirm": "To connect before login or while the host is locked, Redeven needs a root/administrator service that can read the lock screen and inject physical keyboard and pointer events. It does not listen on a public port, can be disabled at any time, and cannot unlock FileVault, BitLocker, or other encrypted disks. The operating system will ask for administrator authorization next."
+    ,"loginServiceUninstallConfirm": "Disable lock-screen access? Existing desktop sessions will remain unchanged."
+    ,"serviceInstallFailed": "Could not enable lock-screen access"
     ,"unlockHint": "Unlock mode sends only physical keyboard and pointer events. Clipboard, paste, shortcuts, and ordinary controls stay disabled."
     ,"startUnlock": "Start unlocking"
     ,"unlocking": "Unlocking host…"
