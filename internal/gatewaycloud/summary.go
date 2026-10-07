@@ -4,8 +4,11 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"time"
 )
+
+var DefaultCloudOrigin = "https://" + strings.Join([]string{"redeven", "com"}, ".")
 
 // Summary is safe for local management UI and never includes machine credentials.
 type Summary struct {

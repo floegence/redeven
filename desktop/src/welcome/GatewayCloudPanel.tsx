@@ -1,4 +1,4 @@
-import { Button, Dialog, Input } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { createSignal, onCleanup, Show } from 'solid-js';
 import { normalizeGatewayCloudConfiguration, type GatewayCloudSummary } from '../shared/gatewayCloud';
 import type { DesktopI18n } from '../shared/i18n/desktopI18n';
@@ -8,7 +8,6 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal<GatewayCloudSummary>();
   const [error, setError] = createSignal('');
-  const [cloud, setCloud] = createSignal('');
   const needsAuthorization = () => ['revoked', 'retired', 'expired'].includes(status()?.state ?? '');
   const needsConfiguration = () => !status()?.configured || needsAuthorization() || status()?.state === 'registering';
   let generation = 0;
@@ -22,7 +21,7 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
   async function load(configure = false) {
     const bridge = window.redevenDesktopLauncher;
     if (!bridge || busy()) return;
-    const configuration = normalizeGatewayCloudConfiguration({ cloud_origin: cloud(), ...(needsAuthorization() ? { reauthorize: true } : {}) });
+    const configuration = normalizeGatewayCloudConfiguration({ ...(needsAuthorization() ? { reauthorize: true } : {}) });
     if (configure && !configuration) { setError(props.i18n.t('gatewayCloud.invalid')); return; }
     const current = ++generation;
     setBusy(true);
@@ -34,16 +33,19 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
       if (current !== generation) return;
       if (!result.ok || !result.gateway_cloud) { setError(props.i18n.t('gatewayCloud.unavailable')); return; }
       setStatus(result.gateway_cloud);
-      if (result.gateway_cloud.cloud_origin) setCloud(result.gateway_cloud.cloud_origin);
+      if (configure && result.gateway_cloud.management_url) await openManagementURL(result.gateway_cloud.management_url);
     } catch { if (current === generation) setError(props.i18n.t('gatewayCloud.unavailable')); }
     finally { if (current === generation) setBusy(false); }
   }
   function close() { cancel(); setOpen(false); queueMicrotask(() => trigger?.focus()); }
-  async function manage() {
-    const url = status()?.management_url;
+  async function openManagementURL(url: string) {
     if (!url) return;
     const result = await window.redevenDesktopShell?.openExternalURL?.(url);
     if (!result?.ok) setError(props.i18n.t('gatewayCloud.unavailable'));
+  }
+  async function manage() {
+    const url = status()?.management_url;
+    if (url) await openManagementURL(url);
   }
   return <>
     <Button ref={trigger} size="sm" variant="outline" class="cursor-pointer" disabled={props.disabled} onClick={() => { setOpen(true); void load(); }}>{props.i18n.t('gatewayCloud.title')}</Button>
@@ -53,13 +55,11 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
         <p class="font-medium">{props.gatewayName}</p>
         <Show when={status()}>{value => <p role="status" class="text-sm text-muted-foreground">{props.i18n.t(`gatewayCloud.${value().state}`)}<Show when={value().namespace_public_id}><span class="ml-2 font-mono text-xs">{value().namespace_public_id}</span></Show></p>}</Show>
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
-        <Show when={needsConfiguration()}>
-          <label class="block space-y-1 text-sm"><span>{props.i18n.t('gatewayCloud.cloudOrigin')}</span><Input value={cloud()} onInput={event => setCloud(event.currentTarget.value)} placeholder="https://cloud.example.com" disabled={busy()} /></label>
-        </Show>
+        <Show when={needsConfiguration()}><p class="text-sm text-muted-foreground">{props.i18n.t('gatewayCloud.nextStep')}</p></Show>
         <div class="flex flex-wrap justify-end gap-2">
           <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t(busy() ? 'common.cancel' : 'common.close')}</Button>
           <Button class="cursor-pointer" variant="outline" disabled={busy()} onClick={() => void load()}>{props.i18n.t('common.refresh')}</Button>
-          <Show when={!needsConfiguration()} fallback={<Button class="cursor-pointer" disabled={busy() || !cloud().trim()} onClick={() => void load(true)}>{props.i18n.t('gatewayCloud.configure')}</Button>}>
+          <Show when={!needsConfiguration()} fallback={<Button class="cursor-pointer" disabled={busy()} onClick={() => void load(true)}>{props.i18n.t('gatewayCloud.configure')}</Button>}>
             <Button class="cursor-pointer" disabled={busy()} onClick={() => void manage()}>{props.i18n.t('gatewayCloud.manage')}</Button>
           </Show>
         </div>

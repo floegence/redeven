@@ -9,25 +9,19 @@ export type GatewayCloudSummary = Readonly<{
 }>;
 
 export type GatewayCloudConfiguration = Readonly<{
-  cloud_origin: string;
   reauthorize?: boolean;
+}>;
+
+export type GatewayCloudExecutionConfiguration = Readonly<GatewayCloudConfiguration & {
+  cloud_origin: string;
 }>;
 
 export function normalizeGatewayCloudConfiguration(value: unknown): GatewayCloudConfiguration | null {
   if (!value || typeof value !== 'object') return null;
   const input = value as Record<string, unknown>;
-  const origin = (raw: unknown): string | null => {
-    if (typeof raw !== 'string' || raw.length > 512) return null;
-    try {
-      const url = new URL(raw);
-      return url.protocol === 'https:' && url.origin === raw && !url.username && !url.password ? raw : null;
-    } catch { return null; }
-  };
-  const cloud = origin(input.cloud_origin);
-  if (!cloud || Object.keys(input).some(key => !['cloud_origin', 'reauthorize'].includes(key))
+  if (Object.keys(input).some(key => !['reauthorize'].includes(key))
     || (input.reauthorize !== undefined && typeof input.reauthorize !== 'boolean')) return null;
-  return { cloud_origin: cloud, ...(input.reauthorize === true ? { reauthorize: true } : {}) };
-
+  return input.reauthorize === true ? { reauthorize: true } : {};
 }
 
 export function parseGatewayCloudSummary(raw: string): GatewayCloudSummary {

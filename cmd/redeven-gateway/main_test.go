@@ -7,8 +7,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/gatewaycloud"
 	"github.com/floegence/redeven/internal/lockfile"
 )
+
+func TestCloudConnectDefaultsToOfficialCloud(t *testing.T) {
+	if gatewaycloud.DefaultCloudOrigin != "https://"+strings.Join([]string{"redeven", "com"}, ".") {
+		t.Fatalf("default Cloud origin = %q", gatewaycloud.DefaultCloudOrigin)
+	}
+}
 
 func TestServiceProcessMatchesRejectsReusedPIDMetadata(t *testing.T) {
 	executable, err := os.Executable()

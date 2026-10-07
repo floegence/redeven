@@ -3057,7 +3057,8 @@
   },
   "gatewayCloud": {
     "title": "Redeven Cloud",
-    "description": "Gateway를 Redeven Cloud에 연결합니다. 네임스페이스 관리자가 게시를 승인합니다. 각 런타임의 로컬 동의는 가입 시 이미 기록됩니다.",
+    "description": "Gateway를 Redeven Cloud에 연결합니다. Desktop이 공식 Cloud를 자동으로 사용합니다. 네임스페이스 관리자가 게시를 승인합니다. 각 런타임의 로컬 동의는 가입 시 이미 기록됩니다.",
+    "nextStep": "연결한 후 Redeven Cloud에서 이 Gateway를 승인하고 소속될 네임스페이스를 선택하세요.",
     "cloudOrigin": "클라우드 주소",
     "gatewayURL": "런타임에서 접근할 수 있는 게이트웨이 주소",
     "listenAddress": "게이트웨이 수신 주소",

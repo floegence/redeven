@@ -142,6 +142,7 @@ import {
   type DesktopSavedRuntimeTarget,
 } from './desktopPreferences';
 import {
+  defaultRedevenCloudOrigin,
   requireRedevenCloudOrigin,
   type RedevenCloudOriginPolicy,
 } from '../shared/redevenCloud';
@@ -3433,6 +3434,7 @@ function gatewayLifecycleManager(): GatewayLifecycleManager {
       release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
       asset_cache_root: desktopRuntimePackageCacheRoot(),
       temp_root: app.getPath('temp'),
+      cloud_origin: defaultRedevenCloudOrigin(desktopRedevenCloudOriginPolicy()),
       source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
       local_ui_bind: compact(process.env.REDEVEN_DESKTOP_LOCAL_UI_BIND),
       target_commit: bundle.commit,
