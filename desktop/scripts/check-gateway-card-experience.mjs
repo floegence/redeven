@@ -54,7 +54,7 @@ try {
       if (index) assert.ok(row.top >= rows[index - 1].bottom, 'Gateways never share a row');
     }
     assert.ok((await card.innerText()).includes(i18n.t('gatewayAccess.directoryPending')));
-    assert.equal(await card.getByRole('button', { name: i18n.t('gatewayMembers.invite'), exact: true }).isDisabled(), true);
+    assert.equal(await card.locator('.redeven-gateway-card__add').count(), 0, 'Gateway access actions stay in More actions');
     assert.equal(await library.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
     for (const button of await library.getByRole('button').all()) assert.equal(await button.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
     await library.evaluate(async el => { await Promise.all(el.getAnimations({ subtree: true }).filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished)); });

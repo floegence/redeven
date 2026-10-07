@@ -9,7 +9,7 @@ import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 
 export function GatewayMembersDialog(props: Readonly<{
   gateway?: DesktopGatewaySource; i18n: DesktopI18n; targets: readonly DesktopProviderRuntimeLinkTarget[];
-  onClose: () => void; refresh: () => Promise<unknown>;
+  onClose: () => void; refresh: () => Promise<unknown>; focusOwner?: (gatewayID: string) => void;
 }>) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
@@ -74,7 +74,12 @@ export function GatewayMembersDialog(props: Readonly<{
     const result = await perform({ kind: 'update_gateway_policy', gateway_id: props.gateway.gateway_id, policy: policy()! });
     if (result) { setDraftPolicy(undefined); setSavingPolicy(false); }
   }
-  return <Dialog open={!!props.gateway} onOpenChange={open => { if (!open) props.onClose(); }}
+  function close() {
+    const id = props.gateway?.gateway_id;
+    props.onClose();
+    if (id) queueMicrotask(() => props.focusOwner?.(id));
+  }
+  return <Dialog open={!!props.gateway} onOpenChange={open => { if (!open) close(); }}
     title={props.i18n.t('gatewayMembers.title')} bodyDescription={props.gateway?.display_name} closeLabel={props.i18n.t('common.close')}>
     <div class="max-h-[75vh] space-y-5 overflow-y-auto p-4">
       <Show when={props.gateway?.rebuild_required}><div class="space-y-2 rounded-md border border-warning p-3 text-sm">
@@ -82,11 +87,16 @@ export function GatewayMembersDialog(props: Readonly<{
         <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'dismiss_gateway_rebuild', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.close')}</Button>
       </div></Show>
       <section class="space-y-3">
-        <h3 class="text-sm font-semibold">{props.i18n.t('gatewayMembers.invite')}</h3>
-        <p class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.inviteHelp')}</p>
-        <Button class="cursor-pointer" size="sm" disabled={busy() || !props.gateway?.permissions?.manage_members} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="text-sm font-semibold">{props.i18n.t('gatewayMembers.invite')}</h3>
+            <p class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.inviteHelp')}</p>
+          </div>
+          <Button class="cursor-pointer" size="sm" disabled={busy() || !props.gateway?.permissions?.manage_members} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
+        </div>
         <Show when={invitation()}>
-          <div class="space-y-3 rounded-md border border-border p-3">
+          <div class="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <p role="status" class="text-xs text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
             <Button class="cursor-pointer" size="sm" variant="outline" onClick={download}>{props.i18n.t('gatewayMembers.download')}</Button>
             <label class="block space-y-1 text-xs"><span>{props.i18n.t('gatewayMembers.chooseRuntime')}</span>
               <select class="w-full cursor-pointer rounded border border-border bg-background p-2" value={targetID()} onChange={event => setTargetID(event.currentTarget.value)}>
@@ -153,7 +163,7 @@ export function GatewayMembersDialog(props: Readonly<{
       </section>
       <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
       <div class="flex justify-end gap-2"><Button class="cursor-pointer" variant="outline" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'refresh_gateway_catalog', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.refresh')}</Button>
-        <Button class="cursor-pointer" variant="ghost" onClick={props.onClose}>{props.i18n.t('common.close')}</Button></div>
+        <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t('common.close')}</Button></div>
     </div>
   </Dialog>;
 }

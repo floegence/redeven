@@ -50,8 +50,10 @@ try {
         await document.fonts.ready;
       }, { dark, largeText, invitation: invitationFixture });
       const card = page.locator(`[data-gateway-id="${gateway.gateway_id}"]`);
-      const invite = card.getByRole('button', { name: i18n.t('gatewayMembers.invite'), exact: true });
-      await invite.focus(); await page.keyboard.press('Enter');
+      const moreActions = card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: gateway.display_name }), exact: true });
+      await moreActions.click();
+      const gatewayMenu = page.locator('.redeven-gateway-menu');
+      await gatewayMenu.getByRole('menuitem', { name: i18n.t('gatewayMembers.invite'), exact: true }).click();
       const dialog = page.getByRole('dialog');
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
       await dialog.getByText(i18n.t('gatewayMembers.failed'), { exact: true }).waitFor();
@@ -81,7 +83,7 @@ try {
       }
       await page.screenshot({ path: `${output}/${locale}-${width}.png` });
       await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
-      await page.waitForFunction(() => document.activeElement?.classList.contains('redeven-gateway-card__add'));
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-haspopup') === 'menu');
       // Failed refresh retains the last directory; access-only identities never gain mutation rights.
       await page.evaluate(({ snapshot, gateway }) => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{ ...gateway, sync_state: 'catalog_failed', permissions: { access: true, manage_members: false, configure_cloud: false } }] }), { snapshot, gateway });
       await card.getByText(i18n.t('gatewayAccess.environmentListStale'), { exact: true }).waitFor();
