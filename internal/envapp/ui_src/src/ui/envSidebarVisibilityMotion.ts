@@ -1,5 +1,6 @@
 export type EnvSidebarVisibilityMotion = 'animated' | 'instant';
 type EnvConversationTab = 'ai';
+const ENV_STANDARD_SIDEBAR_TABS = new Set(['tessiven']);
 
 export const ENV_CONVERSATION_TABS = new Set<EnvConversationTab>(['ai']);
 
@@ -10,7 +11,7 @@ export interface ResolveEnvSidebarVisibilityMotionArgs {
 }
 
 export function shouldEnvTabOpenSidebar(tab: string): boolean {
-  return ENV_CONVERSATION_TABS.has(tab as EnvConversationTab);
+  return ENV_CONVERSATION_TABS.has(tab as EnvConversationTab) || ENV_STANDARD_SIDEBAR_TABS.has(tab);
 }
 
 export function resolveEnvSidebarVisibilityMotion(

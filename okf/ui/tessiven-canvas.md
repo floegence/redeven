@@ -52,6 +52,12 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 - The document viewer and export are read-only. Content changes, including
   renaming and restoring earlier content, are made through Flower.
 
+- Env App exposes Service Canvas as the last Activity entry. Activity navigation
+  keeps the regular shell and sidebar mounted; the header has no duplicate
+  canvas shortcut. In Workbench, the Service Canvas Dock item follows pinned
+  plugin applications and opens a separate Activity window instead of creating
+  a Workbench widget.
+
 - Up to 15 Runtime nodes in a group are shown individually. Larger groups use
   a name or ordinal selector and render only the selected node's details.
 - Clicking opens object details. Hover tracks related edges without opening
@@ -83,3 +89,6 @@ the canvas composer and never sends a message automatically.
 - `internal/envapp/ui_src/src/styles/tessiven.browser.test.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-library.browser.test.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-flower.browser.test.tsx`
+- `internal/envapp/ui_src/src/ui/EnvAppShell.tsx`
+- `internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx`
+- `internal/envapp/ui_src/src/ui/envSidebarVisibilityMotion.ts`

@@ -1237,6 +1237,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
 }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvTessivenPage', () => ({ default: (props: any) => <div data-testid="tessiven-page" data-visible={String(props.visible)} /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({
   EnvFileBrowserPage: () => {
     const [loading, setLoading] = createSignal(true);
@@ -3507,7 +3508,72 @@ describe('EnvAppShell environment entry affordances', () => {
         'containers',
         'ai',
         ...pinnedIDs,
+        'tessiven',
       ]);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('places Service Canvas last in Activity, keeps the standard sidebar, and removes the header shortcut', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => activityItemsState.items.some((item) => item.id === 'tessiven'));
+      const items = activityItemsState.items.map((item) => item.id);
+      expect(items.at(-1)).toBe('tessiven');
+      expect(host.querySelector('[aria-label="Tessiven"]')).toBeNull();
+
+      (host.querySelector('[data-activity-id="tessiven"]') as HTMLButtonElement).click();
+      await flushUntil(() => host.querySelector('[data-testid="activity-main"]')?.getAttribute('data-active-id') === 'tessiven');
+      expect(host.querySelector('[data-testid="shell-sidebar"]')).toBeTruthy();
+      expect(registeredComponentsState.components.some((component) => component.id === 'tessiven')).toBe(true);
+      expect(sidebarActiveTabValue).toBe('tessiven');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('places Service Canvas after Workbench plugin apps and opens it in an independent window', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const pluginInventoryKey = 'instance:plugin_example_metrics';
+    const workbenchPins = JSON.stringify({
+      schemaVersion: 2,
+      activityInventoryKeys: [],
+      workbenchInventoryKeys: [pluginInventoryKey],
+    });
+    window.localStorage.setItem('redeven.plugin-dock-pins:default', workbenchPins);
+    window.localStorage.setItem('redeven.plugin-dock-pins:env_local', workbenchPins);
+    const popup = { focus: vi.fn() } as unknown as Window;
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(popup);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-workbench-dock-item="tessiven"]')));
+      const dockItems = [...host.querySelectorAll<HTMLElement>('[data-workbench-dock-item]')].map((item) => item.dataset.workbenchDockItem);
+      expect(dockItems).toEqual([pluginInventoryKey, 'tessiven']);
+
+      (host.querySelector('[data-workbench-dock-item="tessiven"]') as HTMLButtonElement).click();
+      expect(openWindow).toHaveBeenCalledWith(
+        expect.stringContaining('surface=tessiven'),
+        'redeven-service-canvas-env_local',
+        'popup',
+      );
+      expect(popup.focus).toHaveBeenCalled();
     } finally {
       dispose();
     }
@@ -4190,6 +4256,7 @@ describe('EnvAppShell environment entry affordances', () => {
         'containers',
         'plugins',
         'ai',
+        'tessiven',
       ]);
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugin_example_metrics"]')));

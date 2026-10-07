@@ -5,6 +5,7 @@ describe('envSidebarVisibilityMotion', () => {
   it('marks Flower as a conversation-owned sidebar tab', () => {
     expect(ENV_CONVERSATION_TABS.has('ai')).toBe(true);
     expect(shouldEnvTabOpenSidebar('ai')).toBe(true);
+    expect(shouldEnvTabOpenSidebar('tessiven')).toBe(true);
     expect(shouldEnvTabOpenSidebar('terminal')).toBe(false);
   });
 
