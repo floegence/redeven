@@ -302,22 +302,52 @@ func (m *Manager) controlDesktopApplication(ctx context.Context, a *linuxApplica
 		_, err := attached.call(ctx, nativeapps.DesktopRequest{Method: "terminate_application"})
 		return err
 	}
-	event, err := attached.call(ctx, nativeapps.DesktopRequest{Method: "status"})
-	if err != nil {
-		return err
-	}
-	var state nativeapps.DesktopState
-	if json.Unmarshal(event.Result, &state) != nil {
-		return errors.New("invalid native desktop status")
-	}
-	// Snapshot only top-level windows. A close-generated save prompt must remain
-	// visible and interactive until the user decides whether to save or cancel.
-	for _, window := range state.Windows {
-		if window.Parent == 0 {
-			if _, err := attached.call(ctx, nativeapps.DesktopRequest{Method: "close_window", Window: window.Window}); err != nil {
-				return err
+	// The helper can report sharing readiness before the first top-level window
+	// is discoverable. Keep probing briefly so an immediate Close all windows
+	// request cannot be accepted as a no-op during that startup gap.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		event, err := attached.call(ctx, nativeapps.DesktopRequest{Method: "status"})
+		if err != nil {
+			return err
+		}
+		var state nativeapps.DesktopState
+		if json.Unmarshal(event.Result, &state) != nil {
+			return errors.New("invalid native desktop status")
+		}
+		// Snapshot only top-level windows. A close-generated save prompt must
+		// remain visible and interactive until the user decides whether to save
+		// or cancel.
+		windows := desktopTopLevelWindowIDs(state.Windows)
+		if len(windows) > 0 {
+			for _, window := range windows {
+				if _, err := attached.call(ctx, nativeapps.DesktopRequest{Method: "close_window", Window: window}); err != nil {
+					return err
+				}
 			}
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return nil
+		}
+		timer := time.NewTimer(50 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
 		}
 	}
-	return nil
+}
+
+func desktopTopLevelWindowIDs(windows []nativeapps.DesktopWindow) []uint64 {
+	ids := make([]uint64, 0, len(windows))
+	for _, window := range windows {
+		if window.Window != 0 && window.Parent == 0 {
+			ids = append(ids, window.Window)
+		}
+	}
+	return ids
 }
