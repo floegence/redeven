@@ -18,6 +18,7 @@ import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopSh
 
 export default function EnvTessivenPage(props: {
   visible: boolean;
+  standalone?: boolean;
   openRequest?: TessivenOpenRequest | null;
 }) {
   const env = useEnvContext(),
@@ -50,6 +51,7 @@ export default function EnvTessivenPage(props: {
     <TessivenPage
       locale={i18n.locale()}
       visible={props.visible}
+      standalone={props.standalone}
       t={(key, values) => t()(key, values)}
       transport={transport}
       canWrite={env.env()?.permissions?.can_write === true}

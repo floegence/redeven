@@ -215,6 +215,7 @@ it('keeps reply text, context and controls legible across every theme and clamps
     content: 'Storefront and Orders API run on **production-01**.\n\nOrders API reads from the external **Orders database**. Content delivery forwards requests to Storefront.\n\nThe canvas preserves this distinction: the dashed area is a logical group; the solid card is the host node.', status: 'complete', created_at_ms: 2 }] }), 2);
   runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: reply.current });
   await expect.element(page.getByText('Storefront and Orders API run on', { exact: false })).toBeVisible();
+  expect(host.querySelector('.tessiven-flower-context')).toBeNull();
   const luminance = (color: string) => {
     const ctx = document.createElement('canvas').getContext('2d')!; ctx.fillStyle = color; ctx.fillRect(0, 0, 1, 1);
     const rgb = [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
@@ -224,7 +225,6 @@ it('keeps reply text, context and controls legible across every theme and clamps
     document.documentElement.classList.toggle('dark', preset.mode === 'dark');
     for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
     for (const [selector, background, minimum] of [
-      ['.tessiven-flower-context', '.flower-composer', 4.5],
       ['.tessiven-flower-output h2', '.tessiven-flower-output', 4.5],
       ['.tessiven-flower-output .flower-chat-transcript', '.tessiven-flower-output', 4.5],
       ['.tessiven-flower-output .tessiven-icon-button', '.tessiven-flower-output', 3],

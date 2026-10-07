@@ -1204,6 +1204,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
               aria-pressed={Boolean(action.active)}
               onClick={(event) => action.onActivate?.(event.currentTarget)}
             >
+              {action.icon?.({ class: 'test-workbench-dock-icon' })}
               {action.label}
             </button>
           )}
@@ -1237,7 +1238,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
 }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div>activity main</div> }));
-vi.mock('./pages/EnvTessivenPage', () => ({ default: (props: any) => <div data-testid="tessiven-page" data-visible={String(props.visible)} /> }));
+vi.mock('./pages/EnvTessivenPage', () => ({ default: (props: any) => <div data-testid="tessiven-page" data-visible={String(props.visible)} data-standalone={String(Boolean(props.standalone))} /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({
   EnvFileBrowserPage: () => {
     const [loading, setLoading] = createSignal(true);
@@ -3507,8 +3508,8 @@ describe('EnvAppShell environment entry affordances', () => {
         'applications',
         'containers',
         'ai',
-        ...pinnedIDs,
         'tessiven',
+        ...pinnedIDs,
       ]);
     } finally {
       dispose();
@@ -3568,6 +3569,7 @@ describe('EnvAppShell environment entry affordances', () => {
       const dockItems = [...host.querySelectorAll<HTMLElement>('[data-workbench-dock-item]')].map((item) => item.dataset.workbenchDockItem);
       expect(dockActions).toEqual(['plugins', 'tessiven']);
       expect(dockItems).toEqual([pluginInventoryKey]);
+      expect(host.querySelector('[data-workbench-icon="service-canvas"]')).not.toBeNull();
 
       (host.querySelector('[data-workbench-dock-action="tessiven"]') as HTMLButtonElement).click();
       expect(openWindow).toHaveBeenCalledWith(
@@ -3595,6 +3597,7 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushUntil(() => host.querySelector('[data-env-service-canvas-window]')?.getAttribute('data-env-service-canvas-ready') === 'true');
       expect(host.querySelector('[data-testid="tessiven-page"]')).not.toBeNull();
+      expect(host.querySelector('[data-testid="tessiven-page"]')?.getAttribute('data-standalone')).toBe('true');
       expect(host.querySelector('[data-testid="shell-sidebar"]')).toBeNull();
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
       expect(host.querySelector('[data-activity-id]')).toBeNull();

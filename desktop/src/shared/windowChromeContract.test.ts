@@ -53,6 +53,7 @@ describe('windowChromeContract', () => {
     expect(styleText).toContain("--redeven-desktop-titlebar-height: 40px;");
     expect(styleText).toContain("--redeven-desktop-titlebar-balance-inset: 144px;");
     expect(styleText).toContain("[data-floe-shell-slot='top-bar']");
+    expect(styleText).toContain("[data-redeven-desktop-titlebar-drag-region='true'] button");
     expect(styleText).toContain("[data-redeven-desktop-window-titlebar='true']");
     expect(styleText).toContain(DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR);
     expect(DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR).toBe('data-redeven-desktop-titlebar-no-drag');

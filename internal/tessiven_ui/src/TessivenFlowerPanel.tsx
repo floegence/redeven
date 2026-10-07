@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
-import { ExternalLink, MessageSquare, Plus } from '@floegence/floe-webapp-core/icons';
+import { ExternalLink, Plus } from '@floegence/floe-webapp-core/icons';
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { FlowerConversationParts, FlowerEmbeddedConversation } from '../../flower_ui/src/FlowerSurface';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
@@ -62,10 +62,6 @@ export function TessivenFlowerPanel(props: {
     get placeholder() { return props.t('flowerPlaceholder'); },
     emptyContent: <div class="tessiven-flower-welcome"><FlowerIcon />
       <strong>{props.t('flowerWelcome')}</strong><p>{props.t('flowerWelcomeHint')}</p></div>,
-    composerContext: <div class="tessiven-flower-context"><MessageSquare />
-      <span title={props.request.label}>{props.request.label}</span>
-      <small>{props.t('version', { version: props.request.selection.version_id })}</small>
-    </div>,
     onSubmit: () => setRepliesOpen(true),
     render: renderConversation,
   };

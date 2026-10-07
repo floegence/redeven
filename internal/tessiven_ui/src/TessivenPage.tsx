@@ -50,6 +50,7 @@ export function TessivenPage(props: {
   locale?: string;
   visible?: boolean;
   canWrite: boolean;
+  standalone?: boolean;
   renderFlower: (props: CanvasFlowerSurfaceProps) => JSX.Element;
   onOpenFlower: (threadID: string) => void;
   onOpenService: (
@@ -417,7 +418,11 @@ export function TessivenPage(props: {
     });
   return (
     <section class="tessiven" aria-label="Tessiven">
-      <header class="tessiven-toolbar">
+      <header
+        class={`tessiven-toolbar${props.standalone ? ' tessiven-toolbar--standalone' : ''}`}
+        data-redeven-desktop-titlebar-drag-region={props.standalone ? 'true' : undefined}
+        data-redeven-desktop-titlebar-content={props.standalone ? 'true' : undefined}
+      >
         <div class="tessiven-title">
           <Show
             when={canvas() || archived()}
