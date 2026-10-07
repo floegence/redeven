@@ -31,11 +31,14 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
     finally { if (current === generation) setBusy(false); }
   }
   return <Dialog open={!!props.environment} onOpenChange={value => { if (!value) props.close(); }} title={props.i18n.t('gatewayJoin.title')}
-    bodyDescription={props.i18n.t('gatewayJoin.consent')} closeLabel={props.i18n.t('common.close')}>
+    bodyDescription={props.i18n.t('gatewayJoin.consent')} closeLabel={props.i18n.t('common.close')} class="w-[min(38rem,calc(100vw-2rem))]">
     <Show when={target()?.id} keyed fallback={<div class="space-y-4 p-4">
-      <p class="text-sm">{props.i18n.t('gatewayJoin.startHelp')}</p>
+      <div class="rounded-lg border border-border/70 bg-muted/20 p-4">
+        <p class="text-sm font-medium">{props.i18n.t('gatewayJoin.startTitle')}</p>
+        <p class="mt-1 text-sm leading-6 text-muted-foreground">{props.i18n.t('gatewayJoin.startHelp')}</p>
+      </div>
       <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
-      <div class="flex flex-wrap justify-end gap-2">
+      <div class="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-4">
         <Button class="cursor-pointer" variant="outline" onClick={props.close}>{props.i18n.t('gatewayJoin.notNow')}</Button>
         <Button class="cursor-pointer" loading={busy()} onClick={() => void start()}>{props.i18n.t('gatewayJoin.startAndContinue')}</Button>
       </div>

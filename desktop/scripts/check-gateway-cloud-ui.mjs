@@ -36,6 +36,7 @@ try {
     assert.deepEqual(await page.evaluate(() => window.gatewayRequests[0]), {
       kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:qualification', operation: 'status',
     }, 'opening must inspect membership without submitting consent');
+    assert.ok((await dialog.innerText()).includes(i18n.t('gatewayMembership.not_joined')), `${locale}: missing membership phase must use a readable fallback`);
     const material = { protocol_version: 'redeven-gateway-v4', gateway_id: 'gateway', invitation_id: 'invitation', gateway_url: 'https://gateway.internal:7443', gateway_public_key: 'a'.repeat(43), gateway_tls_root_pem: '-----BEGIN CERTIFICATE-----\ntest', token: 'b'.repeat(43), signature: 'c'.repeat(86), issued_at_unix_ms: 1900000000000, expires_at_unix_ms: 1900000600000 };
     await dialog.locator('input[type=file]').setInputFiles({ name: 'join.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(material)) });
     const approve = dialog.getByRole('button', { name: i18n.t('gatewayJoin.approve'), exact: true });
@@ -45,7 +46,8 @@ try {
     await page.waitForFunction(() => window.gatewayRequests.length === 2);
     await dialog.getByRole('alert').waitFor();
     assert.equal(await approve.isEnabled(), true, 'failure must retain retry');
-    assert.ok((await dialog.innerText()).includes(material.gateway_url), 'failure must preserve selected material');
+    assert.ok((await dialog.innerText()).includes(i18n.t('gatewayJoin.invitationReady')), 'failure must preserve selected material');
+    assert.equal((await dialog.innerText()).includes(material.gateway_url), false, 'failure must not expose gateway URL');
     assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'narrow dialog must fit');
     await page.screenshot({ path: `${output}/${locale}.png` });
     await page.keyboard.press('Escape');
