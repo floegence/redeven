@@ -670,11 +670,11 @@ it.each(['macos', 'linux'])('requires explicit force confirmation for a running 
   dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
   button(`${backend === 'macos' ? 'Quit application' : 'Close all windows'} · Text Editor`).click(); await settle();
   const dialog = document.querySelector('[role="dialog"]')!;
-  [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Force quit')!.click(); await settle();
+  [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Force quit…')!.click(); await settle();
   expect(controlText(dialog)).toContain('Unsaved work will be lost.');
   expect(state.terminate).not.toHaveBeenCalled();
   expect(state.quit).not.toHaveBeenCalled();
-  [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Force quit')!.click(); await settle();
+  [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Force quit now')!.click(); await settle();
   expect(state.terminate).toHaveBeenCalledWith(app.id, ['exact-instance']);
   expect(state.quit).not.toHaveBeenCalled();
   expect(state.detach).not.toHaveBeenCalled();

@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', catalog: vi.fn(), setup: vi.fn(), detach: vi.fn() }));
+const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', catalog: vi.fn(), setup: vi.fn(), detach: vi.fn(), quit: vi.fn(), terminate: vi.fn(), processStopped: false, sharingStopped: false }));
 vi.mock('../i18n', async () => {
   const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return { useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) };
@@ -19,12 +19,14 @@ vi.mock('../services/hostApplicationsApi', async importOriginal => {
   const session = { id: 'shared', application: app, state: 'running', backend: 'macos' };
   return {
     ...await importOriginal<object>(),
-    listHostApplications: async () => state.catalog.getMockImplementation() ? state.catalog() : ({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [session], running: [{ application_id: app.id, instances: ['instance'] }] }),
-    listHostApplicationSessions: async () => state.catalog.getMockImplementation() ? (await state.catalog()).sessions : [session],
-    listRunningHostApplications: async () => state.catalog.getMockImplementation() ? (await state.catalog()).running ?? [] : [{ application_id: app.id, instances: ['instance'] }],
+    listHostApplications: async () => state.catalog.getMockImplementation() ? state.catalog() : ({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: state.sharingStopped ? [] : [session], running: state.processStopped ? [] : [{ application_id: app.id, instances: ['instance'] }] }),
+    listHostApplicationSessions: async () => state.catalog.getMockImplementation() ? (await state.catalog()).sessions : (state.sharingStopped ? [] : [session]),
+    listRunningHostApplications: async () => state.catalog.getMockImplementation() ? (await state.catalog()).running ?? [] : (state.processStopped ? [] : [{ application_id: app.id, instances: ['instance'] }]),
     getHostApplicationSetup: state.setup,
     observeHostApplicationSetup: async (_callback: unknown, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve())),
     detachHostApplication: state.detach,
+    quitHostApplication: state.quit,
+    terminateHostApplication: state.terminate,
   };
 });
 
@@ -32,7 +34,7 @@ let dispose: (() => void) | undefined;
 afterEach(async () => {
   dispose?.();
   document.body.replaceChildren();
-  state.detach.mockClear(); state.catalog.mockReset(); state.setup.mockReset(); state.scope = "";
+  state.locale = 'en-US'; state.detach.mockReset(); state.catalog.mockReset(); state.setup.mockReset(); state.quit.mockReset(); state.terminate.mockReset(); state.scope = ""; state.processStopped = false; state.sharingStopped = false;
   await page.viewport(1280, 720);
 });
 
@@ -71,6 +73,52 @@ it.each([390, 1440].flatMap(width => (['en-US', 'zh-CN'] as const).map(locale =>
     expect(state.detach).not.toHaveBeenCalled();
   },
 );
+
+it('requires explicit force confirmation and shows accepted force-quit feedback', async () => {
+  state.locale = 'en-US';
+  const host = document.createElement('div');
+  document.body.append(host);
+  dispose = render(() => <EnvHostApplicationsPage />, host);
+  await expect.poll(() => host.querySelector('.host-app-quit')).toBeTruthy();
+
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.host-app-quit')!);
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.textContent).toContain('Quit Text Editor?');
+  await userEvent.click(page.getByRole('button', { name: 'Force quit…', exact: true }));
+  expect(state.terminate).not.toHaveBeenCalled();
+  expect(dialog.textContent).toContain('Force quit Text Editor?');
+  expect(dialog.textContent).toContain('Unsaved work will be lost.');
+  expect(document.activeElement?.textContent).toBe('Force quit now');
+
+  await userEvent.click(page.getByRole('button', { name: 'Force quit now', exact: true }));
+  await expect.poll(() => state.terminate).toHaveBeenCalledWith('editor.app', ['instance']);
+  await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+  expect(host.textContent).toContain('Force quit requested.');
+
+  state.processStopped = true;
+  await expect.poll(() => host.querySelector('.host-app-process'), { timeout: 4000 }).toBeNull();
+});
+
+it('keeps stop-sharing failures inside the confirmation dialog and closes after success', async () => {
+  state.locale = 'en-US';
+  const host = document.createElement('div');
+  document.body.append(host);
+  dispose = render(() => <EnvHostApplicationsPage />, host);
+  await expect.poll(() => host.querySelector('.host-app-stop')).toBeTruthy();
+
+  state.detach.mockRejectedValueOnce(new Error('fixture failure'));
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.host-app-stop')!);
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  await userEvent.click(page.getByRole('button', { name: 'Stop sharing', exact: true }));
+  await expect.poll(() => dialog.querySelector('[role="alert"]')).toBeTruthy();
+  expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+
+  state.detach.mockResolvedValueOnce(undefined);
+  state.sharingStopped = true;
+  await userEvent.click(page.getByRole('button', { name: 'Stop sharing', exact: true }));
+  await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+  await expect.poll(() => host.querySelector('.host-app-status')?.textContent).toContain('Running');
+});
 
 it('restores a persisted directory and icon before the network, preserving row focus through an update', async () => {
   const { createResourceCache, createIndexedDBResourceCacheStorage } = await import('@floegence/floe-webapp-core/resource-cache');

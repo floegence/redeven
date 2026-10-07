@@ -12237,7 +12237,7 @@
         "linux",
         "macos"
       ],
-      "timestamp": "2026-09-22T05:00:00Z",
+      "timestamp": "2026-10-07T05:00:00Z",
       "frontmatter": {
         "description": "Compare aligned user operations and operating-system limits for macOS and Linux host applications.",
         "tags": [
@@ -12246,19 +12246,19 @@
           "linux",
           "macos"
         ],
-        "timestamp": "2026-09-22T05:00:00Z",
+        "timestamp": "2026-10-07T05:00:00Z",
         "title": "Cross-platform host application behavior",
         "type": "Interaction Contract"
       },
-      "body_length": 2843,
+      "body_length": 3941,
       "summary": "Host Applications separates viewing, sharing, window closure and process exit on\nboth platforms. Ordinary actions preserve unsaved work and respect app cancellation.\nOnly an independently confirmed Force quit may bypass saving. The backend owns\nprocess evidence, and the interface names the actual supported operation. OS\nsession, display and service policies remain authoritative; unavailable recovery\nmust not silently relaunch an unrelated or replacement process.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "| Operation | macOS | Linux |\n| --- | --- | --- |\n| Close outer Desktop window / browser popup | Disconnect viewer; app survives | Same |\n| Network loss, reload, second viewer | Reconnect same live app; stale input is revoked | Same |\n| Stop sharing | End capture/route; app and unsaved work survive | End proxy/route, including active WebSockets; app survives |\n| No window for more than 40 seconds | Waiting, with native menu/reopen | Waiting, reconnect same process without relaunch |\n| Close last window | Viewer closes; app decides whether its process exits | Same |\n| Cancel normal close/quit | Preserve application and save dialog | Same; ordinary control is Close all windows |\n| Explicit Force quit in library | Confirm loss warning; exact AppKit instance | Confirm loss warning; exact owned backend and descendants |\n| Orderly Runtime shutdown or process exit | Native app remains discoverable | Private display survives; new Runtime verifies/reconnects it |\n| Running list | Regular apps in the logged-in OS session | Caller-owned Redeven instances, including detached/windowless apps |\n| Host reboot / display server destruction / OS cleanup | No survival guarantee | Same; Runtime cgroup cleanup may also end its virtual display |\n\nThe UI shares interaction structure, themes and ten explicit locale catalogs.\nPlatform-specific labels state the real available operation rather than promising\nan application-level Linux graceful quit. Force quit is a separate deliberate\naction, never escalation of a save cancellation. Linux recovery and boundaries\nbelong to the [instance lifecycle contract](linux-application-lifecycle.md).",
-          "char_count": 1638
+          "body": "| Operation | macOS | Linux |\n| --- | --- | --- |\n| Close outer Desktop window / browser popup | Disconnect viewer; app survives | Same |\n| Network loss, reload, second viewer | Reconnect same live app; stale input is revoked | Same |\n| Stop sharing | End capture/route; app and unsaved work survive | End proxy/route, including active WebSockets; app survives |\n| No window for more than 40 seconds | Waiting, with native menu/reopen | Waiting, reconnect same process without relaunch |\n| Close last window | Viewer closes; app decides whether its process exits | Same |\n| Cancel normal close/quit | Preserve application and save dialog | Same; ordinary control is Close all windows |\n| Explicit Force quit in library | Confirm loss warning; exact AppKit instance | Confirm loss warning; exact owned backend and descendants |\n| Orderly Runtime shutdown or process exit | Native app remains discoverable | Private display survives; new Runtime verifies/reconnects it |\n| Running list | Regular apps in the logged-in OS session | Caller-owned Redeven instances, including detached/windowless apps |\n| Host reboot / display server destruction / OS cleanup | No survival guarantee | Same; Runtime cgroup cleanup may also end its virtual display |\n\nThe UI shares interaction structure, themes and ten explicit locale catalogs.\nPlatform-specific labels state the real available operation rather than promising\nan application-level Linux graceful quit. Force quit is a separate deliberate\naction, never escalation of a save cancellation. Linux recovery and boundaries\nbelong to the [instance lifecycle contract](linux-application-lifecycle.md).\n\n## Accepted operations and visible state\n\nQuit and force-quit requests are asynchronous. A successful request response\nmeans that the host accepted the operation, not that the process has already\nexited. The Host Applications surface must close the confirmation dialog after\nacceptance and show a per-application pending state until the authoritative\nrunning snapshot confirms the target instance is gone. Pending work must not\ndisable unrelated applications or leave the target card visually unchanged.\n\nStopping sharing has a different outcome: the Redeven session and route end,\nwhile the host application and its windows may continue running. The running\ncard therefore remains available for reconnection and must make that outcome\nvisible. Errors while stopping sharing stay inside the confirmation surface so\nthe user can retry or cancel without guessing whether the request was sent.\n\nForce quit requires an explicit confirmation state that names the data-loss\nconsequence. The first Force quit action only enters that state; only its final\nconfirmation sends the destructive host request.",
+          "char_count": 2736
         },
         {
           "id": "boundaries",
@@ -33193,5 +33193,5 @@
       ]
     }
   ],
-  "source_sha256": "7a9643271d2a22b75195c6e8306e196d1f89fa9b81836611115083684c7ba023"
+  "source_sha256": "eced24310436e37359620ca5efb119978724c22141edae1cbc26c853d9ebb662"
 }
