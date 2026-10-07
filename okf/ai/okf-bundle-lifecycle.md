@@ -3,13 +3,11 @@ type: OKF Lifecycle
 title: OKF bundle lifecycle
 description: Redeven builds a deterministic embedded OKF bundle from source Markdown concepts.
 tags: [okf, provenance, release]
-timestamp: 2026-06-17T00:00:00Z
+timestamp: 2026-10-07T00:00:00Z
 ---
 # Summary
 
-Redeven builds its embedded OKF bundle from curated source files under the top-level `okf/` authoring root, verifies deterministic dist outputs under `okf/dist/`, and embeds the resulting bundle into the binary used by runtime and AI features.
-
-Redeven builds a deterministic embedded OKF bundle from source Markdown concepts.
+Redeven builds its embedded OKF bundle from curated source files under the top-level `okf/` authoring root, verifies deterministic dist outputs under `okf/dist/`, and embeds the resulting bundle into the binary used by Runtime and AI features for local retrieval.
 
 # Contract
 

@@ -29,6 +29,8 @@ const SOURCE_README = `<p align="center">Redeven</p>
 
 Choose Provider and one provider Environment.
 
+The maintained knowledge bundle is OKF v0.2.
+
 Use \`desktop/.bundle/<goos>-<goarch>/redeven\`.
 
 \`\`\`bash
@@ -56,6 +58,8 @@ const TRANSLATED_README = `<p align="center">Redeven</p>
 
 選擇 Provider 與一個 provider 環境。
 
+維護中的知識套件是 OKF v0.2。
+
 使用 \`desktop/.bundle/<goos>-<goarch>/redeven\`。
 
 \`\`\`bash
@@ -68,8 +72,10 @@ redeven bootstrap --listen <address>
 function writeFixture() {
   const root = mkdtempSync(join(tmpdir(), 'redeven-readme-test-'));
   mkdirSync(join(root, 'assets/readme'), { recursive: true });
+  mkdirSync(join(root, 'okf'), { recursive: true });
   writeFileSync(join(root, 'README.md'), SOURCE_README);
   writeFileSync(join(root, 'README.zh-TW.md'), TRANSLATED_README);
+  writeFileSync(join(root, 'okf/index.md'), '---\nokf_version: "0.2"\n---\n');
   writeFileSync(join(root, 'AGENTS.md'), '# Rules\n');
   writeFileSync(join(root, 'THIRD_PARTY_NOTICES.md'), '# Notices\n');
   writeFileSync(join(root, 'asset.txt'), 'asset\n');
@@ -79,7 +85,7 @@ function writeFixture() {
     schema_version: 2,
     source: { locale: 'en-US', file: 'README.md' },
     sections: [{ id: 'about', level: 2 }],
-    required_literals: ['Redeven'],
+    required_literals: ['Redeven', 'OKF v0.2'],
     quality_rules: {
       zh_tw_forbidden_simplified_characters: '这',
       forbidden_generic_english_terms: ['Runtime'],
@@ -142,6 +148,15 @@ test('accepts synchronized translations without reviewer metadata', () => {
   withFixture((root) => {
     const result = validateRepository(root);
     assert.deepEqual(result.warnings, []);
+  });
+});
+
+test('rejects a README that declares an older OKF version', () => {
+  withFixture((root) => {
+    const path = join(root, 'README.zh-TW.md');
+    const content = readFileSync(path, 'utf8').replace('OKF v0.2', 'OKF v0.1');
+    writeFileSync(path, content);
+    expectValidationError(() => validateRepository(root), 'declares stale OKF versions');
   });
 });
 

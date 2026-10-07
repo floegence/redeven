@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = resolve(SCRIPT_DIR, '..');
 const MANIFEST_PATH = 'assets/readme/locales.json';
+const OKF_INDEX_PATH = 'okf/index.md';
 const SELECTOR_START = '<!-- readme-locales:start -->';
 const SELECTOR_END = '<!-- readme-locales:end -->';
 
@@ -260,6 +261,29 @@ function validateRequiredLiterals(content, manifest, label) {
   return errors;
 }
 
+function readOkfVersion(repoRoot) {
+  const content = readFileSync(resolve(repoRoot, OKF_INDEX_PATH), 'utf8');
+  const match = content.match(/^okf_version:\s*["']?([0-9]+\.[0-9]+)["']?\s*$/m);
+  if (!match) {
+    throw new Error(`${OKF_INDEX_PATH}: missing a valid okf_version`);
+  }
+  return match[1];
+}
+
+export function validateOkfVersion(content, version, label = 'README') {
+  const expected = `OKF v${version}`;
+  const errors = [];
+  const declared = [...content.matchAll(/\bOKF v[0-9]+\.[0-9]+\b/g)].map((match) => match[0]);
+  const stale = [...new Set(declared.filter((literal) => literal !== expected))];
+  if (stale.length > 0) {
+    errors.push(`${label}: declares stale OKF versions ${stale.join(', ')}; expected ${expected}`);
+  }
+  if (!content.includes(expected)) {
+    errors.push(`${label}: must declare ${expected} to match okf/index.md`);
+  }
+  return errors;
+}
+
 function validateTraditionalChinese(content, manifest, locale, label) {
   if (locale !== 'zh-TW') {
     return [];
@@ -452,6 +476,11 @@ export function validateRepository(repoRoot = DEFAULT_REPO_ROOT) {
 
   const sourcePath = resolve(repoRoot, manifest.source.file);
   const sourceContent = readFileSync(sourcePath, 'utf8');
+  const okfVersion = readOkfVersion(repoRoot);
+  const okfLiteral = `OKF v${okfVersion}`;
+  if (!manifest.required_literals?.includes(okfLiteral)) {
+    errors.push(`manifest: required_literals must include ${okfLiteral}`);
+  }
   const sourceHash = contentSha256(sourceContent);
   const sourceLinks = extractLinkDestinations(sourceContent);
 
@@ -463,6 +492,7 @@ export function validateRepository(repoRoot = DEFAULT_REPO_ROOT) {
       continue;
     }
     const content = readFileSync(path, 'utf8');
+    errors.push(...validateOkfVersion(content, okfVersion, label));
     errors.push(...validateLanguageSelector(content, manifest, locale.locale, label));
     errors.push(...validateSections(content, manifest, label));
     errors.push(...validateLocalTargets(content, path, repoRoot, label));
