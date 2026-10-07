@@ -7249,6 +7249,26 @@
     "disconnecting": "切断中…",
     "disconnectFailed": "リモート入力と映像の配信は停止しましたが、セッションの終了を確認できませんでした。もう一度切断してください。",
     "controlHint": "この接続でホストのマウス、キーボード、テキストクリップボードを使用することを許可しますか？別の接続が操作中の場合、その接続は表示専用に切り替わります。",
-    "shortcutsHint": "ホストにショートカットを送信します。キーの組み合わせはホストのOSに対応しています。"
+    "shortcutsHint": "ホストにショートカットを送信します。キーの組み合わせはホストのOSに対応しています。",
+    "loginServiceTitle": "ログイン画面アクセスサービス",
+    "loginServiceHint": "ログイン画面やロック画面の表示と解除に使う任意の管理者サービスです。Runtime の非公開チャネルだけを使用し、暗号化ディスクは解除できません。",
+    "serviceActive": "インストール済み。承認済みのログイン画面セッションを利用できます。",
+    "serviceNotInstalled": "未インストール。通常のデスクトップセッションを開始するには、ホストをローカルで解除してください。",
+    "serviceUnsupported": "このホストまたはコンポジターでは利用できません。",
+    "serviceAuthorizationRequired": "インストールを完了するには管理者の承認が必要です。",
+    "serviceInstalling": "OS によるインストール承認を待っています…",
+    "serviceUninstalling": "ログイン画面サービスを削除しています…",
+    "serviceFailed": "サービス操作に失敗し、変更を元に戻しました。",
+    "installLoginService": "ログイン画面サービスをインストール",
+    "uninstallLoginService": "サービスをアンインストール",
+    "install": "インストール",
+    "loginServiceInstallConfirm": "ロック画面を読み取り、物理キーボードとポインターイベントを注入できる root/管理者サービスをインストールします。公開ポートは開かず、いつでも削除でき、FileVault、BitLocker などの暗号化ディスクは解除できません。次に OS が管理者の承認を求めます。",
+    "loginServiceUninstallConfirm": "管理者ログイン画面サービスを削除しますか？既存のデスクトップセッションは変わりません。",
+    "serviceInstallFailed": "ログイン画面サービスを変更できません",
+    "unlockHint": "解除モードでは物理キーボードとポインターのイベントだけを送信します。クリップボード、貼り付け、ショートカット、通常の操作は無効です。",
+    "startUnlock": "解除を開始",
+    "unlocking": "ホストを解除中…",
+    "unlockPhysicalOnly": "解除モードでは物理キーボードとポインターだけを使用できます。",
+    "unlockFailed": "解除に失敗しました。ホストはロックされたままです。再試行またはキャンセルしてください。"
   }
 }

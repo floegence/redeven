@@ -2,6 +2,7 @@ package remotedesktop
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	nativeapps "github.com/floegence/floe-native-apps"
@@ -40,5 +41,29 @@ func TestStatusPreservesNativeReadinessAndAuthorization(t *testing.T) {
 				t.Fatal("readiness transport leaked")
 			}
 		})
+	}
+}
+
+func TestLoginServiceStatusAndAuthorizationAreExplicit(t *testing.T) {
+	first := &socketTransport{fakeTransport: fakeTransport{done: make(chan struct{})}, control: make(chan nativeapps.HostDesktopMessage, 1)}
+	first.control <- nativeapps.HostDesktopMessage{Type: "service_status", Service: nativeapps.LoginScreenService,
+		ServiceStatus: &nativeapps.ServiceStatus{State: nativeapps.ServiceNotInstalled, Backend: "darwin"}}
+	second := &socketTransport{fakeTransport: fakeTransport{done: make(chan struct{})}, control: make(chan nativeapps.HostDesktopMessage, 1)}
+	second.control <- nativeapps.HostDesktopMessage{Type: "service_status", Service: nativeapps.LoginScreenService,
+		ServiceStatus: &nativeapps.ServiceStatus{State: nativeapps.ServiceAuthorization, Backend: "darwin"}, Code: "ADMIN_AUTHORIZATION_REQUIRED"}
+	connections := []Transport{first, second}
+	m := New(t.TempDir(), nil, func(context.Context) (Transport, error) {
+		n := connections[0]
+		connections = connections[1:]
+		return n, nil
+	})
+	defer m.Close()
+	status, err := m.SystemServiceStatus(context.Background(), "alice")
+	if err != nil || status.State != nativeapps.ServiceNotInstalled {
+		t.Fatalf("service status: %+v, %v", status, err)
+	}
+	status, err = m.InstallLoginService(context.Background(), "alice")
+	if status.State != nativeapps.ServiceAuthorization || !errors.Is(err, ErrServiceAuthorization) {
+		t.Fatalf("authorization result: %+v, %v", status, err)
 	}
 }

@@ -7253,6 +7253,26 @@
     "disconnecting": "Desconectando…",
     "disconnectFailed": "A entrada remota e a transmissão da tela foram interrompidas, mas não foi possível confirmar o encerramento da sessão. Clique em Desconectar novamente.",
     "controlHint": "Permitir que esta conexão use o mouse, o teclado e a área de transferência de texto do host? Se outra conexão estiver no controle, ela passará para o modo somente visualização.",
-    "shortcutsHint": "Envie um atalho de teclado ao host. As combinações correspondem ao sistema operacional do host."
+    "shortcutsHint": "Envie um atalho de teclado ao host. As combinações correspondem ao sistema operacional do host.",
+    "loginServiceTitle": "Serviço de acesso à tela de login",
+    "loginServiceHint": "Serviço opcional de administrador para visualizar e desbloquear a tela de login ou bloqueio. Usa apenas o canal privado do Runtime e não desbloqueia discos criptografados.",
+    "serviceActive": "Instalado e pronto para uma sessão autorizada na tela de login.",
+    "serviceNotInstalled": "Não instalado. O host precisa ser desbloqueado localmente antes de iniciar uma sessão de desktop normal.",
+    "serviceUnsupported": "Indisponível neste host ou compositor.",
+    "serviceAuthorizationRequired": "É necessária autorização de administrador para concluir a instalação.",
+    "serviceInstalling": "Aguardando a autorização do sistema para instalar…",
+    "serviceUninstalling": "Removendo o serviço da tela de login…",
+    "serviceFailed": "A operação falhou e foi revertida.",
+    "installLoginService": "Instalar serviço da tela de login",
+    "uninstallLoginService": "Desinstalar serviço",
+    "install": "Instalar",
+    "loginServiceInstallConfirm": "Isso instala um serviço root/administrador que pode ler a tela bloqueada e injetar eventos físicos de teclado e ponteiro. Ele não escuta em portas públicas, pode ser desinstalado a qualquer momento e não desbloqueia FileVault, BitLocker ou outros discos criptografados. O sistema pedirá autorização de administrador em seguida.",
+    "loginServiceUninstallConfirm": "Remover o serviço administrador da tela de login? As sessões de desktop existentes não serão alteradas.",
+    "serviceInstallFailed": "Não foi possível alterar o serviço da tela de login",
+    "unlockHint": "O modo de desbloqueio envia apenas eventos físicos de teclado e ponteiro. Área de transferência, colagem, atalhos e controles normais ficam desativados.",
+    "startUnlock": "Iniciar desbloqueio",
+    "unlocking": "Desbloqueando o host…",
+    "unlockPhysicalOnly": "O modo de desbloqueio aceita apenas teclado e ponteiro físicos.",
+    "unlockFailed": "Falha ao desbloquear. O host continua bloqueado; tente novamente ou cancele."
   }
 }

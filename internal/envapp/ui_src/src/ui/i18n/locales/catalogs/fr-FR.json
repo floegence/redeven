@@ -7253,6 +7253,26 @@
     "disconnecting": "Déconnexion…",
     "disconnectFailed": "La saisie et la diffusion de l’écran sont arrêtées, mais la fin de la session n’a pas pu être confirmée. Cliquez à nouveau sur Déconnecter.",
     "controlHint": "Autoriser cette connexion à utiliser la souris, le clavier et le presse-papiers texte de l’hôte ? Si une autre connexion contrôle l’hôte, elle passera en mode lecture seule.",
-    "shortcutsHint": "Envoyez un raccourci clavier à l’hôte. Les combinaisons correspondent au système d’exploitation de l’hôte."
+    "shortcutsHint": "Envoyez un raccourci clavier à l’hôte. Les combinaisons correspondent au système d’exploitation de l’hôte.",
+    "loginServiceTitle": "Service d’accès à l’écran de connexion",
+    "loginServiceHint": "Service administrateur facultatif pour afficher et déverrouiller l’écran de connexion ou de verrouillage. Il utilise uniquement le canal privé de Runtime et ne déverrouille pas les disques chiffrés.",
+    "serviceActive": "Installé et prêt pour une session d’écran de connexion autorisée.",
+    "serviceNotInstalled": "Non installé. L’hôte doit être déverrouillé localement avant de démarrer une session de bureau normale.",
+    "serviceUnsupported": "Indisponible sur cet hôte ou ce compositeur.",
+    "serviceAuthorizationRequired": "Une autorisation administrateur est nécessaire pour terminer l’installation.",
+    "serviceInstalling": "En attente de l’autorisation d’installation du système…",
+    "serviceUninstalling": "Suppression du service d’écran de connexion…",
+    "serviceFailed": "L’opération a échoué et a été annulée.",
+    "installLoginService": "Installer le service d’écran de connexion",
+    "uninstallLoginService": "Désinstaller le service",
+    "install": "Installer",
+    "loginServiceInstallConfirm": "Cette action installe un service root/administrateur capable de lire l’écran verrouillé et d’injecter des événements physiques de clavier et de pointeur. Il n’écoute aucun port public, peut être désinstallé à tout moment et ne déverrouille pas FileVault, BitLocker ni les autres disques chiffrés. Le système demandera ensuite l’autorisation administrateur.",
+    "loginServiceUninstallConfirm": "Supprimer le service administrateur de l’écran de connexion ? Les sessions de bureau existantes restent inchangées.",
+    "serviceInstallFailed": "Impossible de modifier le service d’écran de connexion",
+    "unlockHint": "Le mode déverrouillage n’envoie que les événements physiques du clavier et du pointeur. Presse-papiers, collage, raccourcis et commandes normales restent désactivés.",
+    "startUnlock": "Commencer le déverrouillage",
+    "unlocking": "Déverrouillage de l’hôte…",
+    "unlockPhysicalOnly": "Le mode déverrouillage accepte uniquement le clavier et le pointeur physiques.",
+    "unlockFailed": "Échec du déverrouillage. L’hôte reste verrouillé ; réessayez ou annulez."
   }
 }

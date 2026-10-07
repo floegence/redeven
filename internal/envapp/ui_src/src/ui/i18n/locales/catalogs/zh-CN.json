@@ -7249,6 +7249,26 @@
     "disconnecting": "正在断开连接…",
     "disconnectFailed": "远程输入和画面传输已停止，但尚未确认会话已结束。请再次点击“断开连接”。",
     "controlHint": "允许此连接使用主机的鼠标、键盘和文本剪贴板吗？如果其他连接正在控制主机，该连接将切换为仅查看模式。",
-    "shortcutsHint": "向主机发送快捷键。组合键与主机操作系统保持一致。"
+    "shortcutsHint": "向主机发送快捷键。组合键与主机操作系统保持一致。",
+    "loginServiceTitle": "登录界面访问服务",
+    "loginServiceHint": "可选的管理员服务，用于查看和解锁登录或锁屏界面。仅通过 Runtime 私有通道通信，不能解锁加密磁盘。",
+    "serviceActive": "已安装，可用于授权的登录界面会话。",
+    "serviceNotInstalled": "未安装。启动普通桌面会话前必须先在主机本地解锁。",
+    "serviceUnsupported": "此主机或合成器不支持。",
+    "serviceAuthorizationRequired": "完成安装需要管理员授权。",
+    "serviceInstalling": "正在等待操作系统授权安装…",
+    "serviceUninstalling": "正在移除登录界面服务…",
+    "serviceFailed": "服务操作失败，已回滚。",
+    "installLoginService": "安装登录界面服务",
+    "uninstallLoginService": "卸载服务",
+    "install": "安装",
+    "loginServiceInstallConfirm": "这将安装一个 root/管理员服务，用于读取锁屏画面并注入物理键盘和指针事件。服务不会监听公网端口，可随时卸载，也不能解锁 FileVault、BitLocker 或其他加密磁盘。接下来操作系统会请求管理员授权。",
+    "loginServiceUninstallConfirm": "移除管理员登录界面服务？现有桌面会话不受影响。",
+    "serviceInstallFailed": "无法更改登录界面服务",
+    "unlockHint": "解锁模式只发送物理键盘和指针事件。剪贴板、粘贴、快捷键及普通控制均已禁用。",
+    "startUnlock": "开始解锁",
+    "unlocking": "正在解锁主机…",
+    "unlockPhysicalOnly": "解锁模式仅接受物理键盘和指针输入。",
+    "unlockFailed": "解锁失败。主机仍处于锁定状态，可重试或取消。"
   }
 }

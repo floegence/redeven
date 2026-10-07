@@ -9,6 +9,7 @@ const canvas = $('desktop'), panel = $('panel'), toolbar = $('toolbar');
 const base = config.base;
 let session = config.session, control, media, player, epoch = 0, sequence = 0;
 let generation = 0, state = 'disconnected', reason = '', painted = false, stopped = false, retry;
+let unlocking = false, lockedFrame = 0;
 let backend = '', stats, clipboardText = '', clipboardSync = false, clipboardBusy = false;
 let original = false, quality = 'smooth', audio = false, volume = .7, pinned = false, hideTimer;
 let textInput = 'host';
@@ -42,6 +43,7 @@ new MutationObserver(localize).observe(document.documentElement, { attributes: t
 
 function notice(key) { $('notice').textContent = copy(key); clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('notice').textContent = ''; }, 6000); }
 function authorized(target) { return !audioRequest && !awaitingState && target === generation && painted && state === 'active' && session.mode === 'control' && control?.readyState === WebSocket.OPEN; }
+function unlockAuthorized(target) { return unlocking && !audioRequest && !awaitingState && target === generation && painted && state === 'locked' && session.mode === 'control' && control?.readyState === WebSocket.OPEN && lockedFrame > 0; }
 function active(target) { return !panel.open && authorized(target); }
 function command(method, values = {}, takeover = false) {
   if (control?.readyState !== WebSocket.OPEN) return false;
@@ -54,23 +56,32 @@ const input = hostApplicationInput.createRemoteInput({
   surface: canvas, label: copy('input'),
   commitText(text, target) {
     pointer.flush();
+    if (unlockAuthorized(target)) { notice('unlockPhysicalOnly'); return; }
     if (!active(target)) return;
     if (textInput !== 'paste') { notice('textInputRequired'); return; }
     if (new TextEncoder().encode(text).length > 16000) { notice('textTooLong'); return; }
     command('input', { input: { kind: 'paste', text } });
   },
-  sendKey(key, target) { pointer.flush(); if (active(target)) command('input', { input: { kind: 'key', ...key } }); },
+  sendKey(key, target) { pointer.flush(); if (unlockAuthorized(target)) command('unlock_input', { frame_id: lockedFrame, input: { kind: 'key', ...key } }); else if (active(target)) command('input', { input: { kind: 'key', ...key } }); },
   release,
   clipboard(event, target) {
-    if (!clipboardSync || !active(target) || !(event.ctrlKey || event.metaKey) || event.code !== 'KeyV') return false;
+    if (unlocking || !clipboardSync || !active(target) || !(event.ctrlKey || event.metaKey) || event.code !== 'KeyV') return false;
     event.preventDefault(); void localClipboard(target, true); return true;
   },
 });
 const pointer = hostApplicationPointer.createRemotePointer({
-  surface: canvas, resolveTarget: () => active(generation) ? generation : null, isTargetValid: active,
+  surface: canvas, resolveTarget: () => active(generation) || unlockAuthorized(generation) ? generation : null, isTargetValid: target => active(target) || unlockAuthorized(target),
   onActivate(position) { input.setAnchor(position.clientX, position.clientY); input.focus(); },
   release,
   sendPointer(packet, target) {
+    if (unlockAuthorized(target) && !['text', 'paste'].includes(packet.kind)) {
+      const rect = canvas.getBoundingClientRect();
+      const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
+      const width = canvas.width * scale, height = canvas.height * scale;
+      const x = Math.max(0, Math.min(1, (packet.clientX - rect.left - (rect.width - width) / 2) / width));
+      const y = Math.max(0, Math.min(1, (packet.clientY - rect.top - (rect.height - height) / 2) / height));
+      return command('unlock_input', { frame_id: lockedFrame, input: { kind: packet.kind, x, y, button: packet.button ?? 0, clicks: packet.clicks ?? 0, dx: packet.dx ?? 0, dy: packet.dy ?? 0 } });
+    }
     if (!active(target)) return false;
     const rect = canvas.getBoundingClientRect();
     const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
@@ -82,7 +93,7 @@ const pointer = hostApplicationPointer.createRemotePointer({
       shiftKey: !!packet.shiftKey, ctrlKey: !!packet.ctrlKey, altKey: !!packet.altKey, metaKey: !!packet.metaKey } });
   },
 });
-function revoke() { stats = undefined; refreshStats(); painted = false; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
+function revoke() { stats = undefined; refreshStats(); painted = false; lockedFrame = 0; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
   canvas.dataset.mode = session.mode;
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'sound', 'text-input', 'volume']) {
@@ -92,8 +103,13 @@ function updateTransitionControls() {
   $('shortcuts').disabled = !authorized(generation);
   $('disconnect').disabled = stopped;
   $('retry-disconnect').disabled = disconnectBusy;
+  if ($('start-unlock')) $('start-unlock').disabled = stopped || state !== 'locked' || !painted || !session.unlock;
+  if ($('cancel-unlock')) $('cancel-unlock').disabled = !unlocking;
+  $('unlock-bar')?.toggleAttribute('hidden', state !== 'locked');
+  $('start-unlock')?.toggleAttribute('hidden', unlocking);
+  $('cancel-unlock')?.toggleAttribute('hidden', !unlocking);
   toolbar.dataset.state = stopped ? 'ended' : state;
-  $('session-state').textContent = copy(stopped ? 'disconnected' : state === 'active' ? session.mode : 'connecting');
+  $('session-state').textContent = copy(stopped ? 'disconnected' : state === 'active' ? session.mode : state === 'locked' ? 'locked' : 'connecting');
   for (const item of document.querySelectorAll('[data-remote-control]')) item.disabled = !authorized(generation);
   if ($('lock-host')) $('lock-host').disabled = !authorized(generation);
   const confirm = $('confirm-lock');
@@ -125,6 +141,16 @@ async function setAudio(enabled) {
   }
 }
 function status(key, hint = '') { $('connection').hidden = key === ''; $('status').textContent = key ? copy(key) : ''; $('hint').textContent = hint ? copy(hint) : ''; }
+function startUnlock() {
+  if (state !== 'locked' || !painted || !session.unlock) return;
+  unlocking = true; input.bindTarget(unlockAuthorized(generation) ? generation : null); canvas.focus(); status('unlocking', 'unlockPhysicalOnly'); updateTransitionControls();
+}
+function cancelUnlock() {
+  if (!unlocking) return;
+  command('unlock_cancel'); unlocking = false; input.bindTarget(null); status('locked', 'lockedHint'); updateTransitionControls();
+}
+if ($('start-unlock')) $('start-unlock').onclick = startUnlock;
+if ($('cancel-unlock')) $('cancel-unlock').onclick = cancelUnlock;
 function updateDisplays(displays) {
   $('display').replaceChildren(...displays.map((display, index) => {
     const option = document.createElement('option'); option.value = display.id;
@@ -141,10 +167,11 @@ function updateState(message) {
   const nextGeneration = message.generation ?? 0;
   const changed = generation !== nextGeneration;
   state = message.state; reason = message.code ?? ''; generation = nextGeneration;
+  if (state === 'active') unlocking = false;
   awaitingState = false;
   if (state === 'active') session.mode = message.mode ?? session.mode;
   $('mode').value = session.mode;
-  if (changed || state !== 'active') { revoke(); player.reset(generation); }
+  if (changed || state !== 'active' && state !== 'locked') { revoke(); player.reset(generation); }
   if ($('view-hint')) $('view-hint').hidden = session.mode === 'control';
   if (state !== 'active' || session.mode !== 'control') clearClipboard();
   const permission = /permission|authorization|host_action/i.test(state + ' ' + reason);
@@ -163,7 +190,7 @@ function updateState(message) {
     session.display_id = message.display_id; $('display').value = message.display_id;
   }
   updateTransitionControls();
-  if (state === 'active') {
+  if (state === 'active' || state === 'locked') {
     for (const packet of awaitingMedia) player.receive(packet);
     awaitingMedia = [];
   }
@@ -196,8 +223,8 @@ async function connect() {
     media = new windowTransport.WebSocket(address('media'), ['redeven-desktop-v1', result.data.token]);
     media.binaryType = 'arraybuffer';
     player ??= new HostDesktopPlayer(canvas, {
-      acknowledge(g, frame) { if (!awaitingState && state === 'active' && g === generation) command('frame_ack', { frame_id: frame }); },
-      painted(g) { if (awaitingState || g !== generation || state !== 'active') return; painted = true; canvas.setAttribute('data-painted', ''); input.bindTarget(active(g) ? g : null); updateTransitionControls(); reconnectAttempts = 0; },
+      acknowledge(g, frame) { if (!awaitingState && (state === 'active' || state === 'locked') && g === generation) { if (state === 'locked') lockedFrame = frame; command('frame_ack', { frame_id: frame }); } },
+      painted(g) { if (awaitingState || g !== generation || state !== 'active' && state !== 'locked') return; painted = true; canvas.setAttribute('data-painted', ''); input.bindTarget(active(g) || unlockAuthorized(g) ? g : null); updateTransitionControls(); reconnectAttempts = 0; },
       recover() { revoke(); if (state === 'active') changeDesktop('keyframe'); },
       statistics(value) { stats = value; refreshStats(); },
       audioState(value) { if (value === 'unavailable' || value === 'unsupported') notice('failure'); },
@@ -212,6 +239,7 @@ async function connect() {
       const message = JSON.parse(data);
       if (message.type === 'capabilities') {
         backend = message.capabilities.backend;
+        session.unlock = !!message.capabilities.unlock;
         const displays = message.capabilities.displays;
         const display = displays.length && !displays.some(item => item.id === session.display_id) ? '' : session.display_id;
         session.display_id = display;
@@ -244,6 +272,7 @@ async function connect() {
           $('reconnect').hidden = false;
         }
         else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });
+        else if (/UNLOCK|LOGIN_SERVICE/.test(message.code)) { status('locked', 'unlockFailed'); notice('unlockFailed'); updateTransitionControls(); }
         else notice(message.code.includes('CLIPBOARD') ? 'clipboardFailed' : 'failure');
       }
     };

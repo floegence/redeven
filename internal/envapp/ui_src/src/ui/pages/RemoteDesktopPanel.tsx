@@ -5,7 +5,7 @@ import { Dialog, ConfirmDialog } from '../primitives/EnvAppModal';
 import { useI18n } from '../i18n';
 import type { EnvAppTranslationKey } from '../i18n/locales/en-US';
 import { useEnvContext } from './EnvContext';
-import { cancelRemoteDesktopPreparation, forgetRemoteDesktopAuthorization, createRemoteDesktop, disconnectRemoteDesktop, getRemoteDesktopStatus, prepareRemoteDesktop, setRemoteDesktopUnattended, type RemoteDesktopStatus } from '../services/remoteDesktopApi';
+import { cancelRemoteDesktopPreparation, forgetRemoteDesktopAuthorization, createRemoteDesktop, disconnectRemoteDesktop, getRemoteDesktopStatus, prepareRemoteDesktop, setRemoteDesktopUnattended, installRemoteDesktopLoginService, cancelRemoteDesktopLoginService, uninstallRemoteDesktopLoginService, type RemoteDesktopStatus } from '../services/remoteDesktopApi';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
 import { openWebServiceRoute, resolveWebServiceOpenRoute, WebServiceWindowOpenError } from '../services/webServiceWindows';
@@ -14,7 +14,7 @@ import { LocalApiError } from '../services/localApi';
 import './remote-desktop.css';
 
 type Failure = { title: EnvAppTranslationKey; hint: EnvAppTranslationKey; diagnostic?: string };
-type Action = 'connect' | 'prepare' | 'settings' | 'permission' | 'cancel' | 'forget';
+type Action = 'connect' | 'prepare' | 'settings' | 'permission' | 'cancel' | 'forget' | 'service-install' | 'service-uninstall';
 
 function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: EnvAppTranslationKey = 'remoteDesktop.connectionHint'): Failure {
   if (failure instanceof WebServiceWindowOpenError) {
@@ -26,6 +26,7 @@ function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: Env
     else if (failure.code === 'DESKTOP_INVALID') hint = 'remoteDesktop.requestInvalid';
     else if (failure.code === 'DESKTOP_AUTHORIZATION_BUSY') hint = 'remoteDesktop.approvalBusy';
     else if (failure.code === 'DESKTOP_SETUP_BUSY') hint = 'remoteDesktop.setupBusy';
+    else if (failure.code.startsWith('DESKTOP_SERVICE_')) hint = 'remoteDesktop.serviceInstallFailed';
     return { title, hint, diagnostic: `${failure.code} · HTTP ${failure.status}` };
   }
   return { title, hint };
@@ -57,6 +58,8 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const [forgetApproval, setForgetApproval] = createSignal(false);
   const [opened, setOpened] = createSignal(false);
   const [pendingApproval, setPendingApproval] = createSignal<boolean>();
+  const [serviceInstallConfirm, setServiceInstallConfirm] = createSignal(false);
+  const [serviceUninstallConfirm, setServiceUninstallConfirm] = createSignal(false);
   let disposed = false, refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   // The Desktop connection label names SSH/gateway targets. A local Runtime's
@@ -66,6 +69,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     || env.env()?.agent?.hostname?.trim() || env.env_id());
   const full = () => !!env.env()?.permissions?.can_read && !!env.env()?.permissions?.can_write && !!env.env()?.permissions?.can_execute;
   const capabilities = () => status()?.capabilities;
+  const loginService = () => status()?.login_service;
   const displays = () => capabilities()?.displays ?? [];
   const preparing = () => ['checking', 'downloading', 'receiving', 'verifying', 'installing', 'validating'].includes(status()?.setup?.state ?? '');
   const authorization = () => capabilities()?.state === 'authorization_required' || capabilities()?.state === 'host_action_required';
@@ -126,6 +130,17 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (capabilities()?.state === 'unsupported') return 'remoteDesktop.unsupportedHostHint';
     if (!available() && !loadError()) return 'remoteDesktop.connectionHint';
     return undefined;
+  };
+  const serviceStateCopy = (): EnvAppTranslationKey => {
+    switch (loginService()?.state) {
+      case 'active': return 'remoteDesktop.serviceActive';
+      case 'authorization_required': return 'remoteDesktop.serviceAuthorizationRequired';
+      case 'failed': return 'remoteDesktop.serviceFailed';
+      case 'installing': return 'remoteDesktop.serviceInstalling';
+      case 'uninstalling': return 'remoteDesktop.serviceUninstalling';
+      case 'not_installed': return 'remoteDesktop.serviceNotInstalled';
+      default: return 'remoteDesktop.serviceUnsupported';
+    }
   };
 
   const runAction = async (action: Action, title: EnvAppTranslationKey, run: () => Promise<unknown>) => {
@@ -193,6 +208,13 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       <Button size="icon" variant="ghost" disabled={refreshing() || !!busy()} aria-label={i18n.t('remoteDesktop.refresh')} title={i18n.t('remoteDesktop.refresh')} onClick={() => void refresh()}><Refresh size={16} class={refreshing() ? 'animate-spin motion-reduce:animate-none' : ''} /></Button>
     </div>
     <p class="remote-desktop-description">{i18n.t('remoteDesktop.description')}</p>
+    <div class="remote-desktop-service" aria-label={i18n.t('remoteDesktop.loginServiceTitle')}>
+      <div><strong>{i18n.t('remoteDesktop.loginServiceTitle')}</strong><p>{i18n.t(serviceStateCopy())}</p></div>
+      <Show when={loginService()?.state === 'active'} fallback={<Show when={loginService()?.state === 'installing' || loginService()?.state === 'uninstalling'} fallback={<Button variant="outline" disabled={!full() || !!busy() || refreshing() || loginService()?.state === 'unsupported'} onClick={() => setServiceInstallConfirm(true)}>{i18n.t('remoteDesktop.installLoginService')}</Button>}><Button variant="ghost" disabled={!full() || !!busy() || refreshing()} onClick={() => void runAction('service-uninstall', 'remoteDesktop.serviceInstallFailed', cancelRemoteDesktopLoginService)}>{i18n.t('remoteDesktop.cancel')}</Button></Show>}>
+        <Button variant="ghost" disabled={!full() || !!busy() || refreshing()} onClick={() => setServiceUninstallConfirm(true)}>{i18n.t('remoteDesktop.uninstallLoginService')}</Button>
+      </Show>
+    </div>
+    <p class="remote-desktop-service-hint">{i18n.t('remoteDesktop.loginServiceHint')}</p>
     <Show when={stateHint()}>{key => <p class="remote-desktop-guidance">{i18n.t(key())}</p>}</Show>
     <Show when={status()?.capabilities.state === 'setup_required' || preparing()}>
       <div class="remote-desktop-setup">
@@ -241,5 +263,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     </div>
     <ConfirmDialog open={forgetApproval()} onOpenChange={setForgetApproval} title={i18n.t('remoteDesktop.approvalForget')} bodyDescription={i18n.t('remoteDesktop.approvalForgetHint')} confirmText={i18n.t('remoteDesktop.approvalForgetConfirm')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => { setForgetApproval(false); void runAction('forget', 'remoteDesktop.approvalForgetFailed', forgetRemoteDesktopAuthorization); }} />
     <ConfirmDialog open={takeover()} onOpenChange={setTakeover} title={i18n.t('remoteDesktop.takeover')} bodyDescription={i18n.t('remoteDesktop.takeoverHint')} confirmText={i18n.t('remoteDesktop.takeover')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => void open(true)} />
+    <ConfirmDialog open={serviceInstallConfirm()} onOpenChange={setServiceInstallConfirm} title={i18n.t('remoteDesktop.installLoginService')} bodyDescription={i18n.t('remoteDesktop.loginServiceInstallConfirm')} confirmText={i18n.t('remoteDesktop.install')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => { setServiceInstallConfirm(false); void runAction('service-install', 'remoteDesktop.serviceInstallFailed', installRemoteDesktopLoginService); }} />
+    <ConfirmDialog open={serviceUninstallConfirm()} onOpenChange={setServiceUninstallConfirm} title={i18n.t('remoteDesktop.uninstallLoginService')} bodyDescription={i18n.t('remoteDesktop.loginServiceUninstallConfirm')} confirmText={i18n.t('remoteDesktop.uninstallLoginService')} cancelText={i18n.t('remoteDesktop.cancel')} onConfirm={() => { setServiceUninstallConfirm(false); void runAction('service-uninstall', 'remoteDesktop.serviceInstallFailed', uninstallRemoteDesktopLoginService); }} />
   </section>;
 }

@@ -7249,6 +7249,26 @@
     "disconnecting": "연결 해제 중…",
     "disconnectFailed": "원격 입력과 화면 전송은 중지되었지만 세션 종료를 확인하지 못했습니다. 연결 해제를 다시 시도하세요.",
     "controlHint": "이 연결에서 호스트의 마우스, 키보드 및 텍스트 클립보드를 사용하도록 허용할까요? 다른 연결이 호스트를 제어 중이면 해당 연결은 보기 전용으로 전환됩니다.",
-    "shortcutsHint": "호스트에 단축키를 보냅니다. 키 조합은 호스트 운영 체제에 맞게 표시됩니다."
+    "shortcutsHint": "호스트에 단축키를 보냅니다. 키 조합은 호스트 운영 체제에 맞게 표시됩니다.",
+    "loginServiceTitle": "로그인 화면 액세스 서비스",
+    "loginServiceHint": "로그인 또는 잠금 화면을 보고 잠금 해제하기 위한 선택적 관리자 서비스입니다. Runtime의 비공개 채널만 사용하며 암호화된 디스크는 잠금 해제하지 않습니다.",
+    "serviceActive": "설치됨. 승인된 로그인 화면 세션을 사용할 수 있습니다.",
+    "serviceNotInstalled": "설치되지 않음. 일반 데스크톱 세션을 시작하려면 호스트를 로컬에서 잠금 해제해야 합니다.",
+    "serviceUnsupported": "이 호스트 또는 컴포지터에서는 지원되지 않습니다.",
+    "serviceAuthorizationRequired": "설치를 완료하려면 관리자 권한이 필요합니다.",
+    "serviceInstalling": "운영 체제의 설치 승인을 기다리는 중…",
+    "serviceUninstalling": "로그인 화면 서비스를 제거하는 중…",
+    "serviceFailed": "서비스 작업에 실패하여 변경 사항을 되돌렸습니다.",
+    "installLoginService": "로그인 화면 서비스 설치",
+    "uninstallLoginService": "서비스 제거",
+    "install": "설치",
+    "loginServiceInstallConfirm": "잠금 화면을 읽고 실제 키보드와 포인터 이벤트를 주입할 수 있는 root/관리자 서비스를 설치합니다. 공개 포트를 열지 않으며 언제든 제거할 수 있고 FileVault, BitLocker 등의 암호화 디스크는 잠금 해제하지 않습니다. 다음 단계에서 운영 체제가 관리자 승인을 요청합니다.",
+    "loginServiceUninstallConfirm": "관리자 로그인 화면 서비스를 제거하시겠습니까? 기존 데스크톱 세션은 영향을 받지 않습니다.",
+    "serviceInstallFailed": "로그인 화면 서비스를 변경할 수 없습니다",
+    "unlockHint": "잠금 해제 모드에서는 실제 키보드와 포인터 이벤트만 전송합니다. 클립보드, 붙여넣기, 단축키 및 일반 제어는 비활성화됩니다.",
+    "startUnlock": "잠금 해제 시작",
+    "unlocking": "호스트 잠금 해제 중…",
+    "unlockPhysicalOnly": "잠금 해제 모드에서는 실제 키보드와 포인터 입력만 사용할 수 있습니다.",
+    "unlockFailed": "잠금 해제에 실패했습니다. 호스트는 잠긴 상태로 유지됩니다. 다시 시도하거나 취소하세요."
   }
 }
