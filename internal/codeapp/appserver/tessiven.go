@@ -222,7 +222,10 @@ func (g *Server) handleTessivenEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
 	changes, unsubscribe := g.tessiven.Subscribe()
 	defer unsubscribe()
 	ticker := time.NewTicker(20 * time.Second)

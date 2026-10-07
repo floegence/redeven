@@ -58,10 +58,15 @@ text. Flower is the editing surface; the canvas has no manual content editor.
   header has no duplicate canvas shortcut. In Workbench, the Service Canvas
   action sits immediately to the right of the Plugin Center action, uses a
   themed rounded tile icon, and opens a dedicated Service Canvas window. The
-  standalone toolbar participates in the desktop titlebar drag/no-drag
-  contract, and the window renders only the canvas surface and its own
-  controls; it does not mount the Activity or Workbench shell, navigation, or
-  Env App frame.
+  toolbar reuses the shared resource-header sizing used by other resource
+  pages. It participates in the desktop titlebar drag/no-drag contract, and
+  the window renders only the canvas surface and its own controls; it does not
+  mount the Activity or Workbench shell, navigation, or Env App frame.
+- Canvas invalidation uses one host-owned event stream. A transient stream end
+  or transport failure is retried with bounded backoff; after three consecutive
+  failed connections the surface exposes the reconnect action while retaining
+  the last saved data. Reconnecting invalidates snapshots and does not create a
+  cursor journal or a second polling loop.
 
 - Up to 15 Runtime nodes in a group are shown individually. Larger groups use
   a name or ordinal selector and render only the selected node's details.
@@ -91,6 +96,8 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven_ui/src/TessivenGraph.tsx`
 - `internal/tessiven_ui/src/projection.ts`
 - `internal/tessiven_ui/src/tessiven.css`
+- `internal/tessiven_ui/src/transport.ts`
+- `internal/codeapp/appserver/tessiven.go`
 - `internal/envapp/ui_src/src/styles/tessiven.browser.test.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-library.browser.test.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-flower.browser.test.tsx`

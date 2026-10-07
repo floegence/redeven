@@ -76,7 +76,9 @@ it('marks the standalone canvas toolbar as the native titlebar drag surface', as
   );
   const toolbar = host.querySelector('.tessiven-toolbar');
   expect(toolbar?.getAttribute('data-redeven-desktop-titlebar-drag-region')).toBe('true');
-  expect(toolbar?.getAttribute('data-redeven-desktop-titlebar-content')).toBe('true');
+  expect(toolbar?.getAttribute('data-redeven-desktop-window-titlebar')).toBe('true');
+  expect(toolbar?.getAttribute('data-redeven-desktop-window-titlebar-content')).toBe('true');
+  expect(toolbar?.classList.contains('redeven-resource-header')).toBe(true);
   expect(toolbar?.classList.contains('tessiven-toolbar--standalone')).toBe(true);
 });
 
