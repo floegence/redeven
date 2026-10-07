@@ -23,6 +23,7 @@ export const ENV_PAGE_PRESENTATIONS: Record<BuiltinActivityPage, {
   applications: { loading: HostApplicationsPageSkeleton, restoreGeometry: true },
   containers: { loading: ContainersPageSkeleton, restoreGeometry: true },
   ai: { loading: ActivityPageLoading, restoreGeometry: false },
+  tessiven: { loading: ActivityPageLoading, restoreGeometry: false },
   settings: { loading: ActivityPageLoading, restoreGeometry: false },
   'plugin-center': { loading: ActivityPageLoading, restoreGeometry: false },
 };

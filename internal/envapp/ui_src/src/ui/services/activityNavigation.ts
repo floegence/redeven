@@ -1,9 +1,9 @@
 import { createSignal } from 'solid-js';
-import { isEnvSurfaceId, type EnvSurfaceId } from '../envViewMode';
+import { ENV_TESSIVEN_ACTIVITY_ID, isEnvSurfaceId, type EnvSurfaceId } from '../envViewMode';
 import { isDesktopStateStorageAvailable, readUIStorageItem, readUIStorageJSON, removeUIStorageItem, rendererScopedUIStorageKey, writeUIStorageJSON } from './uiStorage';
 import { resolveEnvAppStorageBinding } from './uiPersistence';
 
-export type BuiltinActivityPage = EnvSurfaceId | 'settings' | 'plugin-center';
+export type BuiltinActivityPage = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID | 'settings' | 'plugin-center';
 export type ActivityTarget = Readonly<{ kind: 'builtin'; page: BuiltinActivityPage }> | Readonly<{
   kind: 'plugin'; pluginInstanceID: string; pluginID: string; surfaceID: string;
 }>;
@@ -15,7 +15,7 @@ const LEGACY_PLUGIN_PREFIX = 'redeven.plugin.activity:';
 export type ActivityRestoreTarget = ActivityTarget | Readonly<{ kind: 'legacy-plugin'; inventoryKey: string }>;
 
 export function isBuiltinActivityPage(value: unknown): value is BuiltinActivityPage {
-  return typeof value === 'string' && (isEnvSurfaceId(value) || value === 'settings' || value === 'plugin-center');
+  return typeof value === 'string' && (isEnvSurfaceId(value) || value === ENV_TESSIVEN_ACTIVITY_ID || value === 'settings' || value === 'plugin-center');
 }
 
 export function activityTargetID(target: ActivityRestoreTarget): string {

@@ -249,6 +249,7 @@ import {
 } from './security/localTransportSecurity';
 import {
   ENV_DEFAULT_SURFACE_ID,
+  ENV_TESSIVEN_ACTIVITY_ID,
   isEnvSurfaceId,
   normalizePersistedEnvViewMode,
   type EnvOpenSurfaceOptions,
@@ -329,7 +330,7 @@ const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((mod
 const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost').then((module) => ({ default: module.FileBrowserSurfaceHost })));
 const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
 
-type EnvActivitySurfaceId = EnvSurfaceId | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID;
+type EnvActivitySurfaceId = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID;
 
 type ActivityPluginWindow = Readonly<{
   instanceID: string;
@@ -521,7 +522,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const desktopBootstrapReadyMs = Math.max(0, envAppNowMs() - envAppModuleStartedAtMs);
   const layout = useLayout();
   const navigation = props.navigation ?? createActivityNavigation();
-  const initialSurface = activityTargetID(navigation.initial);
+  const initialTessivenSurface = new URLSearchParams(window.location.search).get('surface') === ENV_TESSIVEN_ACTIVITY_ID;
+  const initialSurface = initialTessivenSurface ? ENV_TESSIVEN_ACTIVITY_ID : activityTargetID(navigation.initial);
   const initialRegularSurface = isEnvSurfaceId(initialSurface) ? initialSurface : ENV_DEFAULT_SURFACE_ID;
   if (layout.sidebarActiveTab() !== initialSurface) layout.setSidebarActiveTab(initialSurface, { openSidebar: false });
   const [pendingPluginRestore, setPendingPluginRestore] = createSignal<Exclude<ActivityRestoreTarget, { kind: 'builtin' }> | undefined>(
@@ -737,14 +739,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);
   const [tessivenOpenRequest, setTessivenOpenRequest] = createSignal<TessivenOpenRequest | null>(null);
-  onMount(() => {
-    const click = (event: MouseEvent) => { if (isLocalMode()) handleTessivenLink(event, request => { setTessivenOpenRequest(request); setTessivenOpen(true); }); };
-    document.addEventListener('click', click);
-    onCleanup(() => document.removeEventListener('click', click));
-  });
-  const [tessivenOpen, setTessivenOpen] = createSignal(new URLSearchParams(window.location.search).get('surface') === 'tessiven');
   const tessivenCopy = createMemo(() => tessivenText(i18n.locale()));
-  const tessivenVisible = () => tessivenOpen() && isLocalMode();
+  const tessivenVisible = () => viewMode() === 'activity' && layout.sidebarActiveTab() === ENV_TESSIVEN_ACTIVITY_ID && isLocalMode();
   const TessivenNavigationIcon = () => <TessivenIcon kind="tessiven"/>;
   const initialAccessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
   if (initialAccessResumeToken) {
@@ -1067,7 +1063,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
   const canUseFlower = createMemo(() => !accessGateVisible());
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
-  const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>(readPersistedDesktopViewMode() ?? 'workbench');
+  const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>(initialTessivenSurface ? 'activity' : (readPersistedDesktopViewMode() ?? 'workbench'));
   const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'activity' : desktopViewMode()));
   const [lastActivitySurface, setLastActivitySurface] = createSignal<EnvSurfaceId>(initialRegularSurface);
   const [lastRequestedSurface, setLastRequestedSurface] = createSignal<EnvSurfaceId>(initialRegularSurface);
@@ -1266,6 +1262,20 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         ).catch(reportPluginNavigationFailure),
       } : undefined,
     })));
+  const workbenchDockItems = createMemo<readonly WorkbenchHostDockItem[]>(() => {
+    const items = [...pluginDockItems()];
+    if (isLocalMode()) {
+      items.push({
+        id: ENV_TESSIVEN_ACTIVITY_ID,
+        label: tessivenCopy()('canvasLabel'),
+        icon: TessivenNavigationIcon,
+        dockPlacement: 'after-components',
+        active: false,
+        onActivate: () => openTessivenWindow(),
+      });
+    }
+    return items;
+  });
   const [pluginCenterSelectedInventoryKey, setPluginCenterSelectedInventoryKey] = createSignal<string | undefined>();
   const [pluginCenterFocusRequest, setPluginCenterFocusRequest] = createSignal(0);
   const [activityPluginWindows, setActivityPluginWindows] = createSignal<readonly ActivityPluginWindow[]>([]);
@@ -2695,7 +2705,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   };
 
   const openFlowerConversation = (threadID: string) => {
-    setTessivenOpen(false);
     if (viewMode() === 'activity' || layout.isMobile()) focusActivityFlowerThread(threadID);
     else focusAIThread(threadID);
     openSurface('ai', { focus: true, openStrategy: 'focus_latest_or_create' });
@@ -3254,10 +3263,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     && !accessGateVisible()
     && !recoveryVisible()
   ));
-  const flowerSurfaceEngaged = createMemo(() => (!tessivenVisible() && (
+  const flowerSurfaceEngaged = createMemo(() => (
     flowerSurfaceVisible()
     && (flowerProductPlacement() === 'workbench' || activityFlowerExpanded())
-  )));
+  ));
   const activityFlowerSummaryCopy = createMemo<ActivityFlowerSummaryCopy>(() => ({
     lead: {
       running: i18n.t('shell.flowerCompanion.summary.lead.workingOn'),
@@ -3890,6 +3899,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       sidebar: { order: 7, fullScreen: true },
     });
     list.push({
+      id: ENV_TESSIVEN_ACTIVITY_ID,
+      name: tessivenCopy()('canvasLabel'),
+      icon: TessivenNavigationIcon,
+      component: () => <EnvTessivenPage openRequest={tessivenOpenRequest()} visible={tessivenVisible()} />,
+      sidebar: { order: 97, fullScreen: true },
+    });
+    list.push({
       id: PLUGIN_CENTER_ACTIVITY_ID,
       name: i18n.t('uiCopy.plugin.centerTitle'),
       icon: Grid3x3,
@@ -3903,7 +3919,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const pageModules = { terminal: EnvTerminalPage, monitor: EnvMonitorPage, files: EnvFileBrowserPage,
     codespaces: EnvCodespacesPage, ports: EnvPortForwardsPage, applications: EnvHostApplicationsPage,
-    containers: EnvContainersPage, ai: EnvAIPage, settings: EnvSettingsPage };
+    containers: EnvContainersPage, ai: EnvAIPage, tessiven: EnvTessivenPage, settings: EnvSettingsPage };
   if (initialSurface in pageModules) void pageModules[initialSurface as keyof typeof pageModules].preload().catch(() => undefined);
 
   const [persistReady, setPersistReady] = createSignal(false);
@@ -3938,11 +3954,52 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     }
     if (surface !== 'settings' && surface !== PLUGIN_CENTER_ACTIVITY_ID) {
       setSettingsOrigin(null);
+    }
+    if (isEnvSurfaceId(surface)) {
       setLastActivitySurface(surface);
       setLastRequestedSurface(surface);
     }
     setEnvSidebarActiveTab(surface, { openSidebar: shouldEnvTabOpenSidebar(surface) });
   };
+
+  const openTessivenWindow = (request?: TessivenOpenRequest) => {
+    const url = new URL(window.location.href);
+    url.hash = '';
+    url.searchParams.set('surface', ENV_TESSIVEN_ACTIVITY_ID);
+    url.searchParams.delete('canvas');
+    url.searchParams.delete('version');
+    if (request) {
+      url.searchParams.set('canvas', request.canvasID);
+      if (request.version !== undefined) url.searchParams.set('version', String(request.version));
+    }
+    const popup = window.open(
+      url.toString(),
+      `redeven-service-canvas-${envId() || 'local'}`,
+      'popup',
+    );
+    if (!popup) {
+      notify.error(i18n.t('webServices.errors.popupBlocked'));
+      return;
+    }
+    popup.focus?.();
+  };
+
+  const openTessiven = (request?: TessivenOpenRequest) => {
+    setTessivenOpenRequest(request ?? null);
+    if (viewMode() === 'workbench' && !layout.isMobile()) {
+      openTessivenWindow(request);
+      return;
+    }
+    activateActivitySurface(ENV_TESSIVEN_ACTIVITY_ID);
+  };
+
+  onMount(() => {
+    const click = (event: MouseEvent) => {
+      if (isLocalMode()) handleTessivenLink(event, request => openTessiven(request));
+    };
+    document.addEventListener('click', click);
+    onCleanup(() => document.removeEventListener('click', click));
+  });
 
   const resolveOpenSurfaceTarget = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions): EnvSurfaceId => {
     if (surfaceId === 'ai' && !canUseFlower()) {
@@ -4058,7 +4115,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   });
 
   const openSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
-    setTessivenOpen(false);
     const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
 
     if (viewMode() === 'workbench') {
@@ -4106,7 +4162,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     }
   });
 
-  const activityFallback = () => navigation.fallback(page => page !== 'ai' || canUseFlower());
+  const activityFallback = () => navigation.fallback(page => (
+    (page !== 'ai' || canUseFlower())
+    && (page !== ENV_TESSIVEN_ACTIVITY_ID || isLocalMode())
+  ));
   const restoreFallback = (permanent: boolean) => {
     const fallback = activityFallback();
     transientActivityFallback = permanent ? '' : fallback;
@@ -4223,7 +4282,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       },
     };
 
-    if (isLocalMode()) items.push({ id: 'tessiven', icon: TessivenNavigationIcon, label: 'Tessiven', collapseBehavior: 'preserve', onClick: () => setTessivenOpen(true) });
     if (!layout.isMobile()) items.push(pluginPanelItem);
 
     items.push(
@@ -4296,6 +4354,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
           }),
         });
       }
+    }
+    if (isLocalMode()) {
+      items.push({
+        id: ENV_TESSIVEN_ACTIVITY_ID,
+        icon: TessivenNavigationIcon,
+        label: tessivenCopy()('canvasLabel'),
+        collapseBehavior: 'preserve',
+        onClick: () => openTessiven(),
+      });
     }
     return items.map(item => isBuiltinActivityPage(item.id) ? {
       ...item, onClick: item.onClick ?? (() => activateActivitySurface(item.id as EnvActivitySurfaceId)),
@@ -4747,7 +4814,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const HeaderActions = () => (
     <div class="flex items-center gap-1">
-      <Show when={isLocalMode()}><TopBarIconButton label={tessivenVisible() ? tessivenCopy()('back') : 'Tessiven'} onClick={() => setTessivenOpen(!tessivenOpen())}><TessivenNavigationIcon/></TopBarIconButton></Show>
       <Show when={!layout.isMobile()}>
         <EnvDisplayModeSwitcher
           mode={viewModeSelection.visual()}
@@ -5126,8 +5192,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       >
         <Show when={activityContentAvailable()}>
           <EnvWorkbenchPage
-            inputEnabled={!tessivenVisible() && viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
-            dockItems={pluginDockItems()}
+            inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
+            dockItems={workbenchDockItems()}
             registerExternalDockDragController={setExternalDockDragController}
             dockActions={[{
               id: 'plugins',
@@ -5142,7 +5208,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
             pluginSurfaceHost={{
               coordinator: pluginSurfaceCoordinator,
               confirmationQueue: pluginConfirmationQueue,
-              workbenchVisible: () => !tessivenVisible() && viewMode() === 'workbench' && !workbenchPluginCenterBlocking(),
+              workbenchVisible: () => viewMode() === 'workbench' && !workbenchPluginCenterBlocking(),
               resolveTarget: resolveCurrentPluginSurfaceTarget,
               resolveSurface: resolvePluginSurface,
               onOpenPluginDetails: (inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure),
@@ -5199,10 +5265,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
           <PageAssetRecoveryNotice reason={assetRecovery.reason()} ready={assetRecoveryReady()} />
           <KeepAliveStack
             class="redeven-env-shell-stage min-h-0 flex-1"
-            activeId={tessivenVisible() ? 'tessiven' : viewMode()}
+            activeId={viewMode()}
             activationMode="after-paint"
             views={[
-              { id: 'tessiven', render: () => <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}><Show when={activityContentAvailable()} fallback={accessGatePanel()}><EnvTessivenPage openRequest={tessivenOpenRequest()} visible={tessivenVisible()}/></Show></DisplayModePageShell> },
               {
                 id: 'activity',
                 render: () => (
