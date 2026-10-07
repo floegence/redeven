@@ -31,6 +31,13 @@ for the latest process-related diagnostic. Status changes update only the
 owning plugin instance and do not lock Plugin Center, Activity, Workbench, or
 Composer.
 
+# Boundaries
+
+This concept owns headless plugin-entry lifecycle and recovery boundaries.
+Process stream ownership is defined by [Plugin process sessions](plugin-process-sessions.md);
+Redeven owns only the installation-review projection, permission state, and
+diagnostic presentation described by [Plugin platform integration](plugin-platform-integration.md).
+
 # Evidence
 
 - ReDevPlugin `pkg/background/manager.go` owns idempotent starts, recovery, owner cleanup, and shutdown.

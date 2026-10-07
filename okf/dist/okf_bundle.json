@@ -1349,7 +1349,7 @@
               "redevplugin"
             ],
             "summary": "ReDevPlugin Process Broker is the single platform owner for local processes\nrequested by plugins. Redeven supplies the authenticated user and environment\nscope, permission decision, minimal environment, secret resolver, state root,\naudit sink, and diagnostic sink; it does not expose a second process protocol.\nThe observable outcome is an opaque session handle and bounded binary stdin,\nstdout, and stderr operations. The failure boundary is explicit: process\noutput may be lost after a bounded buffer overflows, and Host shutdown,\ndisable, uninstall, revocation, or owner teardown terminates owned processes.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "architecture.plugin-background-entries",
@@ -1364,7 +1364,7 @@
               "redevplugin"
             ],
             "summary": "Background entries are a generic ReDevPlugin lifecycle mechanism, not a\nCodex-specific hidden page. A plugin declares `runtime_start` or `on_demand`;\nthe platform starts one headless worker per plugin instance and environment,\nkeeps it independent from visible Activity or Workbench surfaces, and exposes\nonly lifecycle outcomes. The platform stops it on disable, uninstall,\nrevocation, and Host close. Plugin business protocol state is not owned or\nrecovered by Redeven.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "architecture.redevplugin-package-lifecycle",
@@ -16140,7 +16140,7 @@
         "title": "Plugin background entries",
         "type": "Architecture Contract"
       },
-      "body_length": 1835,
+      "body_length": 2195,
       "summary": "Background entries are a generic ReDevPlugin lifecycle mechanism, not a\nCodex-specific hidden page. A plugin declares `runtime_start` or `on_demand`;\nthe platform starts one headless worker per plugin instance and environment,\nkeeps it independent from visible Activity or Workbench surfaces, and exposes\nonly lifecycle outcomes. The platform stops it on disable, uninstall,\nrevocation, and Host close. Plugin business protocol state is not owned or\nrecovered by Redeven.",
       "sections": [
         {
@@ -16149,15 +16149,42 @@
           "level": 1,
           "body": "`runtime_start` entries are recovered after Host startup and runtime recovery;\n`on_demand` entries start only after the plugin requests them through its\ndeclared lifecycle. Starts are idempotent and concurrent starts are serialized.\nClosing a visible surface does not stop a running background entry. A failed\nentry becomes a diagnostic state that can be retried by the plugin or user;\nRedeven does not infer or recreate thread, turn, JSON-RPC, or external-service\nbusiness state.\n\nThe Env App projects background declarations during installation review and\nprojects `Starting`, `Running`, `Exited`, `Blocked`, `Crashed`, and `Stream gap`\nfor the latest process-related diagnostic. Status changes update only the\nowning plugin instance and do not lock Plugin Center, Activity, Workbench, or\nComposer.",
           "char_count": 800
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "This concept owns headless plugin-entry lifecycle and recovery boundaries.\nProcess stream ownership is defined by [Plugin process sessions](plugin-process-sessions.md);\nRedeven owns only the installation-review projection, permission state, and\ndiagnostic presentation described by [Plugin platform integration](plugin-platform-integration.md).",
+          "char_count": 344
         }
       ],
       "snippet": "Background entries are a generic ReDevPlugin lifecycle mechanism, not a Codex-specific hidden page. A plugin declares `runtime_start` or `on_demand`; the platform starts one headless worker per plugin instance and environment,",
+      "links": [
+        {
+          "label": "Plugin platform integration",
+          "path": "architecture/plugin-platform-integration.md",
+          "concept_id": "architecture.plugin-platform-integration",
+          "title": "Plugin platform integration"
+        },
+        {
+          "label": "Plugin process sessions",
+          "path": "architecture/plugin-process-sessions.md",
+          "concept_id": "architecture.plugin-process-sessions",
+          "title": "Plugin process sessions"
+        }
+      ],
       "backlinks": [
         {
           "label": "Plugin platform integration",
           "path": "architecture/plugin-platform-integration.md",
           "concept_id": "architecture.plugin-platform-integration",
           "title": "Plugin platform integration"
+        },
+        {
+          "label": "Plugin process sessions",
+          "path": "architecture/plugin-process-sessions.md",
+          "concept_id": "architecture.plugin-process-sessions",
+          "title": "Plugin process sessions"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -16382,6 +16409,18 @@
       ],
       "backlinks": [
         {
+          "label": "Plugin background entries",
+          "path": "architecture/plugin-background-entries.md",
+          "concept_id": "architecture.plugin-background-entries",
+          "title": "Plugin background entries"
+        },
+        {
+          "label": "Plugin process sessions",
+          "path": "architecture/plugin-process-sessions.md",
+          "concept_id": "architecture.plugin-process-sessions",
+          "title": "Plugin process sessions"
+        },
+        {
           "label": "Plugin surface recovery and permissions",
           "path": "architecture/redevplugin-surface-recovery.md",
           "concept_id": "architecture.redevplugin-surface-recovery",
@@ -16419,7 +16458,7 @@
         "title": "Plugin process sessions",
         "type": "Architecture Contract"
       },
-      "body_length": 2640,
+      "body_length": 2980,
       "summary": "ReDevPlugin Process Broker is the single platform owner for local processes\nrequested by plugins. Redeven supplies the authenticated user and environment\nscope, permission decision, minimal environment, secret resolver, state root,\naudit sink, and diagnostic sink; it does not expose a second process protocol.\nThe observable outcome is an opaque session handle and bounded binary stdin,\nstdout, and stderr operations. The failure boundary is explicit: process\noutput may be lost after a bounded buffer overflows, and Host shutdown,\ndisable, uninstall, revocation, or owner teardown terminates owned processes.",
       "sections": [
         {
@@ -16428,10 +16467,37 @@
           "level": 1,
           "body": "## Ownership and isolation\n\nEvery session binds plugin instance, user scope, environment scope, plugin\ninvocation/session, and client key. Plugin code receives no PID, file\ndescriptor, OS handle, Host path, complete Host environment, or credential.\nStart requests contain an executable and argv array; ReDevPlugin never parses\nan implicit shell command string. A plugin may explicitly select a shell as\nthe executable, but shell semantics remain inside that executable.\n\nRedeven maps an authenticated session through `internal/redevpluginintegration`\nand rejects unknown users or environments. Background entries use a distinct\nvalidated background owner. Secret references are resolved by the Host adapter\nand values do not cross the UI, error, audit, or diagnostic projections.\n\n## Streams and lifecycle\n\nThe first contract supports non-PTY stdin, stdout, and stderr only. Each output\nstream has an independent cursor and bounded ring buffer. Reads report EOF,\nprocess exit, and `stream_gap`; the platform does not promise durable delivery,\nexactly-once reads, or cross-Host replay. Plugin protocol state and recovery\ninformation belong in Plugin Data/Storage.\n\nUnix process groups and Windows Job Objects contain process trees. Graceful\ntermination is followed by forced cleanup when required. The platform removes\nthe session after close and prevents access after owner revocation.",
           "char_count": 1385
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "This concept owns platform process-session ownership, isolation, stream-loss\nsemantics, and cleanup. Background entry lifecycle is defined by [Plugin\nbackground entries](plugin-background-entries.md); Redeven product projection\nand installation review remain in [Plugin platform integration](plugin-platform-integration.md).",
+          "char_count": 324
         }
       ],
       "snippet": "ReDevPlugin Process Broker is the single platform owner for local processes requested by plugins. Redeven supplies the authenticated user and environment scope, permission decision, minimal environment, secret resolver, state root,",
+      "links": [
+        {
+          "label": "Plugin\nbackground entries",
+          "path": "architecture/plugin-background-entries.md",
+          "concept_id": "architecture.plugin-background-entries",
+          "title": "Plugin background entries"
+        },
+        {
+          "label": "Plugin platform integration",
+          "path": "architecture/plugin-platform-integration.md",
+          "concept_id": "architecture.plugin-platform-integration",
+          "title": "Plugin platform integration"
+        }
+      ],
       "backlinks": [
+        {
+          "label": "Plugin background entries",
+          "path": "architecture/plugin-background-entries.md",
+          "concept_id": "architecture.plugin-background-entries",
+          "title": "Plugin background entries"
+        },
         {
           "label": "Plugin platform integration",
           "path": "architecture/plugin-platform-integration.md",
@@ -34776,5 +34842,5 @@
       ]
     }
   ],
-  "source_sha256": "2630a46b448c70153a9582b0c8b8fa5d5b93687417cecc92fbce93a4810a5e6f"
+  "source_sha256": "74d3c54b73982258d9b33a2831d8c2caf132d69348aaa89c506d362bd6446026"
 }
