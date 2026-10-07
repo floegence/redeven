@@ -1,5 +1,6 @@
+import { ChevronDown, Info } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
-import { createEffect, createSignal, onCleanup, onMount, For, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, For, Show, type JSX } from 'solid-js';
 import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import { normalizeGatewayInvitation, type GatewayMembershipStatus, type GatewayMembershipOperation } from '../shared/gatewayJoin';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
@@ -23,8 +24,10 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const [leaving, setLeaving] = createSignal(false);
   const [gatewayID, setGatewayID] = createSignal('');
   const [choice, setChoice] = createSignal<'preserve' | 'new'>();
+  const [invitationFileName, setInvitationFileName] = createSignal('');
   let generation = 0;
   let trigger: HTMLButtonElement | undefined;
+  let invitationInput: HTMLInputElement | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastOpenRequest = props.openRequest ?? 0;
   const close = () => {
@@ -51,12 +54,17 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   async function readInvitation(file?: File) {
     if (!file) return;
     setError('');
+    setInvitation(undefined);
+    setInvitationFileName('');
     const current = generation;
     try {
       if (file.size > 64 * 1024) throw new Error();
       const parsed = normalizeGatewayInvitation(JSON.parse(await file.text()));
       if (!parsed) throw new Error();
-      if (current === generation) setInvitation(parsed);
+      if (current === generation) {
+        setInvitation(parsed);
+        setInvitationFileName(file.name || '');
+      }
     } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.invalid')); }
   }
   async function act(operation: GatewayMembershipOperation) {
@@ -99,41 +107,60 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     }
   }
   const selectedInvitation = () => invitation() ?? props.invitation;
+  const statusLabel = (state: GatewayMembershipStatus) => state.phase
+    ? props.i18n.t(`gatewayMembership.${state.phase}`)
+    : props.i18n.t(state.joined ? 'gatewayMembership.joined' : 'gatewayMembership.not_joined');
+  const disclosure = (label: string, content: JSX.Element) => <details class="group rounded-md border border-border/60 text-xs">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground [&::-webkit-details-marker]:hidden">
+      <span class="flex items-center gap-2"><Info class="h-3.5 w-3.5" aria-hidden="true" />{label}</span>
+      <ChevronDown class="h-3.5 w-3.5 -rotate-90 transition-transform group-open:rotate-0 motion-reduce:transition-none" aria-hidden="true" />
+    </summary>
+    <div class="border-t border-border/50 px-3 py-2.5 leading-5 text-muted-foreground">{content}</div>
+  </details>;
   const body = () => <div class="space-y-5 p-4">
-        <Show when={status()}>{state => <div class="rounded-lg border border-border/70 bg-muted/20 px-4 py-3" role="status" aria-live="polite">
-          <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{props.i18n.t('gatewayJoin.currentStatus')}</p>
-          <p class="mt-1 text-sm font-medium">{state().phase ? props.i18n.t(`gatewayMembership.${state().phase}`) : props.i18n.t(state().joined ? 'gatewayMembership.joined' : 'gatewayMembership.not_joined')}</p>
-          <Show when={state().publication_error_code}><p role="alert" class="mt-2 text-sm text-warning">{props.i18n.t(state().publication_error_code === 'BINDING_PROOF_REQUIRED' ? 'gatewayJoin.bindingProofRequired' : 'gatewayJoin.cloudUnavailable')}</p></Show>
+        <Show when={status()}>{state => <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5" role="status" aria-live="polite">
+          <span class="text-xs font-medium text-muted-foreground">{props.i18n.t('gatewayJoin.currentStatus')}</span>
+          <span class="flex min-w-0 items-center gap-2 text-sm font-medium"><span class="h-2 w-2 shrink-0 rounded-full" classList={{ 'bg-success': state().joined, 'bg-muted-foreground': !state().joined }} />{statusLabel(state())}</span>
+          <Show when={state().publication_error_code}><p role="alert" class="basis-full text-sm text-warning">{props.i18n.t(state().publication_error_code === 'BINDING_PROOF_REQUIRED' ? 'gatewayJoin.bindingProofRequired' : 'gatewayJoin.cloudUnavailable')}</p></Show>
         </div>}</Show>
         <Show when={status()?.joined === false || replacing() || updatingAddress()}>
           <section class="space-y-3">
-            <div>
-              <h3 class="text-sm font-medium">{props.i18n.t('gatewayJoin.connectTitle')}</h3>
-              <p class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('gatewayJoin.connectHelp')}</p>
-            </div>
+            <h3 class="text-sm font-medium">{props.i18n.t('gatewayJoin.connectTitle')}</h3>
             <Show when={props.gateways?.some(gateway => gateway.permissions?.manage_members)}>
               <label class="block space-y-2 text-sm"><span>{props.i18n.t('gatewayJoin.chooseGateway')}</span>
                 <select class="h-9 w-full cursor-pointer rounded-md border border-border bg-background px-3 text-sm disabled:cursor-not-allowed" value={gatewayID()} disabled={busy()}
-                  onChange={event => { setGatewayID(event.currentTarget.value); setInvitation(undefined); }}>
+                  onChange={event => { setGatewayID(event.currentTarget.value); setInvitation(undefined); setInvitationFileName(''); }}>
                   <option value="">{props.i18n.t('gatewayJoin.importInvitation')}</option>
                   <For each={props.gateways?.filter(gateway => gateway.permissions?.manage_members && gateway.local_enabled)}>{gateway => <option value={gateway.gateway_id}>{gateway.display_name}</option>}</For>
                 </select>
               </label>
               <Show when={gatewayID()}><Button class="cursor-pointer" size="sm" variant="outline" disabled={busy()} onClick={() => void createInvitation()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button></Show>
             </Show>
-            <Show when={!gatewayID()}><label class="block space-y-2 text-sm"><span>{props.i18n.t('gatewayJoin.material')}</span>
-              <input type="file" accept=".json,application/json" class="block w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2 text-xs disabled:cursor-not-allowed"
+            <Show when={!gatewayID()}><div class="space-y-2">
+              <span class="block text-sm">{props.i18n.t('gatewayJoin.material')}</span>
+              <div class="flex min-w-0 items-center gap-2 rounded-md border border-border/70 bg-background/50 px-2 py-1.5">
+                <Button class="shrink-0 cursor-pointer" size="sm" variant="outline" disabled={busy()} onClick={() => invitationInput?.click()}>{props.i18n.t('gatewayJoin.chooseFile')}</Button>
+                <span class="min-w-0 truncate text-xs text-muted-foreground">{invitationFileName() || props.i18n.t('gatewayJoin.noFile')}</span>
+              </div>
+              <input ref={invitationInput} id="gateway-invitation-file" type="file" accept=".json,application/json" class="sr-only"
                 disabled={busy()} onChange={event => void readInvitation(event.currentTarget.files?.[0])} />
-            </label></Show>
+            </div></Show>
             <Show when={selectedInvitation()}><p class="flex items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-xs text-primary"><span class="h-1.5 w-1.5 rounded-full bg-primary" />{props.i18n.t('gatewayJoin.invitationReady')}</p></Show>
             <Show when={status()?.rejoin_required}><p role="status" class="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">{props.i18n.t('gatewayJoin.rejoin')}</p></Show>
+            {disclosure(props.i18n.t('gatewayJoin.aboutConnection'), props.i18n.t('gatewayJoin.connectHelp'))}
           </section>
           <Show when={status()?.existing_environment_id && !updatingAddress()}>
             <fieldset class="space-y-2" disabled={busy()}>
               <legend class="text-sm font-medium">{props.i18n.t('gatewayJoin.existingEnvironment')}</legend>
-              <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('gatewayJoin.existingEnvironmentHelp')}</p>
-              <label class="flex cursor-pointer items-start gap-3 rounded-md border border-border/70 p-3 text-sm transition-colors hover:bg-muted/40"><input class="mt-0.5 cursor-pointer disabled:cursor-not-allowed" type="radio" name="gateway-environment-choice" checked={choice() === 'preserve'} onChange={() => setChoice('preserve')} /><span><span class="block font-medium">{props.i18n.t('gatewayJoin.preserve')}</span><span class="mt-1 block text-xs text-muted-foreground">{props.i18n.t('gatewayJoin.preserveHelp')}</span></span></label>
-              <label class="flex cursor-pointer items-start gap-3 rounded-md border border-border/70 p-3 text-sm transition-colors hover:bg-muted/40"><input class="mt-0.5 cursor-pointer disabled:cursor-not-allowed" type="radio" name="gateway-environment-choice" checked={choice() === 'new'} onChange={() => setChoice('new')} /><span><span class="block font-medium">{props.i18n.t('gatewayJoin.createNew')}</span><span class="mt-1 block text-xs text-muted-foreground">{props.i18n.t('gatewayJoin.newHelp')}</span></span></label>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 px-3 py-2.5 text-sm transition-colors hover:bg-muted/40"><input class="cursor-pointer disabled:cursor-not-allowed" type="radio" name="gateway-environment-choice" checked={choice() === 'preserve'} onChange={() => setChoice('preserve')} /><span class="font-medium">{props.i18n.t('gatewayJoin.preserve')}</span></label>
+                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 px-3 py-2.5 text-sm transition-colors hover:bg-muted/40"><input class="cursor-pointer disabled:cursor-not-allowed" type="radio" name="gateway-environment-choice" checked={choice() === 'new'} onChange={() => setChoice('new')} /><span class="font-medium">{props.i18n.t('gatewayJoin.createNew')}</span></label>
+              </div>
+              {disclosure(props.i18n.t('gatewayJoin.choiceDetails'), <div class="space-y-2">
+                <p>{props.i18n.t('gatewayJoin.existingEnvironmentHelp')}</p>
+                <p><strong class="font-medium text-foreground">{props.i18n.t('gatewayJoin.preserve')}:</strong> {props.i18n.t('gatewayJoin.preserveHelp')}</p>
+                <p><strong class="font-medium text-foreground">{props.i18n.t('gatewayJoin.createNew')}:</strong> {props.i18n.t('gatewayJoin.newHelp')}</p>
+              </div>)}
             </fieldset>
           </Show>
         </Show>
@@ -141,7 +168,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         <Show when={replacing()}><p role="alert" class="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">{props.i18n.t('gatewayJoin.replaceHelp')}</p></Show>
         <Show when={leaving()}><p role="alert" class="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">{props.i18n.t('gatewayMembers.leaveImpact')}</p></Show>
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
-        <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('gatewayJoin.pauseDetail')}</p>
+        {disclosure(props.i18n.t('gatewayJoin.impactDetails'), props.i18n.t('gatewayJoin.pauseDetail'))}
         <div class="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-4">
           <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t('common.close')}</Button>
           <Button class="cursor-pointer" variant="outline" disabled={busy()} onClick={() => void act('status')}>{props.i18n.t('common.refresh')}</Button>

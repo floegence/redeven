@@ -80,6 +80,8 @@ describe('Runtime Gateway membership interaction', () => {
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:chosen', operation: 'status' });
     expect(document.body.textContent).toContain(i18n.t('gatewayJoin.invitationReady'));
     expect(document.body.textContent).not.toContain(invitationFixture.gateway_id);
+    expect([...document.querySelectorAll('details')].every(detail => !detail.open)).toBe(true);
+    expect(button(i18n.t('gatewayJoin.chooseFile'))).toBeDefined();
     button(i18n.t('gatewayJoin.approve')).click(); await settle();
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayJoin.failed'));
     expect(button(i18n.t('gatewayJoin.approve')).disabled).toBe(false);

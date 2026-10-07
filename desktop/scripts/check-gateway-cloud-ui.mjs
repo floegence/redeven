@@ -37,6 +37,13 @@ try {
       kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:qualification', operation: 'status',
     }, 'opening must inspect membership without submitting consent');
     assert.ok((await dialog.innerText()).includes(i18n.t('gatewayMembership.not_joined')), `${locale}: missing membership phase must use a readable fallback`);
+    assert.equal(await dialog.locator('details').evaluateAll(details => details.every(detail => !detail.open)), true, `${locale}: explanatory sections must start collapsed`);
+    assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.chooseFile'), exact: true }).isVisible(), true, `${locale}: file selection must use a localized action`);
+    const connectionDetails = dialog.locator('details').filter({ hasText: i18n.t('gatewayJoin.aboutConnection') }).first();
+    await connectionDetails.locator('summary').click();
+    assert.equal(await connectionDetails.evaluate(element => element.open), true, `${locale}: connection explanation must expand on demand`);
+    await connectionDetails.locator('summary').click();
+    assert.equal(await connectionDetails.evaluate(element => element.open), false, `${locale}: connection explanation must collapse again`);
     const material = { protocol_version: 'redeven-gateway-v4', gateway_id: 'gateway', invitation_id: 'invitation', gateway_url: 'https://gateway.internal:7443', gateway_public_key: 'a'.repeat(43), gateway_tls_root_pem: '-----BEGIN CERTIFICATE-----\ntest', token: 'b'.repeat(43), signature: 'c'.repeat(86), issued_at_unix_ms: 1900000000000, expires_at_unix_ms: 1900000600000 };
     await dialog.locator('input[type=file]').setInputFiles({ name: 'join.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(material)) });
     const approve = dialog.getByRole('button', { name: i18n.t('gatewayJoin.approve'), exact: true });
@@ -54,6 +61,32 @@ try {
     await dialog.waitFor({ state: 'detached' });
     assert.equal(await trigger.evaluate(el => el === document.activeElement), true, 'cancel restores focus');
     report.cases.push(`${locale}: local consent, exact target, preserved retry, narrow layout and keyboard cancel`);
+    await page.close();
+  }
+  {
+    const locale = 'zh-CN';
+    const i18n = createDesktopI18n(locale);
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+    await page.addInitScript(() => {
+      window.gatewayRequests = [];
+      window.redevenDesktopLauncher = { performAction: async request => {
+        window.gatewayRequests.push(request);
+        return { ok: true, outcome: 'runtime_gateway_status', gateway_membership: {
+          joined: false, phase: 'not_joined', existing_environment_id: 'environment-qualification',
+        } };
+      } };
+    });
+    await page.goto(new URL(`gateway-cloud.html?locale=${locale}`, server.resolvedUrls.local[0]).href);
+    const trigger = page.getByRole('button', { name: i18n.t('gatewayJoin.title'), exact: true });
+    await trigger.click();
+    const dialog = page.getByRole('dialog');
+    await dialog.waitFor();
+    await page.waitForFunction(() => window.gatewayRequests.length === 1);
+    assert.equal(await dialog.getByRole('radio', { name: i18n.t('gatewayJoin.preserve'), exact: true }).isVisible(), true, 'existing environment choice must stay concise');
+    assert.equal(await dialog.getByRole('radio', { name: i18n.t('gatewayJoin.createNew'), exact: true }).isVisible(), true, 'new environment choice must stay concise');
+    assert.equal(await dialog.locator('details').evaluateAll(details => details.every(detail => !detail.open)), true, 'existing environment explanations must start collapsed');
+    await page.screenshot({ path: `${output}/${locale}-existing-environment.png` });
+    report.cases.push(`${locale}: existing environment choices remain concise with collapsed explanations`);
     await page.close();
   }
   for (const locale of listDesktopI18nLocales()) {
