@@ -1196,6 +1196,18 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
     onCleanup(() => props.registerPluginSurfaceController?.(null));
     return (
       <MockDisplayModeSurface testId="workbench-page">
+        <For each={props.dockActions ?? []}>
+          {(action: any) => (
+            <button
+              type="button"
+              data-workbench-dock-action={action.id}
+              aria-pressed={Boolean(action.active)}
+              onClick={(event) => action.onActivate?.(event.currentTarget)}
+            >
+              {action.label}
+            </button>
+          )}
+        </For>
         <For each={props.dockItems ?? []}>
           {(item: any) => (
             <button
@@ -1216,18 +1228,6 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
               }}
             >
               {item.label}
-            </button>
-          )}
-        </For>
-        <For each={props.dockActions ?? []}>
-          {(action: any) => (
-            <button
-              type="button"
-              data-workbench-dock-action={action.id}
-              aria-pressed={Boolean(action.active)}
-              onClick={(event) => action.onActivate?.(event.currentTarget)}
-            >
-              {action.label}
             </button>
           )}
         </For>
@@ -3563,19 +3563,44 @@ describe('EnvAppShell environment entry affordances', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
-      await flushUntil(() => Boolean(host.querySelector('[data-workbench-dock-item="tessiven"]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-workbench-dock-action="tessiven"]')));
+      const dockActions = [...host.querySelectorAll<HTMLElement>('[data-workbench-dock-action]')].map((item) => item.dataset.workbenchDockAction);
       const dockItems = [...host.querySelectorAll<HTMLElement>('[data-workbench-dock-item]')].map((item) => item.dataset.workbenchDockItem);
-      expect(dockItems).toEqual([pluginInventoryKey, 'tessiven']);
+      expect(dockActions).toEqual(['plugins', 'tessiven']);
+      expect(dockItems).toEqual([pluginInventoryKey]);
 
-      (host.querySelector('[data-workbench-dock-item="tessiven"]') as HTMLButtonElement).click();
+      (host.querySelector('[data-workbench-dock-action="tessiven"]') as HTMLButtonElement).click();
       expect(openWindow).toHaveBeenCalledWith(
         expect.stringContaining('surface=tessiven'),
         'redeven-service-canvas-env_local',
         'popup',
       );
+      expect(openWindow.mock.calls[0][0]).toEqual(expect.stringContaining('window=service-canvas'));
       expect(popup.focus).toHaveBeenCalled();
     } finally {
       dispose();
+    }
+  }, 10000);
+
+  it('renders the standalone Service Canvas window without the Env App shell', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.history.replaceState({}, '', '/?surface=tessiven&window=service-canvas');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell standaloneTessiven />, host);
+
+    try {
+      await flushUntil(() => host.querySelector('[data-env-service-canvas-window]')?.getAttribute('data-env-service-canvas-ready') === 'true');
+      expect(host.querySelector('[data-testid="tessiven-page"]')).not.toBeNull();
+      expect(host.querySelector('[data-testid="shell-sidebar"]')).toBeNull();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
+      expect(host.querySelector('[data-activity-id]')).toBeNull();
+    } finally {
+      dispose();
+      window.history.replaceState({}, '', '/');
     }
   }, 10000);
 

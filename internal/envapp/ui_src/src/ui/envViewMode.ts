@@ -3,6 +3,9 @@ export type EnvViewMode = 'activity' | 'workbench';
 /** The service canvas is an Activity page, but it is intentionally not a Workbench widget. */
 export const ENV_TESSIVEN_ACTIVITY_ID = 'tessiven' as const;
 
+/** Query value used when the canvas is opened in its own product window. */
+export const ENV_TESSIVEN_STANDALONE_WINDOW = 'service-canvas' as const;
+
 export type EnvSurfaceId =
   | 'terminal'
   | 'monitor'

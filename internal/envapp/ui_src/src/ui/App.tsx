@@ -15,7 +15,7 @@ import {
   useTheme,
   WidgetRegistryProvider,
 } from '@floegence/floe-webapp-core';
-import { batch, createMemo, onCleanup, onMount } from 'solid-js';
+import { batch, createMemo, onCleanup, onMount, Show } from 'solid-js';
 import { CommandPalette } from '@floegence/floe-webapp-core/ui';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { EnvAppShell } from './EnvAppShell';
@@ -33,6 +33,13 @@ import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBo
 import { I18nProvider, useI18n, type I18nHelpers } from './i18n';
 import { EnvAppFloatingWindowStackProvider } from './context/EnvAppFloatingWindowStackContext';
 import { ENV_APP_FLOATING_LAYER } from './utils/envAppLayers';
+import { ENV_TESSIVEN_ACTIVITY_ID, ENV_TESSIVEN_STANDALONE_WINDOW } from './envViewMode';
+
+function isStandaloneTessivenWindow(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('surface') === ENV_TESSIVEN_ACTIVITY_ID
+    && params.get('window') === ENV_TESSIVEN_STANDALONE_WINDOW;
+}
 
 function readSessionStorage(key: string): string {
   try {
@@ -211,7 +218,7 @@ function DesktopThemeSync() {
   return null;
 }
 
-function EnvAppProviders() {
+function EnvAppProviders(props: { standaloneTessiven: boolean }) {
   const i18n = useI18n();
   const navigation = createActivityNavigation({ envID });
   const floeConfig = createMemo(() => buildFloeConfig(i18n.t, navigation));
@@ -229,9 +236,11 @@ function EnvAppProviders() {
                     <WidgetRegistryProvider>
                       <CommandProvider>
                         <EnvAppFloatingWindowStackProvider>
-                          <EnvAppShell navigation={navigation} />
-                          <CommandPalette zIndex={ENV_APP_FLOATING_LAYER.commandPalette} />
-                          <NotificationContainer />
+                          <EnvAppShell navigation={navigation} standaloneTessiven={props.standaloneTessiven} />
+                          <Show when={!props.standaloneTessiven}>
+                            <CommandPalette zIndex={ENV_APP_FLOATING_LAYER.commandPalette} />
+                            <NotificationContainer />
+                          </Show>
                         </EnvAppFloatingWindowStackProvider>
                       </CommandProvider>
                     </WidgetRegistryProvider>
@@ -247,6 +256,7 @@ function EnvAppProviders() {
 }
 
 export function App() {
+  const standaloneTessiven = isStandaloneTessivenWindow();
   onMount(() => {
     const dragRegionSync = installDesktopEmbeddedDragRegionSync();
     onCleanup(() => {
@@ -256,7 +266,7 @@ export function App() {
 
   return (
     <I18nProvider>
-      <EnvAppProviders />
+      <EnvAppProviders standaloneTessiven={standaloneTessiven} />
     </I18nProvider>
   );
 }
