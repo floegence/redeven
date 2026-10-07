@@ -1881,7 +1881,7 @@
               "security"
             ],
             "summary": "Gateway Cloud v2 projects the single local member directory into Cloud. Runtime independently proves its identity and receives its own credentials through restricted HTTPS CONNECT, preserving inner Cloud TLS. Namespace owns publication and access approval; the approving administrator is only an audit actor. Manual and authorized automatic publication share one binding transaction. Control service outages do not introduce timers that terminate existing data sessions.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "gateway.gateway-service",
@@ -1896,7 +1896,7 @@
               "identity"
             ],
             "summary": "`redeven-gateway` owns one durable member directory, invitations, paired Desktop permissions, policy and restricted forwarding. Runtime initiates membership and every member connection. Gateway never dials a Runtime address, scans a network, or installs, starts, stops, updates or resets a Runtime. LAN access works without Cloud. Gateway loss interrupts its network paths; independently authorized Runtime management remains separate.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "gateway.gateway-desktop-interactions",
@@ -1911,7 +1911,7 @@
               "validation"
             ],
             "summary": "Desktop presents Gateway members, invitations, permissions, policy and optional Redeven Cloud association. A member appears after Runtime joins; there is no form for adding a Runtime URL. The Runtime connection panel is the single local consent and recovery surface. Failures retain input and previously loaded data. Shared launcher operations own cancellation, progress and focus; UI state cannot expand authority.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "gateway.gateway-access-sessions",
@@ -1927,7 +1927,7 @@
               "sessions"
             ],
             "summary": "Desktop opens a joined Runtime over its existing outbound Flowersec connection to Gateway. Gateway forwards bytes to the Runtime's fixed application entry; it has no Runtime URL to dial. TLS terminates in Desktop and Runtime. Password, MFA, Host/Origin checks and application authorization remain Runtime-owned. Access artifacts limit initial redemption; no Gateway timer shortens established business sessions.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "gateway.gateway-deployment-qualification",
@@ -1943,7 +1943,7 @@
               "validation"
             ],
             "summary": "Qualification must prove Runtime-to-Gateway connection direction and real application behavior. Unit tests alone do not establish Electron certificate handling, browser MFA, MySQL migration or an isolated network path. Record each command's actual result; source changes or installer builds are not proof that an application flow passed. These affected-feature checks are separate from release packaging and the aggregate push gate.",
-            "section_count": 1
+            "section_count": 2
           }
         ]
       },
@@ -3637,7 +3637,7 @@
               "security"
             ],
             "summary": "`redeven-gateway-v4` is the only served Gateway protocol. Its machine-readable authority is `spec/openapi/gateway-v4.yaml`. Gateway owns paired Desktop permissions and Runtime-initiated membership. Protocol mismatch fails explicitly; old URL-profile routes and HTTP forwarding are absent. Gateway Cloud v2 is a separate, shared business contract referring to these same members.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "protocol.rcpp-v3-provider-api",
@@ -22116,7 +22116,7 @@
         "title": "Gateway access sessions",
         "type": "Gateway Contract"
       },
-      "body_length": 4020,
+      "body_length": 4375,
       "summary": "Desktop opens a joined Runtime over its existing outbound Flowersec connection to Gateway. Gateway forwards bytes to the Runtime's fixed application entry; it has no Runtime URL to dial. TLS terminates in Desktop and Runtime. Password, MFA, Host/Origin checks and application authorization remain Runtime-owned. Access artifacts limit initial redemption; no Gateway timer shortens established business sessions.",
       "sections": [
         {
@@ -22125,6 +22125,13 @@
           "level": 1,
           "body": "## Reverse application streams\n\nAfter local consent, Runtime redeems its invitation with its own identity and initiates a persistent Flowersec session to the member TLS endpoint. The published Flowersec controller owns reconnection and cancellation. A paired Desktop with access permission requests an offer for a current member version. Gateway opens a reverse ByteStream on that Runtime's connection and relays both streams with bounded buffers and cancellation.\n\nThe member's signed service descriptor binds its Runtime identity, stable logical HTTPS origin, certificate fingerprint, revision and expiry. Desktop verifies this descriptor, uses a per-session Electron partition and pins only the matching certificate inside that partition. No public DNS for the logical origin, system CA installation, global certificate override, HTML rewriting or Gateway Cookie jar is involved. Runtime need not open a TCP listener.\n\nThe Desktop local opaque CONNECT adapter accepts only the fixed member host. It has explicit proxy authentication, no DIRECT fallback and no arbitrary egress. Node application connections and trusted host bridge connections use the published SDK's explicit connection path. Native CodeSpace and Web Service use the same session owner. TLS, WebSocket, streaming responses and secure cookies retain their original semantics.\n\n## Application and management separation\n\nA reverse stream enters the original public Runtime handler. It never acquires a trusted Desktop management marker. Runtime password, MFA and local permission caps apply. The owner-only Unix socket supports local CLI administration when Runtime exposes no TCP listeners. That socket and Desktop private management routes are not mounted on the member application.\n\nThe Gateway provides no separate HTTP webpage forwarding URL. LAN applications are opened by Desktop, including browser applications it owns. Independently registered direct URL, SSH or container access remains separate from Gateway membership.\n\n## Limits and revocation\n\nThe shared budget admits at most 32 business connections per member and 1,024 in total, including pending opens. Reverse access and Cloud CONNECT use the same budget. One member exceeding a limit cannot consume another member's allocation. Capacity, member state and version are checked before opening; removal closes live member streams.\n\nClosing a Desktop view releases its transport, authentication cache and isolated session. A Gateway process stop ends all paths through it. Removing a member or leaving closes LAN and Cloud access; forbidding Cloud or unpublishing an environment preserves LAN access. Cloud closure receipts and partition limits are owned by [Gateway Cloud access](gateway-cloud-access.md).",
           "char_count": 2738
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Gateway owns reverse-stream admission and bounded forwarding only. Runtime owns application authentication, authorization, and business session lifetime; Desktop owns the isolated browser partition and user consent. No path in this contract grants Gateway a Runtime lifecycle command, arbitrary egress, or a second direct-access transport.",
+          "char_count": 339
         }
       ],
       "snippet": "Desktop opens a joined Runtime over its existing outbound Flowersec connection to Gateway. Gateway forwards bytes to the Runtime's fixed application entry; it has no Runtime URL to dial. TLS terminates in Desktop and Runtime. Password, MFA,",
@@ -22201,7 +22208,7 @@
         "title": "Gateway Cloud access",
         "type": "Gateway Contract"
       },
-      "body_length": 6876,
+      "body_length": 7233,
       "summary": "Gateway Cloud v2 projects the single local member directory into Cloud. Runtime independently proves its identity and receives its own credentials through restricted HTTPS CONNECT, preserving inner Cloud TLS. Namespace owns publication and access approval; the approving administrator is only an audit actor. Manual and authorized automatic publication share one binding transaction. Control service outages do not introduce timers that terminate existing data sessions.",
       "sections": [
         {
@@ -22210,6 +22217,13 @@
           "level": 1,
           "body": "## Publish a member\n\nGateway binds to one Cloud and Namespace using a stable machine claim and a separate rotating Cloud identity. The local member delegation permits later publication without a second local Cloud enrollment. Gateway policy, independent Runtime proof and versioned directory observation must all agree. Cloud challenges bind purpose, Cloud, Namespace, Gateway, Runtime, expiry and binding generation. Only an authenticated Gateway directory observation allocates a candidate member slot. Initial Runtime proof waits for that observation; retries do not allocate unobserved candidates. Historical unobserved proofs retain their evidence but consume no member or egress capacity. Directory metadata alone cannot create an environment or obtain Runtime credentials.\n\nManual mode exposes eligible candidates to Namespace administrators. Automatic mode also requires an explicit Namespace grant for that Gateway; a local mode switch cannot grant it. Both modes use the same idempotent publication and credential delivery business logic. Explicit unpublication is never automatically reversed. Cloud-generated invitations are commands to an online Gateway; Cloud cannot mint a second local membership credential.\n\nFormal environment identity and display names remain Metaserver-owned. Gateway metadata does not overwrite a Cloud name. Cloud lists read a durable projection with monotonic directory and policy revisions. Missing directory entries, sync failure and Gateway downtime never delete environments. Member connectivity, control registration and each user's current access permission remain distinct.\n\n## Required network path\n\nRuntime control registration, credential recovery, data transport and enabled official-platform AI requests use the sole member's explicit proxy path. Gateway resolves approved Cloud, Region and Tunnel destinations. Runtime validates the inner destination TLS certificate. Unsupported transport candidates are removed before dialing; Gateway failure never falls back to direct Internet or global proxy environment variables. Custom Tunnel destinations require existing authoritative approval and billing rules. User programs' general egress is outside this contract.\n\n## Recovery, replacement and migration\n\nControl credentials are replenished normally. After depletion the dedicated Runtime Cloud identity can recover only the same approved binding after Cloud rechecks Gateway, Namespace, environment, membership and generation. Changes to the member certificate, private key, Gateway address or pinned CA cancel the control owner so its existing observer can create a controller with the new explicit route. Bookkeeping writes do not restart it, and independent data sessions remain open. Administrator departure does not revoke Namespace-owned approval. Expired machine identities do not serve as fallback credentials.\n\nChanging Gateway is explicit. Preserving `env_public_id` requires proof of the original binding and a new locally confirmed member delegation. Ordinary user-to-Namespace conversion additionally requires current user binding confirmation and displays ownership transfer. Cross-Namespace name, address or public-health matches never merge environments. A successful transition advances generation and disables old-path recovery.\n\nThe cutover fences old Cloud-only configurations and marks retained Cloud records as requiring rejoin. Old proof can remain only as migration evidence; it cannot start the retired access path. Without valid evidence, use explicit reauthorization or a new environment. Runtime Service compatibility epoch 41 and v2 Cloud contracts require matching clients.\n\n## Revocation and truthful receipts\n\nCloud revocation transactionally disables new access issuance, pending credential delivery and recovery. Runtime cancels matching business sessions; Gateway closes matching Cloud forwarding. Each side reports an independent, durable, idempotent receipt. A disconnected control channel is not proof that data sessions closed. Until both receipts arrive, show which side remains pending.\n\nRuntime retains a bounded terminal outbox after leaving. The receipt relay forwards only a fixed signed closure exchange to an exact current or historical Cloud/Namespace/Gateway association. It carries no old member certificate and cannot route arbitrary URLs or recover credentials. Historical receipt destinations are bounded; capacity exhaustion blocks further retirement instead of discarding pending evidence. A local persistence failure fences the running process and closes sessions but cannot acknowledge durable closure until persistence succeeds.\n\nGateway policy denial first fences local egress and records a durable denial revision. A later allow edit cannot erase that denial or release the fence. Directory delivery reports denial until Cloud commits it; the Gateway reads back the resulting binding projection before acknowledging the exact local denial revision. Lost responses and stale acknowledgements remain retryable. Allowing Cloud again does not republish a revoked binding. Network partition can leave already established sessions alive until their original expiry or connection end when neither endpoint receives revocation. No short authorization lease is added. Explicit removal, Cloud denial, unpublication, environment deletion and Gateway Cloud revocation have separate effects; none stops the Runtime process or background jobs.",
           "char_count": 5440
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Namespace and Cloud own publication approval and formal environment identity; Gateway owns local membership and forwarding policy; Runtime owns its identity proof, credentials, and business sessions. This contract does not authorize direct Internet fallback, recreate a retired membership, or turn a control outage into a data-session lease.",
+          "char_count": 341
         }
       ],
       "snippet": "Gateway Cloud v2 projects the single local member directory into Cloud. Runtime independently proves its identity and receives its own credentials through restricted HTTPS CONNECT, preserving inner Cloud TLS. Namespace owns publication and ",
@@ -22272,7 +22286,7 @@
         "title": "Gateway deployment qualification",
         "type": "Validation Guide"
       },
-      "body_length": 3525,
+      "body_length": 3820,
       "summary": "Qualification must prove Runtime-to-Gateway connection direction and real application behavior. Unit tests alone do not establish Electron certificate handling, browser MFA, MySQL migration or an isolated network path. Record each command's actual result; source changes or installer builds are not proof that an application flow passed. These affected-feature checks are separate from release packaging and the aggregate push gate.",
       "sections": [
         {
@@ -22281,6 +22295,13 @@
           "level": 1,
           "body": "## LAN application acceptance\n\n`scripts/check_gateway_access_browser.sh` starts production Gateway handlers and Runtime application handlers without Runtime TCP listeners or Cloud. It requires a real `code-server` executable on `PATH` or in `REDEVEN_CODE_SERVER_BIN`. It runs actual Electron with the production Node member transport and certificate partition implementation. It verifies pairing, automatic membership directory, login, MFA, secure cookies, session isolation, file and terminal RPC, Flower streaming, Web Service forwarding, native CodeSpace file editing and saving, management denial, wrong-certificate rejection and removal isolation.\n\n`desktop/src/main/gatewayMemberTransport.test.ts` with `REDEVEN_GATEWAY_INTEROP=1` exercises the released Go/Node SDKs, stream cancellation, certificate rotation, exact destination confinement and member removal. Every test owns its temporary state and process tree. No global TLS exception, dependency overlay or system trust installation is permitted.\n\n## Network and Cloud acceptance\n\n`scripts/check_gateway_cloud_isolation.sh` provides a Docker network in which Runtime cannot reach Cloud IPs, public IPs or public DNS. Only the Gateway member endpoint is reachable. Runtime must still join, prove itself, recover and exchange protected traffic. Explicit network-denial probes must precede a passing claim.\n\nPortal's task-owned compose Gateway smoke tests cover Namespace publication, environment opening, migration, custom Tunnel, password and MFA with real MySQL and browser sessions. Directory freshness, policy fencing and both closure receipts require independent assertions. A control-only outage must not be mistaken for data-session closure. Automatic publication and manual unpublication must preserve their different approval semantics.\n\n## Product and release boundaries\n\nDesktop renderer qualification checks all ten locales, narrow viewports, large text, keyboard activation, cancel focus, failed refresh and partial batches. Managed Gateway host tests use the production local/SSH/container lifecycle adapter; they do not restore Runtime lifecycle authority to Gateway.\n\nInstaller artifact signatures, upgrades and cross-platform packaging remain release-workflow responsibilities. A local source fixture cannot certify those results. Do not delete another task's processes, volumes, branches or worktrees while preparing or cleaning acceptance resources.",
           "char_count": 2427
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "These checks qualify Gateway membership, access, and isolation behavior on task-owned resources. They do not replace unit contracts, release packaging evidence, or the aggregate push gate, and a passing local fixture cannot certify an installer or an unrelated deployment target.",
+          "char_count": 279
         }
       ],
       "snippet": "Qualification must prove Runtime-to-Gateway connection direction and real application behavior. Unit tests alone do not establish Electron certificate handling, browser MFA, MySQL migration or an isolated network path. Record each command's",
@@ -22317,7 +22338,7 @@
         "title": "Gateway Desktop interactions",
         "type": "Interaction Contract"
       },
-      "body_length": 4189,
+      "body_length": 4451,
       "summary": "Desktop presents Gateway members, invitations, permissions, policy and optional Redeven Cloud association. A member appears after Runtime joins; there is no form for adding a Runtime URL. The Runtime connection panel is the single local consent and recovery surface. Failures retain input and previously loaded data. Shared launcher operations own cancellation, progress and focus; UI state cannot expand authority.",
       "sections": [
         {
@@ -22326,6 +22347,13 @@
           "level": 1,
           "body": "## Runtime joining\n\nCreating a managed Runtime offers Not now or Join Gateway. Joining starts only through the explicit trusted Runtime start action. A user who manages a Gateway can select it and issue an invitation; otherwise they import an invitation file. Both feed the same Runtime join call. Issuing an invitation does not silently consent or join.\n\nThe confirmation describes delegated LAN access and later Cloud publication. Existing Cloud environments require an explicit preserve/new choice. Replace explains possible interruption and fences the old path. Update address accepts a fresh signed descriptor from the same Gateway while preserving membership. Normal Runtime startup reconnects without showing this dialog. Background status polling never owns or resets Cloud credential recovery, continues after transient failures, and displays Runtime publication diagnostics. It updates observations only: imported invitations, ownership choices and leave confirmations survive until an explicit operation succeeds or the user closes the panel.\n\nThe panel exposes current membership, retry, leave and replace. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending are distinct states. Local Runtime management remains available only through its trusted owner, never through a Gateway member card.\n\n## Members and policy\n\nThe Gateway page's member dialog lists automatically joined members and offers invitations. Administrators can issue an invitation and choose one of their manageable Runtime targets. Refresh failures retain the previous list and any issued invitation. A canceled operation cannot reopen another dialog or discard the current draft.\n\nDefault Cloud permission and each member's inherit/allow/deny override are separate controls. The default-change confirmation lists affected inherited members. A batch keeps successful and failed items independently; retry submits only unresolved items. Cloud automatic mode displays pending authorization until Namespace approval exists. Script hook status and explicit reevaluation are visible; executable configuration remains host-only.\n\nPairing grants access, member management and Cloud configuration independently. A saved registration can be started explicitly if the service is stopped. Saving or refreshing cannot implicitly start or update it. Gateway lifecycle actions continue to use the existing confirmation and operation surface.\n\n## Presentation and accessibility\n\nAll shipped locales have explicit translations. Interactive controls provide pointer feedback, keyboard access, visible focus and disabled semantics. Dialog headers contain identity and controls; descriptions belong in the body. Cancel restores the originating control or its surviving owner. Narrow layouts wrap content without hiding actions. Async operations show actual stages rather than invented percentages.\n\nThe upgrade rebuild notice explains that obsolete Gateway entries must be rejoined. It does not manufacture a migration list or imply that old URL profiles remain executable.",
           "char_count": 3098
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "This surface presents current Gateway state and starts explicit user-authorized operations. It does not mint membership, alter Runtime authority, infer completion from stale observations, or preserve an obsolete URL profile as an executable path.",
+          "char_count": 246
         }
       ],
       "snippet": "Desktop presents Gateway members, invitations, permissions, policy and optional Redeven Cloud association. A member appears after Runtime joins; there is no form for adding a Runtime URL. The Runtime connection panel is the single local con",
@@ -22362,7 +22390,7 @@
         "title": "Gateway service",
         "type": "Gateway Contract"
       },
-      "body_length": 6456,
+      "body_length": 6797,
       "summary": "`redeven-gateway` owns one durable member directory, invitations, paired Desktop permissions, policy and restricted forwarding. Runtime initiates membership and every member connection. Gateway never dials a Runtime address, scans a network, or installs, starts, stops, updates or resets a Runtime. LAN access works without Cloud. Gateway loss interrupts its network paths; independently authorized Runtime management remains separate.",
       "sections": [
         {
@@ -22371,6 +22399,13 @@
           "level": 1,
           "body": "## Membership authority\n\nA host administrator or a paired Desktop with `manage_members` creates a ten-minute, single-use invitation. A trusted Runtime management channel or local `redeven gateway join --invitation-file \u003cfile\u003e` records consent before delivery. The Runtime signs delegation for this exact Gateway to manage LAN access and subsequent Cloud publication. A lost response recovers the original durable delivery; it cannot create another member.\n\nEach Runtime has one Gateway membership. Startup reconnects the saved Gateway without prompting, switching Gateway, or falling back to a direct address. `replace` requires a fresh invitation and explicit local action. Gateway identity is a persisted machine key independent of its address. Each member has its own key, mTLS client certificate, service certificate and version. Credential rotation requires a currently valid identity; expired or revoked identity requires reauthorization.\n\nThe sole member store owns invitation consumption, membership, credentials, policy and revocation. Cloud refers to those members and cannot enroll them independently. Connection generation is a live observation, never an authorization source. Public health proof is useful only for display association.\n\n## Policy and executable hooks\n\nNew installations deny Cloud by default. Each member inherits the default, explicitly allows Cloud, or explicitly denies Cloud. Changing the default affects all inherited members. Manual publication is the default. Automatic publication requires separate Namespace authorization in Cloud and uses the same binding transaction as manual approval.\n\nHost-configured JSON hooks may further deny `member.admit`, `access.open` or `cloud.publish`. Programs use an absolute executable and argument array, never a shell. Versioned input contains only nonsecret identity, action and policy version. Invalid output, failure, a two-second timeout, more than 32 KiB output or the eight-process concurrency limit denies the operation. Stable reason codes are logged; raw script output is not. Desktop and Cloud can inspect status and request reevaluation but cannot install scripts or change their paths. Reevaluation applies policy changes without per-packet execution or periodic session leases. Cold startup reevaluates stored Cloud grants with the current executable configuration before installing any egress. Hook refresh immediately fences old Cloud grants in memory and notifies egress even if persistence fails; the denial survives in the authoritative state for the next successful write and directory acknowledgment. Cloud directory synchronization first persists that state and never sends a volatile policy revision. A changed denial becomes durable; unchanged results do not replay committed commands. Desktop member management and `redeven-gateway members reevaluate --member ID --version N` check the current member version before applying the same reevaluation.\n\n## Own-process management\n\nThe separate Gateway archive and state root contain no Runtime lifecycle data. Desktop supports URL, local host, SSH host, local container and SSH container registrations. Host registrations expose explicit Gateway Start, Stop, Restart and Update through the existing lifecycle owner. Saving, refresh, pairing or member management never starts a stopped service implicitly.\n\nPaired permissions are `access`, `manage_members` and `configure_cloud`. Managed transport is not an automatic permission grant. Host CLI administration uses a separate local credential. Adding member management or Cloud configuration to an existing pairing requires new consent.\n\n## Address changes and upgrade\n\nThe host can update `--member-url` and `--member-listen` while retaining the Gateway identity and member CA. Runtime `update-address` verifies a fresh invitation from the same pinned key and CA, using only its signed address descriptor. It retains the existing member and Cloud association; a new identity requires `replace`. Desktop registration edits prove the pinned machine key with a fresh signed nonce before saving the new audience.\n\nThe v4 cutover removes URL profiles, caches and mode preferences, preserves Gateway installation coordinates and valid paired access identity, and shows a rebuild notice. Old write permissions do not gain new administration rights. Old Cloud-only Runtime membership is non-executable and must rejoin; see [Gateway Cloud access](gateway-cloud-access.md) for environment preservation.",
           "char_count": 4486
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Gateway owns membership, policy, invitations, and restricted forwarding. Runtime remains the owner of its lifecycle, application authentication, and business sessions; Cloud remains the owner of Namespace approval and publication identity. Gateway never dials arbitrary Runtime addresses or turns observations into authority.",
+          "char_count": 325
         }
       ],
       "snippet": "`redeven-gateway` owns one durable member directory, invitations, paired Desktop permissions, policy and restricted forwarding. Runtime initiates membership and every member connection. Gateway never dials a Runtime address, scans a network",
@@ -24159,7 +24194,7 @@
         "title": "Gateway v4 protocol",
         "type": "Protocol Contract"
       },
-      "body_length": 2966,
+      "body_length": 3300,
       "summary": "`redeven-gateway-v4` is the only served Gateway protocol. Its machine-readable authority is `spec/openapi/gateway-v4.yaml`. Gateway owns paired Desktop permissions and Runtime-initiated membership. Protocol mismatch fails explicitly; old URL-profile routes and HTTP forwarding are absent. Gateway Cloud v2 is a separate, shared business contract referring to these same members.",
       "sections": [
         {
@@ -24168,6 +24203,13 @@
           "level": 1,
           "body": "## Wire authority\n\nThe signed Desktop surface includes pairing, identity proof, catalog, invitation, member removal, member and default policy, reevaluation, member access offer and service description, and Cloud configuration/status. Signed requests bind method, route, body digest, protocol, Gateway identity, audience, nonce and time. Access, member management and Cloud configuration are independent grants.\n\nThe member TLS endpoint serves invitation redemption, rotation, cancellation, leaving, member connection admission, Cloud context and the closure-only relay. A Runtime mTLS certificate must be current for that exact member and version. Admission artifacts are one-use. Reverse streams target only the fixed Runtime application; no Runtime address or arbitrary dial request exists in the protocol.\n\nGateway ID derives from the persisted machine key, not a URL audience. Address changes prove the original key before changing trust coordinates. Member delegation binds Runtime, Gateway, member and explicit access/publication consent. Service descriptions are signed separately and bind the Runtime's TLS application identity.\n\n## Version and persistence\n\nMember version controls removal and replacement. Cloud binding generation controls publication and recovery. Network connection generation only distinguishes live observations. Directory and policy revisions prevent stale messages from restoring permissions. None of these versions substitutes for another.\n\nGateway Cloud v2 DTOs are maintained in Portal shared contracts and mirrored with common fixtures in Runtime. The legacy wire protocol is not served during migration. Historical local readers only remove old execution state and preserve explicitly permitted migration evidence. Runtime Service epoch 41 identifies the matching Runtime management contract.\n\n[Gateway service](../gateway/gateway-service.md) owns membership and policy. [Gateway access sessions](../gateway/gateway-access-sessions.md) owns stream and TLS behavior. [Gateway Cloud access](../gateway/gateway-cloud-access.md) owns publication, recovery and revocation.",
           "char_count": 2105
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "The OpenAPI document and signed DTOs are the protocol authority. This concept defines wire compatibility and version fencing; implementation concepts own membership, stream handling, and Cloud behavior. Unknown routes, stale generations, and legacy URL-profile requests remain rejected rather than silently translated.",
+          "char_count": 318
         }
       ],
       "snippet": "`redeven-gateway-v4` is the only served Gateway protocol. Its machine-readable authority is `spec/openapi/gateway-v4.yaml`. Gateway owns paired Desktop permissions and Runtime-initiated membership. Protocol mismatch fails explicitly; old UR",
@@ -34062,5 +34104,5 @@
       ]
     }
   ],
-  "source_sha256": "327f3fa3370d47cecb6f924f5568855949b73528cdf16e2f9933cd5bdef13095"
+  "source_sha256": "a16e6b722c82db7e9e5d59a58ac0491121d881fc2ac6dc20d3aecc396fb64e65"
 }

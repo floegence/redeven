@@ -31,6 +31,10 @@ The shared budget admits at most 32 business connections per member and 1,024 in
 
 Closing a Desktop view releases its transport, authentication cache and isolated session. A Gateway process stop ends all paths through it. Removing a member or leaving closes LAN and Cloud access; forbidding Cloud or unpublishing an environment preserves LAN access. Cloud closure receipts and partition limits are owned by [Gateway Cloud access](gateway-cloud-access.md).
 
+# Boundaries
+
+Gateway owns reverse-stream admission and bounded forwarding only. Runtime owns application authentication, authorization, and business session lifetime; Desktop owns the isolated browser partition and user consent. No path in this contract grants Gateway a Runtime lifecycle command, arbitrary egress, or a second direct-access transport.
+
 # Evidence
 
 - `redeven:internal/gatewaymembership/listener.go` — Fixed stream dispatch and SDK relay.

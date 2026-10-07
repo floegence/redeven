@@ -27,6 +27,10 @@ Gateway Cloud v2 DTOs are maintained in Portal shared contracts and mirrored wit
 
 [Gateway service](../gateway/gateway-service.md) owns membership and policy. [Gateway access sessions](../gateway/gateway-access-sessions.md) owns stream and TLS behavior. [Gateway Cloud access](../gateway/gateway-cloud-access.md) owns publication, recovery and revocation.
 
+# Boundaries
+
+The OpenAPI document and signed DTOs are the protocol authority. This concept defines wire compatibility and version fencing; implementation concepts own membership, stream handling, and Cloud behavior. Unknown routes, stale generations, and legacy URL-profile requests remain rejected rather than silently translated.
+
 # Evidence
 
 - `redeven:spec/openapi/gateway-v4.yaml` — Closed OpenAPI surface.

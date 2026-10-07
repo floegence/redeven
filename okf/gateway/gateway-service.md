@@ -37,6 +37,10 @@ The host can update `--member-url` and `--member-listen` while retaining the Gat
 
 The v4 cutover removes URL profiles, caches and mode preferences, preserves Gateway installation coordinates and valid paired access identity, and shows a rebuild notice. Old write permissions do not gain new administration rights. Old Cloud-only Runtime membership is non-executable and must rejoin; see [Gateway Cloud access](gateway-cloud-access.md) for environment preservation.
 
+# Boundaries
+
+Gateway owns membership, policy, invitations, and restricted forwarding. Runtime remains the owner of its lifecycle, application authentication, and business sessions; Cloud remains the owner of Namespace approval and publication identity. Gateway never dials arbitrary Runtime addresses or turns observations into authority.
+
 # Evidence
 
 - `redeven:internal/gatewaymembership/store.go` — Sole durable membership and invitation delivery.
