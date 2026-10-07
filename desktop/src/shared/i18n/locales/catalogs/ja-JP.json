@@ -3057,7 +3057,8 @@
   },
   "gatewayCloud": {
     "title": "Redeven Cloud",
-    "description": "Gateway を Redeven Cloud に接続します。名前空間の管理者が公開を承認します。ローカルの同意は各ランタイムの参加時に記録されています。",
+    "description": "Gateway を Redeven Cloud に接続します。Desktop は公式 Cloud を自動的に使用します。名前空間の管理者が公開を承認します。ローカルの同意は各ランタイムの参加時に記録されています。",
+    "nextStep": "接続後、Redeven Cloud でこの Gateway を承認し、所属する名前空間を選択してください。",
     "cloudOrigin": "クラウドのアドレス",
     "gatewayURL": "ランタイムから接続できるゲートウェイのアドレス",
     "listenAddress": "ゲートウェイの待ち受けアドレス",

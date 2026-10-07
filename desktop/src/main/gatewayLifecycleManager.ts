@@ -119,6 +119,7 @@ export type GatewayLifecycleManagerOptions = Readonly<{
   release_base_url: string;
   asset_cache_root: string;
   temp_root: string;
+  cloud_origin: string;
   lifecycle_coordinator: RuntimeLifecycleCoordinator;
   source_runtime_root?: string;
   local_ui_bind?: string;
@@ -401,7 +402,7 @@ export class GatewayLifecycleManager {
     return this.runLifecycle(record, 'start', { signal, operationKey }, async currentSignal => {
       const options = await this.serviceOptions(record, { signal: currentSignal });
       if (configuration) await this.ensureBridgeSession(record, { signal: currentSignal });
-      return manageGatewayCloud(options, configuration);
+      return manageGatewayCloud(options, configuration ? { cloud_origin: this.options.cloud_origin, ...configuration } : undefined);
     });
   }
 

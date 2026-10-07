@@ -3063,7 +3063,8 @@
   },
   "gatewayCloud": {
     "title": "Redeven Cloud",
-    "description": "Conecte este Gateway ao Redeven Cloud. Um administrador do espaço de nomes aprova a publicação. O consentimento local já é registrado quando cada ambiente de execução ingressa.",
+    "description": "Conecte este Gateway ao Redeven Cloud. O Desktop usa automaticamente a Cloud oficial. Um administrador do espaço de nomes aprova a publicação. O consentimento local já é registrado quando cada ambiente de execução ingressa.",
+    "nextStep": "Depois de conectar, aprove este Gateway no Redeven Cloud e escolha o espaço de nomes ao qual ele pertencerá.",
     "cloudOrigin": "Endereço da nuvem",
     "gatewayURL": "Endereço do gateway acessível pelos ambiente de execuçãos",
     "listenAddress": "Endereço de escuta do gateway",

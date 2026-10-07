@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  defaultRedevenCloudOrigin,
   isRedevenCloudOrigin,
   redevenCloudAllowedOrigins,
   REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
@@ -28,7 +29,12 @@ describe('Redeven Cloud origin policy', () => {
       REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
     ]);
     expect(requireRedevenCloudOrigin('https://redeven.test/path', policy)).toBe(REDEVEN_CLOUD_DEVELOPMENT_ORIGIN);
+    expect(defaultRedevenCloudOrigin(policy)).toBe(REDEVEN_CLOUD_DEVELOPMENT_ORIGIN);
     expect(() => requireRedevenCloudOrigin('https://custom.redeven.test', policy))
       .toThrow('Redeven Desktop supports Redeven Cloud only.');
+  });
+
+  it('uses the production origin in packaged builds', () => {
+    expect(defaultRedevenCloudOrigin({ allow_development: false })).toBe(REDEVEN_CLOUD_ORIGIN);
   });
 });

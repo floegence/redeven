@@ -18,6 +18,12 @@ export function redevenCloudAllowedOrigins(
     : [REDEVEN_CLOUD_ORIGIN];
 }
 
+export function defaultRedevenCloudOrigin(
+  policy: RedevenCloudOriginPolicy,
+): string {
+  return policy.allow_development ? REDEVEN_CLOUD_DEVELOPMENT_ORIGIN : REDEVEN_CLOUD_ORIGIN;
+}
+
 export function isRedevenCloudOrigin(
   rawOrigin: string,
   policy: RedevenCloudOriginPolicy = { allow_development: false },

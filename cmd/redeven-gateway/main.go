@@ -111,10 +111,14 @@ func (c *cli) cloudConnectCmd(args []string) int {
 	jsonOutput := fs.Bool("json", false, "Return machine-readable Cloud approval details.")
 	reauthorize := fs.Bool("reauthorize", false, "Register a new identity after revocation or expiry; requires new Namespace approval. Existing local memberships are retained.")
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
-	cloudOrigin := fs.String("cloud", "", "Redeven Cloud HTTPS origin (required).")
-	if err := parseFlags(fs, args); err != nil || fs.NArg() != 0 || strings.TrimSpace(*cloudOrigin) == "" {
-		writeError(c.stderr, "Usage: redeven-gateway cloud-connect --cloud https://cloud.example.com [--state-root path]")
+	cloudOrigin := fs.String("cloud", gatewaycloud.DefaultCloudOrigin, "Redeven Cloud HTTPS origin (advanced override; defaults to the official Cloud).")
+	if err := parseFlags(fs, args); err != nil || fs.NArg() != 0 {
+		writeError(c.stderr, "Usage: redeven-gateway cloud-connect [--cloud https://custom-cloud.example] [--state-root path]")
 		return 2
+	}
+	origin := strings.TrimSpace(*cloudOrigin)
+	if origin == "" {
+		origin = gatewaycloud.DefaultCloudOrigin
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -131,17 +135,17 @@ func (c *cli) cloudConnectCmd(args []string) int {
 	}
 	defer client.transport.CloseIdleConnections()
 	var response gc.Gateway
-	err = client.request(ctx, "/gateway/v4/cloud/configure", gp.ConfigureCloudRequest{ProtocolVersion: gp.Version, CloudOrigin: *cloudOrigin, Reauthorize: *reauthorize}, &response)
+	err = client.request(ctx, "/gateway/v4/cloud/configure", gp.ConfigureCloudRequest{ProtocolVersion: gp.Version, CloudOrigin: origin, Reauthorize: *reauthorize}, &response)
 	gateway := &response
 	if err != nil {
 		writeError(c.stderr, err.Error())
 		return 1
 	}
 	if *jsonOutput {
-		_ = json.NewEncoder(c.stdout).Encode(gatewaycloud.Summary{Configured: true, CloudOrigin: *cloudOrigin, GatewayPublicID: gateway.PublicID, NamespacePublicID: gateway.NamespacePublicID, Region: gateway.Region, State: gateway.State, ManagementURL: gatewaycloud.GatewayManagementURL(*cloudOrigin, gateway.NamespacePublicID, gateway.PublicID, gateway.PublicKeySHA256)})
+		_ = json.NewEncoder(c.stdout).Encode(gatewaycloud.Summary{Configured: true, CloudOrigin: origin, GatewayPublicID: gateway.PublicID, NamespacePublicID: gateway.NamespacePublicID, Region: gateway.Region, State: gateway.State, ManagementURL: gatewaycloud.GatewayManagementURL(origin, gateway.NamespacePublicID, gateway.PublicID, gateway.PublicKeySHA256)})
 		return 0
 	}
-	fmt.Fprintf(c.stdout, "Approve Gateway access in Redeven Cloud:\n%s\n", gatewaycloud.GatewayManagementURL(*cloudOrigin, gateway.NamespacePublicID, gateway.PublicID, gateway.PublicKeySHA256))
+	fmt.Fprintf(c.stdout, "Approve Gateway access in Redeven Cloud:\n%s\n", gatewaycloud.GatewayManagementURL(origin, gateway.NamespacePublicID, gateway.PublicID, gateway.PublicKeySHA256))
 	return 0
 }
 

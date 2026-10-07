@@ -3062,7 +3062,8 @@
   },
   "gatewayCloud": {
     "title": "Redeven Cloud",
-    "description": "Verbinden Sie dieses Gateway mit Redeven Cloud. Ein Namespace-Administrator genehmigt dort die Veröffentlichung. Die lokale Zustimmung wird bereits beim Beitritt jeder Laufzeitumgebung gespeichert.",
+    "description": "Verbinden Sie dieses Gateway mit Redeven Cloud. Desktop verwendet automatisch die offizielle Cloud. Ein Namespace-Administrator genehmigt dort die Veröffentlichung. Die lokale Zustimmung wird bereits beim Beitritt jeder Laufzeitumgebung gespeichert.",
+    "nextStep": "Genehmigen Sie dieses Gateway nach der Verbindung in Redeven Cloud und wählen Sie den zugehörigen Namespace.",
     "cloudOrigin": "Cloud-Adresse",
     "gatewayURL": "Für Laufzeitumgebungs erreichbare Gateway-Adresse",
     "listenAddress": "Gateway-Listen-Adresse",

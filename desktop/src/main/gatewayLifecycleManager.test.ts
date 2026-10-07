@@ -105,6 +105,7 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
     release_base_url: 'https://releases.example.invalid',
     asset_cache_root: '/tmp/redeven-assets',
     temp_root: '/tmp/redeven-temp',
+    cloud_origin: 'https://redeven.test',
     source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
     lifecycle_coordinator: new RuntimeLifecycleCoordinator(),
     on_progress: (event) => {
@@ -342,6 +343,7 @@ describe('GatewayLifecycleManager', () => {
       release_base_url: 'https://releases.example.invalid',
       asset_cache_root: '/tmp/redeven-assets',
       temp_root: '/tmp/redeven-temp',
+      cloud_origin: 'https://redeven.test',
       source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
       lifecycle_coordinator: new RuntimeLifecycleCoordinator(),
       session_cache: sessionCache,

@@ -1,4 +1,4 @@
-import { parseGatewayCloudSummary, normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from '../shared/gatewayCloud';
+import { parseGatewayCloudSummary, normalizeGatewayCloudConfiguration, type GatewayCloudExecutionConfiguration, type GatewayCloudSummary } from '../shared/gatewayCloud';
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
@@ -953,8 +953,8 @@ export function gatewayReleasePackageURL(rawReleaseBaseURL: string, releaseTag: 
   return buildDesktopSSHReleaseAssetURL(rawReleaseBaseURL, normalizeReleaseTag(releaseTag), gatewayReleasePackageName(platform));
 }
 
-export async function manageGatewayCloud(options: GatewayServiceHostOptions, configuration?: GatewayCloudConfiguration): Promise<GatewayCloudSummary> {
-  if (configuration && !normalizeGatewayCloudConfiguration(configuration)) throw new Error('Invalid Gateway Cloud configuration.');
+export async function manageGatewayCloud(options: GatewayServiceHostOptions, configuration?: GatewayCloudExecutionConfiguration): Promise<GatewayCloudSummary> {
+  if (configuration && (!configuration.cloud_origin || !normalizeGatewayCloudConfiguration({ reauthorize: configuration.reauthorize }))) throw new Error('Invalid Gateway Cloud configuration.');
   return withGatewayExecutor(options, async executor => {
     const script = [
       'set -eu', rootShellForPlacement(options.placement), managedGatewayPathShell(),
