@@ -14,11 +14,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// One active attachment per application. HTTP status reads never acquire it.
-// Explicit application controls share the viewer's reader and request ordering.
+// Native application state is process-owned. Each lease keeps an independent
+// attachment and route; the helper applies the single-controller takeover rule.
 type desktopAttachmentOwner struct {
 	sync.Mutex
-	current *desktopAttachment
+	attachments map[*desktopAttachment]struct{}
+	current     *desktopAttachment
 }
 type desktopReply struct {
 	viewerID uint64
@@ -50,6 +51,11 @@ func (a *desktopAttachment) emit(event nativeapps.DesktopEvent) bool {
 	case a.events <- event:
 		return true
 	case <-a.done:
+		return false
+	default:
+		// A viewer that cannot drain its own bounded queue must not hold up
+		// capture delivery for other attachments. Its reader closes only this
+		// attachment and the native process remains shared.
 		return false
 	}
 }
@@ -114,7 +120,7 @@ func (a *desktopAttachment) call(ctx context.Context, request nativeapps.Desktop
 	}
 }
 
-func (m *Manager) shareDesktopApplication(ctx context.Context, owner string, a *linuxApplication, presentation Presentation) (Session, error) {
+func (m *Manager) shareDesktopApplication(ctx context.Context, owner string, a *linuxApplication, presentation Presentation, clientID ...string) (Session, error) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		return Session{}, err
@@ -129,7 +135,11 @@ func (m *Manager) shareDesktopApplication(ctx context.Context, owner string, a *
 	if a.ready {
 		state = "running"
 	}
-	s := &ownedSession{application: a, proxy: proxy, owner: owner, password: randomID() + randomID(), done: make(chan struct{}),
+	client := ""
+	if len(clientID) > 0 {
+		client = clientID[0]
+	}
+	s := &ownedSession{application: a, proxy: proxy, owner: owner, clientID: client, password: randomID() + randomID(), done: make(chan struct{}),
 		view: Session{ID: randomID(), Application: a.record.Application, State: state, Backend: "wayland", Mode: "stream", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: presentation}}
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.serveDesktopSession(w, r, s) }), ReadHeaderTimeout: 10 * time.Second}
 	m.mu.Lock()
@@ -188,17 +198,22 @@ func (m *Manager) serveDesktopSession(w http.ResponseWriter, r *http.Request, s 
 		_ = ws.WriteJSON(map[string]any{"event": "unavailable", "code": "capture_failed"})
 		return
 	}
-	previous := owner.current
-	attached := newDesktopAttachment(conn, true)
-	owner.current = attached
-	if previous != nil {
-		previous.close()
+	if owner.attachments == nil {
+		owner.attachments = make(map[*desktopAttachment]struct{})
 	}
+	attached := newDesktopAttachment(conn, true)
+	owner.attachments[attached] = struct{}{}
+	owner.current = attached
 	owner.Unlock()
 	defer func() {
 		owner.Lock()
+		delete(owner.attachments, attached)
 		if owner.current == attached {
 			owner.current = nil
+			for candidate := range owner.attachments {
+				owner.current = candidate
+				break
+			}
 		}
 		attached.close()
 		owner.Unlock()
@@ -228,7 +243,10 @@ func (m *Manager) serveDesktopSession(w http.ResponseWriter, r *http.Request, s 
 			owner.Lock()
 			if owner.current != attached {
 				owner.Unlock()
-				return
+				// The native helper broadcasts control revocation to this
+				// attachment. Keep the viewer subscribed for frames while it is
+				// read-only; a stale input packet is intentionally ignored.
+				continue
 			}
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			err := attached.send(ctx, request.DesktopRequest, desktopReply{viewerID: request.ID})

@@ -70,7 +70,13 @@ pixels or an explicit viewer quit request. Unknown end reasons retain the termin
 page; a directly opened tab is never asked to close itself. A close request alone,
 removal of one child window and transport loss cannot close the viewer. Save/cancel
 prompts remain authoritative. A newly loaded terminal page stays readable until
-dismissed, and closing the viewer itself preserves the application. Refresh never
+dismissed, and closing the outer viewer sends one idempotent release for the
+current client lease while preserving the application. The unload release carries
+a short host-side grace so a browser reload can read state and retain the same
+lease; the inner Close application window control only closes the selected host
+window and never releases the lease.
+A transport loss or temporary status failure retains the lease for reconnect; the
+same client identity is reused when the viewer is opened again. Refresh never
 launches an app.
 
 The native Linux adapter maps a nonempty-to-empty live compositor window registry

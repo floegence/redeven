@@ -10,7 +10,7 @@ timestamp: 2026-09-22T05:00:00Z
 Redeven owns Linux application instances, caller authorization and ephemeral
 sharing; the published Floe Native Apps module owns GIO launch and process-tree
 observation. A live application outlives its viewers and window count. Closing a
-viewer, stopping sharing or exiting Runtime never requests application termination.
+viewer, releasing a share lease or exiting Runtime never requests application termination.
 After Runtime restart, the same host user and private state can recover a surviving
 backend only after matching its kernel process generation and private endpoint
 identity. No persisted PID alone authorizes signaling. Destroying the virtual
@@ -37,9 +37,11 @@ No record is rewritten to the current recommended backend. Unverifiable records
 never authorize terminating the surviving process. Old components remain owned
 by those instances; [preparation](host-application-preparation.md) is independent.
 
-A share has its own ID, route, credential and connection-tracking proxy. Stopping
-sharing closes HTTP and hijacked WebSocket connections immediately; deleting a
-route alone is insufficient. A new share atomically rotates the backend credential
+A share lease has its own client-bound ID, route, credential and connection-tracking
+proxy. Releasing one lease closes only its HTTP and hijacked WebSocket connections
+immediately; deleting a route alone is insufficient. Other client leases and the
+application instance remain available. The last lease revokes the route and
+credential while preserving the backend. A new share rotates the backend credential
 and reconnects the same application instance. Startup never silently re-executes
 a surviving windowless app. The twelve-instance limit includes detached apps.
 Running snapshots expose only instances owned by the authorized caller, including
@@ -64,8 +66,9 @@ a disconnected viewer or an HTTP error cannot manufacture application exit.
 Native sharing waits for the helper's prepared receipt. One authenticated local
 attachment carries bounded window/state, negotiated image frame, cursor, input and clipboard
 messages. Exactly one reader multiplexes browser and product-control replies.
-A new viewer takes over the old attachment; cleanup checks the exact owner so an
-old connection cannot revoke its successor. Passive status reads inspect the
+A new viewer takes over input authority while old attachments remain view-only;
+cleanup checks the exact attachment so an old connection cannot revoke its
+successor. Passive status reads inspect the
 bounded atomic receipt and never attach. Product controls reuse an active
 attachment, or create a short-lived attachment only when no viewer owns it.
 

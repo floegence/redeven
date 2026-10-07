@@ -197,6 +197,122 @@ func TestStopRejectsAnotherOwnerAndCleansPrivateRoute(t *testing.T) {
 	}
 }
 
+func TestClientSessionsStayPrivateAndDetachIsIdempotent(t *testing.T) {
+	state := t.TempDir()
+	reg, err := registry.Open(filepath.Join(state, "forwards.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwards, err := portforward.New(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer forwards.Close()
+	m := New(state, state, forwards)
+	forward := func(target string) *portforward.ForwardSession {
+		f, err := forwards.OpenOwnedForwardSession(context.Background(), target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	firstForward := forward("http://127.0.0.1:45313/_redeven_host_app/")
+	secondForward := forward("http://127.0.0.1:45314/_redeven_host_app/")
+	first := &ownedSession{view: Session{ID: "client-a", State: "running", Forward: firstForward}, owner: "alice", clientID: "browser-a", application: &linuxApplication{}}
+	second := &ownedSession{view: Session{ID: "client-b", State: "running", Forward: secondForward}, owner: "alice", clientID: "browser-b", application: &linuxApplication{}}
+	first.done, second.done = make(chan struct{}), make(chan struct{})
+	m.sessions[first.view.ID], m.sessions[second.view.ID] = first, second
+	if got := m.SessionsForClient("alice", "browser-a"); len(got) != 1 || got[0].ID != first.view.ID {
+		t.Fatalf("client A received the wrong sessions: %+v", got)
+	}
+	if got := m.SessionsForClient("alice", "browser-b"); len(got) != 1 || got[0].ID != second.view.ID {
+		t.Fatalf("client B received the wrong sessions: %+v", got)
+	}
+	if err := m.Detach(context.Background(), "alice", first.view.ID); err != nil {
+		t.Fatal(err)
+	}
+	if second.view.State != "running" {
+		t.Fatalf("detaching A changed B: %+v", second.view)
+	}
+	if err := m.Detach(context.Background(), "alice", first.view.ID); err != nil {
+		t.Fatalf("idempotent detach: %v", err)
+	}
+	if m.Password(first.view.ID) != "" {
+		t.Fatal("detached lease retained its password")
+	}
+	if route, err := forwards.GetForward(context.Background(), firstForward.Forward.ForwardID); err != nil || route != nil {
+		t.Fatalf("detached lease retained its route: %v %v", route, err)
+	}
+}
+
+func TestDetachWithGracePreservesLeaseAcrossReload(t *testing.T) {
+	state := t.TempDir()
+	reg, err := registry.Open(filepath.Join(state, "forwards.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwards, err := portforward.New(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer forwards.Close()
+	m := New(state, state, forwards)
+	f, err := forwards.OpenOwnedForwardSession(context.Background(), "http://127.0.0.1:45315/_redeven_host_app/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &ownedSession{view: Session{ID: "reload", State: "running", Forward: f}, owner: "alice", password: "secret", done: make(chan struct{}), application: &linuxApplication{}}
+	m.sessions[s.view.ID] = s
+	if err := m.DetachWithGrace(context.Background(), "alice", s.view.ID, 40*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	// The replacement document reads state and reacquires the same password;
+	// Password cancels the pending unload release.
+	if got := m.Password(s.view.ID); got != "secret" {
+		t.Fatalf("reload lost the active lease: %q", got)
+	}
+	time.Sleep(80 * time.Millisecond)
+	if s.view.State != "running" || s.stopping {
+		t.Fatalf("reload grace released a retained lease: %+v", s.view)
+	}
+	if err := m.DetachWithGrace(context.Background(), "alice", s.view.ID, 5*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-s.done:
+	case <-time.After(time.Second):
+		t.Fatal("grace release did not finish")
+	}
+	if s.view.State != "ended" || m.Password(s.view.ID) != "" {
+		t.Fatalf("final lease release retained session state: %+v", s.view)
+	}
+}
+
+func TestLateReleaseCannotDetachReplacementLease(t *testing.T) {
+	m := New(t.TempDir(), t.TempDir(), nil)
+	application := &linuxApplication{}
+	first := &ownedSession{view: Session{ID: "old", State: "running"}, owner: "alice", clientID: "browser", application: application, done: make(chan struct{}), password: "old-password"}
+	second := &ownedSession{view: Session{ID: "new", State: "running"}, owner: "alice", clientID: "browser", application: application, done: make(chan struct{}), password: "new-password"}
+	m.sessions[first.view.ID], m.sessions[second.view.ID] = first, second
+	if err := m.Detach(context.Background(), "alice", first.view.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Detach(context.Background(), "alice", first.view.ID); err != nil {
+		t.Fatal(err)
+	}
+	if second.view.State != "running" || second.stopping || m.Password(second.view.ID) != "new-password" {
+		t.Fatalf("late release changed replacement lease: %+v", second.view)
+	}
+}
+
+func TestLaunchRejectsInvalidClientIdentity(t *testing.T) {
+	m := New(t.TempDir(), t.TempDir(), nil)
+	_, err := m.Launch(context.Background(), "alice", LaunchRequest{ApplicationID: "fixture", ClientID: "browser id"})
+	if err != ErrInvalid {
+		t.Fatalf("invalid client identity returned %v", err)
+	}
+}
+
 func TestFinishedSessionPreservesFailuresBeforeAndAfterRunning(t *testing.T) {
 	for _, initial := range []string{"starting", "running"} {
 		t.Run(initial, func(t *testing.T) {

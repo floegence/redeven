@@ -243,7 +243,8 @@ func (m *Manager) launchLinux(ctx context.Context, owner string, req LaunchReque
 		return Session{}, ErrUnavailable
 	}
 	for _, s := range m.sessions {
-		if !s.stopping && s.owner == owner && s.view.Application.ID == req.ApplicationID && (s.view.State == "starting" || s.view.State == "running") {
+		if !s.stopping && s.owner == owner && s.clientID == req.ClientID && s.view.Application.ID == req.ApplicationID && (s.view.State == "starting" || s.view.State == "running") {
+			m.retainSessionLocked(s)
 			view := cloneSession(s.view)
 			m.mu.Unlock()
 			return view, nil
@@ -294,7 +295,7 @@ func (m *Manager) launchLinux(ctx context.Context, owner string, req LaunchReque
 		m.applications[application.record.ID] = application
 	}
 	if application.record.Backend == "wayland" {
-		return m.shareDesktopApplication(ctx, owner, application, req.Presentation)
+		return m.shareDesktopApplication(ctx, owner, application, req.Presentation, req.ClientID)
 	}
 	// Viewer resources are selected from this surviving Xpra instance, never
 	// from a newly activated component with a different backend contract.
@@ -302,10 +303,10 @@ func (m *Manager) launchLinux(ctx context.Context, owner string, req LaunchReque
 	if err != nil {
 		return Session{}, fmt.Errorf("%w: %v", ErrViewerPreparation, err)
 	}
-	return m.shareApplication(ctx, owner, application, req.Presentation, viewer)
+	return m.shareApplication(ctx, owner, application, req.Presentation, viewer, req.ClientID)
 }
 
-func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxApplication, presentation Presentation, viewer *nativeapps.PreparedViewer) (Session, error) {
+func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxApplication, presentation Presentation, viewer *nativeapps.PreparedViewer, clientID ...string) (Session, error) {
 	password := randomID() + randomID()
 	path := filepath.Join(m.applicationDir(a.record.ID), "password")
 	if err := os.WriteFile(path+".tmp", []byte(password), 0600); err != nil {
@@ -327,7 +328,11 @@ func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxAp
 	if a.ready {
 		state = "running"
 	}
-	s := &ownedSession{application: a, proxy: proxy, viewer: viewer, tools: a.tools, socketDir: applicationSocketDir(a.record.ID), owner: owner, password: password, done: make(chan struct{}),
+	client := ""
+	if len(clientID) > 0 {
+		client = clientID[0]
+	}
+	s := &ownedSession{application: a, proxy: proxy, viewer: viewer, tools: a.tools, socketDir: applicationSocketDir(a.record.ID), owner: owner, clientID: client, password: password, done: make(chan struct{}),
 		view: Session{ID: randomID(), Application: a.record.Application, State: state, Backend: "linux", Mode: "stream", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: presentation}}
 	m.mu.Lock()
 	m.trimCompletedLocked()

@@ -32,33 +32,18 @@ func TestDesktopAttachmentBackpressure(t *testing.T) {
 	if !attachment.emit(nativeapps.DesktopEvent{ID: 1}) {
 		t.Fatal("initial event was rejected")
 	}
-	completed := make(chan bool, 1)
-	go func() { completed <- attachment.emit(nativeapps.DesktopEvent{ID: 2}) }()
-	select {
-	case result := <-completed:
-		t.Fatalf("a bounded reply burst must wait for the viewer, returned %v", result)
-	case <-time.After(20 * time.Millisecond):
+	if attachment.emit(nativeapps.DesktopEvent{ID: 2}) {
+		t.Fatal("a slow attachment accepted an event beyond its bounded queue")
 	}
 	if event := <-attachment.events; event.ID != 1 {
 		t.Fatal("event order changed")
 	}
-	select {
-	case result := <-completed:
-		if !result {
-			t.Fatal("draining the queue closed the attachment")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("event did not resume after the viewer drained its queue")
+	if attachment.emit(nativeapps.DesktopEvent{ID: 3}) != true {
+		t.Fatal("draining the queue did not reopen the attachment")
 	}
-	go func() { completed <- attachment.emit(nativeapps.DesktopEvent{ID: 3}) }()
 	attachment.close()
-	select {
-	case result := <-completed:
-		if result {
-			t.Fatal("a closed attachment accepted a queued event")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("closing the attachment did not release the blocked reader")
+	if attachment.emit(nativeapps.DesktopEvent{ID: 4}) {
+		t.Fatal("a closed attachment accepted a queued event")
 	}
 }
 
@@ -219,9 +204,11 @@ func TestDesktopTransportTakeoverAndControlsShareOneReader(t *testing.T) {
 	if current.Connection <= old.Connection {
 		t.Fatal("takeover reused native connection identity")
 	}
-	if _, _, err := first.ReadMessage(); err == nil {
-		t.Fatal("old viewer retained input authority")
+	if err := first.WriteJSON(map[string]any{"id": 40, "method": "status"}); err != nil {
+		t.Fatal(err)
 	}
+	// A stale control packet is ignored locally, while the attachment remains
+	// subscribed to the shared frame stream.
 	// A control request and browser request have independent correlation IDs on
 	// the same native reader. No passive/control probe replaces the viewer.
 	control := make(chan error, 1)
@@ -241,6 +228,9 @@ func TestDesktopTransportTakeoverAndControlsShareOneReader(t *testing.T) {
 	}
 	if err := m.Detach(context.Background(), "alice", view.ID); err != nil {
 		t.Fatal(err)
+	}
+	if _, _, err := first.ReadMessage(); err == nil {
+		t.Fatal("detached first viewer remains connected")
 	}
 	if _, _, err := second.ReadMessage(); err == nil {
 		t.Fatal("detached viewer remains connected")

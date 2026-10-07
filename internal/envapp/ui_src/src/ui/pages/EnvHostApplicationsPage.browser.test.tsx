@@ -39,37 +39,19 @@ afterEach(async () => {
 });
 
 it.each([390, 1440].flatMap(width => (['en-US', 'zh-CN'] as const).map(locale => ({ width, locale }))))(
-  'shows stop-sharing guidance in the body at $width px in $locale', async ({ width, locale }) => {
+  'keeps sharing implicit and hides stop-sharing controls at $width px in $locale', async ({ width, locale }) => {
     state.locale = locale;
     await page.viewport(width, 900);
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvHostApplicationsPage />, host);
-    const title = locale === 'zh-CN' ? '停止共享' : 'Stop sharing';
+    expect(document.body.textContent).not.toContain(locale === 'zh-CN' ? '停止共享' : 'Stop sharing');
+    expect(document.querySelector('.host-app-stop')).toBeNull();
     if (width < 768) {
       await userEvent.click(page.getByRole('button', { name: `${locale === 'zh-CN' ? '应用控制' : 'Application controls'} · Text Editor`, exact: true }));
-      await userEvent.click(page.getByRole('menuitem', { name: title, exact: true }));
-    } else {
-    await userEvent.click(page.getByRole('button', { name: `${title} · Text Editor`, exact: true }));
+      const stopLabel = locale === 'zh-CN' ? '停止共享' : 'Stop sharing';
+      expect([...document.querySelectorAll('[role="menuitem"]')].filter(item => item.textContent?.trim() === stopLabel)).toHaveLength(0);
     }
-    await expect.poll(() => document.querySelector('[role="dialog"]')).toBeTruthy();
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    await expect.poll(() => getComputedStyle(dialog).opacity).toBe('1');
-    const header = dialog.querySelector<HTMLElement>('[data-floe-dialog-header]')!;
-    const body = dialog.querySelector<HTMLElement>('[data-floe-dialog-body]')!;
-    const footer = dialog.querySelector<HTMLElement>('[data-floe-dialog-footer]')!;
-    const description = document.getElementById(dialog.getAttribute('aria-describedby')!)!;
-    expect(header.textContent).toBe(title);
-    expect(description.parentElement).toBe(body);
-    expect(getComputedStyle(description).fontSize).toBe('12px');
-    expect(body.children).toHaveLength(1);
-    expect(description.textContent).toContain(locale === 'zh-CN' ? '应用窗口和未保存的工作会保留。' : 'Its windows and unsaved work stay open.');
-    expect(description.getBoundingClientRect().top).toBeGreaterThan(header.getBoundingClientRect().bottom);
-    expect(description.getBoundingClientRect().bottom).toBeLessThan(footer.getBoundingClientRect().top);
-    expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
-    await page.screenshot({ element: dialog, path: `__screenshots__/stop-sharing-${locale}-${width}.png` });
-    await userEvent.click(page.getByRole('button', { name: locale === 'zh-CN' ? '取消' : 'Cancel', exact: true }));
-    await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
     expect(state.detach).not.toHaveBeenCalled();
   },
 );
@@ -99,25 +81,15 @@ it('requires explicit force confirmation and shows accepted force-quit feedback'
   await expect.poll(() => host.querySelector('.host-app-process'), { timeout: 4000 }).toBeNull();
 });
 
-it('keeps stop-sharing failures inside the confirmation dialog and closes after success', async () => {
+it('does not expose a stop-sharing action for a running process', async () => {
   state.locale = 'en-US';
   const host = document.createElement('div');
   document.body.append(host);
   dispose = render(() => <EnvHostApplicationsPage />, host);
-  await expect.poll(() => host.querySelector('.host-app-stop')).toBeTruthy();
-
-  state.detach.mockRejectedValueOnce(new Error('fixture failure'));
-  await userEvent.click(host.querySelector<HTMLButtonElement>('.host-app-stop')!);
-  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-  await userEvent.click(page.getByRole('button', { name: 'Stop sharing', exact: true }));
-  await expect.poll(() => dialog.querySelector('[role="alert"]')).toBeTruthy();
-  expect(document.querySelector('[role="dialog"]')).toBe(dialog);
-
-  state.detach.mockResolvedValueOnce(undefined);
-  state.sharingStopped = true;
-  await userEvent.click(page.getByRole('button', { name: 'Stop sharing', exact: true }));
-  await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
-  await expect.poll(() => host.querySelector('.host-app-status')?.textContent).toContain('Running');
+  await expect.poll(() => host.querySelector('.host-app-process')).toBeTruthy();
+  expect(host.querySelector('.host-app-stop')).toBeNull();
+  expect(document.body.textContent).not.toContain('Stop sharing');
+  expect(state.detach).not.toHaveBeenCalled();
 });
 
 it('restores a persisted directory and icon before the network, preserving row focus through an update', async () => {

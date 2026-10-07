@@ -7,9 +7,11 @@ timestamp: 2026-10-01T00:00:00Z
 ---
 # Summary
 
-Redeven owns application discovery, authorization and independent sharing.
-Applications run as the host OS user without a container or virtual machine.
-Closing a viewer, stopping sharing or exiting Runtime preserves the application;
+Redeven owns application discovery, authorization and independent client sharing
+leases. Applications run as the host OS user without a container or virtual
+machine. Opening an application always admits or resumes sharing for the current
+client; closing that client's viewer releases only its lease and preserves the
+application. The last lease ends the route and transport without stopping the process;
 ordinary quit and confirmed force quit are separate explicit actions. Sharing
 routes are ephemeral. Surviving Linux instances require verified recovery, while
 macOS uses native OS inventory. Missing capabilities and failed capture remain
@@ -72,29 +74,34 @@ from authorized session metadata, never a request-provided user ID. Only the own
 can access or end a session. A per-session sharing credential independently protects
 the loopback WebSocket and is never placed in URLs or catalog responses.
 
-Launching an active application for the same owner resumes sharing with that
-application. The [Linux instance owner](linux-application-lifecycle.md) separates
+Launching an active application for the same owner and client resumes that
+client's lease. A different client receives an independent lease while reusing
+the same application process. The [Linux instance owner](linux-application-lifecycle.md) separates
 its durable private backend from ephemeral sharing. The
 [macOS management owner](macos-application-management.md) derives running instances
 from the OS. A process, a window, and decoded pixels remain independent facts.
 
 The [Web Service session owner](web-service-browser-sessions.md) provides an owned
-ephemeral route pinned until sharing ends. It is absent from saved Web Services
+ephemeral route pinned until that lease ends. It is absent from saved Web Services
 and cannot become a persistent service. Every forwarded request requires the
-owner's full permissions. Ending sharing revokes existing upgraded connections as
-well as the route and credential. Network loss or outer viewer closure preserves
-the application; orderly Runtime shutdown ends sharing without quitting it.
+owner's full permissions. Ending a lease revokes existing upgraded connections as
+well as its route and credential. A network interruption keeps the lease available
+for reconnect. The unload release uses a short host-side grace so a browser reload
+can read the current state and retain the same lease; an explicit outer viewer
+close releases only that client. Orderly
+Runtime shutdown ends sharing without quitting applications.
 Terminal sharing records remain bounded to forty-eight per Runtime lifetime.
 
 # Interaction
 
 Host Applications is available in Activity navigation and the Workbench launcher.
 The surface combines searchable category-filtered application cards with running
-applications and explicit resume, stop-sharing and application controls. Refresh
+applications and explicit Open/Resume and application controls. Refresh
 re-reads host metadata; lightweight running snapshots remain independent of
 sharing sessions. Read-only users can browse while process controls are disabled.
-Stop sharing explains that windows and unsaved work remain open. Ordinary close
-or quit respects save cancellation. A separate Force quit confirmation explicitly
+Closing the viewer is implicit lease release; the running process remains visible
+and Open/Resume opens the current client's viewer again. Ordinary close or quit
+respects save cancellation. A separate Force quit confirmation explicitly
 warns that unsaved work is lost; it never follows cancellation automatically.
 
 On Linux and remote macOS targets, opening uses an application presentation of the existing

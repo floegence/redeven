@@ -1,6 +1,6 @@
 import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { observeHostApplicationSetup, uploadHostApplicationSetup, quitHostApplication, terminateHostApplication, detachHostApplication, listRunningHostApplications } from './hostApplicationsApi';
+import { observeHostApplicationSetup, uploadHostApplicationSetup, quitHostApplication, terminateHostApplication, detachHostApplication, listRunningHostApplications, listHostApplications, listHostApplicationSessions, launchHostApplication } from './hostApplicationsApi';
 const api = vi.hoisted(() => ({ raw: vi.fn(), json: vi.fn() }));
 vi.mock('./sessionHTTP', async importOriginal => ({...await importOriginal<object>(), fetchSessionHTTP:api.raw, fetchSessionJSON:api.json}));
 
@@ -41,6 +41,21 @@ it('separates process-generation quit from owner-scoped sharing detach', async (
  expect(api.json).toHaveBeenLastCalledWith('/_redeven_proxy/api/host-applications/terminate', { method: 'POST', body: JSON.stringify({ application_id: 'catalog-app', instances: ['first-generation'] }) });
  await detachHostApplication('owned/id');
  expect(api.json).toHaveBeenLastCalledWith('/_redeven_proxy/api/host-applications/sessions/owned%2Fid/detach', { method: 'POST' });
+});
+
+it('carries one stable client identity across catalog, sessions, and launch requests', async () => {
+ api.json.mockReset().mockResolvedValue({ availability: { supported: true, ready: true }, applications: [], sessions: [] });
+ await listHostApplications('en-US');
+ const catalogURL = api.json.mock.calls.at(-1)?.[0] as string;
+ await listHostApplicationSessions();
+ const sessionsURL = api.json.mock.calls.at(-1)?.[0] as string;
+ await launchHostApplication('editor', 'en-US', { locale: 'en-US', connecting: 'Connecting', reconnecting: 'Reconnecting', disconnected: 'Disconnected', connectionHint: 'Connection interrupted', reconnect: 'Reconnect', starting: 'Starting', failed: 'Failed', ended: 'Ended', retry: 'Retry' });
+ const launchBody = JSON.parse(api.json.mock.calls.at(-1)?.[1].body as string) as { client_id: string };
+ const catalogClient = new URL(`http://localhost${catalogURL}`).searchParams.get('client_id');
+ const sessionsClient = new URL(`http://localhost${sessionsURL}`).searchParams.get('client_id');
+ expect(catalogClient).toMatch(/^[A-Za-z0-9._:-]{1,128}$/);
+ expect(sessionsClient).toBe(catalogClient);
+ expect(launchBody.client_id).toBe(catalogClient);
 });
 
 let releaseTestTransport: (() => void) | undefined;

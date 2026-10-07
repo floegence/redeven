@@ -404,7 +404,8 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 			continue
 		}
 		active++
-		if !s.stopping && s.owner == owner && s.view.Application.ID == app.ID {
+		if !s.stopping && s.owner == owner && s.clientID == req.ClientID && s.view.Application.ID == app.ID {
+			m.retainSessionLocked(s)
 			return cloneSession(s.view), nil
 		}
 	}
@@ -423,7 +424,7 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 	}
 	life, cancel := context.WithCancel(context.Background())
 	native := &macSession{cancel: cancel, ready: make(chan struct{}), stopped: life.Done()}
-	s := &ownedSession{view: Session{ID: randomID(), Application: app, State: "starting", Backend: "macos", Mode: "stream", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: req.Presentation}, owner: owner, password: randomID() + randomID(), done: make(chan struct{}), native: native}
+	s := &ownedSession{view: Session{ID: randomID(), Application: app, State: "starting", Backend: "macos", Mode: "stream", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: req.Presentation}, owner: owner, clientID: req.ClientID, password: randomID() + randomID(), done: make(chan struct{}), native: native}
 	native.server = &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.serveMacSession(w, r, s) })}
 	m.sessions[s.view.ID] = s
 	go func() { _ = native.server.Serve(listener) }()

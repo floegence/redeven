@@ -563,9 +563,19 @@
     deadline = setTimeout(() => { if (attempt === generation) finish('disconnected'); }, 45000);
     observe(attempt);
   }
+  let leaseReleased = false;
+  function releaseLease() {
+    if (leaseReleased || !config.release) return;
+    leaseReleased = true;
+    try {
+      const request = windowTransport.fetch(config.release, {method:'POST', keepalive:true, body:''});
+      request?.catch?.(() => {});
+    } catch { /* Closing a viewer is best-effort and idempotent on the host. */ }
+  }
   retry.addEventListener('click', connect);
   window.addEventListener('offline', () => { if (!hostApplicationConnection.terminal(document.body.dataset.state)) finish('disconnected'); });
-  window.addEventListener('pagehide', () => { generation++; clearTimeout(timer); clearTimeout(deadline); request?.abort(); stopClient(); unsubscribeWindow?.(); });
+  window.addEventListener('pagehide', () => { releaseLease(); generation++; clearTimeout(timer); clearTimeout(deadline); request?.abort(); stopClient(); unsubscribeWindow?.(); }, {once:true});
+  window.addEventListener('beforeunload', releaseLease, {once:true});
   if (hostApplicationConnection.initial) present(hostApplicationConnection.initial);
   else connect();
 })();

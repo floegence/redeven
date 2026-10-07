@@ -18,9 +18,9 @@ must not silently relaunch an unrelated or replacement process.
 
 | Operation | macOS | Linux |
 | --- | --- | --- |
-| Close outer Desktop window / browser popup | Disconnect viewer; app survives | Same |
+| Close outer Desktop window / browser popup | Release this client lease; app survives | Same |
 | Network loss, reload, second viewer | Reconnect same live app; stale input is revoked | Same |
-| Stop sharing | End capture/route; app and unsaved work survive | End proxy/route, including active WebSockets; app survives |
+| Release this client lease | End this capture/route; other clients and app survive | End this proxy/route; other clients and app survive |
 | No window for more than 40 seconds | Waiting, with native menu/reopen | Waiting, reconnect same process without relaunch |
 | Close last window | Viewer closes; app decides whether its process exits | Same |
 | Cancel normal close/quit | Preserve application and save dialog | Same; ordinary control is Close all windows |
@@ -44,11 +44,11 @@ acceptance and show a per-application pending state until the authoritative
 running snapshot confirms the target instance is gone. Pending work must not
 disable unrelated applications or leave the target card visually unchanged.
 
-Stopping sharing has a different outcome: the Redeven session and route end,
-while the host application and its windows may continue running. The running
-card therefore remains available for reconnection and must make that outcome
-visible. Errors while stopping sharing stay inside the confirmation surface so
-the user can retry or cancel without guessing whether the request was sent.
+Sharing is client-scoped. The running card expresses the application process and
+always opens or resumes the current client's viewer; it does not expose a
+stop-sharing action or confirmation. Releasing one lease ends only its route,
+credential, WebSocket and native attachment. The final release ends shared
+transport while leaving the process and windows running.
 
 Force quit requires an explicit confirmation state that names the data-loss
 consequence. The first Force quit action only enters that state; only its final
