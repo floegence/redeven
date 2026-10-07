@@ -538,7 +538,13 @@ export function TessivenGraph(props: {
     );
   };
   return (
-    <div class="tessiven-canvas" ref={host}>
+    <div
+      class="tessiven-canvas"
+      ref={host}
+      // InfiniteCanvas owns panning, so a pointer drag over a card must never
+      // fall through to the browser's native text-selection gesture.
+      onSelectStart={(event) => event.preventDefault()}
+    >
       <Show when={error()}>
         <div role="alert" class="tessiven-error">
           {error()}
