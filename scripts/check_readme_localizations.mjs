@@ -273,12 +273,15 @@ function readOkfVersion(repoRoot) {
 export function validateOkfVersion(content, version, label = 'README') {
   const expected = `OKF v${version}`;
   const errors = [];
-  const declared = [...content.matchAll(/\bOKF v[0-9]+\.[0-9]+\b/g)].map((match) => match[0]);
+  // Badges commonly encode the space in the version literal as `%20`; normalize
+  // that presentation before scanning so stale badges cannot bypass the check.
+  const searchable = content.replace(/%20/gi, ' ');
+  const declared = [...searchable.matchAll(/\bOKF v[0-9]+\.[0-9]+\b/g)].map((match) => match[0]);
   const stale = [...new Set(declared.filter((literal) => literal !== expected))];
   if (stale.length > 0) {
     errors.push(`${label}: declares stale OKF versions ${stale.join(', ')}; expected ${expected}`);
   }
-  if (!content.includes(expected)) {
+  if (!searchable.includes(expected)) {
     errors.push(`${label}: must declare ${expected} to match okf/index.md`);
   }
   return errors;

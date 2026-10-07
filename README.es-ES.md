@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://go.dev/"><img alt="Versión de Go" src="https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Versión de Node.js" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
-  <a href="okf/index.md"><img alt="Conocimiento OKF" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
+  <a href="okf/index.md"><img alt="Conocimiento OKF" src="https://img.shields.io/badge/Knowledge-OKF%20v0.2-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Versiones publicadas" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 

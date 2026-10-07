@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   ReadmeValidationError,
   contentSha256,
+  validateOkfVersion,
   validateRepository,
 } from './check_readme_localizations.mjs';
 
@@ -158,6 +159,15 @@ test('rejects a README that declares an older OKF version', () => {
     writeFileSync(path, content);
     expectValidationError(() => validateRepository(root), 'declares stale OKF versions');
   });
+});
+
+test('rejects a URL-encoded older OKF badge version', () => {
+  const errors = validateOkfVersion(
+    '<img src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF">',
+    '0.2',
+    'README',
+  );
+  assert.ok(errors.some((message) => message.includes('declares stale OKF versions')));
 });
 
 test('rejects missing README synchronization metadata', () => {
