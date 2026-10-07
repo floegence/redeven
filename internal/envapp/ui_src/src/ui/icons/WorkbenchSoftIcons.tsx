@@ -110,3 +110,15 @@ export function PluginsWorkbenchIcon(props: { class?: string }) {
     </WorkbenchIconTile>
   );
 }
+
+export function TessivenWorkbenchIcon(props: { class?: string }) {
+  return (
+    <WorkbenchIconTile name="service-canvas" class={props.class}>
+      <g transform="translate(12 12)">
+        <rect x="3" y="4" width="7" height="7" rx="1.5" fill="light-dark(#765597, #b49acb)" />
+        <rect x="14" y="13" width="7" height="7" rx="1.5" fill="light-dark(#b37b37, #d7b175)" />
+        <path d="M7 11v6h7M17 13V7h-7" stroke="light-dark(#b37b37, #d7b175)" stroke-width="1.3" />
+      </g>
+    </WorkbenchIconTile>
+  );
+}

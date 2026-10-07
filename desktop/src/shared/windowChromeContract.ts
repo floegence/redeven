@@ -88,11 +88,9 @@ export function buildDesktopWindowChromeStyleText(
     .join('\n');
   const topBarDragSelector = DESKTOP_WINDOW_CHROME_DRAG_ROOT_SELECTORS[0];
   const noDragSelectors = DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS
-    .map((selector) => (
-      selector.startsWith('[')
-        ? selector
-        : `${topBarDragSelector} ${selector}`
-    ))
+    .flatMap((selector) => selector.startsWith('[')
+      ? [selector]
+      : DESKTOP_WINDOW_CHROME_DRAG_ROOT_SELECTORS.map((rootSelector) => `${rootSelector} ${selector}`))
     .join(',\n');
 
   return `

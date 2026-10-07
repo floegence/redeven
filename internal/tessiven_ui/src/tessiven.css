@@ -1097,18 +1097,6 @@
 }
 .tessiven-flower-composer .flower-chat-bottom-dock-track { width: 100%; max-width: none; padding: 0; }
 .tessiven-flower-composer .flower-composer { background: var(--card); }
-.tessiven-flower-context {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 10px;
-  color: var(--muted-foreground);
-  font-size: 11px;
-  line-height: 18px;
-}
-.tessiven-flower-context svg { width: 13px; height: 13px; flex: none; }
-.tessiven-flower-context span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tessiven-flower-context small { margin-left: auto; white-space: nowrap; font-size: inherit; }
 .tessiven-flower-output {
   pointer-events: auto;
   background: var(--background);

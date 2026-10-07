@@ -20,8 +20,9 @@ text. Flower is the editing surface; the canvas has no manual content editor.
   menu for archived canvases. It has no extra heading, archive tab, or status
   bar. New canvas immediately creates and opens an empty saved canvas.
 - The canonical Flower composer stays at the bottom of the canvas. There is no
-  editor drawer or additional status bar. Its context chip identifies the visible
-  canvas/version and any selected objects.
+  editor drawer, additional status bar, or repeated canvas identity/version row
+  above the input. The Flower request still carries the exact visible
+  canvas/version and selected-object context through its context action.
 - Replies, tool activity, questions, approvals and errors use the same Flower
   surface runtime. Its conversation is placed in an upper-left floating window;
   Floe owns dragging, resizing, clamping, maximize/restore and local interaction
@@ -52,12 +53,15 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 - The document viewer and export are read-only. Content changes, including
   renaming and restoring earlier content, are made through Flower.
 
-- Env App exposes Service Canvas as the last Activity entry. Activity navigation
-  keeps the regular shell and sidebar mounted; the header has no duplicate
-  canvas shortcut. In Workbench, the Service Canvas action sits immediately to
-  the right of the Plugin Center action and opens a dedicated Service Canvas
-  window. That window renders only the canvas surface and its own controls; it
-  does not mount the Activity or Workbench shell, navigation, or Env App frame.
+- Env App exposes Service Canvas after Flower and before pinned Activity plugin
+  entries. Activity navigation keeps the regular shell and sidebar mounted; the
+  header has no duplicate canvas shortcut. In Workbench, the Service Canvas
+  action sits immediately to the right of the Plugin Center action, uses a
+  themed rounded tile icon, and opens a dedicated Service Canvas window. The
+  standalone toolbar participates in the desktop titlebar drag/no-drag
+  contract, and the window renders only the canvas surface and its own
+  controls; it does not mount the Activity or Workbench shell, navigation, or
+  Env App frame.
 
 - Up to 15 Runtime nodes in a group are shown individually. Larger groups use
   a name or ordinal selector and render only the selected node's details.

@@ -48,7 +48,7 @@ import {
   ActivityBarTerminalIcon,
 } from './icons/ActivityBarDockIcons';
 import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
-import { PluginsWorkbenchIcon } from './icons/WorkbenchSoftIcons';
+import { PluginsWorkbenchIcon, TessivenWorkbenchIcon } from './icons/WorkbenchSoftIcons';
 import {
   AppViewport,
   BottomBarCompanion,
@@ -1279,7 +1279,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       actions.push({
         id: ENV_TESSIVEN_ACTIVITY_ID,
         label: tessivenCopy()('canvasLabel'),
-        icon: TessivenNavigationIcon,
+        icon: TessivenWorkbenchIcon,
         active: false,
         onActivate: () => openTessivenWindow(),
       });
@@ -4349,6 +4349,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         },
       });
     }
+    if (isLocalMode()) {
+      items.push({
+        id: ENV_TESSIVEN_ACTIVITY_ID,
+        icon: TessivenNavigationIcon,
+        label: tessivenCopy()('canvasLabel'),
+        collapseBehavior: 'preserve',
+        onClick: () => openTessiven(),
+      });
+    }
     if (!layout.isMobile()) {
       for (const tile of pinnedActivityPluginTiles()) {
         items.push({
@@ -4365,15 +4374,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           }),
         });
       }
-    }
-    if (isLocalMode()) {
-      items.push({
-        id: ENV_TESSIVEN_ACTIVITY_ID,
-        icon: TessivenNavigationIcon,
-        label: tessivenCopy()('canvasLabel'),
-        collapseBehavior: 'preserve',
-        onClick: () => openTessiven(),
-      });
     }
     return items.map(item => isBuiltinActivityPage(item.id) ? {
       ...item, onClick: item.onClick ?? (() => activateActivitySurface(item.id as EnvActivitySurfaceId)),
@@ -5267,7 +5267,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       )}>
         <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
           <Suspense fallback={<ActivityPageLoading />}>
-            <EnvTessivenPage openRequest={tessivenOpenRequest()} visible />
+            <EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone />
           </Suspense>
         </ErrorBoundary>
       </Show>

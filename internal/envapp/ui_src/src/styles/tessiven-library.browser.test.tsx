@@ -53,6 +53,33 @@ function createHost() {
   host.style.cssText = 'width:1100px;height:700px';
   document.body.append(host);
 }
+
+it('marks the standalone canvas toolbar as the native titlebar drag surface', async () => {
+  createHost();
+  const transport = {
+    request: vi.fn(async () => ({ canvases: [] })),
+    subscribe: () => () => {},
+  } as unknown as TessivenTransport;
+  dispose = render(
+    () => (
+      <TessivenPage
+        t={tessivenText('en-US')}
+        canWrite
+        standalone
+        transport={transport}
+        renderFlower={() => <div />}
+        onOpenFlower={() => {}}
+        onOpenService={() => {}}
+      />
+    ),
+    host,
+  );
+  const toolbar = host.querySelector('.tessiven-toolbar');
+  expect(toolbar?.getAttribute('data-redeven-desktop-titlebar-drag-region')).toBe('true');
+  expect(toolbar?.getAttribute('data-redeven-desktop-titlebar-content')).toBe('true');
+  expect(toolbar?.classList.contains('tessiven-toolbar--standalone')).toBe(true);
+});
+
 it('creates immediately, delegates edits to Flower, and follows current versions without changing history', async () => {
   await page.viewport(1200, 800);
   createHost();
