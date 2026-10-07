@@ -44,7 +44,8 @@ it('starts the selected Runtime, issues an invitation from the selected Gateway,
   await settle(); button('gatewayMembers.createInvitation').click(); await settle();
   expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'invite_gateway_runtime', gateway_id: gateway.gateway_id });
   expect(perform).toHaveBeenCalledTimes(2);
-  expect(document.body.textContent).toContain(invitationFixture.gateway_id);
+  expect(document.body.textContent).toContain(i18n.t('gatewayJoin.invitationReady'));
+  expect(document.body.textContent).not.toContain(invitationFixture.gateway_id);
   button('gatewayJoin.approve').click(); await settle();
   expect(perform.mock.calls[2]?.[0]).toEqual({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'join', invitation: invitationFixture });
 });

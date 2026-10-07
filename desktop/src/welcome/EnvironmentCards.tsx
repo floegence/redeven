@@ -777,6 +777,27 @@ function EnvironmentOwnerSurface(
   };
 
   const [gatewaySetupOpen, setGatewaySetupOpen] = createSignal(false);
+  const [gatewayJoinOpenRequest, setGatewayJoinOpenRequest] = createSignal(0);
+  const gatewayAction = createMemo(() => {
+    if (props.environment.kind === 'local_environment'
+      && !props.environment.runtime_service
+      && props.environment.runtime_operations.start.availability === 'available') {
+      return {
+        label: props.i18n.t('gatewayJoin.menuAction'),
+        onRun: (): void => { setGatewaySetupOpen(true); },
+      };
+    }
+    if (props.environment.kind !== 'provider_environment'
+      && props.environment.runtime_service?.capabilities?.runtime_gateway?.supported
+      && props.environment.provider_runtime_link_target) {
+      return {
+        label: props.i18n.t('gatewayJoin.menuAction'),
+        disabled: operationState().actionsDisabled,
+        onRun: (): void => { setGatewayJoinOpenRequest(value => value + 1); },
+      };
+    }
+    return undefined;
+  });
 
   return (
     <section
@@ -880,15 +901,8 @@ function EnvironmentOwnerSurface(
           selectedEndpointID={props.selectedEndpointID} selectEndpointForQRCode={props.selectEndpointForQRCode}
         />
         <Show when={props.paired}>{props.connectionStatus()}</Show>
-        <Show when={props.environment.kind === 'local_environment' && !props.environment.runtime_service && props.environment.runtime_operations.start.availability === 'available'}>
-          <fieldset class="mt-3 space-y-2 rounded-md border border-border p-3 text-sm" disabled={operationState().actionsDisabled}>
-            <legend class="px-1 text-xs font-medium">{props.i18n.t('gatewayJoin.title')}</legend>
-            <label class="flex cursor-pointer items-center gap-2"><input class="cursor-pointer disabled:cursor-not-allowed" type="radio" name={`gateway-setup-${props.environment.id}`} checked={!gatewaySetupOpen()} onChange={() => setGatewaySetupOpen(false)} />{props.i18n.t('gatewayJoin.notNow')}</label>
-            <label class="flex cursor-pointer items-center gap-2"><input class="cursor-pointer disabled:cursor-not-allowed" type="radio" name={`gateway-setup-${props.environment.id}`} checked={gatewaySetupOpen()} onChange={() => setGatewaySetupOpen(true)} />{props.i18n.t('gatewayJoin.joinGateway')}</label>
-          </fieldset>
-        </Show>
         <Show when={props.environment.kind !== 'provider_environment' && props.environment.runtime_service?.capabilities?.runtime_gateway?.supported && props.environment.provider_runtime_link_target}>
-          <RuntimeGatewayJoinPanel gateways={props.gateways} focusOwner={() => ownerElement?.focus()} targetID={props.environment.provider_runtime_link_target!.id} i18n={props.i18n} disabled={operationState().actionsDisabled} />
+          <RuntimeGatewayJoinPanel gateways={props.gateways} focusOwner={() => ownerElement?.focus()} targetID={props.environment.provider_runtime_link_target!.id} i18n={props.i18n} openRequest={gatewayJoinOpenRequest()} hideTrigger />
         </Show>
         <Show when={props.environment.runtime_service?.gateway_publication}>{access => <RuntimeGatewayPublicationStatus access={access()} i18n={props.i18n} openInBrowser={props.openInBrowser} />}</Show>
       </CardContent>
@@ -918,6 +932,7 @@ function EnvironmentOwnerSurface(
           cancelOperation={props.cancelOperation}
           dismissOperation={props.dismissOperation}
           copyOperationDiagnostics={props.copyOperationDiagnostics}
+          gatewayAction={gatewayAction()}
           refreshEnvironmentRuntime={() => {
             void props.refreshEnvironmentRuntime(props.environment, 'connect');
           }}

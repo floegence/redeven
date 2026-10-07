@@ -28,9 +28,16 @@ export const enUS = {
     newHelp: "The previous environment record is retained. Revoke its existing Cloud binding before approving a new environment.",
     rejoin: "Gateway access has changed. Join with a new invitation; old access credentials cannot reconnect.",
 
-    "title": "Gateway connection",
+    "title": "Connect to Gateway",
     "material": "Gateway invitation file",
-    "consent": "Joining lets this Gateway manage local access and later Cloud publication for this Runtime. Password, MFA and Runtime permissions still apply. It cannot manage the Runtime process or tasks.",
+    "consent": "Use a Gateway to reach this Runtime from Redeven Cloud. Your Runtime keeps control of its process, credentials and permissions.",
+    "menuAction": "Connect to Gateway",
+    "currentStatus": "Current status",
+    "connectTitle": "Choose how to connect",
+    "connectHelp": "Select a Gateway you manage to create an invitation, or import an invitation from a Gateway administrator.",
+    "invitationReady": "Invitation ready. Continue to review and join.",
+    "existingEnvironmentHelp": "This Runtime is already associated with an environment. Choose whether to keep that environment or start a separate one.",
+    "startTitle": "Start the Runtime first",
     "approve": "Agree and join",
     "invalid": "This invitation is invalid. Select the original JSON invitation from the Gateway administrator.",
     "failed": "The operation could not complete. Check the Gateway connection and retry. Saved consent and your input are preserved."

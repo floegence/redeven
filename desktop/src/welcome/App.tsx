@@ -9440,9 +9440,14 @@ export function EnvironmentSplitActionButton(
     runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
     onRunAction: (action: EnvironmentActionModel) => void;
     onRunGuidanceAction: (action: EnvironmentActionModel) => void;
+    gatewayAction?: Readonly<{
+      label: string;
+      disabled?: boolean;
+      onRun: () => void;
+    }>;
   }>,
 ) {
-  const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0);
+  const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0 || !!props.gatewayAction);
   const guidanceNotice = createMemo(() => guidanceSessionNotice(props.guidanceSession));
   const sessionPopoverOverlay = createMemo<
     Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | undefined
@@ -9944,6 +9949,28 @@ export function EnvironmentSplitActionButton(
             menuRef = element;
           }}
         >
+          <Show when={props.gatewayAction}>
+            {(action) => (
+              <button
+                type="button"
+                role="menuitem"
+                class="redeven-split-menu-item"
+                data-tone="primary"
+                disabled={action().disabled}
+                onClick={() => {
+                  if (action().disabled) return;
+                  closeMenu();
+                  action().onRun();
+                }}
+              >
+                <span class="redeven-split-menu-item-icon"><Link /></span>
+                <span class="redeven-control-label">{action().label}</span>
+              </button>
+            )}
+          </Show>
+          <Show when={props.gatewayAction && props.presentation.menu_actions.length > 0}>
+            <div class="my-1 border-t border-border/60" role="separator" />
+          </Show>
           <For each={props.presentation.menu_actions}>
             {(item: EnvironmentActionMenuItemModel) => {
               const icon = () => splitMenuIcon(item.action.intent);

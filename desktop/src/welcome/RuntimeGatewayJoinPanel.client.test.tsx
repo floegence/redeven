@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { createDesktopI18n } from '../shared/i18n';
@@ -77,7 +78,8 @@ describe('Runtime Gateway membership interaction', () => {
       .mockResolvedValueOnce(result({ joined: true, phase: 'joined' }));
     const trigger = mount(perform); await settle();
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:chosen', operation: 'status' });
-    expect(document.body.textContent).toContain(invitationFixture.gateway_id);
+    expect(document.body.textContent).toContain(i18n.t('gatewayJoin.invitationReady'));
+    expect(document.body.textContent).not.toContain(invitationFixture.gateway_id);
     button(i18n.t('gatewayJoin.approve')).click(); await settle();
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayJoin.failed'));
     expect(button(i18n.t('gatewayJoin.approve')).disabled).toBe(false);
@@ -92,7 +94,8 @@ describe('Runtime Gateway membership interaction', () => {
       .mockResolvedValueOnce({ ok: false, code: 'GATEWAY_UNAVAILABLE' });
     mount(perform); await settle();
     expect(button(i18n.t('gatewayJoin.approve')).disabled).toBe(true);
-    expect(document.body.textContent).toContain('env_existing');
+    expect(document.body.textContent).toContain(i18n.t('gatewayJoin.existingEnvironmentHelp'));
+    expect(document.body.textContent).not.toContain('env_existing');
     expect(document.body.textContent).toContain(i18n.t('gatewayJoin.rejoin'));
     const options = [...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
     options[0]!.click(); await settle();
@@ -125,5 +128,18 @@ describe('Runtime Gateway membership interaction', () => {
     complete(result({ joined: true, phase: 'joined' })); await settle();
     expect(document.querySelector('[role="status"]')?.textContent).toContain(i18n.t('gatewayMembership.not_joined'));
     expect(button(i18n.t('gatewayJoin.approve')).disabled).toBe(false);
+  });
+  it('opens from the environment actions menu without rendering an inline card control', async () => {
+    const perform = vi.fn().mockResolvedValue(result({ joined: false, phase: 'not_joined' }));
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    const [request, setRequest] = createSignal(0);
+    const root = document.createElement('div'); document.body.append(root);
+    dispose = render(() => <RuntimeGatewayJoinPanel targetID="ssh:chosen" invitation={invitationFixture} i18n={i18n} hideTrigger openRequest={request()} />, root);
+    await settle();
+    expect(perform).not.toHaveBeenCalled();
+    setRequest(1); await settle();
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:chosen', operation: 'status' });
+    expect([...document.querySelectorAll('button')].some(element => controlText(element) === i18n.t('gatewayJoin.title'))).toBe(false);
+    expect(document.body.textContent).toContain(i18n.t('gatewayJoin.invitationReady'));
   });
 });
