@@ -39,6 +39,10 @@ Runtime retains a bounded terminal outbox after leaving. The receipt relay forwa
 
 Gateway policy denial first fences local egress and records a durable denial revision. A later allow edit cannot erase that denial or release the fence. Directory delivery reports denial until Cloud commits it; the Gateway reads back the resulting binding projection before acknowledging the exact local denial revision. Lost responses and stale acknowledgements remain retryable. Allowing Cloud again does not republish a revoked binding. Network partition can leave already established sessions alive until their original expiry or connection end when neither endpoint receives revocation. No short authorization lease is added. Explicit removal, Cloud denial, unpublication, environment deletion and Gateway Cloud revocation have separate effects; none stops the Runtime process or background jobs.
 
+# Boundaries
+
+Namespace and Cloud own publication approval and formal environment identity; Gateway owns local membership and forwarding policy; Runtime owns its identity proof, credentials, and business sessions. This contract does not authorize direct Internet fallback, recreate a retired membership, or turn a control outage into a data-session lease.
+
 # Evidence
 
 - `redeven:internal/gatewaycloud/protocol/contracts.go` — Mirror of shared Gateway Cloud v2 DTOs.

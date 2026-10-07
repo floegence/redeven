@@ -29,6 +29,10 @@ Desktop renderer qualification checks all ten locales, narrow viewports, large t
 
 Installer artifact signatures, upgrades and cross-platform packaging remain release-workflow responsibilities. A local source fixture cannot certify those results. Do not delete another task's processes, volumes, branches or worktrees while preparing or cleaning acceptance resources.
 
+# Boundaries
+
+These checks qualify Gateway membership, access, and isolation behavior on task-owned resources. They do not replace unit contracts, release packaging evidence, or the aggregate push gate, and a passing local fixture cannot certify an installer or an unrelated deployment target.
+
 # Evidence
 
 - `redeven:internal/localui/gateway_member_browser_test.go` — No-inbound-TCP production application fixture.
