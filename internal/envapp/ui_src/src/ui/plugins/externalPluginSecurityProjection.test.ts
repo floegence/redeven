@@ -93,4 +93,21 @@ describe('external plugin security projection', () => {
       'storage:workspace-cache',
     ]);
   });
+
+  it('projects local process and background declarations as high-attention access', () => {
+    const declarations = securityDeclarations(summary({
+      process: {
+        resource_limits: { output_buffer_bytes: 1024, max_runtime_ms: 5000 },
+        method_access: [{ method: 'server.start', operations: ['start', 'read_stdout'] }],
+      },
+      background: { strategy: 'runtime_start', worker_id: 'server-worker' },
+    }));
+
+    expect(declarations.map(({ key }) => key)).toContain('process:local');
+    expect(declarations.map(({ key }) => key)).toContain('background:server-worker');
+    expect(declarations.filter(securityDeclarationIsSensitive).map(({ key }) => key)).toEqual([
+      'process:local',
+      'background:server-worker',
+    ]);
+  });
 });

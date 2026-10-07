@@ -6,7 +6,7 @@ import { CheckCircle, Download, MoreHorizontal, Play, Refresh, RefreshIcon } fro
 import { useI18n } from '../i18n';
 import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginPendingActionLabels, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
-import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
+import { PluginIcon, PluginProcessStatusBadge, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginInstallSummary } from './PluginInstallStatus';
 
@@ -151,6 +151,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             {(value) => <><span aria-hidden="true">·</span><span class="max-w-[35%] shrink-0 truncate" title={`v${value()}`}>v{value()}</span></>}
           </Show>
           <Show when={props.item.lifecycleState !== 'not_installed'}><PluginStatusBadge item={props.item} class="ml-auto max-w-[50%] truncate" /></Show>
+          <Show when={props.item.processStatus}><PluginProcessStatusBadge state={props.item.processStatus!.state} class="max-w-[50%] truncate" /></Show>
         </span>
       </button>
       <div class="flex min-w-0 items-center gap-1.5 border-t pt-3" data-plugin-center-card-actions>

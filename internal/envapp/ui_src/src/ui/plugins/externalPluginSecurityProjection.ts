@@ -2,7 +2,7 @@ import type { PluginExternalPackageSecuritySummary } from './pluginTypes';
 
 export type SecurityCategory = keyof Pick<
   PluginExternalPackageSecuritySummary,
-  'permissions' | 'methods' | 'capability_contracts' | 'workers' | 'network' | 'storage' | 'secret_refs' | 'core_actions' | 'intents' | 'surfaces'
+  'permissions' | 'methods' | 'capability_contracts' | 'workers' | 'process' | 'background' | 'network' | 'storage' | 'secret_refs' | 'core_actions' | 'intents' | 'surfaces'
 >;
 
 export type SecurityDeclaration = {
@@ -33,6 +33,8 @@ export const securityCategoryOrder: readonly SecurityCategory[] = [
   'permissions',
   'methods',
   'capability_contracts',
+  'process',
+  'background',
   'workers',
   'network',
   'storage',
@@ -54,6 +56,8 @@ export function securityDeclarationIsSensitive(declaration: SecurityDeclaration)
     )));
   }
   return declaration.category === 'workers'
+    || declaration.category === 'process'
+    || declaration.category === 'background'
     || declaration.category === 'network'
     || declaration.category === 'secret_refs'
     || declaration.category === 'core_actions';
@@ -65,6 +69,12 @@ export function securityDeclarationHighlight(declaration: SecurityDeclaration): 
       return `effect=${(declaration.value as PluginExternalPackageSecuritySummary['methods'][number]).effect}`;
     case 'workers':
       return (declaration.value as PluginExternalPackageSecuritySummary['workers'][number]).artifact;
+    case 'process': {
+      const process = declaration.value as NonNullable<PluginExternalPackageSecuritySummary['process']>;
+      return process.method_access.flatMap((access) => access.operations).join(', ');
+    }
+    case 'background':
+      return (declaration.value as NonNullable<PluginExternalPackageSecuritySummary['background']>).strategy;
     case 'network':
       return list((declaration.value as PluginExternalPackageSecuritySummary['network'][number]).destinations);
     case 'secret_refs':
@@ -130,6 +140,17 @@ export function projectSecurityDeclarations(summary: PluginExternalPackageSecuri
       `artifact=${value.artifact}; mode=${value.mode}; scope=${value.scope}`,
       `memory_limit_bytes=${value.memory_limit_bytes}; idle_timeout_ms=${value.idle_timeout_ms}`,
     ], value);
+  }
+  if (summary.process) {
+    add('process', 'local', [
+      `resource_limits=output_buffer_bytes:${summary.process.resource_limits.output_buffer_bytes}; max_runtime_ms:${summary.process.resource_limits.max_runtime_ms}`,
+      ...summary.process.method_access.map((access) => `method=${access.method}; operations=${list(access.operations)}`),
+    ], summary.process);
+  }
+  if (summary.background) {
+    add('background', summary.background.worker_id, [
+      `strategy=${summary.background.strategy}; worker_id=${summary.background.worker_id}`,
+    ], summary.background);
   }
   for (const value of summary.network) {
     add('network', value.connector_id, [

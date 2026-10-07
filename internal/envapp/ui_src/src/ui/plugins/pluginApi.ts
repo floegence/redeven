@@ -8,6 +8,7 @@ import {
 import { officialPluginCatalog } from './officialPluginCatalog';
 import { fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
+import { projectPluginProcessStatus } from './pluginProcessStatus';
 import type {
   OfficialPluginCatalogItem,
   ExternalPluginCommitResult,
@@ -20,6 +21,7 @@ import type {
   PluginMarketRefreshEvent,
   PluginMarketSnapshot,
   PluginMarketDetail,
+  PluginProcessStatus,
 } from './pluginTypes';
 
 const INVENTORY_MARKET_TIMEOUT_MS = 5_000;
@@ -161,12 +163,32 @@ export function createPluginLifecycleAPI(
     const unavailablePluginIDs = new Set(permissionRequirementResults.flatMap((result, index) => (
       result.status === 'rejected' ? [installedPlugins[index]?.plugin_instance_id] : []
     )).filter((value): value is string => Boolean(value)));
+    const processStatusByInstanceID = new Map<string, PluginProcessStatus | undefined>();
+    if (typeof client.listDiagnosticEvents === 'function') {
+      await Promise.all(installedPlugins.map(async (plugin) => {
+        try {
+          const result = await withAbortTimeout(
+            (signal) => client.listDiagnosticEvents({
+              plugin_instance_id: plugin.plugin_instance_id,
+              limit: 100,
+            }, { ...options, signal }),
+            options.signal,
+            INVENTORY_MARKET_TIMEOUT_MS,
+            `Loading diagnostics for ${plugin.plugin_instance_id}`,
+          );
+          processStatusByInstanceID.set(plugin.plugin_instance_id, projectPluginProcessStatus(result.diagnostic_events));
+        } catch {
+          processStatusByInstanceID.set(plugin.plugin_instance_id, undefined);
+        }
+      }));
+    }
     const projection = projectPluginInventory({
       officialCatalog: catalog,
       installedPlugins,
       permissionGrants: permissionsResult.status === 'fulfilled' ? permissionsResult.value.permissions : [],
       permissionRequirements,
       securityPolicies: securityPoliciesResult.status === 'fulfilled' ? securityPoliciesResult.value.security_policies : [],
+      processStatusByInstanceID,
     });
     return {
       ...projection,

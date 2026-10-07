@@ -18,6 +18,8 @@ import type {
   PluginInventoryItem,
   PluginInventoryProjection,
   PluginMarketDetail,
+  PluginExternalPackageBackgroundSummary,
+  PluginExternalPackageProcessSummary,
   PluginLifecycleCommand,
   PluginLifecycleState,
   PluginPendingCommandType,
@@ -30,7 +32,7 @@ import { createUIPresentationEventRecorder } from '../services/uiPresentationTra
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginLifecycleLabel, pluginPendingActionLabels, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
-import { PluginIdentityHeader } from './PluginPresentationPrimitives';
+import { PluginIdentityHeader, PluginProcessStatusBadge } from './PluginPresentationPrimitives';
 import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
@@ -1266,6 +1268,10 @@ function OfficialPluginInstallDialog(props: {
                   </For>
                 </div>
               </Show>
+              <OfficialProcessAccessReview
+                process={props.installPreview?.security_summary.process}
+                background={props.installPreview?.security_summary.background}
+              />
               <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.installOperation.declarationNotice')}</p>
                 </section>
               )}>
@@ -1288,6 +1294,44 @@ function OfficialPluginInstallDialog(props: {
         )}
       </Show>
     </Dialog>
+  );
+}
+
+function OfficialProcessAccessReview(props: {
+  process?: PluginExternalPackageProcessSummary;
+  background?: PluginExternalPackageBackgroundSummary;
+}): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <div class="mt-3 space-y-2.5" data-plugin-install-process-review>
+      <Show when={props.process}>
+        {(process) => (
+          <div class="flex min-w-0 items-start gap-2 rounded-md border border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)] px-3 py-2.5">
+            <Shield class="mt-0.5 h-4 w-4 shrink-0 text-[var(--redeven-status-warning-foreground)]" />
+            <span class="min-w-0 flex-1">
+              <span class="block text-[length:var(--floe-type-control)] font-semibold">{i18n.t('uiCopy.plugin.external.localProcessAccess')}</span>
+              <span class="mt-0.5 block text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.localProcessAccessGuidance')}</span>
+              <code class="mt-1 block break-all text-[11px] text-muted-foreground">{i18n.t('uiCopy.plugin.external.processLimits', {
+                output: process().resource_limits.output_buffer_bytes,
+                runtime: process().resource_limits.max_runtime_ms,
+              })}</code>
+            </span>
+          </div>
+        )}
+      </Show>
+      <Show when={props.background}>
+        {(background) => (
+          <div class="flex min-w-0 items-start gap-2 rounded-md border px-3 py-2.5">
+            <RefreshIcon class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <span class="min-w-0 flex-1">
+              <span class="block text-[length:var(--floe-type-control)] font-semibold">{i18n.t('uiCopy.plugin.external.backgroundEntry')}</span>
+              <span class="mt-0.5 block text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.backgroundEntryGuidance')}</span>
+              <code class="mt-1 block break-all text-[11px] text-muted-foreground">{i18n.t('uiCopy.plugin.external.backgroundStrategy', { strategy: background().strategy })}</code>
+            </span>
+          </div>
+        )}
+      </Show>
+    </div>
   );
 }
 
@@ -1675,6 +1719,8 @@ export function PluginCenterDetails(props: {
 
                 <PluginIssueDetails item={item()} />
 
+                <PluginProcessStatusDetails item={item()} />
+
                 <details class="group rounded-md border px-3 py-2.5 transition-[border-color,background-color] duration-150 open:bg-muted/10 motion-reduce:transition-none" data-plugin-technical-details>
                   <summary tabIndex={0} class="min-h-7 cursor-pointer text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
                   <div class="redeven-plugin-disclosure-content mt-3 grid gap-2.5">
@@ -1702,6 +1748,65 @@ export function PluginCenterDetails(props: {
       </Show>
     </aside>
   );
+}
+
+function PluginProcessStatusDetails(props: { item: PluginInventoryItem }): JSX.Element {
+  const i18n = useI18n();
+  const status = () => props.item.processStatus;
+  const description = () => {
+    switch (status()?.state) {
+      case 'starting': return i18n.t('uiCopy.plugin.external.processStatus.startingDescription');
+      case 'running': return i18n.t('uiCopy.plugin.external.processStatus.runningDescription');
+      case 'exited': return i18n.t('uiCopy.plugin.external.processStatus.exitedDescription');
+      case 'blocked': return i18n.t('uiCopy.plugin.external.processStatus.blockedDescription');
+      case 'crashed': return i18n.t('uiCopy.plugin.external.processStatus.crashedDescription');
+      case 'stream_gap': return i18n.t('uiCopy.plugin.external.processStatus.streamGapDescription');
+      default: return '';
+    }
+  };
+  const recovery = () => {
+    switch (status()?.state) {
+      case 'starting': return i18n.t('uiCopy.plugin.external.processStatus.startingRecovery');
+      case 'running': return i18n.t('uiCopy.plugin.external.processStatus.runningRecovery');
+      case 'exited': return i18n.t('uiCopy.plugin.external.processStatus.exitedRecovery');
+      case 'blocked': return i18n.t('uiCopy.plugin.external.processStatus.blockedRecovery');
+      case 'crashed': return i18n.t('uiCopy.plugin.external.processStatus.crashedRecovery');
+      case 'stream_gap': return i18n.t('uiCopy.plugin.external.processStatus.streamGapRecovery');
+      default: return '';
+    }
+  };
+  return (
+    <Show when={status()}>
+      {(current) => (
+        <section data-plugin-process-status-details class="space-y-3 rounded-md border bg-muted/10 px-3 py-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{i18n.t('uiCopy.plugin.external.processStatus.title')}</h3>
+              <p class="mt-1 text-xs leading-5 text-foreground">{description()}</p>
+            </div>
+            <PluginProcessStatusBadge state={current().state} />
+          </div>
+          <p class="text-xs leading-5 text-muted-foreground">{recovery()}</p>
+          <details class="text-xs text-muted-foreground" data-plugin-process-status-technical-details>
+            <summary class="cursor-pointer font-medium text-foreground">{i18n.t('uiCopy.plugin.external.processStatus.diagnostics')}</summary>
+            <div class="mt-2 grid gap-2 sm:grid-cols-2">
+              <DetailStat label={i18n.t('uiCopy.plugin.external.processStatus.operation')} value={current().operation ?? '-'} />
+              <DetailStat label={i18n.t('uiCopy.plugin.external.processStatus.stream')} value={current().stream ?? '-'} />
+              <DetailStat label={i18n.t('uiCopy.plugin.external.processStatus.code')} value={current().code ?? '-'} />
+              <DetailStat label={i18n.t('uiCopy.plugin.external.processStatus.occurredAt')} value={formatProcessStatusTime(current().occurredAt, i18n.locale())} />
+            </div>
+          </details>
+        </section>
+      )}
+    </Show>
+  );
+}
+
+function formatProcessStatusTime(value: string | undefined, locale: string): string {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '-';
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(parsed);
 }
 
 function PluginAuthorContent(props: {
