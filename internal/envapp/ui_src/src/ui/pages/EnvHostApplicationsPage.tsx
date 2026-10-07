@@ -104,10 +104,16 @@ export function EnvHostApplicationsPage() {
   let completingSetup = false;
   const [ending, setEnding] = createSignal<HostApplicationSession | null>(null);
   const [stopBusy, setStopBusy] = createSignal(false);
+  const [stopError, setStopError] = createSignal('');
   const [quitting, setQuitting] = createSignal<{ app: HostApplication; instances: string[]; force?: boolean } | null>(null);
   const [quitBusy, setQuitBusy] = createSignal(false);
   const [quitError, setQuitError] = createSignal('');
-  const [quitNotices, setQuitNotices] = createSignal<Record<string, string[]>>({});
+  type HostApplicationOperation = {
+    kind: 'close_windows' | 'force_quit';
+    instances: string[];
+    state: 'submitting' | 'accepted' | 'failed';
+  };
+  const [operations, setOperations] = createSignal<Record<string, HostApplicationOperation>>({});
   const [addOpen, setAddOpen] = createSignal(false);
   const [addBusy, setAddBusy] = createSignal(false);
   const [name, setName] = createSignal('');
@@ -117,6 +123,7 @@ export function EnvHostApplicationsPage() {
   let request: AbortController | null = null;
   let disposed = false;
   const windows = new Map<string, Window>();
+  let forceConfirmButton: HTMLButtonElement | undefined;
 
   const translateError = (e: unknown, fallback: EnvAppTranslationKey = 'hostApplications.errors.failed') => {
     if (e instanceof ComponentAcquisitionError) return i18n.t(e.translationKey);
@@ -471,7 +478,35 @@ export function EnvHostApplicationsPage() {
     return [retained ?? { ...instance, app }];
   }).sort((a, b) => a.app.name.localeCompare(b.app.name, i18n.locale()) || a.application_id.localeCompare(b.application_id)));
   const runningApplicationIDs = createMemo(() => new Set(runningApplications().map(item => item.application_id)));
-  const quitNotice = (item: RunningHostApplication) => quitNotices()[item.application_id]?.some(id => item.instances.includes(id));
+  const operationFor = (applicationID: string) => operations()[applicationID];
+  const operationMatches = (item: RunningHostApplication) => {
+    const operation = operationFor(item.application_id);
+    return Boolean(operation && operation.instances.some(instance => item.instances.includes(instance)));
+  };
+  const operationBusy = (applicationID: string) => {
+    const operation = operationFor(applicationID);
+    return operation?.state === 'submitting' || operation?.state === 'accepted';
+  };
+  const quitNoticeKey = (item: RunningHostApplication): EnvAppTranslationKey | null => {
+    const operation = operationFor(item.application_id);
+    if (!operation || operation.state === 'failed' || !operationMatches(item)) return null;
+    return operation?.kind === 'force_quit' ? 'hostApplications.forceQuitPending' : 'hostApplications.closeWindowsPending';
+  };
+  createEffect(() => {
+    const liveInstances = new Map(runningApplications().map(item => [item.application_id, new Set(item.instances)]));
+    setOperations(previous => {
+      let changed = false;
+      const next = { ...previous };
+      for (const [applicationID, operation] of Object.entries(previous)) {
+        const live = liveInstances.get(applicationID);
+        if (!live || !operation.instances.some(instance => live.has(instance))) {
+          delete next[applicationID];
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  });
   const requestQuit = async () => {
     const target = quitting();
     if (!target || quitBusy() || !canLaunch()) return;
@@ -482,19 +517,32 @@ export function EnvHostApplicationsPage() {
       const runningNow = await listRunningHostApplications();
       if (disposed || !operationCurrent()) return;
       const instances = runningNow.find(item => item.application_id === target.app.id)?.instances ?? [];
-      if (instances.length === 0) { setQuitting(null); invalidateCatalog(); await refresh(true); return; }
+      if (instances.length === 0) {
+        setQuitting(null);
+        setOperations(previous => { const next = { ...previous }; delete next[target.app.id]; return next; });
+        invalidateCatalog();
+        await refresh(true);
+        return;
+      }
       if ([...instances].sort().join(',') !== [...target.instances].sort().join(',')) {
+        setOperations(previous => { const next = { ...previous }; delete next[target.app.id]; return next; });
         setQuitting({ ...target, instances });
         setQuitError(i18n.t('hostApplications.applicationChanged'));
         return;
       }
+      setOperations(previous => ({ ...previous, [target.app.id]: { kind: target.force ? 'force_quit' : 'close_windows', instances, state: 'submitting' } }));
       await (target.force ? terminateHostApplication : quitHostApplication)(target.app.id, instances);
       invalidateCatalog(operationResource);
       if (disposed) return;
-      if (!target.force) setQuitNotices(previous => ({ ...previous, [target.app.id]: target.instances }));
+      setOperations(previous => ({ ...previous, [target.app.id]: { kind: target.force ? 'force_quit' : 'close_windows', instances, state: 'accepted' } }));
       setQuitting(null);
       await refresh(true);
-    } catch (e) { if (!disposed) setQuitError(translateError(e, isMac() ? 'hostApplications.macQuitFailed' : 'hostApplications.macOperationFailed')); }
+    } catch (e) {
+      if (!disposed) {
+        setOperations(previous => target ? ({ ...previous, [target.app.id]: { kind: target.force ? 'force_quit' : 'close_windows', instances: target.instances, state: 'failed' } }) : previous);
+        setQuitError(translateError(e, isMac() ? 'hostApplications.macQuitFailed' : 'hostApplications.macOperationFailed'));
+      }
+    }
     finally { if (!disposed) setQuitBusy(false); }
   };
   const starting = (appID: string) => Boolean(busy()[appID] || runningByApp().get(appID)?.state === 'starting');
@@ -606,6 +654,7 @@ export function EnvHostApplicationsPage() {
     const operationResource = applicationResource.identity();
     const operationCurrent = applicationResource.captureAuthority();
     setStopBusy(true);
+    setStopError('');
     try {
       if (applicationResource.snapshot().stale || applicationResource.snapshot().refreshing) {
         await refresh(true);
@@ -613,9 +662,9 @@ export function EnvHostApplicationsPage() {
         if (!catalog()?.sessions.some(session => session.id === target.id && ['starting', 'running'].includes(session.state))) { setEnding(null); return; }
       }
       await detachHostApplication(target.id);
-      invalidateCatalog(operationResource); setEnding(null); await refresh(true);
+      invalidateCatalog(operationResource); setEnding(null); setStopError(''); await refresh(true);
     }
-    catch (e) { setError(translateError(e)); }
+    catch (e) { if (!disposed) setStopError(translateError(e, 'hostApplications.operationRetry')); }
     finally { setStopBusy(false); }
   };
 
@@ -679,10 +728,10 @@ export function EnvHostApplicationsPage() {
                   <button class="host-app-session-open" aria-label={`${i18n.t('hostApplications.resume')} · ${item().app.name}`} onClick={() => void open(item().app)} disabled={!canLaunch() || busy()[item().app.id]}>
                     <ApplicationIcon app={item().app} /><span class="min-w-0"><strong class="block truncate">{item().app.name}</strong><span class="host-app-status"><span class="host-app-status-dot" />{i18n.t(runningByApp().has(item().app.id) ? 'hostApplications.macSharing' : 'hostApplications.macAppRunning')}</span></span>
                   </button>
-                  <Show when={runningByApp().get(item().app.id)}>{session => <button class="host-app-stop" onClick={() => setEnding(session())} disabled={!canLaunch()} title={i18n.t('hostApplications.stopSharing')} aria-label={`${i18n.t('hostApplications.stopSharing')} · ${item().app.name}`}><Stop class="w-3.5 h-3.5" /></button>}</Show>
-                  <button class="host-app-quit" aria-label={`${i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')} · ${item().app.name}`} disabled={!canLaunch() || !(isMac() ? catalog()?.availability.native_ready : ready())} onClick={() => { setQuitError(''); setQuitting({ app: item().app, instances: [...item().instances] }); }}>{i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')}</button>
+                  <Show when={runningByApp().get(item().app.id)}>{session => <button class="host-app-stop" onClick={() => { if (stopBusy()) return; setStopError(''); setEnding(session()); }} disabled={!canLaunch() || operationBusy(item().app.id) || stopBusy()} title={i18n.t('hostApplications.stopSharing')} aria-label={`${i18n.t('hostApplications.stopSharing')} · ${item().app.name}`}><Stop class="w-3.5 h-3.5" /></button>}</Show>
+                  <button class="host-app-quit" aria-label={`${i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')} · ${item().app.name}`} disabled={!canLaunch() || operationBusy(item().app.id) || !(isMac() ? catalog()?.availability.native_ready : ready())} onClick={() => { setQuitError(''); setQuitting({ app: item().app, instances: [...item().instances] }); }}>{i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')}</button>
                 </div>
-                <Show when={quitNotice(item())}><p class="host-app-quit-notice" role="status">{i18n.t(isMac() ? 'hostApplications.macQuitPending' : 'hostApplications.closeWindowsPending')}</p></Show>
+                <Show when={quitNoticeKey(item())}>{notice => <p class="host-app-quit-notice" role="status">{i18n.t(notice())}</p>}</Show>
               </div>; }}</For></div>
             </section>
           </Show>
@@ -728,14 +777,14 @@ export function EnvHostApplicationsPage() {
                     <span class="host-app-status">{i18n.t(starting(appID) ? 'hostApplications.starting' : runningByApp().has(appID) ? 'hostApplications.macSharing' : 'hostApplications.macAppRunning')}</span>
                     <Dropdown align="end" triggerAriaLabel={`${i18n.t('hostApplications.macControls')} · ${app().name}`} triggerClass="host-apps-filter-button" trigger={<MoreHorizontal class="h-4 w-4" />}
                       items={[
-                        ...(runningByApp().has(appID) ? [{ id: 'stop', label: i18n.t('hostApplications.stopSharing'), disabled: !canLaunch() }] : []),
-                        ...(processesByID().has(appID) ? [{ id: 'quit', label: i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows'), disabled: !canLaunch() || (isMac() && !catalog()?.availability.native_ready) }] : []),
+                        ...(runningByApp().has(appID) ? [{ id: 'stop', label: i18n.t('hostApplications.stopSharing'), disabled: !canLaunch() || operationBusy(appID) }] : []),
+                        ...(processesByID().has(appID) ? [{ id: 'quit', label: i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows'), disabled: !canLaunch() || operationBusy(appID) || (isMac() && !catalog()?.availability.native_ready) }] : []),
                       ]} onSelect={id => {
-                        if (id === 'stop') setEnding(runningByApp().get(appID)!);
+                        if (id === 'stop' && !stopBusy()) { setStopError(''); setEnding(runningByApp().get(appID)!); }
                         if (id === 'quit') { setQuitError(''); setQuitting({ app: app(), instances: [...processesByID().get(appID)!.instances] }); }
                       }} />
                   </Show>
-                  <Show when={processesByID().get(appID) && quitNotice(processesByID().get(appID)!)}><p class="host-app-quit-notice" role="status">{i18n.t(isMac() ? 'hostApplications.macQuitPending' : 'hostApplications.closeWindowsPending')}</p></Show>
+                  <Show when={processesByID().get(appID) && quitNoticeKey(processesByID().get(appID)!)}>{notice => <p class="host-app-quit-notice" role="status">{i18n.t(notice())}</p>}</Show>
                 </div>
                 <Show when={appErrors()[app().id] || catalog()?.sessions.find(s => s.application.id === app().id)?.state === 'failed'}><p class="host-app-error" role="alert">{appErrors()[app().id] || sessionError(app().id)}</p></Show>
               </div>; }}</For></div>
@@ -761,13 +810,23 @@ export function EnvHostApplicationsPage() {
         </div>
       </Show>
     </Dialog>
-    <Dialog open={Boolean(quitting())} onOpenChange={value => { if (!value && !quitBusy()) setQuitting(null); }} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')}
+    <Dialog open={Boolean(quitting())} onOpenChange={value => { if (!value && !quitBusy()) { setQuitError(''); setQuitting(null); } }} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')}
       title={i18n.t(quitting()?.force ? 'hostApplications.forceQuitTitle' : isMac() ? 'hostApplications.macQuitTitle' : 'hostApplications.closeAllWindowsTitle', { name: quitting()?.app.name ?? '' })}
-      footer={<><Show when={!quitting()?.force}><Button variant="ghost" disabled={quitBusy()} onClick={() => { setQuitError(''); setQuitting(value => value ? { ...value, force: true } : null); }}>{i18n.t('hostApplications.forceQuit')}</Button></Show><Button variant="ghost" disabled={quitBusy()} onClick={() => setQuitting(null)}>{i18n.t('hostApplications.cancel')}</Button><Button variant="destructive" loading={quitBusy()} disabled={quitBusy()} onClick={() => void requestQuit()}>{i18n.t(quitting()?.force ? 'hostApplications.forceQuit' : isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')}</Button></>}>
+      footer={
+        <>
+          <Show when={!quitting()?.force} fallback={<Button variant="ghost" disabled={quitBusy()} onClick={() => { setQuitError(''); setQuitting(value => value ? { ...value, force: undefined } : null); }}>{i18n.t('hostApplications.back')}</Button>}>
+            <Button variant="ghost" disabled={quitBusy()} onClick={() => { setQuitError(''); setQuitting(value => value ? { ...value, force: true } : null); queueMicrotask(() => forceConfirmButton?.focus()); }}>{i18n.t('hostApplications.forceQuitSwitch')}</Button>
+          </Show>
+          <Button variant="ghost" disabled={quitBusy()} onClick={() => setQuitting(null)}>{i18n.t('hostApplications.cancel')}</Button>
+          <Button ref={forceConfirmButton} variant="destructive" loading={quitBusy()} disabled={quitBusy()} onClick={() => void requestQuit()}>{i18n.t(quitting()?.force ? 'hostApplications.confirmForceQuit' : isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')}</Button>
+        </>
+      }>
       <p class="host-app-quit-description">{i18n.t(quitting()?.force ? 'hostApplications.forceQuitDescription' : isMac() ? 'hostApplications.macQuitDescription' : 'hostApplications.sessionQuitDescription')}</p>
       <Show when={quitError()}><p role="alert" class="host-app-error">{quitError()}</p></Show>
     </Dialog>
-    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) setEnding(null); }} title={i18n.t('hostApplications.stopSharing')} bodyDescription={i18n.t('hostApplications.stopSharingDescription')} confirmText={i18n.t('hostApplications.stopSharing')} cancelText={i18n.t('hostApplications.cancel')} variant="default" loading={stopBusy()} onConfirm={() => void stop()} />
+    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) { setStopError(''); setEnding(null); } }} title={i18n.t('hostApplications.stopSharing')} bodyDescription={i18n.t('hostApplications.stopSharingDescription')} confirmText={i18n.t('hostApplications.stopSharing')} cancelText={i18n.t('hostApplications.cancel')} variant="default" loading={stopBusy()} onConfirm={() => void stop()}>
+      <Show when={stopError()}><p role="alert" class="host-app-error">{stopError()}</p></Show>
+    </ConfirmDialog>
     <Dialog class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} open={addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || (!isMac() && !name().trim()) || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
       <div class="space-y-4"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t(isMac() ? 'hostApplications.macAddDescription' : 'hostApplications.addDescription')}</p>
         <Show when={!isMac()}><label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.name')}</span><Input value={name()} onInput={e => setName(e.currentTarget.value)} maxLength={120} /></label></Show>

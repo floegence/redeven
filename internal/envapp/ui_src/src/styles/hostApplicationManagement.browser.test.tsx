@@ -46,7 +46,7 @@ it.each([360,1100].flatMap(width => ['macos','linux'].flatMap(backend => ['light
   expect(dialog.textContent).toContain(backend === 'macos' ? 'all of its windows' : 'Close all windows in this application session.');
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(500);
-  await userEvent.click([...dialog.querySelectorAll('button')].find(button => button.textContent === 'Force quit')!);
+  await userEvent.click([...dialog.querySelectorAll('button')].find(button => button.textContent === 'Force quit…')!);
   expect(dialog.textContent).toContain('Unsaved work will be lost.');
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   await page.screenshot({element:dialog,path:`__screenshots__/force-quit-${backend}-${mode}-${width}.png`});
@@ -66,7 +66,7 @@ it.each(SUPPORTED_LOCALES)('keeps ordinary and forced Linux close confirmations 
   const copy=createTestI18nHelpers(locale);
   expect(dialog.textContent).toContain(copy.t('hostApplications.closeAllWindowsTitle',{name:state.app.name}));
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
-  await userEvent.click([...dialog.querySelectorAll('button')].find(button => button.textContent===copy.t('hostApplications.forceQuit'))!);
+  await userEvent.click([...dialog.querySelectorAll('button')].find(button => button.textContent===copy.t('hostApplications.forceQuitSwitch'))!);
   expect(dialog.textContent).toContain(copy.t('hostApplications.forceQuitDescription'));
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   for (const button of dialog.querySelectorAll('button')) {

@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Cross-platform host application behavior
 description: Compare aligned user operations and operating-system limits for macOS and Linux host applications.
 tags: [applications, macos, linux, lifecycle]
-timestamp: 2026-09-22T05:00:00Z
+timestamp: 2026-10-07T05:00:00Z
 ---
 # Summary
 
@@ -34,6 +34,25 @@ Platform-specific labels state the real available operation rather than promisin
 an application-level Linux graceful quit. Force quit is a separate deliberate
 action, never escalation of a save cancellation. Linux recovery and boundaries
 belong to the [instance lifecycle contract](linux-application-lifecycle.md).
+
+## Accepted operations and visible state
+
+Quit and force-quit requests are asynchronous. A successful request response
+means that the host accepted the operation, not that the process has already
+exited. The Host Applications surface must close the confirmation dialog after
+acceptance and show a per-application pending state until the authoritative
+running snapshot confirms the target instance is gone. Pending work must not
+disable unrelated applications or leave the target card visually unchanged.
+
+Stopping sharing has a different outcome: the Redeven session and route end,
+while the host application and its windows may continue running. The running
+card therefore remains available for reconnection and must make that outcome
+visible. Errors while stopping sharing stay inside the confirmation surface so
+the user can retry or cancel without guessing whether the request was sent.
+
+Force quit requires an explicit confirmation state that names the data-loss
+consequence. The first Force quit action only enters that state; only its final
+confirmation sends the destructive host request.
 
 # Boundaries
 

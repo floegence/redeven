@@ -139,6 +139,21 @@ func (s *hostAppsStub) Detach(_ context.Context, owner, _ string) error {
 	s.owner = owner
 	return nil
 }
+
+func TestHostApplicationQuitRequestsRemainAcceptedUntilLifecycleReconciliation(t *testing.T) {
+	for _, path := range []string{hostApplicationsAPI + "/quit", hostApplicationsAPI + "/terminate"} {
+		backend := &hostAppsStub{}
+		server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"application_id":"editor.desktop","instances":["exact-instance"]}`))
+		r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
+		w := httptest.NewRecorder()
+		server.handleHostApplicationsAPI(w, r)
+		if w.Code != http.StatusAccepted || backend.calls != 1 || backend.owner != "alice" {
+			t.Fatalf("%s did not preserve accepted asynchronous semantics: %d %s calls=%d owner=%q", path, w.Code, w.Body.String(), backend.calls, backend.owner)
+		}
+	}
+}
+
 func (s *hostAppsStub) Add(context.Context, hostapps.AddRequest) error { s.calls++; return nil }
 func (s *hostAppsStub) ForTarget(target string) (hostapps.Session, string, bool) {
 	return hostapps.Session{ID: "one", Backend: "linux", State: "running"}, "alice", target == "http://127.0.0.1:40000"
