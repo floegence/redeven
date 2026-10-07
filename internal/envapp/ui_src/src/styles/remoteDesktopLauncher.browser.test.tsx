@@ -12,7 +12,7 @@ import { LocalApiError } from '../ui/services/localApi';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import type { RemoteDesktopStatus } from '../ui/services/remoteDesktopApi';
 
-const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), forget: vi.fn(), prepare: vi.fn(), cancel: vi.fn(), permission: vi.fn(), full: true }));
+const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), forget: vi.fn(), prepare: vi.fn(), cancel: vi.fn(), install: vi.fn(), permission: vi.fn(), full: true }));
 vi.mock('../ui/i18n', () => ({ useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) }));
 vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: 'Local Environment', agent: { hostname: 'server.local' }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
@@ -21,7 +21,7 @@ vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
 vi.mock('../ui/services/desktopSessionContext', async importOriginal => ({ ...await importOriginal<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'server' }) }));
 vi.mock('../ui/services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellWebServiceWindowOpenAvailable: () => true }));
 vi.mock('../ui/services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
-vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: state.prepare, cancelRemoteDesktopPreparation: state.cancel }));
+vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: state.prepare, cancelRemoteDesktopPreparation: state.cancel, installRemoteDesktopLoginService: state.install }));
 vi.mock('../ui/services/hostApplicationsApi', () => ({ requestHostApplicationPermission: state.permission }));
 
 const ready: RemoteDesktopStatus = { capabilities: { backend: 'macos', state: 'ready', screen: true, input: true, audio: true, clipboard: true, unattended: true, displays: [{ id: 'one', name: 'Studio Display', width: 2560, height: 1440, scale: 1, primary: true }] }, unattended: false, control_in_use: false, last_display_id: '' };
@@ -30,7 +30,7 @@ let renderErrors: string[] = [];
 beforeEach(() => {
   renderErrors = [];
   vi.resetAllMocks(); state.locale = 'zh-CN'; state.full = true;
-  state.status.mockResolvedValue(structuredClone(ready)); state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' }); state.open.mockResolvedValue(undefined);
+  state.status.mockResolvedValue(structuredClone(ready)); state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' }); state.open.mockResolvedValue(undefined); state.install.mockResolvedValue({ state: 'active' });
   document.documentElement.dataset.floeShellTheme = 'porcelain-dark'; document.documentElement.classList.add('dark');
 });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark', 'light'); delete document.documentElement.dataset.floeShellTheme; expect(renderErrors).toEqual([]); });
@@ -104,6 +104,41 @@ it('keeps errors visible with diagnostic details and closes the launcher after a
   await userEvent.click(connect);
   await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
   expect(state.create).toHaveBeenLastCalledWith(expect.objectContaining({ host_name: 'server', mode: 'control' }));
+});
+
+it('keeps login-screen access inside the normal connect flow', async () => {
+  const first = { ...ready, capabilities: { ...ready.capabilities, state: 'locked', unlock: true }, login_service: { state: 'not_installed' as const } };
+  state.status.mockResolvedValue(first);
+  state.install.mockImplementation(async () => {
+    state.status.mockResolvedValue({ ...first, login_service: { state: 'active' as const } });
+    return { state: 'active' };
+  });
+  const { dialog, copy } = await launch(390);
+  expect(dialog.querySelector('.remote-desktop-service')).toBeNull();
+  await page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.connect'), exact: true }).click();
+  const confirm = page.getByRole('button', { name: copy.t('remoteDesktop.install'), exact: true });
+  await expect.element(confirm).toBeVisible();
+  const modal = confirm.element().closest('[role=dialog]')!;
+  expect(modal.textContent).toContain(copy.t('remoteDesktop.loginServiceInstallConfirm'));
+  expect(state.install).not.toHaveBeenCalled();
+  expect(state.create).not.toHaveBeenCalled();
+  expect(modal.querySelector('button[aria-busy="true"]')).toBeNull();
+  await userEvent.click(page.getByRole('button', { name: copy.t('remoteDesktop.cancel'), exact: true }));
+  expect(state.install).not.toHaveBeenCalled();
+  await page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.connect'), exact: true }).click();
+  await userEvent.click(page.getByRole('button', { name: copy.t('remoteDesktop.install'), exact: true }));
+  await expect.poll(() => state.install.mock.calls.length).toBe(1);
+  await expect.poll(() => state.create.mock.calls.length).toBe(1);
+});
+
+it('keeps the authorization action label centered without an empty icon slot', async () => {
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, state: 'locked', unlock: true }, login_service: { state: 'not_installed' as const } });
+  const { dialog, copy } = await launch(390);
+  await page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.connect'), exact: true }).click();
+  const confirm = page.getByRole('button', { name: copy.t('remoteDesktop.install'), exact: true });
+  await expect.element(confirm).toBeVisible();
+  expect(confirm.element().querySelector('span[aria-hidden="true"]')).toBeNull();
+  expectSingleLineButtonLabels(confirm.element().closest('[role=dialog]')!);
 });
 
 it.each(['locked', 'session_unavailable', 'unsupported', 'screen_permission_required', 'setup_required', 'authorization_required'])('explains the next step for %s', async value => {
