@@ -3126,6 +3126,7 @@
     "migration_pending": "Beigetreten · Umgebungsmigration ausstehend"
   },
   "gatewayMembers": {
+    "reevaluate": "Richtlinie erneut prüfen",
     "title": "Gateway-Mitglieder",
     "permissions": "Kopplungsberechtigungen",
     "access": "Auf Mitglieder zugreifen",

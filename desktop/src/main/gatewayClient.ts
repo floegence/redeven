@@ -247,6 +247,10 @@ export class GatewayClient {
     await this.request(record, 'members/remove', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID), expected_member_version: integer(expectedMemberVersion, 1) }, options);
   }
 
+  async reevaluateMember(record: GatewayRecord, memberID: string, expectedMemberVersion: number, options: GatewayRequestOptions = {}): Promise<void> {
+    await this.request(record, 'members/reevaluate', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID), expected_member_version: integer(expectedMemberVersion, 1) }, options);
+  }
+
   async updateMembers(record: GatewayRecord, items: readonly GatewayMemberPolicyUpdate[], options: GatewayRequestOptions = {}): Promise<readonly GatewayMemberOperationResult[]> {
     const value = await this.request(record, 'members/policy', { protocol_version: GATEWAY_PROTOCOL_VERSION, items }, options);
     if (!Array.isArray(value) || value.length !== items.length) return invalid();

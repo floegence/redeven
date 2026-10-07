@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/floegence/redeven/internal/gatewaystate"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
@@ -153,7 +154,7 @@ func (s *Store) Rotate(leaf *x509.Certificate, request gp.MemberRotateRequest) (
 func (s *Store) RefreshHooks(config HookConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Invalidate first, so a persistence failure cannot preserve stale grants.
+	// Fence both live hook execution and cached Cloud grants.
 	s.hooks.Invalidate()
 	if err := s.fenceHookGrantsLocked(); err != nil {
 		return err
@@ -176,7 +177,14 @@ func (s *Store) fenceHookGrantsLocked() error {
 		member.HookCloudAllowed = false
 		next.Members[id] = member
 	}
-	return s.commit(next)
+	next = s.nextRevision(next)
+	err := gatewaystate.Write(s.path, next)
+	s.unpersisted = err != nil
+	// Invalidation is irreversible in this process even if storage fails. Keep
+	// the denial in the same authoritative state so snapshots, egress, concurrent
+	// evaluations, and the next successful write all observe the same fence.
+	s.applyLocked(next)
+	return err
 }
 
 // ServiceIdentity returns only the current member's signed public application

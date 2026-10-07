@@ -19,7 +19,7 @@ func (s *Store) AcknowledgeCloudDirectory(namespace string, policyRevision int64
 		if current.Member.State == "removed" {
 			delete(next.Members, id)
 			changed = true
-		} else if current.Member.CloudRevocationPending {
+		} else if current.Member.CloudRevocationPending && observation.Member.CloudRevocationPending && current.CloudRevocationRevision == observation.CloudRevocationRevision {
 			current.Member.CloudRevocationPending = false
 			next.Members[id] = current
 			changed = true

@@ -12,6 +12,47 @@ import (
 	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 )
 
+func TestGatewayConnectionChangesInvalidateOnlyTheControlOwner(t *testing.T) {
+	for _, field := range []string{"address", "certificate", "key", "trust", "bookkeeping"} {
+		t.Run(field, func(t *testing.T) {
+			store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
+			member := gatewayfixture.Enroll(t, store, "runtime")
+			control, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			data, closeData := context.WithCancel(t.Context())
+			defer closeData()
+			a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateway: member, LocalEnvironmentPublicID: "runtime"}, controlCancel: cancel, sessions: map[string]*activeSession{"data": {cancel: closeData}}}
+			before := a.remoteConfigSnapshot()
+			next := member.Clone()
+			switch field {
+			case "address":
+				next.GatewayURL = "https://new.gateway.internal:7443"
+			case "certificate":
+				next.ClientCertificatePEM += "\n"
+			case "key":
+				next.ClientPrivateKeyPEM += "\n"
+			case "trust":
+				next.GatewayTLSRootPEM += "\n"
+			case "bookkeeping":
+				next.LastSpentChannelID = "channel_next"
+			}
+			if err := a.persistGatewayMember(next); err != nil {
+				t.Fatal(err)
+			}
+			changed := field != "bookkeeping"
+			if (control.Err() != nil) != changed {
+				t.Fatal("control owner does not match the saved connection configuration")
+			}
+			if sameControlBinding(before, a.remoteConfigSnapshot()) == changed {
+				t.Fatal("stale proxy configuration can acquire control credentials")
+			}
+			if data.Err() != nil {
+				t.Fatal("connection configuration update closed an independent data session")
+			}
+		})
+	}
+}
+
 func TestGatewayLeaveFencesCloudBeforeRemovalDelivery(t *testing.T) {
 	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
 	member := gatewayfixture.Enroll(t, store, "runtime")

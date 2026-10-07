@@ -127,12 +127,16 @@ func (s *Store) SetCloudNamespace(ctx context.Context, namespaceID string) error
 
 // ReevaluateCloud uses the current authoritative namespace and commits only the
 // exact snapshot evaluated. It cannot restore an explicitly revoked Cloud binding.
-func (s *Store) ReevaluateCloud(ctx context.Context, memberID string) error {
+func (s *Store) ReevaluateCloud(ctx context.Context, memberID string, expectedVersion int64) error {
 	s.mu.Lock()
 	member, ok := s.state.Members[memberID]
 	if !ok || member.Member.State != "active" {
 		s.mu.Unlock()
 		return ErrDenied
+	}
+	if member.Member.MemberVersion != expectedVersion {
+		s.mu.Unlock()
+		return ErrConflict
 	}
 	next, revision := s.clone(), s.state.Revision
 	s.mu.Unlock()

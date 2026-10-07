@@ -579,5 +579,5 @@ func (s *Server) handleReevaluate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
 		return
 	}
-	writeResult(w, struct{}{}, s.members.ReevaluateCloud(r.Context(), request.MemberID))
+	writeResult(w, struct{}{}, s.members.ReevaluateCloud(r.Context(), request.MemberID, request.ExpectedMemberVersion))
 }

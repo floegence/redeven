@@ -345,7 +345,10 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 			return err
 		}
 	}
-	records, policy, _ := g.members.Snapshot()
+	records, policy, _, err := g.members.DurableSnapshot()
+	if err != nil {
+		return err
+	}
 	active := make([]gatewaymembership.MemberRecord, 0, len(records))
 	removed := make([]gatewaymembership.MemberRecord, 0)
 	for _, record := range records {
@@ -358,9 +361,11 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 	revision := status.Gateway.DirectoryRevision
 	syncBatch := func(batch []gatewaymembership.MemberRecord, full bool) error {
 		members := make([]gc.DirectoryMember, 0, len(batch))
+		hasDenial := false
 		for _, record := range batch {
 			m := record.Member
-			members = append(members, gc.DirectoryMember{MemberID: m.MemberID, MemberVersion: m.MemberVersion, Delegation: gc.MemberDelegation(record.Delegation), State: m.State, CloudPermission: string(m.CloudPermission), HookAllowed: record.HookCloudAllowed && record.HookPolicyRevision == policy.Revision, Reachable: g.connections.IsConnected(m.MemberID), Metadata: gc.RuntimeMetadata(m.Metadata)})
+			hasDenial = hasDenial || m.CloudRevocationPending
+			members = append(members, gc.DirectoryMember{MemberID: m.MemberID, MemberVersion: m.MemberVersion, Delegation: gc.MemberDelegation(record.Delegation), State: m.State, CloudPermission: string(m.CloudPermission), HookAllowed: gatewaymembership.EffectiveCloudAllowed(record, policy), Reachable: g.connections.IsConnected(m.MemberID), Metadata: gc.RuntimeMetadata(m.Metadata)})
 		}
 		sort.Slice(members, func(i, j int) bool { return members[i].MemberID < members[j].MemberID })
 		accepted, err := client.Directory(ctx, identity, gc.DirectorySync{ListenerURL: g.members.Endpoint().URL, BaseRevision: revision, Revision: revision + 1, Full: full, Policy: gc.GatewayPolicy{Revision: policy.Revision, DefaultCloudAllowed: policy.DefaultCloudAllowed, PublicationMode: string(policy.PublicationMode)}, Members: members})
@@ -371,6 +376,26 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 			return ErrState
 		}
 		revision++
+		if hasDenial {
+			// Do not let acknowledging a denial reinstall a cached active binding.
+			// Read back the committed Cloud projection before releasing the local
+			// fence; a lost response leaves the durable denial pending for retry.
+			fresh, err := client.GatewayStatusPage(ctx, identity, g.closureCursor)
+			if err != nil {
+				return err
+			}
+			if fresh.Gateway.PublicID != config.GatewayPublicID || fresh.Gateway.GatewayID != g.stable.ID || fresh.Gateway.NamespacePublicID != config.NamespacePublicID || fresh.Gateway.DirectoryRevision < revision {
+				return ErrState
+			}
+			config.Status = fresh
+			if err := gatewaystate.Write(g.path, config); err != nil {
+				return err
+			}
+			g.mu.Lock()
+			g.config, g.status = config, fresh
+			g.applyPolicyOrDenyLocked()
+			g.mu.Unlock()
+		}
 		return g.members.AcknowledgeCloudDirectory(config.NamespacePublicID, policy.Revision, batch)
 	}
 	// Retire tombstones before a complete active snapshot so old members do not

@@ -917,3 +917,11 @@ describe('desktopLauncherIPC', () => {
     });
   });
 });
+
+it('requires a current member identity for explicit policy reevaluation', () => {
+  const request = { kind: 'reevaluate_gateway_member', gateway_id: 'gateway', member_id: 'member', member_version: 2 };
+  expect(normalizeDesktopLauncherActionRequest(request)).toEqual(request);
+  for (const member_version of [0, -1, 1.5, undefined]) {
+    expect(normalizeDesktopLauncherActionRequest({ ...request, member_version })).toBeNull();
+  }
+});

@@ -3157,6 +3157,7 @@
     "migration_pending": "Присоединён · Ожидается перенос среды"
   },
   "gatewayMembers": {
+    "reevaluate": "Повторно оценить политику",
     "title": "Участники Gateway",
     "permissions": "Права сопряжения",
     "access": "Доступ к участникам",

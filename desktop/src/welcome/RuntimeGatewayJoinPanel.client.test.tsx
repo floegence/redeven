@@ -18,16 +18,59 @@ function button(label: string) {
 function result(gateway_membership: GatewayMembershipStatus): DesktopLauncherActionResult {
   return { ok: true, outcome: 'gateway_membership_updated', gateway_membership };
 }
-function mount(perform: ReturnType<typeof vi.fn>) {
+function mount(perform: ReturnType<typeof vi.fn>, suppliedInvitation = true) {
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
-  dispose = render(() => <RuntimeGatewayJoinPanel targetID="ssh:chosen" invitation={invitationFixture} i18n={i18n} />, root);
+  dispose = render(() => <RuntimeGatewayJoinPanel targetID="ssh:chosen" invitation={suppliedInvitation ? invitationFixture : undefined} i18n={i18n} />, root);
   const trigger = button(i18n.t('gatewayJoin.title')); trigger.focus(); trigger.click(); return trigger;
 }
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
-afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('Runtime Gateway membership interaction', () => {
+  it('keeps polling after a transient failure and preserves pending consent', async () => {
+    vi.useFakeTimers();
+    const perform = vi.fn().mockResolvedValueOnce(result({ joined: true, phase: 'joined' }))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(result({ joined: true, phase: 'gateway_offline' }));
+    mount(perform); await vi.advanceTimersByTimeAsync(50);
+    button(i18n.t('gatewayMembers.leave')).click();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(document.body.textContent).toContain(i18n.t('gatewayJoin.failed'));
+    expect(document.querySelector('[role="status"]')?.textContent).toContain(i18n.t('gatewayMembership.joined'));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(perform).toHaveBeenCalledTimes(3);
+    expect(document.querySelector('[role="status"]')?.textContent).toContain(i18n.t('gatewayMembership.gateway_offline'));
+    expect(button(i18n.t('gatewayMembers.confirmLeave')).disabled).toBe(false);
+    button(i18n.t('common.close')).click();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(perform).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['replace', 'updateAddress'] as const)('preserves an imported %s invitation across status polling', async operation => {
+    vi.useFakeTimers();
+    const perform = vi.fn().mockResolvedValue(result({ joined: true, phase: 'joined' }));
+    mount(perform, false); await vi.advanceTimersByTimeAsync(50);
+    button(i18n.t(`gatewayJoin.${operation}`)).click();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [{ size: 1000, text: async () => JSON.stringify(invitationFixture) }] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(3100);
+    expect(perform).toHaveBeenCalledTimes(2);
+    const confirm = button(i18n.t(operation === 'replace' ? 'gatewayJoin.confirmReplace' : 'gatewayJoin.updateAddress'));
+    expect(confirm.disabled).toBe(false);
+    confirm.click(); await vi.advanceTimersByTimeAsync(50);
+    expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({ operation: operation === 'replace' ? 'replace' : 'update-address', invitation: invitationFixture });
+  });
+  it('preserves leave confirmation across status polling', async () => {
+    vi.useFakeTimers();
+    const perform = vi.fn().mockResolvedValue(result({ joined: true, phase: 'joined' }));
+    mount(perform); await vi.advanceTimersByTimeAsync(50);
+    button(i18n.t('gatewayMembers.leave')).click();
+    await vi.advanceTimersByTimeAsync(3100);
+    expect(button(i18n.t('gatewayMembers.confirmLeave')).disabled).toBe(false);
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayMembers.leaveImpact'));
+  });
   it('only reads status on open and preserves consent input on failure and focus on close', async () => {
     const perform = vi.fn().mockResolvedValueOnce(result({ joined: false, phase: 'not_joined' }))
       .mockResolvedValueOnce({ ok: false, code: 'GATEWAY_UNAVAILABLE' })
