@@ -50,6 +50,7 @@ export const enUS = {
     "removal_pending": "Leaving · Revocation pending"
 },
   gatewayMembers: {
+    reevaluate: 'Reevaluate policy',
     refreshFailed: 'The operation succeeded, but the member list could not be refreshed. Your result is preserved. Refresh to see the latest state.',
     "title": "Gateway members",
     "permissions": "Pairing permissions",

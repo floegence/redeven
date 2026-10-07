@@ -6020,7 +6020,7 @@ function runtimeLifecycleTitleKey(operation: 'start' | 'stop' | 'restart' | 'upd
 }
 
 async function manageGatewayMemberFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'invite_gateway_runtime' | 'remove_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'invite_gateway_runtime' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.gateway_id);
   if (!record) return launcherActionFailure('environment_missing', 'gateway', 'This Gateway is no longer available.', { shouldRefreshSnapshot: true });
@@ -6035,7 +6035,8 @@ async function manageGatewayMemberFromLauncher(
       for (const session of liveGatewayEnvironmentSessions(record.gateway_id, request.member_id)) {
         failGatewaySessionTransport(session, new GatewayClientError('MEMBER_REMOVED', 'Gateway membership was removed.'));
       }
-    } else if (request.kind === 'update_gateway_policy') await client.updatePolicy(record, request.policy);
+    } else if (request.kind === 'reevaluate_gateway_member') await client.reevaluateMember(record, request.member_id, request.member_version);
+    else if (request.kind === 'update_gateway_policy') await client.updatePolicy(record, request.policy);
     else if (request.kind === 'update_gateway_members') results = await client.updateMembers(record, request.items);
     else await client.dismissMigration(record);
     await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
@@ -17858,6 +17859,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       }
     case 'invite_gateway_runtime':
     case 'remove_gateway_member':
+    case 'reevaluate_gateway_member':
     case 'update_gateway_policy':
     case 'update_gateway_members':
     case 'dismiss_gateway_rebuild':
@@ -19318,13 +19320,18 @@ async function runGatewayCloudActionFromLauncher(request: Extract<DesktopLaunche
 }
 
 async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'manage_runtime_gateway' }>): Promise<DesktopLauncherActionResult> {
-  if (explicitProviderLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('provider_link_failed', 'environment', 'A Cloud connection action is already in progress.');
-  explicitProviderLinkTargets.add(request.runtime_target_id);
-  providerLinkIntentVersions.set(request.runtime_target_id, (providerLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
+  const mutating = request.operation !== 'status';
+  if (mutating && explicitProviderLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('provider_link_failed', 'environment', 'A Cloud connection action is already in progress.');
+  if (mutating) {
+    explicitProviderLinkTargets.add(request.runtime_target_id);
+    providerLinkIntentVersions.set(request.runtime_target_id, (providerLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
+  }
   let target: ProviderRuntimeLinkTargetRecord | null = null;
   try {
-    await providerCredentialRecovery.settled(request.runtime_target_id);
-    providerCredentialRecovery.forget(request.runtime_target_id);
+    if (mutating) {
+      await providerCredentialRecovery.settled(request.runtime_target_id);
+      providerCredentialRecovery.forget(request.runtime_target_id);
+    }
     target = await resolveProviderRuntimeLinkTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
     const endpoint = target?.record.startup.runtime_control;
     if (!target || !endpoint) return launcherActionFailure('runtime_not_started', 'environment', 'Start this Runtime through its trusted management connection first.');
@@ -19334,7 +19341,7 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
   } catch {
     return launcherActionFailure('provider_link_failed', 'environment', 'Gateway enrollment could not advance. Check the Gateway and retry the saved enrollment.');
   } finally {
-    await target?.bridge_lease?.release();
-    explicitProviderLinkTargets.delete(request.runtime_target_id);
+    try { await target?.bridge_lease?.release(); }
+    finally { if (mutating) explicitProviderLinkTargets.delete(request.runtime_target_id); }
   }
 }

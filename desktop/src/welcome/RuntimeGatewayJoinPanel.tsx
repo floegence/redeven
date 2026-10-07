@@ -49,14 +49,19 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         operation, ...((operation === 'join' || operation === 'replace' || operation === 'update-address') ? { invitation: invitation() ?? props.invitation, ...((operation === 'join' || operation === 'replace') && choice() ? { environment_choice: choice() } : {}) } : {}) });
       if (current !== generation) return;
       if (!result?.ok || !result.gateway_membership) throw new Error();
-      setStatus(result.gateway_membership); setLeaving(false);
-      if (operation !== 'status') { setReplacing(false); setUpdatingAddress(false); }
-      if (result.gateway_membership.joined) setInvitation(undefined);
-      if (open()) {
-        timer = setTimeout(() => void act('status'), 3000);
+      setStatus(result.gateway_membership);
+      // Observation never consumes an invitation or dismisses local consent.
+      if (operation !== 'status') {
+        setLeaving(false); setReplacing(false); setUpdatingAddress(false);
+        if (result.gateway_membership.joined) setInvitation(undefined);
       }
     } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.failed')); }
-    finally { if (current === generation) setBusy(false); }
+    finally {
+      if (current === generation) {
+        setBusy(false);
+        if (open()) timer = setTimeout(() => void act('status'), 3000);
+      }
+    }
   }
   onMount(() => { if (props.embedded) { setOpen(true); void act('status'); } });
   async function createInvitation() {
@@ -68,7 +73,12 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       if (!result?.ok || !result.gateway_invitation) throw new Error();
       setInvitation(result.gateway_invitation);
     } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.failed')); }
-    finally { if (current === generation) setBusy(false); }
+    finally {
+      if (current === generation) {
+        setBusy(false);
+        if (open()) timer = setTimeout(() => void act('status'), 3000);
+      }
+    }
   }
   const selectedInvitation = () => invitation() ?? props.invitation;
   const body = () =>       <div class="space-y-4 p-4">

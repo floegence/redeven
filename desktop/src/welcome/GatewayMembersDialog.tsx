@@ -135,6 +135,9 @@ export function GatewayMembersDialog(props: Readonly<{
               </select>
             </label>
             <Show when={member.cloud_revocation_pending}><p role="status" class="text-xs text-warning">{props.i18n.t('gatewayMembers.revocationPending')}</p></Show>
+            <Button class="cursor-pointer" size="xs" variant="outline" disabled={busy() || !props.gateway?.permissions?.manage_members}
+              onClick={() => props.gateway && void perform({ kind: 'reevaluate_gateway_member', gateway_id: props.gateway.gateway_id,
+                member_id: member.member_id, member_version: member.member_version })}>{props.i18n.t('gatewayMembers.reevaluate')}</Button>
             <Show when={results()?.find(result => result.member_id === member.member_id)}>{result => <p role="status" class="text-xs">{result().error_code || props.i18n.t('gatewayMembers.saved')}</p>}</Show>
             <Show when={removing() === member.member_id}><p role="alert" class="text-xs text-warning">{props.i18n.t('gatewayMembers.leaveImpact')}</p></Show>
             <Button class="cursor-pointer" size="xs" variant="outline" disabled={busy() || !props.gateway?.permissions?.manage_members}

@@ -61,6 +61,11 @@ func (a *Agent) persistGatewayMember(member *gatewaymembership.RuntimeConfig) er
 	if err := config.Save(a.configPath, &next); err != nil {
 		return err
 	}
+	if !sameControlBinding(a.cfg, &next) && a.controlCancel != nil {
+		// The controller owns an immutable proxy. Its existing lifecycle observer
+		// restarts it from the saved configuration without closing data sessions.
+		a.controlCancel()
+	}
 	a.cfg = &next
 	member.Revision = next.Gateway.Revision
 	return nil

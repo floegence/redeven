@@ -3127,6 +3127,7 @@
     "migration_pending": "Unido · Migración del entorno pendiente"
   },
   "gatewayMembers": {
+    "reevaluate": "Reevaluar la política",
     "title": "Miembros del Gateway",
     "permissions": "Permisos de emparejamiento",
     "access": "Acceder a miembros",

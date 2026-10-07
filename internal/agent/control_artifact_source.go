@@ -34,7 +34,9 @@ func sameControlBinding(expected, current *config.Config) bool {
 	if (expected.Gateway == nil) != (current.Gateway == nil) {
 		return false
 	}
-	if current.Gateway != nil && (current.Gateway.Leaving || expected.Gateway.MemberID != current.Gateway.MemberID || expected.Gateway.MemberVersion != current.Gateway.MemberVersion || expected.Gateway.GatewayID != current.Gateway.GatewayID) {
+	if current.Gateway != nil && (current.Gateway.Leaving || expected.Gateway.MemberID != current.Gateway.MemberID || expected.Gateway.MemberVersion != current.Gateway.MemberVersion || expected.Gateway.GatewayID != current.Gateway.GatewayID ||
+		expected.Gateway.GatewayURL != current.Gateway.GatewayURL || expected.Gateway.GatewayTLSRootPEM != current.Gateway.GatewayTLSRootPEM ||
+		expected.Gateway.ClientCertificatePEM != current.Gateway.ClientCertificatePEM || expected.Gateway.ClientPrivateKeyPEM != current.Gateway.ClientPrivateKeyPEM) {
 		return false
 	}
 	left, right := gatewayFence(expected), gatewayFence(current)

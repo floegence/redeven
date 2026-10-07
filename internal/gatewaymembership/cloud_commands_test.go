@@ -29,7 +29,7 @@ func TestCloudCommandDeliveryIsAtomicAndSurvivesRestart(t *testing.T) {
 	if code, err := store.ApplyCloudCommand(t.Context(), command); err != nil || code != "" {
 		t.Fatal(code, err)
 	}
-	records, _, revision := store.Snapshot()
+	records, _, _ := store.Snapshot()
 	if !records[0].HookCloudAllowed {
 		t.Fatal("Cloud policy was not evaluated")
 	}
@@ -38,11 +38,15 @@ func TestCloudCommandDeliveryIsAtomicAndSurvivesRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	records, _, revision := restarted.Snapshot()
+	if records[0].HookCloudAllowed || !records[0].Member.CloudRevocationPending {
+		t.Fatal("restart preserved a grant from the invalidated hook")
+	}
 	if code, err := restarted.ApplyCloudCommand(t.Context(), command); err != nil || code != "" {
 		t.Fatal(code, err)
 	}
 	records, _, after := restarted.Snapshot()
-	if after != revision || !records[0].HookCloudAllowed {
+	if after != revision || records[0].HookCloudAllowed {
 		t.Fatal("lost response retried an already committed policy decision")
 	}
 	changed := command

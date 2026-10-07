@@ -3121,6 +3121,7 @@
     "migration_pending": "已加入 · 环境迁移待完成"
   },
   "gatewayMembers": {
+    "reevaluate": "重新评估策略",
     "title": "Gateway 成员",
     "permissions": "配对权限",
     "access": "访问成员",

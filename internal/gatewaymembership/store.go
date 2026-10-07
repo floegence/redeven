@@ -56,8 +56,11 @@ type MemberRecord struct {
 	ClientExpiresAtUnixMS   int64               `json:"client_expires_at_unix_ms"`
 	HookCloudAllowed        bool                `json:"hook_cloud_allowed"`
 	HookPolicyRevision      int64               `json:"hook_policy_revision"`
-	ConnectionGeneration    uint64              `json:"connection_generation"`
-	Rotation                *rotationDelivery   `json:"rotation,omitempty"`
+	// A denial is delivered even if a later edit permits Cloud again. The
+	// transaction revision prevents an older receipt from clearing a newer denial.
+	CloudRevocationRevision int64             `json:"cloud_revocation_revision,omitempty"`
+	ConnectionGeneration    uint64            `json:"connection_generation"`
+	Rotation                *rotationDelivery `json:"rotation,omitempty"`
 }
 
 type rotationDelivery struct {
@@ -94,13 +97,14 @@ type memberState struct {
 }
 
 type Store struct {
-	mu       sync.Mutex
-	path     string
-	identity GatewayIdentity
-	state    memberState
-	hooks    *PolicyHooks
-	// Applied under the transaction lock, after persistence and before returning
-	// to the caller. It must not call Store methods. This lets the service fence
+	mu          sync.Mutex
+	path        string
+	identity    GatewayIdentity
+	state       memberState
+	hooks       *PolicyHooks
+	unpersisted bool
+	// Applied under the transaction lock before returning to the caller. Policy
+	// invalidation also publishes a denial when persistence fails. It must not call Store methods. This lets the service fence
 	// removed permissions synchronously and in committed revision order.
 	onCommit func([]MemberRecord, gp.GatewayPolicy)
 }
@@ -149,6 +153,25 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 	if err := s.ensureEndpoint(); err != nil {
 		return nil, err
 	}
+	if len(s.state.Members) > 0 {
+		// Executable policy may change while the host is stopped. Evaluate before
+		// any caller can install persisted Cloud grants or expose a listener.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		next := s.clone()
+		if err := s.evaluateCloud(ctx, &next, policyMemberIDs(next)); err != nil {
+			return nil, err
+		}
+		for id, current := range next.Members {
+			previous := s.state.Members[id]
+			if current.HookCloudAllowed != previous.HookCloudAllowed || current.HookPolicyRevision != previous.HookPolicyRevision {
+				if err := s.commit(next); err != nil {
+					return nil, err
+				}
+				break
+			}
+		}
+	}
 	return s, nil
 }
 
@@ -184,25 +207,50 @@ func (s *Store) Snapshot() ([]MemberRecord, gp.GatewayPolicy, int64) {
 	return s.recordsLocked(), s.state.Policy, s.state.Revision
 }
 
+// DurableSnapshot never exposes an unpersisted policy revision to Cloud. Local
+// invalidation still fences egress immediately while storage is unavailable.
+func (s *Store) DurableSnapshot() ([]MemberRecord, gp.GatewayPolicy, int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.unpersisted {
+		if err := gatewaystate.Write(s.path, s.state); err != nil {
+			return nil, gp.GatewayPolicy{}, 0, err
+		}
+		s.unpersisted = false
+	}
+	return s.recordsLocked(), s.state.Policy, s.state.Revision, nil
+}
+
 func (s *Store) Endpoint() Endpoint { s.mu.Lock(); defer s.mu.Unlock(); return s.state.Endpoint }
 
-func (s *Store) commit(next memberState) error {
+func (s *Store) nextRevision(next memberState) memberState {
 	next.Revision = s.state.Revision + 1
 	for id, member := range next.Members {
 		previous, exists := s.state.Members[id]
-		if exists && EffectiveCloudAllowed(previous, s.state.Policy) && !EffectiveCloudAllowed(member, next.Policy) {
+		if exists && cloudPolicyAllows(previous, s.state.Policy) && !cloudPolicyAllows(member, next.Policy) {
 			member.Member.CloudRevocationPending = true
+			member.CloudRevocationRevision = next.Revision
 			next.Members[id] = member
 		}
 	}
+	return next
+}
+
+func (s *Store) commit(next memberState) error {
+	next = s.nextRevision(next)
 	if err := gatewaystate.Write(s.path, next); err != nil {
 		return err
 	}
+	s.unpersisted = false
+	s.applyLocked(next)
+	return nil
+}
+
+func (s *Store) applyLocked(next memberState) {
 	s.state = next
 	if s.onCommit != nil {
 		s.onCommit(s.recordsLocked(), s.state.Policy)
 	}
-	return nil
 }
 
 func (s *Store) clone() memberState {
@@ -388,6 +436,10 @@ func (s *Store) Join(ctx context.Context, request gp.MemberJoinRequest) (_ gp.Me
 }
 
 func EffectiveCloudAllowed(member MemberRecord, policy gp.GatewayPolicy) bool {
+	return !member.Member.CloudRevocationPending && cloudPolicyAllows(member, policy)
+}
+
+func cloudPolicyAllows(member MemberRecord, policy gp.GatewayPolicy) bool {
 	return member.Member.State == "active" && member.Member.CloudPermission != gp.CloudDeny && (member.Member.CloudPermission == gp.CloudAllow || policy.DefaultCloudAllowed) && member.HookCloudAllowed && member.HookPolicyRevision == policy.Revision
 }
 

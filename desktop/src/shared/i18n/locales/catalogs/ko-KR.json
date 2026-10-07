@@ -3121,6 +3121,7 @@
     "migration_pending": "가입됨 · 환경 이전 대기 중"
   },
   "gatewayMembers": {
+    "reevaluate": "정책 다시 평가",
     "title": "Gateway 멤버",
     "permissions": "페어링 권한",
     "access": "멤버 접근",

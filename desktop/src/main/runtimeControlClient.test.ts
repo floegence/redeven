@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import {
   connectProviderLink,
+  manageRuntimeGateway,
   getProviderLinkStatus,
   RuntimeControlError,
   runtimeControlServiceURL,
@@ -112,6 +113,14 @@ afterEach(async () => {
 });
 
 describe('runtimeControlClient', () => {
+  it.each(['BINDING_PROOF_REQUIRED', 'CLOUD_UNAVAILABLE'])('preserves Gateway publication diagnostic %s', async code => {
+    const server = await startServer((_request, _body, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: { joined: true, phase: 'cloud_pending', publication_error_code: code } }));
+    });
+    expect(await manageRuntimeGateway(endpoint(server.origin), 'status')).toMatchObject({ publication_error_code: code });
+  });
+
   it('reads and saves server access only with the private control credential', async () => {
     const saved = {local_ui_bind: '0.0.0.0:23998', local_ui_protocol: 'http', local_ui_password_configured: true, restart_required: true, runtime_started_at_unix_ms: 1778751234567};
     const server = await startServer((_request, _body, response) => {

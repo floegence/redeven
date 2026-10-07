@@ -3121,6 +3121,7 @@
     "migration_pending": "参加済み · 環境の移行待ち"
   },
   "gatewayMembers": {
+    "reevaluate": "ポリシーを再評価",
     "title": "Gateway メンバー",
     "permissions": "ペアリング権限",
     "access": "メンバーにアクセス",

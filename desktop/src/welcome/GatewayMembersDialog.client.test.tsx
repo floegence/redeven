@@ -36,6 +36,15 @@ beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLEleme
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway member management', () => {
+  it('reevaluates the selected member without applying an unsaved policy edit', async () => {
+    const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated' });
+    mount(perform); await settle();
+    select(document.querySelector<HTMLSelectElement>('li select')!, 'allow');
+    button(i18n.t('gatewayMembers.reevaluate')).click(); await settle();
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_member', gateway_id: gateway.gateway_id,
+      member_id: memberFixture.member_id, member_version: memberFixture.member_version });
+    expect(document.querySelector<HTMLSelectElement>('li select')!.value).toBe('allow');
+  });
   it('keeps an issued invitation when the following refresh fails', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_invitation_created', gateway_invitation: invitationFixture });
     mount(perform, vi.fn(async () => { throw new Error('unavailable'); })); await settle();
@@ -86,6 +95,7 @@ describe('Gateway member management', () => {
     mount(perform, undefined, { ...gateway, permissions: { access: true, manage_members: false, configure_cloud: false } }); await settle();
     expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
     expect(button(i18n.t('gatewayMembers.remove')).disabled).toBe(true);
+    expect(button(i18n.t('gatewayMembers.reevaluate')).disabled).toBe(true);
     expect([...document.querySelectorAll('select')].every(select => select.disabled)).toBe(true);
     expect(perform).not.toHaveBeenCalled();
   });

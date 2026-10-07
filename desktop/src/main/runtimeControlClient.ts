@@ -322,6 +322,7 @@ export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoi
     ...(typeof result.gateway_url === 'string' ? { gateway_url: result.gateway_url } : {}),
     ...(typeof result.member_id === 'string' ? { member_id: result.member_id } : {}),
     ...(typeof result.existing_environment_id === 'string' ? { existing_environment_id: result.existing_environment_id } : {}),
+    ...(typeof result.publication_error_code === 'string' ? { publication_error_code: result.publication_error_code } : {}),
     ...(typeof result.rejoin_required === 'boolean' ? { rejoin_required: result.rejoin_required } : {}),
   };
 }

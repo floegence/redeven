@@ -246,6 +246,7 @@ export type DesktopLauncherActionKind =
   | 'upsert_environment_registration'
   | 'invite_gateway_runtime'
   | 'remove_gateway_member'
+  | 'reevaluate_gateway_member'
   | 'update_gateway_policy'
   | 'update_gateway_members'
   | 'dismiss_gateway_rebuild'
@@ -869,6 +870,7 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | { kind: 'invite_gateway_runtime'; gateway_id: string }
   | { kind: 'remove_gateway_member'; gateway_id: string; member_id: string; member_version: number }
+  | { kind: 'reevaluate_gateway_member'; gateway_id: string; member_id: string; member_version: number }
   | { kind: 'update_gateway_policy'; gateway_id: string; policy: GatewayPolicy }
   | { kind: 'update_gateway_members'; gateway_id: string; items: readonly { member_id: string; expected_member_version: number; cloud_permission: GatewayCloudPermission }[] }
   | { kind: 'dismiss_gateway_rebuild'; gateway_id: string }
@@ -1174,7 +1176,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       const gateway_id = compact((candidate as { gateway_id?: unknown }).gateway_id);
       return gateway_id ? { kind, gateway_id } : null;
     }
-    case 'remove_gateway_member': {
+    case 'remove_gateway_member':
+    case 'reevaluate_gateway_member': {
       const input = candidate as Record<string, unknown>;
       const gateway_id = compact(input.gateway_id), member_id = compact(input.member_id);
       const member_version = input.member_version;

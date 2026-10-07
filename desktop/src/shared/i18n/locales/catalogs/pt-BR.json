@@ -3127,6 +3127,7 @@
     "migration_pending": "Membro · Migração do ambiente pendente"
   },
   "gatewayMembers": {
+    "reevaluate": "Reavaliar política",
     "title": "Membros do Gateway",
     "permissions": "Permissões de pareamento",
     "access": "Acessar membros",

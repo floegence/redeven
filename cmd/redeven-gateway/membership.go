@@ -24,6 +24,7 @@ const membershipHelp = `Usage:
   redeven-gateway invite --output PATH [--state-root PATH]
   redeven-gateway members list [--state-root PATH]
   redeven-gateway members remove --member ID --version N [--state-root PATH]
+  redeven-gateway members reevaluate --member ID --version N [--state-root PATH]
   redeven-gateway members policy --member ID --version N --cloud inherit|allow|deny [--state-root PATH]
   redeven-gateway policy show [--state-root PATH]
   redeven-gateway policy set [--default-cloud allow|deny] [--publication-mode manual|automatic] [--apply] [--state-root PATH]
@@ -64,7 +65,7 @@ func (c *cli) membershipCmd(args []string) int {
 		valid = valid && *output != "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
 	case "members/list", "policy/show":
 		valid = valid && *output == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
-	case "members/remove":
+	case "members/remove", "members/reevaluate":
 		valid = valid && *member != "" && *version > 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && *output == "" && !*apply
 	case "members/policy":
 		valid = valid && *member != "" && *version > 0 && (*cloud == "inherit" || *cloud == "allow" || *cloud == "deny") && *defaultCloud == "" && *mode == "" && *output == "" && !*apply
@@ -100,6 +101,8 @@ func (c *cli) membershipCmd(args []string) int {
 		result = invitation
 	case "members/remove":
 		err = client.request(ctx, "/gateway/v4/members/remove", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
+	case "members/reevaluate":
+		err = client.request(ctx, "/gateway/v4/members/reevaluate", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
 	case "members/policy":
 		var results []gp.MemberOperationResult
 		err = client.request(ctx, "/gateway/v4/members/policy", gp.UpdateMembersRequest{ProtocolVersion: gp.Version, Items: []gp.MemberPolicyUpdate{{MemberID: *member, ExpectedMemberVersion: *version, CloudPermission: gp.CloudPermission(*cloud)}}}, &results)
