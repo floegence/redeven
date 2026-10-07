@@ -3,7 +3,7 @@ type: UI Contract
 title: Tessiven canvas
 description: Render progressively detailed service topology and exact object context.
 tags: [ui, tessiven, graph]
-timestamp: 2026-10-06T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -46,6 +46,14 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 - The visible version supplies the context for subsequent messages, including
   explicit history. Saved-version events update current views only; they do not
   infer completion of a Flower turn.
+- The graph surface disables native text selection and cancels `selectstart`,
+  so dragging to pan never selects card labels or other graph content. Text
+  outside the graph, including the Flower composer and document viewer, keeps
+  its normal selection behavior.
+- Flower saves are durable without an open canvas client. Every connected SSE
+  canvas client receives the same coalesced invalidation, and a client that
+  reconnects or opens later receives an initial invalidation before reading the
+  current snapshots.
 - The built-in example is identified in its library preview and open canvas.
   It demonstrates topology without claiming actual connections or health.
 - Flower saves update a canvas being viewed as current. Explicit historical
@@ -97,6 +105,8 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven_ui/src/projection.ts`
 - `internal/tessiven_ui/src/tessiven.css`
 - `internal/tessiven_ui/src/transport.ts`
+- `internal/tessiven/store.go`
+- `internal/tessiven/store_test.go`
 - `internal/codeapp/appserver/tessiven.go`
 - `internal/envapp/ui_src/src/styles/tessiven.browser.test.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-library.browser.test.tsx`

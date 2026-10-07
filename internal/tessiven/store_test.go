@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestVersionLifecycleAndConcurrency(t *testing.T) {
@@ -103,6 +104,74 @@ func TestVersionLifecycleAndConcurrency(t *testing.T) {
 	list, err := s.List(ctx, "Different", "", false)
 	if err != nil || len(list.Canvases) != 1 {
 		t.Fatalf("library: %+v %v", list, err)
+	}
+}
+
+func TestFlowerSaveInvalidatesEveryCanvasClientAndSurvivesNoClients(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	created, err := s.Create(t.Context(), "multi-client-create", "Shared canvas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, unsubscribeFirst := s.Subscribe()
+	second, unsubscribeSecond := s.Subscribe()
+	defer unsubscribeFirst()
+	defer unsubscribeSecond()
+	// A subscription starts with one invalidation so a newly opened client
+	// reads the current snapshot, even when Flower saved while no client was
+	// connected.
+	drainInvalidation := func(name string, changes <-chan struct{}) {
+		t.Helper()
+		select {
+		case <-changes:
+		case <-time.After(time.Second):
+			t.Fatalf("%s did not receive the initial canvas invalidation", name)
+		}
+	}
+	drainInvalidation("first", first)
+	drainInvalidation("second", second)
+
+	_, err = s.Save(t.Context(), SaveRequest{
+		RequestID:       "flower-update-1",
+		CanvasID:        created.Canvas.ID,
+		ExpectedVersion: created.Version.Number,
+		DocumentYAML:    exampleDocument,
+		Summary:         "Flower mapped the shared canvas",
+	}, "flower")
+	if err != nil {
+		t.Fatal(err)
+	}
+	drainInvalidation("first", first)
+	drainInvalidation("second", second)
+
+	// Closing every client must not stop Flower's persisted work. A client
+	// that opens after the save receives the current snapshot immediately.
+	unsubscribeFirst()
+	unsubscribeSecond()
+	latest, err := s.Save(t.Context(), SaveRequest{
+		RequestID:       "flower-update-2",
+		CanvasID:        created.Canvas.ID,
+		ExpectedVersion: created.Version.Number + 1,
+		DocumentYAML:    exampleDocument,
+		Summary:         "Flower completed the mapping",
+	}, "flower")
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, unsubscribeThird := s.Subscribe()
+	defer unsubscribeThird()
+	drainInvalidation("reopened client", third)
+	view, err := s.Version(t.Context(), created.Canvas.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Number != latest.Version.Number || view.Number != created.Version.Number+2 {
+		t.Fatalf("reopened client did not converge to Flower's latest save: got %d, want %d", view.Number, latest.Version.Number)
 	}
 }
 

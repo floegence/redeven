@@ -485,6 +485,9 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   background: color-mix(in oklab, var(--background) 96%, var(--foreground));
   --graph-edge: color-mix(in oklab, var(--foreground) 57%, var(--background));
 }

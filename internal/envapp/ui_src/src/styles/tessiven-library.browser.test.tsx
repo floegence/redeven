@@ -24,6 +24,7 @@ afterEach(() => {
   document.documentElement.removeAttribute('style');
   document.documentElement.classList.remove('dark', 'light');
 });
+
 const canvas: Canvas = {
   id: 'commerce',
   title: 'Commerce / Current',
@@ -428,4 +429,43 @@ it('keeps global navigation and library text visible in every published theme', 
       ).toBeGreaterThanOrEqual(minimum);
     }
   }
+});
+
+it('keeps graph panning from creating a browser text selection', async () => {
+  await page.viewport(1200, 800);
+  createHost();
+  const current = version(2);
+  current.document.nodes = [{ id: 'host', name: 'Runtime', runtimeRef: 'local:local' }];
+  current.document.services = [{ id: 'api', name: 'Orders API', kind: 'api' }];
+  current.document.instances = [{ id: 'orders', nodeRef: 'host', serviceRef: 'api', role: 'standalone' }];
+  const transport = {
+    request: vi.fn(async (_method: string, path: string) => {
+      if (path.startsWith('/canvases?')) return { canvases: [canvas] };
+      if (path === '/canvases/commerce') return canvas;
+      return current;
+    }),
+    subscribe: () => () => {},
+  } as unknown as TessivenTransport;
+  dispose = render(
+    () => (
+      <TessivenPage
+        t={tessivenText('en-US')}
+        canWrite
+        transport={transport}
+        openRequest={{ canvasID: 'commerce', nonce: 1 }}
+        renderFlower={() => <div />}
+        onOpenFlower={() => {}}
+        onOpenService={() => {}}
+      />
+    ),
+    host,
+  );
+  await expect.element(page.getByRole('heading', { name: 'Commerce', exact: true })).toBeVisible();
+  const graph = page.getByRole('region', { name: 'Tessiven service canvas', exact: true });
+  await expect.element(graph).toBeVisible();
+  const graphElement = graph.element();
+  expect(getComputedStyle(graphElement).userSelect).toBe('none');
+  const selectStart = new Event('selectstart', { bubbles: true, cancelable: true });
+  expect(graphElement.dispatchEvent(selectStart)).toBe(false);
+  expect(window.getSelection()?.toString() ?? '').toBe('');
 });
