@@ -2,6 +2,7 @@ import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type {
+  Binding,
   Instance,
   TessivenText,
   TessivenTransport,
@@ -18,6 +19,7 @@ type Operation = {
 type Inspection = {
   name: string;
   runtime_ref: string;
+  binding?: Binding;
   state: string;
   observed_at: string;
   identity: string;

@@ -3913,28 +3913,39 @@ func prependRedevenBinToEnv(baseEnv []string) []string {
 		envMap[key] = val
 	}
 
-	home := strings.TrimSpace(envMap["HOME"])
-	if home == "" {
-		if h, err := os.UserHomeDir(); err == nil {
-			home = strings.TrimSpace(h)
+	redevenBin := ""
+	preferBundledCLI := false
+	if cliPath := strings.TrimSpace(envMap["REDEVEN_CLI_PATH"]); cliPath != "" {
+		redevenBin = filepath.Dir(cliPath)
+		preferBundledCLI = true
+	} else {
+		home := strings.TrimSpace(envMap["HOME"])
+		if home == "" {
+			if h, err := os.UserHomeDir(); err == nil {
+				home = strings.TrimSpace(h)
+			}
+		}
+		if home != "" {
+			redevenBin = filepath.Join(home, ".redeven", "bin")
 		}
 	}
-	if home != "" {
-		redevenBin := filepath.Join(home, ".redeven", "bin")
+	if redevenBin != "" {
 		pathVal := strings.TrimSpace(envMap["PATH"])
 		parts := strings.Split(pathVal, string(os.PathListSeparator))
+		filteredParts := make([]string, 0, len(parts)+1)
 		hasRedevenBin := false
 		for _, part := range parts {
 			if filepath.Clean(strings.TrimSpace(part)) == filepath.Clean(redevenBin) {
 				hasRedevenBin = true
-				break
+				continue
 			}
+			filteredParts = append(filteredParts, part)
 		}
-		if !hasRedevenBin {
-			if pathVal == "" {
+		if preferBundledCLI || !hasRedevenBin {
+			if len(filteredParts) == 0 || (len(filteredParts) == 1 && filteredParts[0] == "") {
 				envMap["PATH"] = redevenBin
 			} else {
-				envMap["PATH"] = redevenBin + string(os.PathListSeparator) + pathVal
+				envMap["PATH"] = redevenBin + string(os.PathListSeparator) + strings.Join(filteredParts, string(os.PathListSeparator))
 			}
 			if _, ok := envMap["PATH"]; ok {
 				found := false

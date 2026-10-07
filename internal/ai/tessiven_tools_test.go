@@ -53,6 +53,29 @@ func TestTessivenToolCanvasLifecycleWithoutModel(t *testing.T) {
 		t.Fatal("unrelated field accepted")
 	}
 }
+
+func TestTessivenInspectReturnsStructuredUnavailableForDescriptiveRuntime(t *testing.T) {
+	library, err := tessiven.Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	r := &run{host: runHostCapabilities{
+		tessiven:          library,
+		tessivenResources: &tessiven.ResourceBackend{},
+	}}
+	result, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.inspect", map[string]any{
+		"runtime_ref": "demo:application",
+		"action":      "list",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inspection := result.(tessiven.ResourceResult).Inspection
+	if inspection == nil || inspection.RuntimeRef != "demo:application" || inspection.State != "unavailable" || inspection.Binding != nil {
+		t.Fatalf("descriptive runtime was not represented safely: %+v", result)
+	}
+}
 func TestTessivenContextPreservesHistoryAndBoundedReferenceParts(t *testing.T) {
 	library, err := tessiven.Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
 	if err != nil {

@@ -35,7 +35,7 @@ type ResourceRequest struct {
 }
 type ResourceInspection struct {
 	RuntimeRef string   `json:"runtime_ref"`
-	Binding    Binding  `json:"binding"`
+	Binding    *Binding `json:"binding,omitempty"`
 	Name       string   `json:"name"`
 	State      string   `json:"state"`
 	ObservedAt string   `json:"observed_at"`
@@ -121,13 +121,42 @@ func (b *ResourceBackend) Execute(ctx context.Context, meta *session.Meta, req R
 	if req.RuntimeRef != "local:local" {
 		if b.Remote == nil {
 			if b.Broker != nil {
-				return b.Broker.Execute(ctx, meta, req)
+				result, err := b.Broker.Execute(ctx, meta, req)
+				return unavailableReadResultIfNeeded(req, result, err)
 			}
-			return ResourceResult{}, ErrTargetUnavailable
+			return unavailableReadResultIfNeeded(req, ResourceResult{}, ErrTargetUnavailable)
 		}
-		return b.Remote(ctx, meta, req)
+		result, err := b.Remote(ctx, meta, req)
+		return unavailableReadResultIfNeeded(req, result, err)
 	}
 	return b.ExecuteLocal(ctx, meta, req)
+}
+
+func unavailableReadResult(req ResourceRequest) ResourceResult {
+	return ResourceResult{
+		RuntimeRef: req.RuntimeRef,
+		Inspection: &ResourceInspection{
+			RuntimeRef: req.RuntimeRef,
+			State:      "unavailable",
+			ObservedAt: time.Now().UTC().Format(time.RFC3339Nano),
+			Actions:    []string{},
+		},
+	}
+}
+
+func unavailableReadResultIfNeeded(req ResourceRequest, result ResourceResult, err error) (ResourceResult, error) {
+	if err != nil && !isResourceMutation(req.Action) && isTargetUnavailable(err) {
+		return unavailableReadResult(req), nil
+	}
+	return result, err
+}
+
+func isTargetUnavailable(err error) bool {
+	if errors.Is(err, ErrTargetUnavailable) {
+		return true
+	}
+	var resourceErr *ResourceError
+	return errors.As(err, &resourceErr) && resourceErr.Code == "TESSIVEN_TARGET_UNAVAILABLE"
 }
 
 // ExecuteLocal is used after the target connection has been selected and
@@ -183,6 +212,9 @@ func (b *ResourceBackend) ExecuteLocal(ctx context.Context, meta *session.Meta, 
 		return out, nil
 	}
 	if req.Binding == nil {
+		if req.Action == "inspect" {
+			return unavailableReadResult(req), nil
+		}
 		return out, ErrOperationUnavailable
 	}
 	binding := *req.Binding
@@ -218,7 +250,7 @@ func (b *ResourceBackend) ExecuteLocal(ctx context.Context, meta *session.Meta, 
 		if detail.ContainerID != binding.ResourceID {
 			return out, ErrResourceChanged
 		}
-		inspection = ResourceInspection{RuntimeRef: req.RuntimeRef, Binding: binding, Name: detail.Name, State: string(detail.State), ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Identity: fmt.Sprintf("%s:%d", detail.ContainerID, detail.CreatedAtUnixMs), Actions: []string{"inspect", "logs"}}
+		inspection = ResourceInspection{RuntimeRef: req.RuntimeRef, Binding: &binding, Name: detail.Name, State: string(detail.State), ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Identity: fmt.Sprintf("%s:%d", detail.ContainerID, detail.CreatedAtUnixMs), Actions: []string{"inspect", "logs"}}
 		if !detail.Management.Managed {
 			inspection.Actions = append(inspection.Actions, "start", "stop", "restart")
 		}
@@ -317,7 +349,7 @@ func inspectManaged(runtime string, service managedwebservice.ServiceView) Resou
 			actions = append(actions, item.name)
 		}
 	}
-	return ResourceInspection{RuntimeRef: runtime, Binding: Binding{Owner: "managed_service", ResourceID: service.ServiceID, Identity: identity}, Identity: identity, Name: service.Name, State: service.Status, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Actions: actions, Operation: service.ActiveOperation}
+	return ResourceInspection{RuntimeRef: runtime, Binding: &Binding{Owner: "managed_service", ResourceID: service.ServiceID, Identity: identity}, Identity: identity, Name: service.Name, State: service.Status, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Actions: actions, Operation: service.ActiveOperation}
 }
 
 // ResourceError preserves a classified manager refusal across the host bridge.

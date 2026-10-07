@@ -19,6 +19,10 @@ outcome, so the user must inspect the original manager before trying again.
 - Tessiven tools read the canonical schema, list/read/validate versions, save a
   complete new version, inspect explicit targets, and execute one exact bound
   instance when the existing permission and approval checks allow it.
+- Read-only inspection of a missing, non-current, or unauthorized Runtime
+  returns structured `unavailable` state without a binding. Descriptive canvas
+  references remain unbound and are never treated as connection handles;
+  mutation requests against them remain blocked.
 - A selected canvas is the update target, including a newly created empty
   canvas. Flower creates another canvas only when the user requests one.
   Renaming and restoring content use read/validate/save against the latest
@@ -48,9 +52,10 @@ outcome, so the user must inspect the original manager before trying again.
 
 Flower and the UI call the same Tessiven service; neither writes its database
 directly. Runtime and resource references identify targets without granting
-permission. Remote requests require an existing authorized Desktop placement
-connection exposing Runtime control. A target without that connection remains
-unavailable; Tessiven never connects implicitly or substitutes a local target.
+permission or creating a connection. Remote requests require an existing
+authorized Desktop placement connection exposing Runtime control. A target
+without that connection remains unavailable in read-only results and cannot be
+mutated; Tessiven never connects implicitly or substitutes a local target.
 Managed Services and Containers retain execution and progress ownership.
 External and unmanaged resources support inspection and explanation only.
 

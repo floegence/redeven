@@ -22,13 +22,23 @@ inference evidence do not describe connected infrastructure. When asked to map
 real services, inspect actual targets and replace example content; never attach
 real management bindings to fictional identities.
 
+Runtime references in a canvas are data, not connection handles. Use
+`local:local` for the current Runtime and use another reference only when it
+comes from an explicitly connected, authorized target. Descriptive references
+such as `demo:application` are not inspectable targets: do not create a
+connection, call a lifecycle action, or infer a live resource for them. Keep
+such nodes unbound; an explicitly requested observation may be recorded as
+`unknown` or `unavailable` with matching evidence.
+
 - Read `tessiven.schema` for the authoritative field definitions. For updates,
   read the requested canvas/version with `tessiven.read`; preserve stable IDs,
   user names, evidence, and intentional presentation choices.
 - Inspect code and configuration with available file tools. Use
-  `tessiven.inspect` with an explicit `runtime_ref` to obtain actual management
-  bindings. A remote failure must remain a remote failure; never substitute a
-  local inventory, infer identity from a process name, or create a connection.
+  `tessiven.inspect` with an explicit valid `runtime_ref` to obtain actual
+  management bindings. A remote failure must remain a remote failure; never
+  substitute a local inventory, infer identity from a process name, or create a
+  connection. A missing or non-current read-only target is unavailable, not a
+  managed resource; mutations must remain blocked.
 - Separate logical services from concrete instances. Roles belong to instances;
   shard identity is separate. Groups are visual membership, not runtime entities.
   Databases and caches may be hosted instances or external resources.
