@@ -100,10 +100,16 @@ func TestRemoteResourceNeverFallsBackToLocal(t *testing.T) {
 	backend := &ResourceBackend{Library: s, Managed: manager}
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
 	req := ResourceRequest{CanvasID: first.Canvas.ID, VersionID: 1, InstanceID: "orders-01", RuntimeRef: "local:local", Action: "inspect"}
+	result, err := backend.Execute(t.Context(), meta, req)
+	if err != nil || result.RuntimeRef != "ssh:actual-target" || result.Inspection == nil || result.Inspection.State != "unavailable" || result.Inspection.Binding != nil {
+		t.Fatalf("missing remote was not represented as unavailable: result=%+v err=%v", result, err)
+	}
+	req.Action = "start"
 	if _, err := backend.Execute(t.Context(), meta, req); !errors.Is(err, ErrTargetUnavailable) {
-		t.Fatalf("missing remote: %v", err)
+		t.Fatalf("missing remote mutation did not remain unavailable: %v", err)
 	}
 	called := false
+	req.Action = "inspect"
 	backend.Remote = func(_ context.Context, got *session.Meta, request ResourceRequest) (ResourceResult, error) {
 		called = true
 		if request.RuntimeRef != "ssh:actual-target" || request.Binding.ResourceID != "example-service-id" || got != meta {
@@ -116,6 +122,34 @@ func TestRemoteResourceNeverFallsBackToLocal(t *testing.T) {
 	}
 	if manager.calls != 0 {
 		t.Fatal("remote executed locally")
+	}
+}
+
+func TestUnboundLocalInstanceReturnsUnavailableWithoutBinding(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	document := strings.Replace(exampleDocument, "binding: {owner: managed_service, resourceId: example-service-id}", "", 1)
+	first, err := s.Save(t.Context(), SaveRequest{RequestID: "unbound", DocumentYAML: document}, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &ResourceBackend{Library: s, Managed: &managedFixture{}}
+	result, err := backend.Execute(t.Context(), &session.Meta{CanRead: true}, ResourceRequest{CanvasID: first.Canvas.ID, VersionID: 1, InstanceID: "orders-01", Action: "inspect"})
+	if err != nil || result.Inspection == nil || result.Inspection.State != "unavailable" || result.Inspection.Binding != nil {
+		t.Fatalf("unbound instance was treated as managed: result=%+v err=%v", result, err)
+	}
+}
+
+func TestRemoteUnavailableErrorIsStructuredForReadOnlyRequests(t *testing.T) {
+	backend := &ResourceBackend{Remote: func(context.Context, *session.Meta, ResourceRequest) (ResourceResult, error) {
+		return ResourceResult{}, &ResourceError{Code: "TESSIVEN_TARGET_UNAVAILABLE", Message: "target unavailable", Status: 409}
+	}}
+	result, err := backend.Execute(t.Context(), &session.Meta{CanRead: true}, ResourceRequest{RuntimeRef: "ssh:missing", Action: "list"})
+	if err != nil || result.Inspection == nil || result.Inspection.State != "unavailable" || result.Inspection.Binding != nil {
+		t.Fatalf("remote unavailable error was not structured: result=%+v err=%v", result, err)
 	}
 }
 func TestSelectionReadsImmutableVersionAndRejectsMissingObject(t *testing.T) {

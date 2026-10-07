@@ -155,6 +155,9 @@ func (b *Broker) Execute(ctx context.Context, meta *session.Meta, req ResourceRe
 			if response.Code == "TESSIVEN_OUTCOME_UNKNOWN" {
 				return ResourceResult{}, ErrOutcomeUnknown
 			}
+			if response.Code == "TESSIVEN_TARGET_UNAVAILABLE" {
+				return ResourceResult{}, ErrTargetUnavailable
+			}
 			if response.Status >= 400 && response.Status < 500 && response.Code != "" {
 				return ResourceResult{}, &ResourceError{Code: response.Code, Message: response.Error, Status: response.Status}
 			}

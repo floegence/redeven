@@ -18,7 +18,9 @@ failed validation or version conflict leaves the last saved document intact.
 - A canvas document contains stable IDs for Runtime nodes, visual groups,
   business services, instances, external resources, relations, and evidence.
 - Groups are visual membership only. Instance bindings and Runtime references
-  are data references and do not grant permission or create a connection.
+  are data references and do not grant permission or create a connection. A
+  descriptive or unavailable Runtime remains unbound and may only carry an
+  explicit `unknown` or `unavailable` observation.
 - Relations require evidence and may form cycles. Missing observations remain
   explicitly unknown.
 - The schema accepts data and presentation hints only. It does not accept

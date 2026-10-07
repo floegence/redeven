@@ -105,3 +105,20 @@ func TestBrokerNeverReconnectsOrRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBrokerMapsUnavailableTargetResponse(t *testing.T) {
+	broker, ws := connectedBroker(t)
+	go func() {
+		var message struct {
+			ID string `json:"id"`
+		}
+		if err := ws.ReadJSON(&message); err != nil {
+			return
+		}
+		_ = ws.WriteJSON(brokerResponse{ID: message.ID, Error: "target unavailable", Code: "TESSIVEN_TARGET_UNAVAILABLE", Status: 409})
+	}()
+	_, err := broker.Execute(t.Context(), &session.Meta{CanRead: true}, ResourceRequest{RuntimeRef: "demo:application", Action: "inspect"})
+	if !errors.Is(err, ErrTargetUnavailable) {
+		t.Fatalf("target unavailable response was not classified: %v", err)
+	}
+}
