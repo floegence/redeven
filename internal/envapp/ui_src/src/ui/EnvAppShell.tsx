@@ -35,7 +35,7 @@ import {
   Terminal,
   X,
 } from '@floegence/floe-webapp-core/icons';
-import type { WorkbenchCanvasWidgetPlacement, WorkbenchExternalDockDragController, WorkbenchHostDockItem } from '@floegence/floe-webapp-core/workbench';
+import type { WorkbenchCanvasWidgetPlacement, WorkbenchDockAction, WorkbenchExternalDockDragController, WorkbenchHostDockItem } from '@floegence/floe-webapp-core/workbench';
 import {
   ActivityBarCodespacesIcon,
   ActivityBarContainersIcon,
@@ -250,6 +250,7 @@ import {
 import {
   ENV_DEFAULT_SURFACE_ID,
   ENV_TESSIVEN_ACTIVITY_ID,
+  ENV_TESSIVEN_STANDALONE_WINDOW,
   isEnvSurfaceId,
   normalizePersistedEnvViewMode,
   type EnvOpenSurfaceOptions,
@@ -518,11 +519,12 @@ function EnvDisplayModeSwitcher(props: {
   );
 }
 
-export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
+export function EnvAppShell(props: { navigation?: ActivityNavigation; standaloneTessiven?: boolean } = {}) {
   const desktopBootstrapReadyMs = Math.max(0, envAppNowMs() - envAppModuleStartedAtMs);
   const layout = useLayout();
   const navigation = props.navigation ?? createActivityNavigation();
   const initialTessivenSurface = new URLSearchParams(window.location.search).get('surface') === ENV_TESSIVEN_ACTIVITY_ID;
+  const standaloneTessiven = props.standaloneTessiven === true;
   const initialSurface = initialTessivenSurface ? ENV_TESSIVEN_ACTIVITY_ID : activityTargetID(navigation.initial);
   const initialRegularSurface = isEnvSurfaceId(initialSurface) ? initialSurface : ENV_DEFAULT_SURFACE_ID;
   if (layout.sidebarActiveTab() !== initialSurface) layout.setSidebarActiveTab(initialSurface, { openSidebar: false });
@@ -1262,19 +1264,27 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         ).catch(reportPluginNavigationFailure),
       } : undefined,
     })));
-  const workbenchDockItems = createMemo<readonly WorkbenchHostDockItem[]>(() => {
-    const items = [...pluginDockItems()];
+  const workbenchDockActions = createMemo<readonly WorkbenchDockAction[]>(() => {
+    const actions: WorkbenchDockAction[] = [{
+      id: 'plugins',
+      label: i18n.t('uiCopy.plugin.panelTitle'),
+      icon: PluginsWorkbenchIcon,
+      active: pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench',
+      onActivate: (trigger) => {
+        const nextOpen = !(pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench');
+        updatePluginPanel({ open: nextOpen, trigger, placement: 'workbench' });
+      },
+    }];
     if (isLocalMode()) {
-      items.push({
+      actions.push({
         id: ENV_TESSIVEN_ACTIVITY_ID,
         label: tessivenCopy()('canvasLabel'),
         icon: TessivenNavigationIcon,
-        dockPlacement: 'after-components',
         active: false,
         onActivate: () => openTessivenWindow(),
       });
     }
-    return items;
+    return actions;
   });
   const [pluginCenterSelectedInventoryKey, setPluginCenterSelectedInventoryKey] = createSignal<string | undefined>();
   const [pluginCenterFocusRequest, setPluginCenterFocusRequest] = createSignal(0);
@@ -3966,6 +3976,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     const url = new URL(window.location.href);
     url.hash = '';
     url.searchParams.set('surface', ENV_TESSIVEN_ACTIVITY_ID);
+    url.searchParams.set('window', ENV_TESSIVEN_STANDALONE_WINDOW);
     url.searchParams.delete('canvas');
     url.searchParams.delete('version');
     if (request) {
@@ -5193,18 +5204,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         <Show when={activityContentAvailable()}>
           <EnvWorkbenchPage
             inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
-            dockItems={workbenchDockItems()}
+            dockItems={pluginDockItems()}
             registerExternalDockDragController={setExternalDockDragController}
-            dockActions={[{
-              id: 'plugins',
-              label: i18n.t('uiCopy.plugin.panelTitle'),
-              icon: PluginsWorkbenchIcon,
-              active: pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench',
-              onActivate: (trigger) => {
-                const nextOpen = !(pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench');
-                updatePluginPanel({ open: nextOpen, trigger, placement: 'workbench' });
-              },
-            }]}
+            dockActions={workbenchDockActions()}
             pluginSurfaceHost={{
               coordinator: pluginSurfaceCoordinator,
               confirmationQueue: pluginConfirmationQueue,
@@ -5250,6 +5252,26 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const mobilePluginModalOpen = () => (
     layout.isMobile() && viewMode() === 'activity' && activityPluginWindows().length > 0
+  );
+
+  const renderStandaloneTessiven = () => (
+    <div
+      class="h-full min-h-0"
+      data-env-service-canvas-window
+      data-env-service-canvas-ready={activityContentAvailable() ? 'true' : 'false'}
+    >
+      <Show when={activityContentAvailable()} fallback={(
+        <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>
+          {renderActivityPageLoading(ENV_TESSIVEN_ACTIVITY_ID)}
+        </Show>
+      )}>
+        <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
+          <Suspense fallback={<ActivityPageLoading />}>
+            <EnvTessivenPage openRequest={tessivenOpenRequest()} visible />
+          </Suspense>
+        </ErrorBoundary>
+      </Show>
+    </div>
   );
 
   const renderMainShell = () => (
@@ -5402,7 +5424,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         consumeAIThreadFocusRequest,
       }}
     >
-      {renderPluginPanel()}
+      <Show when={!standaloneTessiven}>
+        {renderPluginPanel()}
+      </Show>
       <PluginPinContextMenu
         request={pluginPinMenu()?.request ?? null}
         ariaLabel={i18n.t('uiCopy.plugin.pluginMenuLabel', {
@@ -5446,7 +5470,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
                   </div></section>
                 )}>
                   <div class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
-                    {renderMainShell()}
+                    {standaloneTessiven ? renderStandaloneTessiven() : renderMainShell()}
                   </div>
                 </Show>
                 <Show when={restartPreparing()}>

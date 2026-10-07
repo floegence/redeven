@@ -54,9 +54,10 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 
 - Env App exposes Service Canvas as the last Activity entry. Activity navigation
   keeps the regular shell and sidebar mounted; the header has no duplicate
-  canvas shortcut. In Workbench, the Service Canvas Dock item follows pinned
-  plugin applications and opens a separate Activity window instead of creating
-  a Workbench widget.
+  canvas shortcut. In Workbench, the Service Canvas action sits immediately to
+  the right of the Plugin Center action and opens a dedicated Service Canvas
+  window. That window renders only the canvas surface and its own controls; it
+  does not mount the Activity or Workbench shell, navigation, or Env App frame.
 
 - Up to 15 Runtime nodes in a group are shown individually. Larger groups use
   a name or ordinal selector and render only the selected node's details.
