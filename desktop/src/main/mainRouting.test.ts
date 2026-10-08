@@ -659,7 +659,14 @@ describe('main routing', () => {
     expect(diagnosisStart).toBeGreaterThanOrEqual(0);
     expect(diagnosisEnd).toBeGreaterThan(diagnosisStart);
     const diagnosisSrc = mainSrc.slice(diagnosisStart, diagnosisEnd);
-    const protocolStart = diagnosisSrc.indexOf("error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED'");
+    const upgradeStart = diagnosisSrc.indexOf("error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED'");
+    const upgradeEnd = diagnosisSrc.indexOf('gatewayTrustErrorNeedsReinstall(error)', upgradeStart);
+    const upgradeSrc = diagnosisSrc.slice(upgradeStart, upgradeEnd);
+    expect(upgradeStart).toBeGreaterThanOrEqual(0);
+    expect(upgradeEnd).toBeGreaterThan(upgradeStart);
+    expect(upgradeSrc).toContain("classification: 'needs_update'");
+    expect(upgradeSrc).not.toContain("classification: manageable ? 'needs_reinstall'");
+    const protocolStart = diagnosisSrc.indexOf("error.code === 'GATEWAY_INVALID_RESPONSE'");
     const protocolEnd = diagnosisSrc.indexOf('classification: manageable && serviceState?.status', protocolStart);
     expect(protocolStart).toBeGreaterThanOrEqual(0);
     expect(protocolEnd).toBeGreaterThan(protocolStart);
