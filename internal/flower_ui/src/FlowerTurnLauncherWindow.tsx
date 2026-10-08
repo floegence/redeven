@@ -10,6 +10,7 @@ import type {
 import { createFlowerClientRequestID } from './flowerRequestIdentity';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { flowerTurnAdmissionFailureKind } from './flowerTurnAdmission';
+import { FlowerComposerContextReference, FlowerComposerContextReferences } from './composer/FlowerComposerContextReferences';
 import {
   DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY,
   buildFlowerTurnLauncherCopy,
@@ -182,28 +183,6 @@ function actionIcon(action: FlowerTurnLauncherContextAction) {
   if (action.type === 'open_directory_browser') return <Folder class="size-3.5" />;
   if (action.type === 'open_process_snapshot_preview') return <Activity class="size-3.5" />;
   return <FileText class="size-3.5" />;
-}
-
-function entryButtonClass(entry: FlowerTurnLauncherContextChip): string {
-  if (entry.tone === 'environment') {
-    return 'border-[color-mix(in_srgb,var(--redeven-categorical-7)_24%,var(--border))] bg-[color-mix(in_srgb,var(--redeven-categorical-7)_10%,transparent)] text-[var(--redeven-categorical-7)] hover:border-[var(--redeven-categorical-7)] hover:bg-[color-mix(in_srgb,var(--redeven-categorical-7)_16%,transparent)]';
-  }
-  if (entry.tone === 'process') {
-    return 'border-[color-mix(in_srgb,var(--redeven-categorical-8)_24%,var(--border))] bg-[color-mix(in_srgb,var(--redeven-categorical-8)_10%,transparent)] text-[var(--redeven-categorical-8)] hover:border-[var(--redeven-categorical-8)] hover:bg-[color-mix(in_srgb,var(--redeven-categorical-8)_16%,transparent)]';
-  }
-  if (entry.tone === 'selection' || entry.tone === 'terminal') {
-    return 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] text-[var(--redeven-status-success-foreground)] hover:border-[var(--redeven-status-success)] hover:bg-[color-mix(in_srgb,var(--redeven-status-success)_16%,transparent)]';
-  }
-  if (entry.tone === 'snapshot') {
-    return 'border-[color-mix(in_srgb,var(--redeven-categorical-6)_24%,var(--border))] bg-[color-mix(in_srgb,var(--redeven-categorical-6)_10%,transparent)] text-[var(--redeven-categorical-6)] hover:border-[var(--redeven-categorical-6)] hover:bg-[color-mix(in_srgb,var(--redeven-categorical-6)_16%,transparent)]';
-  }
-  if (entry.tone === 'attachment') {
-    return 'border-[var(--redeven-status-info-border)] bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)] hover:border-[var(--redeven-status-info)] hover:bg-[color-mix(in_srgb,var(--redeven-status-info)_16%,transparent)]';
-  }
-  if (entry.tone === 'directory') {
-    return 'border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)] hover:border-[var(--redeven-status-warning)] hover:bg-[color-mix(in_srgb,var(--redeven-status-warning)_16%,transparent)]';
-  }
-  return 'border-primary/20 bg-primary/10 text-primary hover:border-primary/35 hover:bg-primary/16';
 }
 
 function secondaryActionLabel(action: FlowerTurnLauncherContextAction): string {
@@ -424,60 +403,6 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                     <div class="flower-turn-launcher-message-surface min-w-0 rounded-[1.05rem] rounded-tl-md px-2.5 py-2 shadow-[0_14px_28px_-28px_color-mix(in_srgb,var(--foreground)_34%,transparent)] backdrop-blur sm:px-3 sm:py-2.5">
                       <div class="flower-body-copy leading-5 text-foreground/95">{projected()?.question}</div>
 
-                      <Show when={(projected()?.context_entries.length ?? 0) > 0}>
-                        <div class="mt-2 border-t border-border/50 pt-2">
-                          <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/65">
-                            {copyValue(props.copy, 'linked_context_label')}
-                          </div>
-                          <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                            <For each={projected()?.context_entries ?? []}>
-                              {(entry) => (
-                                <div class="flex min-w-0 items-stretch">
-                                  <button
-                                    type="button"
-                                    class={`flex min-w-0 flex-1 items-start gap-2 border px-2 py-1.5 text-left text-[11px] font-medium transition-colors ${
-                                      entry.secondary_actions.length > 0 ? 'rounded-l-[0.95rem] rounded-r-none' : 'rounded-[0.95rem]'
-                                    } ${
-                                      entry.primary_action
-                                        ? (sending() ? 'cursor-not-allowed' : 'cursor-pointer')
-                                        : 'cursor-default'
-                                    } ${entryButtonClass(entry)}`}
-                                    title={entry.title}
-                                    disabled={!entry.primary_action || sending()}
-                                    onClick={() => runContextAction(entry.primary_action, entry)}
-                                  >
-                                    <span class="mt-0.5 shrink-0">{entryIcon(entry)}</span>
-                                    <span class="min-w-0 flex-1">
-                                      <span class="block truncate leading-4">{entry.label}</span>
-                                      <span class="mt-0.5 block truncate font-mono text-[11px] leading-4 opacity-75">{entry.detail}</span>
-                                    </span>
-                                  </button>
-                                  <For each={entry.secondary_actions}>
-                                    {(action, index) => {
-                                      const label = secondaryActionLabel(action);
-                                      return (
-                                        <button
-                                          type="button"
-                                          class={`-ml-px flex w-9 shrink-0 items-center justify-center border px-0 py-1.5 transition-colors ${
-                                            index() === entry.secondary_actions.length - 1 ? 'rounded-l-none rounded-r-[0.95rem]' : 'rounded-none'
-                                          } ${sending() ? 'cursor-not-allowed' : 'cursor-pointer'} ${entryButtonClass(entry)}`}
-                                          aria-label={label}
-                                          title={label}
-                                          disabled={sending()}
-                                          onClick={() => runContextAction(action, entry)}
-                                        >
-                                          {actionIcon(action)}
-                                        </button>
-                                      );
-                                    }}
-                                  </For>
-                                </div>
-                              )}
-                            </For>
-                          </div>
-                        </div>
-                      </Show>
-
                       <Show when={(intent.notes?.length ?? 0) > 0}>
                         <div class="mt-1.5 space-y-1">
                           <For each={(intent.notes ?? []).map(compact).filter(Boolean)}>
@@ -514,6 +439,22 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                         </div>
 
                         <div data-floe-input-surface data-testid="flower-turn-launcher-editor-shell" class="flower-turn-launcher-editor-shell">
+                          <Show when={(projected()?.context_entries.length ?? 0) > 0}>
+                            <FlowerComposerContextReferences label={copyValue(props.copy, 'linked_context_label')}
+                              localScrollProps={props.localScrollProps}>
+                              <For each={projected()?.context_entries ?? []}>{entry => (
+                                <FlowerComposerContextReference label={entry.tone === 'selection' ? entry.detail : entry.label}
+                                  title={`${entry.title}${entry.detail ? `\n${entry.detail}` : ''}`}
+                                  icon={entryIcon(entry)} disabled={sending()}
+                                  onPreview={entry.primary_action ? () => runContextAction(entry.primary_action, entry) : undefined}
+                                  actions={<For each={entry.secondary_actions}>{action => (
+                                    <button type="button" class="flower-composer-context-action"
+                                      aria-label={secondaryActionLabel(action)} title={secondaryActionLabel(action)}
+                                      disabled={sending()} onClick={() => runContextAction(action, entry)}>{actionIcon(action)}</button>
+                                  )}</For>} />
+                              )}</For>
+                            </FlowerComposerContextReferences>
+                          </Show>
                           <textarea
                             ref={setTextareaEl}
                             id={`flower-turn-launcher-prompt-${intent.id}`}

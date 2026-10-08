@@ -3,7 +3,7 @@ type: UI Contract
 title: Ask Flower window boundaries
 description: Keep contextual Ask Flower controls below host headers without maximizing the launcher.
 tags: [ui, flower, floating-windows, desktop]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -38,9 +38,11 @@ capabilities. The launcher titlebar retains its close control.
 
 Default, minimum, maximum, and anchored geometry use the same available viewport.
 When it cannot accommodate the preferred size, the window shrinks within that
-viewport. Context scrolls inside its existing constrained region and the composer
-stays docked at the bottom. Header changes and display-mode changes preserve the
-current DOM, draft, and submission identity. Send, dismissal, and thread handoff
+viewport. Linked context uses the compact quoted rows defined by
+[Flower composer references](flower-composer-references.md) inside the input's
+bounded scroll region, and the composer stays docked at the bottom. Header changes
+and display-mode changes preserve the current DOM, draft, and submission identity.
+Send, dismissal, and thread handoff
 continue to follow the [Flower command contract](flower-turn-launcher.md) and
 [Activity companion placement](flower-activity-companion.md).
 

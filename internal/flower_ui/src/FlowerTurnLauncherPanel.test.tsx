@@ -39,7 +39,7 @@ beforeEach(() => {
   document.body.append(host);
   animationFrameCallbacks = [];
   vi.stubGlobal('crypto', {
-    randomUUID: vi.fn(() => '00000000-0000-4000-8000-000000000001'),
+    getRandomValues: (values: Uint8Array) => { values.fill(0); values[15] = 1; return values; },
   });
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     animationFrameCallbacks.push(callback);
@@ -79,10 +79,13 @@ describe('FlowerTurnLauncherPanel', () => {
 
     expect(host.textContent).toContain('What should we focus on?');
     expect(host.textContent).toContain('main.go');
-    expect(host.textContent).toContain('/workspace/redeven/main.go');
+    expect(host.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('/workspace/redeven/main.go');
     expect(host.textContent).toContain('The file is linked as live context.');
     expect(host.textContent).toContain('/workspace/redeven');
     expect(host.querySelector('[data-floe-geometry-surface="floating-window"]')).toBeNull();
+    const input = host.querySelector('[data-testid="flower-turn-launcher-editor-shell"]')!;
+    expect(input.querySelector('.flower-composer-context-references')?.textContent).toContain('main.go');
+    expect(host.querySelector('.flower-turn-launcher-message-surface')?.textContent).not.toContain('main.go');
 
     const contextButton = host.querySelector('button[title*="/workspace/redeven/main.go"]') as HTMLButtonElement;
     contextButton.click();
@@ -95,6 +98,26 @@ describe('FlowerTurnLauncherPanel', () => {
       .find((button) => button.textContent?.trim() === 'Close') as HTMLButtonElement;
     closeButton.click();
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps selected text and its live-file action together inside the composer', () => {
+    const { onContextAction } = renderPanel({ intent: {
+      ...intent,
+      context_items: [{ kind: 'file_selection', path: '/workspace/redeven/main.go', selection: 'func main() {}', selection_chars: 14 }],
+    } });
+    const input = host.querySelector('[data-testid="flower-turn-launcher-editor-shell"]')!;
+    const buttons = Array.from(input.querySelectorAll<HTMLButtonElement>('.flower-composer-context-reference button'));
+    expect(buttons).toHaveLength(2);
+    buttons[0].click();
+    expect(onContextAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'open_text_context_preview', body: 'func main() {}' }),
+      expect.objectContaining({ tone: 'selection' }),
+    );
+    buttons[1].click();
+    expect(onContextAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'open_live_file_preview', path: '/workspace/redeven/main.go' }),
+      expect.objectContaining({ tone: 'selection' }),
+    );
   });
 
   it('submits a trimmed prompt and keeps launcher actions disabled until submission settles', async () => {
