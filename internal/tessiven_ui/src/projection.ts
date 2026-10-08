@@ -23,13 +23,16 @@ export type Card =
       selectedNode?: string;
       instances: Instance[];
     }
-  | { kind: 'node'; node: CanvasNode; instances: Instance[] }
+  | { kind: 'node'; node: CanvasNode; instances: Instance[]; group?: Group; groupInstances: Instance[] }
   | { kind: 'resource'; resource: Resource }
   | { kind: 'service'; service: BusinessService; instanceCount: number };
 export type Projection = {
   graph: GraphInput;
   cards: Map<string, Card>;
   relations: Map<string, Relation[]>;
+  appearances: Map<string, string[]>;
+  memberships: Map<string, Group[]>;
+  instanceMemberships: Map<string, Group[]>;
 };
 
 // Rendering identities are derived from stable DSL IDs. Grouping never changes
@@ -42,8 +45,9 @@ export function projectCanvas(
   const nodes: GraphNode[] = [],
     cards = new Map<string, Card>(),
     relationGroups = new Map<string, Relation[]>();
-  const nodeOwners = new Map<string, string>(),
-    visibleHosts = new Set<string>();
+  const memberships = new Map<string, Group[]>(),
+    appearances = new Map<string, string[]>(),
+    instanceGroups = new Map<string, Group[]>();
   const hosts = new Map((document.nodes ?? []).map((node) => [node.id, node]));
   const instances = document.instances ?? [];
   const byNode = new Map<string, Instance[]>();
@@ -53,20 +57,44 @@ export function projectCanvas(
     list.push(instance);
     byNode.set(instance.nodeRef, list);
   }
-  const addHost = (node: CanvasNode, parentId?: string) => {
+  const groups = document.groups ?? [];
+  const groupInstances = new Map<string, Instance[]>();
+  for (const group of groups) {
+    for (const id of group.nodeRefs) {
+      const member = memberships.get(id) ?? [];
+      member.push(group);
+      memberships.set(id, member);
+    }
+    const members = group.instanceRefs
+      ? group.instanceRefs.flatMap(id => byID.has(id) ? [byID.get(id)!] : [])
+      : group.nodeRefs.flatMap(id => byNode.get(id) ?? []);
+    groupInstances.set(group.id, members);
+    for (const instance of members) {
+      const member = instanceGroups.get(instance.id) ?? [];
+      member.push(group);
+      instanceGroups.set(instance.id, member);
+    }
+  }
+  // DSL identities remain canonical. Only repeated host views need a distinct
+  // renderer ID; its separator cannot collide with a schema-valid object ID.
+  const viewID = (id: string, group?: Group) =>
+    group && (memberships.get(id)?.length ?? 0) > 1 ? `${group.id}::${id}` : id;
+  const addHost = (node: CanvasNode, group?: Group) => {
     const hosted = byNode.get(node.id) ?? [];
     const serviceCount = new Set(hosted.map((instance) => instance.serviceRef))
       .size;
     nodes.push({
-      id: node.id,
+      id: viewID(node.id, group),
       label: node.name,
-      parentId,
+      parentId: group?.id,
       width: 280,
-      height:
-        116 + Math.min(serviceCount, 12) * 49 + (serviceCount > 12 ? 32 : 0),
+      height: 116 + serviceCount * 49,
     });
-    cards.set(node.id, { kind: 'node', node, instances: hosted });
-    visibleHosts.add(node.id);
+    const id = viewID(node.id, group);
+    cards.set(id, { kind: 'node', node, instances: hosted, group, groupInstances: group ? groupInstances.get(group.id)! : [] });
+    const views = appearances.get(node.id) ?? [];
+    views.push(id);
+    appearances.set(node.id, views);
   };
   for (const group of document.groups ?? []) {
     const members = group.nodeRefs.flatMap((id) =>
@@ -82,9 +110,7 @@ export function projectCanvas(
     const selectedMembers = aggregated
       ? members.filter((node) => node.id === selectedNode)
       : members;
-    const groupedInstances = group.nodeRefs.flatMap(
-      (id) => byNode.get(id) ?? [],
-    );
+    const groupedInstances = groupInstances.get(group.id)!;
     const serviceIDs = new Set(
       groupedInstances.map((instance) => instance.serviceRef),
     );
@@ -104,11 +130,10 @@ export function projectCanvas(
       selectedNode,
       instances: groupedInstances,
     });
-    for (const node of members) nodeOwners.set(node.id, group.id);
-    if (open) for (const node of selectedMembers) addHost(node, group.id);
+    if (open) for (const node of selectedMembers) addHost(node, group);
   }
   for (const node of hosts.values())
-    if (!nodeOwners.has(node.id)) addHost(node);
+    if (!memberships.has(node.id)) addHost(node);
   for (const resource of document.resources ?? []) {
     nodes.push({
       id: resource.id,
@@ -120,15 +145,24 @@ export function projectCanvas(
   }
   const serviceTargets = new Map<string, Set<string>>();
   const serviceCounts = new Map<string, number>();
+  const instanceTargets = (instance: Instance, detailed: boolean): string[] => {
+    const owners = instanceGroups.get(instance.id) ?? [];
+    if (owners.length) return owners.map(group => {
+      const id = viewID(instance.nodeRef, group);
+      return detailed && cards.has(id) ? id : group.id;
+    });
+    const owner = memberships.get(instance.nodeRef)?.[0];
+    const view = appearances.get(instance.nodeRef)?.[0];
+    return [detailed && view ? view : owner?.id ?? instance.nodeRef];
+  };
   for (const instance of instances) {
     serviceCounts.set(
       instance.serviceRef,
       (serviceCounts.get(instance.serviceRef) ?? 0) + 1,
     );
-    const target = nodeOwners.get(instance.nodeRef) ?? instance.nodeRef;
     if (!serviceTargets.has(instance.serviceRef))
       serviceTargets.set(instance.serviceRef, new Set());
-    serviceTargets.get(instance.serviceRef)!.add(target);
+    for (const target of instanceTargets(instance, false)) serviceTargets.get(instance.serviceRef)!.add(target);
   }
   for (const service of document.services ?? [])
     if (
@@ -154,12 +188,12 @@ export function projectCanvas(
   const endpoints = (id: string): string[] => {
     if (serviceTargets.has(id)) return [...serviceTargets.get(id)!];
     const instance = byID.get(id);
-    if (instance)
-      return [
-        visibleHosts.has(instance.nodeRef)
-          ? instance.nodeRef
-          : (nodeOwners.get(instance.nodeRef) ?? instance.nodeRef),
-      ];
+    if (instance) return [...new Set(instanceTargets(instance, true))];
+    if (hosts.has(id) && memberships.has(id))
+      return memberships.get(id)!.map(group => {
+        const view = viewID(id, group);
+        return cards.has(view) ? view : group.id;
+      });
     return [id];
   };
   const edges: GraphEdge[] = [];
@@ -185,9 +219,23 @@ export function projectCanvas(
   );
   if (order.size)
     nodes.sort(
-      (a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity),
+      (a, b) => {
+        const rank = (id: string) => {
+          const card = cards.get(id);
+          return order.get(card?.kind === 'node' ? card.node.id : id) ?? Infinity;
+        };
+        return rank(a.id) - rank(b.id);
+      },
     );
-  return { graph: { nodes, edges }, cards, relations: relationGroups };
+  return { graph: { nodes, edges }, cards, relations: relationGroups, appearances, memberships, instanceMemberships: instanceGroups };
+}
+
+export function projectPositions(document: CanvasDocument, projection: Projection) {
+  const visible = new Set(projection.graph.nodes.map(node => node.id));
+  return (document.presentation?.positions ?? []).flatMap(position => {
+    const nodeId = projection.appearances.get(position.objectRef)?.[0] ?? position.objectRef;
+    return visible.has(nodeId) ? [{ nodeId, x: position.x, y: position.y }] : [];
+  });
 }
 
 export type Difference = {

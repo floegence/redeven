@@ -20,8 +20,9 @@ import {
   type GraphObjectRef,
 } from '@floegence/floe-webapp-core/graph';
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
 import '@floegence/floe-webapp-core/graph.css';
-import { projectCanvas } from './projection';
+import { projectCanvas, projectPositions } from './projection';
 import { TessivenIcon } from './TessivenIcon';
 import type {
   Instance,
@@ -73,6 +74,7 @@ export function TessivenGraph(props: {
     bounds: { x: 0, y: 0, width: 1, height: 1 },
   });
   const [selected, setSelected] = createSignal<GraphObjectRef | null>(null);
+  const [hovered, setHovered] = createSignal<GraphObjectRef | null>(null);
   const [popup, setPopup] = createSignal<{
     event: GraphObjectEvent;
     refs: string[];
@@ -99,16 +101,21 @@ export function TessivenGraph(props: {
   // Presentation positions are hints attached to the saved document. Only
   // objects that are currently rendered are sent to Floe; collapsed members
   // keep their saved pins in the document and are applied when expanded.
-  const positions = createMemo(() => {
-    const visible = new Set(projection().graph.nodes.map((node) => node.id));
-    return (props.version.document.presentation?.positions ?? [])
-      .filter((position) => visible.has(position.objectRef))
-      .map((position) => ({
-        nodeId: position.objectRef,
-        x: position.x,
-        y: position.y,
-      }));
+  const positions = createMemo(() => projectPositions(props.version.document, projection()));
+  const linkedNode = createMemo(() => {
+    const object = hovered() ?? selected();
+    const card = object?.kind === 'node' ? projection().cards.get(object.id) : undefined;
+    return card?.kind === 'node' ? card.node.id : undefined;
   });
+  const canonicalRef = (id: string) => {
+    const card = projection().cards.get(id);
+    return card?.kind === 'node' ? card.node.id : id;
+  };
+  const appearance = (nodeId: string, groupId?: string) =>
+    projection().appearances.get(nodeId)?.find(id => {
+      const card = projection().cards.get(id);
+      return card?.kind === 'node' && (!groupId || card.group?.id === groupId);
+    });
   const allObjects = createMemo(
     () =>
       new Map(
@@ -174,7 +181,8 @@ export function TessivenGraph(props: {
     void engine
       .layout(input, {
         direction: 'RIGHT',
-        spacing: 64,
+        aspectRatio: 1.6,
+        spacing: 32,
         groupPadding: { top: 108, right: 20, bottom: 20, left: 20 },
         positions: positions(),
         positionMode: 'preferred',
@@ -224,21 +232,22 @@ export function TessivenGraph(props: {
       (value) => value.id === endpoint || value.serviceRef === endpoint,
     );
     const nodeID = instance?.nodeRef ?? endpoint;
-    const group = document.groups?.find((value) =>
-      value.nodeRefs.includes(nodeID),
-    );
     untrack(() => {
+      const group = instance
+        ? projection().instanceMemberships.get(instance.id)?.[0]
+        : projection().memberships.get(nodeID)?.[0];
       if (group) {
         setExpanded((previous) => new Set([...previous, group.id]));
         setSelectedNodes((previous) => ({ ...previous, [group.id]: nodeID }));
       }
-      setSelected({ kind: 'node', id: nodeID });
-      pendingLocate = nodeID;
+      const viewID = appearance(nodeID, group?.id) ?? nodeID;
+      setSelected({ kind: 'node', id: viewID });
+      pendingLocate = viewID;
       centerSelection();
       const bounds = host!.getBoundingClientRect();
       show(
         {
-          object: { kind: 'node', id: nodeID },
+          object: { kind: 'node', id: viewID },
           owner: host!,
           position: { x: bounds.left + bounds.width / 2, y: bounds.top + 60 },
         },
@@ -249,8 +258,12 @@ export function TessivenGraph(props: {
   function close(restore = false) {
     const owner = popup()?.event.owner;
     setPopup(null);
-    if (restore && owner instanceof HTMLElement && owner.isConnected)
-      owner.focus({ preventScroll: true });
+    if (restore) {
+      const object = selected();
+      const target = owner instanceof HTMLElement && owner.isConnected && owner.matches('button, a, input, select, textarea, [tabindex]')
+        ? owner : object?.kind === 'node' ? host?.querySelector<HTMLElement>(`[data-graph-object="${object.id}"]`) : undefined;
+      target?.focus({ preventScroll: true });
+    }
   }
   function show(event: GraphObjectEvent, refs?: string[], menu = false) {
     setSelected(event.object);
@@ -263,7 +276,7 @@ export function TessivenGraph(props: {
               .relations.get(event.object.id)
               ?.map((value) => value.id) ?? [])
           : event.object
-            ? [event.object.id]
+            ? [canonicalRef(event.object.id)]
             : []),
       menu,
     });
@@ -275,7 +288,7 @@ export function TessivenGraph(props: {
         object?.kind === 'edge'
           ? projection().graph.edges.find((edge) => edge.id === object.id)
           : undefined;
-      refs = edge ? [edge.source, edge.target] : object ? [object.id] : [];
+      refs = edge ? [canonicalRef(edge.source), canonicalRef(edge.target)] : object ? [canonicalRef(object.id)] : [];
     }
     close();
     props.onAsk({
@@ -294,6 +307,16 @@ export function TessivenGraph(props: {
     });
     close();
   }
+  function locateNode(nodeId: string, groupId: string) {
+    setExpanded(previous => new Set([...previous, groupId]));
+    setSelectedNodes(previous => ({ ...previous, [groupId]: nodeId }));
+    const id = appearance(nodeId, groupId)!;
+    setSelected({ kind: 'node', id });
+    pendingLocate = id;
+    centerSelection();
+    const current = popup();
+    if (current) setPopup({ ...current, event: { ...current.event, object: { kind: 'node', id }, owner: host! } });
+  }
   const rowEvent = (
     event: MouseEvent | KeyboardEvent,
     id: string,
@@ -309,17 +332,19 @@ export function TessivenGraph(props: {
         : { x: rect.left + 12, y: rect.bottom },
     };
   };
-  const keyboardMenu = (event: KeyboardEvent, id: string) => {
+  const keyboardMenu = (event: KeyboardEvent, id: string, refs = [canonicalRef(id)]) => {
     if (
       event.key === 'ContextMenu' ||
       (event.shiftKey && event.key === 'F10')
     ) {
       event.preventDefault();
       event.stopPropagation();
-      show(rowEvent(event, id), [id], true);
+      show(rowEvent(event, id), refs, true);
     }
   };
-  const serviceRows = (instances: Instance[], limit = 12): JSX.Element => {
+  const serviceRows = (instances: Instance[], limit = Infinity, ownerId?: string): JSX.Element => {
+    const owner = ownerId ? projection().cards.get(ownerId) : undefined;
+    const grouped = owner?.kind === 'node' && owner.group?.instanceRefs ? new Set(owner.groupInstances.map(instance => instance.id)) : undefined;
     const serviceIDs = [
       ...new Set(instances.map((instance) => instance.serviceRef)),
     ];
@@ -331,29 +356,34 @@ export function TessivenGraph(props: {
               members = instances.filter(
                 (instance) => instance.serviceRef === id,
               );
+            const groups = [...new Map(members.flatMap(instance => projection().instanceMemberships.get(instance.id) ?? []).map(group => [group.id, group])).values()];
+            const caption = () => owner?.kind === 'node' && (projection().memberships.get(owner.node.id)?.length ?? 0) > 1 && groups.length
+              ? [...groups.map(group => group.name), ...new Set(members.map(instance => props.t(`role.${instance.role}`)))].join(' · ')
+              : props.t(`kind.${service()?.kind ?? 'service'}`);
             return (
               <button
                 class="tessiven-service"
                 data-kind={service()?.kind}
-                onKeyDown={(event) => keyboardMenu(event, id)}
+                data-member={grouped ? members.some(instance => grouped.has(instance.id)) : undefined}
+                onKeyDown={(event) => keyboardMenu(event, ownerId ?? id, [id])}
                 onClick={(event) => {
                   event.stopPropagation();
                   show(
-                    rowEvent(event, id),
+                    rowEvent(event, ownerId ?? id),
                     members.map((instance) => instance.id),
                   );
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  show(rowEvent(event, id), [id], true);
+                  show(rowEvent(event, ownerId ?? id), [id], true);
                 }}
               >
                 <TessivenIcon kind={service()?.kind ?? 'service'} />
                 <span>
                   <strong>{service()?.name ?? id}</strong>
                   <small>
-                    {props.t(`kind.${service()?.kind ?? 'service'}`)}
+                    {caption()}
                   </small>
                 </span>
                 <span class="tessiven-count">×{members.length}</span>
@@ -449,13 +479,18 @@ export function TessivenGraph(props: {
       );
     if (card.kind === 'node')
       return (
-        <section class="tessiven-node">
+        <section class="tessiven-node" data-node-id={card.node.id} data-group-id={card.group?.id} data-linked={linkedNode() === card.node.id}>
           <header>
             <TessivenIcon kind="node" />
             <span>
               <strong>{card.node.name}</strong>
               <small>{card.node.id}</small>
             </span>
+            <Show when={(projection().memberships.get(card.node.id)?.length ?? 0) > 1}>
+              <span class="tessiven-shared-host" role="img" aria-label={props.t('sharedHost', { count: projection().memberships.get(card.node.id)!.length })}>
+                <Link class="size-3.5" />{projection().memberships.get(card.node.id)!.length}
+              </span>
+            </Show>
             <button
               onClick={context.openMenu}
               aria-label={props.t('objectMenu')}
@@ -466,15 +501,15 @@ export function TessivenGraph(props: {
           <div class="tessiven-node-body">
             <button
               class="tessiven-runtime"
-              onKeyDown={(event) => keyboardMenu(event, card.node.id)}
+              onKeyDown={(event) => keyboardMenu(event, node.id)}
               onContextMenu={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                show(rowEvent(event, card.node.id), [card.node.id], true);
+                show(rowEvent(event, node.id), [card.node.id], true);
               }}
               onClick={(event) => {
                 event.stopPropagation();
-                show(rowEvent(event, card.node.id));
+                show(rowEvent(event, node.id), [card.node.id]);
               }}
             >
               <span class="tessiven-runtime-mark">r.</span>
@@ -487,7 +522,7 @@ export function TessivenGraph(props: {
               {props.t('hostedServices')}
               <span>{card.instances.length}</span>
             </div>
-            {serviceRows(card.instances)}
+            {serviceRows(card.instances, Infinity, node.id)}
           </div>
         </section>
       );
@@ -561,6 +596,7 @@ export function TessivenGraph(props: {
         renderGroup={renderCard}
         onActivate={(event) => show(event)}
         onContextMenu={(event) => show(event, undefined, true)}
+        onHover={setHovered}
         onInteractionStart={() => close()}
       />
       <div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
@@ -648,6 +684,7 @@ export function TessivenGraph(props: {
                         (member) =>
                           member.serviceRef === id || member.nodeRef === id,
                       ) ?? [];
+                    const relatedGroups = instance ? projection().instanceMemberships.get(instance.id) ?? [] : projection().memberships.get(id) ?? [];
                     return (
                       <section class="tessiven-detail-object">
                         <strong>{title}</strong>
@@ -719,6 +756,18 @@ export function TessivenGraph(props: {
                         </Show>
                         <Show when={item && 'runtimeRef' in item}>
                           <code>{String(item?.runtimeRef)}</code>
+                        </Show>
+                        <Show when={relatedGroups.length}>
+                          <section class="tessiven-memberships">
+                            <div class="tessiven-detail-heading"><span>{props.t('groupMemberships')}</span><span>{relatedGroups.length}</span></div>
+                            <For each={relatedGroups}>
+                              {(group) => <button
+                                aria-label={props.t('locateInGroup', { name: group.name })}
+                                aria-current={projection().cards.get(value.event.object?.id ?? '')?.kind === 'node' && appearance(instance?.nodeRef ?? id, group.id) === value.event.object?.id ? 'location' : undefined}
+                                onClick={() => locateNode(instance?.nodeRef ?? id, group.id)}
+                              ><span>{group.name}</span><ExternalLink class="size-3.5" /></button>}
+                            </For>
+                          </section>
                         </Show>
                         <Show when={item && 'endpoint' in item}>
                           <code>{String(item?.endpoint)}</code>

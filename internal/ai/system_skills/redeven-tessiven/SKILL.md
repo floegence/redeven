@@ -42,6 +42,12 @@ such nodes unbound; an explicitly requested observation may be recorded as
 - Separate logical services from concrete instances. Roles belong to instances;
   shard identity is separate. Groups are visual membership, not runtime entities.
   Databases and caches may be hosted instances or external resources.
+- Keep each physical node and service instance unique. Put a shared node ID in
+  every logical group's `nodeRefs` where it participates; use `instanceRefs`
+  for the exact instances belonging to each project or cluster. Each host view
+  keeps the full physical inventory while emphasizing that group's services.
+  Distinguish separate clusters of the same service through stable group and
+  instance IDs, not duplicate physical hosts or invented runtime connections.
 - Prefer automatic layout: omit `presentation.positions` unless the user asks
   for a particular arrangement or existing intentional hints need preservation.
   Positions are preferred coordinates, not fixed constraints. The renderer

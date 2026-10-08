@@ -21,6 +21,12 @@ failed validation or version conflict leaves the last saved document intact.
   are data references and do not grant permission or create a connection. A
   descriptive or unavailable Runtime remains unbound and may only carry an
   explicit `unknown` or `unavailable` observation.
+- A physical node may belong to multiple logical groups while retaining one
+  stable node ID and one inventory of instances. Optional group `instanceRefs`
+  identifies exact project or cluster membership; every referenced instance
+  must run on a node in that group's `nodeRefs`. Omitting `instanceRefs` retains
+  membership of all instances on those nodes. Rendering replicas never become
+  persistent nodes, execution targets, or independent management identities.
 - Relations require evidence and may form cycles. Missing observations remain
   explicitly unknown.
 - The schema accepts data and presentation hints only. It does not accept
@@ -53,6 +59,7 @@ background, or synchronize libraries between devices.
 
 - `spec/tessiven/v1.schema.json`
 - `internal/tessiven/document.go`
+- `internal/tessiven/document_test.go` - Shared-node membership validation and YAML round-trip.
 - `internal/tessiven/store.go`
 - `internal/tessiven/store_test.go`
 - `internal/tessiven/onboarding_test.go`

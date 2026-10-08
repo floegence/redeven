@@ -68,6 +68,28 @@ func (s *Service) SelectionContext(ctx context.Context, selection Selection) (st
 			refs[instance.ServiceRef] = true
 		}
 	}
+	// Membership describes the selected host/instance without expanding other
+	// hosts in the same group into a second, unrelated selection scope.
+	for _, group := range version.Document.Groups {
+		if len(group.InstanceRefs) > 0 {
+			for _, id := range group.InstanceRefs {
+				if refs[id] {
+					refs[group.ID] = true
+				}
+			}
+		} else {
+			for _, id := range group.NodeRefs {
+				if refs[id] {
+					refs[group.ID] = true
+				}
+			}
+		}
+		for _, id := range group.NodeRefs {
+			if requested[id] {
+				refs[group.ID] = true
+			}
+		}
+	}
 	directScope := make(map[string]bool, len(refs))
 	for id := range refs {
 		directScope[id] = true

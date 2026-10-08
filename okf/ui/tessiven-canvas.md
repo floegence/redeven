@@ -16,6 +16,12 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 
 # Contract
 
+Automatic layout and library thumbnails use Floe's published compound packing
+with a landscape aspect ratio. Independent members are arranged as readable
+peers inside their dashed logical group. Relations retain their original
+endpoints and ports; grouping never invents a relationship. Saved world
+positions remain preferred hints, and expansion retains the inspected anchor.
+
 - The library uses one toolbar with search, direct creation, and a secondary
   menu for archived canvases. It has no extra heading, archive tab, or status
   bar. New canvas immediately creates and opens an empty saved canvas.
@@ -90,6 +96,18 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 
 - Up to 15 Runtime nodes in a group are shown individually. Larger groups use
   a name or ordinal selector and render only the selected node's details.
+- A mixed-deployment host appears inside every logical group it belongs to.
+  Every appearance lists its complete physical service inventory, including
+  services belonging to other groups. A subtle service-row accent identifies
+  exact membership of the current group; shared-host markers show the number
+  of groups without a tooltip. Counts, service operations and Flower references
+  use canonical objects, never visual replicas.
+- Hover and focus apply the same title, surface and border color to all visible
+  appearances of the canonical host without opening a popup. Clicking retains
+  the existing object-details popup and adds a compact group list there.
+  Locating another appearance expands its group when necessary and preserves
+  the current object reference; closing restores focus. Service-row clicks
+  continue to open exact instance details and bound-service inspection.
 - Clicking opens object details. Hover tracks related edges without opening
   explanatory UI; right-click, keyboard context menu, and touch context entry
   open Ask Flower with the exact immutable canvas/version selection.
@@ -128,6 +146,7 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven/store_test.go`
 - `internal/codeapp/appserver/tessiven.go`
 - `internal/envapp/ui_src/src/styles/tessiven.browser.test.tsx`
+- `internal/envapp/ui_src/src/styles/tessiven-shared-hosts.browser.test.tsx` - Complete host inventory, linked hover/focus, original details, membership navigation, themes and projected placement.
 - `internal/envapp/ui_src/src/styles/fixtures/tessiven-hadoop.json`
 - `internal/envapp/ui_src/src/styles/tessiven-library.browser.test.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-flower.browser.test.tsx`

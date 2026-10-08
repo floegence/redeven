@@ -1,4 +1,7 @@
 {
+  "groupMemberships": "Grupos",
+  "sharedHost": "Host compartido · {count} grupos",
+  "locateInGroup": "Localizar en {name}",
   "subtitle": "Relaciones y gestión de servicios",
   "libraryTitle": "Tus lienzos",
   "libraryDescription": "Una vista de tus servicios, creada junto a Flower.",

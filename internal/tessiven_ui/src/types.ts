@@ -9,7 +9,7 @@ export type CanvasNode = {
   runtimeRef: string;
   observation?: Observation;
 };
-export type Group = { id: string; name: string; nodeRefs: string[] };
+export type Group = { id: string; name: string; nodeRefs: string[]; instanceRefs?: string[] };
 export type BusinessService = {
   id: string;
   name: string;

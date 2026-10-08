@@ -29,9 +29,10 @@ type Node struct {
 	Observation *Observation `json:"observation,omitempty"`
 }
 type Group struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	NodeRefs []string `json:"nodeRefs"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	NodeRefs     []string `json:"nodeRefs"`
+	InstanceRefs []string `json:"instanceRefs,omitempty"`
 }
 type BusinessService struct {
 	ID          string `json:"id"`
@@ -322,15 +323,23 @@ func Validate(source string) Validation {
 			checkEvidence(o.EvidenceRefs, path+"/observation/evidenceRefs")
 		}
 	}
-	grouped := map[string]bool{}
+	instanceNodes := map[string]string{}
+	for _, instance := range document.Instances {
+		instanceNodes[instance.ID] = instance.NodeRef
+	}
 	for i, g := range document.Groups {
+		members := map[string]bool{}
 		for j, id := range g.NodeRefs {
 			p := fmt.Sprintf("/groups/%d/nodeRefs/%d", i, j)
 			check(id, p, "node")
-			if grouped[id] {
-				add(p, "A node may belong to only one visual group.")
+			members[id] = true
+		}
+		for j, id := range g.InstanceRefs {
+			p := fmt.Sprintf("/groups/%d/instanceRefs/%d", i, j)
+			check(id, p, "instance")
+			if node, ok := instanceNodes[id]; ok && !members[node] {
+				add(p, "A grouped instance must run on one of the group's member nodes.")
 			}
-			grouped[id] = true
 		}
 	}
 	for i, v := range document.Nodes {
