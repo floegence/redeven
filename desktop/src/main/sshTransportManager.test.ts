@@ -106,6 +106,20 @@ function windowsManagerFixture() {
 }
 
 describe('Windows native SSH transport', () => {
+  it('reports a closed upload pipe through the command promise', async () => {
+    const fixture = windowsManagerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'pipe-check' });
+      const child = fakeProcess({ longLived: true });
+      fixture.spawnProcess.mockImplementationOnce(() => child);
+      const transfer = lease.run('cat > transferred-file', { stdinData: Buffer.from('qualification') });
+      const failure = expect(transfer).rejects.toMatchObject({ code: 'EPIPE' });
+      child.stdin?.emit('error', Object.assign(new Error('Upload pipe closed'), { code: 'EPIPE' }));
+      await failure;
+      child.kill();
+      await lease.release();
+    } finally { await fixture.manager.dispose(); }
+  });
   it('authenticates and runs commands without a ControlMaster or shell password script', async () => {
     const fixture = windowsManagerFixture();
     try {

@@ -676,6 +676,50 @@ func TestDesktopModelSourceProviderPreservesEmptyToolArguments(t *testing.T) {
 	}
 }
 
+func TestDesktopModelSourceIdleRPCStopsWhenGenerationContextIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	client := newDesktopModelSourceClient(nil)
+	session := DesktopModelSourceSession{SessionID: "idle-desktop-session", Source: DesktopModelSourceDefaultSource, ProtocolVersion: DesktopModelSourceProtocolVersion}
+	attached, done := make(chan struct{}), make(chan error, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			done <- err
+			return
+		}
+		done <- client.ServeRPC(ctx, session, conn, func() {
+			if client.isConnected() {
+				close(attached)
+			}
+		})
+	}))
+	defer server.Close()
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	select {
+	case <-attached:
+	case <-time.After(time.Second):
+		t.Fatal("RPC did not attach")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("canceled RPC: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("idle RPC retained its service generation after cancellation")
+	}
+	if client.isConnected() {
+		t.Fatal("canceled RPC still advertises a connection")
+	}
+}
+
 func startTestDesktopModelSource(t *testing.T, handle func(DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame) (*desktopModelSourceClient, func()) {
 	t.Helper()
 

@@ -24,6 +24,19 @@ func (m *Manager) openLinux(ctx context.Context) (Transport, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	status, err := m.serviceStatus(ctx)
+	if status.State == nativeapps.ServiceActive && err == nil {
+		return nativeapps.OpenLoginScreenSession(ctx, nativeapps.LoginServiceSocket)
+	}
+	if status.State != nativeapps.ServiceNotInstalled {
+		return nil, ErrServiceUnavailable
+	}
+	return m.openLinuxUserDesktop(ctx)
+}
+
+// Current-user sharing is optional. An installed system service never falls
+// back to a Portal grant when its policy, service or hardware is unavailable.
+func (m *Manager) openLinuxUserDesktop(ctx context.Context) (Transport, error) {
 	setup, err := m.setupManager()
 	if err != nil {
 		return nil, err

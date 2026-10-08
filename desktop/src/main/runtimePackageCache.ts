@@ -592,8 +592,8 @@ function validateRuntimePackageArchive(
       throw new Error(`Runtime package archive is missing ${name}.`);
     }
   }
-  if (args.packageKind === 'runtime') {
-    runtimeExecutableFromArchive(archiveData);
+  if (args.packageKind === 'runtime' && !entries.get('redeven')?.length) {
+    throw new Error('Runtime release archive does not contain the redeven executable.');
   }
 }
 

@@ -769,13 +769,17 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
             ));
           }, normalizedTimeoutMs)
         : null;
-      child.once('error', (error) => {
+      const fail = (error: Error) => {
         if (settled) return;
         settled = true;
         if (timeout) this.deps.clearTimer(timeout);
         spawnError = error instanceof Error ? error : new Error(String(error));
         reject(spawnError);
-      });
+      };
+      child.once('error', fail);
+      // Cancellation or early remote exit can close an upload pipe before SSH
+      // emits its own exit event. Keep that failure inside the command promise.
+      child.stdin?.once('error', fail);
       child.stdout?.setEncoding('utf8');
       child.stdout?.on('data', (chunk: string) => {
         stdout += chunk;
