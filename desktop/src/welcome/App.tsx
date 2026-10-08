@@ -6060,6 +6060,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  async function recoverFlowerRuntime(code: 'runtime_update_required' | 'desktop_update_required'): Promise<void> {
+    const environment = flowerRuntimeEnvironment();
+    if (!environment) return;
+    await triggerLocalEnvironmentAction(environment, { intent: code === 'desktop_update_required' ? 'update_desktop' : 'update_runtime', label: '', enabled: true, variant: 'default' });
+    await refreshSnapshot();
+  }
+
   function openFlowerSurface(): void {
     navigateWelcomeSurface('flower');
   }
@@ -6421,11 +6428,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
                 onSettingsChanged: refreshSnapshot,
               });
-              return <FlowerSurface adapter={adapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
+              return <DesktopFlowerRuntimeBoundary embedded
+                snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())} i18n={i18n()}
+                onBack={() => void openEnvironmentCenterSurface()}
+                onRecover={recoverFlowerRuntime}>
+                <FlowerSurface adapter={adapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
                 engaged={surface.engaged} transcriptVisible={surface.transcriptVisible}
                 embeddedConversation={surface.embeddedConversation} copy={flowerSurfaceCopy()}
                 filesystemScopeKey={flowerFilesystemScopeKey()}
-                notify={notice => showActionToast(notice.message, notice.tone, notice.title ? { title: notice.title } : {})} />;
+                notify={notice => showActionToast(notice.message, notice.tone, notice.title ? { title: notice.title } : {})} />
+              </DesktopFlowerRuntimeBoundary>;
             }}
             onOpenFlower={openFlowerConversation}
             onOpenService={async () => { throw new Error(tessivenCopy()('openUnavailable')); }}/>
@@ -6446,12 +6458,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                     snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())}
                     i18n={i18n()}
                     onBack={() => void openEnvironmentCenterSurface()}
-                    onRecover={async (code) => {
-                      const environment = flowerRuntimeEnvironment();
-                      if (!environment) return;
-                      await triggerLocalEnvironmentAction(environment, { intent: code === 'desktop_update_required' ? 'update_desktop' : 'update_runtime', label: '', enabled: true, variant: 'default' });
-                      await refreshSnapshot();
-                    }}
+                    onRecover={recoverFlowerRuntime}
                   >
                     <FlowerSurface
                       engaged={flowerVisible()}

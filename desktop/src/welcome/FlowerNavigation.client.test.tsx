@@ -5,6 +5,7 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { testDesktopPreferences } from '../testSupport/desktopTestHelpers';
 import type { DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
 import { normalizeRuntimeServiceSnapshot, RUNTIME_SERVICE_COMPATIBILITY_EPOCH, RUNTIME_SERVICE_PROTOCOL_VERSION, type RuntimeServiceAIReadinessState } from '../shared/runtimeService';
+import type { RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
 
 const disposers: Array<() => void> = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -15,11 +16,12 @@ const click = (selector: string) => {
   button!.click();
 };
 
-async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_environment', aiState: RuntimeServiceAIReadinessState = 'ready') {
+async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_environment', aiState: RuntimeServiceAIReadinessState = 'ready', respond?: (request: RuntimeFlowerRequest) => unknown) {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })));
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} });
+  vi.stubGlobal('Worker', class extends EventTarget { postMessage() {} terminate() {} });
   vi.stubGlobal('CSS', { escape: (value: string) => value });
   const storage = new Map<string, string>();
   vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
@@ -31,7 +33,9 @@ async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_envir
   // Both IPC and runtime preparation stay pending throughout navigation.
   const performAction = vi.fn(() => new Promise<never>(() => {}));
   const getSnapshot = vi.fn(() => new Promise<never>(() => {}));
-  const requestRuntimeFlower = vi.fn(() => new Promise<never>(() => {}));
+  const requestRuntimeFlower = vi.fn((request: RuntimeFlowerRequest) => respond
+    ? Promise.resolve({ ok: true as const, data: respond(request) })
+    : new Promise<never>(() => {}));
   const startRuntimeFlowerStream = vi.fn(() => new Promise<never>(() => {}));
   const cancelRuntimeFlowerStream = vi.fn();
   const settings = { load: vi.fn(), save: vi.fn(), cancel: vi.fn(), requestRuntimeFlower,
@@ -54,6 +58,38 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it('keeps the canvas available during AI startup and loads its configured model only after readiness', async () => {
+  const canvas = { id: 'commerce', title: 'Commerce', latest_version: 1, archived: false, created_at: 1, updated_at: 1 };
+  const version = { canvas_id: canvas.id, number: 1, document: { apiVersion: 'redeven.io/tessiven/v1', kind: 'ServiceCanvas', metadata: { title: canvas.title } }, document_yaml: '', digest: 'fixture', created_at: 1, source: 'created', summary: '' };
+  const h = await mount('connect_environment', 'inspecting', request => {
+    if (request.path.startsWith('/_redeven_proxy/api/tessiven/canvases?')) return { canvases: [canvas] };
+    if (request.path === '/_redeven_proxy/api/tessiven/canvases/commerce') return canvas;
+    if (request.path.includes('/canvases/commerce/versions/')) return version;
+    if (request.path === '/_redeven_proxy/api/settings') return { ai: { current_model_id: 'deepseek/deepseek-flash', permission_type: 'full_access', providers: [{ id: 'deepseek', name: 'DeepSeek', type: 'deepseek', model_selection: { selected_models: ['deepseek-flash'] } }] }, ai_secrets: { provider_api_key_set: { deepseek: true } } };
+    if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'deepseek/deepseek-flash', models: [] };
+    if (request.path.startsWith('/_redeven_proxy/api/ai/threads?')) return { threads: [] };
+    return {};
+  });
+  click('button[aria-label="Tessiven"]');
+  await vi.waitFor(() => expect(document.querySelector('.tessiven-library-card > button')).not.toBeNull());
+  click('.tessiven-library-card > button');
+  await vi.waitFor(() => expect(document.querySelector('.tessiven-canvas')).not.toBeNull());
+  expect(document.querySelector('[data-flower-runtime-availability="preparing"]')).not.toBeNull();
+  const aiRequests = () => h.requestRuntimeFlower.mock.calls.filter(([request]) => !request.path.startsWith('/_redeven_proxy/api/tessiven/'));
+  expect(aiRequests()).toHaveLength(0);
+  h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_service: { ...entry.runtime_service!, ai_readiness: { state: 'ready' } } })) });
+  await vi.waitFor(() => expect(document.querySelector('.flower-composer')?.textContent).toContain('DeepSeek'));
+  expect(document.querySelector('.flower-composer')?.textContent).not.toContain('No model selected');
+  const editor = document.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+  editor.value = 'Keep the horizontal layout request';
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+  h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_service: { ...entry.runtime_service!, ai_readiness: { state: 'recovering' } } })) });
+  await vi.waitFor(() => expect(document.querySelector('.flower-composer')).toBeNull());
+  expect(document.querySelector('.tessiven-canvas')).not.toBeNull();
+  h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_service: { ...entry.runtime_service!, ai_readiness: { state: 'ready' } } })) });
+  await vi.waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.value).toBe('Keep the horizontal layout request'));
 });
 
 it('opens Flower on the click while IPC and runtime preparation are pending', async () => {

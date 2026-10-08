@@ -24,6 +24,13 @@ Ollama queries `/api/tags`, `/api/ps`, and `/api/show`; only installed local mod
 
 ## Settings interaction
 
+Automatic model-list discovery has a five-second total catalog budget, shorter
+than Desktop's bootstrap request deadline. A slow or disconnected dynamic
+provider cannot prevent unrelated configured models from being listed. This
+read-only budget neither changes selected identities nor authorizes missing
+models. Explicit catalog discovery retains its own request deadline, and send
+preflight still resolves the exact selected model against current inventory.
+
 Candidate rows in both provider dialogs use model identity independently of metadata object allocation. Selection changes preserve the existing checkbox or action button, keyboard focus, and scroll position. Selection controls reserve their layout space; shared dialog actions move as a group below model details on narrow screens. Metadata refresh updates surviving rows without retaining obsolete labels or availability. Parameter edits remain reactive without rebuilding the candidate row.
 
 ## Chat presentation
@@ -57,6 +64,8 @@ Include publicly callable Preview and Experimental models when the adapter suppo
 Gemini uses the supported OpenAI-compatible endpoint with model-specific effort or budget controls. Its tool thought signatures stay in the existing opaque provider state, bound to exact tool identity and arguments, and are pruned with projected history. DeepSeek uses published Floret v7.25.2, including current Flash/alias capabilities and prepared-image support, as described in [DeepSeek Responses](deepseek-responses.md). No public Floret catalog API, host credential contract, or domain schema is added by this change.
 
 # Evidence
+
+- `redeven:internal/ai/service_models_test.go` - Unresponsive catalogs stay within the automatic inventory deadline without losing configured alternatives or preferences.
 
 - `redeven:internal/config/ai_model_catalog.go` - Catalog and preference resolution.
 - `redeven:internal/config/ai_model_migration.go` - Atomic startup conversion.
