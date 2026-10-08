@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -10,7 +10,7 @@ import {
 } from './sshTransportManager';
 
 type FakeProcess = EventEmitter & {
-  stdin: PassThrough | null;
+  stdin: Writable | null;
   stdout: PassThrough | null;
   stderr: PassThrough;
   exitCode: number | null;
@@ -104,6 +104,72 @@ function windowsManagerFixture() {
   });
   return { manager, calls, spawnProcess };
 }
+
+describe('SSH package upload deadlines', () => {
+  it('allows a slow progressing upload beyond the command deadline', async () => {
+    vi.useFakeTimers();
+    const fixture = managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'slow-upload' });
+      const child = fakeProcess({ longLived: true });
+      let received = 0;
+      child.stdin = new Writable({
+        write(data, _encoding, callback) {
+          setTimeout(() => { received += data.length; callback(); }, 40 * data.length / (256 * 1024));
+        },
+        final(callback) { callback(); queueMicrotask(() => { child.exitCode = 0; child.emit('close', 0, null); }); },
+      });
+      fixture.spawnProcess.mockImplementationOnce(() => child);
+      const upload = lease.run('cat > package', { stdinData: Buffer.alloc(512 * 1024), timeout_ms: 50, stdin_progress_timeout_ms: 50 });
+      const observed = upload.then(result => ({ result }), error => ({ error }));
+      await vi.advanceTimersByTimeAsync(85);
+      expect(await observed).toMatchObject({ result: { exit_code: 0 } });
+      expect(received).toBe(512 * 1024);
+      expect(child.kill).not.toHaveBeenCalled();
+      await lease.release();
+    } finally { await fixture.manager.dispose(); vi.useRealTimers(); }
+  });
+
+  it('ends a stalled upload and keeps ordinary command deadlines bounded', async () => {
+    vi.useFakeTimers();
+    const fixture = managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'stalled-upload' });
+      const child = fakeProcess({ longLived: true });
+      child.stdin = new Writable({ write() {} });
+      fixture.spawnProcess.mockImplementationOnce(() => child);
+      const failure = expect(lease.run('cat > package', { stdinData: Buffer.alloc(512 * 1024), timeout_ms: 50, stdin_progress_timeout_ms: 50 })).rejects.toMatchObject({ timeoutMs: 50 });
+      await vi.advanceTimersByTimeAsync(51); await failure;
+      expect(child.kill).toHaveBeenCalledOnce();
+      const command = fakeProcess({ longLived: true });
+      fixture.spawnProcess.mockImplementationOnce(() => command);
+      const commandFailure = expect(lease.run('sleep', { timeout_ms: 50 })).rejects.toMatchObject({ timeoutMs: 50 });
+      await vi.advanceTimersByTimeAsync(51); await commandFailure;
+      expect(command.kill).toHaveBeenCalledOnce();
+      await lease.release();
+    } finally { await fixture.manager.dispose(); vi.useRealTimers(); }
+  });
+
+  it('bounds remote completion after a progressing upload has finished', async () => {
+    vi.useFakeTimers();
+    const fixture = managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'upload-completion' });
+      const child = fakeProcess({ longLived: true });
+      child.stdin = new Writable({
+        write(_data, _encoding, callback) { setTimeout(callback, 40); },
+      });
+      fixture.spawnProcess.mockImplementationOnce(() => child);
+      const failure = expect(lease.run('cat > package', { stdinData: Buffer.alloc(512 * 1024), timeout_ms: 50, stdin_progress_timeout_ms: 50 })).rejects.toMatchObject({ timeoutMs: 50 });
+      await vi.advanceTimersByTimeAsync(129);
+      expect(child.stdin.writableFinished).toBe(true);
+      expect(child.kill).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2); await failure;
+      expect(child.kill).toHaveBeenCalledOnce();
+      await lease.release();
+    } finally { await fixture.manager.dispose(); vi.useRealTimers(); }
+  });
+});
 
 describe('Windows native SSH transport', () => {
   it('reports a closed upload pipe through the command promise', async () => {

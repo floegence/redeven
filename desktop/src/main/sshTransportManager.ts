@@ -36,6 +36,7 @@ export type DesktopSSHStreamingCommand = Readonly<{
 
 export type SSHCommandOptions = Readonly<{
   stdinData?: Buffer;
+  stdin_progress_timeout_ms?: number;
   signal?: AbortSignal;
   onStderr?: (chunk: string) => void;
   timeout_ms?: number;
@@ -586,7 +587,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           ...sharedArgs(entry),
           ...targetArgs(entry.target),
           command,
-        ], options.stdinData, options.signal, options.onStderr, options.timeout_ms);
+        ], options.stdinData, options.signal, options.onStderr, options.timeout_ms, options.stdin_progress_timeout_ms);
         if (entry.direct) {
           if (!transportAlive(entry) || entry.generation !== generation) {
             throw new DesktopSSHTransportInterruptedError(desktopSSHAuthority(entry.target), generation, result);
@@ -738,6 +739,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
     signal?: AbortSignal,
     onStderr?: (chunk: string) => void,
     timeoutMs?: number,
+    stdinProgressTimeoutMs?: number,
   ): Promise<DesktopSSHCommandResult> {
     return new Promise((resolve, reject) => {
       let child: SpawnedSSHProcess;
@@ -756,19 +758,23 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       let spawnError: Error | null = null;
       let settled = false;
       const normalizedTimeoutMs = Number(timeoutMs);
-      const timeout = Number.isFinite(normalizedTimeoutMs) && normalizedTimeoutMs > 0
-        ? this.deps.setTimer(() => {
-            if (settled) return;
-            settled = true;
-            child.kill('SIGTERM');
-            reject(new DesktopSSHCommandTimeoutError(
-              desktopSSHAuthority(entry.target),
-              Math.floor(normalizedTimeoutMs),
-              stdout,
-              stderr,
-            ));
-          }, normalizedTimeoutMs)
-        : null;
+      const progressTimeoutMs = Number(stdinProgressTimeoutMs);
+      const progressDeadline = !!stdinData && Number.isFinite(progressTimeoutMs) && progressTimeoutMs > 0;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+      const armTimeout = (duration: number) => {
+        if (timeout) this.deps.clearTimer(timeout);
+        timeout = Number.isFinite(duration) && duration > 0
+          ? this.deps.setTimer(() => {
+              if (settled) return;
+              settled = true;
+              child.kill('SIGTERM');
+              reject(new DesktopSSHCommandTimeoutError(
+                desktopSSHAuthority(entry.target), Math.floor(duration), stdout, stderr,
+              ));
+            }, duration)
+          : null;
+      };
+      armTimeout(progressDeadline ? progressTimeoutMs : normalizedTimeoutMs);
       const fail = (error: Error) => {
         if (settled) return;
         settled = true;
@@ -789,8 +795,31 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
         stderr += chunk;
         onStderr?.(chunk);
       });
-      if (stdinData) {
-        child.stdin?.end(stdinData);
+      if (stdinData && child.stdin) {
+        if (!progressDeadline) child.stdin.end(stdinData);
+        else {
+          // Observe bounded pipe writes rather than timing an entire package.
+          // A slow upload may progress for longer than the command deadline;
+          // stalled writes and command completion still have bounded deadlines.
+          let offset = 0;
+          const writeNext = () => {
+            if (settled) return;
+            if (offset === stdinData.length) {
+              armTimeout(normalizedTimeoutMs);
+              child.stdin?.end();
+              return;
+            }
+            const end = Math.min(offset + 256 * 1024, stdinData.length);
+            child.stdin?.write(stdinData.subarray(offset, end), error => {
+              if (settled) return;
+              if (error) { fail(error); return; }
+              offset = end;
+              armTimeout(progressTimeoutMs);
+              writeNext();
+            });
+          };
+          writeNext();
+        }
       }
       child.once('close', (exitCode, closeSignal) => {
         if (settled) return;

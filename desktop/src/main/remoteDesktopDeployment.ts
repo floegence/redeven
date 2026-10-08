@@ -66,7 +66,7 @@ export class RemoteDesktopDeployment {
       for (const name of ['floe-host-desktop-service', 'desktop-drm', 'libdrmtap.LICENSE']) {
         const data = kit.files.get(name);
         if (!data || data.length === 0 || data.length > 128 << 20) return { ok: false, code: 'deployment_failed' };
-        const uploaded = await host.lease.run(`cat > ${quote(`${directory}/${name}`)}`, { stdinData: data, signal, timeout_ms: 30_000 });
+        const uploaded = await host.lease.run(`cat > ${quote(`${directory}/${name}`)}`, { stdinData: data, signal, timeout_ms: 30_000, stdin_progress_timeout_ms: 30_000 });
         if (uploaded.exit_code !== 0) return { ok: false, code: 'deployment_failed' };
       }
       const request = { operation, source_directory: directory, runtime_uid: runtimeUID, runtime_gid: runtimeGID, runtime_sha256: runtimeSHA256, service_sha256: kit.serviceSHA256, worker_sha256: kit.workerSHA256 };
