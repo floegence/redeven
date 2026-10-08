@@ -177,7 +177,7 @@ func TestFlowerSaveInvalidatesEveryCanvasClientAndSurvivesNoClients(t *testing.T
 
 func TestIncompatibleDatabaseRemainsUnchanged(t *testing.T) {
 	for _, tc := range []struct{ name, sql string }{
-		{"future", `PRAGMA user_version=2`},
+		{"future", `PRAGMA user_version=3`},
 		{"wrong kind", `UPDATE __redeven_db_meta SET db_kind='other'`},
 		{"drift", `ALTER TABLE canvases ADD COLUMN unexpected TEXT`},
 		{"metadata drift", `ALTER TABLE __redeven_db_meta ADD COLUMN unexpected TEXT`},

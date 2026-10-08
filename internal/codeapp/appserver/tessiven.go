@@ -107,6 +107,19 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 		}
 		if len(parts) == 3 {
 			switch parts[2] {
+			case "flower-thread":
+				if r.Method == http.MethodPost {
+					var req struct {
+						ThreadID string `json:"thread_id"`
+					}
+					if err := decodeTessivenJSON(r, &req); err != nil {
+						writeTessivenError(w, err)
+						return true
+					}
+					err := g.tessiven.BindFlowerThread(r.Context(), id, req.ThreadID)
+					writeTessivenResult(w, map[string]string{"thread_id": strings.TrimSpace(req.ThreadID)}, err)
+					return true
+				}
 			case "versions":
 				if r.Method == http.MethodGet {
 					before, err := parseTessivenVersion(r.URL.Query().Get("before"), true)

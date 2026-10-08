@@ -19,21 +19,23 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("tessiven canvas or version not found")
-	ErrConflict        = errors.New("tessiven canvas has a newer version; read it before saving")
-	ErrRequestConflict = errors.New("tessiven request identity was already used with different content")
-	ErrArchived        = errors.New("tessiven canvas is archived")
-	ErrInvalidRequest  = errors.New("invalid Tessiven request")
+	ErrNotFound               = errors.New("tessiven canvas or version not found")
+	ErrConflict               = errors.New("tessiven canvas has a newer version; read it before saving")
+	ErrRequestConflict        = errors.New("tessiven request identity was already used with different content")
+	ErrArchived               = errors.New("tessiven canvas is archived")
+	ErrInvalidRequest         = errors.New("invalid Tessiven request")
+	ErrFlowerThreadReferenced = errors.New("Flower thread is referenced by a Tessiven canvas")
 )
 
 type Canvas struct {
-	ID            string `json:"id"`
-	Title         string `json:"title"`
-	Description   string `json:"description"`
-	LatestVersion int64  `json:"latest_version"`
-	Archived      bool   `json:"archived"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	LatestVersion  int64  `json:"latest_version"`
+	Archived       bool   `json:"archived"`
+	CreatedAt      int64  `json:"created_at"`
+	UpdatedAt      int64  `json:"updated_at"`
+	FlowerThreadID string `json:"flower_thread_id,omitempty"`
 }
 type Version struct {
 	CanvasID     string    `json:"canvas_id"`
@@ -157,7 +159,7 @@ func (s *Service) publish() {
 
 func (s *Service) List(ctx context.Context, query, cursor string, archived bool) (Library, error) {
 	result := Library{Canvases: []Canvas{}}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,title,description,latest_version,archived,created_at,updated_at FROM canvases WHERE archived=? AND id>? AND (instr(lower(title),lower(?))>0 OR instr(lower(description),lower(?))>0) ORDER BY id LIMIT 101`, archived, cursor, query, query)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,title,description,latest_version,archived,created_at,updated_at,flower_thread_id FROM canvases WHERE archived=? AND id>? AND (instr(lower(title),lower(?))>0 OR instr(lower(description),lower(?))>0) ORDER BY id LIMIT 101`, archived, cursor, query, query)
 	if err != nil {
 		return result, err
 	}
@@ -179,7 +181,7 @@ func (s *Service) List(ctx context.Context, query, cursor string, archived bool)
 type scanner interface{ Scan(...any) error }
 
 func scanCanvas(row scanner, c *Canvas) error {
-	return row.Scan(&c.ID, &c.Title, &c.Description, &c.LatestVersion, &c.Archived, &c.CreatedAt, &c.UpdatedAt)
+	return row.Scan(&c.ID, &c.Title, &c.Description, &c.LatestVersion, &c.Archived, &c.CreatedAt, &c.UpdatedAt, &c.FlowerThreadID)
 }
 func notFound(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
@@ -189,7 +191,7 @@ func notFound(err error) error {
 }
 func (s *Service) Canvas(ctx context.Context, id string) (Canvas, error) {
 	var c Canvas
-	err := scanCanvas(s.db.QueryRowContext(ctx, `SELECT id,title,description,latest_version,archived,created_at,updated_at FROM canvases WHERE id=?`, id), &c)
+	err := scanCanvas(s.db.QueryRowContext(ctx, `SELECT id,title,description,latest_version,archived,created_at,updated_at,flower_thread_id FROM canvases WHERE id=?`, id), &c)
 	return c, notFound(err)
 }
 func readVersion(ctx context.Context, q interface {
@@ -291,7 +293,7 @@ func (s *Service) Save(ctx context.Context, req SaveRequest, source string) (Sav
 		}
 		c.ID = uuid.NewString()
 	} else {
-		err = scanCanvas(tx.QueryRowContext(ctx, `SELECT id,title,description,latest_version,archived,created_at,updated_at FROM canvases WHERE id=?`, c.ID), &c)
+		err = scanCanvas(tx.QueryRowContext(ctx, `SELECT id,title,description,latest_version,archived,created_at,updated_at,flower_thread_id FROM canvases WHERE id=?`, c.ID), &c)
 		if err != nil {
 			return SaveResult{}, notFound(err)
 		}
@@ -308,7 +310,7 @@ func (s *Service) Save(ctx context.Context, req SaveRequest, source string) (Sav
 	c.UpdatedAt = now
 	v := Version{CanvasID: c.ID, Number: c.LatestVersion, DocumentYAML: req.DocumentYAML, Digest: digest(req.DocumentYAML), CreatedAt: now, Source: source, Summary: req.Summary, Document: validation.Document}
 	if req.CanvasID == "" {
-		_, err = tx.ExecContext(ctx, `INSERT INTO canvases(id,title,description,latest_version,archived,created_at,updated_at) VALUES(?,?,?,?,0,?,?)`, c.ID, c.Title, c.Description, c.LatestVersion, c.CreatedAt, now)
+		_, err = tx.ExecContext(ctx, `INSERT INTO canvases(id,title,description,latest_version,archived,created_at,updated_at,flower_thread_id) VALUES(?,?,?,?,0,?,?,?)`, c.ID, c.Title, c.Description, c.LatestVersion, c.CreatedAt, now, "")
 	} else {
 		_, err = tx.ExecContext(ctx, `UPDATE canvases SET title=?,description=?,latest_version=?,updated_at=? WHERE id=?`, c.Title, c.Description, c.LatestVersion, now, c.ID)
 	}
@@ -391,4 +393,32 @@ func (s *Service) Archive(ctx context.Context, id string, expected int64, archiv
 	}
 	s.publish()
 	return nil
+}
+
+// BindFlowerThread establishes the one durable Flower conversation for a canvas.
+// A second conversation cannot silently replace the existing binding.
+func (s *Service) BindFlowerThread(ctx context.Context, canvasID, threadID string) error {
+	canvasID, threadID = strings.TrimSpace(canvasID), strings.TrimSpace(threadID)
+	if canvasID == "" || threadID == "" {
+		return ErrInvalidRequest
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE canvases SET flower_thread_id=?,updated_at=? WHERE id=? AND flower_thread_id IN ('',?)`, threadID, time.Now().UnixMilli(), canvasID, threadID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrConflict
+	}
+	s.publish()
+	return nil
+}
+
+func (s *Service) FlowerThreadReferenced(ctx context.Context, threadID string) (bool, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM canvases WHERE flower_thread_id=?`, strings.TrimSpace(threadID)).Scan(&count)
+	return count > 0, err
 }

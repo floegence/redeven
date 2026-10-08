@@ -594,6 +594,7 @@ export type FlowerEmbeddedConversation = Readonly<{
   emptyContent?: JSX.Element;
   composerContext?: JSX.Element;
   onSubmit?: () => void;
+  onThreadBound?: (threadID: string) => void;
   render: (parts: FlowerConversationParts) => JSX.Element;
 }>;
 
@@ -4501,6 +4502,7 @@ webSearch: model.web_search,
   const acceptTurnLaunchReceipt = (receipt: FlowerTurnLaunchReceipt): boolean => {
     const requestID = trimString(receipt.client_request_id);
     const threadID = trimString(receipt.thread_id);
+    if (threadID) props.embeddedConversation?.onThreadBound?.(threadID);
     if (!requestID || !threadID) {
       throw flowerTurnAdmissionError(
         'unknown',

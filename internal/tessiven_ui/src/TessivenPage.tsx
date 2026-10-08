@@ -142,6 +142,7 @@ export function TessivenPage(props: {
       labels: selectionLabels(value),
       prompt,
       nonce: Date.now(),
+      flower_thread_id: canvas()?.flower_thread_id,
     };
     const existing = flowerSessions().find(
       (session) => session.id === value.canvas_id,
@@ -155,6 +156,14 @@ export function TessivenPage(props: {
       ]);
     }
 
+  }
+  async function bindFlowerThread(threadID: string) {
+    const current = canvas();
+    if (!current || current.flower_thread_id === threadID) return;
+    await request('POST', `/canvases/${encodeURIComponent(current.id)}/flower-thread`, { thread_id: threadID });
+    setCanvas({ ...current, flower_thread_id: threadID });
+    const session = flowerSessions().find(item => item.id === current.id);
+    if (session) session.update({ ...session.request(), flower_thread_id: threadID });
   }
   const ask = (prompt?: string) => {
     const value = selection();
@@ -177,7 +186,7 @@ export function TessivenPage(props: {
       if (!session) {
         const [request, update] = createSignal<CanvasFlowerRequest>({
           selection: { canvas_id: current.canvas_id, version_id: current.number, object_refs: [] },
-          labels: {}, nonce: 0,
+          labels: {}, nonce: 0, flower_thread_id: currentCanvasFlowerThread(current.canvas_id),
         });
         setFlowerSessions(sessions => [...sessions, { id: current.canvas_id, request, update }]);
         return;
@@ -188,10 +197,14 @@ export function TessivenPage(props: {
         ...previous,
         prompt: undefined,
         selection: { ...previous.selection, version_id: current.number },
-        labels: selectionLabels(previous.selection),
+            labels: selectionLabels(previous.selection),
+        flower_thread_id: currentCanvasFlowerThread(current.canvas_id),
       });
     });
   });
+  function currentCanvasFlowerThread(canvasID: string) {
+    return canvas()?.id === canvasID ? canvas()?.flower_thread_id : undefined;
+  }
   const message = (cause: unknown) =>
     cause instanceof Error ? cause.message : String(cause);
   const request = props.transport.request;
@@ -682,6 +695,7 @@ export function TessivenPage(props: {
             t={props.t}
             renderSurface={props.renderFlower}
             onOpenConversation={props.onOpenFlower}
+            onThreadBound={threadID => void bindFlowerThread(threadID)}
           />
         </Show>
       </div>
