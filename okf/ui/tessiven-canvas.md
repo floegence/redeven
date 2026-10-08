@@ -19,6 +19,12 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 - The library uses one toolbar with search, direct creation, and a secondary
   menu for archived canvases. It has no extra heading, archive tab, or status
   bar. New canvas immediately creates and opens an empty saved canvas.
+- Each library card previews the current saved document through the same
+  projection and published Floe layout engine used by the canvas. It shows
+  nodes, groups, resources, and routed relationships without creating a second
+  editable graph surface. Title, version, date, description, and object counts
+  sit in a lower overlay; hover and keyboard focus reveal details without
+  changing card geometry, while touch displays those details by default.
 - The canonical Flower composer stays at the bottom of the canvas. There is no
   editor drawer, additional status bar, or repeated canvas identity/version row
   above the input. The Flower request still carries the exact visible
