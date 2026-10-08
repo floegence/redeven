@@ -33,6 +33,8 @@ let logs = '';
 child.stdout.on('data', bytes => { logs += bytes.toString(); });
 let browser;
 let page;
+let serviceRoot;
+const fixtureBinary = path.join(state, 'redeven-gateway');
 const stop = () => {
   if (child.exitCode !== null || child.signalCode !== null) return;
   if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F']);
@@ -87,6 +89,12 @@ try {
   assert.equal(needsStart.gateway_id, id);
   assert.deepEqual(needsStart.continuation_action, { kind: 'start_gateway', gateway_id: id });
   report.cases.push('Authorization on a stopped service preserves the registration and offers explicit Start');
+  serviceRoot = path.join(dataRoot, 'gateways', id, 'state');
+  execFileSync('go', ['build', '-o', fixtureBinary, './cmd/redeven-gateway'], {
+    cwd: path.resolve(root, '..'), env: { ...process.env, GOWORK: 'off' }, stdio: 'inherit',
+  });
+  execFileSync(fixtureBinary, ['service-start', '--state-root', serviceRoot, '--member-listen', '127.0.0.1:0'], { stdio: 'pipe' });
+  execFileSync(fixtureBinary, ['service-stop', '--state-root', serviceRoot], { stdio: 'pipe' });
   const run = async kind => {
     const result = await action({ kind, gateway_id: id });
     assert.equal(result.ok, true, `${kind}: ${JSON.stringify(result)}`);
@@ -152,9 +160,8 @@ try {
   await writeFile(path.join(output, 'desktop.log'), logs);
   const cleanupErrors = [];
   // The managed service is detached from Electron; stop only this test's root.
-  if (report.gatewayID) {
-    const serviceRoot = path.join(state, 'gateway-data', 'gateways', report.gatewayID, 'state');
-    try { execFileSync(path.join(serviceRoot, 'managed/bin/redeven-gateway'), ['service-stop', '--state-root', serviceRoot], { timeout: 15_000, stdio: 'ignore' }); }
+  if (serviceRoot) {
+    try { execFileSync(fixtureBinary, ['service-stop', '--state-root', serviceRoot], { timeout: 15_000, stdio: 'ignore' }); }
     catch (error) { if (error.code !== 'ENOENT') cleanupErrors.push(String(error)); }
   }
   stop();

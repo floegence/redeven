@@ -272,7 +272,7 @@ func (s *Store) Endpoint() Endpoint { s.mu.Lock(); defer s.mu.Unlock(); return s
 func (s *Store) Endpoints() []gp.GatewayEndpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]gp.GatewayEndpoint(nil), s.state.AdvertisedEndpoints...)
+	return append([]gp.GatewayEndpoint{}, s.state.AdvertisedEndpoints...)
 }
 
 func (s *Store) EndpointOrigins() []string {
