@@ -7,10 +7,10 @@ import { Check, ChevronRight, Filter, HelpIcon, MonitorPointer, MoreHorizontal, 
 import { hostApplicationPresentation, hostApplicationLaunchFailureCopy } from '../services/hostApplicationPresentation';
 import { renderHostApplicationLaunchDocument } from '../services/hostApplicationLaunchDocument';
 import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
-import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
+import { Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, getHostApplicationTransferPlan, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, terminateHostApplication, type RunningHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
+import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, getHostApplicationTransferPlan, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, terminateHostApplication, type RunningHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
 import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress, hostApplicationDesktopDetail, type HostApplicationDesktopProgress } from './HostApplicationSetupPanel';
 import type { HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 import { updateHostApplicationPreparationDocument, type HostApplicationPreparationView } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
