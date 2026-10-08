@@ -10,7 +10,7 @@ const base = config.base;
 let session = config.session, control, media, player, epoch = 0, sequence = 0;
 let generation = 0, state = 'disconnected', reason = '', painted = false, stopped = false, retry;
 let unlocking = false, lockedFrame = 0;
-let backend = '', stats, clipboardText = '', clipboardSync = false, clipboardBusy = false;
+let backend = '', capabilities = {}, stats, clipboardText = '', clipboardSync = false, clipboardBusy = false;
 let original = false, quality = 'smooth', audio = false, volume = .7, pinned = false, hideTimer;
 let textInput = 'host';
 let awaitingMedia = [], reconnectAttempts = 0, noticeTimer, awaitingState = false;
@@ -51,7 +51,7 @@ function command(method, values = {}, takeover = false) {
   control.send(JSON.stringify({ command: { version: 1, id: ++sequence, method, ...(!['probe', 'connect', 'disconnect'].includes(method) ? { generation } : {}), ...values }, takeover }));
   return true;
 }
-function release(target) { if (target === generation && state === 'active') command('release_input'); }
+function release(target) { if (target === generation && ['active', 'locked'].includes(state)) command('release_input'); }
 const input = hostApplicationInput.createRemoteInput({
   surface: canvas, label: copy('input'),
   commitText(text, target) {
@@ -62,10 +62,17 @@ const input = hostApplicationInput.createRemoteInput({
     if (new TextEncoder().encode(text).length > 16000) { notice('textTooLong'); return; }
     command('input', { input: { kind: 'paste', text } });
   },
-  sendKey(key, target) { pointer.flush(); if (unlockAuthorized(target)) command('unlock_input', { frame_id: lockedFrame, input: { kind: 'key', ...key } }); else if (active(target)) command('input', { input: { kind: 'key', ...key } }); },
+  sendKey(key, target) {
+    pointer.flush();
+    if (unlockAuthorized(target)) {
+      if (key.pressed && (/^(Control|Meta)/.test(key.code) || ['AltLeft', 'ContextMenu'].includes(key.code) || (key.code === 'Insert' && key.shiftKey))) { notice('unlockPhysicalOnly'); return; }
+      command('unlock_input', { frame_id: lockedFrame, input: { kind: 'key', ...key } });
+    } else if (active(target)) command('input', { input: { kind: 'key', ...key } });
+  },
   release,
   clipboard(event, target) {
-    if (unlocking || !clipboardSync || !active(target) || !(event.ctrlKey || event.metaKey) || event.code !== 'KeyV') return false;
+    if (unlocking && ((event.ctrlKey || event.metaKey) || event.shiftKey && event.code === 'Insert')) { event.preventDefault(); notice('unlockPhysicalOnly'); return true; }
+    if (!clipboardSync || !active(target) || !(event.ctrlKey || event.metaKey) || event.code !== 'KeyV') return false;
     event.preventDefault(); void localClipboard(target, true); return true;
   },
 });
@@ -75,6 +82,7 @@ const pointer = hostApplicationPointer.createRemotePointer({
   release,
   sendPointer(packet, target) {
     if (unlockAuthorized(target) && !['text', 'paste'].includes(packet.kind)) {
+      if (packet.kind === 'down' && packet.button !== 0) { notice('unlockPhysicalOnly'); return false; }
       const rect = canvas.getBoundingClientRect();
       const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
       const width = canvas.width * scale, height = canvas.height * scale;
@@ -99,10 +107,14 @@ function updateTransitionControls() {
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'sound', 'text-input', 'volume']) {
     if ($(id)) $(id).disabled = !!audioRequest || awaitingState || state !== 'active';
   }
-  $('clipboard').disabled = stopped || state !== 'active' || !painted;
+  if ($('sound')) $('sound').disabled ||= capabilities.audio === false;
+  if ($('volume')) $('volume').disabled ||= capabilities.audio === false;
+  if ($('text-input')) $('text-input').disabled ||= capabilities.clipboard === false;
+  $('clipboard').disabled = stopped || state !== 'active' || !painted || capabilities.clipboard === false;
   $('shortcuts').disabled = !authorized(generation);
   $('disconnect').disabled = stopped;
   $('retry-disconnect').disabled = disconnectBusy;
+  if (state === 'locked' && painted) $('connection').hidden = true;
   if ($('start-unlock')) $('start-unlock').disabled = stopped || state !== 'locked' || !painted || !session.unlock;
   if ($('cancel-unlock')) $('cancel-unlock').disabled = !unlocking;
   $('unlock-bar')?.toggleAttribute('hidden', state !== 'locked');
@@ -140,10 +152,10 @@ async function setAudio(enabled) {
     input.bindTarget(active(generation) ? generation : null);
   }
 }
-function status(key, hint = '') { $('connection').hidden = key === ''; $('status').textContent = key ? copy(key) : ''; $('hint').textContent = hint ? copy(hint) : ''; }
+function status(key, hint = '') { $('connection').hidden = key === '' || state === 'locked' && painted; $('status').textContent = key ? copy(key) : ''; $('hint').textContent = hint ? copy(hint) : ''; }
 function startUnlock() {
   if (state !== 'locked' || !painted || !session.unlock) return;
-  unlocking = true; input.bindTarget(unlockAuthorized(generation) ? generation : null); canvas.focus(); status('unlocking', 'unlockPhysicalOnly'); updateTransitionControls();
+  unlocking = true; input.bindTarget(unlockAuthorized(generation) ? generation : null); input.focus(); status('unlocking', 'unlockPhysicalOnly'); updateTransitionControls();
 }
 function cancelUnlock() {
   if (!unlocking) return;
@@ -238,6 +250,7 @@ async function connect() {
       if (current !== epoch) return;
       const message = JSON.parse(data);
       if (message.type === 'capabilities') {
+        capabilities = message.capabilities;
         backend = message.capabilities.backend;
         session.unlock = !!message.capabilities.unlock;
         const displays = message.capabilities.displays;

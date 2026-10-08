@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop session and model source
 description: Session routing, Desktop model catalog, Flower attach, and lifecycle invalidation.
 tags: [desktop, sessions, models, flower]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-10-08T10:00:00Z
 ---
 # Summary
 
@@ -19,7 +19,7 @@ Desktop model-source RPC v1 publishes opaque `desktop:model_<hash>` identifiers 
 
 The Runtime status projection also publishes `configured`, the authoritative fact that Desktop has a Flower provider profile. A bound, connected source with `configured:false` is an intentional unconfigured state rather than a bridge failure; an empty catalog or missing provider keys are separate availability states. Connection, protocol, catalog, and runtime failures retain diagnostics and are the only states that use connection recovery. Remote Runtime and Desktop provider profiles remain independent and are never copied or used as an implicit fallback.
 
-Desktop stores the model-source process handle immediately after spawn and opens the Env App without awaiting its startup report. There is no fixed eight-second kill boundary. One loop inside the model-source process owns both initial connection and later reconnection, uses capped backoff for transient network, timeout, rate-limit, and server failures, and stops immediately for authentication, configuration, or protocol failures. Desktop does not add a second retry owner. Session close cancels the connector, closes an in-progress WebSocket dial or read, and stops the exact process. A normal WebSocket close is reconnectable and never replaces a previously observed actionable failure with close code 1000.
+Desktop stores the model-source process handle immediately after spawn and opens the Env App without awaiting its startup report. There is no fixed eight-second kill boundary. One loop inside the model-source process owns both initial connection and later reconnection, uses capped backoff for transient network, timeout, rate-limit, and server failures, and stops immediately for authentication, configuration, or protocol failures. Desktop does not add a second retry owner. Session close cancels the connector, closes an in-progress WebSocket dial or read, and stops the exact process. On the Runtime side, cancellation of an AI service generation closes that generation’s RPC socket even during an idle read. The canceled handler releases its service lease before shutdown waits for the generation to drain; an open Desktop connection cannot hold Runtime restart indefinitely. A normal WebSocket close is reconnectable and never replaces a previously observed actionable failure with close code 1000.
 
 Thread inventory and detail reads project persisted model id, reasoning selection, permissions, and working directory without consulting the live Desktop model catalog. Model capability remains live catalog state. Creating a thread, changing its model or reasoning selection, and accepting a new send still validate the selected Desktop model against the current source and fail closed while it is disconnected. The send preflight runs after idempotency lookup, so retrying an already accepted request returns its canonical result without admitting new work. Draft editing and persisted history remain usable during connection recovery; Redeven adds no cached model directory, read-only mode, queued-send fallback, or second retry loop.
 

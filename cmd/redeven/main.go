@@ -86,6 +86,8 @@ func (c *cli) run(args []string) int {
 		return c.desktopBridgeCmd(args[1:])
 	case "desktop-runtime-status":
 		return c.desktopRuntimeStatusCmd(args[1:])
+	case "desktop-service-kit":
+		return c.desktopServiceKitCmd(args[1:])
 	case "desktop-runtime-inventory":
 		return c.desktopRuntimeInventoryCmd(args[1:])
 	case "desktop-runtime-stop":

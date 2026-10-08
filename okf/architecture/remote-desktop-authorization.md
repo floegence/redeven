@@ -8,12 +8,15 @@ timestamp: 2026-10-08T00:00:00Z
 # Summary
 
 Redeven owns the host's sharing preference and authenticated reset operation;
-published `floe-native-apps` v0.22.19 owns OS authorization and private recovery
+published `floe-native-apps` v0.22.24 owns OS authorization and private recovery
 credentials. With the Runtime running in a logged-in graphical desktop, sharing
 defaults to preserving first approval. Later connections attempt recovery before
 requesting consent again. A saved credential is a recovery opportunity, not proof
 that the OS will accept it. No credential reaches the viewer, URL or audit.
 Uncertain single-use credentials are retained but never replayed indefinitely.
+This contract governs the optional current-user Portal chain. Linux Desktop SSH
+uses the [system-service deployment contract](remote-desktop-ssh-deployment.md);
+Portal approval is never its installation or lock-screen prerequisite.
 
 # Contract
 

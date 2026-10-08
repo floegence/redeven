@@ -78,6 +78,7 @@ type Manager struct {
 	closed          bool
 	forwards        *portforward.Service
 	factory         Factory
+	serviceStatus   func(context.Context) (nativeapps.ServiceStatus, error)
 	setupMu         sync.Mutex
 	setup           *nativeapps.Manager
 	state           string
@@ -91,6 +92,9 @@ func New(state string, forwards *portforward.Service, mac Factory) *Manager {
 		m.factory = mac
 	case "linux":
 		m.factory = m.openLinux
+		m.serviceStatus = func(ctx context.Context) (nativeapps.ServiceStatus, error) {
+			return nativeapps.InstalledLoginServiceStatus(ctx, nativeapps.LoginServiceSocket)
+		}
 	}
 	go m.expire()
 	return m
@@ -113,13 +117,22 @@ func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
 		return status, nil
 	}
 	if runtime.GOOS == "linux" {
-		setup, err := m.SetupStatus(owner)
-		if err != nil {
-			return status, err
-		}
-		status.Setup = &setup
-		if setup.Installed == nil || !setup.Installed.Ready || setup.UpdateAvailable {
-			status.Capabilities.State = "setup_required"
+		service, err := m.serviceStatus(ctx)
+		status.LoginService = service
+		if service.State == nativeapps.ServiceNotInstalled {
+			setup, err := m.SetupStatus(owner)
+			if err != nil {
+				return status, err
+			}
+			status.Setup = &setup
+			if setup.Installed == nil || !setup.Installed.Ready || setup.UpdateAvailable {
+				status.Capabilities.State = "setup_required"
+				return status, nil
+			}
+		} else if err != nil || service.State != nativeapps.ServiceActive {
+			status.Capabilities.State = "unavailable"
+			status.Capabilities.Backend = service.Backend
+			status.Capabilities.Reason = service.Reason
 			return status, nil
 		}
 	}
@@ -172,6 +185,9 @@ func (m *Manager) InstallLoginService(ctx context.Context, owner string) (native
 
 func (m *Manager) UninstallLoginService(ctx context.Context, owner string) (nativeapps.ServiceStatus, error) {
 	status, err := m.serviceCommand(ctx, owner, "service_uninstall")
+	if errors.Is(err, nativeapps.ErrServiceAuthorization) {
+		return status, ErrServiceAuthorization
+	}
 	if err != nil && errors.Is(err, nativeapps.ErrServiceUnsupported) {
 		return status, ErrServiceUnsupported
 	}
@@ -191,6 +207,16 @@ func (m *Manager) serviceCommand(ctx context.Context, owner, method string) (nat
 	}
 	if closed || factory == nil {
 		return status, ErrServiceUnsupported
+	}
+	if m.serviceStatus != nil {
+		if method != "service_status" {
+			return nativeapps.ServiceStatus{State: nativeapps.ServiceAuthorization, Backend: "linux-drm-kms", Reason: "ssh_administrator_authorization_required"}, nativeapps.ErrServiceAuthorization
+		}
+		status, err := m.serviceStatus(ctx)
+		if status.State == nativeapps.ServiceNotInstalled && errors.Is(err, nativeapps.ErrServiceNotInstalled) {
+			err = nil
+		}
+		return status, err
 	}
 	connection, err := factory(ctx)
 	if err != nil {

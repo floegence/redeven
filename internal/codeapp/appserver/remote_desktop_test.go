@@ -1,11 +1,13 @@
 package appserver
 
 import (
+	"encoding/json"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/remotedesktop"
 	"github.com/floegence/redeven/internal/session"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -42,7 +44,7 @@ func TestRemoteDesktopSettingsPreserveRememberedDisplayAcrossRestart(t *testing.
 func TestRemoteDesktopRequiresFullPermissionForEverySessionRoute(t *testing.T) {
 	server := &Server{resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true})}
 	for _, route := range []struct{ method, path string }{
-		{"POST", "/sessions"}, {"GET", "/sessions/one"}, {"POST", "/sessions/one/takeover"}, {"POST", "/sessions/one/display"}, {"POST", "/sessions/one/mode"}, {"POST", "/sessions/one/lock"}, {"DELETE", "/sessions/one"}, {"PUT", "/settings"}, {"DELETE", "/authorization"}, {"POST", "/setup"},
+		{"POST", "/sessions"}, {"GET", "/sessions/one"}, {"POST", "/sessions/one/takeover"}, {"POST", "/sessions/one/display"}, {"POST", "/sessions/one/mode"}, {"POST", "/sessions/one/lock"}, {"DELETE", "/sessions/one"}, {"PUT", "/settings"}, {"DELETE", "/authorization"}, {"POST", "/setup"}, {"POST", "/service/deployment"}, {"POST", "/service/install"}, {"DELETE", "/service"},
 	} {
 		r := httptest.NewRequest(route.method, remoteDesktopAPI+route.path, strings.NewReader(`{}`))
 		r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))
@@ -159,6 +161,51 @@ func TestRemoteDesktopStatusReportsEffectivePolicyFromLegacyConfiguration(t *tes
 		}
 		if w.Code != 200 || !strings.Contains(w.Body.String(), `"approval_policy":"`+policy+`"`) {
 			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestRemoteDesktopDeploymentAuditRejectsCredentialsAndUnconfirmedOutcomes(t *testing.T) {
+	manager := remotedesktop.New(t.TempDir(), nil, nil)
+	defer manager.Close()
+	server := &Server{remoteDesktop: manager, resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	for _, test := range []struct {
+		body   string
+		status int
+	}{
+		{`{"operation":"install","phase":"authorize"}`, 200},
+		{`{"operation":"stop","phase":"result","outcome":"canceled","rollback":"complete"}`, 200},
+		{`{"operation":"install","phase":"authorize","administratorPassword":"fixture-only"}`, 400},
+		{`{"operation":"install","phase":"authorize","runtime_pid":42}`, 400},
+		{`{"operation":"install","phase":"result"}`, 400},
+		{`{"operation":"shell","phase":"authorize"}`, 400},
+		{`{"operation":"install","phase":"authorize","outcome":"success"}`, 400},
+	} {
+		r := httptest.NewRequest("POST", remoteDesktopAPI+"/service/deployment", strings.NewReader(test.body))
+		r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))
+		w := httptest.NewRecorder()
+		server.handleRemoteDesktopAPI(w, r)
+		if w.Code != test.status {
+			t.Fatalf("deployment contract: %d", w.Code)
+		}
+		if strings.Contains(w.Body.String(), "fixture-only") {
+			t.Fatal("credential reflected")
+		}
+		if test.status == 200 {
+			var response struct {
+				Data struct {
+					RuntimePID int `json:"runtime_pid"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(test.body, `"phase":"authorize"`) && response.Data.RuntimePID != os.Getpid() {
+				t.Fatal("authorization did not identify its executing Runtime")
+			}
+			if strings.Contains(test.body, `"phase":"result"`) && response.Data.RuntimePID != 0 {
+				t.Fatal("result response exposed unneeded process information")
+			}
 		}
 	}
 }

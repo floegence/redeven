@@ -10,13 +10,16 @@ import type { RemoteDesktopStatus } from '../services/remoteDesktopApi';
 const state = vi.hoisted(() => ({
   label: 'server', hostname: 'server.example', local: true, full: true, desktop: true,
   status: vi.fn(), create: vi.fn(), open: vi.fn(), disconnect: vi.fn(), save: vi.fn(), forget: vi.fn(), permission: vi.fn(),
+  deployment: vi.fn(), progress: vi.fn(),
 }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: state.local ? 'Local Environment' : 'Research host', agent: { hostname: state.hostname }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   env_id: () => 'env-fixture', localRuntime: () => state.local ? {} : null,
 }) }));
 vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.label ? { label: state.label } : null }));
-vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => state.desktop }));
+vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => state.desktop,
+  remoteDesktopDeploymentInDesktopShell: state.deployment, onRemoteDesktopDeploymentProgress: state.progress,
+}));
 vi.mock('../services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
 vi.mock('../services/remoteDesktopApi', async original => ({ ...await original<object>(), getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, disconnectRemoteDesktop: state.disconnect, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget }));
 vi.mock('../services/hostApplicationsApi', async original => ({ ...await original<object>(), requestHostApplicationPermission: state.permission }));
@@ -31,11 +34,12 @@ beforeEach(() => {
   state.status.mockResolvedValue(structuredClone(ready));
   state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' });
   state.open.mockResolvedValue(undefined); state.disconnect.mockResolvedValue(undefined); state.save.mockResolvedValue({ unattended: true });
+  state.deployment.mockResolvedValue({ ok: true, available: false }); state.progress.mockReturnValue(() => {});
   host = document.createElement('main'); document.body.append(host);
 });
 afterEach(() => { dispose?.(); host.remove(); vi.restoreAllMocks(); });
 const button = (name: string) => [...host.querySelectorAll('button')].find(item => controlText(item) === name || item.getAttribute('aria-label') === name)!;
-async function mount() { dispose = render(() => <RemoteDesktopPanel />, host); await vi.waitFor(() => expect(state.status).toHaveBeenCalled()); await vi.waitFor(() => expect(button('Connect to desktop')).toBeTruthy()); }
+async function mount() { dispose = render(() => <RemoteDesktopPanel />, host); await vi.waitFor(() => expect(state.status).toHaveBeenCalled()); await vi.waitFor(() => expect(host.querySelector('.remote-desktop-connect')).toBeTruthy()); }
 
 it.each([
   { label: 'server', local: true, hostname: 'server.example', expected: 'server' },
@@ -181,4 +185,80 @@ it.each(['unknown', 'revoked', 'unsupported'] as const)('does not call %s approv
   await mount();
   expect(host.querySelector('.remote-desktop-state')?.textContent).not.toContain('Sharing approval saved');
   expect(button('Connect to desktop').disabled).toBe(false);
+});
+
+it('confirms administrator scope in Env App and clears the credential before SSH begins', async () => {
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'host_action_required' }, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void;
+  state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : new Promise(resolve => { finish = resolve; }));
+  await mount(); await vi.waitFor(() => expect(button('Set up')).toBeDefined());
+  expect(host.textContent).not.toContain('Confirm screen sharing on the host');
+  button('Set up').click();
+  const dialog = document.querySelector('[role=dialog]')!;
+  expect(dialog.textContent).toContain('root system service');
+  expect(dialog.textContent).toContain('opens no public port');
+  expect(state.deployment.mock.calls.filter(([request]) => request.action === 'manage')).toHaveLength(0);
+  const password = dialog.querySelector<HTMLInputElement>('input[type=password]')!;
+  password.value = 'ephemeral-fixture'; password.dispatchEvent(new Event('input', { bubbles: true }));
+  [...dialog.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith({ action: 'manage', operation: 'install', confirmed: true, administratorPassword: 'ephemeral-fixture' }));
+  expect(password.value).toBe(''); expect(password.disabled).toBe(true);
+  finish({ ok: false, code: 'authorization_failed' });
+  await vi.waitFor(() => expect(dialog.querySelector('[role=alert]')?.textContent).toContain('Administrator authorization was not accepted'));
+  expect(state.permission).not.toHaveBeenCalled();
+  expect(state.create).not.toHaveBeenCalled();
+});
+
+it('waits for cancellation rollback and explains its observed outcome', async () => {
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void;
+  state.deployment.mockImplementation(request => {
+    if (request.action === 'capabilities') return Promise.resolve({ ok: true, available: true });
+    if (request.action === 'cancel') { finish({ ok: false, code: 'canceled', rollback: 'complete' }); return Promise.resolve({ ok: true }); }
+    return new Promise(resolve => { finish = resolve; });
+  });
+  await mount(); await vi.waitFor(() => expect(button('Start')).toBeDefined());
+  button('Start').click();
+  const dialog = document.querySelector('[role=dialog]')!;
+  [...dialog.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'start' })));
+  [...dialog.querySelectorAll('button')].find(item => controlText(item) === 'Cancel')!.click();
+  await vi.waitFor(() => expect(dialog.querySelector('[role=alert]')?.textContent).toContain('previous system state was restored'));
+  expect(dialog.textContent).toContain('Operation canceled');
+  expect(document.querySelector('[role=dialog]')).not.toBeNull();
+});
+
+it('shows the actual unsupported graphics reason without an unusable connection button', async () => {
+  state.deployment.mockResolvedValue({ ok: true, available: true });
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'GPU_SCANOUT_UNSUPPORTED' }, login_service: { state: 'active', backend: 'linux-drm-kms' } });
+  await mount(); expect(button('Connect to desktop').disabled).toBe(true);
+  expect(host.textContent).toContain('graphics device cannot provide');
+  expect(host.textContent).not.toContain('Unlock it locally');
+  expect(host.textContent).not.toContain('Set up remote desktop');
+});
+
+it('finishes the operation before refreshing status and allows the canceled result to close', async () => {
+  state.status.mockResolvedValueOnce({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  state.status.mockImplementation(() => new Promise(() => {}));
+  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities'
+    ? { ok: true, available: true } : { ok: false, code: 'canceled', rollback: 'complete' }));
+  await mount(); await vi.waitFor(() => expect(button('Start')).toBeDefined());
+  button('Start').click();
+  const dialog = document.querySelector('[role=dialog]')!;
+  [...dialog.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
+  await vi.waitFor(() => expect(dialog.querySelector('[role=alert]')?.textContent).toContain('Operation canceled'));
+  expect(dialog.querySelector('.remote-desktop-deployment-progress')).toBeNull();
+  [...dialog.querySelectorAll('button')].find(item => controlText(item) === 'Cancel')!.click();
+  expect(state.deployment.mock.calls.filter(([request]) => request.action === 'cancel')).toHaveLength(0);
+});
+
+it('does not offer target-side consent or deployment on an unsupported SSH operating system', async () => {
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, screen: false, input: false }, login_service: { state: 'unsupported', backend: 'darwin' } });
+  state.deployment.mockResolvedValue({ ok: true, available: true });
+  await mount();
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith({ action: 'capabilities' }));
+  expect(button('Connect to desktop').disabled).toBe(true);
+  expect(host.textContent).toContain('SSH is not supported on this operating system');
+  expect(host.textContent).not.toContain('Allow screen recording');
+  expect(host.textContent).not.toContain('Allow accessibility');
 });

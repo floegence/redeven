@@ -1,4 +1,5 @@
 import type { HostApplicationComponentsRequest, HostApplicationComponentsResult, HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
+import type { DesktopDeploymentRequest, DesktopDeploymentResult, DesktopDeploymentProgress } from '../../../../../../desktop/src/shared/remoteDesktopDeployment';
 import {
   normalizeDesktopShellWindowCommandResponse,
   type DesktopShellWindowCommandResponse,
@@ -37,6 +38,8 @@ export type DesktopRuntimeMaintenanceResult = Readonly<{
 export type RuntimeMaintenanceContext = DesktopShellRuntimeMaintenanceContext;
 
 export interface DesktopShellBridge {
+  remoteDesktopDeployment?: (request: DesktopDeploymentRequest) => Promise<DesktopDeploymentResult>;
+  onRemoteDesktopDeploymentProgress?: (listener: (value: DesktopDeploymentProgress) => void) => () => void;
   onRemoteDesktopFiles?: (listener: () => void) => () => void;
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;
@@ -77,6 +80,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
     !candidate
     || (
       typeof candidate.openConnectionCenter !== 'function'
+      && typeof candidate.remoteDesktopDeployment !== 'function'
       && typeof candidate.openAdvancedSettings !== 'function'
       && typeof candidate.openFlowerSettings !== 'function'
       && typeof candidate.openWindow !== 'function'
@@ -103,6 +107,13 @@ function desktopShellBridge(): DesktopShellBridge | null {
 
 export function desktopShellBridgeAvailable(): boolean {
   return desktopShellBridge() !== null;
+}
+
+export async function remoteDesktopDeploymentInDesktopShell(request: DesktopDeploymentRequest): Promise<DesktopDeploymentResult> {
+  return await desktopShellBridge()?.remoteDesktopDeployment?.(request) ?? { ok: false, code: 'unsupported_target' };
+}
+export function onRemoteDesktopDeploymentProgress(listener: (value: DesktopDeploymentProgress) => void): () => void {
+  return desktopShellBridge()?.onRemoteDesktopDeploymentProgress?.(listener) ?? (() => {});
 }
 
 export async function openConnectionCenter(): Promise<boolean> {

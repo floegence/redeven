@@ -89,7 +89,7 @@ server.on('upgrade', (request, socket, head) => {
       control = connection; controls.push(connection);
       connection.on('message', data => {
         const packet = JSON.parse(data); const command = packet.command; messages.push(packet);
-        if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: { backend, displays } }));
+        if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: { backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: true } }));
         if (command.method === 'connect') {
           if (lockedNextConnect) {
             lockedNextConnect = false;
@@ -462,6 +462,42 @@ try {
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
   assert.equal(await canvasCursor(), controlCursor, 'taking control must apply the control frame cursor presentation');
   assert(messages.some(item => item.command.method === 'set_mode' && item.takeover), 'takeover missing explicit flag');
+  control.send(JSON.stringify({ version: 1, type: 'state', state: 'locked', mode: 'control', generation: ++generation }));
+  await page.waitForFunction(() => !document.querySelector('#unlock-bar').hidden);
+  assert(await page.locator('#start-unlock').isDisabled(), 'unlock accepted an unpainted lock screen');
+  paint();
+  await page.waitForFunction(() => !document.querySelector('#start-unlock').disabled);
+  assert(await page.locator('#connection').isHidden(), 'painted lock screen retained the connection overlay');
+  assert(await page.locator('#clipboard').isDisabled(), 'lock screen exposed clipboard');
+  assert(await page.locator('#shortcuts').isDisabled(), 'lock screen exposed shortcuts');
+  const beforeUnlock = messages.length;
+  await page.locator('#start-unlock').click();
+  await page.keyboard.press('a');
+  await page.keyboard.press('Control+v');
+  await page.keyboard.press('Meta+v');
+  await page.keyboard.press('Shift+Insert');
+  await page.evaluate(() => document.querySelector('.floe-remote-input').dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true })));
+  await page.keyboard.down('Shift');
+  await page.locator('#settings').focus();
+  await page.waitForFunction(() => document.querySelector('.floe-remote-input').disabled === false);
+  await page.waitForTimeout(40);
+  const unlockCommands = messages.slice(beforeUnlock).map(item => item.command);
+  assert(unlockCommands.some(command => command.method === 'unlock_input' && command.input.code === 'KeyA'), 'physical unlock input missing');
+  assert(unlockCommands.some(command => command.method === 'release_input'), 'locked blur retained held input');
+  assert(!unlockCommands.some(command => command.method === 'input' || ['set_clipboard', 'get_clipboard'].includes(command.method) || command.input?.kind === 'paste' || command.input?.code === 'Insert' && command.input?.pressed || /^(Control|Meta)/u.test(command.input?.code ?? '') && command.input?.pressed), 'unlock leaked clipboard, paste or ordinary input');
+  await page.keyboard.up('Shift');
+  await page.locator('#cancel-unlock').click();
+  await page.waitForTimeout(20);
+  assert(messages.some(item => item.command.method === 'unlock_cancel'), 'unlock cancellation missing');
+  state();
+  generation++; state();
+  await page.waitForFunction(() => document.querySelector('#unlock-bar').hidden);
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'unlock successor reused the lock frame authority');
+  const beforePaint = messages.length;
+  await page.keyboard.press('b');
+  assert(!messages.slice(beforePaint).some(item => item.command.method === 'input'), 'successor input escaped before paint');
+  paint();
+  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'locked', generation: ++generation }));
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host is locked');
   assert(await page.locator('.floe-remote-input').isDisabled(), 'locked host retained input');

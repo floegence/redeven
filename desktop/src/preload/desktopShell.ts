@@ -2,6 +2,7 @@
 
 import { REMOTE_DESKTOP_FILES_CHANNEL } from '../shared/hostApplicationWindowIPC';
 import { contextBridge, ipcRenderer } from 'electron';
+import { REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, parseDesktopDeploymentRequest, parseDesktopDeploymentProgress, type DesktopDeploymentRequest, type DesktopDeploymentResult, type DesktopDeploymentProgress } from '../shared/remoteDesktopDeployment';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest, type HostApplicationComponentsResult, type HostApplicationComponentsProgress } from '../shared/hostApplicationComponents';
 import { HOST_APPLICATION_PREPARATION_CHANNEL, HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL, type HostApplicationPreparationRequest, type HostApplicationPreparationResult } from '../shared/hostApplicationPreparation';
 
@@ -38,6 +39,16 @@ import {
 
 export function bootstrapDesktopShellBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopShell', {
+    remoteDesktopDeployment: async (request: DesktopDeploymentRequest): Promise<DesktopDeploymentResult> => {
+      const normalized = parseDesktopDeploymentRequest(request);
+      if (!normalized) return { ok: false, code: 'invalid_request' };
+      return ipcRenderer.invoke(REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, normalized);
+    },
+    onRemoteDesktopDeploymentProgress: (listener: (value: DesktopDeploymentProgress) => void) => {
+      const receive = (_event: unknown, value: unknown) => { const progress = parseDesktopDeploymentProgress(value); if (progress) listener(progress); };
+      ipcRenderer.on(REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, receive);
+      return () => ipcRenderer.removeListener(REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, receive);
+    },
     onRemoteDesktopFiles: (listener: () => void): (() => void) => {
       const receive = () => listener();
       ipcRenderer.on(REMOTE_DESKTOP_FILES_CHANNEL, receive);

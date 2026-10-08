@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -96,6 +97,33 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		value, err = g.remoteDesktop.SystemServiceStatus(ctx, owner)
+	case r.URL.Path == remoteDesktopAPI+"/service/deployment" && r.Method == http.MethodPost:
+		// This endpoint authorizes and audits the Desktop SSH transaction. It
+		// never accepts credentials or executes privileged host operations.
+		var request struct {
+			Operation string `json:"operation"`
+			Phase     string `json:"phase"`
+			Outcome   string `json:"outcome,omitempty"`
+			Rollback  string `json:"rollback,omitempty"`
+		}
+		if decodeManagedJSON(r, &request) != nil || !desktopDeploymentOperation(request.Operation) ||
+			(request.Phase != "authorize" && request.Phase != "result") ||
+			(request.Phase == "authorize" && (request.Outcome != "" || request.Rollback != "")) ||
+			(request.Phase == "result" && request.Outcome != "success" && request.Outcome != "failure" && request.Outcome != "canceled") ||
+			(request.Rollback != "" && request.Rollback != "complete" && request.Rollback != "failed" && request.Rollback != "unknown") {
+			err = remotedesktop.ErrInvalid
+			break
+		}
+		result := request.Outcome
+		if request.Phase == "authorize" {
+			result = "authorized"
+		}
+		g.appendAudit(meta, "remote_desktop_service_"+request.Operation+"_"+request.Phase, result,
+			map[string]any{"rollback": request.Rollback}, nil)
+		value = map[string]any{"authorized": true}
+		if request.Phase == "authorize" {
+			value = map[string]any{"authorized": true, "runtime_pid": os.Getpid()}
+		}
 	case r.URL.Path == remoteDesktopAPI+"/service/install" && r.Method == http.MethodPost:
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 		defer cancel()
@@ -196,6 +224,13 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: value})
 	}
 	return true
+}
+func desktopDeploymentOperation(operation string) bool {
+	switch operation {
+	case "install", "update", "start", "stop", "uninstall":
+		return true
+	}
+	return false
 }
 func writeDesktopError(w http.ResponseWriter, err error) {
 	status, code := http.StatusServiceUnavailable, "DESKTOP_UNAVAILABLE"

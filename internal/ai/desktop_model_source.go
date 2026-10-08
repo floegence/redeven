@@ -613,6 +613,10 @@ func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) error {
 	if c == nil || c.ws == nil {
 		return errors.New("desktop model source websocket is not connected")
 	}
+	// A generation's cancellation must unblock an idle read so its lease can
+	// drain during Runtime restart, even when Desktop leaves the socket open.
+	stopCancellation := context.AfterFunc(ctx, func() { c.closeWithError(ctx.Err()) })
+	defer stopCancellation()
 	for {
 		select {
 		case <-ctx.Done():
@@ -622,6 +626,9 @@ func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) error {
 		}
 		var frame DesktopModelSourceRPCFrame
 		if err := c.ws.ReadJSON(&frame); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			c.closeWithError(err)
 			return err
 		}
@@ -735,8 +742,8 @@ func (c *desktopModelSourceRuntimeConn) dispatch(frame DesktopModelSourceRPCFram
 		return
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	ch := c.pending[id]
-	c.mu.Unlock()
 	if ch == nil {
 		return
 	}

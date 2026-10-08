@@ -1,6 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 
 const MAX_RUNTIME_ARCHIVE_BYTES = 256 * 1024 * 1024;
+const MAX_RUNTIME_UNPACKED_BYTES = 512 * 1024 * 1024;
 
 function tarString(block: Buffer, offset: number, length: number): string {
   const end = block.subarray(offset, offset + length).indexOf(0);
@@ -36,11 +37,14 @@ export function runtimeArchiveEntries(archive: Buffer): ReadonlyMap<string, Buff
   }
   let tar: Buffer;
   try {
-    tar = gunzipSync(archive);
-  } catch {
+    tar = gunzipSync(archive, { maxOutputLength: MAX_RUNTIME_UNPACKED_BYTES });
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new Error('Runtime release archive exceeds the size limit.');
+    }
     throw new Error('Runtime release archive is not a valid gzip stream.');
   }
-  if (tar.length > MAX_RUNTIME_ARCHIVE_BYTES) {
+  if (tar.length > MAX_RUNTIME_UNPACKED_BYTES) {
     throw new Error('Runtime release archive exceeds the size limit.');
   }
   let offset = 0;
@@ -56,7 +60,7 @@ export function runtimeArchiveEntries(archive: Buffer): ReadonlyMap<string, Buff
       throw new Error(`Runtime release archive contains an unsafe entry: ${name}.`);
     }
     totalEntryBytes += size;
-    if (totalEntryBytes > MAX_RUNTIME_ARCHIVE_BYTES) {
+    if (totalEntryBytes > MAX_RUNTIME_UNPACKED_BYTES) {
       throw new Error('Runtime release archive exceeds the size limit.');
     }
     const bodyStart = offset + 512;
@@ -68,7 +72,7 @@ export function runtimeArchiveEntries(archive: Buffer): ReadonlyMap<string, Buff
       if (entries.has(name)) {
         throw new Error(`Runtime release archive contains duplicate entry: ${name}.`);
       }
-      entries.set(name, Buffer.from(tar.subarray(bodyStart, bodyEnd)));
+      entries.set(name, tar.subarray(bodyStart, bodyEnd));
     }
     offset = bodyStart + Math.ceil(size / 512) * 512;
   }

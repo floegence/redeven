@@ -23,6 +23,8 @@ SSH discovery follows bounded configuration includes, excludes wildcard and nega
 
 One lifecycle operation opens or reuses one SSH transport, probes platform once, prepares a lightweight helper only when required, and reuses that session for inventory and stop. Start and Stop do not prepare a full Runtime package. Update prepares the Runtime package independently, verifies it before target modification, and exposes build/download/upload phases separately from process discovery.
 
+Runtime package admission limits the compressed archive to 256 MiB and its entire expanded tar stream to 512 MiB. The expanded budget covers the native Runtime, Computer suite, and signed plugin inventory together. Gzip expansion enforces the limit while decoding; oversized input fails before target modification. Validation consumes one parsed entry inventory rather than inflating the same archive again for executable discovery.
+
 Desktop stages every managed Runtime package with private metadata independent of the target user's shell `umask`: `runtime`, `runtime/managed`, and `runtime/managed/bin` are mode `0700`; the `redeven` and `redevplugin-runtime` executables are mode `0700`; and the managed stamp plus ReDevPlugin evidence files are mode `0600`. Upload, remote-install, container, and reinstall paths consume this one slot contract. A metadata-normalization failure leaves the live slot unchanged, while ReDevPlugin remains the final fail-closed executable-admission authority at startup.
 
 ## Host and container behavior
@@ -50,6 +52,7 @@ Desktop never scans unrelated processes, selects a similarly named container, de
 - `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Platform execution, failure classification, and owned-child disposal.
 - `redeven:desktop/src/main/managedRuntimeSlot.ts:1` - Standard managed Runtime file inventory and private metadata contract.
 - `redeven:desktop/src/main/sshRuntime.ts:1` - Direct SSH Runtime package, helper, process, start, and verification operations.
+- `redeven:desktop/src/main/runtimeArchive.ts:1` and `redeven:desktop/src/main/runtimeArchive.test.ts:1` - Bounded package expansion and complete-suite admission.
 - `redeven:desktop/src/main/containerRuntime.ts:1` - Exact SSH-container command construction.
 - `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1` - One current-Desktop owner per physical target.
 - `redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1` - Explicit intent-specific progress phases.

@@ -21,6 +21,9 @@ import { ProviderCredentialRecovery, providerCredentialsNeedRenewal } from './pr
 import { BrowserPackages, browserPackageOwner } from './browserPackage';
 import { BROWSER_PACKAGE_CHANNEL, BROWSER_PACKAGE_PROGRESS_CHANNEL, parseBrowserPackageRequest } from '../shared/browserPackageIPC';
 import { HostApplicationComponents } from './hostApplicationComponents';
+import { RemoteDesktopDeployment, DesktopDeploymentPermissionError } from './remoteDesktopDeployment';
+import { loadDesktopServiceKit } from './remoteDesktopServiceKit';
+import { REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, parseDesktopDeploymentRequest } from '../shared/remoteDesktopDeployment';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest } from '../shared/hostApplicationComponents';
 import { desktopEnvironmentID } from './desktopPreferences';
 import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, requireEnvironmentManagementAvailable, type EnvironmentAccessOwner } from './environmentAccessSettings';
@@ -1007,6 +1010,8 @@ const hostApplicationPreparations = new HostApplicationPreparationWindows<Deskto
 );
 const browserPackages = new BrowserPackages(bundledRuntimeExecutablePath, () => path.join(app.getPath('userData'), 'browser-package-cache'));
 const browserPackageOwners = new Set<number>();
+const remoteDesktopDeployment = new RemoteDesktopDeployment();
+const remoteDesktopDeploymentOwners = new Set<number>();
 const hostApplicationComponents = new HostApplicationComponents(bundledRuntimeExecutablePath, () => path.join(app.getPath('userData'), 'native-application-components'));
 const hostApplicationComponentOwners = new Set<number>();
 const observedPreparationWindows = new WeakSet<BrowserWindow>();
@@ -18084,6 +18089,7 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   await Promise.allSettled(sessionClosePromises);
   await Promise.allSettled([...sessionCloseTasks.values()]);
   await runtimePlacementBridgeRegistry.retireAll().catch(() => undefined);
+  await remoteDesktopDeployment.dispose();
   await desktopSSHTransportManager.dispose();
 }
 
@@ -18951,6 +18957,56 @@ if (!app.requestSingleInstanceLock()) {
         if (!event.sender.isDestroyed()) event.sender.send(BROWSER_PACKAGE_PROGRESS_CHANNEL, progress);
       });
     } catch { return { ok: false, error: 'acquisition_failed' }; }
+  });
+  ipcMain.handle(REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, async (event, value: unknown) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    const request = parseDesktopDeploymentRequest(value);
+    if (!record || record.closing || record.root_window.webContentsID !== event.sender.id || event.senderFrame !== event.sender.mainFrame || !request) return { ok: false, code: 'invalid_request' };
+    if (request.action === 'cancel') { await remoteDesktopDeployment.cancel(event.sender.id); return { ok: true }; }
+    if (record.target.kind !== 'ssh_environment') return { ok: false, available: false, code: 'unsupported_target' };
+    const target = record.target;
+    if (request.action === 'capabilities') return { ok: true, available: true };
+    const owner = event.sender.id;
+    if (!remoteDesktopDeploymentOwners.has(owner)) {
+      remoteDesktopDeploymentOwners.add(owner);
+      event.sender.on('did-start-navigation', (_navigation, _url, inPlace, mainFrame) => {
+        if (mainFrame && !inPlace) void remoteDesktopDeployment.cancel(owner);
+      });
+      event.sender.once('destroyed', () => { void remoteDesktopDeployment.cancel(owner); remoteDesktopDeploymentOwners.delete(owner); });
+    }
+    const audit = async (phase: 'authorize' | 'result', outcome?: string, rollback?: string, signal?: AbortSignal) => {
+      const url = new URL('/_redeven_proxy/api/remote-desktop/service/deployment', record.allowed_base_url).toString();
+      const response = await event.sender.session.fetch(url, { method: 'POST',
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
+        headers: Object.fromEntries(Object.entries(desktopPrivateBridgeRequestHeaders(record.transport, record.startup, url, { 'Content-Type': 'application/json' }))
+          .map(([name, value]) => [name, Array.isArray(value) ? value.join(', ') : value])),
+        body: JSON.stringify({ operation: request.operation, phase, ...(outcome ? { outcome } : {}), ...(rollback ? { rollback } : {}) }),
+      });
+      const value = await response.json();
+      if (!response.ok || value.ok !== true) throw new DesktopDeploymentPermissionError();
+      return phase === 'authorize' ? Number(value.data?.runtime_pid) : undefined;
+    };
+    let lease: Awaited<ReturnType<typeof desktopSSHTransportManager.acquire>> | undefined;
+    try {
+      const result = await remoteDesktopDeployment.manage(owner, async signal => {
+        // Placement bridge startup describes its carrier. The full-permission
+        // authorization response identifies the Runtime executing this action.
+        const runtimePID = await audit('authorize', undefined, undefined, signal);
+        const preferences = await loadDesktopPreferencesCached();
+        const saved = preferences.saved_runtime_targets.find(savedTarget => savedTarget.id === target.environment_id);
+        lease = await desktopSSHTransportManager.acquire({ target, credentialScope: target.environment_id,
+          sshPassword: saved?.ssh_password_configured ? saved.ssh_password : undefined, signal });
+        return { lease, runtimePID: Number(runtimePID),
+          loadKit: (architecture, signal) => loadDesktopServiceKit(bundledRuntimeExecutablePath(), architecture, signal) };
+      }, request.operation, request.administratorPassword, progress => {
+        if (!event.sender.isDestroyed()) event.sender.send(REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, progress);
+      });
+      await audit('result', result.ok ? 'success' : result.code === 'canceled' ? 'canceled' : 'failure', result.rollback).catch(() => {});
+      return result;
+    } catch {
+      await audit('result', 'failure', 'unknown').catch(() => {});
+      return { ok: false, code: 'transport_interrupted' };
+    } finally { await lease?.release().catch(() => {}); }
   });
   ipcMain.handle(HOST_APPLICATION_COMPONENTS_CHANNEL, async (event, value: unknown) => {
     const record = sessionRecordForWebContentsID(event.sender.id);
