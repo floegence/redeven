@@ -836,6 +836,7 @@ async function withFakeSSHEnv<T>(fixture: FakeSSHFixture, run: () => Promise<T>)
 function targetFor(strategy: DesktopSSHBootstrapStrategy): DesktopSSHEnvironmentDetails {
   return {
     ssh_destination: 'devbox',
+    connect_timeout_seconds: 1,
     ssh_port: 2222,
     auth_mode: 'key_agent',
     runtime_root: 'remote_default',
@@ -881,7 +882,6 @@ async function startWithFakeSSH(
     assetCacheRoot: path.join(fixture.root, 'asset-cache'),
     startupTimeoutMs: options.startupTimeoutMs ?? 5_000,
     stopTimeoutMs: 500,
-    connectTimeoutSeconds: 1,
     signal: options.signal,
     onLog: options.onLog,
     onProgress: options.onProgress,
@@ -911,7 +911,6 @@ async function ensureReadyWithFakeSSH(
     assetCacheRoot: path.join(fixture.root, 'asset-cache'),
     startupTimeoutMs: SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS,
     stopTimeoutMs: 500,
-    connectTimeoutSeconds: 1,
   }));
 }
 
@@ -1045,7 +1044,6 @@ describe('sshRuntime integration', () => {
         runtimeReleaseTag: 'v1.2.3',
         sshBinary: fixture.sshBinary,
         tempRoot: fixture.root,
-        connectTimeoutSeconds: 1,
       }));
 
       expect(probe.status).toBe('ready');
@@ -1067,7 +1065,6 @@ describe('sshRuntime integration', () => {
         runtimeReleaseTag: 'v1.2.3',
         sshBinary: fixture.sshBinary,
         tempRoot: fixture.root,
-        connectTimeoutSeconds: 1,
       }));
 
       expect(probe).toMatchObject({
@@ -1091,7 +1088,6 @@ describe('sshRuntime integration', () => {
         sshBinary: fixture.sshBinary,
         tempRoot: fixture.root,
         assetCacheRoot: path.join(fixture.root, 'asset-cache'),
-        connectTimeoutSeconds: 1,
       };
       const processSession = await withFakeSSHEnv(fixture, () => openManagedSSHRuntimeProcessSession({
         ...processArgs,
@@ -1706,7 +1702,6 @@ describe('sshRuntime integration', () => {
           assetCacheRoot: sharedCacheRoot,
           startupTimeoutMs: 2_500,
           stopTimeoutMs: 500,
-          connectTimeoutSeconds: 1,
         }));
         runtimes.push(runtime);
       }

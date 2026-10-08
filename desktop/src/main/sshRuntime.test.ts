@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildManagedRuntimeAuthorityCommand,
@@ -16,12 +16,14 @@ import {
   describeManagedSSHRuntimeProbeResult,
   parseManagedSSHRuntimeProbeResult,
   probeManagedSSHRuntimeStatus,
+  openManagedSSHRuntimeProcessSession,
+  ensureManagedSSHRuntimeReady,
 } from './sshRuntime';
 import {
   MANAGED_RUNTIME_STAMP_FILENAME,
   MANAGED_RUNTIME_STAMP_SCHEMA_VERSION,
 } from './managedRuntimeSlot';
-import { DefaultDesktopSSHTransportManager } from './sshTransportManager';
+import { DefaultDesktopSSHTransportManager, DesktopSSHTransportUnavailableError, type DesktopSSHTransportManager } from './sshTransportManager';
 
 function readSSHRuntimeSource(): string {
   return fs.readFileSync(path.join(__dirname, 'sshRuntime.ts'), 'utf8');
@@ -59,6 +61,20 @@ function createRuntimeArchive(root: string): string {
 }
 
 describe('sshRuntime', () => {
+  it.each(['probe', 'inventory', 'start'] as const)('honors the environment connection deadline during %s', async phase => {
+    const acquire = vi.fn(async () => { throw new DesktopSSHTransportUnavailableError('Delayed SSH fixture'); });
+    const args = {
+      sshTransportManager: { acquire } as unknown as DesktopSSHTransportManager,
+      sshCredentialScope: 'selected-deadline', runtimeReleaseTag: 'v1.2.3', assetCacheRoot: '/unused',
+      target: { ssh_destination: 'slow-host', ssh_port: null, auth_mode: 'key_agent' as const,
+        runtime_root: 'remote_default', bootstrap_strategy: 'auto' as const, release_base_url: '', connect_timeout_seconds: 60 },
+    };
+    if (phase === 'probe') await probeManagedSSHRuntimeStatus(args);
+    else if (phase === 'inventory') await expect(openManagedSSHRuntimeProcessSession({ ...args, helperBinaryPath: '/unused' })).rejects.toThrow();
+    else await expect(ensureManagedSSHRuntimeReady(args)).rejects.toThrow();
+    expect(acquire).toHaveBeenCalledWith(expect.objectContaining({ readyTimeoutMs: 60_000 }));
+  });
+
   it('keeps authority arguments literal and sends access secrets only over stdin', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-authority-'));
     const runtimeRoot = path.join(root, 'install with spaces $(never-run)');
@@ -89,13 +105,6 @@ describe('sshRuntime', () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
-  });
-
-  it('uses the shared ten-second default for SSH connection establishment', () => {
-    const source = readSSHRuntimeSource();
-    expect(source).toContain('const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 10;');
-    expect(source).toContain('readyTimeoutMs: Math.max(1_000, connectTimeoutSeconds * 1_000)');
-    expect(source).not.toContain('readyTimeoutMs: startupTimeoutMs');
   });
 
   it('returns no startup report until the session report file exists', () => {
@@ -153,7 +162,6 @@ describe('sshRuntime', () => {
         runtimeReleaseTag: 'v1.2.3',
         sshBinary: fakeSSH,
         tempRoot: tempDir,
-        connectTimeoutSeconds: 1,
       });
 
       expect(probe.status).toBe('failed');
