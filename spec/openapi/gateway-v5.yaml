@@ -2,13 +2,13 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Redeven Gateway membership and access",
-    "version": "redeven-gateway-v4",
+    "version": "redeven-gateway-v5",
     "description": "Runtime is the active member initiator. Gateway never dials Runtime URLs. The administration listener rejects browser Origin headers. Runtime membership uses a separately authenticated HTTPS listener; inner Runtime TLS and Flowersec application authorization remain end to end. Member limits are 1,024 members, 32 business streams per member and 1,024 business streams globally, including pending opens and Cloud egress. No Runtime lifecycle or legacy HTTP proxy routes are exposed."
   },
   "paths": {
-    "/gateway/v4/identity": {
+    "/gateway/v5/identity": {
       "post": {
-        "operationId": "gateway_v4_identity",
+        "operationId": "gateway_v5_identity",
         "description": "Prove the stable Gateway key at a changed address using fresh caller input and the existing paired identity.",
         "security": [
           {
@@ -64,9 +64,9 @@
         }
       }
     },
-    "/gateway/v4/pairing/challenge": {
+    "/gateway/v5/pairing/challenge": {
       "post": {
-        "operationId": "gateway_v4_pairing_challenge",
+        "operationId": "gateway_v5_pairing_challenge",
         "description": "Authorize Desktop pairing through an administrator code or trusted host bridge.",
         "security": [],
         "requestBody": {
@@ -115,9 +115,9 @@
         }
       }
     },
-    "/gateway/v4/pairing/complete": {
+    "/gateway/v5/pairing/complete": {
       "post": {
-        "operationId": "gateway_v4_pairing_complete",
+        "operationId": "gateway_v5_pairing_complete",
         "description": "Complete signed pairing with explicit access, member management and Cloud configuration grants.",
         "security": [],
         "requestBody": {
@@ -166,9 +166,9 @@
         }
       }
     },
-    "/gateway/v4/cloud/configure": {
+    "/gateway/v5/cloud/configure": {
       "post": {
-        "operationId": "gateway_v4_cloud_configure",
+        "operationId": "gateway_v5_cloud_configure",
         "description": "Configure the Cloud association using explicit Cloud configuration authority. Reauthorization cannot restore a retired registration.",
         "security": [
           {
@@ -224,9 +224,9 @@
         }
       }
     },
-    "/gateway/v4/cloud/status": {
+    "/gateway/v5/cloud/status": {
       "post": {
-        "operationId": "gateway_v4_cloud_status",
+        "operationId": "gateway_v5_cloud_status",
         "description": "Read the live Cloud association without credentials.",
         "security": [
           {
@@ -282,9 +282,9 @@
         }
       }
     },
-    "/gateway/v4/members/reevaluate": {
+    "/gateway/v5/members/reevaluate": {
       "post": {
-        "operationId": "gateway_v4_members_reevaluate",
+        "operationId": "gateway_v5_members_reevaluate",
         "description": "Reevaluate the current configured Cloud policy hook for a member.",
         "security": [
           {
@@ -340,9 +340,9 @@
         }
       }
     },
-    "/gateway/v4/catalog": {
+    "/gateway/v5/catalog": {
       "post": {
-        "operationId": "gateway_v4_catalog",
+        "operationId": "gateway_v5_catalog",
         "description": "Read members, policy, hook status and observed connectivity. This does not issue Runtime lifecycle authority.",
         "security": [
           {
@@ -398,9 +398,9 @@
         }
       }
     },
-    "/gateway/v4/invitations": {
+    "/gateway/v5/invitations": {
       "post": {
-        "operationId": "gateway_v4_invitations",
+        "operationId": "gateway_v5_invitations",
         "description": "Issue a ten-minute one-use invitation. Requires member management permission.",
         "security": [
           {
@@ -456,9 +456,22 @@
         }
       }
     },
-    "/gateway/v4/members/remove": {
+    "/gateway/v5/endpoints": {
       "post": {
-        "operationId": "gateway_v4_members_remove",
+        "operationId": "gateway_v5_endpoints",
+        "description": "Save administrator-confirmed Runtime connection addresses without changing Gateway or member identities. Requires member management permission. An empty list disables invitations; remote reachability is not inferred from local listeners.",
+        "security": [{ "GatewaySignature": [] }, { "HostAdministrator": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EndpointUpdateRequest" } } } },
+        "responses": {
+          "200": { "description": "Updated Runtime connection endpoints", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/EndpointUpdateResponse" } } }] } } } },
+          "400": { "description": "Invalid connection endpoints", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "403": { "description": "Member management permission required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }
+        }
+      }
+    },
+    "/gateway/v5/members/remove": {
+      "post": {
+        "operationId": "gateway_v5_members_remove",
         "description": "Remove the exact member version; fence LAN and Cloud connections and persist Cloud revocation work.",
         "security": [
           {
@@ -514,9 +527,9 @@
         }
       }
     },
-    "/gateway/v4/members/policy": {
+    "/gateway/v5/members/policy": {
       "post": {
-        "operationId": "gateway_v4_members_policy",
+        "operationId": "gateway_v5_members_policy",
         "description": "Update Cloud permission independently for each member; successful items survive partial failure.",
         "security": [
           {
@@ -575,9 +588,9 @@
         }
       }
     },
-    "/gateway/v4/policy": {
+    "/gateway/v5/policy": {
       "post": {
-        "operationId": "gateway_v4_policy",
+        "operationId": "gateway_v5_policy",
         "description": "Update Gateway Cloud policy using an expected revision. Automatic mode requires separate Namespace authorization.",
         "security": [
           {
@@ -633,9 +646,9 @@
         }
       }
     },
-    "/gateway/v4/access/open": {
+    "/gateway/v5/access/open": {
       "post": {
-        "operationId": "gateway_v4_access_open",
+        "operationId": "gateway_v5_access_open",
         "description": "Authorize a reverse member access connection. Ticket expiry limits redemption, not application session duration.",
         "security": [
           {
@@ -691,9 +704,9 @@
         }
       }
     },
-    "/gateway/v4/access/service": {
+    "/gateway/v5/access/service": {
       "post": {
-        "operationId": "gateway_v4_access_service",
+        "operationId": "gateway_v5_access_service",
         "description": "Refresh signed Runtime TLS service identity for the exact member version, without interrupting established streams.",
         "security": [
           {
@@ -749,9 +762,9 @@
         }
       }
     },
-    "/gateway/v4/migration/dismiss": {
+    "/gateway/v5/migration/dismiss": {
       "post": {
-        "operationId": "gateway_v4_migration_dismiss",
+        "operationId": "gateway_v5_migration_dismiss",
         "description": "Dismiss the one-time member rebuilding notice.",
         "security": [
           {
@@ -807,9 +820,9 @@
         }
       }
     },
-    "/v4/member/join": {
+    "/v5/member/join": {
       "post": {
-        "operationId": "v4_member_join",
+        "operationId": "v5_member_join",
         "description": "Redeem the Gateway invitation with Runtime-signed local consent; repeated delivery retains the same member.",
         "security": [],
         "requestBody": {
@@ -846,9 +859,9 @@
         }
       }
     },
-    "/v4/member/cancel-join": {
+    "/v5/member/cancel-join": {
       "post": {
-        "operationId": "v4_member_cancel_join",
+        "operationId": "v5_member_cancel_join",
         "description": "Cancel a pending join with the original signed request, including a lost successful response.",
         "security": [],
         "requestBody": {
@@ -885,9 +898,9 @@
         }
       }
     },
-    "/v4/member/rotate": {
+    "/v5/member/rotate": {
       "post": {
-        "operationId": "v4_member_rotate",
+        "operationId": "v5_member_rotate",
         "description": "Rotate current member client credentials and signed service certificate without changing established session lifetime.",
         "security": [
           {
@@ -928,9 +941,9 @@
         }
       }
     },
-    "/v4/member/leave": {
+    "/v5/member/leave": {
       "post": {
-        "operationId": "v4_member_leave",
+        "operationId": "v5_member_leave",
         "description": "Leave as the current authenticated member. Removal remains idempotent for the same version.",
         "security": [
           {
@@ -971,9 +984,9 @@
         }
       }
     },
-    "/v4/member/cloud-closure": {
+    "/v5/member/cloud-closure": {
       "post": {
-        "operationId": "v4_member_cloud_closure",
+        "operationId": "v5_member_cloud_closure",
         "description": "Relay a bounded signed observation or terminal closure receipt to the configured Cloud. Requires an independent Runtime signature; provides no connection or recovery authority.",
         "security": [],
         "requestBody": {
@@ -1010,9 +1023,9 @@
         }
       }
     },
-    "/v4/member/cloud": {
+    "/v5/member/cloud": {
       "post": {
-        "operationId": "v4_member_cloud",
+        "operationId": "v5_member_cloud",
         "description": "Observe the optional Cloud publication context of the sole authenticated member.",
         "security": [
           {
@@ -1053,9 +1066,9 @@
         }
       }
     },
-    "/v4/member/connect": {
+    "/v5/member/connect": {
       "post": {
-        "operationId": "v4_member_connect",
+        "operationId": "v5_member_connect",
         "description": "Obtain a one-use ticket for the Runtime-initiated persistent membership connection.",
         "security": [
           {
@@ -1067,7 +1080,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CatalogRequest"
+                "$ref": "#/components/schemas/MemberConnectRequest"
               }
             }
           }
@@ -1154,7 +1167,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "nonce": {
             "type": "string"
@@ -1184,7 +1197,7 @@
           },
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "signature": {
             "type": "string"
@@ -1219,6 +1232,44 @@
           "configure_cloud"
         ]
       },
+      "GatewayEndpoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "endpoint_id": { "type": "string" },
+          "address": { "type": "string", "format": "uri" },
+          "scope": { "type": "string", "enum": ["lan", "overlay", "public"] },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 1000 }
+        },
+        "required": ["endpoint_id", "address", "scope", "priority"]
+      },
+      "MemberConnectRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
+          "endpoint": { "$ref": "#/components/schemas/GatewayEndpoint" }
+        },
+        "required": ["protocol_version", "endpoint"]
+      },
+      "EndpointUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
+          "endpoints": { "type": "array", "maxItems": 16, "items": { "$ref": "#/components/schemas/GatewayEndpoint" } }
+        },
+        "required": ["protocol_version", "endpoints"]
+      },
+      "EndpointUpdateResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
+          "endpoints": { "type": "array", "maxItems": 16, "items": { "$ref": "#/components/schemas/GatewayEndpoint" } }
+        },
+        "required": ["protocol_version", "endpoints"]
+      },
       "GatewayMetadata": {
         "type": "object",
         "additionalProperties": false,
@@ -1232,8 +1283,15 @@
           "gateway_public_key_fingerprint": {
             "type": "string"
           },
-          "member_url": {
+          "listener_address": {
             "type": "string"
+          },
+          "listener_addresses": { "type": "array", "items": { "type": "string" } },
+          "listener_running": { "type": "boolean" },
+          "endpoint_last_used_at": { "type": "object", "additionalProperties": { "type": "integer", "format": "int64" } },
+          "member_endpoints": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/GatewayEndpoint" }
           },
           "member_tls_root_pem": {
             "type": "string"
@@ -1246,7 +1304,11 @@
           "gateway_id",
           "display_name",
           "gateway_public_key_fingerprint",
-          "member_url",
+          "listener_address",
+          "listener_addresses",
+          "listener_running",
+          "endpoint_last_used_at",
+          "member_endpoints",
           "member_tls_root_pem",
           "permissions"
         ]
@@ -1257,7 +1319,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           }
         },
         "required": [
@@ -1270,7 +1332,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "gateway": {
             "$ref": "#/components/schemas/GatewayMetadata"
@@ -1314,7 +1376,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "member_id": {
             "type": "string"
@@ -1331,7 +1393,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "member_id": {
             "type": "string"
@@ -1353,7 +1415,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "member_id": {
             "type": "string"
@@ -1383,7 +1445,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           }
         },
         "required": [
@@ -1396,7 +1458,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "member_id": {
             "type": "string"
@@ -1418,7 +1480,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "expected_revision": {
             "type": "integer",
@@ -1440,7 +1502,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "items": {
             "type": "array",
@@ -1460,7 +1522,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "client_nonce": {
             "type": "string"
@@ -1488,7 +1550,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "gateway_id": {
             "type": "string"
@@ -1529,7 +1591,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "client_nonce": {
             "type": "string"
@@ -1570,7 +1632,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "gateway_id": {
             "type": "string"
@@ -1604,7 +1666,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "invitation_id": {
             "type": "string"
@@ -1612,8 +1674,12 @@
           "gateway_id": {
             "type": "string"
           },
-          "gateway_url": {
-            "type": "string"
+          "gateway_name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "endpoints": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": { "$ref": "#/components/schemas/GatewayEndpoint" }
           },
           "gateway_public_key": {
             "type": "string"
@@ -1640,7 +1706,8 @@
           "protocol_version",
           "invitation_id",
           "gateway_id",
-          "gateway_url",
+          "gateway_name",
+          "endpoints",
           "gateway_public_key",
           "gateway_tls_root_pem",
           "token",
@@ -1655,7 +1722,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "gateway_id": {
             "type": "string"
@@ -1763,7 +1830,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "invitation_id": {
             "type": "string"
@@ -1808,7 +1875,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "gateway_id": {
             "type": "string"
@@ -1847,7 +1914,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "gateway_id": {
             "type": "string"
@@ -1889,7 +1956,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "member_id": {
             "type": "string"
@@ -2103,7 +2170,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "gateway_id": {
             "type": "string"
@@ -2154,7 +2221,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "cloud_origin": {
             "type": "string"
@@ -2175,7 +2242,7 @@
         "properties": {
           "protocol_version": {
             "type": "string",
-            "const": "redeven-gateway-v4"
+            "const": "redeven-gateway-v5"
           },
           "channel_id": {
             "type": "string"

@@ -26,7 +26,7 @@ func TestGatewayConnectionChangesInvalidateOnlyTheControlOwner(t *testing.T) {
 			next := member.Clone()
 			switch field {
 			case "address":
-				next.GatewayURL = "https://new.gateway.internal:7443"
+				next.GatewayEndpoints = []gp.GatewayEndpoint{{EndpointID: "new", Address: "https://new.gateway.internal:7443", Scope: gp.GatewayEndpointLAN, Priority: 0}}
 			case "certificate":
 				next.ClientCertificatePEM += "\n"
 			case "key":

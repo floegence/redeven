@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
@@ -131,7 +132,7 @@ func (a *Agent) drainGatewayRemoval(ctx context.Context, cursor int) int {
 	next := *a.cfg
 	next.GatewayRemovalOutbox = append([]gatewaymembership.RemovalDelivery(nil), a.cfg.GatewayRemovalOutbox...)
 	for i, current := range next.GatewayRemovalOutbox {
-		if current.MemberID == item.MemberID && current.GatewayURL == item.GatewayURL {
+		if current.MemberID == item.MemberID && slices.Equal(current.GatewayEndpoints, item.GatewayEndpoints) {
 			next.GatewayRemovalOutbox = append(next.GatewayRemovalOutbox[:i], next.GatewayRemovalOutbox[i+1:]...)
 			if config.Save(a.configPath, &next) == nil {
 				a.cfg = &next

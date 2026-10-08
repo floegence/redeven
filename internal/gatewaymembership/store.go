@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"net"
 	"os"
 	"sort"
 	"sync"
@@ -29,17 +30,20 @@ var (
 )
 
 type GatewayIdentity struct {
-	ID         string
-	PrivateKey ed25519.PrivateKey
+	ID          string
+	DisplayName string
+	PrivateKey  ed25519.PrivateKey
 }
 
 type Endpoint struct {
-	URL            string `json:"url"`
-	ListenAddress  string `json:"listen_address"`
-	RootPEM        string `json:"root_pem"`
-	RootKeyPEM     string `json:"root_key_pem"`
-	CertificatePEM string `json:"certificate_pem"`
-	PrivateKeyPEM  string `json:"private_key_pem"`
+	URL                string   `json:"url"`
+	ListenAddress      string   `json:"listen_address"`
+	ListenAddresses    []string `json:"listen_addresses,omitempty"`
+	CertificateOrigins []string `json:"certificate_origins,omitempty"`
+	RootPEM            string   `json:"root_pem"`
+	RootKeyPEM         string   `json:"root_key_pem"`
+	CertificatePEM     string   `json:"certificate_pem"`
+	PrivateKeyPEM      string   `json:"private_key_pem"`
 }
 
 func (Endpoint) String() string   { return "Gateway.MemberEndpoint" }
@@ -84,16 +88,18 @@ type invitationRecord struct {
 }
 
 type memberState struct {
-	SchemaVersion    int                             `json:"schema_version"`
-	CloudNamespaceID string                          `json:"cloud_namespace_id,omitempty"`
-	GatewayID        string                          `json:"gateway_id"`
-	Revision         int64                           `json:"revision"`
-	Endpoint         Endpoint                        `json:"endpoint"`
-	Policy           gp.GatewayPolicy                `json:"policy"`
-	Members          map[string]MemberRecord         `json:"members"`
-	Invitations      map[string]invitationRecord     `json:"invitations"`
-	CloudCommands    map[string]cloudCommandDelivery `json:"cloud_commands"`
-	Admissions       map[string]Admission            `json:"admissions"`
+	SchemaVersion       int                             `json:"schema_version"`
+	CloudNamespaceID    string                          `json:"cloud_namespace_id,omitempty"`
+	GatewayID           string                          `json:"gateway_id"`
+	Revision            int64                           `json:"revision"`
+	Endpoint            Endpoint                        `json:"endpoint"`
+	AdvertisedEndpoints []gp.GatewayEndpoint            `json:"advertised_endpoints"`
+	EndpointLastUsedAt  map[string]int64                `json:"endpoint_last_used_at"`
+	Policy              gp.GatewayPolicy                `json:"policy"`
+	Members             map[string]MemberRecord         `json:"members"`
+	Invitations         map[string]invitationRecord     `json:"invitations"`
+	CloudCommands       map[string]cloudCommandDelivery `json:"cloud_commands"`
+	Admissions          map[string]Admission            `json:"admissions"`
 }
 
 type Store struct {
@@ -113,28 +119,63 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 	if path == "" || !validID(identity.ID) || len(identity.PrivateKey) != ed25519.PrivateKeySize || hooks == nil {
 		return nil, ErrState
 	}
-	s := &Store{path: path, identity: GatewayIdentity{ID: identity.ID, PrivateKey: append(ed25519.PrivateKey(nil), identity.PrivateKey...)}, hooks: hooks}
+	s := &Store{path: path, identity: GatewayIdentity{ID: identity.ID, DisplayName: identity.DisplayName, PrivateKey: append(ed25519.PrivateKey(nil), identity.PrivateKey...)}, hooks: hooks}
 	err := gatewaystate.Read(path, &s.state)
 	if errors.Is(err, os.ErrNotExist) {
+		confirmedURL := endpointURL
+		if endpointURL == "" {
+			endpointURL = "https://localhost:7443"
+		}
 		endpoint, err := newEndpoint(endpointURL, listen)
 		if err != nil {
 			return nil, err
 		}
-		s.state = memberState{SchemaVersion: 1, GatewayID: identity.ID, Revision: 1, Endpoint: endpoint, Policy: gp.GatewayPolicy{Revision: 1, PublicationMode: gp.PublicationManual}, Members: map[string]MemberRecord{}, Invitations: map[string]invitationRecord{}, CloudCommands: map[string]cloudCommandDelivery{}, Admissions: map[string]Admission{}}
+		s.state = memberState{SchemaVersion: 2, GatewayID: identity.ID, Revision: 1, Endpoint: endpoint, Policy: gp.GatewayPolicy{Revision: 1, PublicationMode: gp.PublicationManual}, Members: map[string]MemberRecord{}, Invitations: map[string]invitationRecord{}, CloudCommands: map[string]cloudCommandDelivery{}, Admissions: map[string]Admission{}}
+		if confirmedURL != "" {
+			s.state.AdvertisedEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_primary", Address: endpoint.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
+		}
 		if err := gatewaystate.Write(path, s.state); err != nil {
 			return nil, err
 		}
 	} else if err != nil {
 		return nil, err
 	}
-	if s.state.SchemaVersion != 1 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
+	migrated := s.state.SchemaVersion == 1
+	if migrated {
+		if !validOrigin(s.state.Endpoint.URL) {
+			return nil, ErrState
+		}
+		s.state.SchemaVersion = 2
+		s.state.AdvertisedEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_legacy", Address: s.state.Endpoint.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
+	}
+	if s.state.SchemaVersion != 2 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
 		return nil, ErrState
 	}
 	if s.state.CloudCommands == nil {
 		s.state.CloudCommands = map[string]cloudCommandDelivery{}
 	}
+	if len(s.state.Endpoint.ListenAddresses) == 0 {
+		s.state.Endpoint.ListenAddresses = []string{s.state.Endpoint.ListenAddress}
+		migrated = true
+	}
+	for _, address := range s.state.Endpoint.ListenAddresses {
+		if _, _, err := net.SplitHostPort(address); err != nil {
+			return nil, ErrState
+		}
+	}
+	if s.state.EndpointLastUsedAt == nil {
+		s.state.EndpointLastUsedAt = make(map[string]int64)
+	}
 	if s.state.Admissions == nil {
 		return nil, ErrState
+	}
+	if err := validateStoredEndpoints(s.state.AdvertisedEndpoints); err != nil {
+		return nil, err
+	}
+	if len(s.state.Endpoint.CertificateOrigins) == 0 {
+		for _, endpoint := range s.state.AdvertisedEndpoints {
+			s.state.Endpoint.CertificateOrigins = append(s.state.Endpoint.CertificateOrigins, endpoint.Address)
+		}
 	}
 	active := 0
 	for id, member := range s.state.Members {
@@ -170,6 +211,11 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 				}
 				break
 			}
+		}
+	}
+	if migrated {
+		if err := gatewaystate.Write(path, s.state); err != nil {
+			return nil, err
 		}
 	}
 	return s, nil
@@ -223,6 +269,80 @@ func (s *Store) DurableSnapshot() ([]MemberRecord, gp.GatewayPolicy, int64, erro
 
 func (s *Store) Endpoint() Endpoint { s.mu.Lock(); defer s.mu.Unlock(); return s.state.Endpoint }
 
+func (s *Store) Endpoints() []gp.GatewayEndpoint {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]gp.GatewayEndpoint(nil), s.state.AdvertisedEndpoints...)
+}
+
+func (s *Store) EndpointOrigins() []string {
+	endpoints := s.Endpoints()
+	origins := make([]string, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		origins = append(origins, endpoint.Address)
+	}
+	return origins
+}
+
+// UpdateEndpoints replaces only the administrator-confirmed Runtime paths.
+// Listener binding, Gateway identity and member credentials remain unchanged.
+func (s *Store) UpdateEndpoints(endpoints []gp.GatewayEndpoint) error {
+	if len(endpoints) > 0 && validateStoredEndpoints(endpoints) != nil {
+		return ErrState
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(endpoints) == 0 {
+		if len(s.state.AdvertisedEndpoints) == 0 {
+			return nil
+		}
+		next := s.clone()
+		next.AdvertisedEndpoints = nil
+		next.Admissions = map[string]Admission{}
+		return s.commit(next)
+	}
+	current := s.state.AdvertisedEndpoints
+	if len(current) == len(endpoints) {
+		equal := true
+		for index := range endpoints {
+			if endpoints[index] != current[index] {
+				equal = false
+				break
+			}
+		}
+		if equal {
+			return nil
+		}
+	}
+	primary := endpoints[0].Address
+	endpoint := s.state.Endpoint
+	endpoint.URL = primary
+	updated, err := renewEndpointForOrigins(endpoint, endpointAddresses(endpoints))
+	if err != nil {
+		return err
+	}
+	next := s.clone()
+	next.Endpoint = updated
+	next.AdvertisedEndpoints = append([]gp.GatewayEndpoint(nil), endpoints...)
+	next.Admissions = map[string]Admission{}
+	return s.commit(next)
+}
+
+func endpointAddresses(endpoints []gp.GatewayEndpoint) []string {
+	addresses := make([]string, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		addresses = append(addresses, endpoint.Address)
+	}
+	return addresses
+}
+
+func validateStoredEndpoints(endpoints []gp.GatewayEndpoint) error {
+	if len(endpoints) == 0 {
+		return nil
+	}
+	return validateGatewayEndpoints(endpoints)
+}
+
 func (s *Store) nextRevision(next memberState) memberState {
 	next.Revision = s.state.Revision + 1
 	for id, member := range next.Members {
@@ -255,6 +375,7 @@ func (s *Store) applyLocked(next memberState) {
 
 func (s *Store) clone() memberState {
 	next := s.state
+	next.EndpointLastUsedAt = maps.Clone(s.state.EndpointLastUsedAt)
 	next.CloudCommands = maps.Clone(s.state.CloudCommands)
 	next.Members = maps.Clone(next.Members)
 	next.Invitations = maps.Clone(next.Invitations)
@@ -288,7 +409,7 @@ func (s *Store) InviteForCommand(createdBy, commandID string, expires time.Time)
 
 func (s *Store) invitationToken(id string) string {
 	mac := hmac.New(sha256.New, s.identity.PrivateKey.Seed())
-	_, _ = mac.Write([]byte("redeven.gateway.invitation-token.v4\x00" + id))
+	_, _ = mac.Write([]byte("redeven.gateway.invitation-token.v5\x00" + id))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
@@ -301,7 +422,7 @@ func (s *Store) issueInvitation(createdBy, commandID string, deadline time.Time)
 	now := time.Now()
 	id := ""
 	if commandID != "" {
-		id = "invite_" + digest([]byte("redeven.gateway.invitation-command.v4\x00" + commandID))[:48]
+		id = "invite_" + digest([]byte("redeven.gateway.invitation-command.v5\x00" + commandID))[:48]
 		if record, ok := s.state.Invitations[id]; ok {
 			if record.IssuanceID != commandID || record.CreatedBy != createdBy || record.Canceled || record.Issued == nil || record.ExpiresAtUnixMS <= now.UnixMilli() {
 				return gp.MemberInvitation{}, ErrDenied
@@ -323,7 +444,17 @@ func (s *Store) issueInvitation(createdBy, commandID string, deadline time.Time)
 			return gp.MemberInvitation{}, err
 		}
 	}
-	invitation := gp.MemberInvitation{ProtocolVersion: gp.Version, InvitationID: id, GatewayID: s.identity.ID, GatewayURL: s.state.Endpoint.URL, GatewayPublicKey: base64.RawURLEncoding.EncodeToString(s.identity.PrivateKey.Public().(ed25519.PublicKey)), GatewayTLSRootPEM: s.state.Endpoint.RootPEM, Token: s.invitationToken(id), IssuedAtUnixMS: now.UnixMilli(), ExpiresAtUnixMS: now.Add(10 * time.Minute).UnixMilli()}
+	if err := validateStoredEndpoints(s.state.AdvertisedEndpoints); err != nil {
+		return gp.MemberInvitation{}, ErrDenied
+	}
+	if len(s.state.AdvertisedEndpoints) == 0 {
+		return gp.MemberInvitation{}, ErrDenied
+	}
+	invitation := gp.MemberInvitation{ProtocolVersion: gp.Version, InvitationID: id, GatewayID: s.identity.ID, Endpoints: append([]gp.GatewayEndpoint(nil), s.state.AdvertisedEndpoints...), GatewayPublicKey: base64.RawURLEncoding.EncodeToString(s.identity.PrivateKey.Public().(ed25519.PublicKey)), GatewayTLSRootPEM: s.state.Endpoint.RootPEM, Token: s.invitationToken(id), IssuedAtUnixMS: now.UnixMilli(), ExpiresAtUnixMS: now.Add(10 * time.Minute).UnixMilli()}
+	invitation.GatewayName = s.identity.DisplayName
+	if invitation.GatewayName == "" {
+		invitation.GatewayName = "Gateway"
+	}
 	if err := SignInvitation(&invitation, s.identity.PrivateKey); err != nil {
 		return gp.MemberInvitation{}, err
 	}

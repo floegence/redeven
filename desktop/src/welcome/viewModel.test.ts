@@ -328,7 +328,7 @@ describe('environment open flow decisions', () => {
         presentation_state: 'allowed' as const,
         target: { lifecycle_target_id: 'rlt_local', target_generation: 1 },
         compatibility: {
-          gateway_protocol: 'redeven-gateway-v4',
+          gateway_protocol: 'redeven-gateway-v5',
           runtime_platform: 'darwin' as const,
           runtime_architecture: 'arm64' as const,
           runtime_service_protocol: 'redeven-runtime-v2',

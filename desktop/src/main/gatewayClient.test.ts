@@ -17,9 +17,9 @@ describe('Gateway access client contracts', () => {
   });
 
   it('requires the canonical signed member origin from Gateway', () => {
-    const catalog = (member_url: string) => ({ ...catalogFixture, gateway: { ...catalogFixture.gateway, member_url } });
-    expect(normalizeGatewayCatalogResponse(catalog('https://macbook-pro.local:7443')).gateway.member_url).toBe('https://macbook-pro.local:7443');
-    expect(normalizeGatewayCatalogResponse(catalog('https://gateway.example')).gateway.member_url).toBe('https://gateway.example');
+    const catalog = (address: string) => ({ ...catalogFixture, gateway: { ...catalogFixture.gateway, member_endpoints: [{ ...catalogFixture.gateway.member_endpoints[0], address }] } });
+    expect(normalizeGatewayCatalogResponse(catalog('https://macbook-pro.local:7443')).gateway.member_endpoints[0].address).toBe('https://macbook-pro.local:7443');
+    expect(normalizeGatewayCatalogResponse(catalog('https://gateway.example')).gateway.member_endpoints[0].address).toBe('https://gateway.example');
     for (const url of ['https://MacBook-Pro.local:7443', 'https://gateway.example:443', 'https://gateway.example/path', 'https://gateway.example/?redirect=1', 'https://gateway.example/#member', 'https://user:secret@gateway.example']) {
       expect(() => normalizeGatewayCatalogResponse(catalog(url))).toThrow();
     }
@@ -56,7 +56,7 @@ describe('Gateway bridge HTTP byte framing', () => {
     const record: GatewayRecord = { schema_version: 4, gateway_id: 'gw', display_name: 'Gateway', local_enabled: true,
       connection: { kind: 'local_host', runtime_root: '/tmp/gateway-test' }, created_at_ms: 1, updated_at_ms: 1 };
     const client = new GatewayClient({ readSecret: () => '', writeSecret: () => {}, deleteSecret: () => {} }, bridge);
-    await expect(client.pairingChallenge(record, { protocol_version: 'redeven-gateway-v4', client_nonce: 'test', client_public_key: 'test', binding_audience: 'test' }))
+    await expect(client.pairingChallenge(record, { protocol_version: 'redeven-gateway-v5', client_nonce: 'test', client_public_key: 'test', binding_audience: 'test' }))
       .rejects.toMatchObject({ code: 'GATEWAY_UNREACHABLE' });
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -72,7 +72,7 @@ describe('Gateway bridge HTTP byte framing', () => {
     const record: GatewayRecord = { schema_version: 4, gateway_id: 'gw', display_name: 'Gateway', local_enabled: true,
       connection: { kind: 'local_host', runtime_root: '/tmp/gateway-test' }, created_at_ms: 1, updated_at_ms: 1 };
     const client = new GatewayClient({ readSecret: () => '', writeSecret: () => {}, deleteSecret: () => {} }, bridge);
-    await expect(client.pairingChallenge(record, { protocol_version: 'redeven-gateway-v4', client_nonce: 'test', client_public_key: 'test', binding_audience: 'test' },
+    await expect(client.pairingChallenge(record, { protocol_version: 'redeven-gateway-v5', client_nonce: 'test', client_public_key: 'test', binding_audience: 'test' },
       { signal: controller.signal, timeoutMs: 10 })).rejects.toMatchObject({
         code: mode === 'cancel' ? 'GATEWAY_CANCELED' : mode === 'timeout' ? 'GATEWAY_CANCELED' : 'GATEWAY_UNREACHABLE',
       });
@@ -91,7 +91,7 @@ describe('Gateway bridge HTTP byte framing', () => {
       created_at_unix_ms: 1, last_verified_at_unix_ms: 1,
     } };
     const displayName = '中文环境 café 🚀';
-    const body = Buffer.from(JSON.stringify({ ok: true, data: { protocol_version: 'redeven-gateway-v4',
+    const body = Buffer.from(JSON.stringify({ ok: true, data: { protocol_version: 'redeven-gateway-v5',
       gateway: { ...catalogFixture.gateway, gateway_id: base.gateway_id, gateway_public_key_fingerprint: fingerprint, display_name: displayName }, members: [], policy: catalogFixture.policy, revision: 1, rebuild_required: false, hook_status: catalogFixture.hook_status } }));
     const split = body.indexOf(Buffer.from('中文')) + 1;
     const chunks = framing === 'split-utf8'

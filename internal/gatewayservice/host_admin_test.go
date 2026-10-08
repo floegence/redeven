@@ -9,7 +9,7 @@ import (
 
 func TestHostAdministrationRequiresSeparateCredentialAndLoopback(t *testing.T) {
 	token := strings.Repeat("a", 43)
-	server, err := New(Options{StateRoot: t.TempDir(), HostAdminToken: token, DesktopBridgeTransport: true, ManagedBridgeToken: "desktop-bridge-secret"})
+	server, err := New(Options{StateRoot: t.TempDir(), HostAdminToken: token, MemberURL: "https://gateway.internal:7443", DesktopBridgeTransport: true, ManagedBridgeToken: "desktop-bridge-secret"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestHostAdministrationRequiresSeparateCredentialAndLoopback(t *testing.T) {
 		{"IPv6 administrator", "[::1]:21000", token, "", http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v4/invitations", strings.NewReader(`{"protocol_version":"redeven-gateway-v4"}`))
+			request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/invitations", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
 			request.RemoteAddr = tc.remote
 			request.Header.Set(HostAdminHeader, tc.token)
 			request.Header.Set("Origin", tc.origin)

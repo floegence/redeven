@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ import (
 
 func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 	token := strings.Repeat("x", 43)
-	owner, err := gatewayservice.New(gatewayservice.Options{StateRoot: t.TempDir(), HostAdminToken: token})
+	owner, err := gatewayservice.New(gatewayservice.Options{StateRoot: t.TempDir(), HostAdminToken: token, MemberURL: "https://gateway.internal:7443"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +28,7 @@ func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 	client := hostAdminClient{endpoint: server.URL, token: token, transport: &http.Transport{Proxy: nil}}
 	defer client.transport.CloseIdleConnections()
 	var invitation gp.MemberInvitation
-	if err := client.request(context.Background(), "/gateway/v4/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation); err != nil {
+	if err := client.request(context.Background(), "/gateway/v5/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation); err != nil {
 		t.Fatal(err)
 	}
 	if err := gatewaymembership.VerifyInvitation(invitation, time.Now()); err != nil {
@@ -42,7 +43,7 @@ func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	var saved gp.MemberInvitation
-	if json.Unmarshal(before, &saved) != nil || saved != invitation {
+	if json.Unmarshal(before, &saved) != nil || !reflect.DeepEqual(saved, invitation) {
 		t.Fatal("invitation delivery changed")
 	}
 	info, err := os.Stat(file)
@@ -57,7 +58,7 @@ func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 		t.Fatal("existing invitation changed")
 	}
 	var catalog gp.CatalogResponse
-	if err := client.request(context.Background(), "/gateway/v4/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog); err != nil {
+	if err := client.request(context.Background(), "/gateway/v5/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog); err != nil {
 		t.Fatal(err)
 	}
 	if !catalog.Gateway.Permissions.ManageMembers || catalog.Policy.DefaultCloudAllowed || len(catalog.Members) != 0 {
@@ -66,10 +67,10 @@ func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 	policy := catalog.Policy
 	policy.DefaultCloudAllowed = true
 	request := gp.UpdatePolicyRequest{ProtocolVersion: gp.Version, ExpectedRevision: policy.Revision, Policy: policy}
-	if err := client.request(context.Background(), "/gateway/v4/policy", request, nil); err != nil {
+	if err := client.request(context.Background(), "/gateway/v5/policy", request, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.request(context.Background(), "/gateway/v4/policy", request, nil); err == nil {
+	if err := client.request(context.Background(), "/gateway/v5/policy", request, nil); err == nil {
 		t.Fatal("stale policy revision accepted")
 	}
 }

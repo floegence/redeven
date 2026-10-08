@@ -23,10 +23,10 @@ import (
 	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
-const gatewayMembershipHelp = `Usage: redeven gateway <join|replace|update-address|status|retry|leave> [flags]
+const gatewayMembershipHelp = `Usage: redeven gateway <join|replace|update-endpoints|status|retry|leave> [flags]
 
   --state-root PATH        Runtime state root
-  --invitation-file PATH  Private invitation file (join, replace, or update-address)
+  --invitation-file PATH  Private invitation file (join, replace, or update-endpoints)
   --environment-choice preserve|new  Explicit choice for an existing Cloud environment
 
 Joining delegates LAN access and later Cloud publication to this Gateway.
@@ -41,7 +41,7 @@ func (c *cli) gatewayCmd(args []string) int {
 		return 0
 	}
 	action := args[0]
-	if action != "join" && action != "replace" && action != "update-address" && action != "status" && action != "retry" && action != "leave" {
+	if action != "join" && action != "replace" && action != "update-endpoints" && action != "status" && action != "retry" && action != "leave" {
 		writeText(c.stderr, gatewayMembershipHelp)
 		return 2
 	}
@@ -56,12 +56,12 @@ func (c *cli) gatewayCmd(args []string) int {
 		}
 		return 2
 	}
-	if (action != "join" && action != "replace" && *choice != "") || flags.NArg() != 0 || (action == "join" || action == "replace" || action == "update-address") != (*file != "") {
+	if (action != "join" && action != "replace" && *choice != "") || flags.NArg() != 0 || (action == "join" || action == "replace" || action == "update-endpoints") != (*file != "") {
 		writeText(c.stderr, gatewayMembershipHelp)
 		return 2
 	}
 	var invitation gp.MemberInvitation
-	if action == "join" || action == "replace" || action == "update-address" {
+	if action == "join" || action == "replace" || action == "update-endpoints" {
 		if err := readGatewayInvitation(*file, &invitation); err != nil {
 			fmt.Fprintln(c.stderr, "Cannot read a valid, unexpired Gateway invitation.")
 			return 1
@@ -126,13 +126,13 @@ func (c *cli) gatewayCmd(args []string) int {
 		}
 		cfg = next
 	}
-	if action == "update-address" {
-		next, err := cfg.Gateway.PrepareAddressUpdate(invitation)
+	if action == "update-endpoints" {
+		next, err := cfg.Gateway.PrepareConnectionEndpoints(invitation)
 		if err == nil {
 			err = persist(next)
 		}
 		if err != nil {
-			fmt.Fprintln(c.stderr, "Cannot verify the Gateway address. Use a fresh invitation from the same Gateway identity.")
+			fmt.Fprintln(c.stderr, "Cannot verify the Gateway connection endpoints. Use a fresh invitation from the same Gateway identity.")
 			return 1
 		}
 	}
@@ -160,7 +160,7 @@ func (c *cli) gatewayCmd(args []string) int {
 	}
 	result := agent.GatewayMembershipStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID, RejoinRequired: cfg.GatewayRejoinRequired}
 	if member := cfg.Gateway; member != nil {
-		result = agent.GatewayMembershipStatus{Joined: member.PendingJoin == nil && !member.Leaving, GatewayID: member.GatewayID, GatewayURL: member.GatewayURL, MemberID: member.MemberID, Phase: "gateway_offline"}
+		result = agent.GatewayMembershipStatus{Joined: member.PendingJoin == nil && !member.Leaving, GatewayID: member.GatewayID, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, MemberID: member.MemberID, Phase: "gateway_offline"}
 		if member.PendingJoin != nil {
 			result.Phase = "joining"
 		}
@@ -191,7 +191,7 @@ func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath string, acti
 	if action == "status" {
 		method = http.MethodGet
 	}
-	if action == "join" || action == "replace" || action == "update-address" {
+	if action == "join" || action == "replace" || action == "update-endpoints" {
 		body, _ = json.Marshal(struct {
 			Invitation        gp.MemberInvitation `json:"invitation"`
 			EnvironmentChoice string              `json:"environment_choice,omitempty"`

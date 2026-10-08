@@ -117,7 +117,7 @@ func (g *Gateway) MemberContext(record gatewaymembership.MemberRecord) gp.Member
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/v4/member/cloud-closure" {
+	if r.URL.Path == "/v5/member/cloud-closure" {
 		g.relayClosure(w, r)
 		return
 	}
@@ -126,7 +126,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	if r.Method != http.MethodPost || r.URL.Path != "/v4/member/cloud" {
+	if r.Method != http.MethodPost || r.URL.Path != "/v5/member/cloud" {
 		http.NotFound(w, r)
 		return
 	}

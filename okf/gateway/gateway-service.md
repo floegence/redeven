@@ -33,9 +33,15 @@ Paired permissions are `access`, `manage_members` and `configure_cloud`. Managed
 
 ## Address changes and upgrade
 
-The host can update `--member-url` and `--member-listen` while retaining the Gateway identity and member CA. Runtime `update-address` verifies a fresh invitation from the same pinned key and CA, using only its signed address descriptor. It retains the existing member and Cloud association; a new identity requires `replace`. Desktop registration edits prove the pinned machine key with a fresh signed nonce before saving the new audience.
+Gateway listener bindings describe sockets on the device. Reachable connection endpoints describe the LAN, overlay or public addresses a Runtime can use, including DNS names and port-forwarded addresses that differ from those sockets. Administrators confirm and prioritize up to sixteen endpoints. Local interfaces are not automatically published, and deleted endpoints do not return after restart. With no confirmed endpoints, invitation creation is disabled.
 
-The v4 cutover removes URL profiles, caches and mode preferences, preserves Gateway installation coordinates and valid paired access identity, and shows a rebuild notice. Old write permissions do not gain new administration rights. Old Cloud-only Runtime membership is non-executable and must rejoin; see [Gateway Cloud access](gateway-cloud-access.md) for environment preservation.
+The invitation signs the Gateway name, stable identity and endpoint set. Runtime keeps the most recently connected endpoint first, then administrator priority; a failed session tries another approved endpoint. If all fail, the membership stays intact and reports Gateway unavailable. Endpoint usage is recorded only after a Runtime session succeeds. A listening socket or configured public address does not prove remote reachability. No Cloud origin or listener binding is embedded in the invitation.
+
+The host can update its listener and administrator-confirmed Runtime connection endpoints while retaining the Gateway identity and member CA. Runtime `update-endpoints` verifies a fresh invitation from the same pinned key and CA, using only its signed endpoint descriptor. It retains the existing member and Cloud association; a new identity requires `replace`. Desktop registration edits prove the pinned machine key with a fresh signed nonce before saving the new audience.
+
+Existing single-address member state migrates to one endpoint without replacing the Gateway key, Runtime key, member credentials or Cloud binding. Old invitations must be recreated. Legacy Cloud-only enrollment without membership remains non-executable; see [Gateway Cloud access](gateway-cloud-access.md) for environment preservation.
+
+Transport continues to use the published Flowersec implementation. The existing internal trust root covers the configured endpoint hostnames and IP addresses; administrators do not apply for a public certificate or configure TLS roots. Runtime users import an invitation and approve Gateway access. Optional Cloud publishing remains a separate flow.
 
 # Boundaries
 
@@ -46,6 +52,7 @@ Gateway owns membership, policy, invitations, and restricted forwarding. Runtime
 - `redeven:internal/gatewaymembership/store.go` — Sole durable membership and invitation delivery.
 - `redeven:internal/gatewaymembership/hooks.go` — Bounded deny-only hook execution.
 - `redeven:internal/gatewaymembership/address_test.go` — Address change preserves identity and rejects replacement keys.
+- `redeven:internal/gatewaymembership/network_acceptance_test.go` — Real socket failover and endpoint removal with stable membership.
 - `redeven:internal/gatewayservice/server.go` — Paired access and administration boundary.
 - `redeven:cmd/redeven/gateway_membership.go` — Local membership commands.
 - `redeven:desktop/src/main/gatewayLifecycleManager.ts` — Independent Gateway process owner.

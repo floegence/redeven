@@ -22,6 +22,8 @@ import (
 
 const membershipHelp = `Usage:
   redeven-gateway invite --output PATH [--state-root PATH]
+  redeven-gateway endpoints show [--state-root PATH]
+  redeven-gateway endpoints set --file PATH [--state-root PATH]
   redeven-gateway members list [--state-root PATH]
   redeven-gateway members remove --member ID --version N [--state-root PATH]
   redeven-gateway members reevaluate --member ID --version N [--state-root PATH]
@@ -30,6 +32,7 @@ const membershipHelp = `Usage:
   redeven-gateway policy set [--default-cloud allow|deny] [--publication-mode manual|automatic] [--apply] [--state-root PATH]
 
 Invitations expire after ten minutes and can be used by one Runtime.
+The endpoints file is a JSON array of endpoint_id, address, scope and priority.
 Policy set previews affected members; --apply saves with a version check.
 Automatic publication still requires Namespace authorization in Redeven Cloud.
 Host commands require the running Gateway's private local administrator credential.
@@ -45,6 +48,7 @@ func (c *cli) membershipCmd(args []string) int {
 	flags := newFlagSet(command)
 	root := flags.String("state-root", "", "Gateway state root")
 	output := flags.String("output", "", "Create a private invitation file; use - for stdout")
+	filePath := flags.String("file", "", "JSON file containing administrator-confirmed connection endpoints")
 	member := flags.String("member", "", "Member ID")
 	version := flags.Int64("version", 0, "Expected member version")
 	cloud := flags.String("cloud", "", "Member Cloud permission: inherit, allow, deny")
@@ -59,8 +63,10 @@ func (c *cli) membershipCmd(args []string) int {
 		writeError(c.stderr, err.Error())
 		return 2
 	}
-	valid := flags.NArg() == 0
+	valid := flags.NArg() == 0 && (command == "endpoints" || *filePath == "")
 	switch command + "/" + action {
+	case "endpoints/show", "endpoints/set":
+		valid = valid && *output == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply && ((action == "show" && *filePath == "") || (action == "set" && *filePath != ""))
 	case "invite/":
 		valid = valid && *output != "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
 	case "members/list", "policy/show":
@@ -88,9 +94,26 @@ func (c *cli) membershipCmd(args []string) int {
 	defer client.transport.CloseIdleConnections()
 	var result any
 	switch command + "/" + action {
+	case "endpoints/set":
+		file, openErr := os.Open(*filePath)
+		if openErr != nil {
+			writeError(c.stderr, "cannot read connection endpoints file")
+			return 1
+		}
+		defer file.Close()
+		decoder := json.NewDecoder(io.LimitReader(file, 64<<10))
+		decoder.DisallowUnknownFields()
+		var endpoints []gp.GatewayEndpoint
+		if decoder.Decode(&endpoints) != nil || decoder.Decode(new(any)) != io.EOF {
+			writeError(c.stderr, "invalid connection endpoints file")
+			return 2
+		}
+		var updated gp.EndpointUpdateResponse
+		err = client.request(ctx, "/gateway/v5/endpoints", gp.EndpointUpdateRequest{ProtocolVersion: gp.Version, Endpoints: endpoints}, &updated)
+		result = updated.Endpoints
 	case "invite/":
 		var invitation gp.MemberInvitation
-		err = client.request(ctx, "/gateway/v4/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation)
+		err = client.request(ctx, "/gateway/v5/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation)
 		if err == nil && *output != "-" {
 			err = writeInvitationFile(*output, invitation)
 			if err == nil {
@@ -100,21 +123,25 @@ func (c *cli) membershipCmd(args []string) int {
 		}
 		result = invitation
 	case "members/remove":
-		err = client.request(ctx, "/gateway/v4/members/remove", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
+		err = client.request(ctx, "/gateway/v5/members/remove", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
 	case "members/reevaluate":
-		err = client.request(ctx, "/gateway/v4/members/reevaluate", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
+		err = client.request(ctx, "/gateway/v5/members/reevaluate", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
 	case "members/policy":
 		var results []gp.MemberOperationResult
-		err = client.request(ctx, "/gateway/v4/members/policy", gp.UpdateMembersRequest{ProtocolVersion: gp.Version, Items: []gp.MemberPolicyUpdate{{MemberID: *member, ExpectedMemberVersion: *version, CloudPermission: gp.CloudPermission(*cloud)}}}, &results)
+		err = client.request(ctx, "/gateway/v5/members/policy", gp.UpdateMembersRequest{ProtocolVersion: gp.Version, Items: []gp.MemberPolicyUpdate{{MemberID: *member, ExpectedMemberVersion: *version, CloudPermission: gp.CloudPermission(*cloud)}}}, &results)
 		result = results
 	default:
 		var catalog gp.CatalogResponse
-		err = client.request(ctx, "/gateway/v4/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog)
+		err = client.request(ctx, "/gateway/v5/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog)
 		if err != nil {
 			break
 		}
 		if command == "members" {
 			result = catalog.Members
+			break
+		}
+		if command == "endpoints" {
+			result = catalog.Gateway.MemberEndpoints
 			break
 		}
 		if action == "show" {
@@ -135,7 +162,7 @@ func (c *cli) membershipCmd(args []string) int {
 			}
 		}
 		if *apply {
-			err = client.request(ctx, "/gateway/v4/policy", gp.UpdatePolicyRequest{ProtocolVersion: gp.Version, ExpectedRevision: catalog.Policy.Revision, Policy: policy}, nil)
+			err = client.request(ctx, "/gateway/v5/policy", gp.UpdatePolicyRequest{ProtocolVersion: gp.Version, ExpectedRevision: catalog.Policy.Revision, Policy: policy}, nil)
 			if err == nil {
 				policy.Revision = catalog.Policy.Revision + 1
 			}

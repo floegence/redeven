@@ -17,7 +17,7 @@ import (
 func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)
 	root := filepath.Join(filepath.Dir(file), "../../..")
-	raw, err := os.ReadFile(filepath.Join(root, "spec/openapi/gateway-v4.yaml"))
+	raw, err := os.ReadFile(filepath.Join(root, "spec/openapi/gateway-v5.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,8 +41,8 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 	for _, value := range []any{
 		gc.RuntimeClosureExchangeRequest{}, gc.RuntimeClosureExchangeResponse{}, gc.BindingFence{}, gc.Closure{}, gp.IdentityRequest{}, gp.IdentityResponse{}, gp.ConfigureCloudRequest{}, gp.MemberCloudContext{}, gp.GatewayPermissions{}, gp.GatewayMetadata{}, gp.CatalogRequest{}, gp.CatalogResponse{}, gp.OpenSessionRequest{}, gp.MemberServiceRequest{}, gp.MemberServiceResponse{},
 		gp.InvitationRequest{}, gp.RemoveMemberRequest{}, gp.UpdatePolicyRequest{}, gp.UpdateMembersRequest{}, gp.PairingChallengeRequest{}, gp.PairingChallengeResponse{}, gp.PairingCompleteRequest{}, gp.PairingCompleteResponse{},
-		gp.MemberInvitation{}, gp.MemberDelegation{}, gp.MemberService{}, gp.MemberMetadata{}, gp.MemberJoinRequest{}, gp.MemberJoinResponse{}, gp.MemberRotateRequest{}, gp.MemberRotateResponse{},
-		gp.Member{}, gp.GatewayPolicy{}, gp.MemberPolicyUpdate{}, gp.MemberOperationResult{}, gp.HookInput{}, gp.HookResult{}, gatewaymembership.ConnectionOffer{},
+		gp.MemberInvitation{}, gp.MemberDelegation{}, gp.MemberService{}, gp.MemberMetadata{}, gp.MemberJoinRequest{}, gp.MemberJoinResponse{}, gp.MemberRotateRequest{}, gp.MemberRotateResponse{}, gp.GatewayEndpoint{}, gp.EndpointUpdateRequest{}, gp.EndpointUpdateResponse{},
+		gp.Member{}, gp.MemberConnectRequest{}, gp.GatewayPolicy{}, gp.MemberPolicyUpdate{}, gp.MemberOperationResult{}, gp.HookInput{}, gp.HookResult{}, gatewaymembership.ConnectionOffer{},
 	} {
 		typ := reflect.TypeOf(value)
 		schema, ok := spec.Components.Schemas[typ.Name()]
@@ -66,7 +66,7 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 			}
 		}
 	}
-	expected := []string{"/gateway/v4/identity", "/v4/member/cloud-closure", "/gateway/v4/cloud/configure", "/gateway/v4/cloud/status", "/gateway/v4/members/reevaluate", "/v4/member/cloud", "/gateway/v4/pairing/challenge", "/gateway/v4/pairing/complete", "/gateway/v4/catalog", "/gateway/v4/invitations", "/gateway/v4/members/remove", "/gateway/v4/members/policy", "/gateway/v4/policy", "/gateway/v4/access/open", "/gateway/v4/access/service", "/gateway/v4/migration/dismiss", "/v4/member/join", "/v4/member/cancel-join", "/v4/member/rotate", "/v4/member/leave", "/v4/member/connect"}
+	expected := []string{"/gateway/v5/identity", "/v5/member/cloud-closure", "/gateway/v5/cloud/configure", "/gateway/v5/cloud/status", "/gateway/v5/members/reevaluate", "/v5/member/cloud", "/gateway/v5/pairing/challenge", "/gateway/v5/pairing/complete", "/gateway/v5/catalog", "/gateway/v5/invitations", "/gateway/v5/endpoints", "/gateway/v5/members/remove", "/gateway/v5/members/policy", "/gateway/v5/policy", "/gateway/v5/access/open", "/gateway/v5/access/service", "/gateway/v5/migration/dismiss", "/v5/member/join", "/v5/member/cancel-join", "/v5/member/rotate", "/v5/member/leave", "/v5/member/connect"}
 	if len(spec.Paths) != len(expected) {
 		t.Fatal("OpenAPI contains unexpected routes")
 	}

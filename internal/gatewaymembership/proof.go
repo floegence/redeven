@@ -22,6 +22,8 @@ import (
 
 var ErrInvalidProof = errors.New("MEMBER_PROOF_INVALID")
 
+const legacyGatewayProtocolVersion = "redeven-gateway-v4"
+
 func decodeKey(value string, size int) ([]byte, error) {
 	raw, err := base64.RawURLEncoding.Strict().DecodeString(value)
 	if err != nil || len(raw) != size || base64.RawURLEncoding.EncodeToString(raw) != value {
@@ -114,9 +116,37 @@ func validOrigin(value string) bool {
 	return err == nil && canonical == value
 }
 
+func validateGatewayEndpoints(endpoints []gp.GatewayEndpoint) error {
+	if len(endpoints) == 0 || len(endpoints) > 16 {
+		return ErrInvalidProof
+	}
+	ids := make(map[string]struct{}, len(endpoints))
+	addresses := make(map[string]struct{}, len(endpoints))
+	for _, endpoint := range endpoints {
+		if !validID(endpoint.EndpointID) || len(endpoint.EndpointID) > 64 || !validOrigin(endpoint.Address) || endpoint.Priority < 0 || endpoint.Priority > 1000 {
+			return ErrInvalidProof
+		}
+		if endpoint.Scope != gp.GatewayEndpointLAN && endpoint.Scope != gp.GatewayEndpointOverlay && endpoint.Scope != gp.GatewayEndpointPublic {
+			return ErrInvalidProof
+		}
+		if _, exists := ids[endpoint.EndpointID]; exists {
+			return ErrInvalidProof
+		}
+		if _, exists := addresses[endpoint.Address]; exists {
+			return ErrInvalidProof
+		}
+		ids[endpoint.EndpointID] = struct{}{}
+		addresses[endpoint.Address] = struct{}{}
+	}
+	return nil
+}
+
 func SignInvitation(invitation *gp.MemberInvitation, private ed25519.PrivateKey) error {
+	if invitation == nil || validateGatewayEndpoints(invitation.Endpoints) != nil {
+		return ErrInvalidProof
+	}
 	invitation.Signature = ""
-	signature, err := signValue("redeven.gateway.invitation.v4", *invitation, private)
+	signature, err := signValue("redeven.gateway.invitation.v5", *invitation, private)
 	if err == nil {
 		invitation.Signature = signature
 	}
@@ -124,7 +154,10 @@ func SignInvitation(invitation *gp.MemberInvitation, private ed25519.PrivateKey)
 }
 
 func VerifyInvitation(invitation gp.MemberInvitation, now time.Time) error {
-	if invitation.ProtocolVersion != gp.Version || !validID(invitation.InvitationID) || !validID(invitation.GatewayID) || !validOrigin(invitation.GatewayURL) || invitation.IssuedAtUnixMS <= 0 || invitation.IssuedAtUnixMS > now.Add(time.Minute).UnixMilli() || invitation.ExpiresAtUnixMS <= now.UnixMilli() || invitation.ExpiresAtUnixMS-invitation.IssuedAtUnixMS != int64((10*time.Minute)/time.Millisecond) {
+	if invitation.ProtocolVersion != gp.Version || !validID(invitation.InvitationID) || !validID(invitation.GatewayID) || validateGatewayEndpoints(invitation.Endpoints) != nil || invitation.IssuedAtUnixMS <= 0 || invitation.IssuedAtUnixMS > now.Add(time.Minute).UnixMilli() || invitation.ExpiresAtUnixMS <= now.UnixMilli() || invitation.ExpiresAtUnixMS-invitation.IssuedAtUnixMS != int64((10*time.Minute)/time.Millisecond) {
+		return ErrInvalidProof
+	}
+	if strings.TrimSpace(invitation.GatewayName) == "" || len(invitation.GatewayName) > 256 {
 		return ErrInvalidProof
 	}
 	if _, err := decodeKey(invitation.Token, 32); err != nil {
@@ -136,12 +169,12 @@ func VerifyInvitation(invitation gp.MemberInvitation, now time.Time) error {
 	}
 	signature := invitation.Signature
 	invitation.Signature = ""
-	return verifyValue("redeven.gateway.invitation.v4", invitation, invitation.GatewayPublicKey, signature)
+	return verifyValue("redeven.gateway.invitation.v5", invitation, invitation.GatewayPublicKey, signature)
 }
 
 func SignDelegation(delegation *gp.MemberDelegation, private ed25519.PrivateKey) error {
 	delegation.Signature = ""
-	signature, err := signValue("redeven.gateway.delegation.v4", *delegation, private)
+	signature, err := signValue("redeven.gateway.delegation.v5", *delegation, private)
 	if err == nil {
 		delegation.Signature = signature
 	}
@@ -149,22 +182,33 @@ func SignDelegation(delegation *gp.MemberDelegation, private ed25519.PrivateKey)
 }
 
 func MemberID(invitationID, publicKey string) string {
+	sum := sha256.Sum256([]byte("redeven.gateway.member.v5\x00" + invitationID + "\x00" + publicKey))
+	return "member_" + hex.EncodeToString(sum[:24])
+}
+
+func legacyMemberID(invitationID, publicKey string) string {
 	sum := sha256.Sum256([]byte("redeven.gateway.member.v4\x00" + invitationID + "\x00" + publicKey))
 	return "member_" + hex.EncodeToString(sum[:24])
 }
 
 func VerifyDelegation(delegation gp.MemberDelegation) error {
-	if delegation.ProtocolVersion != gp.Version || !validID(delegation.GatewayID) || delegation.MemberID != MemberID(delegation.InvitationID, delegation.PublicKeyB64u) || !validID(delegation.RuntimePublicID) || !validID(delegation.InvitationID) || delegation.ConsentedAtUnixMS <= 0 || !delegation.ManageAccess || !delegation.ManageCloudPublication {
+	domain, expectedMemberID := "redeven.gateway.delegation.v5", MemberID(delegation.InvitationID, delegation.PublicKeyB64u)
+	if delegation.ProtocolVersion == legacyGatewayProtocolVersion {
+		domain, expectedMemberID = "redeven.gateway.delegation.v4", legacyMemberID(delegation.InvitationID, delegation.PublicKeyB64u)
+	} else if delegation.ProtocolVersion != gp.Version {
+		return ErrInvalidProof
+	}
+	if !validID(delegation.GatewayID) || delegation.MemberID != expectedMemberID || !validID(delegation.RuntimePublicID) || !validID(delegation.InvitationID) || delegation.ConsentedAtUnixMS <= 0 || !delegation.ManageAccess || !delegation.ManageCloudPublication {
 		return ErrInvalidProof
 	}
 	signature := delegation.Signature
 	delegation.Signature = ""
-	return verifyValue("redeven.gateway.delegation.v4", delegation, delegation.PublicKeyB64u, signature)
+	return verifyValue(domain, delegation, delegation.PublicKeyB64u, signature)
 }
 
 func SignJoin(request *gp.MemberJoinRequest, private ed25519.PrivateKey) error {
 	request.Signature = ""
-	signature, err := signValue("redeven.gateway.member-join.v4", *request, private)
+	signature, err := signValue("redeven.gateway.member-join.v5", *request, private)
 	if err == nil {
 		request.Signature = signature
 	}
@@ -183,7 +227,7 @@ func VerifyJoin(request gp.MemberJoinRequest, gatewayID string, now time.Time) e
 	}
 	signature := request.Signature
 	request.Signature = ""
-	return verifyValue("redeven.gateway.member-join.v4", request, request.Delegation.PublicKeyB64u, signature)
+	return verifyValue("redeven.gateway.member-join.v5", request, request.Delegation.PublicKeyB64u, signature)
 }
 
 func ServiceOrigin(runtimeID string) string {
@@ -201,7 +245,11 @@ type serviceStatement struct {
 // Gateway cannot substitute its own leaf for an already selected member ID.
 func SignService(service *gp.MemberService, delegation gp.MemberDelegation, key ed25519.PrivateKey) error {
 	service.Signature = ""
-	signature, err := signValue("redeven.gateway.service.v4", serviceStatement{delegation.MemberID, delegation.RuntimePublicID, *service}, key)
+	domain := "redeven.gateway.service.v5"
+	if delegation.ProtocolVersion == legacyGatewayProtocolVersion {
+		domain = "redeven.gateway.service.v4"
+	}
+	signature, err := signValue(domain, serviceStatement{delegation.MemberID, delegation.RuntimePublicID, *service}, key)
 	if err == nil {
 		service.Signature = signature
 	}
@@ -217,7 +265,11 @@ func VerifyMemberService(service gp.MemberService, delegation gp.MemberDelegatio
 	}
 	signature := service.Signature
 	service.Signature = ""
-	return verifyValue("redeven.gateway.service.v4", serviceStatement{delegation.MemberID, delegation.RuntimePublicID, service}, delegation.PublicKeyB64u, signature)
+	domain := "redeven.gateway.service.v5"
+	if delegation.ProtocolVersion == legacyGatewayProtocolVersion {
+		domain = "redeven.gateway.service.v4"
+	}
+	return verifyValue(domain, serviceStatement{delegation.MemberID, delegation.RuntimePublicID, service}, delegation.PublicKeyB64u, signature)
 }
 
 func VerifyService(service gp.MemberService, runtimeID string, now time.Time) error {

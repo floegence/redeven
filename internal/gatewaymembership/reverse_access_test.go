@@ -134,7 +134,7 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 	}
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM([]byte(member.GatewayTLSRootPEM))
-	desktop, err := flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{TrustRoots: roots, Origin: member.GatewayURL})
+	desktop, err := flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{TrustRoots: roots, Origin: member.ConnectionEndpoints()[0].Address})
 	if err != nil {
 		t.Fatal(err)
 	}

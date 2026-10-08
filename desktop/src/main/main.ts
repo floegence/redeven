@@ -5849,6 +5849,11 @@ async function syncGatewayRecord(
           ...(catalog.gateway.permissions.configure_cloud ? ['cloud_configure' as const] : []),
         ],
         permissions: catalog.gateway.permissions, policy: catalog.policy, catalog_revision: catalog.revision,
+        listener_address: catalog.gateway.listener_address,
+        listener_addresses: catalog.gateway.listener_addresses,
+        listener_running: catalog.gateway.listener_running,
+        endpoint_last_used_at: catalog.gateway.endpoint_last_used_at,
+        member_endpoints: catalog.gateway.member_endpoints,
         rebuild_required: catalog.rebuild_required, hook_status: catalog.hook_status,
         environments: catalogEnvironments,
       }), syncedRecord, {
@@ -6022,17 +6027,18 @@ function runtimeLifecycleTitleKey(operation: 'start' | 'stop' | 'restart' | 'upd
 }
 
 async function manageGatewayMemberFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'invite_gateway_runtime' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.gateway_id);
   if (!record) return launcherActionFailure('environment_missing', 'gateway', 'This Gateway is no longer available.', { shouldRefreshSnapshot: true });
   try {
     const client = await gatewayLifecycleManager().client(record, { startPolicy: 'require_ready' });
-    if (request.kind === 'invite_gateway_runtime') {
+	if (request.kind === 'invite_gateway_runtime') {
       return { ...launcherActionSuccess('gateway_invitation_created'), gateway_invitation: await client.invite(record) };
     }
     let results: DesktopLauncherActionSuccess['gateway_member_results'];
-    if (request.kind === 'remove_gateway_member') {
+	if (request.kind === 'update_gateway_endpoints') await client.updateEndpoints(record, request.endpoints);
+	else if (request.kind === 'remove_gateway_member') {
       await client.removeMember(record, request.member_id, request.member_version);
       for (const session of liveGatewayEnvironmentSessions(record.gateway_id, request.member_id)) {
         failGatewaySessionTransport(session, new GatewayClientError('MEMBER_REMOVED', 'Gateway membership was removed.'));
@@ -17860,6 +17866,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         );
       }
     case 'invite_gateway_runtime':
+    case 'update_gateway_endpoints':
     case 'remove_gateway_member':
     case 'reevaluate_gateway_member':
     case 'update_gateway_policy':

@@ -25,7 +25,7 @@ type Listener struct {
 func NewListener(store *Store, connections *Connections, desktopAllowed func(string) bool) (*Listener, error) {
 	l := &Listener{store: store, connections: connections, admissions: make(map[string]Admission)}
 	acceptor, err := flowersec.NewAcceptor(flowersec.AcceptorOptions{
-		AllowedOrigins:    []string{store.Endpoint().URL},
+		CheckOrigin:       func(request *http.Request) bool { return originAllowed(store, request) },
 		MaxInboundStreams: gp.MaxMemberConnections,
 		MaxDirectSessions: gp.MaxGatewayConnections * 2,
 		Authorize: func(_ context.Context, request controlplane.RuntimeAuthorizationRequest) (controlplane.AuthorizationResponse, error) {
@@ -48,6 +48,22 @@ func NewListener(store *Store, connections *Connections, desktopAllowed func(str
 	return l, nil
 }
 
+func originAllowed(store *Store, request *http.Request) bool {
+	if store == nil || request == nil {
+		return false
+	}
+	origin := request.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	for _, allowed := range store.EndpointOrigins() {
+		if origin == allowed {
+			return true
+		}
+	}
+	return false
+}
+
 func (l *Listener) Server(tlsConfig *tls.Config, egress http.Handler) (*flowersec.WebSocketHTTPServer, error) {
 	return flowersec.NewWebSocketHTTPServer(flowersec.WebSocketHTTPServerOptions{
 		Handler: l.acceptor.Handler(), ApplicationHandler: l.applicationHandler(egress),
@@ -59,7 +75,7 @@ func (l *Listener) applicationHandler(egress http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	l.store.RegisterMemberHandlers(mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodConnect || r.URL.Path == "/v4/member/cloud" || r.URL.Path == "/v4/member/cloud-closure" {
+		if r.Method == http.MethodConnect || r.URL.Path == "/v5/member/cloud" || r.URL.Path == "/v5/member/cloud-closure" {
 			if egress == nil {
 				http.Error(w, "CLOUD_NOT_CONFIGURED", http.StatusForbidden)
 				return
@@ -79,6 +95,9 @@ func (l *Listener) serveSession(ctx context.Context, session flowersec.Session, 
 		return ErrDenied
 	}
 	if admission.DesktopKeyID == "" {
+		if err := l.store.recordEndpointUse(admission); err != nil {
+			return err
+		}
 		return l.connections.ServeMember(ctx, admission, session)
 	}
 	handlers, err := flowersec.NewStreamHandlers(flowersec.StreamHandlerOptions{MaxConcurrentStreams: gp.MaxMemberConnections})

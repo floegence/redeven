@@ -29,7 +29,7 @@ Control credentials are replenished normally. After depletion the dedicated Runt
 
 Changing Gateway is explicit. Preserving `env_public_id` requires proof of the original binding and a new locally confirmed member delegation. Ordinary user-to-Namespace conversion additionally requires current user binding confirmation and displays ownership transfer. Cross-Namespace name, address or public-health matches never merge environments. A successful transition advances generation and disables old-path recovery.
 
-The cutover fences old Cloud-only configurations and marks retained Cloud records as requiring rejoin. Old proof can remain only as migration evidence; it cannot start the retired access path. Without valid evidence, use explicit reauthorization or a new environment. Runtime Service compatibility epoch 41 and v2 Cloud contracts require matching clients.
+The cutover fences old Cloud-only configurations and marks retained Cloud records as requiring rejoin. Old proof can remain only as migration evidence; it cannot start the retired access path. Without valid evidence, use explicit reauthorization or a new environment. Runtime Service compatibility epoch 42 and v2 Cloud contracts require matching clients.
 
 ## Revocation and truthful receipts
 

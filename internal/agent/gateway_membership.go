@@ -115,12 +115,12 @@ func (a *Agent) ReplaceGateway(invitation gp.MemberInvitation, choice string) er
 	return a.changeGateway(invitation, choice, true)
 }
 
-func (a *Agent) UpdateGatewayAddress(invitation gp.MemberInvitation) error {
+func (a *Agent) UpdateGatewayEndpoints(invitation gp.MemberInvitation) error {
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
 	// Join the credential writer before taking its current revision.
 	a.stopGatewayMemberLocked()
-	member, err := a.GatewayMembership().PrepareAddressUpdate(invitation)
+	member, err := a.GatewayMembership().PrepareConnectionEndpoints(invitation)
 	if err == nil {
 		err = a.persistGatewayMember(member)
 	}
@@ -167,14 +167,15 @@ func (a *Agent) changeGateway(invitation gp.MemberInvitation, choice string, rep
 }
 
 type GatewayMembershipStatus struct {
-	PublicationErrorCode  string `json:"publication_error_code,omitempty"`
-	Joined                bool   `json:"joined"`
-	GatewayID             string `json:"gateway_id,omitempty"`
-	GatewayURL            string `json:"gateway_url,omitempty"`
-	MemberID              string `json:"member_id,omitempty"`
-	Phase                 string `json:"phase"`
-	ExistingEnvironmentID string `json:"existing_environment_id,omitempty"`
-	RejoinRequired        bool   `json:"rejoin_required,omitempty"`
+	PublicationErrorCode  string               `json:"publication_error_code,omitempty"`
+	Joined                bool                 `json:"joined"`
+	GatewayID             string               `json:"gateway_id,omitempty"`
+	Endpoints             []gp.GatewayEndpoint `json:"endpoints,omitempty"`
+	LastEndpointID        string               `json:"last_endpoint_id,omitempty"`
+	MemberID              string               `json:"member_id,omitempty"`
+	Phase                 string               `json:"phase"`
+	ExistingEnvironmentID string               `json:"existing_environment_id,omitempty"`
+	RejoinRequired        bool                 `json:"rejoin_required,omitempty"`
 }
 
 func (a *Agent) GatewayMembershipStatus() GatewayMembershipStatus {
@@ -185,7 +186,7 @@ func (a *Agent) GatewayMembershipStatus() GatewayMembershipStatus {
 		cfg := a.remoteConfigSnapshot()
 		return GatewayMembershipStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID, RejoinRequired: cfg.GatewayRejoinRequired}
 	}
-	status := GatewayMembershipStatus{Joined: true, GatewayID: member.GatewayID, GatewayURL: member.GatewayURL, MemberID: member.MemberID, Phase: "gateway_offline", ExistingEnvironmentID: a.remoteConfigSnapshot().EnvironmentID}
+	status := GatewayMembershipStatus{Joined: true, GatewayID: member.GatewayID, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, MemberID: member.MemberID, Phase: "gateway_offline", ExistingEnvironmentID: a.remoteConfigSnapshot().EnvironmentID}
 	if member.PendingJoin != nil {
 		status.Phase = "joining"
 	}

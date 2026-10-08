@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -104,7 +105,7 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 		if first.MemberID == "" {
 			first = response
 		}
-		if response != first {
+		if !reflect.DeepEqual(response, first) {
 			t.Fatal("duplicate request changed credential delivery")
 		}
 	}
@@ -133,7 +134,7 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	response, err := reopened.Join(context.Background(), request)
-	if err != nil || response != first {
+	if err != nil || !reflect.DeepEqual(response, first) {
 		t.Fatalf("recovery %v", err)
 	}
 	if err := reopened.Remove(first.MemberID, first.MemberVersion); err != nil {
@@ -157,7 +158,7 @@ func TestCloudInvitationCommandRecoversTheSameDelivery(t *testing.T) {
 	}
 	for range 3 {
 		got, err := reopened.InviteForCommand("namespace_admin", "command_one", deadline)
-		if err != nil || got != first {
+		if err != nil || !reflect.DeepEqual(got, first) {
 			t.Fatal("invitation delivery changed after restart", err)
 		}
 	}
@@ -176,7 +177,7 @@ func TestCloudInvitationCommandRecoversTheSameDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	recovered, err := reopened.InviteForCommand("namespace_admin", "command_one", deadline)
-	if err != nil || recovered != first {
+	if err != nil || !reflect.DeepEqual(recovered, first) {
 		t.Fatal("issuance retry changed the spent invitation", err)
 	}
 	if _, err := reopened.Join(context.Background(), request); err == nil {
@@ -192,7 +193,7 @@ func TestMemberProofDoesNotCrossGatewayIdentityOrServiceOrigin(t *testing.T) {
 	}
 	request, key := memberRequest(t, invitation, "runtime_a")
 	changed := invitation
-	changed.GatewayURL = "https://attacker.invalid"
+	changed.Endpoints[0].Address = "https://attacker.invalid"
 	if VerifyInvitation(changed, time.Now()) == nil {
 		t.Fatal("changed invitation endpoint accepted")
 	}

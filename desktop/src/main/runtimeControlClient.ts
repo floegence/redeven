@@ -35,7 +35,7 @@ type RuntimeControlEnvelope = Readonly<{
 type RuntimeControlServiceRoute =
   | 'v2/gateway/join'
   | 'v2/gateway/replace'
-  | 'v2/gateway/update-address'
+  | 'v2/gateway/update-endpoints'
   | 'v2/gateway/status'
   | 'v2/gateway/retry'
   | 'v2/gateway/leave'
@@ -311,15 +311,17 @@ export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpo
 }
 
 export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, invitation?: GatewayMemberInvitation, choice?: 'preserve' | 'new'): Promise<GatewayMembershipStatus> {
-  if ((operation === 'join' || operation === 'replace' || operation === 'update-address') !== Boolean(invitation)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Join requires an invitation.');
+  if ((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') !== Boolean(invitation)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Join requires an invitation.');
   const result = (await requestRuntimeControl(endpoint, `v2/gateway/${operation}`, {
-    method: operation === 'status' ? 'GET' : 'POST', ...((operation === 'join' || operation === 'replace' || operation === 'update-address') ? { body: { invitation, ...(choice ? { environment_choice: choice } : {}) } } : {}), timeoutMs: 30_000,
+    method: operation === 'status' ? 'GET' : 'POST', ...((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') ? { body: { invitation, ...(choice ? { environment_choice: choice } : {}) } } : {}), timeoutMs: 30_000,
   })).data as Record<string, unknown> | undefined;
   if (!result || !['not_joined', 'joining', 'gateway_offline', 'joined', 'reauthorization_required', 'removal_pending', 'cloud_denied', 'cloud_pending', 'cloud_control_offline', 'accessible', 'migration_pending'].includes(String(result.phase))
     || typeof result.joined !== 'boolean') throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE', 'The Runtime did not return Gateway membership status.');
   return { joined: result.joined, phase: result.phase as GatewayMembershipStatus['phase'],
     ...(typeof result.gateway_id === 'string' ? { gateway_id: result.gateway_id } : {}),
-    ...(typeof result.gateway_url === 'string' ? { gateway_url: result.gateway_url } : {}),
+    ...(Array.isArray(result.endpoints) ? { endpoints: result.endpoints as GatewayMembershipStatus['endpoints'] } : {}),
+    ...(typeof result.last_endpoint_id === 'string' ? { last_endpoint_id: result.last_endpoint_id } : {}),
+    ...(typeof result.last_endpoint_id === 'string' ? { last_endpoint_id: result.last_endpoint_id } : {}),
     ...(typeof result.member_id === 'string' ? { member_id: result.member_id } : {}),
     ...(typeof result.existing_environment_id === 'string' ? { existing_environment_id: result.existing_environment_id } : {}),
     ...(typeof result.publication_error_code === 'string' ? { publication_error_code: result.publication_error_code } : {}),

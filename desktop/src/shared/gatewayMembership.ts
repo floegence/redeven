@@ -1,6 +1,14 @@
-/** Gateway v4 is the only membership and LAN access contract. */
-export const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v4' as const;
-export const GATEWAY_ACCESS_STREAM = 'redeven.gateway.access.https.v4';
+/** Gateway v5 is the membership and multi-endpoint access contract. */
+export const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v5' as const;
+export const GATEWAY_ACCESS_STREAM = 'redeven.gateway.access.https.v5';
+
+export type GatewayEndpointScope = 'lan' | 'overlay' | 'public';
+export type GatewayEndpoint = Readonly<{
+  endpoint_id: string;
+  address: string;
+  scope: GatewayEndpointScope;
+  priority: number;
+}>;
 
 export type GatewayPermissions = Readonly<{
   access: boolean;
@@ -33,7 +41,8 @@ export type GatewayMemberInvitation = Readonly<{
   protocol_version: typeof GATEWAY_PROTOCOL_VERSION;
   invitation_id: string;
   gateway_id: string;
-  gateway_url: string;
+  gateway_name: string;
+	endpoints: readonly GatewayEndpoint[];
   gateway_public_key: string;
   gateway_tls_root_pem: string;
   token: string;
@@ -50,7 +59,7 @@ export type GatewayMemberService = Readonly<{
   signature: string;
 }>;
 export type GatewayMemberDelegation = Readonly<{
-  protocol_version: typeof GATEWAY_PROTOCOL_VERSION;
+  protocol_version: typeof GATEWAY_PROTOCOL_VERSION | 'redeven-gateway-v4';
   gateway_id: string;
   member_id: string;
   runtime_public_id: string;

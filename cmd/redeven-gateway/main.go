@@ -81,7 +81,7 @@ func (c *cli) run(args []string) int {
 		return 0
 	}
 	switch strings.TrimSpace(strings.ToLower(args[0])) {
-	case "members", "invite", "policy":
+	case "members", "invite", "policy", "endpoints":
 		return c.membershipCmd(args)
 	case "cloud-status":
 		return c.cloudStatusCmd(args[1:])
@@ -135,7 +135,7 @@ func (c *cli) cloudConnectCmd(args []string) int {
 	}
 	defer client.transport.CloseIdleConnections()
 	var response gc.Gateway
-	err = client.request(ctx, "/gateway/v4/cloud/configure", gp.ConfigureCloudRequest{ProtocolVersion: gp.Version, CloudOrigin: origin, Reauthorize: *reauthorize}, &response)
+	err = client.request(ctx, "/gateway/v5/cloud/configure", gp.ConfigureCloudRequest{ProtocolVersion: gp.Version, CloudOrigin: origin, Reauthorize: *reauthorize}, &response)
 	gateway := &response
 	if err != nil {
 		writeError(c.stderr, err.Error())
@@ -789,6 +789,7 @@ Commands:
   invite            Create a one-use Runtime membership invitation.
   members           List members, remove membership, or set member Cloud policy.
   policy            View or update Gateway Cloud publication policy.
+  endpoints         Show or update administrator-confirmed connection addresses.
   serve             Run the Gateway HTTP service.
   desktop-bridge    Run the Gateway desktop bridge over stdio.
   service-status    Probe a managed Gateway service.
@@ -808,7 +809,7 @@ Flags:
   --state-root <path>   Gateway state root.
   --listen <addr>       Listen address (default 127.0.0.1:0).
   --member-url <url>     Advertised HTTPS endpoint for Runtime members.
-  --member-listen <addr> Member TLS listen address (default :7443).
+  --member-listen <addr> Comma-separated member listen addresses (default :7443).
 `, "\n")
 }
 
@@ -844,7 +845,7 @@ func (c *cli) cloudStatusCmd(args []string) int {
 	}
 	defer client.transport.CloseIdleConnections()
 	var status gatewaycloud.Summary
-	err = client.request(ctx, "/gateway/v4/cloud/status", gp.CatalogRequest{ProtocolVersion: gp.Version}, &status)
+	err = client.request(ctx, "/gateway/v5/cloud/status", gp.CatalogRequest{ProtocolVersion: gp.Version}, &status)
 	if err != nil {
 		writeError(c.stderr, err.Error())
 		return 1

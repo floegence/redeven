@@ -79,7 +79,7 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 		runtime.log = slog.Default()
 		runtime.a = newRuntimeHealthTestAgent(t, runtime.configPath, gate)
 		runtime.appServer = runtime.a.CodeAppServer()
-		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v4/invitations", strings.NewReader(`{"protocol_version":"redeven-gateway-v4"}`))
+		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/invitations", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()

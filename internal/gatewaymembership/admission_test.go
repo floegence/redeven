@@ -29,11 +29,11 @@ func TestMemberConnectionOffersFencePreviousAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.MemberOffer(pair.Leaf)
+	first, err := store.MemberOffer(pair.Leaf, invitation.Endpoints[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := store.MemberOffer(pair.Leaf)
+	second, err := store.MemberOffer(pair.Leaf, invitation.Endpoints[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestMemberConnectionOffersFencePreviousAttempts(t *testing.T) {
 	if err := store.Remove(response.MemberID, response.MemberVersion); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.MemberOffer(pair.Leaf); err == nil {
+	if _, err := store.MemberOffer(pair.Leaf, invitation.Endpoints[0]); err == nil {
 		t.Fatal("removed member acquired another offer")
 	}
 	if _, err := store.AccessOffer(context.Background(), response.MemberID, "paired_desktop"); err == nil {

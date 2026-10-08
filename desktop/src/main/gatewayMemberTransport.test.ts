@@ -7,7 +7,18 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import { createGatewayMemberTransport, verifyMemberServiceProof } from './gatewayMemberTransport';
-import type { GatewayMemberOffer, GatewayMemberServiceResponse } from '../shared/gatewayMembership';
+import type { GatewayEndpoint, GatewayMemberOffer, GatewayMemberServiceResponse } from '../shared/gatewayMembership';
+
+describe('Gateway member endpoint configuration', () => {
+  it('reports missing addresses before acquiring a member capability', async () => {
+    await expect(createGatewayMemberTransport({
+      memberID: 'member', memberVersion: 1, runtimeID: 'runtime', gatewayID: 'gateway',
+      gatewayEndpoints: [], gatewayTLSRootPEM: '',
+      acquire: async () => { throw new Error('must not acquire'); },
+      refreshService: async () => { throw new Error('must not refresh'); },
+    })).rejects.toThrow('no reachable connection addresses');
+  });
+});
 
 /** This suite exercises the published Node SDK against a real Go member owner. */
 describe.runIf(process.env.REDEVEN_GATEWAY_INTEROP === '1')('Gateway Go/Node reverse access', () => {
@@ -40,13 +51,14 @@ describe.runIf(process.env.REDEVEN_GATEWAY_INTEROP === '1')('Gateway Go/Node rev
     let transport: Awaited<ReturnType<typeof createGatewayMemberTransport>> | undefined;
     try {
       const data = await ready;
+      expect((data.endpoints as GatewayEndpoint[]).length).toBe(2);
       const offer = await command('offer') as GatewayMemberOffer;
       verifyMemberServiceProof(offer.service, offer.delegation, String(data.gateway_id), String(data.member_id), String(data.runtime_id));
       expect(() => verifyMemberServiceProof(offer.service, { ...offer.delegation, manage_cloud_publication: false }, String(data.gateway_id), String(data.member_id), String(data.runtime_id))).toThrow();
       expect(() => verifyMemberServiceProof({ ...offer.service, certificate_sha256: '0'.repeat(64) }, offer.delegation, String(data.gateway_id), String(data.member_id), String(data.runtime_id))).toThrow();
       transport = await createGatewayMemberTransport({
         memberID: String(data.member_id), memberVersion: Number(data.member_version), runtimeID: String(data.runtime_id),
-        gatewayID: String(data.gateway_id), gatewayURL: String(data.gateway_url), gatewayTLSRootPEM: String(data.gateway_tls_root_pem),
+        gatewayID: String(data.gateway_id), gatewayEndpoints: data.endpoints as GatewayEndpoint[], gatewayTLSRootPEM: String(data.gateway_tls_root_pem),
         signal: lifetime.signal, refreshService: async () => await command('service') as GatewayMemberServiceResponse, acquire: async () => await command('offer') as GatewayMemberOffer,
       });
       const owner = transport;

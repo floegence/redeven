@@ -98,9 +98,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     activeRecord = record;
     const catalog = await lifecycle.catalog(record);
     assert.deepEqual(catalog.gateway.permissions, request.permissions);
+    assert.deepEqual(catalog.gateway.member_endpoints, []);
+    await assert.rejects(session.client.invite(record));
+    const endpoints = [{ endpoint_id: 'lan', address: 'https://localhost:7443', scope: 'lan', priority: 0 }];
+    await session.client.updateEndpoints(record, endpoints);
     const invitation = await session.client.invite(record);
-    assert.equal(invitation.protocol_version, 'redeven-gateway-v4');
+    assert.equal(invitation.protocol_version, 'redeven-gateway-v5');
     assert.equal(invitation.gateway_id, catalog.gateway.gateway_id);
+    assert.deepEqual(invitation.endpoints, endpoints);
     assert.equal(invitation.expires_at_unix_ms - invitation.issued_at_unix_ms, 600_000);
     assert.equal(catalog.members.length, 0, 'Only a Runtime can complete membership');
     await session.client.updatePolicy(record, { ...catalog.policy, default_cloud_allowed: true });
@@ -108,6 +113,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     const restored = await lifecycle.catalog(record);
     assert.equal(restored.policy.default_cloud_allowed, true);
     assert.equal(restored.gateway.gateway_id, invitation.gateway_id);
+    assert.deepEqual(restored.gateway.member_endpoints, endpoints);
+    await session.client.updateEndpoints(record, []);
+    await lifecycle.restartGateway(record);
+    assert.deepEqual((await lifecycle.catalog(record)).gateway.member_endpoints, []);
     await lifecycle.stopGateway(record);
     assert.equal((await lifecycle.inspectService(record)).status, 'not_started');
     await lifecycle.clear(record);

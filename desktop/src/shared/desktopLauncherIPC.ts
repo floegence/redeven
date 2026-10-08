@@ -1,4 +1,4 @@
-import type { GatewayMember, GatewayPermissions, GatewayPolicy, GatewayMemberInvitation, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
+import type { GatewayEndpoint, GatewayMember, GatewayPermissions, GatewayPolicy, GatewayMemberInvitation, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
 import { normalizeGatewayInvitation, type GatewayMembershipStatus, type GatewayMembershipOperation } from './gatewayJoin';
 import { normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from './gatewayCloud';
 import type { EnvironmentAccessRoute } from './environmentAccess';
@@ -245,6 +245,7 @@ export type DesktopLauncherActionKind =
   | 'delete_gateway'
   | 'upsert_environment_registration'
   | 'invite_gateway_runtime'
+  | 'update_gateway_endpoints'
   | 'remove_gateway_member'
   | 'reevaluate_gateway_member'
   | 'update_gateway_policy'
@@ -869,6 +870,7 @@ export type DesktopLauncherActionRequest = Readonly<
       registration: DesktopEnvironmentRegistrationUpsert;
     }
   | { kind: 'invite_gateway_runtime'; gateway_id: string }
+  | { kind: 'update_gateway_endpoints'; gateway_id: string; endpoints: readonly GatewayEndpoint[] }
   | { kind: 'remove_gateway_member'; gateway_id: string; member_id: string; member_version: number }
   | { kind: 'reevaluate_gateway_member'; gateway_id: string; member_id: string; member_version: number }
   | { kind: 'update_gateway_policy'; gateway_id: string; policy: GatewayPolicy }
@@ -1175,6 +1177,23 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'dismiss_gateway_rebuild': {
       const gateway_id = compact((candidate as { gateway_id?: unknown }).gateway_id);
       return gateway_id ? { kind, gateway_id } : null;
+    }
+    case 'update_gateway_endpoints': {
+      const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id);
+      if (!gateway_id || !Array.isArray(input.endpoints) || input.endpoints.length > 16) return null;
+      const endpoints: GatewayEndpoint[] = [];
+      for (const raw of input.endpoints) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+        const item = raw as Record<string, unknown>;
+        const endpoint_id = compact(item.endpoint_id), address = compact(item.address), scope = compact(item.scope);
+        if (!/^[A-Za-z0-9_-]{1,64}$/u.test(endpoint_id) || !/^https:\/\/[^/?#]+$/u.test(address)
+          || !['lan', 'overlay', 'public'].includes(scope) || !Number.isSafeInteger(item.priority) || Number(item.priority) < 0 || Number(item.priority) > 1000) return null;
+        try { const parsed = new URL(address); if (parsed.origin !== address || parsed.username || parsed.password) return null; } catch { return null; }
+        endpoints.push({ endpoint_id, address, scope: scope as GatewayEndpoint['scope'], priority: Number(item.priority) });
+      }
+      return new Set(endpoints.map(item => item.endpoint_id)).size === endpoints.length
+        && new Set(endpoints.map(item => item.address)).size === endpoints.length
+        ? { kind, gateway_id, endpoints } : null;
     }
     case 'remove_gateway_member':
     case 'reevaluate_gateway_member': {
@@ -1553,8 +1572,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       const invitation = input.invitation === undefined ? undefined : normalizeGatewayInvitation(input.invitation);
       const choice = input.environment_choice;
       if (choice !== undefined && ((operation !== 'join' && operation !== 'replace') || (choice !== 'preserve' && choice !== 'new'))) return null;
-      if (!/^(local|ssh|wsl):.+$/u.test(runtimeTargetID) || !['join', 'replace', 'update-address', 'status', 'retry', 'leave'].includes(operation)
-        || ((operation === 'join' || operation === 'replace' || operation === 'update-address') ? !invitation : invitation !== undefined)) return null;
+      if (!/^(local|ssh|wsl):.+$/u.test(runtimeTargetID) || !['join', 'replace', 'update-endpoints', 'status', 'retry', 'leave'].includes(operation)
+        || ((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') ? !invitation : invitation !== undefined)) return null;
       return { kind, runtime_target_id: runtimeTargetID as DesktopProviderRuntimeLinkTargetID,
         operation: operation as GatewayMembershipOperation, ...(invitation ? { invitation } : {}), ...(choice ? { environment_choice: choice } : {}) };
     }

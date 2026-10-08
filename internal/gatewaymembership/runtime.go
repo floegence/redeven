@@ -15,19 +15,24 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"time"
 
+	"github.com/floegence/flowersec/flowersec-go/v5/egress"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
 // RuntimeConfig is the sole local Gateway membership. Optional Cloud binding
 // state must refer to this member instead of carrying a second Gateway route.
 type RuntimeConfig struct {
-	Revision              uint64                `json:"revision"`
-	Leaving               bool                  `json:"leaving"`
-	ProtocolVersion       string                `json:"protocol_version"`
-	GatewayID             string                `json:"gateway_id"`
-	GatewayURL            string                `json:"gateway_url"`
+	Revision         uint64               `json:"revision"`
+	Leaving          bool                 `json:"leaving"`
+	ProtocolVersion  string               `json:"protocol_version"`
+	GatewayID        string               `json:"gateway_id"`
+	GatewayEndpoints []gp.GatewayEndpoint `json:"gateway_endpoints,omitempty"`
+	LastEndpointID   string               `json:"last_endpoint_id,omitempty"`
+	// GatewayURL is read only during one-time v4 state migration.
+	GatewayURL            string                `json:"gateway_url,omitempty"`
 	GatewayPublicKey      string                `json:"gateway_public_key"`
 	GatewayTLSRootPEM     string                `json:"gateway_tls_root_pem"`
 	MemberID              string                `json:"member_id"`
@@ -61,6 +66,7 @@ func (r *RuntimeConfig) Clone() *RuntimeConfig {
 		return nil
 	}
 	next := *r
+	next.GatewayEndpoints = append([]gp.GatewayEndpoint(nil), r.GatewayEndpoints...)
 	if r.PendingJoin != nil {
 		copy := *r.PendingJoin
 		next.PendingJoin = &copy
@@ -123,13 +129,89 @@ func PrepareRuntime(invitation gp.MemberInvitation, runtimeID string, metadata g
 	if err := SignJoin(&request, key); err != nil {
 		return nil, err
 	}
-	return &RuntimeConfig{Revision: 1, ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, GatewayURL: invitation.GatewayURL, GatewayPublicKey: invitation.GatewayPublicKey, GatewayTLSRootPEM: invitation.GatewayTLSRootPEM, MemberID: memberID, RuntimePublicID: runtimeID, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), ClientPrivateKeyPEM: clientKey, Service: service, ServicePrivateKeyPEM: serviceKey, Delegation: delegation, PendingJoin: &request}, nil
+	return &RuntimeConfig{Revision: 1, ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, GatewayEndpoints: append([]gp.GatewayEndpoint(nil), invitation.Endpoints...), GatewayPublicKey: invitation.GatewayPublicKey, GatewayTLSRootPEM: invitation.GatewayTLSRootPEM, MemberID: memberID, RuntimePublicID: runtimeID, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), ClientPrivateKeyPEM: clientKey, Service: service, ServicePrivateKeyPEM: serviceKey, Delegation: delegation, PendingJoin: &request}, nil
+}
+
+// MigrateLegacyState converts one persisted v4 route into the v5 endpoint
+// model without changing Gateway or Runtime identity. It runs only while
+// loading durable Runtime configuration; new state never writes GatewayURL.
+func (r *RuntimeConfig) MigrateLegacyState() bool {
+	if r == nil {
+		return false
+	}
+	changed := false
+	if r.ProtocolVersion == "redeven-gateway-v4" {
+		r.ProtocolVersion = gp.Version
+		changed = true
+	}
+	if len(r.GatewayEndpoints) == 0 && validOrigin(r.GatewayURL) {
+		r.GatewayEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_legacy", Address: r.GatewayURL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
+		changed = true
+	}
+	if r.GatewayURL != "" {
+		r.GatewayURL = ""
+		changed = true
+	}
+	return changed
+}
+
+func (r *RuntimeConfig) connectionEndpoints() []gp.GatewayEndpoint {
+	if r == nil {
+		return nil
+	}
+	if len(r.GatewayEndpoints) > 0 {
+		return append([]gp.GatewayEndpoint(nil), r.GatewayEndpoints...)
+	}
+	return nil
+}
+
+func (r *RuntimeConfig) orderedEndpoints() []gp.GatewayEndpoint {
+	endpoints := r.connectionEndpoints()
+	sort.SliceStable(endpoints, func(left, right int) bool {
+		if left == right {
+			return false
+		}
+		if endpoints[left].EndpointID == r.LastEndpointID {
+			return true
+		}
+		if endpoints[right].EndpointID == r.LastEndpointID {
+			return false
+		}
+		if endpoints[left].Priority != endpoints[right].Priority {
+			return endpoints[left].Priority < endpoints[right].Priority
+		}
+		return endpoints[left].EndpointID < endpoints[right].EndpointID
+	})
+	return endpoints
+}
+
+func (r *RuntimeConfig) ConnectionEndpoints() []gp.GatewayEndpoint {
+	return r.orderedEndpoints()
+}
+
+func (r *RuntimeConfig) NewGatewayEndpointTransport(authenticated bool) (*http.Transport, error) {
+	config, err := r.TLSConfig(authenticated)
+	if err != nil {
+		return nil, err
+	}
+	addresses := make([]string, 0, len(r.orderedEndpoints()))
+	for _, endpoint := range r.orderedEndpoints() {
+		addresses = append(addresses, endpoint.Address)
+	}
+	proxy, err := egress.NewHTTPSProxy(egress.HTTPSProxyOptions{URLs: addresses, TLSConfig: config})
+	if err != nil {
+		return nil, err
+	}
+	return proxy.HTTPTransport(), nil
 }
 
 // Validate checks durable identity without requiring the network or a currently
 // usable credential. Expired access must not prevent local Runtime startup.
 func (r *RuntimeConfig) Validate(runtimeID string) error {
 	if r == nil || r.Revision == 0 || r.RuntimePublicID != runtimeID || r.Delegation.RuntimePublicID != runtimeID || r.Delegation.GatewayID != r.GatewayID || r.Delegation.MemberID != r.MemberID || VerifyDelegation(r.Delegation) != nil {
+		return ErrState
+	}
+	if endpoints := r.connectionEndpoints(); len(endpoints) == 0 || validateGatewayEndpoints(endpoints) != nil {
 		return ErrState
 	}
 	key, err := decodeKey(r.PrivateKeyB64u, ed25519.PrivateKeySize)
@@ -159,7 +241,7 @@ func (r *RuntimeConfig) Validate(runtimeID string) error {
 }
 
 func (r *RuntimeConfig) TLSConfig(authenticated bool) (*tls.Config, error) {
-	if r == nil || r.ProtocolVersion != gp.Version || !validOrigin(r.GatewayURL) {
+	if r == nil || r.ProtocolVersion != gp.Version || len(r.connectionEndpoints()) == 0 {
 		return nil, ErrState
 	}
 	roots := x509.NewCertPool()
@@ -180,9 +262,38 @@ func (r *RuntimeConfig) TLSConfig(authenticated bool) (*tls.Config, error) {
 // Request only calls the enrolled Gateway. Environment proxy settings and HTTP
 // redirects are excluded, and Gateway trust is isolated from system roots.
 func (r *RuntimeConfig) Request(ctx context.Context, path string, body, out any, authenticated bool) error {
+	endpoints := r.orderedEndpoints()
+	if len(endpoints) == 0 {
+		return ErrState
+	}
+	var last error
+	for _, endpoint := range endpoints {
+		err := r.requestEndpoint(ctx, endpoint, path, body, out, authenticated)
+		if err == nil {
+			r.LastEndpointID = endpoint.EndpointID
+			return nil
+		}
+		last = err
+		if !errors.Is(err, errGatewayUnavailable) {
+			return err
+		}
+	}
+	if last != nil {
+		return last
+	}
+	return errors.New("GATEWAY_UNAVAILABLE")
+}
+
+var errGatewayUnavailable = errors.New("GATEWAY_UNAVAILABLE")
+
+func (r *RuntimeConfig) requestEndpoint(ctx context.Context, endpoint gp.GatewayEndpoint, path string, body, out any, authenticated bool) error {
 	config, err := r.TLSConfig(authenticated)
 	if err != nil {
 		return err
+	}
+	if connect, ok := body.(gp.MemberConnectRequest); ok {
+		connect.Endpoint = endpoint
+		body = connect
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -193,14 +304,14 @@ func (r *RuntimeConfig) Request(ctx context.Context, path string, body, out any,
 	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 10 * time.Second}).DialContext, TLSClientConfig: config, DisableKeepAlives: true, MaxResponseHeaderBytes: 16 << 10}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("gateway redirects are prohibited") }}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, r.GatewayURL+path, bytes.NewReader(raw))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.Address+path, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(request)
 	if err != nil {
-		return err
+		return errGatewayUnavailable
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
@@ -212,7 +323,7 @@ func (r *RuntimeConfig) Request(ctx context.Context, path string, body, out any,
 		case http.StatusTooManyRequests:
 			return ErrCapacity
 		default:
-			return errors.New("GATEWAY_UNAVAILABLE")
+			return errGatewayUnavailable
 		}
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 128<<10))
@@ -235,7 +346,7 @@ func (r *RuntimeConfig) Enroll(ctx context.Context, persist func(*RuntimeConfig)
 		return err
 	}
 	var response gp.MemberJoinResponse
-	if err := r.Request(ctx, "/v4/member/join", r.PendingJoin, &response, false); err != nil {
+	if err := r.Request(ctx, "/v5/member/join", r.PendingJoin, &response, false); err != nil {
 		return err
 	}
 	if response.ProtocolVersion != gp.Version || response.GatewayID != r.GatewayID || response.MemberID != r.MemberID || response.MemberVersion != 1 || response.DeliveryID != r.PendingJoin.DeliveryID {
@@ -262,10 +373,10 @@ func (r *RuntimeConfig) Leave(ctx context.Context) error {
 	// signed request can cancel that delivery without enrolling again.
 	if r.PendingJoin != nil {
 		var response gp.CatalogRequest
-		return r.Request(ctx, "/v4/member/cancel-join", r.PendingJoin, &response, false)
+		return r.Request(ctx, "/v5/member/cancel-join", r.PendingJoin, &response, false)
 	}
 	var response gp.CatalogRequest
-	return r.Request(ctx, "/v4/member/leave", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: r.MemberID, ExpectedMemberVersion: r.MemberVersion}, &response, true)
+	return r.Request(ctx, "/v5/member/leave", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: r.MemberID, ExpectedMemberVersion: r.MemberVersion}, &response, true)
 }
 
 func (r *RuntimeConfig) validateClient() error {
@@ -324,7 +435,7 @@ func (r *RuntimeConfig) Rotate(ctx context.Context, persist func(*RuntimeConfig)
 		*r = *next
 	}
 	var response gp.MemberRotateResponse
-	if err := r.Request(ctx, "/v4/member/rotate", r.PendingRotation.Request, &response, true); err != nil {
+	if err := r.Request(ctx, "/v5/member/rotate", r.PendingRotation.Request, &response, true); err != nil {
 		return err
 	}
 	if response.ProtocolVersion != gp.Version || response.MemberID != r.MemberID || response.MemberVersion != r.MemberVersion || response.DeliveryID != r.PendingRotation.Request.DeliveryID {

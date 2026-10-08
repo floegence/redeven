@@ -560,9 +560,14 @@ export function gatewayRecordToSourceWithCatalog(
     status_message?: string;
     capabilities?: readonly DesktopGatewayCapability[];
     environments?: readonly DesktopGatewayEnvironment[];
+    listener_address?: string;
+    listener_addresses?: DesktopGatewaySource['listener_addresses'];
+    listener_running?: boolean;
+    endpoint_last_used_at?: DesktopGatewaySource['endpoint_last_used_at'];
     permissions?: DesktopGatewaySource['permissions'];
     policy?: DesktopGatewaySource['policy'];
     catalog_revision?: number;
+    member_endpoints?: DesktopGatewaySource['member_endpoints'];
     rebuild_required?: boolean;
     hook_status?: DesktopGatewaySource['hook_status'];
   }>,
@@ -582,6 +587,11 @@ export function gatewayRecordToSourceWithCatalog(
         ? 'Gateway catalog is ready.'
         : 'Gateway catalog could not be refreshed.'),
     capabilities: [...new Set(catalog.capabilities ?? [])],
+    listener_address: catalog.listener_address,
+    listener_addresses: catalog.listener_addresses,
+    listener_running: catalog.listener_running,
+    endpoint_last_used_at: catalog.endpoint_last_used_at,
+    member_endpoints: catalog.member_endpoints,
     environments: [...(catalog.environments ?? [])],
     permissions: catalog.permissions, policy: catalog.policy,
     catalog_revision: catalog.catalog_revision, rebuild_required: catalog.rebuild_required, hook_status: catalog.hook_status,
