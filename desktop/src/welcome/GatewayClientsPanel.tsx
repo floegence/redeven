@@ -51,7 +51,7 @@ export function GatewayClientsPanel(props: Readonly<{ gatewayID: string; i18n: D
         <Button size="sm" icon={Plus} disabled={busy()} onClick={() => void perform({ kind: 'issue_gateway_access_code', gateway_id: props.gatewayID })}>{props.i18n.t('gatewayClients.createCode')}</Button>
       </div>
       <details class="redeven-gateway-disclosure text-xs text-muted-foreground"><summary class="cursor-pointer">{props.i18n.t('gatewayClients.codeHelpTitle')}</summary><p class="pt-2 leading-relaxed">{props.i18n.t('gatewayClients.codeHelp')}</p></details>
-      <Show when={code()}>{value => <div class="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-3">
+      <Show when={code()}>{value => <div class="redeven-gateway-content-enter space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <code class="break-all text-base font-semibold tracking-wide">{value().access_code}</code>
           <Button variant="outline" size="sm" icon={Copy} disabled={!remaining()} onClick={() => void copyCode()}>{props.i18n.t(copied() ? 'environmentCenter.copied' : 'common.copy')}</Button>
@@ -63,7 +63,7 @@ export function GatewayClientsPanel(props: Readonly<{ gatewayID: string; i18n: D
       <div class="flex items-center justify-between gap-3"><h3 class="text-sm font-semibold">{props.i18n.t('gatewayClients.authorizedClients')}</h3>
         <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void perform({ kind: 'list_gateway_clients', gateway_id: props.gatewayID })}>{props.i18n.t('common.refresh')}</Button></div>
       <Show when={clients().length} fallback={<p class="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">{props.i18n.t('gatewayClients.emptyClients')}</p>}>
-        <ul class="space-y-2"><For each={clients()}>{client => <li class="space-y-3 rounded-lg border border-border p-3">
+        <ul class="space-y-2"><For each={clients()}>{client => <li class="redeven-gateway-content-enter space-y-3 rounded-lg border border-border p-3">
           <div class="flex flex-wrap items-center justify-between gap-3"><strong class="text-sm">{client.client_name || props.i18n.t('gatewayClients.unnamedClient')}</strong>
             <Show when={!client.revoked_at_unix_ms} fallback={<span class="text-xs text-muted-foreground">{props.i18n.t('gatewayClients.revoked')}</span>}>
               <Button variant="outline" size="xs" icon={Trash} disabled={busy()} onClick={() => {
@@ -73,10 +73,10 @@ export function GatewayClientsPanel(props: Readonly<{ gatewayID: string; i18n: D
             </Show>
           </div>
           <dl class="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground"><div><dt>{props.i18n.t('gatewayClients.authorizedAt')}</dt><dd>{new Date(client.paired_at_unix_ms).toLocaleString(props.i18n.locale)}</dd></div><div><dt>{props.i18n.t('gatewayClients.lastSeen')}</dt><dd>{client.last_verified_at_unix_ms ? new Date(client.last_verified_at_unix_ms).toLocaleString(props.i18n.locale) : '—'}</dd></div></dl>
-          <Show when={revoking() === client.client_key_id}><p role="alert" class="text-xs text-warning">{props.i18n.t('gatewayClients.revokeHelp')}</p><Button variant="ghost" size="xs" onClick={() => setRevoking('')}>{props.i18n.t('common.cancel')}</Button></Show>
+          <Show when={revoking() === client.client_key_id}><div class="redeven-gateway-content-enter space-y-2"><p role="alert" class="text-xs text-warning">{props.i18n.t('gatewayClients.revokeHelp')}</p><Button variant="ghost" size="xs" onClick={() => setRevoking('')}>{props.i18n.t('common.cancel')}</Button></div></Show>
         </li>}</For></ul>
       </Show>
     </section>
-    <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
+    <Show when={error()}><p role="alert" class="redeven-gateway-content-enter text-sm text-error">{error()}</p></Show>
   </div>;
 }

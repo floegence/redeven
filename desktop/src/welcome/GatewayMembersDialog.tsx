@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Input } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, Info, Plus, Trash, Download } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
@@ -24,15 +24,18 @@ export function GatewayMembersPanel(props: Readonly<{
   const [savingPolicy, setSavingPolicy] = createSignal(false);
   const [endpointDraft, setEndpointDraft] = createSignal<GatewayEndpoint[]>([]);
   const [savedEndpoints, setSavedEndpoints] = createSignal<readonly GatewayEndpoint[]>([]);
-  let generation = 0, gatewayID = '';
+  const [removingEndpointID, setRemovingEndpointID] = createSignal('');
+  let generation = 0, gatewayID = '', removalTimer: number | undefined;
   createEffect(() => {
     const next = props.gateway?.gateway_id ?? '';
     if (next === gatewayID) return;
+    if (removalTimer !== undefined) window.clearTimeout(removalTimer);
+    removalTimer = undefined;
     gatewayID = next; generation++; setBusy(false); setError(''); setInvitation(undefined); setTargetID('');
-    setDraftPolicy(undefined); setOverrides({}); setResults(undefined); setRemoving(''); setSavingPolicy(false); setEndpointDraft([...(props.gateway?.member_endpoints ?? [])]);
+    setDraftPolicy(undefined); setOverrides({}); setResults(undefined); setRemoving(''); setSavingPolicy(false); setRemovingEndpointID(''); setEndpointDraft([...(props.gateway?.member_endpoints ?? [])]);
     setSavedEndpoints(props.gateway?.member_endpoints ?? []);
   });
-  onCleanup(() => { generation++; });
+  onCleanup(() => { generation++; if (removalTimer !== undefined) window.clearTimeout(removalTimer); });
   const members = () => props.gateway?.environments.filter(member => member.state === 'active') ?? [];
   const policy = () => draftPolicy() ?? props.gateway?.policy;
   const targets = createMemo(() => [...new Map(props.targets.filter(target => target.runtime_running && target.runtime_control_status.state === 'available').map(target => [target.id, target])).values()]);
@@ -105,10 +108,25 @@ export function GatewayMembersPanel(props: Readonly<{
   }
   async function saveEndpoints() {
     if (!props.gateway) return;
+    if (removingEndpointID()) return;
     if (!endpointsValid()) { setError(props.i18n.t('gatewayMembers.invalidConnectionAddresses')); return; }
     const endpoints = normalizedEndpoints();
     const result = await perform({ kind: 'update_gateway_endpoints', gateway_id: props.gateway.gateway_id, endpoints });
     if (result) { setSavedEndpoints(endpoints); setEndpointDraft(endpoints); setInvitation(undefined); }
+  }
+  function removeEndpoint(endpointID: string) {
+    if (removingEndpointID()) return;
+    const finishRemoval = () => setEndpointDraft(current => current.filter(endpoint => endpoint.endpoint_id !== endpointID));
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true) {
+      finishRemoval();
+      return;
+    }
+    setRemovingEndpointID(endpointID);
+    removalTimer = window.setTimeout(() => {
+      finishRemoval();
+      setRemovingEndpointID(current => current === endpointID ? '' : current);
+      removalTimer = undefined;
+    }, 180);
   }
   return (
     <div class="space-y-5">
@@ -131,33 +149,24 @@ export function GatewayMembersPanel(props: Readonly<{
         <div>
           <h3 class="flex items-center gap-2 text-sm font-semibold">{props.i18n.t('gatewayMembers.connectionAddresses')}<DesktopTooltip content={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><button type="button" class="cursor-pointer text-muted-foreground" aria-label={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><Info class="h-3.5 w-3.5" /></button></DesktopTooltip></h3>
         </div>
-        <div class="space-y-2">
-          <For each={endpointDraft()}>{(endpoint, index) => <div class="redeven-gateway-endpoint">
+        <div class="redeven-gateway-endpoint-list">
+          <For each={endpointDraft()}>{(endpoint, index) => <div class="redeven-gateway-endpoint-shell" data-endpoint-id={endpoint.endpoint_id} classList={{ 'redeven-gateway-endpoint-shell--removing': removingEndpointID() === endpoint.endpoint_id }} inert={removingEndpointID() === endpoint.endpoint_id}>
+            <div class="redeven-gateway-endpoint">
             <div class="redeven-gateway-endpoint__address">
               <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayMembers.address')}</span>
-                <Input aria-label={props.i18n.t('gatewayMembers.address')} disabled={busy() || !props.gateway?.permissions?.manage_members} size="sm" class="w-full min-w-0 font-mono" value={endpoint.address}
+                <Input aria-label={props.i18n.t('gatewayMembers.address')} disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} size="sm" class="w-full min-w-0 font-mono" value={endpoint.address}
                   onInput={event => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, address: event.currentTarget.value.trim() } : item))} />
               </label>
-              <DesktopTooltip content={props.i18n.t('gatewayMembers.removeAddress')}><Button class="h-8 w-8 cursor-pointer" size="xs" variant="ghost" aria-label={props.i18n.t('gatewayMembers.removeAddress')} disabled={busy() || !props.gateway?.permissions?.manage_members} onClick={() => setEndpointDraft(current => current.filter((_, itemIndex) => itemIndex !== index()))}><Trash class="h-3.5 w-3.5" /></Button></DesktopTooltip>
-            </div>
-            <div class="redeven-gateway-endpoint__options">
-              <div class="redeven-gateway-field" role="group" aria-label={props.i18n.t('gatewayMembers.scope')}><span>{props.i18n.t('gatewayMembers.scope')}</span>
-                <Select value={endpoint.scope} disabled={busy() || !props.gateway?.permissions?.manage_members}
-                  options={(['lan', 'overlay', 'public'] as const).map(value => ({ value, label: props.i18n.t(value === 'lan' ? 'gatewayMembers.scopeLAN' : value === 'overlay' ? 'gatewayMembers.scopeOverlay' : 'gatewayMembers.scopePublic') }))}
-                  onChange={scope => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, scope: scope as GatewayEndpoint['scope'] } : item))} />
-              </div>
-              <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayMembers.priority')}</span>
-                <Input aria-label={props.i18n.t('gatewayMembers.priority')} disabled={busy() || !props.gateway?.permissions?.manage_members} type="number" min="0" max="1000" size="sm" class="w-full"
-                  value={endpoint.priority} onInput={event => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, priority: Number(event.currentTarget.value) || 0 } : item))} />
-              </label>
+              <DesktopTooltip content={props.i18n.t('gatewayMembers.removeAddress')}><Button class="h-8 w-8 cursor-pointer" size="xs" variant="ghost" aria-label={props.i18n.t('gatewayMembers.removeAddress')} disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} onClick={() => removeEndpoint(endpoint.endpoint_id)}><Trash class="h-3.5 w-3.5" /></Button></DesktopTooltip>
             </div>
             <span class="text-xs text-muted-foreground">{props.gateway?.endpoint_last_used_at?.[endpoint.endpoint_id] ? `${props.i18n.t('gatewayMembers.usedByRuntime')} · ${new Date(props.gateway.endpoint_last_used_at[endpoint.endpoint_id]!).toLocaleString(props.i18n.locale)}` : props.i18n.t('gatewayMembers.notVerified')}</span>
+            </div>
           </div>}</For>
           <Show when={!endpointDraft().length}><p class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
         </div>
         <div class="flex flex-wrap gap-2">
-          <Button class="cursor-pointer" size="xs" variant="outline" icon={Plus} disabled={busy() || !props.gateway?.permissions?.manage_members || endpointDraft().length >= 16} onClick={() => setEndpointDraft(current => [...current, { endpoint_id: `endpoint_${crypto.randomUUID().replaceAll('-', '')}`, address: '', scope: 'lan', priority: current.length }])}>{props.i18n.t('gatewayMembers.addAddress')}</Button>
-          <Button class="cursor-pointer" size="xs" disabled={busy() || !props.gateway?.permissions?.manage_members} onClick={() => void saveEndpoints()}>{props.i18n.t('gatewayMembers.saveAddresses')}</Button>
+          <Button class="cursor-pointer" size="xs" variant="outline" icon={Plus} disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members || endpointDraft().length >= 16} onClick={() => setEndpointDraft(current => [...current, { endpoint_id: `endpoint_${crypto.randomUUID().replaceAll('-', '')}`, address: '', scope: 'lan', priority: current.length }])}>{props.i18n.t('gatewayMembers.addAddress')}</Button>
+          <Button class="cursor-pointer" size="xs" disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} onClick={() => void saveEndpoints()}>{props.i18n.t('gatewayMembers.saveAddresses')}</Button>
         </div>
         <Show when={endpointsDirty()}><p role="status" class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.saveFirst')}</p></Show>
       </section>
@@ -173,7 +182,7 @@ export function GatewayMembersPanel(props: Readonly<{
         </div>
         <Show when={!savedEndpoints().length}><p role="status" class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
         <Show when={invitation() && !endpointsDirty()}>
-          <div class="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+          <div class="redeven-gateway-content-enter space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
             <p role="status" class="text-xs text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
             <dl class="grid grid-cols-2 gap-2 text-xs"><div><dt class="text-muted-foreground">{props.i18n.t('gatewayJoin.gateway')}</dt><dd class="break-words font-medium">{invitation()?.gateway_name}</dd></div><div><dt class="text-muted-foreground">{props.i18n.t('gatewayJoin.connectionOptions')}</dt><dd>{invitation()?.endpoints.length}</dd></div><div><dt class="text-muted-foreground">{props.i18n.t('gatewayJoin.invitationType')}</dt><dd>{props.i18n.t('gatewayJoin.oneTime')}</dd></div><div><dt class="text-muted-foreground">{props.i18n.t('gatewayJoin.expiry')}</dt><dd>{new Date(invitation()!.expires_at_unix_ms).toLocaleTimeString(props.i18n.locale)}</dd></div></dl>
             <Button class="cursor-pointer" size="sm" variant="outline" icon={Download} onClick={download}>{props.i18n.t('gatewayMembers.download')}</Button>
@@ -204,9 +213,11 @@ export function GatewayMembersPanel(props: Readonly<{
           <p>{action}: {props.i18n.t(props.gateway?.hook_status?.[action] === 'invalid' ? 'gatewayMembers.hookInvalid' : props.gateway?.hook_status?.[action] === 'configured' ? 'gatewayMembers.hookConfigured' : 'gatewayMembers.hookAbsent')}</p>}
         </For></div></details>
         <Show when={draftPolicy()}>
-          <p class="text-xs">{props.i18n.t('gatewayMembers.affected')}: {affected().map(member => member.display_name).join(', ') || props.i18n.t('gatewayMembers.none')}</p>
-          <Show when={savingPolicy()}><p role="alert" class="text-xs text-warning">{props.i18n.t('gatewayMembers.cloudImpact')}</p></Show>
-          <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => savingPolicy() ? void savePolicy() : setSavingPolicy(true)}>{props.i18n.t(savingPolicy() ? 'gatewayMembers.confirmSave' : 'common.save')}</Button>
+          <div class="redeven-gateway-content-enter space-y-2">
+            <p class="text-xs">{props.i18n.t('gatewayMembers.affected')}: {affected().map(member => member.display_name).join(', ') || props.i18n.t('gatewayMembers.none')}</p>
+            <Show when={savingPolicy()}><p role="alert" class="redeven-gateway-content-enter text-xs text-warning">{props.i18n.t('gatewayMembers.cloudImpact')}</p></Show>
+            <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => savingPolicy() ? void savePolicy() : setSavingPolicy(true)}>{props.i18n.t(savingPolicy() ? 'gatewayMembers.confirmSave' : 'common.save')}</Button>
+          </div>
         </Show>
       </details>}</Show>
       <section class="space-y-3 border-t border-border pt-4">
@@ -236,12 +247,13 @@ export function GatewayMembersPanel(props: Readonly<{
               }}>{props.i18n.t(removing() === member.member_id ? 'gatewayMembers.confirmRemove' : 'gatewayMembers.remove')}</Button>
           </li>}</For></ul>
         </Show>
-        <Show when={Object.keys(overrides()).length}><p class="text-xs text-warning">{props.i18n.t('gatewayMembers.cloudImpact')}</p>
+        <Show when={Object.keys(overrides()).length}><div class="redeven-gateway-content-enter space-y-2">
+          <p class="text-xs text-warning">{props.i18n.t('gatewayMembers.cloudImpact')}</p>
           <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => void saveMembers()}>{props.i18n.t('gatewayMembers.confirmSave')}</Button>
-        </Show>
+        </div></Show>
       </section>
       </Show>
-      <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
+      <Show when={error()}><p role="alert" class="redeven-gateway-content-enter text-sm text-error">{error()}</p></Show>
     </div>
   );
 }
