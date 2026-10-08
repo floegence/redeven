@@ -2407,7 +2407,6 @@ async function inspectRuntimePlacementTargetState(
       runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
       runtimeStateRoot: desktopRuntimePlacementStateRoot(target.placement),
       sshPassword: sshPassword || undefined,
-      connectTimeoutSeconds: target.hostAccess.ssh.connect_timeout_seconds ?? undefined,
       signal: target.signal,
     });
     if (status.status === 'ready') {

@@ -38,6 +38,7 @@ import {
 import { desktopOperationFailureFromBlockedLaunchReport } from './runtimeBlockedLaunchFailure';
 import {
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+  DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
   desktopSSHAuthority,
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHEnvironmentDetails,
@@ -85,7 +86,6 @@ import {
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
 const DEFAULT_SSH_STOP_TIMEOUT_MS = 5_000;
-const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 10;
 const DEFAULT_SSH_POLL_INTERVAL_MS = 200;
 const MAX_RECENT_LOG_CHARS = 8_000;
 type RemoteInstallStrategy = 'desktop_upload' | 'remote_install';
@@ -133,7 +133,6 @@ export type ManagedSSHRuntimeProcessInventoryArgs = Readonly<{
   tempRoot?: string;
   assetCacheRoot: string;
   sourceRuntimeRoot?: string;
-  connectTimeoutSeconds?: number;
   signal?: AbortSignal;
   onLog?: StartManagedSSHRuntimeArgs['onLog'];
   onProgress?: StartManagedSSHRuntimeArgs['onProgress'];
@@ -269,7 +268,6 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   allowActiveWorkReplacement?: boolean;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
-  connectTimeoutSeconds?: number;
   signal?: AbortSignal;
   beforeRuntimeReplacement?: () => Promise<void>;
   onLog?: (
@@ -961,7 +959,6 @@ export async function probeManagedSSHRuntimeStatus(
     sshPassword?: string;
     sshBinary?: string;
     tempRoot?: string;
-    connectTimeoutSeconds?: number;
     signal?: AbortSignal;
   }>,
 ): Promise<DesktopSSHRuntimeStatusProbe> {
@@ -975,7 +972,7 @@ export async function probeManagedSSHRuntimeStatus(
       credentialScope: args.sshCredentialScope,
       sshPassword: args.sshPassword,
       sshBinary: args.sshBinary,
-      readyTimeoutMs: Math.max(1_000, (args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS) * 1_000),
+      readyTimeoutMs: Math.max(1_000, (target.connect_timeout_seconds ?? DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS) * 1_000),
       signal: args.signal,
     });
     const session: SSHControlSessionContext = {
@@ -1092,7 +1089,7 @@ export async function openManagedSSHRuntimeProcessSession(
       credentialScope: args.sshCredentialScope,
       sshPassword: args.sshPassword,
       sshBinary: args.sshBinary,
-      readyTimeoutMs: Math.max(1_000, (args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS) * 1_000),
+      readyTimeoutMs: Math.max(1_000, (target.connect_timeout_seconds ?? DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS) * 1_000),
       signal: args.signal,
     }));
   if (!args.transportLease) {
@@ -2107,7 +2104,7 @@ async function startManagedSSHRuntimeInternal(
   const assetCacheRoot = compact(args.assetCacheRoot) || path.join(tempRoot, 'redeven-ssh-release-cache');
   const startupTimeoutMs = args.startupTimeoutMs ?? DEFAULT_SSH_STARTUP_TIMEOUT_MS;
   const stopTimeoutMs = args.stopTimeoutMs ?? DEFAULT_SSH_STOP_TIMEOUT_MS;
-  const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
+  const connectTimeoutSeconds = target.connect_timeout_seconds ?? DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS;
   const releaseFetchPolicy = resolveDesktopSSHReleaseFetchPolicy(startupTimeoutMs, connectTimeoutSeconds);
   const runtimeProcessIntent = args.runtimeProcessIntent
     ?? (args.forceRuntimeUpdate === true ? 'update' : 'start');
@@ -2218,7 +2215,6 @@ async function startManagedSSHRuntimeInternal(
           tempRoot,
           assetCacheRoot,
           sourceRuntimeRoot: args.sourceRuntimeRoot,
-          connectTimeoutSeconds,
           onLog: args.onLog,
         };
         const activeProcessSession =
@@ -2267,7 +2263,6 @@ async function startManagedSSHRuntimeInternal(
       tempRoot,
       assetCacheRoot,
       sourceRuntimeRoot: args.sourceRuntimeRoot,
-      connectTimeoutSeconds,
       onLog: args.onLog,
       onProgress: args.onProgress,
       platform: sharedPlatform,
