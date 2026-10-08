@@ -787,6 +787,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [saveError, setSaveError] = createSignal('');
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
   const [snapshot, setSnapshot] = createSignal<FlowerSettingsSnapshot | null>(null);
+  const settingsLoading = () => !snapshot() && !loadError();
 	const [threadCache, setThreadCache] = createSignal(createThreadCache());
   const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox());
   const [stoppingThreadIDs, setStoppingThreadIDs] = createSignal<ReadonlySet<string>>(new Set());
@@ -2747,6 +2748,7 @@ webSearch: model.web_search,
     const catalogModel = catalogModelOptions().find((option) => option.id === currentModelID());
     if (catalogModel) return catalogModel.label;
     const current = snapshot();
+    if (settingsLoading()) return '';
     return current?.model_profile ? formatFlowerCurrentModelLabel(current.model_profile, copy().chat.noModelSelected) : copy().chat.noModelSelected;
   });
   const reasoningControlLabel = createMemo(() => trimString(copy().chat.reasoningLabel) || DEFAULT_FLOWER_SURFACE_COPY.chat.reasoningLabel);
@@ -10804,12 +10806,19 @@ webSearch: model.web_search,
     </Show>
   );
 
+  const composerModelLoading = () => settingsLoading() && !surfaceWarmupActive();
   const modelReasoningSelector = (location: FlowerComposerControlLocation = 'inline') => (
     <Show
       when={!surfaceWarmupActive() && modelSelectOptions().length > 0}
       fallback={(
-        <span class={cn('flower-model-chip', `flower-composer-control-${location}`, surfaceWarmupActive() && 'flower-model-chip-warmup')}>
-          {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
+        <span class={cn('flower-model-chip', `flower-composer-control-${location}`, surfaceWarmupActive() && 'flower-model-chip-warmup')}
+          role={composerModelLoading() ? 'status' : undefined}
+          aria-label={composerModelLoading() ? copy().chat.loadingSettings : undefined}
+          aria-busy={composerModelLoading() ? 'true' : undefined}>
+          <Show when={composerModelLoading()}
+            fallback={surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}>
+            <Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" />
+          </Show>
         </span>
       )}
     >

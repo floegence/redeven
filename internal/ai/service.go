@@ -1001,7 +1001,11 @@ func (s *Service) listModels(ctx context.Context, cfg *config.AIConfig) (*Models
 	}
 	s.mu.Unlock()
 	var catalogErr error
-	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, "")
+	// Automatic inventory refresh must fit inside the Desktop bootstrap budget.
+	// A disconnected catalog cannot hold unrelated configured models hostage.
+	catalogCtx, cancelCatalog := context.WithTimeout(ctx, 5*time.Second)
+	cfg, catalogErr = resolveModelCatalogs(catalogCtx, cfg, s.resolveProviderKey, "")
+	cancelCatalog()
 
 	if !cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding()) {
 		return nil, ErrNotConfigured

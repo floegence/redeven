@@ -10,6 +10,7 @@ export function DesktopFlowerRuntimeBoundary(props: {
   i18n: DesktopI18n;
   onRecover: (code: 'runtime_update_required' | 'desktop_update_required') => Promise<void>;
   onBack: () => void;
+  embedded?: boolean;
   children: JSX.Element;
 }) {
   const [pending, setPending] = createSignal(false);
@@ -39,7 +40,7 @@ export function DesktopFlowerRuntimeBoundary(props: {
   };
   return <Show when={blocker()} fallback={(
     <Show when={availability() === 'ready'} fallback={(
-      <div class="flower-warmup h-full" data-flower-runtime-availability={availability()}>
+      <div class="flower-warmup h-full" data-flower-runtime-availability={availability()} data-flower-runtime-embedded={props.embedded ? 'true' : undefined}>
         <div class="flower-warmup-panel">
           <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14" />
           <div class="flower-warmup-copy" role="status" aria-live="polite" aria-busy={availability() === 'preparing'}>
@@ -54,7 +55,7 @@ export function DesktopFlowerRuntimeBoundary(props: {
       </div>
     )}>{props.children}</Show>
   )}>{(blocked) => (
-    <div class="flex h-full min-h-0 items-center justify-center p-8" data-flower-runtime-blocker={blocked().code}>
+    <div class="flex h-full min-h-0 items-center justify-center p-8" data-flower-runtime-blocker={blocked().code} data-flower-runtime-embedded={props.embedded ? 'true' : undefined}>
       <div class="w-full max-w-lg space-y-4 rounded-xl border border-border/60 bg-background p-6" role="status" aria-live="polite">
         <h2 class="text-lg font-semibold">{props.i18n.t(blocked().code === 'desktop_update_required' ? 'flowerRuntime.desktopTitle' : 'flowerRuntime.runtimeTitle')}</h2>
         <p class="text-[length:var(--floe-type-body)] leading-[var(--floe-line-body)] text-muted-foreground">{props.i18n.t(blocked().code === 'desktop_update_required' ? 'flowerRuntime.desktopDetail' : 'flowerRuntime.runtimeDetail')}</p>

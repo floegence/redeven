@@ -53,7 +53,7 @@ text. Flower is the editing surface; the canvas has no manual content editor.
   or canvases cannot retarget an in-flight request or its eventual response.
 - Settings, permissions, model selection, attachments, stop, approval and retry
   use the native Flower controls. Opening the full conversation is optional.
-  Env App readiness keeps the canvas visible and confines recovery controls to
+  Env App and Desktop readiness keep the canvas visible and confine recovery controls to
   a bottom card; its wrapper never paints an opaque full-canvas background.
 - The visible version supplies the context for subsequent messages, including
   explicit history. Saved-version events update current views only; they do not

@@ -31,9 +31,23 @@ Desktop Welcome uses the same Flower adapter contract as Env App for thread oper
 
 # Boundaries
 
+Welcome's full Flower page and embedded Tessiven conversation use the same
+Runtime compatibility and AI readiness boundary. The embedded conversation
+does not issue AI requests until the published state is `ready` or `degraded`.
+Preparation and update recovery occupy a compact bottom surface; the canvas
+remains browsable. A transition back to preparation disposes stale Flower
+initialization, while the parent-owned ComposerDraftStore preserves drafts for
+the next ready instance. Neither placement retries startup independently.
+
+The model-list catalog deadline is owned by
+[Model directory and selection](../ai/model-directory-and-selection.md).
+
 Runtime-control is also not a plugin grant, plugin management, or plugin capability plane. Its token and routes are reserved for Desktop-to-Runtime coordination such as provider-link, code-workspace-engine import, and Desktop model source binding. Plugin workers and sandbox surfaces must not receive runtime-control endpoint data, use runtime-control bearer tokens, or treat runtime-control routes as plugin capabilities; plugin access to Redeven resources must go through released ReDevPlugin brokers and Redeven-registered adapters.
 
 # Evidence
+
+- `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Canvas startup waits for AI publication and preserves drafts through recovery.
+- `redeven:internal/envapp/ui_src/src/styles/desktop-tessiven-model.browser.test.tsx` - Real browser placement, configured Desktop model and draft recovery in light and dark themes.
 
 - `redeven:desktop/src/main/main.ts:9863` - Welcome Flower attaches or joins the single coordinated Local Environment lifecycle readiness path.
 - `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:235` - Only Start, Restart, and Update may be awaited as ready-producing mutations.

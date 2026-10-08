@@ -13,6 +13,12 @@ Flower keeps environment and Desktop model sources explicit, preserves thread-ow
 
 ## Mechanism
 
+Before the initial settings snapshot arrives, the composer shows a compact
+model-loading indicator with a localized accessible status. It does not claim
+that no model is selected while configuration is still being read. A failed
+load remains an explicit settings error; a successfully loaded empty profile
+retains the existing setup behavior.
+
 Authorized platform models use a separate read-only `platform_model_source`, described in [Authorized platform model gateway](../ai/platform-model-gateway.md). They require no local Provider key or editable model profile. The model menu groups this source under `Redeven AI` when another source is present. A selected platform default is scoped to the session owner; its current authorized catalog controls readiness.
 
 The shared settings contract separates `defaults.permission_type`, nullable `model_profile`, and optional `model_source`. Provider editing, first-time setup, default-permission autosave, and the settings layout follow [Flower setup and settings](flower-setup-and-settings.md). A `remote_desktop` Env App session may expose the Desktop catalog alongside the environment profile; `local_host` and ordinary browser sessions ignore the unbound Desktop diagnostic object. Runtime status distinguishes no Desktop provider (`not_configured`), configured but unavailable keys or catalog (`missing_keys` or `empty`), and actual connection or protocol errors.

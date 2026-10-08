@@ -4,12 +4,44 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/config"
 )
+
+func TestService_ListModels_BoundsUnresponsiveCatalogWithoutLosingConfiguredModel(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	cfg := &config.AIConfig{CurrentModelID: "local/agent", Providers: []config.AIProvider{
+		{ID: "local", Type: "openai_compatible", Models: []config.AIProviderModel{{ModelName: "agent"}}},
+		{ID: "offline", Type: "ollama", BaseURL: server.URL, ModelSelection: &config.AIModelSelection{SelectedModels: []string{"missing"}}},
+	}}
+	svc := &Service{cfg: cfg}
+	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Second)
+	defer cancel()
+	start := time.Now()
+	out, err := svc.ListModelsForSession(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed > 5500*time.Millisecond {
+		t.Fatalf("unresponsive catalog blocked configured models for %s", elapsed)
+	}
+	if out.CurrentModel != cfg.CurrentModelID || len(out.Models) != 1 || out.Models[0].ID != cfg.CurrentModelID {
+		t.Fatalf("configured model was lost: %+v", out)
+	}
+	if cfg.Providers[1].ModelSelection.SelectedModels[0] != "missing" {
+		t.Fatal("catalog failure changed provider preferences")
+	}
+}
 
 func TestNewModelsResponseJSONUsesEmptyModelsArray(t *testing.T) {
 	t.Parallel()
