@@ -1,8 +1,9 @@
 import { Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
-import { ExternalLink, Plus } from '@floegence/floe-webapp-core/icons';
+import { ExternalLink, Layers, Plus } from '@floegence/floe-webapp-core/icons';
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { FlowerConversationParts, FlowerEmbeddedConversation } from '../../flower_ui/src/FlowerSurface';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
+import { FlowerComposerContextReference, FlowerComposerContextReferences } from '../../flower_ui/src/composer/FlowerComposerContextReferences';
 import { tessivenFlowerIntent } from './flower';
 import type { Selection, TessivenText } from './types';
 
@@ -59,7 +60,12 @@ export function TessivenFlowerPanel(props: {
     get scope() { return `tessiven:${props.request.selection.canvas_id}`; },
     get contextAction() { return contextAction(); },
     get request() { return props.request.nonce ? props.request : undefined; },
-    get placeholder() { return props.t('flowerPlaceholder'); },
+    placeholder: '',
+    composerContext: <FlowerComposerContextReferences label={props.t('flowerReference')}>
+      <FlowerComposerContextReference label={props.request.label}
+        title={`${props.request.label} · ${props.t('version', { version: props.request.selection.version_id })}`}
+        icon={<Layers />} />
+    </FlowerComposerContextReferences>,
     emptyContent: <div class="tessiven-flower-welcome"><FlowerIcon />
       <strong>{props.t('flowerWelcome')}</strong><p>{props.t('flowerWelcomeHint')}</p></div>,
     onSubmit: () => setRepliesOpen(true),

@@ -11210,11 +11210,11 @@ webSearch: model.web_search,
             if (companionCollapsed()) composerAutosizeController.suspend();
           }}
           class="w-full flower-body-copy leading-6 text-foreground placeholder:text-muted-foreground"
-          placeholder={bottomActionMode() === 'chat' && props.embeddedConversation?.placeholder ? props.embeddedConversation.placeholder : composerPlaceholder()}
+          placeholder={bottomActionMode() === 'chat' ? props.embeddedConversation?.placeholder ?? composerPlaceholder() : composerPlaceholder()}
           value={composerTextValue()}
           disabled={composerTextareaDisabled()}
           readOnly={composerTextareaReadOnly()}
-          aria-label={presentation() === 'companion' ? copy().chat.placeholder : undefined}
+          aria-label={presentation() === 'companion' || props.embeddedConversation ? copy().chat.placeholder : undefined}
           data-flower-input-custom-answer={selectedInputRequest() && questionMode(activeInputQuestion()!) === 'select_or_write' ? 'true' : undefined}
           aria-autocomplete={composerReferenceEditingAllowed() || composerCommandMenuVisible() ? 'list' : undefined}
           aria-haspopup="listbox"
@@ -11277,7 +11277,7 @@ webSearch: model.web_search,
         }}
         type="password"
         class="w-full flower-body-copy leading-6 text-foreground placeholder:text-muted-foreground"
-        placeholder={bottomActionMode() === 'chat' && props.embeddedConversation?.placeholder ? props.embeddedConversation.placeholder : composerPlaceholder()}
+        placeholder={bottomActionMode() === 'chat' ? props.embeddedConversation?.placeholder ?? composerPlaceholder() : composerPlaceholder()}
         value={composerTextValue()}
         disabled={composerTextareaDisabled()}
         readOnly={composerTextareaReadOnly()}

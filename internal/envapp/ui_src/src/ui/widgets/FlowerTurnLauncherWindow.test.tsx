@@ -363,14 +363,14 @@ describe('FlowerTurnLauncherWindow', () => {
 
     expect(host.textContent).toContain('询问 Flower');
     expect(host.textContent).not.toContain('工作目录');
-    expect(host.textContent).toContain('关联上下文');
+    expect(host.querySelector('.flower-composer-context-references')?.getAttribute('aria-label')).toBe('关联上下文');
     expect(host.textContent).toContain('你');
     expect(host.textContent).toContain('回复 Flower');
-    expect(host.textContent).toContain('已选内容');
+    expect(host.querySelector('.flower-composer-context-reference')?.textContent).toBe('main.ts');
     const selectionButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('已选内容'),
+      button.title.includes('预览来自 /Users/demo/project/src/main.ts 的已选内容'),
     );
-    expect(selectionButton?.getAttribute('title')).toBe('预览来自 /Users/demo/project/src/main.ts 的已选内容');
+    expect(selectionButton?.getAttribute('title')).toBe('预览来自 /Users/demo/project/src/main.ts 的已选内容\nmain.ts');
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
@@ -446,7 +446,7 @@ describe('FlowerTurnLauncherWindow', () => {
 
     const textarea = composePrompt(host, 'Inspect this project');
     const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
-    const contextButton = host.querySelector('.flower-turn-launcher-message-surface button') as HTMLButtonElement;
+    const contextButton = host.querySelector('.flower-composer-context-reference button') as HTMLButtonElement;
     const closeButton = host.querySelector('[data-testid="floating-window-close"]') as HTMLButtonElement;
 
     sendButton.click();
@@ -696,7 +696,7 @@ describe('FlowerTurnLauncherWindow', () => {
     ), host);
 
     const selectionButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('selected content'),
+      button.title.includes('Preview selected content from /Users/demo/notes.md'),
     );
     expect(selectionButton).toBeTruthy();
     selectionButton?.click();
@@ -743,7 +743,7 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(host.querySelector('[data-testid="preview-window"]')).toBeFalsy();
   });
 
-  it('renders the Flower bubble as a plain question with linked context below it', () => {
+  it('renders the Flower bubble as a plain question with linked context inside the input', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -767,7 +767,9 @@ describe('FlowerTurnLauncherWindow', () => {
     ), host);
 
     expect(host.textContent).toContain('What would you like to explore inside it?');
-    expect(host.textContent).toContain('Linked context');
+    expect(host.querySelector('.flower-composer-context-references')?.getAttribute('aria-label')).toBe('Linked context');
+    expect(host.querySelector('[data-testid="flower-turn-launcher-editor-shell"]')?.textContent).toContain('project');
+    expect(host.querySelector('.flower-turn-launcher-message-surface')?.textContent).not.toContain('project');
     expect(host.textContent).not.toContain('Question');
     expect(host.textContent).not.toContain('Files');
   });

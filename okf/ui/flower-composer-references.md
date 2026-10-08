@@ -1,18 +1,40 @@
 ---
 type: UI Contract
 title: Flower composer references
-description: The full Flower composer discovers working-directory files and directories through @, keeps editable chips in connection memory, and admits exact ordered references to Floret.
+description: Show Ask Flower context inside the input and admit exact ordered composer references to Floret.
 tags: [ui, flower, composer, references, floret]
-timestamp: 2026-08-10T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
 - Authority: Redeven owns reference discovery and unadmitted draft editing; Floret is the sole canonical source after admission.
-- Outcome: a whitespace-boundary `@` token selects one working-directory file or directory as an ordered reference chip without adding prompt text or file content.
+- Outcome: Ask Flower shows its exact linked context inside the input; a whitespace-boundary `@` token adds one working-directory file or directory as an editable reference without inserting prompt text or file content.
 - Invariants: discovery uses the host's authorized filesystem adapter, all visible placements in one connection share one in-memory scope, and one strict context action preserves the frozen order and directory kind.
 - Failure boundary: stale search generations, malformed wire data, or admission mismatches fail without discarding the connection-local editor, creating a different queued command, or writing canonical Floret state.
 
 # Contract
+
+## Ask Flower context
+
+The shared launcher and embedded Tessiven composer show linked context inside
+their existing composite input boundary. A compact quoted row contains only its
+source icon and readable name; it has no separate heading, description, nested
+card or visible version line. Complete paths and version metadata remain in the
+row's hover title. Selected file content uses the filename as its visible name.
+The localized reference label remains available to assistive technology.
+
+The launcher preserves context order and primary previews plus secondary actions,
+including live-file navigation alongside a selection or attachment snapshot.
+Context without an action is plain text, not a disabled button. Multiple entries
+scroll inside a bounded input region under the host's existing local-scroll
+contract. Submission still uses the original intent and frozen retry identity.
+
+Tessiven derives its row from the live canvas request and updates its object name
+and hover version without replacing the canvas draft. Its empty input omits
+instructional placeholder copy while retaining an accessible name. The existing
+context action remains the sole submission authority; displaying a quote does
+not create another reference store or imply that ambient canvas context can be
+removed independently. Editable `@` references keep their existing controls.
 
 ## Composer interaction
 
@@ -44,6 +66,10 @@ Before Send, Redeven does not persist the ordered editable reference snapshot. A
 
 # Evidence
 
+- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Compact quoted rows reuse the existing input boundary and preserve actionable and plain-text semantics.
+- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Input containment, exact submission, selection preview and secondary live-file actions.
+- `redeven:internal/envapp/ui_src/src/styles/flower-composer-context.browser.test.tsx` - Real Chromium checks bounded scrolling, narrow layouts, all built-in themes and unchanged focus geometry.
+- `redeven:internal/envapp/ui_src/src/styles/tessiven-flower.browser.test.tsx` - Live canvas citation, draft isolation, current version and exact context alongside native file references.
 - `redeven:internal/flower_ui/src/composer/flowerComposerReferenceToken.ts` - Token parsing and replacement preserve Unicode selection boundaries and suppress reference editing during IME composition.
 - `redeven:internal/flower_ui/src/composer/flowerComposerReferenceIndex.ts` - The host-backed index bounds scans, ranks deterministically, caches by runtime/root, and rejects stale generations.
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - One shell-owned in-memory scope shares text and reference chips without persistence or editor ownership.

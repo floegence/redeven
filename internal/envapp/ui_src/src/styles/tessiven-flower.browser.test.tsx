@@ -66,6 +66,10 @@ it('keeps the canonical composer at the bottom and displays real conversation ou
   await page.viewport(1200, 800);
   const runtime = mount();
   await expect.element(editor()).toBeVisible();
+  const references = host.querySelector('.flower-composer .flower-composer-context-references');
+  expect(references?.textContent).toBe('Orders API');
+  expect(references?.querySelector('[title]')?.getAttribute('title')).toContain('Version 2');
+  expect(host.querySelector('.flower-composer textarea')?.getAttribute('placeholder')).toBe('');
   await editor().fill('Explain the database connection');
   await expect.element(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -99,9 +103,15 @@ it('keeps drafts isolated by canvas and a single workspace connection while reta
   await editor().fill('Commerce draft');
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, label: 'Analytics', nonce: 1 });
   await expect.element(editor()).toHaveValue('');
+  expect(host.querySelector('.flower-composer-context-references')?.textContent).toContain('Analytics');
   await editor().fill('Analytics draft');
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 1, object_refs: ['db'] }, label: 'Database', nonce: 2 });
   await expect.element(editor()).toHaveValue('Commerce draft');
+  expect(host.querySelector('.flower-composer-context-references')?.textContent).toContain('Database');
+  expect(host.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('Version 1');
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 3, object_refs: ['db'] }, label: 'Database', nonce: 2 });
+  await expect.element(editor()).toHaveValue('Commerce draft');
+  expect(host.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('Version 3');
   expect(runtime.sent).not.toHaveBeenCalled();
   expect(runtime.connections).toHaveBeenCalledTimes(1);
 });
