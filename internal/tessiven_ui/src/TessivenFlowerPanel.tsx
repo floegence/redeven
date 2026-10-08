@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
 import { ExternalLink, Layers, Plus } from '@floegence/floe-webapp-core/icons';
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { FlowerConversationParts, FlowerEmbeddedConversation } from '../../flower_ui/src/FlowerSurface';
@@ -9,7 +9,7 @@ import type { Selection, TessivenText } from './types';
 
 export type CanvasFlowerRequest = {
   selection: Selection;
-  label: string;
+  labels: Record<string, string>;
   prompt?: string;
   nonce: number;
 };
@@ -27,6 +27,7 @@ export function TessivenFlowerPanel(props: {
   t: TessivenText;
   renderSurface: (props: CanvasFlowerSurfaceProps) => JSX.Element;
   onOpenConversation: (threadID: string) => void;
+  onRemoveReference: (objectRef: string) => void;
 }) {
   const [repliesOpen, setRepliesOpen] = createSignal(true);
   const [boundary, setBoundary] = createSignal<HTMLDivElement>();
@@ -61,11 +62,16 @@ export function TessivenFlowerPanel(props: {
     get contextAction() { return contextAction(); },
     get request() { return props.request.nonce ? props.request : undefined; },
     placeholder: '',
-    composerContext: <FlowerComposerContextReferences label={props.t('flowerReference')}>
-      <FlowerComposerContextReference label={props.request.label}
-        title={`${props.request.label} · ${props.t('version', { version: props.request.selection.version_id })}`}
-        icon={<Layers />} />
-    </FlowerComposerContextReferences>,
+    composerContext: <Show when={props.request.selection.object_refs.length > 0}>
+      <FlowerComposerContextReferences label={props.t('flowerReference')}>
+        <For each={props.request.selection.object_refs}>{objectRef => (
+          <FlowerComposerContextReference label={props.request.labels[objectRef]}
+            title={`${props.request.labels[objectRef]} · ${props.t('version', { version: props.request.selection.version_id })}`}
+            icon={<Layers />} removeLabel={props.t('removeFlowerReference', { name: props.request.labels[objectRef] })}
+            onRemove={() => props.onRemoveReference(objectRef)} />
+        )}</For>
+      </FlowerComposerContextReferences>
+    </Show>,
     emptyContent: <div class="tessiven-flower-welcome"><FlowerIcon />
       <strong>{props.t('flowerWelcome')}</strong><p>{props.t('flowerWelcomeHint')}</p></div>,
     onSubmit: () => setRepliesOpen(true),

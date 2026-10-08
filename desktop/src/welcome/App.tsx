@@ -6501,6 +6501,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         copy={{
           window_title: i18n().t('environmentCenter.askFlowerCardTitle'),
           linked_context_label: i18n().t('environmentCenter.askFlowerCardContextLabel'),
+          remove_reference: (path) => i18n().t('flowerSurface.chat.composerReferenceRemove', { path }),
           working_dir_label: i18n().t('flowerSurface.threadList.workingDirectoryLabel'),
           working_directory_unavailable: i18n().t('environmentCenter.askFlowerWorkingDirectoryUnavailable'),
           ready: i18n().t('flowerSurface.chat.ready'),

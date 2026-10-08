@@ -176,6 +176,7 @@
   "source.created": "Создано",
   "libraryMenu": "Действия с библиотекой",
   "flowerReference": "Ссылка",
+  "removeFlowerReference": "Удалить ссылку {name}",
   "flowerConversation": "Открыть беседу",
   "showReplies": "Показать ответы",
   "hideReplies": "Скрыть ответы",

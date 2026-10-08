@@ -176,6 +176,7 @@
   "source.created": "已创建",
   "libraryMenu": "画布库操作",
   "flowerReference": "引用",
+  "removeFlowerReference": "移除引用 {name}",
   "flowerConversation": "打开对话",
   "showReplies": "查看回复",
   "hideReplies": "收起回复",

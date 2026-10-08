@@ -469,3 +469,39 @@ it('keeps graph panning from creating a browser text selection', async () => {
   expect(graphElement.dispatchEvent(selectStart)).toBe(false);
   expect(window.getSelection()?.toString() ?? '').toBe('');
 });
+
+it('removes an object reference through the canvas session owner and sends the implicit whole-canvas scope', async () => {
+  await page.viewport(1200, 800);
+  createHost();
+  const current = version(2);
+  current.document.nodes = [{ id: 'host', name: 'Runtime', runtimeRef: 'local:local' }];
+  current.document.services = [{ id: 'api', name: 'Orders API', kind: 'api' }];
+  current.document.instances = [{ id: 'orders', nodeRef: 'host', serviceRef: 'api', role: 'standalone' }];
+  const transport = {
+    request: async (_method: string, path: string) => {
+      if (path.startsWith('/canvases?')) return { canvases: [canvas] };
+      if (path === '/canvases/commerce') return canvas;
+      return current;
+    },
+    subscribe: () => () => {},
+  } as TessivenTransport;
+  const ask = vi.fn(canvasFlowerAdapter().launchTurn);
+  dispose = render(() => <TessivenPage t={tessivenText('en-US')} canWrite transport={transport}
+    openRequest={{ canvasID: 'commerce', nonce: 1 }}
+    renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={{ ...canvasFlowerAdapter(), launchTurn: ask }} />}
+    onOpenFlower={() => {}} onOpenService={() => {}} />, host);
+  await expect.element(page.getByRole('textbox')).toBeVisible();
+  expect(host.querySelector('.flower-composer-context-references')).toBeNull();
+  await page.getByRole('textbox').fill('Keep this question');
+  await page.getByRole('button', { name: 'Orders API API ×1', exact: true }).click();
+  await page.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+  await expect.element(page.getByRole('button', { name: 'Remove reference Orders API', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('textbox')).toHaveValue('Keep this question');
+  await page.getByRole('button', { name: 'Remove reference Orders API', exact: true }).click();
+  expect(host.querySelector('.flower-composer-context-references')).toBeNull();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => ask.mock.calls.length).toBe(1);
+  expect(ask.mock.calls[0][0].context_action).toMatchObject({ context: [
+    { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: [] },
+  ] });
+});

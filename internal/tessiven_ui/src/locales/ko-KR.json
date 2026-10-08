@@ -176,6 +176,7 @@
   "source.created": "생성됨",
   "libraryMenu": "캔버스 목록 작업",
   "flowerReference": "참조",
+  "removeFlowerReference": "{name} 참조 제거",
   "flowerConversation": "대화 열기",
   "showReplies": "응답 보기",
   "hideReplies": "응답 접기",
