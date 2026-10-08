@@ -23,6 +23,7 @@
     "test:host-application-browser": "vitest run --config vitest.host-application.config.ts",
     "test:browser:headed": "node scripts/runVitestBrowser.mjs --browser.headless=false",
     "test:built-dist-shell": "node scripts/checkPackagedRenderer.mjs",
+    "test:canvas-runtime": "node scripts/checkCanvasRuntime.mjs",
     "test:document-reload": "node scripts/checkDocumentReload.mjs",
     "test:startup-continuity": "node scripts/checkStartupContinuity.mjs",
     "test:terminal-font-carrier": "node scripts/checkTerminalFontCarrier.mjs",
