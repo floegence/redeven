@@ -156,35 +156,44 @@
 .tessiven-library-card {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--card);
   box-shadow: 0 2px 5px rgb(0 0 0 / 3%);
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
 }
 .tessiven-library-card:hover {
   border-color: color-mix(in srgb, var(--foreground) 30%, var(--border));
-  box-shadow: 0 6px 18px rgb(0 0 0 / 7%);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 14%);
+  transform: translateY(-3px);
 }
 .tessiven-library-card > button {
+  position: relative;
   display: block;
   text-align: left;
   width: 100%;
   white-space: normal;
+  color: inherit;
+  cursor: pointer;
+  height: 276px;
+}
+.tessiven-library-card > button:focus-visible {
+  outline: 2px solid var(--ts-glyph-accent);
+  outline-offset: -3px;
 }
 .tessiven-card-preview {
-  height: 166px;
+  height: 100%;
   position: relative;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 24px 20px;
+  padding: 18px 14px 72px;
   background: color-mix(in srgb, var(--muted) 56%, var(--background));
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
 }
 .tessiven-card-preview::before {
   content: '';
@@ -198,78 +207,126 @@
   background-size: 14px 14px;
   pointer-events: none;
 }
-.tessiven-preview-host {
-  position: relative;
-  width: 54%;
-  max-width: 158px;
-  flex: none;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--card);
-  padding-bottom: 5px;
+.tessiven-thumbnail {
+  width: 100%;
+  height: 100%;
+  display: block;
+  color: var(--ts-glyph-accent);
+  transition: transform 220ms ease;
+}
+.tessiven-library-card:hover .tessiven-thumbnail,
+.tessiven-library-card:focus-within .tessiven-thumbnail {
+  transform: translateY(-8px) scale(1.035);
+}
+.tessiven-thumbnail-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ts-glyph-accent) 72%, var(--border));
+  stroke-width: 5;
+  opacity: 0.78;
+}
+.tessiven-thumbnail-host,
+.tessiven-thumbnail-resource {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  box-shadow: 0 3px 9px rgb(0 0 0 / 7%);
-}
-.tessiven-preview-host-header {
-  background: var(--ts-header);
-  color: #f4f4f4;
-  height: 27px;
-  padding: 0 9px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-}
-.tessiven-preview-host-header .tessiven-icon {
-  width: 14px;
-  height: 14px;
-}
-.tessiven-preview-service {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
   color: var(--foreground);
-  font-size: 9px;
+  font-size: 24px;
 }
-.tessiven-preview-service .tessiven-icon {
-  width: 13px;
-  height: 13px;
+.tessiven-thumbnail-host { border-top: 4px solid var(--ts-glyph); }
+.tessiven-thumbnail-group {
+  border-style: dashed;
+  border-color: var(--ts-group-line);
+  background: color-mix(in srgb, var(--ts-group) 38%, var(--card));
 }
-.tessiven-preview-service span,
-.tessiven-preview-resources span {
+.tessiven-thumbnail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--ts-header);
+  color: #f8f7f4;
+  font-size: 24px;
+}
+.tessiven-thumbnail-header strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tessiven-preview-resources {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  flex: 1;
-  min-width: 0;
-  max-width: 112px;
-  position: relative;
+.tessiven-thumbnail-header .tessiven-icon {
+  width: 28px;
+  height: 28px;
+  flex: none;
 }
-.tessiven-preview-resources > div {
+.tessiven-thumbnail-host > small,
+.tessiven-thumbnail-resource small {
+  display: block;
+  padding: 8px 16px 4px;
+  color: var(--muted-foreground);
+  font-size: 19px;
+}
+.tessiven-thumbnail-service {
   display: flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--ts-storage) 60%, var(--border));
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--ts-storage) 25%, var(--card));
-  padding: 9px;
-  font-size: 9px;
+  gap: 10px;
+  padding: 9px 16px;
   color: var(--foreground);
+  font-size: 24px;
 }
-.tessiven-preview-resources .tessiven-icon {
-  width: 15px;
-  height: 15px;
+.tessiven-thumbnail-service .tessiven-icon {
+  width: 28px;
+  height: 28px;
+  flex: none;
 }
-.tessiven-preview-empty {
-  width: 38px;
-  height: 38px;
-  position: relative;
+.tessiven-thumbnail-service span,
+.tessiven-thumbnail-resource strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tessiven-thumbnail-resource {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  border-color: color-mix(in srgb, var(--ts-storage) 65%, var(--border));
+  background: color-mix(in srgb, var(--ts-storage) 22%, var(--card));
+  text-align: center;
+}
+.tessiven-thumbnail-resource strong { max-width: 100%; }
+.tessiven-thumbnail-resource[data-kind='network'] {
+  border-color: color-mix(in srgb, var(--ts-network) 65%, var(--border));
+  background: color-mix(in srgb, var(--ts-network) 25%, var(--card));
+}
+.tessiven-thumbnail-resource .tessiven-icon {
+  width: 42px;
+  height: 42px;
+}
+.tessiven-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.tessiven-preview-placeholder .tessiven-icon {
+  width: 32px;
+  height: 32px;
+  opacity: 0.72;
+}
+.tessiven-preview-placeholder--loading .tessiven-icon {
+  animation: tessiven-preview-pulse 1.2s ease-in-out infinite;
+}
+@keyframes tessiven-preview-pulse {
+  50% { opacity: 0.32; transform: scale(0.92); }
 }
 .tessiven-preview-badge,
 .tessiven-badge {
@@ -291,13 +348,39 @@
   z-index: 1;
 }
 .tessiven-card-information {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 2;
   padding: 14px 16px;
+  color: #fff;
+  background: rgb(7 11 17 / 94%);
+  pointer-events: none;
 }
+.tessiven-card-information::before {
+  content: '';
+  position: absolute;
+  inset: -36px 0 auto;
+  height: 36px;
+  background: linear-gradient(to bottom, transparent, rgb(7 11 17 / 94%));
+}
+.tessiven-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tessiven-card-title svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  opacity: 0.75;
+}
+.tessiven-card-title h3 { flex: 1; min-width: 0; }
 .tessiven-card-information h3 {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
-  margin: 0 0 6px;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -308,9 +391,38 @@
   align-items: center;
   gap: 10px;
   font-size: 11px;
-  color: var(--muted-foreground);
+  color: rgb(255 255 255 / 72%);
   margin-top: 8px;
 }
+.tessiven-card-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 180ms ease;
+}
+.tessiven-card-reveal > div { overflow: hidden; }
+.tessiven-library-card:hover .tessiven-card-reveal,
+.tessiven-library-card:focus-within .tessiven-card-reveal { grid-template-rows: 1fr; }
+.tessiven-card-reveal p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 8px 0 0;
+  color: rgb(255 255 255 / 78%);
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.tessiven-card-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 10px 0 0;
+  color: rgb(255 255 255 / 72%);
+  font-size: 10px;
+}
+.tessiven-card-counts div { display: flex; gap: 4px; }
+.tessiven-card-counts dt::after { content: ':'; }
+.tessiven-card-counts dd { margin: 0; font-weight: 650; color: #fff; }
 .tessiven-card-meta time::before {
   content: '·';
   padding-right: 10px;
@@ -1054,9 +1166,24 @@
 
 }
 @media (prefers-reduced-motion: reduce) {
-  .tessiven-library-card {
-    transition: none;
-  }
+  .tessiven-library-card,
+  .tessiven-thumbnail,
+  .tessiven-card-information,
+  .tessiven-card-reveal { transition: none; }
+  .tessiven-preview-placeholder--loading .tessiven-icon { animation: none; }
+}
+@media (hover: none) {
+  .tessiven-card-reveal { grid-template-rows: 1fr; }
+}
+@media (forced-colors: active) {
+  .tessiven-card-information { background: Canvas; color: CanvasText; border-top: 1px solid CanvasText; padding-top: 14px; }
+  .tessiven-card-information::before { display: none; }
+  .tessiven-card-meta,
+  .tessiven-card-reveal p,
+  .tessiven-card-counts,
+  .tessiven-card-counts dd { color: CanvasText; }
+  .tessiven-thumbnail-edge { stroke: CanvasText; }
+  .tessiven-library-card > button:focus-visible { outline-color: Highlight; }
 }
 
 /* The graph keeps the whole canvas. These two conversation surfaces float above it. */

@@ -11,6 +11,7 @@ import {
   untrack,
 } from 'solid-js';
 import { Button, Dialog, Dropdown } from '@floegence/floe-webapp-core/ui';
+import { createGraphLayoutEngine } from '@floegence/floe-webapp-core/graph';
 import {
   ArrowLeft,
   Clock,
@@ -59,6 +60,8 @@ export function TessivenPage(props: {
   ) => void | Promise<void>;
   openRequest?: { canvasID: string; version?: number; nonce: number } | null;
 }) {
+  const thumbnailLayoutEngine = createGraphLayoutEngine();
+  onCleanup(() => thumbnailLayoutEngine.dispose());
   const [library, setLibrary] = createSignal<Library>({ canvases: [] });
   const browseStates = new Map<string, GraphBrowseState>();
   const [query, setQuery] = createSignal('');
@@ -644,6 +647,7 @@ export function TessivenPage(props: {
                           transport={props.transport}
                           t={props.t}
                           locale={props.locale}
+                          layoutEngine={thumbnailLayoutEngine}
                           onOpen={() => void openCanvas(item.id)}
                         />
                       )}

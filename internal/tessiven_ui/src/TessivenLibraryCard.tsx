@@ -1,5 +1,11 @@
-import { For, Show, createResource } from 'solid-js';
+import { For, Show, createResource, createUniqueId, onCleanup } from 'solid-js';
+import { ArrowRight } from '@floegence/floe-webapp-core/icons';
+import {
+  createGraphLayoutEngine,
+  type GraphLayoutEngine,
+} from '@floegence/floe-webapp-core/graph';
 import { TessivenIcon } from './TessivenIcon';
+import { TessivenThumbnail } from './TessivenThumbnail';
 import type { Canvas, TessivenText, TessivenTransport, Version } from './types';
 
 export function TessivenLibraryCard(props: {
@@ -7,8 +13,12 @@ export function TessivenLibraryCard(props: {
   transport: TessivenTransport;
   t: TessivenText;
   locale?: string;
+  layoutEngine?: GraphLayoutEngine;
   onOpen: () => void;
 }) {
+  const descriptionID = createUniqueId();
+  const layoutEngine = props.layoutEngine ?? createGraphLayoutEngine();
+  if (!props.layoutEngine) onCleanup(() => layoutEngine.dispose());
   const [preview] = createResource(
     () => `${props.canvas.id}/versions/${props.canvas.latest_version}`,
     async (path) => {
@@ -22,83 +32,83 @@ export function TessivenLibraryCard(props: {
       }
     },
   );
-  const nodes = () => preview()?.document.nodes ?? [];
-  const services = () => {
-    const doc = preview()?.document;
-    const node = nodes()[0];
-    if (!node) return doc?.services ?? [];
-    const hosted = new Set(
-      (doc?.instances ?? [])
-        .filter((instance) => instance.nodeRef === node.id)
-        .map((instance) => instance.serviceRef),
+  const hasObjects = () =>
+    ['nodes', 'services', 'resources'].some(
+      (kind) =>
+        (preview()?.document[kind as 'nodes' | 'services' | 'resources']?.length ??
+          0) > 0,
     );
-    return (doc?.services ?? []).filter((service) => hosted.has(service.id));
-  };
-  const resources = () => preview()?.document.resources ?? [];
+  const description = () =>
+    props.canvas.description || preview()?.document.metadata.description;
   return (
     <article class="tessiven-library-card">
-      <button onClick={props.onOpen} aria-label={props.canvas.title}>
+      <button
+        type="button"
+        onClick={props.onOpen}
+        aria-label={props.canvas.title}
+        aria-describedby={descriptionID}
+      >
         <div class="tessiven-card-preview" aria-hidden="true">
-          <Show when={preview()?.source === 'example'}>
-            <span class="tessiven-preview-badge">{props.t('example')}</span>
-          </Show>
           <Show
-            when={nodes().length || services().length || resources().length}
+            when={preview() && hasObjects()}
             fallback={
-              <TessivenIcon kind="tessiven" class="tessiven-preview-empty" />
+              <div
+                class="tessiven-preview-placeholder"
+                classList={{ 'tessiven-preview-placeholder--loading': preview.loading }}
+              >
+                <TessivenIcon kind="tessiven" />
+                <span>
+                  {props.t(
+                    preview.loading
+                      ? 'previewLoading'
+                      : preview()
+                        ? 'previewEmpty'
+                        : 'previewUnavailable',
+                  )}
+                </span>
+              </div>
             }
           >
-            <Show when={nodes().length || services().length}>
-              <div class="tessiven-preview-host">
-                <Show when={nodes().length}>
-                  <div class="tessiven-preview-host-header">
-                    <TessivenIcon kind="node" />
-                    <span>{nodes()[0]?.name}</span>
-                  </div>
-                </Show>
-                <For each={services().slice(0, 3)}>
-                  {(service) => (
-                    <div class="tessiven-preview-service">
-                      <TessivenIcon kind={service.kind} />
-                      <span>{service.name}</span>
-                    </div>
-                  )}
-                </For>
-                <Show when={!services().length}>
-                  <div class="tessiven-preview-service">
-                    <span>
-                      {props.t('nodeCount', { count: nodes().length })}
-                    </span>
-                  </div>
-                </Show>
-              </div>
-            </Show>
-            <Show when={resources().length}>
-              <div class="tessiven-preview-resources">
-                <For each={resources().slice(0, 2)}>
-                  {(resource) => (
-                    <div>
-                      <TessivenIcon kind={resource.kind} />
-                      <span>{resource.name}</span>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
+            <TessivenThumbnail document={preview()!.document} t={props.t} engine={layoutEngine} />
           </Show>
         </div>
+        <Show when={preview()?.source === 'example'}>
+          <span class="tessiven-preview-badge">{props.t('example')}</span>
+        </Show>
         <div class="tessiven-card-information">
-          <h3>{props.canvas.title}</h3>
+          <div class="tessiven-card-title">
+            <h3 title={props.canvas.title}>{props.canvas.title}</h3>
+            <ArrowRight aria-hidden="true" />
+          </div>
           <div class="tessiven-card-meta">
             <span>
               {props.t('version', { version: props.canvas.latest_version })}
             </span>
-            <time>
+            <time dateTime={new Date(props.canvas.updated_at).toISOString()}>
               {new Date(props.canvas.updated_at).toLocaleDateString(
                 props.locale,
                 { month: 'short', day: 'numeric' },
               )}
             </time>
+          </div>
+          <div class="tessiven-card-reveal" id={descriptionID}>
+            <div>
+              <Show when={description()}>
+                <p>{description()}</p>
+              </Show>
+              <Show when={preview()}>
+                <dl class="tessiven-card-counts">
+                  <For each={['nodes', 'services', 'relations'] as const}>
+                    {(kind) => (
+                      <div>
+                        <dt>{props.t(`collection.${kind}`)}</dt>
+                        <dd>{preview()?.document[kind]?.length ?? 0}</dd>
+                      </div>
+                    )}
+                  </For>
+                </dl>
+              </Show>
+            </div>
           </div>
         </div>
       </button>
