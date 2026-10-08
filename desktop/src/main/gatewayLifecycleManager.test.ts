@@ -35,7 +35,7 @@ import {
   GatewayServiceUnavailableError,
 } from './gatewayLifecycleManager';
 import type { GatewayRecord } from './gatewayStore';
-import type { GatewaySecretStore } from './gatewayTrust';
+import { GatewayTrustError, type GatewaySecretStore } from './gatewayTrust';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { RuntimeLifecycleCoordinator, RuntimeLifecycleInProgressError } from './runtimeLifecycleCoordinator';
@@ -583,6 +583,13 @@ describe('GatewayLifecycleManager', () => {
     } satisfies Partial<GatewayServiceUnavailableError>);
 
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
+  });
+
+  it('preserves a host-authority compatibility mismatch as an upgrade, not a broken bridge', async () => {
+    const mismatch = new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
+    lifecycleMocks.startRuntimePlacementBridgeSession.mockRejectedValue(mismatch);
+    await expect(manager().client(sshGateway(), { startPolicy: 'start_if_needed' })).rejects.toBe(mismatch);
+    expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
   });
 
   it('reports bridge attach failures with structured Gateway bridge errors', async () => {

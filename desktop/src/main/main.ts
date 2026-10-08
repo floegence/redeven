@@ -5469,7 +5469,6 @@ function gatewayClientErrorIsTrustMismatch(error: GatewayClientError): boolean {
 
 function gatewayTrustErrorNeedsReinstall(error: GatewayTrustError): boolean {
   switch (compact(error.code)) {
-    case 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED':
     case 'GATEWAY_TRUST_CHANGED':
     case 'GATEWAY_TRUST_ID_MISMATCH':
     case 'GATEWAY_PAIRING_ID_MISMATCH':
@@ -6469,6 +6468,15 @@ function gatewayDiagnosisForError(
     error_code: code,
     error_message: message,
   };
+  if ((error instanceof GatewayTrustError || error instanceof GatewayClientError) && error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED') {
+    return {
+      ...base,
+      classification: 'needs_update',
+      catalog_state: 'catalog_failed',
+      summary: 'Gateway update required',
+      detail: message || 'Update Gateway and Desktop to matching versions.',
+    };
+  }
   if ((error instanceof GatewayTrustError && gatewayTrustErrorNeedsReinstall(error)) || code === 'GATEWAY_TRUST_CHANGED') {
     return {
       ...base,
@@ -6557,8 +6565,7 @@ function gatewayDiagnosisForError(
       };
     }
     if (
-      error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED'
-      || error.code === 'GATEWAY_INVALID_RESPONSE'
+      error.code === 'GATEWAY_INVALID_RESPONSE'
       || error.code === 'GATEWAY_RUNTIME_CAPABILITY_INVALID'
     ) {
       return {

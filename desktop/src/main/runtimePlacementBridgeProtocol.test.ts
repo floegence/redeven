@@ -44,7 +44,7 @@ describe('runtimePlacementBridgeProtocol', () => {
     for (const compatibility_epoch of [42, 44, undefined]) {
       expect(() => parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
         ...gatewayHello, gateway_protocol: { ...gatewayHello.gateway_protocol, compatibility_epoch },
-      })))).toThrow();
+      })))).toThrowError(expect.objectContaining({ code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' }));
     }
   });
 

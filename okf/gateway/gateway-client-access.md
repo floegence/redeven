@@ -35,7 +35,7 @@ POST `/gateway/v5/clients/revoke` and `redeven-gateway clients revoke --client I
 
 ## State and compatibility
 
-Trust schema 3 retains Gateway and client keys, preserves previously allowed environment access and removes legacy management grants. Previously denied clients remain denied. Existing host registrations regain management only through fresh host verification, while authorized URL clients keep their existing keys. Gateway/Desktop compatibility epoch 43 rejects the old authority handshake; Runtime membership remains v5 with its signed multi-endpoint model unchanged.
+Trust schema 3 retains Gateway and client keys, preserves previously allowed environment access and removes legacy management grants. Previously denied clients remain denied. Existing host registrations regain management only through fresh host verification, while authorized URL clients keep their existing keys. Gateway/Desktop compatibility epoch 43 rejects the old authority handshake; Runtime membership remains v5 with its signed multi-endpoint model unchanged. A handshake mismatch requests a Gateway/Desktop update, not identity replacement or state reinstallation.
 
 # Evidence
 

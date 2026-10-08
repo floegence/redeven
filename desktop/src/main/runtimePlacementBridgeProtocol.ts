@@ -1,6 +1,7 @@
 import { parseLocalUIAddressIssues, type LocalUIAddressIssue } from '../shared/localUIAddressIssues';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { normalizeDesktopPrivateBridgeToken } from './desktopPrivateBridge';
+import { GatewayTrustError } from './gatewayTrust';
 import {
   RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
   normalizeRuntimeServiceSnapshot,
@@ -95,7 +96,7 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
   const gatewayService = parsed.gateway_service && typeof parsed.gateway_service === 'object'
     ? parsed.gateway_service as Record<string, unknown>
     : null;
-  if (gatewayService && (parsed.gateway_protocol as { compatibility_epoch?: unknown } | undefined)?.compatibility_epoch !== RUNTIME_SERVICE_COMPATIBILITY_EPOCH) throw new Error('Update Gateway and Desktop to matching versions.');
+  if (gatewayService && (parsed.gateway_protocol as { compatibility_epoch?: unknown } | undefined)?.compatibility_epoch !== RUNTIME_SERVICE_COMPATIBILITY_EPOCH) throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
   const localUIAvailable = localUI.available === true;
   const localUIBridgeToken = normalizeDesktopPrivateBridgeToken(localUI.bridge_token);
   if (localUIAvailable && localUIBridgeToken === '') {

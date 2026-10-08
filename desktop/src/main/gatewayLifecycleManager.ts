@@ -16,7 +16,7 @@ import {
 import { type RuntimePlacementBridgeSession, startRuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
 import { GatewayClient, redactGatewayDiagnosticValue, type GatewayCatalogResponse } from './gatewayClient';
 import { gatewayRecordSSHPasswordRef, type GatewayRecord } from './gatewayStore';
-import type { GatewaySecretStore } from './gatewayTrust';
+import { GatewayTrustError, type GatewaySecretStore } from './gatewayTrust';
 import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
@@ -548,6 +548,7 @@ export class GatewayLifecycleManager {
         signal: options.signal,
       });
     } catch (error) {
+      if (error instanceof GatewayTrustError) throw error;
       throw new GatewayServiceUnavailableError(
         'gateway_bridge_unavailable',
         error instanceof Error ? error.message : String(error),

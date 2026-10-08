@@ -28,7 +28,7 @@ const secrets = new Map();
 const secretStore = { readSecret: key => secrets.get(key) ?? '', writeSecret: (key, value) => secrets.set(key, value), deleteSecret: key => secrets.delete(key) };
 const ssh = new DefaultDesktopSSHTransportManager();
 const bridges = [];
-const report = { status: 'running', marker, sourceDirty: true, commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), cases: [] };
+const report = { status: 'running', marker, sourceDirty: Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim()), nodeVersion: process.version, commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), cases: [] };
 const run = promisify(execFile);
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', timeout: 180000 });
 const originalPath = process.env.PATH;
