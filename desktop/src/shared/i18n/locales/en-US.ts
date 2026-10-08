@@ -10,7 +10,7 @@ export const enUS = {
     chooseGateway: "Choose Gateway",
     importInvitation: "Import an invitation",
     notNow: "Not now",
-    joinGateway: "Join Gateway",
+    joinGateway: "After setup, add Gateway access",
     setupHelp: "After saving, start this Runtime through its trusted management connection, then choose a Gateway or import an invitation and confirm joining.",
     startHelp: "Start this Runtime through Desktop before joining. This uses your Runtime management permissions; Gateway does not receive them.",
     startAndContinue: "Start Runtime and continue",

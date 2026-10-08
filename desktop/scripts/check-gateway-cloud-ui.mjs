@@ -11,6 +11,16 @@ const server = await createSSHSettingsPreviewServer(0, ['gateway-cloud.html', 'g
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { cases: [], errors: [] };
+async function captureDialog(page, filename) {
+  await page.waitForFunction(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    for (let ancestor = dialog; ancestor; ancestor = ancestor.parentElement) {
+      if (Number(getComputedStyle(ancestor).opacity) < 0.99) return false;
+    }
+    return Boolean(dialog);
+  });
+  await page.screenshot({ path: `${output}/${filename}` });
+}
 try {
   const { createDesktopI18n, listDesktopI18nLocales } = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/i18n/desktopI18n.ts', import.meta.url)));
   for (const locale of listDesktopI18nLocales()) {
@@ -56,7 +66,7 @@ try {
     assert.ok((await dialog.innerText()).includes(i18n.t('gatewayJoin.invitationReady')), 'failure must preserve selected material');
     assert.equal(await dialog.locator('details').evaluateAll(details => details.every(detail => !detail.open)), true, 'failure must keep technical connection details collapsed');
     assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'narrow dialog must fit');
-    await page.screenshot({ path: `${output}/${locale}.png` });
+    await captureDialog(page, `${locale}.png`);
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'detached' });
     assert.equal(await trigger.evaluate(el => el === document.activeElement), true, 'cancel restores focus');
@@ -85,7 +95,7 @@ try {
     assert.equal(await dialog.getByRole('radio', { name: i18n.t('gatewayJoin.preserve'), exact: true }).isVisible(), true, 'existing environment choice must stay concise');
     assert.equal(await dialog.getByRole('radio', { name: i18n.t('gatewayJoin.createNew'), exact: true }).isVisible(), true, 'new environment choice must stay concise');
     assert.equal(await dialog.locator('details').evaluateAll(details => details.every(detail => !detail.open)), true, 'existing environment explanations must start collapsed');
-    await page.screenshot({ path: `${output}/${locale}-existing-environment.png` });
+    await captureDialog(page, `${locale}-existing-environment.png`);
     report.cases.push(`${locale}: existing environment choices remain concise with collapsed explanations`);
     await page.close();
   }
@@ -133,7 +143,7 @@ try {
     ], `${locale}: configuration must open the Cloud management page`);
     assert.ok((await dialog.innerText()).includes(i18n.t('gatewayCloud.pending')), `${locale}: pending Namespace approval state must be visible`);
     assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, `${locale}: narrow dialog must fit`);
-    await page.screenshot({ path: `${output}/${locale}-panel.png` });
+    await captureDialog(page, `${locale}-panel.png`);
     report.cases.push(`${locale}: fixed Cloud origin, no address input, Namespace approval and management handoff`);
     await page.close();
   }

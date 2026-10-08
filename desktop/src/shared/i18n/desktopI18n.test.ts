@@ -435,6 +435,16 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.runtimeMessage.sshContainerRuntime).toBe('SSH 容器运行时');
   });
 
+  it('describes Gateway access as an optional network path in localized controls', () => {
+    const zhCN = DESKTOP_I18N_DICTIONARIES['zh-CN'];
+    expect(enUS.gatewayJoin.title).toBe('Add Gateway access');
+    expect(enUS.gatewayJoin.approve).toBe('Enable Gateway access');
+    expect(enUS.gatewayJoin.joinGateway).toBe('After setup, add Gateway access');
+    expect(zhCN.gatewayJoin.title).toBe('添加 Gateway 访问');
+    expect(zhCN.gatewayJoin.approve).toBe('启用 Gateway 访问');
+    expect(zhCN.gatewayJoin.consent).toContain('Gateway 无法管理此运行时');
+  });
+
   it('keeps Flower surface copy localized for every supported Desktop locale', () => {
     for (const locale of REDEVEN_SUPPORTED_LOCALES) {
       const copy = DESKTOP_I18N_DICTIONARIES[locale].flowerSurface;
