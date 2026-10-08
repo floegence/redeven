@@ -3096,7 +3096,7 @@
     "startTitle": "先启动运行时",
     "approve": "启用 Gateway 访问",
     "pauseDetail": "关闭对话框后，已保存的操作会继续。可重新打开查看状态。更换 Gateway 必须显式操作，可能导致会话中断。",
-    "invalid": "邀请无效。请选择 Gateway 管理员提供的原始 JSON 邀请文件。",
+    "invalid": "此邀请无效或已不再支持。请向 Gateway 管理员获取新邀请。",
     "failed": "操作未完成。请检查 Gateway 连接后重试。已保存的同意记录和输入会保留。",
     "existingEnvironment": "现有 Cloud 环境",
     "preserve": "保留此环境",

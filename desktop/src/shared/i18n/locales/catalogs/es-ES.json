@@ -3102,7 +3102,7 @@
     "startTitle": "Inicia primero el entorno",
     "approve": "Activar acceso mediante Gateway",
     "pauseDetail": "Al cerrar este diálogo, la operación guardada continúa. Ábralo de nuevo para consultar su estado. Cambiar de Gateway requiere una acción explícita y puede desconectar las sesiones.",
-    "invalid": "La invitación no es válida. Seleccione el archivo JSON original del administrador del Gateway.",
+    "invalid": "Esta invitación no es válida o está desactualizada. Pide al administrador del Gateway una nueva invitación.",
     "failed": "No se pudo completar la operación. Compruebe la conexión al Gateway y reinténtelo. Se conservan el consentimiento guardado y los datos introducidos.",
     "existingEnvironment": "Entorno de Cloud existente",
     "preserve": "Conservar este entorno",
