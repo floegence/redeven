@@ -126,7 +126,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
     const headerRowIndex = src.indexOf('flower-chat-header-row');
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track', src.indexOf('const composerPanel ='));
-    const statusLaneIndex = src.indexOf('flower-model-status-lane', dockIndex);
+    const statusLaneIndex = src.indexOf('<Show when={!props.embeddedConversation}>{progressLane()}</Show>', dockIndex);
     const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
     const composerIndex = src.indexOf('flower-composer p-3');
     const composerActionsIndex = src.indexOf('flower-composer-actions');
@@ -206,7 +206,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const floatIndex = src.indexOf('flower-scroll-to-latest-float', dockIndex);
     const scrollButtonIndex = src.indexOf('flower-scroll-to-latest-button', floatIndex);
     const dockTrackIndex = src.indexOf('flower-chat-bottom-dock-track', scrollButtonIndex);
-    const statusLaneIndex = src.indexOf('flower-model-status-lane', dockTrackIndex);
+    const statusLaneIndex = src.indexOf('<Show when={!props.embeddedConversation}>{progressLane()}</Show>', dockTrackIndex);
     const composerIndex = src.indexOf('flower-composer p-3', statusLaneIndex);
 
     expect(dockIndex).toBeGreaterThanOrEqual(0);

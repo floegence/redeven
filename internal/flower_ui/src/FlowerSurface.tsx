@@ -6549,6 +6549,7 @@ webSearch: model.web_search,
     return retainEqualValue(previous, usage);
   });
   const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null);
+  const selectedPendingDelivery = createMemo(() => visibleTransportOutbox().find(entry => !entry.terminalError));
   const showScrollToLatestButton = createMemo(() => (
     (selectedThreadHasContent() || selectedThreadHasLiveProgress())
     && !selectedThreadTailPreparing()
@@ -11294,6 +11295,18 @@ webSearch: model.web_search,
     </Show>
   );
 
+  const progressLane = (conversation = false) => (
+    <div class={cn('flower-model-status-lane', conversation && 'flower-model-status-lane--conversation')}
+      role="status" aria-live="polite" aria-atomic="true">
+      <Show when={selectedThreadStopPending()} fallback={<FlowerProgressIndicator
+        progress={selectedRunProgress()}
+        pendingRequestID={selectedPendingDelivery()?.requestId}
+        label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind)
+          : selectedPendingDelivery() ? copy().chat.pendingSending : ''}
+      />}><span class="flower-turn-stopping text-xs text-muted-foreground">{copy().chat.stopping}</span></Show>
+    </div>
+  );
+
   const composerPanel = () => (
         <div class="flower-chat-bottom-dock" data-flower-action-layout={bottomActionMode()}>
           <Show when={showScrollToLatestButton()}>
@@ -11317,14 +11330,7 @@ webSearch: model.web_search,
             </div>
           </Show>
           <div class="flower-chat-bottom-dock-track">
-            <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
-              <Show when={selectedThreadStopPending()} fallback={<FlowerProgressIndicator
-                progress={selectedRunProgress()
-                  ? { kind: selectedRunProgress()!.kind, runID: selectedRunProgress()!.runID }
-                  : null}
-                label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind) : ''}
-              />}><span class="flower-turn-stopping text-xs text-muted-foreground">{copy().chat.stopping}</span></Show>
-            </div>
+            <Show when={!props.embeddedConversation}>{progressLane()}</Show>
             <Show when={bottomActionMode() !== 'approval'}>{threadSyncErrorNotice()}</Show>
             <div class="flower-composer-anchor">
               <Show when={bottomActionMode() !== 'approval'}>
@@ -12077,6 +12083,7 @@ webSearch: model.web_search,
             </Show>
           </div>
         </div>
+        <Show when={props.embeddedConversation}>{progressLane(true)}</Show>
         <Show when={!props.embeddedConversation}>{composerPanel()}</Show>
       </div>
     </div>

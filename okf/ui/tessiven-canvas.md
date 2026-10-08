@@ -35,6 +35,8 @@ text. Flower is the editing surface; the canvas has no manual content editor.
   and selected-object context through its context action.
 - Replies, tool activity, questions, approvals and errors use the same Flower
   surface runtime. Its conversation is placed in an upper-left floating window;
+  pending delivery and canonical run feedback stay visible at that window's
+  bottom under the [live timeline contract](flower-live-timeline.md).
   Floe owns dragging, resizing, clamping, maximize/restore and local interaction
   ownership. The composer is excluded from the window's safe boundary.
 - Hiding replies leaves the composer and conversation alive. A small restore
