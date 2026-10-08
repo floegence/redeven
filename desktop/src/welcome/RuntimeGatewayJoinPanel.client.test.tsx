@@ -29,6 +29,21 @@ beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLEleme
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('Runtime Gateway membership interaction', () => {
+  it('rejects obsolete invitations and directs the user to request a new one', async () => {
+    const perform = vi.fn().mockResolvedValue(result({ joined: false, phase: 'not_joined' }));
+    mount(perform, false);
+    await settle();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const obsolete = { ...invitationFixture, protocol_version: 'redeven-gateway-v4' };
+    Object.defineProperty(input, 'files', { value: [{ size: 1000, text: async () => JSON.stringify(obsolete) }] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(i18n.t('gatewayJoin.invalid'));
+    expect(i18n.t('gatewayJoin.invalid')).toContain('new invitation');
+    expect(button(i18n.t('gatewayJoin.approve')).disabled).toBe(true);
+    expect(perform).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps polling after a transient failure and preserves pending consent', async () => {
     vi.useFakeTimers();
     const perform = vi.fn().mockResolvedValueOnce(result({ joined: true, phase: 'joined' }))

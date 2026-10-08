@@ -3096,7 +3096,7 @@
     "startTitle": "先啟動執行階段",
     "approve": "啟用 Gateway 存取",
     "pauseDetail": "關閉對話框後，已儲存的操作會繼續。可重新開啟查看狀態。更換 Gateway 必須明確操作，可能導致工作階段中斷。",
-    "invalid": "邀請無效。請選取 Gateway 管理員提供的原始 JSON 邀請檔案。",
+    "invalid": "此邀請無效或已不再支援。請向 Gateway 管理員取得新邀請。",
     "failed": "操作未完成。請檢查 Gateway 連線後重試。已儲存的同意記錄和輸入會保留。",
     "existingEnvironment": "現有 Cloud 環境",
     "preserve": "保留此環境",

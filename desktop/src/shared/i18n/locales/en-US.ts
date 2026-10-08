@@ -53,7 +53,7 @@ export const enUS = {
     "selection": "Selection",
     "automatic": "Automatic",
     "technicalDetails": "Technical details",
-    "invalid": "This invitation is invalid. Select the original JSON invitation from the Gateway administrator.",
+    "invalid": "This invitation is invalid or outdated. Ask the Gateway administrator for a new invitation.",
     "failed": "The operation could not complete. Check the Gateway connection and retry. Saved consent and your input are preserved."
 },
   gatewayMembership: {

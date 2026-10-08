@@ -3101,7 +3101,7 @@
     "startTitle": "Laufzeitumgebung zuerst starten",
     "approve": "Gateway-Zugang aktivieren",
     "pauseDetail": "Beim Schließen läuft der gespeicherte Vorgang weiter. Öffnen Sie den Dialog erneut, um den Status zu prüfen. Ein Gateway-Wechsel erfordert eine ausdrückliche Aktion und kann Sitzungen trennen.",
-    "invalid": "Die Einladung ist ungültig. Wählen Sie die ursprüngliche JSON-Einladung des Gateway-Administrators.",
+    "invalid": "Diese Einladung ist ungültig oder veraltet. Bitten Sie den Gateway-Administrator um eine neue Einladung.",
     "failed": "Der Vorgang konnte nicht abgeschlossen werden. Prüfen Sie die Gateway-Verbindung und versuchen Sie es erneut. Zustimmung und Eingaben bleiben gespeichert.",
     "existingEnvironment": "Vorhandene Cloud-Umgebung",
     "preserve": "Diese Umgebung behalten",
