@@ -35,6 +35,8 @@ Gateway settings is the sole registration and authorization entry. An access-onl
 
 All shipped locales have explicit translations. Interactive controls provide pointer feedback, keyboard access, visible focus and disabled semantics. Dialog headers contain identity and controls; descriptions belong in the body. Cancel restores the originating control or its surviving owner. Narrow layouts wrap content without hiding actions. Async operations show actual stages rather than invented percentages.
 
+Every Gateway card menu action, including invitations, settings and deletion, uses the same icon container, spacing and label alignment. Restart uses a power-cycle icon distinct from Refresh; the menu, active card action and confirmation share a reactive icon projection so labels and icons stay in sync. Destructive and disabled styling, keyboard navigation and explicit lifecycle confirmation remain unchanged.
+
 Gateway dialogs use a comfortably wide, viewport-bounded panel and the published Dialog's scrolling body. Connection addresses occupy a full-width labelled row; network scope and numeric priority have separate visible labels and stack on narrow screens. The published Select owns Gateway and endpoint-scope choice, including keyboard navigation and Escape dismissal before the enclosing dialog. Native disclosures animate height and opacity in both directions and respect reduced-motion preferences.
 
 The upgrade rebuild notice explains that obsolete Gateway entries must be rejoined. It does not manufacture a migration list or imply that old URL profiles remain executable.
@@ -53,3 +55,4 @@ This surface presents current Gateway state and starts explicit user-authorized 
 - `redeven:desktop/scripts/check-gateway-access-ui.mjs` — Browser layout, keyboard and locale qualification.
 - `redeven:desktop/scripts/check-gateway-dialog-polish.mjs` — Single settings entry, endpoint layout, nested selection and reversible disclosure motion.
 - `redeven:desktop/scripts/check-gateway-permissions-ui.mjs` — Permission recipient, explicit grants, retained permissions and localized keyboard/layout checks.
+- `redeven:desktop/scripts/check-gateway-menu-ui.mjs` — Uniform menu geometry, distinct restart icons, confirmation, keyboard navigation and focus across themes, locales and viewport sizes.

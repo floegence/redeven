@@ -1147,14 +1147,16 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewaySourceActionIconEnd).toBeGreaterThan(gatewaySourceActionIconStart);
     const gatewaySourceActionIconSrc = appSrc.slice(gatewaySourceActionIconStart, gatewaySourceActionIconEnd);
     expect(gatewaySourceActionIconSrc).toContain(
-      "case 'disable_gateway':\n      return <GatewayDisabledIcon class={iconClass()} />;",
+      "case 'disable_gateway': return GatewayDisabledIcon;",
     );
     expect(gatewaySourceActionIconSrc).toContain(
-      "case 'refresh_gateway':\n      return <Refresh class={iconClass()} />;",
+      "case 'refresh_gateway': return Refresh;",
     );
     expect(gatewaySourceActionIconSrc).toContain("case 'start_gateway':");
     expect(gatewaySourceActionIconSrc).toContain("case 'stop_gateway':");
     expect(gatewaySourceActionIconSrc).toContain("case 'restart_gateway':");
+    expect(gatewaySourceActionIconSrc).toContain("case 'restart_gateway': return PowerIcon;");
+    expect(gatewaySourceActionIconSrc).toContain('<Dynamic component={icon()}');
     expect(gatewaySourceActionIconSrc).toContain("case 'update_gateway':");
     expect(gatewaySourceActionIconSrc).not.toContain("case 'disable_gateway':\n      return <Stop");
     expect(gatewaySourceActionIconSrc).not.toContain("case 'update_gateway':\n      return <Save");
@@ -2271,7 +2273,7 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain("import { Portal } from 'solid-js/web';");
+    expect(appSrc).toMatch(/import \{[^}]*\bPortal\b[^}]*\} from 'solid-js\/web';/);
     expect(appSrc).toContain('<DesktopActionToastViewport');
     expect(appSrc).toContain('showActionToast(');
     expect(appSrc).not.toContain('feedback={feedback()}');
