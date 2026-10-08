@@ -1526,9 +1526,41 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
 
     const abortController = new AbortController();
 
+    const waitForLayoutRetry = (delayMs: number): Promise<void> => new Promise((resolve, reject) => {
+      let timer: ReturnType<typeof globalThis.setTimeout>;
+      const abort = () => {
+        globalThis.clearTimeout(timer);
+        abortController.signal.removeEventListener('abort', abort);
+        reject(new DOMException('Workbench layout load aborted', 'AbortError'));
+      };
+      const finish = () => {
+        abortController.signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      abortController.signal.addEventListener('abort', abort, { once: true });
+      if (abortController.signal.aborted) {
+        abort();
+        return;
+      }
+      timer = globalThis.setTimeout(finish, delayMs);
+    });
+
     const loadRuntimeLayout = async () => {
       try {
-        let snapshot = await getWorkbenchLayoutSnapshot();
+        let snapshot: RuntimeWorkbenchLayoutSnapshot | undefined;
+        let lastError: unknown;
+        const retryDelaysMs = [150, 400];
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            snapshot = await getWorkbenchLayoutSnapshot();
+            break;
+          } catch (error) {
+            lastError = error;
+            if (abortController.signal.aborted || attempt >= retryDelaysMs.length) throw error;
+            await waitForLayoutRetry(retryDelaysMs[attempt]!);
+          }
+        }
+        if (!snapshot) throw lastError ?? new Error('Workbench layout snapshot was not returned');
         if (abortController.signal.aborted) {
           return;
         }
