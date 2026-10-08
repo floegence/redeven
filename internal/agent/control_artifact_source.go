@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,7 +36,7 @@ func sameControlBinding(expected, current *config.Config) bool {
 		return false
 	}
 	if current.Gateway != nil && (current.Gateway.Leaving || expected.Gateway.MemberID != current.Gateway.MemberID || expected.Gateway.MemberVersion != current.Gateway.MemberVersion || expected.Gateway.GatewayID != current.Gateway.GatewayID ||
-		expected.Gateway.GatewayURL != current.Gateway.GatewayURL || expected.Gateway.GatewayTLSRootPEM != current.Gateway.GatewayTLSRootPEM ||
+		!slices.Equal(expected.Gateway.ConnectionEndpoints(), current.Gateway.ConnectionEndpoints()) || expected.Gateway.GatewayTLSRootPEM != current.Gateway.GatewayTLSRootPEM ||
 		expected.Gateway.ClientCertificatePEM != current.Gateway.ClientCertificatePEM || expected.Gateway.ClientPrivateKeyPEM != current.Gateway.ClientPrivateKeyPEM) {
 		return false
 	}

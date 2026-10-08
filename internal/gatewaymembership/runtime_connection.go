@@ -30,16 +30,18 @@ type RuntimeApplication struct {
 }
 
 type runtimeSource struct {
-	mu       sync.Mutex
-	current  func() *RuntimeConfig
-	persist  func(*RuntimeConfig) error
-	memberID string
+	mu                  sync.Mutex
+	current             func() *RuntimeConfig
+	persist             func(*RuntimeConfig) error
+	memberID            string
+	attemptedEndpointID string
+	failedEndpoints     map[string]bool
 }
 
 func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *flowersec.ArtifactSourceError) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := s.current()
+	r := s.current().Clone()
 	if r == nil || r.MemberID != s.memberID {
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(ErrDenied)
 	}
@@ -63,9 +65,27 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 		}
 	}
 	var offer ConnectionOffer
-	if err := r.Request(ctx, "/v4/member/connect", gp.CatalogRequest{ProtocolVersion: gp.Version}, &offer, true); err != nil {
+	if s.failedEndpoints == nil {
+		s.failedEndpoints = make(map[string]bool)
+	}
+	if s.attemptedEndpointID != "" {
+		s.failedEndpoints[s.attemptedEndpointID] = true
+	}
+	endpoints := r.orderedEndpoints()
+	r.GatewayEndpoints = nil
+	for _, endpoint := range endpoints {
+		if !s.failedEndpoints[endpoint.EndpointID] {
+			r.GatewayEndpoints = append(r.GatewayEndpoints, endpoint)
+		}
+	}
+	if len(r.GatewayEndpoints) == 0 {
+		s.failedEndpoints = make(map[string]bool)
+		r.GatewayEndpoints = endpoints
+	}
+	if err := r.Request(ctx, "/v5/member/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &offer, true); err != nil {
 		return flowersec.ArtifactLease{}, memberSourceError(err)
 	}
+	s.attemptedEndpointID = r.LastEndpointID
 	if offer.ProtocolVersion != gp.Version || offer.MemberID != r.MemberID || offer.MemberVersion != r.MemberVersion || offer.ChannelID == "" || offer.ChannelID == r.LastSpentChannelID || offer.Generation == 0 {
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(ErrInvalidProof)
 	}
@@ -76,7 +96,7 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		next := s.current()
+		next := s.current().Clone()
 		if next == nil || next.MemberID != r.MemberID || next.MemberVersion != r.MemberVersion || next.LastSpentChannelID == offer.ChannelID {
 			return ErrDenied
 		}
@@ -87,6 +107,23 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(err)
 	}
 	return lease, nil
+}
+
+func (s *runtimeSource) connected() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current := s.current()
+	if current == nil || current.MemberID != s.memberID {
+		return ErrDenied
+	}
+	endpointID := s.attemptedEndpointID
+	s.failedEndpoints = nil
+	if endpointID == "" || current.LastEndpointID == endpointID {
+		return nil
+	}
+	next := current.Clone()
+	next.LastEndpointID = endpointID
+	return s.persist(next)
 }
 
 func memberSourceError(err error) *flowersec.ArtifactSourceError {
@@ -101,7 +138,7 @@ func memberSourceError(err error) *flowersec.ArtifactSourceError {
 func (s *runtimeSource) renew(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := s.current()
+	r := s.current().Clone()
 	if r == nil || r.MemberID != s.memberID {
 		return ErrDenied
 	}
@@ -127,7 +164,11 @@ func NewRuntimeConnection(current func() *RuntimeConfig, persist func(*RuntimeCo
 		return nil, err
 	}
 	source := &runtimeSource{current: current, persist: persist, memberID: r.MemberID}
-	controller, err := flowersec.NewConnectionController(source, flowersec.ConnectionControllerOptions{Connector: flowersec.ConnectorOptions{TrustRoots: trust.RootCAs, Origin: r.GatewayURL}})
+	endpoints := r.orderedEndpoints()
+	if len(endpoints) == 0 {
+		return nil, ErrState
+	}
+	controller, err := flowersec.NewConnectionController(source, flowersec.ConnectionControllerOptions{Connector: flowersec.ConnectorOptions{TrustRoots: trust.RootCAs}})
 	if err != nil {
 		return nil, err
 	}
@@ -183,6 +224,9 @@ func (r *RuntimeConnection) Run(ctx context.Context, application func(string) Ru
 			}
 			served = current
 			if current != nil {
+				if err := r.source.connected(); err != nil {
+					return err
+				}
 				sessionCtx, cancelSession := context.WithCancel(ctx)
 				sessionCancel = cancelSession
 				workers.Add(1)
@@ -190,6 +234,9 @@ func (r *RuntimeConnection) Run(ctx context.Context, application func(string) Ru
 			}
 		}
 		if snapshot.State == flowersec.ConnectionClosed || snapshot.State == flowersec.ConnectionFailed {
+			if snapshot.Failure != nil {
+				return errors.Join(ErrDenied, snapshot.Failure.Error)
+			}
 			return ErrDenied
 		}
 		var err error

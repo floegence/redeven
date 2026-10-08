@@ -55,6 +55,9 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	}
 
 	*c = Config(decoded)
+	if c.Gateway != nil && c.Gateway.MigrateLegacyState() {
+		c.gatewayConfigMigrated = true
+	}
 	// json.RawMessage encodes a nil value as the literal `null`. Keep terminal
 	// artifact tombstones truly byte-empty after a restart so validation cannot
 	// mistake the JSON marker for retained opaque credential material.

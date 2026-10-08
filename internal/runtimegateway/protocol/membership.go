@@ -1,8 +1,8 @@
 package protocol
 
 const (
-	MemberConnectionStream = "redeven.gateway.member.https.v4"
-	MemberAccessStream     = "redeven.gateway.access.https.v4"
+	MemberConnectionStream = "redeven.gateway.member.https.v5"
+	MemberAccessStream     = "redeven.gateway.access.https.v5"
 	MaxMembers             = 1024
 	MaxMemberConnections   = 32
 	MaxGatewayConnections  = 1024
@@ -23,19 +23,43 @@ const (
 	PublicationAutomatic PublicationMode = "automatic"
 )
 
+type GatewayEndpointScope string
+
+const (
+	GatewayEndpointLAN     GatewayEndpointScope = "lan"
+	GatewayEndpointOverlay GatewayEndpointScope = "overlay"
+	GatewayEndpointPublic  GatewayEndpointScope = "public"
+)
+
+// GatewayEndpoint is an administrator-confirmed Runtime connection option.
+// It is deliberately independent from the Gateway listener address and Cloud
+// origin; the Gateway signs the complete set before a Runtime can use it.
+type GatewayEndpoint struct {
+	EndpointID string               `json:"endpoint_id"`
+	Address    string               `json:"address"`
+	Scope      GatewayEndpointScope `json:"scope"`
+	Priority   int                  `json:"priority"`
+}
+
+type MemberConnectRequest struct {
+	ProtocolVersion string          `json:"protocol_version"`
+	Endpoint        GatewayEndpoint `json:"endpoint"`
+}
+
 // MemberInvitation is a Gateway-admin-authorized one-time capability. It has
 // no Runtime destination, Cloud credential, or Namespace enrollment token.
 type MemberInvitation struct {
-	ProtocolVersion   string `json:"protocol_version"`
-	InvitationID      string `json:"invitation_id"`
-	GatewayID         string `json:"gateway_id"`
-	GatewayURL        string `json:"gateway_url"`
-	GatewayPublicKey  string `json:"gateway_public_key"`
-	GatewayTLSRootPEM string `json:"gateway_tls_root_pem"`
-	Token             string `json:"token"`
-	IssuedAtUnixMS    int64  `json:"issued_at_unix_ms"`
-	ExpiresAtUnixMS   int64  `json:"expires_at_unix_ms"`
-	Signature         string `json:"signature"`
+	ProtocolVersion   string            `json:"protocol_version"`
+	InvitationID      string            `json:"invitation_id"`
+	GatewayID         string            `json:"gateway_id"`
+	GatewayName       string            `json:"gateway_name"`
+	Endpoints         []GatewayEndpoint `json:"endpoints"`
+	GatewayPublicKey  string            `json:"gateway_public_key"`
+	GatewayTLSRootPEM string            `json:"gateway_tls_root_pem"`
+	Token             string            `json:"token"`
+	IssuedAtUnixMS    int64             `json:"issued_at_unix_ms"`
+	ExpiresAtUnixMS   int64             `json:"expires_at_unix_ms"`
+	Signature         string            `json:"signature"`
 }
 
 func (MemberInvitation) String() string   { return "Gateway.MemberInvitation" }

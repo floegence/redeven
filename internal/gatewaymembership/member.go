@@ -58,7 +58,7 @@ func (s *Store) CancelJoin(request gp.MemberJoinRequest) error {
 	}
 	signature := request.Signature
 	request.Signature = ""
-	if err := verifyValue("redeven.gateway.member-join.v4", request, request.Delegation.PublicKeyB64u, signature); err != nil {
+	if err := verifyValue("redeven.gateway.member-join.v5", request, request.Delegation.PublicKeyB64u, signature); err != nil {
 		return err
 	}
 	request.Signature = signature
@@ -94,7 +94,7 @@ func (s *Store) CancelJoin(request gp.MemberJoinRequest) error {
 
 func SignRotation(request *gp.MemberRotateRequest, key ed25519.PrivateKey) error {
 	request.Signature = ""
-	signature, err := signValue("redeven.gateway.member-rotate.v4", *request, key)
+	signature, err := signValue("redeven.gateway.member-rotate.v5", *request, key)
 	if err == nil {
 		request.Signature = signature
 	}
@@ -113,7 +113,7 @@ func (s *Store) Rotate(leaf *x509.Certificate, request gp.MemberRotateRequest) (
 	}
 	signature := request.Signature
 	request.Signature = ""
-	if err := verifyValue("redeven.gateway.member-rotate.v4", request, member.Delegation.PublicKeyB64u, signature); err != nil {
+	if err := verifyValue("redeven.gateway.member-rotate.v5", request, member.Delegation.PublicKeyB64u, signature); err != nil {
 		return gp.MemberRotateResponse{}, err
 	}
 	if err := VerifyMemberService(request.Service, member.Delegation, now); err != nil {

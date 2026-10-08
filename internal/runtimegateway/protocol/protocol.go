@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const Version = "redeven-gateway-v4"
+const Version = "redeven-gateway-v5"
 
 type IdentityRequest struct {
 	ProtocolVersion string `json:"protocol_version"`
@@ -32,7 +32,11 @@ type GatewayMetadata struct {
 	GatewayID                   string             `json:"gateway_id"`
 	DisplayName                 string             `json:"display_name"`
 	GatewayPublicKeyFingerprint string             `json:"gateway_public_key_fingerprint"`
-	MemberURL                   string             `json:"member_url"`
+	ListenerAddress             string             `json:"listener_address"`
+	ListenerAddresses           []string           `json:"listener_addresses"`
+	ListenerRunning             bool               `json:"listener_running"`
+	EndpointLastUsedAt          map[string]int64   `json:"endpoint_last_used_at"`
+	MemberEndpoints             []GatewayEndpoint  `json:"member_endpoints"`
 	MemberTLSRootPEM            string             `json:"member_tls_root_pem"`
 	Permissions                 GatewayPermissions `json:"permissions"`
 }
@@ -72,6 +76,16 @@ type MemberServiceResponse struct {
 
 type InvitationRequest struct {
 	ProtocolVersion string `json:"protocol_version"`
+}
+
+type EndpointUpdateRequest struct {
+	ProtocolVersion string            `json:"protocol_version"`
+	Endpoints       []GatewayEndpoint `json:"endpoints"`
+}
+
+type EndpointUpdateResponse struct {
+	ProtocolVersion string            `json:"protocol_version"`
+	Endpoints       []GatewayEndpoint `json:"endpoints"`
 }
 type RemoveMemberRequest struct {
 	ProtocolVersion       string `json:"protocol_version"`

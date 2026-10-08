@@ -49,6 +49,18 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	unavailable, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	unavailableAddress := unavailable.Addr().String()
+	_ = unavailable.Close()
+	if err := store.UpdateEndpoints([]gp.GatewayEndpoint{
+		{EndpointID: "a_unreachable", Address: "https://" + unavailableAddress, Scope: gp.GatewayEndpointPublic, Priority: 0},
+		{EndpointID: "z_lan", Address: "https://localhost:" + strconv.Itoa(listener.Addr().(*net.TCPAddr).Port), Scope: gp.GatewayEndpointLAN, Priority: 1},
+	}); err != nil {
+		return err
+	}
 	flows := gm.NewConnections(gatewayflow.New(0, 0))
 	defer flows.Close()
 	store.SetCommitHandler(flows.Apply)
@@ -136,7 +148,7 @@ func run() error {
 	}
 	member := current()
 	encoder := json.NewEncoder(os.Stdout)
-	if err := encoder.Encode(map[string]any{"ready": true, "gateway_id": member.GatewayID, "gateway_url": member.GatewayURL, "gateway_tls_root_pem": member.GatewayTLSRootPEM, "runtime_id": member.RuntimePublicID, "member_id": member.MemberID, "member_version": member.MemberVersion}); err != nil {
+	if err := encoder.Encode(map[string]any{"ready": true, "gateway_id": member.GatewayID, "endpoints": member.ConnectionEndpoints(), "gateway_tls_root_pem": member.GatewayTLSRootPEM, "runtime_id": member.RuntimePublicID, "member_id": member.MemberID, "member_version": member.MemberVersion}); err != nil {
 		return err
 	}
 	scanner := bufio.NewScanner(os.Stdin)

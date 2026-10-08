@@ -48,7 +48,7 @@ describe('Runtime Gateway membership interaction', () => {
     expect(perform).toHaveBeenCalledTimes(3);
   });
 
-  it.each(['replace', 'updateAddress'] as const)('preserves an imported %s invitation across status polling', async operation => {
+  it.each(['replace', 'updateEndpoints'] as const)('preserves an imported %s invitation across status polling', async operation => {
     vi.useFakeTimers();
     const perform = vi.fn().mockResolvedValue(result({ joined: true, phase: 'joined' }));
     mount(perform, false); await vi.advanceTimersByTimeAsync(50);
@@ -58,10 +58,10 @@ describe('Runtime Gateway membership interaction', () => {
     input.dispatchEvent(new Event('change', { bubbles: true }));
     await vi.advanceTimersByTimeAsync(3100);
     expect(perform).toHaveBeenCalledTimes(2);
-    const confirm = button(i18n.t(operation === 'replace' ? 'gatewayJoin.confirmReplace' : 'gatewayJoin.updateAddress'));
+    const confirm = button(i18n.t(operation === 'replace' ? 'gatewayJoin.confirmReplace' : 'gatewayJoin.updateEndpoints'));
     expect(confirm.disabled).toBe(false);
     confirm.click(); await vi.advanceTimersByTimeAsync(50);
-    expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({ operation: operation === 'replace' ? 'replace' : 'update-address', invitation: invitationFixture });
+    expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({ operation: operation === 'replace' ? 'replace' : 'update-endpoints', invitation: invitationFixture });
   });
   it('preserves leave confirmation across status polling', async () => {
     vi.useFakeTimers();
@@ -79,7 +79,7 @@ describe('Runtime Gateway membership interaction', () => {
     const trigger = mount(perform); await settle();
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:chosen', operation: 'status' });
     expect(document.body.textContent).toContain(i18n.t('gatewayJoin.invitationReady'));
-    expect(document.body.textContent).not.toContain(invitationFixture.gateway_id);
+    expect(document.body.textContent).toContain(invitationFixture.gateway_name);
     expect([...document.querySelectorAll('details')].every(detail => !detail.open)).toBe(true);
     expect(button(i18n.t('gatewayJoin.chooseFile'))).toBeDefined();
     button(i18n.t('gatewayJoin.approve')).click(); await settle();

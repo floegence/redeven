@@ -21,7 +21,10 @@ const target: DesktopProviderRuntimeLinkTarget = { id: 'ssh:created', kind: 'ssh
   runtime_running: true, runtime_openable: true, runtime_control_status: { state: 'available' }, provider_connection_state: 'unlinked', provider_link_state: 'unbound',
   provider_origin_supported: false, can_connect_provider: false, can_disconnect_provider: false };
 const environment = { id: 'created', label: 'Created Runtime' } as DesktopEnvironmentEntry;
-const gateway = { gateway_id: 'local-registration', display_name: 'Office', local_enabled: true, permissions: { manage_members: true } } as DesktopGatewaySource;
+const gateway: DesktopGatewaySource = { gateway_id: 'local-registration', display_name: 'Office', local_enabled: true,
+  connection_kind: 'url', management_capability: 'access_only', capabilities: ['member_manage'],
+  status: 'online', trust_state: 'paired', created_at_ms: 1, updated_at_ms: 1, environments: [],
+  permissions: { access: true, manage_members: true, configure_cloud: false }, member_endpoints: invitationFixture.endpoints };
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 

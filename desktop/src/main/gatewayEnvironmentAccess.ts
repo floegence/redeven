@@ -26,7 +26,7 @@ export async function prepareGatewayEnvironmentAccess(
   const transport = await createGatewayMemberTransport({
     memberID: member.member_id, memberVersion: member.member_version,
     runtimeID: member.runtime_public_id, gatewayID: gatewayProtocolID(record),
-    gatewayURL: catalog.gateway.member_url, gatewayTLSRootPEM: catalog.gateway.member_tls_root_pem,
+    gatewayEndpoints: catalog.gateway.member_endpoints, gatewayTLSRootPEM: catalog.gateway.member_tls_root_pem,
     gatewayConnectionPath: client.memberConnectionPath(catalog),
     refreshService: signal => client.memberService(record, member.member_id, member.member_version, { signal }),
     acquire: signal => client.openMember(record, member.member_id, { signal }), signal,

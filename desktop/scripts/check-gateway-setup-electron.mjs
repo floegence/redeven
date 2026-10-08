@@ -99,10 +99,18 @@ try {
   assert.equal((await action({ ...registration, permissions: { access: true, manage_members: true, configure_cloud: true } })).ok, true);
   const paired = (await snapshot()).gateway_sources.find(item => item.gateway_id === id);
   assert.deepEqual(paired.permissions, { access: true, manage_members: true, configure_cloud: true });
+  assert.equal((await action({ kind: 'invite_gateway_runtime', gateway_id: id })).ok, false, 'Invitations require administrator-confirmed endpoints');
+  const endpoints = [
+    { endpoint_id: 'lan', address: 'https://localhost:7443', scope: 'lan', priority: 0 },
+    { endpoint_id: 'public', address: 'https://gateway.example:9443', scope: 'public', priority: 1 },
+  ];
+  assert.equal((await action({ kind: 'update_gateway_endpoints', gateway_id: id, endpoints })).ok, true);
   const invited = await action({ kind: 'invite_gateway_runtime', gateway_id: id });
   assert.equal(invited.ok, true);
-  assert.equal(invited.gateway_invitation.protocol_version, 'redeven-gateway-v4');
+  assert.equal(invited.gateway_invitation.protocol_version, 'redeven-gateway-v5');
   assert.equal(invited.gateway_invitation.expires_at_unix_ms - invited.gateway_invitation.issued_at_unix_ms, 600_000);
+  assert.deepEqual(invited.gateway_invitation.endpoints, endpoints);
+  assert.ok(invited.gateway_invitation.gateway_name);
   assert.equal((await snapshot()).environments.some(item => item.kind === 'gateway_environment'), false, 'Invitation does not manufacture a member');
   const policy = { ...paired.policy, default_cloud_allowed: true };
   assert.equal((await action({ kind: 'update_gateway_policy', gateway_id: id, policy })).ok, true);
@@ -111,6 +119,10 @@ try {
   assert.equal(restored.policy.default_cloud_allowed, true);
   assert.equal(restored.permissions.manage_members, true);
   report.cases.push('Access-only pairing denies invitations; explicit permissions and policy survive restart');
+  assert.equal((await action({ kind: 'update_gateway_endpoints', gateway_id: id, endpoints: [] })).ok, true);
+  await run('restart_gateway');
+  assert.equal((await action({ kind: 'invite_gateway_runtime', gateway_id: id })).ok, false, 'Restart must not restore deleted endpoints');
+  report.cases.push('Confirmed multi-endpoint invitations and endpoint deletion persist without automatic address publication');
   current = await snapshot();
   await writeFile(path.join(output, 'snapshot.json'), JSON.stringify(current, null, 2));
   await run('stop_gateway');

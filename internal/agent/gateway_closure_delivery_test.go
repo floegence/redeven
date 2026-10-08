@@ -35,7 +35,7 @@ func TestGatewayClosureOutboxSurvivesRemovalAndWaitsForActualSessionClosure(t *t
 	attempts := 0
 	relay := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
-		if r.URL.Path != "/v4/member/cloud-closure" || len(r.TLS.PeerCertificates) != 0 {
+		if r.URL.Path != "/v5/member/cloud-closure" || len(r.TLS.PeerCertificates) != 0 {
 			t.Error("receipt reused member access credentials")
 			w.WriteHeader(403)
 			return
@@ -52,7 +52,7 @@ func TestGatewayClosureOutboxSurvivesRemovalAndWaitsForActualSessionClosure(t *t
 		_ = json.NewEncoder(w).Encode(gc.RuntimeClosureExchangeResponse{Accepted: true, Closure: &gc.Closure{BindingPublicID: "binding", Generation: 1, GatewayPublicID: "cloud_gateway", RuntimePublicID: "runtime", RuntimeClosed: true}})
 	}))
 	defer relay.Close()
-	member.GatewayURL = relay.URL
+	member.GatewayEndpoints = []gp.GatewayEndpoint{{EndpointID: "relay", Address: relay.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
 	member.GatewayTLSRootPEM = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: relay.Certificate().Raw}))
 	remote, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -101,7 +101,7 @@ func TestGatewayClosureFencesProcessWhenPersistenceFails(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(gc.RuntimeClosureExchangeResponse{Closure: &gc.Closure{BindingPublicID: "binding", Generation: 1, GatewayPublicID: "cloud_gateway", RuntimePublicID: "runtime"}})
 	}))
 	defer relay.Close()
-	member.GatewayURL = relay.URL
+	member.GatewayEndpoints = []gp.GatewayEndpoint{{EndpointID: "relay", Address: relay.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
 	member.GatewayTLSRootPEM = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: relay.Certificate().Raw}))
 	remote, cancel := context.WithCancel(t.Context())
 	defer cancel()

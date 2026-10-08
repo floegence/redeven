@@ -13,7 +13,7 @@ import {
 } from './gatewayTrust';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
 import {
-  GATEWAY_PROTOCOL_VERSION, type GatewayPermissions, type GatewayMember,
+  GATEWAY_PROTOCOL_VERSION, type GatewayPermissions, type GatewayMember, type GatewayEndpoint,
   type GatewayPolicy, type GatewayMemberInvitation, type GatewayMemberOffer,
   type GatewayMemberOperationResult, type GatewayCloudPermission, type GatewayHookStatuses, type GatewayHookStatus,
 } from '../shared/gatewayMembership';
@@ -23,7 +23,11 @@ export type GatewayCatalogResponse = Readonly<{
   protocol_version: typeof GATEWAY_PROTOCOL_VERSION;
   gateway: Readonly<{
     gateway_id: string; display_name: string; gateway_public_key_fingerprint: string;
-    member_url: string; member_tls_root_pem: string; permissions: GatewayPermissions;
+    listener_address: string;
+    listener_addresses?: readonly string[];
+    listener_running?: boolean;
+    endpoint_last_used_at?: Readonly<Record<string, number>>;
+    member_endpoints: readonly GatewayEndpoint[]; member_tls_root_pem: string; permissions: GatewayPermissions;
   }>;
   members: readonly GatewayMember[];
   policy: GatewayPolicy;
@@ -59,6 +63,23 @@ function integer(value: unknown, minimum = 0): number {
   return value;
 }
 function boolean(value: unknown): boolean { if (typeof value !== 'boolean') return invalid(); return value; }
+function endpoint(value: unknown): GatewayEndpoint {
+  const item = object(value);
+  const scope = item.scope;
+  if (scope !== 'lan' && scope !== 'overlay' && scope !== 'public') return invalid();
+  const address = text(item.address, 512);
+  const parsed = new URL(address);
+  if (parsed.protocol !== 'https:' || parsed.origin !== address || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) return invalid();
+  const priority = integer(item.priority, 0);
+  if (priority > 1000) return invalid();
+  return { endpoint_id: id(item.endpoint_id), address, scope, priority };
+}
+function endpointList(value: unknown, requireOne = true): readonly GatewayEndpoint[] {
+  if (!Array.isArray(value) || (requireOne && value.length < 1) || value.length > 16) return invalid();
+  const result = value.map(endpoint);
+  if (new Set(result.map(item => item.endpoint_id)).size !== result.length || new Set(result.map(item => item.address)).size !== result.length) return invalid();
+  return result;
+}
 function version(value: unknown): typeof GATEWAY_PROTOCOL_VERSION {
   if (value !== GATEWAY_PROTOCOL_VERSION) throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
   return value;
@@ -95,15 +116,17 @@ function member(value: unknown): GatewayMember {
 }
 export function normalizeGatewayCatalogResponse(value: unknown): GatewayCatalogResponse {
   const item = object(value), gateway = object(item.gateway), hooks = object(item.hook_status);
-  const memberURL = new URL(text(gateway.member_url));
-  if (memberURL.protocol !== 'https:' || memberURL.origin !== gateway.member_url || memberURL.username || memberURL.password || memberURL.pathname !== '/' || memberURL.search || memberURL.hash) return invalid();
+  const memberEndpoints = endpointList(gateway.member_endpoints, false);
   if (!Array.isArray(item.members) || item.members.length > 1024) return invalid();
   const members = item.members.map(member);
   if (new Set(members.map(value => value.member_id)).size !== members.length) return invalid();
   return {
     protocol_version: version(item.protocol_version), gateway: {
       gateway_id: id(gateway.gateway_id), display_name: text(gateway.display_name),
-      gateway_public_key_fingerprint: text(gateway.gateway_public_key_fingerprint), member_url: text(gateway.member_url),
+      gateway_public_key_fingerprint: text(gateway.gateway_public_key_fingerprint), listener_address: text(gateway.listener_address), member_endpoints: memberEndpoints,
+      listener_addresses: Array.isArray(gateway.listener_addresses) ? gateway.listener_addresses.map(value => text(value)) : [],
+      listener_running: gateway.listener_running === true,
+      endpoint_last_used_at: Object.fromEntries(Object.entries(object(gateway.endpoint_last_used_at ?? {})).map(([key, value]) => [id(key), integer(value, 0)])),
       member_tls_root_pem: text(gateway.member_tls_root_pem, 16_384), permissions: permissions(gateway.permissions),
     }, members, policy: policy(item.policy), revision: integer(item.revision, 1), rebuild_required: boolean(item.rebuild_required),
     hook_status: { 'member.admit': hookStatus(hooks['member.admit']), 'access.open': hookStatus(hooks['access.open']), 'cloud.publish': hookStatus(hooks['cloud.publish']) },
@@ -121,7 +144,7 @@ function envelope(raw: string, status: number): unknown {
   return data.data;
 }
 
-/** One signed v4 client for URL and trusted host transports. The optional bridge
+/** One signed v5 client for URL and trusted host transports. The optional bridge
  * changes only byte delivery; it never grants Runtime lifecycle permissions.
  */
 export class GatewayClient {
@@ -136,7 +159,7 @@ export class GatewayClient {
   private async request(record: GatewayRecord, route: string, body: unknown, options: GatewayRequestOptions, authenticated = true): Promise<unknown> {
     const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 20_000)]) : AbortSignal.timeout(options.timeoutMs ?? 20_000);
     signal.throwIfAborted();
-    const path = `/gateway/v4/${route}`;
+    const path = `/gateway/v5/${route}`;
     const headers = authenticated ? await createGatewayAuthHeaders({ record, method: 'POST', route: path, body, secret_store: this.secretStore }) : {};
     signal.throwIfAborted();
     let url: URL;
@@ -147,7 +170,7 @@ export class GatewayClient {
       agent.createConnection = () => openGatewayBridgeSocket(this.bridge!) as net.Socket;
     } else {
       if (record.connection.kind !== 'url') throw new GatewayClientError('GATEWAY_BRIDGE_UNAVAILABLE', 'Gateway host bridge is unavailable.');
-      url = new URL(`gateway/v4/${route}`, normalizeGatewayBaseURL(record.connection.base_url));
+      url = new URL(`gateway/v5/${route}`, normalizeGatewayBaseURL(record.connection.base_url));
       if (url.protocol !== 'https:' && !(record.connection.allow_loopback_http && url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname))) {
         throw new GatewayClientError('GATEWAY_URL_INSECURE', 'Gateway requires HTTPS.');
       }
@@ -205,8 +228,15 @@ export class GatewayClient {
     const item = object(await this.request(record, 'invitations', { protocol_version: GATEWAY_PROTOCOL_VERSION }, options));
     if (item.gateway_id !== gatewayProtocolID(record)) return invalid();
     return { protocol_version: version(item.protocol_version), invitation_id: id(item.invitation_id), gateway_id: id(item.gateway_id),
-      gateway_url: text(item.gateway_url), gateway_public_key: text(item.gateway_public_key), gateway_tls_root_pem: text(item.gateway_tls_root_pem, 16_384),
+      gateway_name: text(item.gateway_name, 256),
+      endpoints: endpointList(item.endpoints), gateway_public_key: text(item.gateway_public_key), gateway_tls_root_pem: text(item.gateway_tls_root_pem, 16_384),
       token: text(item.token), issued_at_unix_ms: integer(item.issued_at_unix_ms, 1), expires_at_unix_ms: integer(item.expires_at_unix_ms, 1), signature: text(item.signature) };
+  }
+
+  async updateEndpoints(record: GatewayRecord, endpoints: readonly GatewayEndpoint[], options: GatewayRequestOptions = {}): Promise<readonly GatewayEndpoint[]> {
+    const value = object(await this.request(record, 'endpoints', { protocol_version: GATEWAY_PROTOCOL_VERSION, endpoints }, options));
+    version(value.protocol_version);
+    return endpointList(value.endpoints, false);
   }
 
   async openMember(record: GatewayRecord, memberID: string, options: GatewayRequestOptions = {}): Promise<GatewayMemberOffer> {
@@ -230,10 +260,10 @@ export class GatewayClient {
 
   memberConnectionPath(catalog: GatewayCatalogResponse): NodeConnectionPath | undefined {
     if (!this.bridge) return undefined;
-    const endpoint = new URL(catalog.gateway.member_url);
+    const endpoints = catalog.gateway.member_endpoints.map(item => new URL(item.address));
     return { connect: async ({ hostname, port, signal }) => {
       signal.throwIfAborted();
-      if (hostname !== endpoint.hostname.replace(/^\[|\]$/gu, '') || port !== Number(endpoint.port || 443)) throw new GatewayClientError('MEMBER_TARGET_DENIED', 'Gateway member endpoint does not match.');
+      if (!endpoints.some(endpoint => hostname === endpoint.hostname.replace(/^\[|\]$/gu, '') && port === Number(endpoint.port || 443))) throw new GatewayClientError('MEMBER_TARGET_DENIED', 'Gateway member endpoint does not match.');
       const socket = openGatewayBridgeSocket(this.bridge!, 'gateway_member');
       const abort = () => socket.destroy();
       signal.addEventListener('abort', abort, { once: true });

@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
@@ -62,14 +63,41 @@ func newEndpoint(origin, listen string) (Endpoint, error) {
 	if err != nil {
 		return Endpoint{}, err
 	}
-	return renewEndpoint(Endpoint{URL: origin, ListenAddress: listen, RootPEM: certPEM(root.Raw), RootKeyPEM: rootPrivate})
+	addresses := strings.Split(listen, ",")
+	for _, address := range addresses {
+		if _, _, err := net.SplitHostPort(address); err != nil {
+			return Endpoint{}, ErrState
+		}
+	}
+	return renewEndpointForOrigins(Endpoint{URL: origin, ListenAddress: addresses[0], ListenAddresses: addresses, RootPEM: certPEM(root.Raw), RootKeyPEM: rootPrivate}, []string{origin})
 }
 
 func renewEndpoint(endpoint Endpoint) (Endpoint, error) {
+	origins := endpoint.CertificateOrigins
+	if len(origins) == 0 {
+		origins = []string{endpoint.URL}
+	}
+	return renewEndpointForOrigins(endpoint, origins)
+}
+
+func renewEndpointForOrigins(endpoint Endpoint, origins []string) (Endpoint, error) {
 	rootBlock, _ := pem.Decode([]byte(endpoint.RootPEM))
 	keyBlock, _ := pem.Decode([]byte(endpoint.RootKeyPEM))
-	if rootBlock == nil || keyBlock == nil || !validOrigin(endpoint.URL) {
+	if rootBlock == nil || keyBlock == nil || !validOrigin(endpoint.URL) || len(origins) == 0 {
 		return Endpoint{}, ErrState
+	}
+	canonicalOrigins := make([]string, 0, len(origins))
+	seenOrigins := make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		canonical, err := canonicalOrigin(origin)
+		if err != nil {
+			return Endpoint{}, ErrState
+		}
+		if _, exists := seenOrigins[canonical]; exists {
+			continue
+		}
+		seenOrigins[canonical] = struct{}{}
+		canonicalOrigins = append(canonicalOrigins, canonical)
 	}
 	root, err := x509.ParseCertificate(rootBlock.Bytes)
 	if err != nil || !root.IsCA {
@@ -99,17 +127,20 @@ func renewEndpoint(endpoint Endpoint) (Endpoint, error) {
 	if err != nil {
 		return Endpoint{}, err
 	}
-	parsed, _ := url.Parse(endpoint.URL)
 	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "Redeven Gateway"}, NotBefore: now.Add(-time.Minute), NotAfter: expires, KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
-	if ip := net.ParseIP(parsed.Hostname()); ip != nil {
-		template.IPAddresses = []net.IP{ip}
-	} else {
-		template.DNSNames = []string{parsed.Hostname()}
+	for _, origin := range canonicalOrigins {
+		parsed, _ := url.Parse(origin)
+		if ip := net.ParseIP(parsed.Hostname()); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, parsed.Hostname())
+		}
 	}
 	raw, err := x509.CreateCertificate(rand.Reader, template, root, &key.PublicKey, signer)
 	if err != nil {
 		return Endpoint{}, err
 	}
+	endpoint.CertificateOrigins = canonicalOrigins
 	endpoint.CertificatePEM = certPEM(raw)
 	endpoint.PrivateKeyPEM, err = keyPEM(key)
 	if err != nil {
@@ -156,16 +187,18 @@ func endpointTLS(endpoint Endpoint) (*tls.Config, error) {
 	if !roots.AppendCertsFromPEM([]byte(endpoint.RootPEM)) {
 		return nil, ErrState
 	}
-	if !validOrigin(endpoint.URL) {
+	if !validOrigin(endpoint.URL) || len(endpoint.CertificateOrigins) == 0 {
 		return nil, ErrState
 	}
-	u, _ := url.Parse(endpoint.URL)
 	leaf, err := x509.ParseCertificate(pair.Certificate[0])
 	if err != nil {
 		return nil, ErrState
 	}
-	if _, err := leaf.Verify(x509.VerifyOptions{DNSName: u.Hostname(), Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
-		return nil, ErrState
+	for _, origin := range endpoint.CertificateOrigins {
+		u, _ := url.Parse(origin)
+		if _, err := leaf.Verify(x509.VerifyOptions{DNSName: u.Hostname(), Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
+			return nil, ErrState
+		}
 	}
 	return &tls.Config{Certificates: []tls.Certificate{pair}, ClientCAs: roots, ClientAuth: tls.VerifyClientCertIfGiven, MinVersion: tls.VersionTLS13, NextProtos: []string{"http/1.1"}, SessionTicketsDisabled: true}, nil
 }

@@ -1,4 +1,4 @@
-import type { GatewayMember, GatewayPermissions, GatewayPolicy, GatewayHookStatuses } from './gatewayMembership';
+import type { GatewayEndpoint, GatewayMember, GatewayPermissions, GatewayPolicy, GatewayHookStatuses } from './gatewayMembership';
 import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
 import type { DesktopContainerEngine } from './desktopRuntimePlacement';
 
@@ -146,6 +146,11 @@ export type DesktopGatewaySource = Readonly<{
   trust_state?: DesktopGatewayTrustState;
   status_message?: string;
   endpoint_label?: string;
+  listener_address?: string;
+  listener_addresses?: readonly string[];
+  listener_running?: boolean;
+  endpoint_last_used_at?: Readonly<Record<string, number>>;
+  member_endpoints?: readonly GatewayEndpoint[];
   runtime_root?: string;
   gateway_url?: string;
   allow_loopback_http?: boolean;

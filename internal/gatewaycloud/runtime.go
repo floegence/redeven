@@ -115,14 +115,31 @@ func (r *RuntimeConfig) Proxy(member *gatewaymembership.RuntimeConfig) (*egress.
 	if err != nil {
 		return nil, err
 	}
-	return egress.NewHTTPSProxy(egress.HTTPSProxyOptions{URL: member.GatewayURL, TLSConfig: tlsConfig})
+	endpoints := member.ConnectionEndpoints()
+	if len(endpoints) == 0 {
+		return nil, ErrState
+	}
+	addresses := make([]string, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		addresses = append(addresses, endpoint.Address)
+	}
+	return egress.NewHTTPSProxy(egress.HTTPSProxyOptions{URLs: addresses, TLSConfig: tlsConfig})
 }
 func (r *RuntimeConfig) Client(member *gatewaymembership.RuntimeConfig) (*Client, error) {
-	proxy, err := r.Proxy(member)
+	if _, err := r.Identity(); err != nil {
+		return nil, err
+	}
+	if r.Revoked || member == nil || member.Leaving {
+		return nil, ErrState
+	}
+	if err := r.ValidateMember(member); err != nil {
+		return nil, err
+	}
+	transport, err := member.NewGatewayEndpointTransport(true)
 	if err != nil {
 		return nil, err
 	}
-	return NewClient(r.CloudOrigin, proxy.HTTPTransport())
+	return NewClient(r.CloudOrigin, transport)
 }
 func (r *RuntimeConfig) Join(ctx context.Context, member *gatewaymembership.RuntimeConfig, metadata gc.RuntimeMetadata) (*gc.Candidate, error) {
 	client, err := r.Client(member)
@@ -190,11 +207,10 @@ func (r *RuntimeConfig) Recover(ctx context.Context, member *gatewaymembership.R
 	if fence == nil || !fence.Valid() || r.DeliveryRequestID == "" {
 		return nil, ErrState
 	}
-	proxy, err := r.Proxy(member)
+	transport, err := member.NewGatewayEndpointTransport(true)
 	if err != nil {
 		return nil, err
 	}
-	transport := proxy.HTTPTransport()
 	defer transport.CloseIdleConnections()
 	client, err := NewClient(r.CloudOrigin, transport)
 	if err != nil {

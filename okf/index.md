@@ -276,7 +276,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Protocol
 
-- [Gateway v4 protocol](protocol/gateway-v4-protocol.md) - Define signed invitations, member identity, independent permissions and reverse access.
+- [Gateway v5 protocol](protocol/gateway-v5-protocol.md) - Define signed multi-endpoint invitations, member identity, independent permissions and reverse access.
 - [RCPP v3 provider API](protocol/rcpp-v3-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.
 
 ## Release

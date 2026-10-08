@@ -229,7 +229,7 @@ describe("DesktopDiagnosticsRecorder", () => {
         "https://gateway.example/session/env-app",
       );
 
-      const artifactURL = `https://gateway.example/gateway/v4/access?token=${'a'.repeat(43)}`;
+      const artifactURL = `https://gateway.example/gateway/v5/access?token=${'a'.repeat(43)}`;
       await recorder.recordLifecycle("gateway_artifact_seen", `request failed at ${artifactURL}`, {
         proof: "proof-secret",
         signature: "signature-secret",
@@ -251,7 +251,7 @@ describe("DesktopDiagnosticsRecorder", () => {
       expect(raw).not.toContain("artifact-nonce-secret");
       expect(raw).not.toContain("https://gateway.example/session?proof=secret");
       expect(raw).not.toContain('a'.repeat(43));
-      expect(raw).toContain('/gateway/v4/access?token=[redacted]');
+      expect(raw).toContain('/gateway/v5/access?token=[redacted]');
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
     }

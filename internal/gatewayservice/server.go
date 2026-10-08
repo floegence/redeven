@@ -44,6 +44,7 @@ type Options struct {
 	HostAdminToken         string
 	MemberURL              string
 	MemberListen           string
+	MemberEndpoints        []gp.GatewayEndpoint
 	Hooks                  gatewaymembership.HookConfig
 }
 
@@ -63,6 +64,8 @@ type Server struct {
 	hooks                  *gatewaymembership.PolicyHooks
 	migrationMu            sync.Mutex
 	rebuildRequired        bool
+	listenerMu             sync.Mutex
+	listenerAddresses      []string
 }
 
 type envelope struct {
@@ -120,22 +123,26 @@ func New(options Options) (*Server, error) {
 		return nil, err
 	}
 	memberURL, memberListen := options.MemberURL, options.MemberListen
-	if memberURL == "" {
-		hostname, err := os.Hostname()
-		if err != nil {
-			return nil, err
-		}
-		memberURL = "https://" + net.JoinHostPort(hostname, "7443")
+	if memberURL == "" && len(options.MemberEndpoints) > 0 {
+		memberURL = options.MemberEndpoints[0].Address
 	}
 	if memberListen == "" {
 		memberListen = ":7443"
 	}
-	members, err := gatewaymembership.NewStore(filepath.Join(root, "members.json"), gatewaymembership.GatewayIdentity{ID: metadata.GatewayID, PrivateKey: key}, memberURL, memberListen, hooks)
+	membersPath := filepath.Join(root, "members.json")
+	_, stateErr := os.Stat(membersPath)
+	initialSetup := errors.Is(stateErr, os.ErrNotExist)
+	members, err := gatewaymembership.NewStore(membersPath, gatewaymembership.GatewayIdentity{ID: metadata.GatewayID, DisplayName: metadata.DisplayName, PrivateKey: key}, memberURL, memberListen, hooks)
 	if err != nil {
 		return nil, err
 	}
-	if err := members.Readdress(options.MemberURL, options.MemberListen); err != nil {
+	if err := members.Readdress("", options.MemberListen); err != nil {
 		return nil, err
+	}
+	if initialSetup && len(options.MemberEndpoints) > 0 {
+		if err := members.UpdateEndpoints(options.MemberEndpoints); err != nil {
+			return nil, err
+		}
 	}
 	budget := gatewayflow.New(0, 0)
 	connections := gatewaymembership.NewConnections(budget)
@@ -223,20 +230,21 @@ func defaultStateRoot() string {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /gateway/v4/pairing/challenge", s.handlePairingChallenge)
-	mux.HandleFunc("POST /gateway/v4/pairing/complete", s.handlePairingComplete)
-	mux.HandleFunc("POST /gateway/v4/catalog", s.handleCatalog)
-	mux.HandleFunc("POST /gateway/v4/identity", s.handleIdentity)
-	mux.HandleFunc("POST /gateway/v4/cloud/configure", s.handleConfigureCloud)
-	mux.HandleFunc("POST /gateway/v4/cloud/status", s.handleCloudStatus)
-	mux.HandleFunc("POST /gateway/v4/members/reevaluate", s.handleReevaluate)
-	mux.HandleFunc("POST /gateway/v4/invitations", s.handleInvitation)
-	mux.HandleFunc("POST /gateway/v4/members/remove", s.handleRemove)
-	mux.HandleFunc("POST /gateway/v4/members/policy", s.handleMemberPolicy)
-	mux.HandleFunc("POST /gateway/v4/policy", s.handlePolicy)
-	mux.HandleFunc("POST /gateway/v4/access/open", s.handleOpen)
-	mux.HandleFunc("POST /gateway/v4/access/service", s.handleServiceIdentity)
-	mux.HandleFunc("POST /gateway/v4/migration/dismiss", s.handleDismissMigration)
+	mux.HandleFunc("POST /gateway/v5/pairing/challenge", s.handlePairingChallenge)
+	mux.HandleFunc("POST /gateway/v5/pairing/complete", s.handlePairingComplete)
+	mux.HandleFunc("POST /gateway/v5/catalog", s.handleCatalog)
+	mux.HandleFunc("POST /gateway/v5/identity", s.handleIdentity)
+	mux.HandleFunc("POST /gateway/v5/cloud/configure", s.handleConfigureCloud)
+	mux.HandleFunc("POST /gateway/v5/cloud/status", s.handleCloudStatus)
+	mux.HandleFunc("POST /gateway/v5/members/reevaluate", s.handleReevaluate)
+	mux.HandleFunc("POST /gateway/v5/invitations", s.handleInvitation)
+	mux.HandleFunc("POST /gateway/v5/endpoints", s.handleEndpoints)
+	mux.HandleFunc("POST /gateway/v5/members/remove", s.handleRemove)
+	mux.HandleFunc("POST /gateway/v5/members/policy", s.handleMemberPolicy)
+	mux.HandleFunc("POST /gateway/v5/policy", s.handlePolicy)
+	mux.HandleFunc("POST /gateway/v5/access/open", s.handleOpen)
+	mux.HandleFunc("POST /gateway/v5/access/service", s.handleServiceIdentity)
+	mux.HandleFunc("POST /gateway/v5/migration/dismiss", s.handleDismissMigration)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This API is a signed native-client surface, never a browser endpoint.
 		if r.Header.Get("Origin") != "" {
@@ -255,35 +263,57 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 	if err != nil {
 		return nil, nil, err
 	}
-	member, err := net.Listen("tcp", s.members.Endpoint().ListenAddress)
-	if err != nil {
-		_ = admin.Close()
-		return nil, nil, err
+	listeners := []net.Listener{admin}
+	memberClosers := []func(){}
+	shutdown := func() {
+		for _, closeServer := range memberClosers {
+			closeServer()
+		}
+		for _, listener := range listeners {
+			_ = listener.Close()
+		}
+		s.listenerMu.Lock()
+		s.listenerAddresses = nil
+		s.listenerMu.Unlock()
+	}
+	for _, address := range s.members.Endpoint().ListenAddresses {
+		member, err := net.Listen("tcp", address)
+		if err != nil {
+			shutdown()
+			return nil, nil, err
+		}
+		listeners = append(listeners, member)
 	}
 	tlsConfig, err := s.members.TLSConfig()
 	if err != nil {
-		_ = admin.Close()
-		_ = member.Close()
+		shutdown()
 		return nil, nil, err
 	}
 	adminServer := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
-	memberServer, err := s.memberListener.Server(tlsConfig, s.cloud)
-	if err != nil {
-		_ = admin.Close()
-		_ = member.Close()
-		return nil, nil, err
-	}
 	ctx, cancel := context.WithCancel(ctx)
+	starters := []func(){}
+	for _, member := range listeners[1:] {
+		memberServer, err := s.memberListener.Server(tlsConfig.Clone(), s.cloud)
+		if err != nil {
+			cancel()
+			shutdown()
+			return nil, nil, err
+		}
+		memberClosers = append(memberClosers, func() { _ = memberServer.Close() })
+		starters = append(starters, func() { defer cancel(); _ = memberServer.Serve(member) })
+	}
+	s.listenerMu.Lock()
+	for _, member := range listeners[1:] {
+		s.listenerAddresses = append(s.listenerAddresses, member.Addr().String())
+	}
+	s.listenerMu.Unlock()
 	go s.cloud.Run(ctx)
-	go func() { <-ctx.Done(); s.connections.Close(); _ = adminServer.Close(); _ = memberServer.Close() }()
-	go func() { defer cancel(); _ = adminServer.Serve(admin); s.connections.Close(); _ = memberServer.Close() }()
-	go func() {
-		defer cancel()
-		_ = memberServer.Serve(member)
-		s.connections.Close()
-		_ = adminServer.Close()
-	}()
-	return adminServer, []net.Listener{admin, member}, nil
+	go func() { <-ctx.Done(); s.connections.Close(); _ = adminServer.Close(); shutdown() }()
+	go func() { defer cancel(); _ = adminServer.Serve(admin) }()
+	for _, start := range starters {
+		go start()
+	}
+	return adminServer, listeners, nil
 }
 
 func (s *Server) isManagedDesktopBridgeRequest(r *http.Request) bool {
@@ -375,7 +405,13 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	endpoint := s.members.Endpoint()
-	metadata.MemberURL, metadata.MemberTLSRootPEM, metadata.Permissions = endpoint.URL, endpoint.RootPEM, client.Permissions
+	metadata.ListenerAddress = endpoint.ListenAddress
+	metadata.ListenerAddresses = append([]string(nil), endpoint.ListenAddresses...)
+	s.listenerMu.Lock()
+	metadata.ListenerRunning = len(s.listenerAddresses) > 0
+	s.listenerMu.Unlock()
+	metadata.EndpointLastUsedAt = s.members.EndpointUsage()
+	metadata.MemberEndpoints, metadata.MemberTLSRootPEM, metadata.Permissions = s.members.Endpoints(), endpoint.RootPEM, client.Permissions
 	members := make([]gp.Member, 0, len(records))
 	for _, record := range records {
 		if record.Member.State != "active" {
@@ -391,6 +427,23 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	rebuildRequired := s.rebuildRequired
 	s.migrationMu.Unlock()
 	writeResult(w, gp.CatalogResponse{ProtocolVersion: gp.Version, Gateway: metadata, Members: members, Policy: policy, Revision: revision, RebuildRequired: rebuildRequired, HookStatus: s.hooks.Status()}, nil)
+}
+
+func (s *Server) handleEndpoints(w http.ResponseWriter, r *http.Request) {
+	var request gp.EndpointUpdateRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
+		return
+	}
+	if err := s.members.UpdateEndpoints(request.Endpoints); err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	writeResult(w, gp.EndpointUpdateResponse{ProtocolVersion: gp.Version, Endpoints: s.members.Endpoints()}, nil)
 }
 
 func (s *Server) handleDismissMigration(w http.ResponseWriter, r *http.Request) {

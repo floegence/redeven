@@ -32,7 +32,7 @@ func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 		return gatewaycloud.ErrState
 	}
 	var association gp.MemberCloudContext
-	if err := member.Request(ctx, "/v4/member/cloud", gp.CatalogRequest{ProtocolVersion: gp.Version}, &association, true); err != nil {
+	if err := member.Request(ctx, "/v5/member/cloud", gp.CatalogRequest{ProtocolVersion: gp.Version}, &association, true); err != nil {
 		return err
 	}
 	a.mu.Lock()

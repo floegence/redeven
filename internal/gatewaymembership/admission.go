@@ -23,6 +23,7 @@ type Admission struct {
 	Authorization     []byte `json:"authorization"`
 	ExpiresAtUnixMS   int64  `json:"expires_at_unix_ms"`
 	Consumed          bool   `json:"consumed"`
+	EndpointID        string `json:"endpoint_id,omitempty"`
 }
 
 func (Admission) String() string   { return "Gateway.Admission" }
@@ -43,14 +44,19 @@ type ConnectionOffer struct {
 func (ConnectionOffer) String() string   { return "Gateway.ConnectionOffer" }
 func (ConnectionOffer) GoString() string { return "Gateway.ConnectionOffer" }
 
-func (s *Store) MemberOffer(leaf *x509.Certificate) (ConnectionOffer, error) {
+func (s *Store) MemberOffer(leaf *x509.Certificate, endpoint gp.GatewayEndpoint) (ConnectionOffer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	member, err := s.authenticateLocked(leaf)
 	if err != nil {
 		return ConnectionOffer{}, err
 	}
-	return s.offerLocked(member, "")
+	for _, confirmed := range s.state.AdvertisedEndpoints {
+		if confirmed == endpoint {
+			return s.offerLocked(member, "", []gp.GatewayEndpoint{confirmed})
+		}
+	}
+	return ConnectionOffer{}, errGatewayUnavailable
 }
 
 // AccessOffer is called after paired-Desktop permission verification. The hook
@@ -75,10 +81,10 @@ func (s *Store) AccessOffer(ctx context.Context, memberID, desktopKeyID string) 
 	if err := VerifyMemberService(member.Service, member.Delegation, time.Now()); err != nil {
 		return ConnectionOffer{}, err
 	}
-	return s.offerLocked(member, desktopKeyID)
+	return s.offerLocked(member, desktopKeyID, s.state.AdvertisedEndpoints)
 }
 
-func (s *Store) offerLocked(member MemberRecord, desktopKeyID string) (ConnectionOffer, error) {
+func (s *Store) offerLocked(member MemberRecord, desktopKeyID string, endpointDescriptors []gp.GatewayEndpoint) (ConnectionOffer, error) {
 	now := time.Now()
 	next := s.clone()
 	for key, ticket := range next.Admissions {
@@ -93,9 +99,16 @@ func (s *Store) offerLocked(member MemberRecord, desktopKeyID string) (Connectio
 	if err != nil {
 		return ConnectionOffer{}, err
 	}
-	u, _ := url.Parse(s.state.Endpoint.URL)
-	u.Scheme, u.Path = "wss", flowersec.WebSocketDirectPath
-	endpoints, err := controlplane.NewEndpointSet(controlplane.EndpointConfig{ID: "gateway", URL: u.String(), TLS: controlplane.CAPolicy()})
+	if len(endpointDescriptors) == 0 {
+		return ConnectionOffer{}, ErrState
+	}
+	endpointConfigs := make([]controlplane.EndpointConfig, 0, len(endpointDescriptors))
+	for _, descriptor := range endpointDescriptors {
+		u, _ := url.Parse(descriptor.Address)
+		u.Scheme, u.Path = "wss", flowersec.WebSocketDirectPath
+		endpointConfigs = append(endpointConfigs, controlplane.EndpointConfig{ID: descriptor.EndpointID, URL: u.String(), TLS: controlplane.CAPolicy()})
+	}
+	endpoints, err := controlplane.NewEndpointSet(endpointConfigs...)
 	if err != nil {
 		return ConnectionOffer{}, err
 	}
@@ -116,10 +129,43 @@ func (s *Store) offerLocked(member MemberRecord, desktopKeyID string) (Connectio
 		next.Members[member.Member.MemberID] = member
 	}
 	next.Admissions[issued.LookupKey()] = Admission{ChannelID: channelID, MemberID: member.Member.MemberID, MemberVersion: member.Member.MemberVersion, Generation: member.ConnectionGeneration, DesktopKeyID: desktopKeyID, Authorization: authorization, CertificateSHA256: member.ClientCertificateSHA256, PolicyRevision: s.state.Policy.Revision, ExpiresAtUnixMS: expires.UnixMilli()}
+	if desktopKeyID == "" {
+		admission := next.Admissions[issued.LookupKey()]
+		admission.EndpointID = endpointDescriptors[0].EndpointID
+		next.Admissions[issued.LookupKey()] = admission
+	}
 	if err := s.commit(next); err != nil {
 		return ConnectionOffer{}, err
 	}
 	return ConnectionOffer{ProtocolVersion: gp.Version, ChannelID: channelID, MemberID: member.Member.MemberID, MemberVersion: member.Member.MemberVersion, Generation: member.ConnectionGeneration, Artifact: issued.ArtifactJSON(), Service: member.Service, Delegation: member.Delegation, ExpiresAtUnixMS: expires.UnixMilli()}, nil
+}
+
+func (s *Store) EndpointUsage() map[string]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make(map[string]int64)
+	for _, endpoint := range s.state.AdvertisedEndpoints {
+		result[endpoint.EndpointID] = s.state.EndpointLastUsedAt[endpoint.EndpointID]
+	}
+	return result
+}
+
+func (s *Store) recordEndpointUse(admission Admission) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	member, ok := s.state.Members[admission.MemberID]
+	if !ok || member.Member.State != "active" || member.Member.MemberVersion != admission.MemberVersion {
+		return ErrDenied
+	}
+	next := s.clone()
+	member.Member.LastSeenAtUnixMS = time.Now().UnixMilli()
+	next.Members[admission.MemberID] = member
+	for _, endpoint := range next.AdvertisedEndpoints {
+		if endpoint.EndpointID == admission.EndpointID {
+			next.EndpointLastUsedAt[endpoint.EndpointID] = member.Member.LastSeenAtUnixMS
+		}
+	}
+	return s.commit(next)
 }
 
 // ConsumeAdmission commits the one-time spend before Flowersec may accept the

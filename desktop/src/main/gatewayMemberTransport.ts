@@ -7,7 +7,7 @@ import {
   createConnectionController, createConnectionPathAgent,
   type NodeConnectionPath, type ConnectionSnapshot,
 } from '@floegence/flowersec-core/node';
-import { GATEWAY_ACCESS_STREAM, GATEWAY_PROTOCOL_VERSION, type GatewayMemberOffer, type GatewayMemberService, type GatewayMemberDelegation, type GatewayMemberServiceResponse } from '../shared/gatewayMembership';
+import { GATEWAY_ACCESS_STREAM, GATEWAY_PROTOCOL_VERSION, type GatewayEndpoint, type GatewayMemberOffer, type GatewayMemberService, type GatewayMemberDelegation, type GatewayMemberServiceResponse } from '../shared/gatewayMembership';
 
 export type GatewayMemberTransport = Readonly<{
   origin: string;
@@ -34,10 +34,11 @@ export function validateMemberService(service: GatewayMemberService, runtimeID: 
 
 export function verifyMemberServiceProof(service: GatewayMemberService, delegation: GatewayMemberDelegation, gatewayID: string, memberID: string, runtimeID: string): void {
   validateMemberService(service, runtimeID);
-  const member = createHash('sha256').update(`redeven.gateway.member.v4\0${delegation.invitation_id}\0${delegation.public_key_b64u}`).digest('hex').slice(0, 48);
+  const version = delegation.protocol_version === 'redeven-gateway-v4' ? 'v4' : 'v5';
+  const member = createHash('sha256').update(`redeven.gateway.member.${version}\0${delegation.invitation_id}\0${delegation.public_key_b64u}`).digest('hex').slice(0, 48);
   const rawKey = Buffer.from(delegation.public_key_b64u, 'base64url');
   if (rawKey.length !== 32 || rawKey.toString('base64url') !== delegation.public_key_b64u
-    || delegation.protocol_version !== GATEWAY_PROTOCOL_VERSION || delegation.gateway_id !== gatewayID
+    || (delegation.protocol_version !== GATEWAY_PROTOCOL_VERSION && delegation.protocol_version !== 'redeven-gateway-v4') || delegation.gateway_id !== gatewayID
     || delegation.member_id !== memberID || memberID !== `member_${member}` || delegation.runtime_public_id !== runtimeID
     || !delegation.manage_access || !delegation.manage_cloud_publication || !Number.isSafeInteger(delegation.consented_at_unix_ms)
     || delegation.consented_at_unix_ms <= 0) throw new Error('Invalid member delegation.');
@@ -48,13 +49,13 @@ export function verifyMemberServiceProof(service: GatewayMemberService, delegati
       throw new Error('Invalid member proof.');
     }
   };
-  check('redeven.gateway.delegation.v4', {
+  check(`redeven.gateway.delegation.${version}`, {
     protocol_version: delegation.protocol_version, gateway_id: delegation.gateway_id, member_id: delegation.member_id,
     runtime_public_id: delegation.runtime_public_id, public_key_b64u: delegation.public_key_b64u,
     invitation_id: delegation.invitation_id, consented_at_unix_ms: delegation.consented_at_unix_ms,
     manage_access: delegation.manage_access, manage_cloud_publication: delegation.manage_cloud_publication, signature: '',
   }, delegation.signature);
-  check('redeven.gateway.service.v4', { member_id: memberID, runtime_public_id: runtimeID, service: {
+  check(`redeven.gateway.service.${version}`, { member_id: memberID, runtime_public_id: runtimeID, service: {
     revision: service.revision, origin: service.origin, certificate_pem: service.certificate_pem, certificate_sha256: service.certificate_sha256,
     expires_at_unix_ms: service.expires_at_unix_ms, signature: '',
   } }, service.signature);
@@ -68,13 +69,14 @@ export async function createGatewayMemberTransport(options: Readonly<{
   memberVersion: number;
   runtimeID: string;
   gatewayID: string;
-  gatewayURL: string;
+  gatewayEndpoints: readonly GatewayEndpoint[];
   gatewayTLSRootPEM: string;
   gatewayConnectionPath?: NodeConnectionPath;
   refreshService: (signal: AbortSignal) => Promise<GatewayMemberServiceResponse>;
   acquire: (signal: AbortSignal) => Promise<GatewayMemberOffer>;
   signal?: AbortSignal;
 }>): Promise<GatewayMemberTransport> {
+  if (options.gatewayEndpoints.length === 0) throw new Error('Gateway has no reachable connection addresses configured.');
   const lifetime = new AbortController();
   const signal = options.signal ? AbortSignal.any([lifetime.signal, options.signal]) : lifetime.signal;
   let service: GatewayMemberService | undefined;
@@ -109,7 +111,7 @@ export async function createGatewayMemberTransport(options: Readonly<{
       const terminal = ['MEMBER_DENIED', 'MEMBER_REMOVED', 'ACCESS_REQUIRED', 'UNAUTHORIZED', 'GATEWAY_INVALID_RESPONSE', 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED'].includes(code ?? '');
       return { kind: 'failure', code: 'connection_failed', disposition: { kind: terminal ? 'terminal' : 'retryable' } };
     }
-  } }, { origin: options.gatewayURL, roots: options.gatewayTLSRootPEM, connectionPath: options.gatewayConnectionPath });
+  } }, { origin: options.gatewayEndpoints[0].address, roots: options.gatewayTLSRootPEM, connectionPath: options.gatewayConnectionPath });
   let agent: ReturnType<typeof createConnectionPathAgent> | undefined;
   let proxy: http.Server | undefined;
   const sockets = new Set<Duplex>();

@@ -36,7 +36,7 @@ func TestGatewayAddressProofUsesPersistentMachineKey(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		request := httptest.NewRequest(http.MethodPost, endpoint+"/gateway/v4/identity", strings.NewReader(`{"protocol_version":"redeven-gateway-v4","nonce":"caller-challenge-with-entropy"}`))
+		request := httptest.NewRequest(http.MethodPost, endpoint+"/gateway/v5/identity", strings.NewReader(`{"protocol_version":"redeven-gateway-v5","nonce":"caller-challenge-with-entropy"}`))
 		request.RemoteAddr = "127.0.0.1:12345"
 		request.Header.Set(HostAdminHeader, token)
 		response := httptest.NewRecorder()

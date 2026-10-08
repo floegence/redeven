@@ -32,12 +32,12 @@ func (s *runtimeControlServer) handleGatewayJoin(w http.ResponseWriter, r *http.
 	}
 	var err error
 	switch r.URL.Path {
-	case "/v2/gateway/update-address":
+	case "/v2/gateway/update-endpoints":
 		if body.EnvironmentChoice != "" {
-			writeRuntimeControlError(w, http.StatusBadRequest, "GATEWAY_ADDRESS_INVALID", "An address update cannot change the Cloud environment.")
+			writeRuntimeControlError(w, http.StatusBadRequest, "GATEWAY_ENDPOINTS_INVALID", "A connection endpoint update cannot change the Cloud environment.")
 			return
 		}
-		err = s.agent.UpdateGatewayAddress(body.Invitation)
+		err = s.agent.UpdateGatewayEndpoints(body.Invitation)
 	case "/v2/gateway/replace":
 		err = s.agent.ReplaceGateway(body.Invitation, body.EnvironmentChoice)
 	default:

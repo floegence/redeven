@@ -29,11 +29,11 @@ func TestAddressUpdatePreservesMembershipAndRejectsIdentityReplacement(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated, err := member.PrepareAddressUpdate(invitation)
+	updated, err := member.PrepareConnectionEndpoints(invitation)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.GatewayURL != "https://moved.internal:9443" || updated.MemberID != old.MemberID || updated.MemberVersion != old.MemberVersion || updated.ClientCertificatePEM != old.ClientCertificatePEM || updated.Delegation != old.Delegation || member.GatewayURL != old.GatewayURL {
+	if len(updated.GatewayEndpoints) != 1 || updated.GatewayEndpoints[0].Address != "https://moved.internal:9443" || updated.MemberID != old.MemberID || updated.MemberVersion != old.MemberVersion || updated.ClientCertificatePEM != old.ClientCertificatePEM || updated.Delegation != old.Delegation || member.ConnectionEndpoints()[0].Address != old.ConnectionEndpoints()[0].Address {
 		t.Fatal("address update mutated authorization or previous state")
 	}
 	reopened, err := NewStore(store.path, identity, "", "", store.hooks)
@@ -45,11 +45,11 @@ func TestAddressUpdatePreservesMembershipAndRejectsIdentityReplacement(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := member.PrepareAddressUpdate(foreign); err == nil {
+	if _, err := member.PrepareConnectionEndpoints(foreign); err == nil {
 		t.Fatal("address update inherited a different machine key")
 	}
-	invitation.GatewayURL = "https://forged.internal:9443"
-	if _, err := member.PrepareAddressUpdate(invitation); err == nil {
+	invitation.Endpoints[0].Address = "https://forged.internal:9443"
+	if _, err := member.PrepareConnectionEndpoints(invitation); err == nil {
 		t.Fatal("address forgery accepted")
 	}
 }
@@ -69,7 +69,7 @@ func TestGatewayOriginCanonicalizationPrecedesSignedInvitations(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if invitation.GatewayURL != want || store.Endpoint().URL != want {
+			if len(invitation.Endpoints) != 1 || invitation.Endpoints[0].Address != want || store.Endpoint().URL != want {
 				t.Fatal("signed endpoint was not canonical")
 			}
 			if _, err := PrepareRuntime(invitation, "runtime", gp.MemberMetadata{}); err != nil {

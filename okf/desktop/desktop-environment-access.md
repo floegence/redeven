@@ -117,7 +117,7 @@ existing authorities. Proof observation never upgrades those permissions.
 
 - `redeven:internal/runtimeidentity/access_identity.go` - State identity, exclusive initialization and nonce proof.
 - `redeven:internal/localui/access_identity_test.go` - Public/private identity agreement and independent Runtime authentication.
-- `redeven:spec/openapi/gateway-v4.yaml` - Signed membership and service identity schemas.
+- `redeven:spec/openapi/gateway-v5.yaml` - Signed membership and service identity schemas.
 - `redeven:desktop/src/main/runtimeAccessIdentity.test.ts` - Signature verification, tampering and replay rejection.
 - `redeven:desktop/src/main/environmentAccess.test.ts` - Binding invalidation, explicit defaults, persistence and malformed-state preservation.
 - `redeven:desktop/src/welcome/environmentRelation.test.ts` - Existing Cloud perspective ownership with Gateway membership.

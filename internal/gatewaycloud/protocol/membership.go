@@ -7,12 +7,20 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"time"
+
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-const MemberProtocolVersion = "redeven-gateway-v4"
+const MemberProtocolVersion = "redeven-gateway-v5"
 
-// MemberDelegation preserves the v4 membership field order and signature domain.
+const legacyMemberProtocolVersion = "redeven-gateway-v4"
+
+type GatewayEndpoint = gp.GatewayEndpoint
+
+// MemberDelegation keeps existing v4 member identities verifiable while new
+// invitations and members use the v5 endpoint contract.
 type MemberDelegation struct {
 	ProtocolVersion        string `json:"protocol_version"`
 	GatewayID              string `json:"gateway_id"`
@@ -27,24 +35,41 @@ type MemberDelegation struct {
 }
 
 type MemberInvitation struct {
-	ProtocolVersion   string `json:"protocol_version"`
-	InvitationID      string `json:"invitation_id"`
-	GatewayID         string `json:"gateway_id"`
-	GatewayURL        string `json:"gateway_url"`
-	GatewayPublicKey  string `json:"gateway_public_key"`
-	GatewayTLSRootPEM string `json:"gateway_tls_root_pem"`
-	Token             string `json:"token"`
-	IssuedAtUnixMS    int64  `json:"issued_at_unix_ms"`
-	ExpiresAtUnixMS   int64  `json:"expires_at_unix_ms"`
-	Signature         string `json:"signature"`
+	ProtocolVersion   string            `json:"protocol_version"`
+	InvitationID      string            `json:"invitation_id"`
+	GatewayID         string            `json:"gateway_id"`
+	GatewayName       string            `json:"gateway_name"`
+	Endpoints         []GatewayEndpoint `json:"endpoints"`
+	GatewayPublicKey  string            `json:"gateway_public_key"`
+	GatewayTLSRootPEM string            `json:"gateway_tls_root_pem"`
+	Token             string            `json:"token"`
+	IssuedAtUnixMS    int64             `json:"issued_at_unix_ms"`
+	ExpiresAtUnixMS   int64             `json:"expires_at_unix_ms"`
+	Signature         string            `json:"signature"`
 }
 
 func (MemberInvitation) String() string   { return "Gateway.MemberInvitation" }
 func (MemberInvitation) GoString() string { return "Gateway.MemberInvitation" }
 
 func (i MemberInvitation) Verify(gatewayID, publicKey string, now time.Time) error {
-	if i.ProtocolVersion != MemberProtocolVersion || i.GatewayID != gatewayID || i.GatewayPublicKey != publicKey || !ValidMemberID(i.InvitationID) || !ValidOrigin(i.GatewayURL) || i.IssuedAtUnixMS <= 0 || i.IssuedAtUnixMS > now.Add(time.Minute).UnixMilli() || i.ExpiresAtUnixMS <= now.UnixMilli() || i.ExpiresAtUnixMS-i.IssuedAtUnixMS != int64(10*time.Minute/time.Millisecond) {
+	if strings.TrimSpace(i.GatewayName) == "" || len(i.GatewayName) > 256 {
 		return ErrInvalidProof
+	}
+	if i.ProtocolVersion != MemberProtocolVersion || i.GatewayID != gatewayID || i.GatewayPublicKey != publicKey || !ValidMemberID(i.InvitationID) || len(i.Endpoints) == 0 || len(i.Endpoints) > 16 || i.IssuedAtUnixMS <= 0 || i.IssuedAtUnixMS > now.Add(time.Minute).UnixMilli() || i.ExpiresAtUnixMS <= now.UnixMilli() || i.ExpiresAtUnixMS-i.IssuedAtUnixMS != int64(10*time.Minute/time.Millisecond) {
+		return ErrInvalidProof
+	}
+	seenIDs, seenAddresses := map[string]struct{}{}, map[string]struct{}{}
+	for _, endpoint := range i.Endpoints {
+		if !ValidMemberID(endpoint.EndpointID) || !ValidOrigin(endpoint.Address) || endpoint.Priority < 0 || endpoint.Priority > 1000 || (endpoint.Scope != gp.GatewayEndpointLAN && endpoint.Scope != gp.GatewayEndpointOverlay && endpoint.Scope != gp.GatewayEndpointPublic) {
+			return ErrInvalidProof
+		}
+		if _, ok := seenIDs[endpoint.EndpointID]; ok {
+			return ErrInvalidProof
+		}
+		if _, ok := seenAddresses[endpoint.Address]; ok {
+			return ErrInvalidProof
+		}
+		seenIDs[endpoint.EndpointID], seenAddresses[endpoint.Address] = struct{}{}, struct{}{}
 	}
 	token, err := DecodeKey(i.Token)
 	if err != nil || len(token) != 32 || len(i.GatewayTLSRootPEM) > 16<<10 || !x509.NewCertPool().AppendCertsFromPEM([]byte(i.GatewayTLSRootPEM)) {
@@ -52,7 +77,7 @@ func (i MemberInvitation) Verify(gatewayID, publicKey string, now time.Time) err
 	}
 	signature := i.Signature
 	i.Signature = ""
-	return verifyValue("redeven.gateway.invitation.v4", i, publicKey, signature)
+	return verifyValue("redeven.gateway.invitation.v5", i, publicKey, signature)
 }
 
 type GatewayPolicy struct {
@@ -126,6 +151,11 @@ func ValidMemberID(value string) bool {
 }
 
 func MemberID(invitationID, key string) string {
+	digest := sha256.Sum256([]byte("redeven.gateway.member.v5\x00" + invitationID + "\x00" + key))
+	return "member_" + hex.EncodeToString(digest[:24])
+}
+
+func legacyMemberID(invitationID, key string) string {
 	digest := sha256.Sum256([]byte("redeven.gateway.member.v4\x00" + invitationID + "\x00" + key))
 	return "member_" + hex.EncodeToString(digest[:24])
 }
@@ -171,12 +201,20 @@ func verifyValue(domain string, value any, publicKey, signature string) error {
 }
 
 func (d MemberDelegation) Verify() error {
-	if d.ProtocolVersion != MemberProtocolVersion || !ValidMemberID(d.GatewayID) || !ValidMemberID(d.InvitationID) || !ValidMemberID(d.RuntimePublicID) || d.MemberID != MemberID(d.InvitationID, d.PublicKeyB64u) || d.ConsentedAtUnixMS <= 0 || !d.ManageAccess || !d.ManageCloudPublication {
+	domain, expectedMemberID := "redeven.gateway.delegation.v5", MemberID(d.InvitationID, d.PublicKeyB64u)
+	switch d.ProtocolVersion {
+	case legacyMemberProtocolVersion:
+		domain, expectedMemberID = "redeven.gateway.delegation.v4", legacyMemberID(d.InvitationID, d.PublicKeyB64u)
+	case MemberProtocolVersion:
+	default:
+		return ErrInvalidProof
+	}
+	if !ValidMemberID(d.GatewayID) || !ValidMemberID(d.InvitationID) || !ValidMemberID(d.RuntimePublicID) || d.MemberID != expectedMemberID || d.ConsentedAtUnixMS <= 0 || !d.ManageAccess || !d.ManageCloudPublication {
 		return ErrInvalidProof
 	}
 	signature := d.Signature
 	d.Signature = ""
-	return verifyValue("redeven.gateway.delegation.v4", d, d.PublicKeyB64u, signature)
+	return verifyValue(domain, d, d.PublicKeyB64u, signature)
 }
 
 // proofContext retains challenge and identity while avoiding a circular payload hash.

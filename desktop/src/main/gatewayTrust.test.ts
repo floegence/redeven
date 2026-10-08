@@ -33,7 +33,7 @@ describe('Gateway v4 trust', () => {
     const f = fixture(), profile = await f.pair(), record = { ...f.record, trust_profile: profile };
     expect(profile.gateway_id).toBe('machine_stable'); expect(profile.gateway_id).not.toBe(f.record.gateway_id);
     expect(gatewayProtocolID(record)).toBe(profile.gateway_id);
-    const headers = await createGatewayAuthHeaders({ record, method: 'POST', route: '/gateway/v4/catalog', body: {}, secret_store: f.secret_store, timestamp_unix_ms: 1000, nonce: 'request-nonce' });
+    const headers = await createGatewayAuthHeaders({ record, method: 'POST', route: '/gateway/v5/catalog', body: {}, secret_store: f.secret_store, timestamp_unix_ms: 1000, nonce: 'request-nonce' });
     expect(headers).toMatchObject({ 'x-redeven-gateway-id': 'machine_stable', 'x-redeven-client-key-id': f.material.client_key_id, 'x-redeven-client-nonce': 'request-nonce' });
     expect(headers.authorization).toBeUndefined();
     expect(JSON.stringify(headers)).not.toContain(f.material.client_private_key);
@@ -70,7 +70,7 @@ describe('Gateway v4 trust', () => {
   });
   it('fences unpaired, revoked and edited destinations and deletes the revoked secure key', async () => {
     const f = fixture();
-    const call = (record: typeof f.record) => createGatewayAuthHeaders({ record, method: 'POST', route: '/gateway/v4/catalog', body: {}, secret_store: f.secret_store });
+    const call = (record: typeof f.record) => createGatewayAuthHeaders({ record, method: 'POST', route: '/gateway/v5/catalog', body: {}, secret_store: f.secret_store });
     await expect(call(f.record)).rejects.toMatchObject({ code: 'GATEWAY_PAIRING_REQUIRED' });
     const profile = await f.pair();
     await expect(call({ ...f.record, connection: { kind: 'url', base_url: 'https://other.example/' }, trust_profile: profile })).rejects.toMatchObject({ code: 'GATEWAY_TRUST_CHANGED' });

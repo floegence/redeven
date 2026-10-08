@@ -15,7 +15,8 @@ const gateway: DesktopGatewaySource = {
   gateway_id: 'gateway_fixture', display_name: 'Gateway', local_enabled: true, connection_kind: 'url',
   management_capability: 'access_only', capabilities: ['member_access', 'member_manage', 'cloud_configure'],
   status: 'online', trust_state: 'paired', created_at_ms: 1, updated_at_ms: 1,
-  permissions: catalogFixture.gateway.permissions, policy: catalogFixture.policy, environments: [memberFixture],
+  listener_address: catalogFixture.gateway.listener_address,
+  permissions: catalogFixture.gateway.permissions, policy: catalogFixture.policy, member_endpoints: catalogFixture.gateway.member_endpoints, environments: [memberFixture],
 };
 function button(label: string) {
   const found = [...document.querySelectorAll('button')].find(el => controlText(el) === label && !el.closest('[hidden], [aria-hidden="true"]'));
@@ -36,9 +37,18 @@ beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLEleme
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway member management', () => {
+  it('requires a saved reachable address before creating an invitation', async () => {
+    const perform = vi.fn();
+    mount(perform, undefined, { ...gateway, member_endpoints: [] }); await settle();
+    expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
+    expect(document.body.textContent).toContain(i18n.t('gatewayMembers.noConnectionAddresses'));
+    expect(perform).not.toHaveBeenCalled();
+  });
   it('reevaluates the selected member without applying an unsaved policy edit', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated' });
     mount(perform); await settle();
+    expect(document.body.textContent).toContain(catalogFixture.gateway.listener_address);
+    expect(document.body.textContent).toContain(i18n.t('gatewayMembers.listenerAddress'));
     select(document.querySelector<HTMLSelectElement>('li select')!, 'allow');
     button(i18n.t('gatewayMembers.reevaluate')).click(); await settle();
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_member', gateway_id: gateway.gateway_id,
@@ -97,6 +107,9 @@ describe('Gateway member management', () => {
     expect(button(i18n.t('gatewayMembers.remove')).disabled).toBe(true);
     expect(button(i18n.t('gatewayMembers.reevaluate')).disabled).toBe(true);
     expect([...document.querySelectorAll('select')].every(select => select.disabled)).toBe(true);
+    expect([...document.querySelectorAll('input')].filter(input => input.type !== 'hidden').every(input => input.disabled)).toBe(true);
+    expect(button(i18n.t('gatewayMembers.addAddress')).disabled).toBe(true);
+    expect(button(i18n.t('gatewayMembers.saveAddresses')).disabled).toBe(true);
     expect(perform).not.toHaveBeenCalled();
   });
 });

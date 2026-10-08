@@ -44,7 +44,7 @@ try {
     assert.equal(await connectionDetails.evaluate(element => element.open), true, `${locale}: connection explanation must expand on demand`);
     await connectionDetails.locator('summary').click();
     assert.equal(await connectionDetails.evaluate(element => element.open), false, `${locale}: connection explanation must collapse again`);
-    const material = { protocol_version: 'redeven-gateway-v4', gateway_id: 'gateway', invitation_id: 'invitation', gateway_url: 'https://gateway.internal:7443', gateway_public_key: 'a'.repeat(43), gateway_tls_root_pem: '-----BEGIN CERTIFICATE-----\ntest', token: 'b'.repeat(43), signature: 'c'.repeat(86), issued_at_unix_ms: 1900000000000, expires_at_unix_ms: 1900000600000 };
+    const material = { protocol_version: 'redeven-gateway-v5', gateway_id: 'gateway', gateway_name: 'Office Gateway', invitation_id: 'invitation', endpoints: [{ endpoint_id: 'lan', address: 'https://gateway.internal:7443', scope: 'lan', priority: 0 }], gateway_public_key: 'a'.repeat(43), gateway_tls_root_pem: '-----BEGIN CERTIFICATE-----\ntest', token: 'b'.repeat(43), signature: 'c'.repeat(86), issued_at_unix_ms: 1900000000000, expires_at_unix_ms: 1900000600000 };
     await dialog.locator('input[type=file]').setInputFiles({ name: 'join.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(material)) });
     const approve = dialog.getByRole('button', { name: i18n.t('gatewayJoin.approve'), exact: true });
     await approve.click({ trial: true });
@@ -54,7 +54,7 @@ try {
     await dialog.getByRole('alert').waitFor();
     assert.equal(await approve.isEnabled(), true, 'failure must retain retry');
     assert.ok((await dialog.innerText()).includes(i18n.t('gatewayJoin.invitationReady')), 'failure must preserve selected material');
-    assert.equal((await dialog.innerText()).includes(material.gateway_url), false, 'failure must not expose gateway URL');
+    assert.equal(await dialog.locator('details').evaluateAll(details => details.every(detail => !detail.open)), true, 'failure must keep technical connection details collapsed');
     assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'narrow dialog must fit');
     await page.screenshot({ path: `${output}/${locale}.png` });
     await page.keyboard.press('Escape');
