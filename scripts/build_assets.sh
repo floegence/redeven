@@ -60,6 +60,18 @@ build_okf_bundle() {
   ui_pkg_log "OKF bundle: done."
 }
 
+prepare_desktop_ui_dependencies() {
+  local dir="$ROOT_DIR/desktop"
+  # Env App imports Desktop's shared Flower surface, whose dependencies resolve
+  # from Desktop even when the source checkout has no installed packages.
+  (
+    cd "$dir"
+    if ui_pkg_need_install "$dir"; then
+      ui_pkg_run_pnpm install --frozen-lockfile
+    fi
+  )
+}
+
 verify_third_party_notices() {
   local script="$ROOT_DIR/scripts/generate_third_party_notices.mjs"
   if [ ! -f "$script" ]; then
@@ -71,13 +83,6 @@ verify_third_party_notices() {
 
   ui_pkg_log ""
   ui_pkg_log "Third-party notices: verifying..."
-  (
-    local dir="$ROOT_DIR/desktop"
-    cd "$dir"
-    if ui_pkg_need_install "$dir"; then
-      ui_pkg_run_pnpm install --frozen-lockfile
-    fi
-  )
   node "$script" --check
   ui_pkg_log "Third-party notices: done."
 }
@@ -89,6 +94,7 @@ main() {
     ui_pkg_log "REDEVEN_AGENT_FORCE_INSTALL=1 (dependency reinstall enabled)"
   fi
 
+  prepare_desktop_ui_dependencies
   build_envapp_ui
   build_codeapp_ui
   build_okf_bundle

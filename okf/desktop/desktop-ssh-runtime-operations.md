@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop SSH runtime operations
 description: Direct SSH and SSH-container Runtime lifecycle execution owned by Desktop.
 tags: [desktop, ssh, runtime, process]
-timestamp: 2026-09-09T00:00:00Z
+timestamp: 2026-10-08T11:00:00Z
 ---
 # Summary
 
@@ -24,6 +24,8 @@ SSH discovery follows bounded configuration includes, excludes wildcard and nega
 One lifecycle operation opens or reuses one SSH transport, probes platform once, prepares a lightweight helper only when required, and reuses that session for inventory and stop. Start and Stop do not prepare a full Runtime package. Update prepares the Runtime package independently, verifies it before target modification, and exposes build/download/upload phases separately from process discovery.
 
 Runtime package admission limits the compressed archive to 256 MiB and its entire expanded tar stream to 512 MiB. The expanded budget covers the native Runtime, Computer suite, and signed plugin inventory together. Gzip expansion enforces the limit while decoding; oversized input fails before target modification. Validation consumes one parsed entry inventory rather than inflating the same archive again for executable discovery.
+
+Source package preparation builds from a clean checkout against published dependencies. Embedded asset preparation installs Desktop dependencies before compiling Env App, because the shared Flower surface resolves its imports from Desktop. A package build must not depend on a developer's existing `node_modules`.
 
 Desktop stages every managed Runtime package with private metadata independent of the target user's shell `umask`: `runtime`, `runtime/managed`, and `runtime/managed/bin` are mode `0700`; the `redeven` and `redevplugin-runtime` executables are mode `0700`; and the managed stamp plus ReDevPlugin evidence files are mode `0600`. Upload, remote-install, container, and reinstall paths consume this one slot contract. A metadata-normalization failure leaves the live slot unchanged, while ReDevPlugin remains the final fail-closed executable-admission authority at startup.
 
