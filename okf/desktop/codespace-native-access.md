@@ -45,7 +45,7 @@ The native gateway streams request/response bodies with backpressure, preserves 
 
 ## Compatibility and validation
 
-Compatibility epoch 14 introduced isolated system-browser presentation origins while preserving the epoch 13 HTTP/stream contract and epoch 12 storage-generation fence. The current Desktop/Runtime pair and upgradeable earlier epochs are declared only in the Runtime Service compatibility manifest. The epoch 14 record was qualified against released Flowersec 5.2.2 and Floe Webapp 0.56.2; it is historical compatibility evidence, not the current dependency declaration. The current Redeven pair consumes Flowersec 5.10.3 and Floe Webapp 0.84.0 without sibling source wiring.
+Compatibility epoch 14 introduced isolated system-browser presentation origins while preserving the epoch 13 HTTP/stream contract and epoch 12 storage-generation fence. The current Desktop/Runtime pair and upgradeable earlier epochs are declared only in the Runtime Service compatibility manifest. The epoch 14 record was qualified against released Flowersec 5.2.2 and Floe Webapp 0.56.2; it is historical compatibility evidence, not the current dependency declaration. The current Redeven pair consumes Flowersec 5.10.5 and Floe Webapp 0.85.1 without sibling source wiring.
 
 # Boundaries
 

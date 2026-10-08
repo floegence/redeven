@@ -26,6 +26,7 @@ export function TessivenThumbnail(props: {
     try {
       return await props.engine.layout(projected.graph, {
         direction: 'RIGHT', spacing: 64,
+        positionMode: 'preferred',
         groupPadding: { top: 108, right: 20, bottom: 20, left: 20 },
         positions: (props.document.presentation?.positions ?? [])
           .filter(position => visible.has(position.objectRef))

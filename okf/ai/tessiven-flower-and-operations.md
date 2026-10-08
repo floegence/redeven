@@ -32,6 +32,11 @@ outcome, so the user must inspect the original manager before trying again.
   management bindings to example identities.
 - Flower preserves stable object IDs, adds evidence and observation times, and
   never guesses a management identity from a name, address, or process.
+- Generation defaults to automatic layout. Flower preserves intentional existing
+  hints and adds coordinates only for a requested arrangement; it does not guess
+  compact card geometry. Schema validation and saving prove document validity
+  and persistence, while the [canvas UI contract](../ui/tessiven-canvas.md) owns
+  actual rendering and preferred-coordinate collision resolution.
 - Ask Flower carries `canvas_id`, `version_id`, and bounded object references;
   historical selections stay historical during the discussion.
 - Canvas editing embeds the canonical Flower surface with its existing typed

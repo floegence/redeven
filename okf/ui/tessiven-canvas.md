@@ -95,6 +95,13 @@ text. Flower is the editing surface; the canvas has no manual content editor.
   open Ask Flower with the exact immutable canvas/version selection.
 - Layout hints are read from the saved document and applied only to visible
   graph objects; hidden members retain their hints for later expansion.
+  Both the canvas and library thumbnail use published Floe's preferred-position
+  mode. Clear coordinates stay exact; crowded sibling cards and complete group
+  subtrees move apart, and groups fit their actual content before every relation
+  is routed. Generated hints cannot turn a valid topology into a blank canvas
+  merely because card heights or expansion changed. Rendering never rewrites
+  saved hints or creates a new document version. Invalid graph data and actual
+  worker/routing failures remain visible errors.
 - Theme tokens, high contrast, product locale, and accessible names are used
   for every card, edge, menu, and action.
 
@@ -121,6 +128,7 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven/store_test.go`
 - `internal/codeapp/appserver/tessiven.go`
 - `internal/envapp/ui_src/src/styles/tessiven.browser.test.tsx`
+- `internal/envapp/ui_src/src/styles/fixtures/tessiven-hadoop.json`
 - `internal/envapp/ui_src/src/styles/tessiven-library.browser.test.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-flower.browser.test.tsx`
 - `internal/envapp/ui_src/src/ui/EnvAppShell.tsx`

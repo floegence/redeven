@@ -177,6 +177,7 @@ export function TessivenGraph(props: {
         spacing: 64,
         groupPadding: { top: 108, right: 20, bottom: 20, left: 20 },
         positions: positions(),
+        positionMode: 'preferred',
         anchor: anchor
           ? { nodeId: anchor.id, position: { x: anchor.x, y: anchor.y } }
           : undefined,

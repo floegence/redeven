@@ -1,9 +1,35 @@
 package tessiven
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+func TestPresentationPositionHints(t *testing.T) {
+	var schema map[string]any
+	if err := json.Unmarshal(Schema(), &schema); err != nil {
+		t.Fatal(err)
+	}
+	positions := schema["properties"].(map[string]any)["presentation"].(map[string]any)["properties"].(map[string]any)["positions"].(map[string]any)
+	if description, _ := positions["description"].(string); !strings.Contains(description, "not fixed constraints") || !strings.Contains(description, "Omit for automatic layout") {
+		t.Fatalf("schema must explain preferred coordinates: %v", positions)
+	}
+	// Geometry depends on projected card sizes. Valid crowded hints are retained
+	// as authored data; the published renderer owns their collision resolution.
+	source := exampleDocument + "presentation:\n  positions:\n    - {objectRef: core-01, x: 0, y: 0}\n    - {objectRef: assets, x: 0, y: 0}\n"
+	result := Validate(source)
+	if !result.Valid || len(result.Document.Presentation.Positions) != 2 {
+		t.Fatalf("valid hints were lost: %+v", result)
+	}
+	encoded, err := documentYAML(result.Document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roundTrip := Validate(encoded); !roundTrip.Valid || roundTrip.Document.Presentation.Positions[1].X != 0 {
+		t.Fatalf("hints changed: %+v", roundTrip)
+	}
+}
 
 const exampleDocument = `apiVersion: redeven.io/tessiven/v1
 kind: ServiceCanvas
