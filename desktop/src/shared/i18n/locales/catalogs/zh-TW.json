@@ -3055,6 +3055,20 @@
     "editorUnavailableDetail": "無法開啟編輯器。請返回 Codespaces 後重試。",
     "technicalDetails": "技術詳細資料"
   },
+  "gatewayDesktopAccess": {
+    "title": "此 Desktop 的操作權限",
+    "viewer": "使用環境",
+    "viewerHelp": "開啟透過此 Gateway 共用的環境。",
+    "administrator": "管理 Gateway",
+    "administratorHelp": "建立邀請、管理存取及設定 Cloud；仍須 Cloud 管理員核准。",
+    "custom": "自訂權限",
+    "customHelp": "保留現有授權，或調整下方的個別權限。",
+    "customize": "調整個別權限",
+    "boundary": "這些權限授予目前的 Desktop，而非已加入的執行階段；不會授予執行階段管理權，也不會核准 Cloud 存取。",
+    "access": "開啟共用環境",
+    "members": "建立邀請及移除執行階段存取",
+    "cloud": "設定此 Gateway 的 Cloud 存取"
+  },
   "gatewayCloud": {
     "title": "連線至 Cloud",
     "description": "可選：透過 Redeven Cloud 發布已加入的執行階段。Cloud 使用此 Gateway 作為存取入口，不會直接連線執行階段。",

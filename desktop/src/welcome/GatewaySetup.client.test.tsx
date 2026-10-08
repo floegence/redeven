@@ -24,9 +24,11 @@ async function openGatewayAccess() {
   button('Gateway settings').click(); await settle();
 }
 function grantMemberManagement() {
+  const disclosure = [...document.querySelectorAll('summary')].find(element => element.textContent?.includes('Customize Desktop access'));
+  if (!disclosure?.parentElement?.hasAttribute('open')) disclosure?.click();
   const checkbox = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
-    .find(element => element.closest('label')?.textContent?.includes('Invite and manage Runtimes')
-      || element.getAttribute('aria-label') === 'Invite and manage Runtimes');
+    .find(element => element.closest('label')?.textContent?.includes('Create invitations and remove Runtime access')
+      || element.getAttribute('aria-label') === 'Create invitations and remove Runtime access');
   expect(checkbox).toBeTruthy(); checkbox!.click();
 }
 function button(label: string): HTMLButtonElement {
@@ -79,8 +81,8 @@ describe('Gateway setup and own-service actions', () => {
     const perform = await mount({ ...source, permissions, gateway_url: 'https://gateway.example/' });
     await openGatewayAccess();
     const cloud = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
-      .find(element => element.closest('label')?.textContent?.includes('Manage Cloud publishing')
-        || element.getAttribute('aria-label') === 'Manage Cloud publishing');
+      .find(element => element.closest('label')?.textContent?.includes("Set up this Gateway's Cloud access")
+        || element.getAttribute('aria-label') === "Set up this Gateway's Cloud access");
     expect(cloud?.getAttribute('aria-checked') === 'true' || (cloud as HTMLInputElement)?.checked).toBe(true);
     input('gateway-name', 'Renamed Gateway');
     button('Save Gateway').click(); await settle();
@@ -117,8 +119,10 @@ describe('Gateway setup and own-service actions', () => {
         diagnostics: [{ channel: 'stderr', label: 'Command stderr', text: 'Fixture diagnostic' }] } });
     button('Save Gateway').click(); await settle();
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Gateway setup could not finish.');
-    expect(document.querySelector('details')?.textContent).toContain('Gateway URL must use HTTP or HTTPS.');
-    expect(document.querySelector('details')?.textContent).toContain('Fixture diagnostic');
+    const technicalDetails = Array.from(document.querySelectorAll('details')).find(element =>
+      element.querySelector('summary')?.textContent?.includes('Technical error details'));
+    expect(technicalDetails?.textContent).toContain('Gateway URL must use HTTP or HTTPS.');
+    expect(technicalDetails?.textContent).toContain('Fixture diagnostic');
   });
   it('requires a pairing code before claiming to grant member management authorization', async () => {
     const perform = await mount();

@@ -13,5 +13,7 @@ export function redactGatewayDiagnosticValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactGatewayDiagnosticValue);
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key,
     sensitiveKey.test(key) ? '[redacted]' : redactGatewayDiagnosticValue(nested)]));
-  return typeof value === 'string' ? redactGatewayDiagnosticText(value).slice(0, 512) : value;
+  if (typeof value !== 'string') return value;
+  const redacted = redactGatewayDiagnosticText(value);
+  return redacted.length <= 16_384 ? redacted : `${redacted.slice(0, 8192)}\n…\n${redacted.slice(-8189)}`;
 }

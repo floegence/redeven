@@ -3055,6 +3055,20 @@
     "editorUnavailableDetail": "编辑器未能打开。请返回 Codespaces 后重试。",
     "technicalDetails": "技术详情"
   },
+  "gatewayDesktopAccess": {
+    "title": "此 Desktop 的操作权限",
+    "viewer": "使用环境",
+    "viewerHelp": "打开通过此 Gateway 共享的环境。",
+    "administrator": "管理 Gateway",
+    "administratorHelp": "创建邀请、管理接入和配置 Cloud；仍需 Cloud 管理员批准。",
+    "custom": "自定义权限",
+    "customHelp": "保留现有授权，或调整下方的具体权限。",
+    "customize": "调整具体权限",
+    "boundary": "这些权限授予当前 Desktop，而不是已接入的运行时；不会授予运行时管理权，也不会批准 Cloud 接入。",
+    "access": "打开共享环境",
+    "members": "创建邀请及移除运行时接入",
+    "cloud": "配置此 Gateway 的 Cloud 接入"
+  },
   "gatewayCloud": {
     "title": "接入 Cloud",
     "description": "可选：通过 Redeven Cloud 发布已加入的运行时。Cloud 使用此 Gateway 作为访问入口，不会直接连接运行时。",

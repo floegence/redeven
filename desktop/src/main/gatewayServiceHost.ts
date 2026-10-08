@@ -17,6 +17,7 @@ import {
 import {
   prepareDesktopRuntimeUploadAsset,
   runtimeReleaseFetchPolicy,
+  type DesktopRuntimeUploadAsset,
 } from './runtimePackageCache';
 import { createLocalRuntimeHostExecutor, createSSHRuntimeHostExecutor, type RuntimeHostAccessExecutor } from './runtimeHostAccess';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
@@ -104,6 +105,7 @@ export type GatewayServiceHostOptions = Readonly<{
   sshPassword?: string;
   tempRoot: string;
   forceUpdate?: boolean;
+  forceRestart?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: GatewayServiceProgress) => void;
 }>;
@@ -743,17 +745,16 @@ export function resolveGatewayHostPlatform(
     : resolveDesktopSSHRemotePlatform(rawOS, rawArch);
 }
 
-async function installGatewayPackage(
+async function prepareGatewayPackage(
   options: GatewayServiceHostOptions,
-  executor: RuntimeHostAccessExecutor,
   platform: DesktopSSHRemotePlatform,
-): Promise<void> {
+): Promise<DesktopRuntimeUploadAsset> {
   options.onProgress?.({
     phase: 'preparing_gateway_package',
     title: 'Preparing Gateway package',
     detail: `Desktop is locating the ${platform.platform_label} Redeven Gateway ${normalizeReleaseTag(options.releaseTag)} package for upload.`,
   });
-  const asset = await prepareDesktopRuntimeUploadAsset({
+  return prepareDesktopRuntimeUploadAsset({
     runtimeReleaseTag: options.releaseTag,
     releaseBaseURL: options.releaseBaseURL || DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
     assetCacheRoot: options.assetCacheRoot,
@@ -763,6 +764,13 @@ async function installGatewayPackage(
     fetchPolicy: runtimeReleaseFetchPolicy(45_000, options.signal),
     signal: options.signal,
   });
+}
+
+async function installGatewayPackage(
+  options: GatewayServiceHostOptions,
+  executor: RuntimeHostAccessExecutor,
+  asset: DesktopRuntimeUploadAsset,
+): Promise<void> {
   options.onProgress?.({
     phase: 'installing_gateway',
     title: 'Installing Gateway package',
@@ -888,17 +896,15 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
     const initialProbe = await probeGatewayPackage(options, executor).catch(() => null);
     if (options.forceUpdate === true || initialProbe?.status !== 'ready') {
       const platform = await probeGatewayPlatform(options, executor);
-      const rootShell = rootShellForPlacement(options.placement);
-      await executor.run(commandForPlacement(options.placement, gatewayServiceStopScript(rootShell), [
-        options.placement.runtime_root,
-        options.stateRoot,
-        releaseTag,
-      ]), { signal: options.signal });
-      await installGatewayPackage(options, executor, platform);
+      const asset = await prepareGatewayPackage(options, platform);
+      await stopManagedGatewayServiceWithExecutor(options, executor);
+      await installGatewayPackage(options, executor, asset);
       const installedProbe = await probeGatewayPackage(options, executor);
       if (installedProbe.status !== 'ready') {
         throw new Error(describeGatewayPackageProbe(installedProbe));
       }
+    } else if (options.forceRestart === true) {
+      await stopManagedGatewayServiceWithExecutor(options, executor);
     }
     options.onProgress?.({
       phase: 'starting_gateway',
@@ -921,28 +927,30 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
 }
 
 export async function stopManagedGatewayService(options: GatewayServiceHostOptions): Promise<void> {
-  await withGatewayExecutor(options, async (executor) => {
-    options.onProgress?.({
-      phase: 'stopping_gateway',
-      title: 'Stopping Gateway service',
-      detail: 'Desktop is stopping the managed Gateway service on the target.',
-    });
-    const rootShell = rootShellForPlacement(options.placement);
-    await executor.run(commandForPlacement(options.placement, gatewayServiceStopScript(rootShell), [
-      options.placement.runtime_root,
-      options.stateRoot,
-      normalizeReleaseTag(options.releaseTag),
-    ]), { signal: options.signal });
-    options.onProgress?.({
-      phase: 'verifying_gateway_stopped',
-      title: 'Verifying Gateway stopped',
-      detail: 'Desktop is confirming that the managed Gateway service has stopped.',
-    });
-    const probe = await probeManagedGatewayServiceStatusWithExecutor(options, executor).catch(() => null);
-    if (probe?.status === 'running') {
-      throw new Error('Desktop could not stop the Gateway service because it still reports running.');
-    }
+  await withGatewayExecutor(options, executor => stopManagedGatewayServiceWithExecutor(options, executor));
+}
+
+async function stopManagedGatewayServiceWithExecutor(options: GatewayServiceHostOptions, executor: RuntimeHostAccessExecutor): Promise<void> {
+  options.onProgress?.({
+    phase: 'stopping_gateway',
+    title: 'Stopping Gateway service',
+    detail: 'Desktop is stopping the managed Gateway service on the target.',
   });
+  const rootShell = rootShellForPlacement(options.placement);
+  await executor.run(commandForPlacement(options.placement, gatewayServiceStopScript(rootShell), [
+    options.placement.runtime_root,
+    options.stateRoot,
+    normalizeReleaseTag(options.releaseTag),
+  ]), { signal: options.signal });
+  options.onProgress?.({
+    phase: 'verifying_gateway_stopped',
+    title: 'Verifying Gateway stopped',
+    detail: 'Desktop is confirming that the managed Gateway service has stopped.',
+  });
+  const probe = await probeManagedGatewayServiceStatusWithExecutor(options, executor).catch(() => null);
+  if (probe?.status === 'running') {
+    throw new Error('Desktop could not stop the Gateway service because it still reports running.');
+  }
 }
 
 export function gatewayReleasePackageName(platform: DesktopSSHRemotePlatform): string {

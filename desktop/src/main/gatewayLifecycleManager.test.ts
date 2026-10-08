@@ -683,21 +683,12 @@ describe('GatewayLifecycleManager', () => {
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
   });
 
-  it('updates managed Gateways by stopping the old service before forcing the package install and restart', async () => {
+  it('delegates prepared updates to the Gateway host before replacing the Desktop bridge', async () => {
     const record = sshGateway();
 
     await manager().updateGateway(record);
 
-    expect(lifecycleMocks.stopManagedGatewayService).toHaveBeenCalledWith(expect.objectContaining({
-      target: expect.objectContaining({ ssh_destination: 'bastion.internal' }),
-      placement: expect.objectContaining({
-        kind: 'host_process',
-        runtime_root: '/opt/redeven',
-        runtime_state_root: '/opt/redeven/gateways/gw_bastion/state',
-      }),
-      stateRoot: '/opt/redeven/gateways/gw_bastion/state',
-      releaseTag: 'v1.2.3',
-    }));
+    expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       stateRoot: '/opt/redeven/gateways/gw_bastion/state',
       forceUpdate: true,
@@ -707,12 +698,23 @@ describe('GatewayLifecycleManager', () => {
       runtime_binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
     }));
-    expect(lifecycleMocks.stopManagedGatewayService.mock.invocationCallOrder[0]).toBeLessThan(
-      lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[0] ?? 0,
-    );
     expect(lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[0]).toBeLessThan(
       lifecycleMocks.startRuntimePlacementBridgeSession.mock.invocationCallOrder[0] ?? 0,
     );
+  });
+
+  it.each(['update', 'restart'] as const)('preserves the running service and Desktop bridge when %s package preparation fails', async intent => {
+    const lifecycle = manager();
+    const record = sshGateway();
+    const bridge = fakeBridgeSession();
+    vi.mocked(bridge.disconnect).mockResolvedValue(undefined);
+    lifecycleMocks.startRuntimePlacementBridgeSession.mockResolvedValue(bridge);
+    await lifecycle.client(record, { startPolicy: 'start_if_needed' });
+    lifecycleMocks.stopManagedGatewayService.mockClear();
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockRejectedValueOnce(new Error('Package is unavailable'));
+    await expect(intent === 'update' ? lifecycle.updateGateway(record) : lifecycle.restartGateway(record)).rejects.toThrow('Package is unavailable');
+    expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
+    expect(bridge.disconnect).not.toHaveBeenCalled();
   });
 
   it('installs and verifies a fresh Gateway without opening a bridge or invoking the ordinary stop path', async () => {

@@ -659,7 +659,7 @@ describe('runtimePackageCache', () => {
       ]);
       expect(tarGzipEntryNames(gatewayAsset.archiveData)).toEqual(['redeven-gateway']);
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
-      expect(buildLog.trim().split('\n')).toHaveLength(2);
+      expect(buildLog.trim().split('\n')).toHaveLength(1);
 
       const cachedGateway = await preparePackage({
         cacheRoot: fixture.cacheRoot,
@@ -699,6 +699,18 @@ describe('runtimePackageCache', () => {
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
+  });
+
+  it('prepares Gateway packages independently of unavailable Runtime frontend builds', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    try {
+      await fs.writeFile(path.join(fixture.root, 'scripts', 'build_assets.sh'), '#!/bin/sh\necho "Runtime frontend is unavailable" >&2\nexit 23\n', { mode: 0o755 });
+      const asset = await preparePackage({ cacheRoot: fixture.cacheRoot, platform: resolveDesktopSSHRemotePlatform('linux', 'x86_64'),
+        packageKind: 'gateway', sourceRuntimeRoot: fixture.root });
+      expect(asset.source).toBe('source_build');
+      expect(tarGzipEntryNames(asset.archiveData)).toEqual(['redeven-gateway']);
+      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally { await fs.rm(path.dirname(fixture.root), { recursive: true, force: true }); }
   });
 
 	  it('keeps source runtime build failures concise with raw output in diagnostics', async () => {

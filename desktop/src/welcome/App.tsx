@@ -13771,6 +13771,7 @@ function GatewaySetupDialog(props: Readonly<{
         </Show>
 
         <GatewayPermissionsEditor i18n={props.i18n} value={props.state?.permissions ?? { access: true, manage_members: false, configure_cloud: false }}
+          disabled={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action}
           onChange={permissions => props.updateField('permissions', permissions)} />
         <Show when={props.recovery}>
           {recovery => <GatewayActionRecoveryNotice i18n={props.i18n} recovery={recovery()}

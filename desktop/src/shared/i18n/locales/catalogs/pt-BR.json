@@ -3061,6 +3061,20 @@
     "editorUnavailableDetail": "Não foi possível abrir o editor. Volte para Codespaces e tente novamente.",
     "technicalDetails": "Detalhes técnicos"
   },
+  "gatewayDesktopAccess": {
+    "title": "Permissões deste Desktop",
+    "viewer": "Usar ambientes",
+    "viewerHelp": "Abrir ambientes compartilhados por este Gateway.",
+    "administrator": "Gerenciar Gateway",
+    "administratorHelp": "Criar convites, gerenciar acessos e configurar Cloud. A aprovação do Cloud continua separada.",
+    "custom": "Escolher permissões",
+    "customHelp": "Manter as permissões atuais ou ajustá-las abaixo.",
+    "customize": "Personalizar o acesso do Desktop",
+    "boundary": "Estas permissões pertencem a este Desktop, não aos ambientes de execução conectados. Não permitem administrá-los nem aprovar o acesso ao Cloud.",
+    "access": "Abrir ambientes compartilhados",
+    "members": "Criar convites e remover o acesso de ambientes de execução",
+    "cloud": "Configurar o acesso ao Cloud deste Gateway"
+  },
   "gatewayCloud": {
     "title": "Conectar ao Cloud",
     "description": "Opcional: publique ambientes ingressados pelo Redeven Cloud. A Cloud usa este Gateway como ponto de acesso; não se conecta diretamente a um ambiente.",
