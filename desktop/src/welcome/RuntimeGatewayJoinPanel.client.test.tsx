@@ -97,6 +97,8 @@ describe('Runtime Gateway membership interaction', () => {
     expect(document.body.textContent).toContain(invitationFixture.gateway_name);
     expect([...document.querySelectorAll('details')].every(detail => !detail.open)).toBe(true);
     expect(button(i18n.t('gatewayJoin.chooseFile'))).toBeDefined();
+    expect([...document.querySelectorAll('button')].some(element => controlText(element) === i18n.t('gatewayMembers.createInvitation'))).toBe(false);
+    expect(document.querySelector('select')).toBeNull();
     button(i18n.t('gatewayJoin.approve')).click(); await settle();
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayJoin.failed'));
     expect(button(i18n.t('gatewayJoin.approve')).disabled).toBe(false);

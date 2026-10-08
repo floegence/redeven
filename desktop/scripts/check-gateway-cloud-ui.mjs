@@ -130,7 +130,8 @@ try {
     await dialog.waitFor();
     await page.waitForFunction(() => window.gatewayRequests.length === 1);
     assert.equal(await dialog.locator('input').count(), 0, `${locale}: Cloud address input must not be rendered`);
-    assert.equal(await dialog.getByText(i18n.t('gatewayCloud.nextStep'), { exact: true }).count(), 1, `${locale}: Namespace next step must be visible`);
+    assert.equal(await dialog.getByText(i18n.t('gatewayCloud.nextStep'), { exact: true }).count(), 1, `${locale}: Cloud approval next step must be visible`);
+    assert.equal(await dialog.getByText('namespace-acceptance', { exact: true }).count(), 0, `${locale}: internal Namespace ID must stay hidden`);
     const configure = dialog.getByRole('button', { name: i18n.t('gatewayCloud.configure'), exact: true });
     assert.equal(await configure.isEnabled(), true, `${locale}: configure action must be available without an address`);
     await configure.click();
@@ -141,7 +142,10 @@ try {
     assert.deepEqual(await page.evaluate(() => window.openedGatewayURLs), [
       `${officialCloudOrigin}/namespaces/namespace-acceptance/gateways/gateway-acceptance`,
     ], `${locale}: configuration must open the Cloud management page`);
-    assert.ok((await dialog.innerText()).includes(i18n.t('gatewayCloud.pending')), `${locale}: pending Namespace approval state must be visible`);
+    const cloudDialogText = await dialog.innerText();
+    assert.ok(cloudDialogText.includes(i18n.t('gatewayCloud.pending')), `${locale}: Cloud approval state must be visible`);
+    assert.doesNotMatch(cloudDialogText, /namespace|命名空间|命名空間/iu, `${locale}: internal ownership terms must stay hidden`);
+    assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayCloud.manage'), exact: true }).count(), 1, `${locale}: follow-up action must describe opening the Runtime in Cloud`);
     assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, `${locale}: narrow dialog must fit`);
     await captureDialog(page, `${locale}-panel.png`);
     report.cases.push(`${locale}: fixed Cloud origin, no address input, Namespace approval and management handoff`);

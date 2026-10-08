@@ -159,7 +159,7 @@ export function GatewayMembersPanel(props: Readonly<{
               </label>
               <DesktopTooltip content={props.i18n.t('gatewayMembers.removeAddress')}><Button class="h-8 w-8 cursor-pointer" size="xs" variant="ghost" aria-label={props.i18n.t('gatewayMembers.removeAddress')} disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} onClick={() => removeEndpoint(endpoint.endpoint_id)}><Trash class="h-3.5 w-3.5" /></Button></DesktopTooltip>
             </div>
-            <span class="redeven-gateway-endpoint__meta">{props.gateway?.endpoint_last_used_at?.[endpoint.endpoint_id] ? `${props.i18n.t('gatewayMembers.usedByRuntime')} · ${new Date(props.gateway.endpoint_last_used_at[endpoint.endpoint_id]!).toLocaleString(props.i18n.locale)}` : props.i18n.t('gatewayMembers.notVerified')}</span>
+            <Show when={props.gateway?.endpoint_last_used_at?.[endpoint.endpoint_id]}>{lastUsedAt => <span class="redeven-gateway-endpoint__meta">{props.i18n.t('gatewayMembers.usedByRuntime')} · {new Date(lastUsedAt()).toLocaleString(props.i18n.locale)}</span>}</Show>
             </div>
           </div>}</For>
           <Show when={!endpointDraft().length}><p class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>

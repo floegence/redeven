@@ -808,7 +808,7 @@ function EnvironmentOwnerSurface(
       data-owner-role={props.relationshipRole ?? 'standalone'}
       aria-label={ownerLabel()}
     >
-      <RuntimeGatewaySetupDialog environment={gatewaySetupOpen() ? props.environment : undefined} gateways={props.gateways ?? []} i18n={props.i18n}
+      <RuntimeGatewaySetupDialog environment={gatewaySetupOpen() ? props.environment : undefined} i18n={props.i18n}
         close={() => { setGatewaySetupOpen(false); queueMicrotask(() => ownerElement?.focus()); }}
         start={async environment => {
           const started = await props.runLocalEnvironmentAction(environment, { intent: 'start_runtime', label: props.i18n.t('gatewayJoin.startAndContinue'), enabled: true, variant: 'default' }, 'dialog');
@@ -902,7 +902,7 @@ function EnvironmentOwnerSurface(
         />
         <Show when={props.paired}>{props.connectionStatus()}</Show>
         <Show when={props.environment.kind !== 'provider_environment' && props.environment.runtime_service?.capabilities?.runtime_gateway?.supported && props.environment.provider_runtime_link_target}>
-          <RuntimeGatewayJoinPanel gateways={props.gateways} focusOwner={() => ownerElement?.focus()} targetID={props.environment.provider_runtime_link_target!.id} i18n={props.i18n} openRequest={gatewayJoinOpenRequest()} hideTrigger />
+          <RuntimeGatewayJoinPanel focusOwner={() => ownerElement?.focus()} targetID={props.environment.provider_runtime_link_target!.id} i18n={props.i18n} openRequest={gatewayJoinOpenRequest()} hideTrigger />
         </Show>
         <Show when={props.environment.runtime_service?.gateway_publication}>{access => <RuntimeGatewayPublicationStatus access={access()} i18n={props.i18n} openInBrowser={props.openInBrowser} />}</Show>
       </CardContent>

@@ -4,7 +4,6 @@ import { render } from 'solid-js/web';
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
-import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { createDesktopI18n } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
 import { invitationFixture } from '../testSupport/gatewayMembershipFixture';
@@ -21,37 +20,31 @@ const target: DesktopProviderRuntimeLinkTarget = { id: 'ssh:created', kind: 'ssh
   runtime_running: true, runtime_openable: true, runtime_control_status: { state: 'available' }, provider_connection_state: 'unlinked', provider_link_state: 'unbound',
   provider_origin_supported: false, can_connect_provider: false, can_disconnect_provider: false };
 const environment = { id: 'created', label: 'Created Runtime' } as DesktopEnvironmentEntry;
-const gateway: DesktopGatewaySource = { gateway_id: 'local-registration', display_name: 'Office', local_enabled: true,
-  connection_kind: 'local_host', management_capability: 'managed_local_host', capabilities: ['member_manage'],
-  status: 'online', trust_state: 'paired', created_at_ms: 1, updated_at_ms: 1, environments: [],
-  permissions: { access: true, manage_members: true, configure_cloud: false }, member_endpoints: invitationFixture.endpoints };
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-it('starts the selected Runtime, issues an invitation from the selected Gateway, then requires local consent', async () => {
+it('starts the selected Runtime, imports an administrator invitation, then requires local consent', async () => {
   const perform = vi.fn().mockResolvedValueOnce({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } })
-    .mockResolvedValueOnce({ ok: true, gateway_invitation: invitationFixture })
     .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: true, phase: 'joining' } });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(environment);
   const start = vi.fn(async () => { setCurrent({ ...environment, provider_runtime_link_target: target }); return true; });
   const root = document.createElement('div'); document.body.append(root);
-  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} gateways={[gateway]} i18n={i18n} start={start} close={() => setCurrent(undefined)} />, root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} start={start} close={() => setCurrent(undefined)} />, root);
   await settle();
   expect(perform).not.toHaveBeenCalled(); expect(start).not.toHaveBeenCalled();
   button('gatewayJoin.startAndContinue').click(); await settle();
   expect(start).toHaveBeenCalledExactlyOnceWith(environment);
   expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'status' });
-  button('gatewayJoin.importInvitation').click(); await settle();
-  const selection = [...document.querySelectorAll<HTMLButtonElement>('button')].find(element => element.textContent?.trim() === gateway.display_name)!;
-  selection.click();
-  await settle(); button('gatewayMembers.createInvitation').click(); await settle();
-  expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'invite_gateway_runtime', gateway_id: gateway.gateway_id });
-  expect(perform).toHaveBeenCalledTimes(2);
+  expect([...document.querySelectorAll('button')].some(element => controlText(element) === i18n.t('gatewayMembers.createInvitation'))).toBe(false);
+  expect(document.querySelector('select')).toBeNull();
+  const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(input, 'files', { value: [{ size: 1000, text: async () => JSON.stringify(invitationFixture) }] });
+  input.dispatchEvent(new Event('change', { bubbles: true })); await settle();
   expect(document.body.textContent).toContain(i18n.t('gatewayJoin.invitationReady'));
   expect(document.body.textContent).not.toContain(invitationFixture.gateway_id);
   button('gatewayJoin.approve').click(); await settle();
-  expect(perform.mock.calls[2]?.[0]).toEqual({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'join', invitation: invitationFixture });
+  expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'join', invitation: invitationFixture });
 });
 
 it('keeps the saved registration after startup failure and supports cancellation without enrollment', async () => {
@@ -59,7 +52,7 @@ it('keeps the saved registration after startup failure and supports cancellation
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(environment);
   const root = document.createElement('div'); document.body.append(root);
-  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} gateways={[]} i18n={i18n} start={start} close={() => setCurrent(undefined)} />, root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} start={start} close={() => setCurrent(undefined)} />, root);
   await settle(); button('gatewayJoin.startAndContinue').click(); await settle();
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayJoin.startFailed'));
   expect(current()).toBe(environment);
