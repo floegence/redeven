@@ -3055,6 +3055,20 @@
     "editorUnavailableDetail": "エディターを開けませんでした。Codespaces に戻って再試行してください。",
     "technicalDetails": "技術情報"
   },
+  "gatewayDesktopAccess": {
+    "title": "この Desktop でできること",
+    "viewer": "環境を利用",
+    "viewerHelp": "この Gateway で共有された環境を開きます。",
+    "administrator": "Gateway を管理",
+    "administratorHelp": "招待の作成、アクセス管理、Cloud の設定を行います。Cloud 側の承認は別途必要です。",
+    "custom": "権限を選択",
+    "customHelp": "既存の権限を維持するか、以下で個別に変更します。",
+    "customize": "Desktop の権限を調整",
+    "boundary": "対象はこの Desktop の権限であり、参加したランタイムの権限ではありません。ランタイム管理や Cloud の承認は許可されません。",
+    "access": "共有環境を開く",
+    "members": "招待を作成してランタイムのアクセスを削除",
+    "cloud": "この Gateway の Cloud アクセスを設定"
+  },
   "gatewayCloud": {
     "title": "Cloud に接続",
     "description": "任意: 参加済みランタイムを Redeven Cloud 経由で公開します。Cloud はこの Gateway をアクセス入口として利用し、ランタイムへ直接接続しません。",

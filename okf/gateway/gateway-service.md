@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway service
 description: Manage Runtime-initiated membership without acquiring Runtime lifecycle authority.
 tags: [gateway, desktop, access, identity]
-timestamp: 2026-10-07T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -31,6 +31,8 @@ The separate Gateway archive and state root contain no Runtime lifecycle data. D
 
 Paired permissions are `access`, `manage_members` and `configure_cloud`. Managed transport is not an automatic permission grant. Host CLI administration uses a separate local credential. Adding member management or Cloud configuration to an existing pairing requires new consent.
 
+Gateway updates prepare the complete package before stopping the existing service or replacing its Desktop bridge. A package preparation failure leaves both intact. Restart reuses a matching package; a stale package follows the same prepare-before-stop path. Source-built Gateway archives compile the standalone Gateway command without building Runtime frontend assets. Successful replacement retains the state root, Gateway identity, members and paired permissions. Preparation diagnostics retain a bounded redacted log head and tail so the compiler cause remains inspectable.
+
 ## Address changes and upgrade
 
 Gateway listener bindings describe sockets on the device. Reachable connection endpoints describe the LAN, overlay or public addresses a Runtime can use, including DNS names and port-forwarded addresses that differ from those sockets. Administrators confirm and prioritize up to sixteen endpoints. Local interfaces are not automatically published, and deleted endpoints do not return after restart. With no confirmed endpoints, invitation creation is disabled.
@@ -56,6 +58,7 @@ Gateway owns membership, policy, invitations, and restricted forwarding. Runtime
 - `redeven:internal/gatewayservice/server.go` — Paired access and administration boundary.
 - `redeven:cmd/redeven/gateway_membership.go` — Local membership commands.
 - `redeven:desktop/src/main/gatewayLifecycleManager.ts` — Independent Gateway process owner.
+- `redeven:desktop/scripts/check-gateway-local-update.mjs` — Real local update/restart, stable identity and failed-package service/bridge preservation.
 
 ## Operational observations
 

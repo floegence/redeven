@@ -27,6 +27,8 @@ Default Cloud permission and each member's inherit/allow/deny override are separ
 
 Pairing grants access, member management and Cloud configuration independently. A saved registration can be started explicitly if the service is stopped. Saving or refreshing cannot implicitly start or update it. Gateway lifecycle actions continue to use the existing confirmation and operation surface.
 
+Gateway settings names the permission recipient: this Desktop, not Runtime members. Use environments grants only environment access; Manage Gateway selects environment access, invitations/member removal and Gateway Cloud configuration. Customize Desktop access reveals the three independent controls. Existing partial grants remain unchanged until explicitly edited; renaming a registration or opening settings never grants additional permissions. Cloud configuration permission is not Cloud Namespace approval or Runtime lifecycle authority.
+
 Gateway settings is the sole registration and authorization entry. An access-only Gateway does not offer a duplicate Grant access action or a misleading Invite Runtime action. Once member management is authorized, Invite Runtime opens the separate invitation, connection-endpoint and member-policy surface. Connect to Cloud names the optional Cloud association action; opening either surface never grants permissions or publishes a Runtime.
 
 ## Presentation and accessibility
@@ -50,3 +52,4 @@ This surface presents current Gateway state and starts explicit user-authorized 
 - `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.client.test.tsx` — Failed start and invitation consent.
 - `redeven:desktop/scripts/check-gateway-access-ui.mjs` — Browser layout, keyboard and locale qualification.
 - `redeven:desktop/scripts/check-gateway-dialog-polish.mjs` — Single settings entry, endpoint layout, nested selection and reversible disclosure motion.
+- `redeven:desktop/scripts/check-gateway-permissions-ui.mjs` — Permission recipient, explicit grants, retained permissions and localized keyboard/layout checks.

@@ -3055,6 +3055,20 @@
     "editorUnavailableDetail": "편집기를 열지 못했습니다. Codespaces로 돌아가 다시 시도하세요.",
     "technicalDetails": "기술 세부 정보"
   },
+  "gatewayDesktopAccess": {
+    "title": "이 Desktop에서 할 수 있는 작업",
+    "viewer": "환경 사용",
+    "viewerHelp": "이 Gateway를 통해 공유된 환경을 엽니다.",
+    "administrator": "Gateway 관리",
+    "administratorHelp": "초대 생성, 접근 관리 및 Cloud 설정을 수행합니다. Cloud 승인은 별도로 필요합니다.",
+    "custom": "권한 선택",
+    "customHelp": "기존 권한을 유지하거나 아래에서 개별 권한을 조정합니다.",
+    "customize": "Desktop 권한 조정",
+    "boundary": "이 권한은 연결된 런타임이 아닌 현재 Desktop에 부여됩니다. 런타임 관리나 Cloud 접근 승인을 허용하지 않습니다.",
+    "access": "공유 환경 열기",
+    "members": "초대 생성 및 런타임 접근 제거",
+    "cloud": "이 Gateway의 Cloud 접근 설정"
+  },
   "gatewayCloud": {
     "title": "Cloud에 연결",
     "description": "선택 사항: 가입한 런타임을 Redeven Cloud를 통해 게시합니다. Cloud는 이 Gateway를 액세스 지점으로 사용하며 런타임에 직접 연결하지 않습니다.",

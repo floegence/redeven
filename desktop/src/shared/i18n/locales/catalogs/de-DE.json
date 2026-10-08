@@ -3060,6 +3060,20 @@
     "editorUnavailableDetail": "Der Editor konnte nicht geöffnet werden. Kehren Sie zu Codespaces zurück und versuchen Sie es erneut.",
     "technicalDetails": "Technische Details"
   },
+  "gatewayDesktopAccess": {
+    "title": "Berechtigungen dieses Desktop",
+    "viewer": "Umgebungen nutzen",
+    "viewerHelp": "Über dieses Gateway freigegebene Umgebungen öffnen.",
+    "administrator": "Gateway verwalten",
+    "administratorHelp": "Einladungen erstellen, Zugriffe verwalten und Cloud einrichten. Die Cloud-Freigabe bleibt separat.",
+    "custom": "Berechtigungen wählen",
+    "customHelp": "Vorhandene Berechtigungen behalten oder unten einzeln anpassen.",
+    "customize": "Desktop-Zugriff anpassen",
+    "boundary": "Diese Berechtigungen gelten für dieses Desktop, nicht für verbundene Laufzeitumgebungen. Sie erlauben weder deren Verwaltung noch die Cloud-Freigabe.",
+    "access": "Freigegebene Umgebungen öffnen",
+    "members": "Einladungen erstellen und den Zugriff von Laufzeitumgebungen entfernen",
+    "cloud": "Cloud-Zugriff dieses Gateways einrichten"
+  },
   "gatewayCloud": {
     "title": "Mit Cloud verbinden",
     "description": "Optional: Veröffentlichen Sie beigetretene Laufzeitumgebungen über Redeven Cloud. Cloud nutzt dieses Gateway als Zugangspunkt und verbindet sich nicht direkt mit einer Laufzeitumgebung.",

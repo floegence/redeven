@@ -825,7 +825,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
     const buildTime = compact(process.env.REDEVEN_DESKTOP_BUNDLE_BUILD_TIME)
       || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
     const commit = args.sourceCommit;
-    await buildSourceRuntimeAssets(buildSourceRoot, args.signal);
+    if (args.packageKind === 'runtime') await buildSourceRuntimeAssets(buildSourceRoot, args.signal);
     await buildSourceRuntimeBinary({
       sourceRoot: buildSourceRoot,
       commandName,

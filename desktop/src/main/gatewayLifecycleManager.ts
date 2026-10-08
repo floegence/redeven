@@ -351,10 +351,7 @@ export class GatewayLifecycleManager {
       throw new GatewayNotManageableError();
     }
     await this.throwIfReinstallRequired(record, options.signal);
-    return this.runLifecycle(record, 'restart', options, async (signal) => {
-      await this.stopGatewayUncoordinated(record, { ...options, signal });
-      return this.ensureBridgeSession(record, { ...options, signal });
-    });
+    return this.runLifecycle(record, 'restart', options, signal => this.restartOrUpdateGatewayUncoordinated(record, 'restart', { ...options, signal }));
   }
 
   async updateGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<GatewayLifecycleSession> {
@@ -362,7 +359,7 @@ export class GatewayLifecycleManager {
       throw new GatewayNotManageableError();
     }
     await this.throwIfReinstallRequired(record, options.signal);
-    return this.runLifecycle(record, 'update', options, (signal) => this.updateGatewayUncoordinated(record, { ...options, signal }));
+    return this.runLifecycle(record, 'update', options, signal => this.restartOrUpdateGatewayUncoordinated(record, 'update', { ...options, signal }));
   }
 
   async installFreshGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<void> {
@@ -452,32 +449,15 @@ export class GatewayLifecycleManager {
     });
   }
 
-  private async updateGatewayUncoordinated(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
+  private async restartOrUpdateGatewayUncoordinated(record: GatewayRecord, intent: 'restart' | 'update', options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
     const placement = gatewayPlacement(record);
     const sshPassword = await this.gatewaySSHPassword(record);
-    await this.clear(record);
-    await stopManagedGatewayService({
-      sshTransportManager: this.options.ssh_transport_manager,
-      sshCredentialScope: record.gateway_id,
-      target: gatewaySSHDetails(record),
-      hostAccess: gatewayHostAccess(record),
-      placement,
-      stateRoot: gatewayServiceStateRoot(record),
-      releaseTag: this.gatewayReleaseTag(),
-      releaseBaseURL: this.gatewayReleaseBaseURL(record),
-      assetCacheRoot: this.options.asset_cache_root,
-      sourceRuntimeRoot: this.options.source_runtime_root,
-      localUIBind: this.options.local_ui_bind,
-      targetCommit: this.options.target_commit,
-      sshPassword,
-      tempRoot: this.options.temp_root,
-      signal: options.signal,
-      onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
-    });
     const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
-      forceUpdate: true,
+      forceUpdate: intent === 'update',
+      forceRestart: intent === 'restart',
       onProgress: options.onProgress,
     });
+    await this.clear(record);
     return this.openBridgeSession(record, gatewayBinaryPath, {
       signal: options.signal,
       onProgress: options.onProgress,
@@ -590,7 +570,7 @@ export class GatewayLifecycleManager {
     placement: DesktopRuntimePlacement,
     sshPassword: string,
     signal?: AbortSignal,
-    options: Readonly<{ forceUpdate?: boolean; onProgress?: GatewayLifecycleProgressSink }> = {},
+    options: Readonly<{ forceUpdate?: boolean; forceRestart?: boolean; onProgress?: GatewayLifecycleProgressSink }> = {},
   ): Promise<string> {
     try {
       return await ensureManagedGatewayServiceReady({
@@ -614,6 +594,7 @@ export class GatewayLifecycleManager {
         sshPassword,
         tempRoot: this.options.temp_root,
         forceUpdate: options.forceUpdate === true,
+        forceRestart: options.forceRestart === true,
         signal,
         onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
       });

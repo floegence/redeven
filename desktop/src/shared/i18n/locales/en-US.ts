@@ -139,6 +139,20 @@ export const enUS = {
     "confirmRemove": "Confirm removal",
     "remove": "Remove member"
 },
+  gatewayDesktopAccess: {
+    "title": "What this Desktop can do",
+    "viewer": "Use environments",
+    "viewerHelp": "Open environments shared through this Gateway.",
+    "administrator": "Manage Gateway",
+    "administratorHelp": "Create invitations, manage access and set up Cloud. Cloud approval remains separate.",
+    "custom": "Choose permissions",
+    "customHelp": "Keep your existing choices, or adjust the permissions below.",
+    "customize": "Customize Desktop access",
+    "boundary": "These permissions belong to this Desktop, not to joined Runtimes. They do not grant Runtime administration or approve Cloud access.",
+    "access": "Open shared environments",
+    "members": "Create invitations and remove Runtime access",
+    "cloud": "Set up this Gateway's Cloud access"
+  },
   gatewayCloud: {
     expired: "Cloud authorization expired",
     retired: "Previous Cloud association retired",
