@@ -3061,13 +3061,13 @@
     "technicalDetails": "Technische Details"
   },
   "gatewayCloud": {
-    "title": "Cloud-Veröffentlichung",
+    "title": "Mit Cloud verbinden",
     "description": "Optional: Veröffentlichen Sie beigetretene Laufzeitumgebungen über Redeven Cloud. Cloud nutzt dieses Gateway als Zugangspunkt und verbindet sich nicht direkt mit einer Laufzeitumgebung.",
     "nextStep": "Genehmigen Sie dieses Gateway in Redeven Cloud und wählen Sie den zugehörigen Namespace. Andere freigegebene Clients können das Gateway weiterhin unabhängig nutzen.",
     "cloudOrigin": "Cloud-Adresse",
     "gatewayURL": "Für Laufzeitumgebungs erreichbare Gateway-Adresse",
     "listenAddress": "Gateway-Listen-Adresse",
-    "configure": "Cloud-Veröffentlichung aktivieren",
+    "configure": "Mit Cloud verbinden",
     "manage": "Cloud-Einstellungen öffnen",
     "unconfigured": "Cloud-Zugriff ist nicht eingerichtet.",
     "pending": "Warten auf Cloud-Genehmigung.",

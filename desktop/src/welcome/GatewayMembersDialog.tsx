@@ -1,4 +1,4 @@
-import { Button, Checkbox, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, Info, Plus, Trash, Download } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
@@ -116,13 +116,16 @@ export function GatewayMembersDialog(props: Readonly<{
     if (id) queueMicrotask(() => props.focusOwner?.(id));
   }
   return <Dialog open={!!props.gateway} onOpenChange={open => { if (!open) close(); }}
-    title={props.i18n.t('gatewayMembers.title')} bodyDescription={props.gateway?.display_name} closeLabel={props.i18n.t('common.close')} class="w-[min(42rem,calc(100vw-2rem))]">
-    <div class="max-h-[75vh] space-y-5 overflow-y-auto p-4">
+    title={props.i18n.t('gatewayMembers.title')} bodyDescription={props.gateway?.display_name} closeLabel={props.i18n.t('common.close')}
+    class="redeven-gateway-dialog" contentClass="redeven-gateway-dialog__content"
+    footer={<div class="flex justify-end gap-2"><Button class="cursor-pointer" variant="outline" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'refresh_gateway_catalog', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.refresh')}</Button>
+      <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t('common.close')}</Button></div>}>
+    <div class="space-y-5">
       <Show when={props.gateway?.rebuild_required}><div class="space-y-2 rounded-md border border-warning p-3 text-sm">
         <p>{props.i18n.t('gatewayMembers.rebuild')}</p>
         <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'dismiss_gateway_rebuild', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.close')}</Button>
       </div></Show>
-      <details class="group border-b border-border/60 pb-3">
+      <details class="redeven-gateway-disclosure group border-b border-border/60 pb-3">
         <summary class="flex cursor-pointer list-none items-center justify-between text-sm [&::-webkit-details-marker]:hidden"><span>{props.i18n.t('gatewayMembers.listenerAddress')}</span><ChevronDown class="h-3.5 w-3.5 transition-transform group-open:rotate-180" /></summary>
         <div>
           <p class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.listenerAddressHelp')}</p>
@@ -137,17 +140,26 @@ export function GatewayMembersDialog(props: Readonly<{
           <h3 class="flex items-center gap-2 text-sm font-semibold">{props.i18n.t('gatewayMembers.connectionAddresses')}<DesktopTooltip content={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><button type="button" class="cursor-pointer text-muted-foreground" aria-label={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><Info class="h-3.5 w-3.5" /></button></DesktopTooltip></h3>
         </div>
         <div class="space-y-2">
-          <For each={endpointDraft()}>{(endpoint, index) => <div class="grid gap-2 rounded-md border border-border/70 p-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-            <input aria-label={props.i18n.t('gatewayMembers.address')} disabled={busy() || !props.gateway?.permissions?.manage_members} class="min-w-0 rounded border border-border bg-background px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60" value={endpoint.address}
-              onInput={event => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, address: event.currentTarget.value.trim() } : item))} />
-            <select aria-label={props.i18n.t('gatewayMembers.scope')} disabled={busy() || !props.gateway?.permissions?.manage_members} class="cursor-pointer rounded border border-border bg-background px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60" value={endpoint.scope}
-              onChange={event => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, scope: event.currentTarget.value as GatewayEndpoint['scope'] } : item))}>
-              <option value="lan">{props.i18n.t('gatewayMembers.scopeLAN')}</option><option value="overlay">{props.i18n.t('gatewayMembers.scopeOverlay')}</option><option value="public">{props.i18n.t('gatewayMembers.scopePublic')}</option>
-            </select>
-            <input aria-label={props.i18n.t('gatewayMembers.priority')} disabled={busy() || !props.gateway?.permissions?.manage_members} type="number" min="0" max="1000" class="w-16 rounded border border-border bg-background px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60" value={endpoint.priority}
-              onInput={event => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, priority: Number(event.currentTarget.value) || 0 } : item))} />
-            <DesktopTooltip content={props.i18n.t('gatewayMembers.removeAddress')}><Button class="h-8 w-8 cursor-pointer" size="xs" variant="ghost" aria-label={props.i18n.t('gatewayMembers.removeAddress')} disabled={busy() || !props.gateway?.permissions?.manage_members} onClick={() => setEndpointDraft(current => current.filter((_, itemIndex) => itemIndex !== index()))}><Trash class="h-3.5 w-3.5" /></Button></DesktopTooltip>
-            <span class="text-[11px] text-muted-foreground sm:col-span-4">{props.gateway?.endpoint_last_used_at?.[endpoint.endpoint_id] ? `${props.i18n.t('gatewayMembers.usedByRuntime')} · ${new Date(props.gateway.endpoint_last_used_at[endpoint.endpoint_id]!).toLocaleString(props.i18n.locale)}` : props.i18n.t('gatewayMembers.notVerified')}</span>
+          <For each={endpointDraft()}>{(endpoint, index) => <div class="redeven-gateway-endpoint">
+            <div class="redeven-gateway-endpoint__address">
+              <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayMembers.address')}</span>
+                <Input aria-label={props.i18n.t('gatewayMembers.address')} disabled={busy() || !props.gateway?.permissions?.manage_members} size="sm" class="w-full min-w-0 font-mono" value={endpoint.address}
+                  onInput={event => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, address: event.currentTarget.value.trim() } : item))} />
+              </label>
+              <DesktopTooltip content={props.i18n.t('gatewayMembers.removeAddress')}><Button class="h-8 w-8 cursor-pointer" size="xs" variant="ghost" aria-label={props.i18n.t('gatewayMembers.removeAddress')} disabled={busy() || !props.gateway?.permissions?.manage_members} onClick={() => setEndpointDraft(current => current.filter((_, itemIndex) => itemIndex !== index()))}><Trash class="h-3.5 w-3.5" /></Button></DesktopTooltip>
+            </div>
+            <div class="redeven-gateway-endpoint__options">
+              <div class="redeven-gateway-field" role="group" aria-label={props.i18n.t('gatewayMembers.scope')}><span>{props.i18n.t('gatewayMembers.scope')}</span>
+                <Select value={endpoint.scope} disabled={busy() || !props.gateway?.permissions?.manage_members}
+                  options={(['lan', 'overlay', 'public'] as const).map(value => ({ value, label: props.i18n.t(value === 'lan' ? 'gatewayMembers.scopeLAN' : value === 'overlay' ? 'gatewayMembers.scopeOverlay' : 'gatewayMembers.scopePublic') }))}
+                  onChange={scope => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, scope: scope as GatewayEndpoint['scope'] } : item))} />
+              </div>
+              <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayMembers.priority')}</span>
+                <Input aria-label={props.i18n.t('gatewayMembers.priority')} disabled={busy() || !props.gateway?.permissions?.manage_members} type="number" min="0" max="1000" size="sm" class="w-full"
+                  value={endpoint.priority} onInput={event => setEndpointDraft(current => current.map((item, itemIndex) => itemIndex === index() ? { ...item, priority: Number(event.currentTarget.value) || 0 } : item))} />
+              </label>
+            </div>
+            <span class="text-xs text-muted-foreground">{props.gateway?.endpoint_last_used_at?.[endpoint.endpoint_id] ? `${props.i18n.t('gatewayMembers.usedByRuntime')} · ${new Date(props.gateway.endpoint_last_used_at[endpoint.endpoint_id]!).toLocaleString(props.i18n.locale)}` : props.i18n.t('gatewayMembers.notVerified')}</span>
           </div>}</For>
           <Show when={!endpointDraft().length}><p class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
         </div>
@@ -180,7 +192,7 @@ export function GatewayMembersDialog(props: Readonly<{
           </div>
         </Show>
       </section>
-      <Show when={policy()}>{current => <details class="group space-y-3 border-t border-border pt-4">
+      <Show when={policy()}>{current => <details class="redeven-gateway-disclosure group space-y-3 border-t border-border pt-4">
         <summary class="flex cursor-pointer list-none items-center justify-between text-sm font-semibold [&::-webkit-details-marker]:hidden">{props.i18n.t('gatewayMembers.policy')}<ChevronDown class="h-3.5 w-3.5 transition-transform group-open:rotate-180" /></summary>
         <Checkbox label={props.i18n.t('gatewayMembers.defaultAllow')} checked={current().default_cloud_allowed}
           disabled={busy() || !props.gateway?.permissions?.configure_cloud}
@@ -192,7 +204,7 @@ export function GatewayMembersDialog(props: Readonly<{
             <option value="manual">{props.i18n.t('gatewayMembers.manual')}</option><option value="automatic">{props.i18n.t('gatewayMembers.automatic')}</option>
           </select>
         </label>
-        <details><summary class="cursor-pointer text-xs text-muted-foreground">{props.i18n.t('gatewayJoin.technicalDetails')}</summary><p class="py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.automaticHelp')}</p>
+        <details class="redeven-gateway-disclosure"><summary class="cursor-pointer text-xs text-muted-foreground">{props.i18n.t('gatewayJoin.technicalDetails')}</summary><p class="py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.automaticHelp')}</p>
         <div class="space-y-1 text-xs text-muted-foreground"><For each={['member.admit', 'access.open', 'cloud.publish'] as const}>{action =>
           <p>{action}: {props.i18n.t(props.gateway?.hook_status?.[action] === 'invalid' ? 'gatewayMembers.hookInvalid' : props.gateway?.hook_status?.[action] === 'configured' ? 'gatewayMembers.hookConfigured' : 'gatewayMembers.hookAbsent')}</p>}
         </For></div></details>
@@ -234,8 +246,6 @@ export function GatewayMembersDialog(props: Readonly<{
         </Show>
       </section>
       <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
-      <div class="flex justify-end gap-2"><Button class="cursor-pointer" variant="outline" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'refresh_gateway_catalog', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.refresh')}</Button>
-        <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t('common.close')}</Button></div>
     </div>
   </Dialog>;
 }

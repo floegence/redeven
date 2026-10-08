@@ -3056,13 +3056,13 @@
     "technicalDetails": "技術詳細資料"
   },
   "gatewayCloud": {
-    "title": "Cloud 發布",
+    "title": "連線至 Cloud",
     "description": "可選：透過 Redeven Cloud 發布已加入的執行階段。Cloud 使用此 Gateway 作為存取入口，不會直接連線執行階段。",
     "nextStep": "請在 Redeven Cloud 中核准此 Gateway，然後選擇所屬 Namespace。其他獲准的用戶端仍可獨立使用此 Gateway。",
     "cloudOrigin": "雲端位址",
     "gatewayURL": "執行環境可連線的閘道位址",
     "listenAddress": "閘道監聽位址",
-    "configure": "啟用 Cloud 發布",
+    "configure": "連線至 Cloud",
     "manage": "開啟 Cloud 設定",
     "unconfigured": "尚未設定雲端存取。",
     "pending": "等待命名空間核准。",

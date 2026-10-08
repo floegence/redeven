@@ -50,8 +50,9 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
   return <>
     <Button ref={trigger} size="sm" variant="outline" class="cursor-pointer" disabled={props.disabled} onClick={() => { setOpen(true); void load(); }}>{props.i18n.t('gatewayCloud.title')}</Button>
     <Dialog open={open()} onOpenChange={value => { if (!value) close(); }} title={props.i18n.t('gatewayCloud.title')}
-      bodyDescription={props.i18n.t('gatewayCloud.description')} closeLabel={props.i18n.t('common.close')}>
-      <div class="space-y-4 p-4">
+      bodyDescription={props.i18n.t('gatewayCloud.description')} closeLabel={props.i18n.t('common.close')}
+      class="redeven-gateway-dialog" contentClass="redeven-gateway-dialog__content">
+      <div class="space-y-4">
         <p class="font-medium">{props.gatewayName}</p>
         <Show when={status()}>{value => <p role="status" class="text-sm text-muted-foreground">{props.i18n.t(`gatewayCloud.${value().state}`)}<Show when={value().namespace_public_id}><span class="ml-2 font-mono text-xs">{value().namespace_public_id}</span></Show></p>}</Show>
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>

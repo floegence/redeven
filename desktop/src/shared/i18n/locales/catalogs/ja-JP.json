@@ -3056,13 +3056,13 @@
     "technicalDetails": "技術情報"
   },
   "gatewayCloud": {
-    "title": "Cloud 公開",
+    "title": "Cloud に接続",
     "description": "任意: 参加済みランタイムを Redeven Cloud 経由で公開します。Cloud はこの Gateway をアクセス入口として利用し、ランタイムへ直接接続しません。",
     "nextStep": "Redeven Cloud でこの Gateway を承認し、所属する Namespace を選択してください。他の承認済みクライアントは引き続き独立して利用できます。",
     "cloudOrigin": "クラウドのアドレス",
     "gatewayURL": "ランタイムから接続できるゲートウェイのアドレス",
     "listenAddress": "ゲートウェイの待ち受けアドレス",
-    "configure": "Cloud 公開を有効にする",
+    "configure": "Cloud に接続",
     "manage": "Cloud 設定を開く",
     "unconfigured": "クラウド接続は未設定です。",
     "pending": "クラウドでの承認を待っています。",

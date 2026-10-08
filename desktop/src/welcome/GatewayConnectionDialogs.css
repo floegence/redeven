@@ -1,0 +1,91 @@
+.redeven-gateway-dialog {
+  width: min(52rem, calc(100vw - 2rem));
+  max-width: min(52rem, calc(100vw - 2rem));
+  border-radius: .75rem;
+}
+
+.redeven-gateway-dialog__content {
+  padding: 1.25rem;
+  scrollbar-gutter: stable;
+}
+
+.redeven-gateway-field {
+  display: grid;
+  min-width: 0;
+  gap: .375rem;
+  font-size: var(--floe-type-control);
+}
+
+.redeven-gateway-field > span {
+  color: var(--muted-foreground);
+  font-size: .75rem;
+  font-weight: 500;
+}
+
+.redeven-gateway-endpoint {
+  display: grid;
+  min-width: 0;
+  gap: .75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: .625rem;
+  background: color-mix(in srgb, var(--muted) 12%, var(--background));
+}
+
+.redeven-gateway-endpoint__address {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: .5rem;
+}
+
+.redeven-gateway-endpoint__options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, .4fr);
+  align-items: end;
+  gap: .75rem;
+}
+
+.redeven-gateway-disclosure {
+  interpolate-size: allow-keywords;
+}
+
+.redeven-gateway-disclosure::details-content {
+  block-size: 0;
+  overflow: clip;
+  opacity: 0;
+  transition: block-size 200ms cubic-bezier(.2, .8, .2, 1), opacity 160ms ease, content-visibility 200ms allow-discrete;
+}
+
+.redeven-gateway-disclosure[open]::details-content {
+  block-size: auto;
+  opacity: 1;
+}
+
+.redeven-gateway-disclosure:not([open]) > :not(summary) {
+  interactivity: inert;
+}
+
+.redeven-gateway-disclosure > summary {
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
+.redeven-gateway-disclosure > summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: .375rem;
+}
+
+@media (max-width: 480px) {
+  .redeven-gateway-dialog__content { padding: 1rem; }
+  .redeven-gateway-endpoint { padding: .75rem; }
+  .redeven-gateway-endpoint__options { grid-template-columns: minmax(0, 1fr); }
+  .redeven-gateway-field input,
+  .redeven-gateway-field [role="button"] { min-height: 2.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-gateway-disclosure::details-content { transition: none; }
+  .redeven-gateway-disclosure > summary svg { transition: none; }
+}

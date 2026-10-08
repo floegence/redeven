@@ -7,6 +7,7 @@
 @import '../../../internal/envapp/ui_src/src/ui/pages/resource-header.css';
 @import '../../../internal/flower_ui/src/styles/flower.css';
 @import './EnvironmentSettingsDialog.css';
+@import './GatewayConnectionDialogs.css';
 
 @source './**/*.{ts,tsx,html}';
 @source '../../../internal/flower_ui/src/**/*.{ts,tsx,html}';

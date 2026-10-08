@@ -20,7 +20,8 @@ async function openGatewayAccess() {
   button('Gateways').click(); await settle();
   const moreActions = document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]');
   expect(moreActions).toBeTruthy(); moreActions!.click(); await settle();
-  button('Grant access').click(); await settle();
+  expect([...document.querySelectorAll('[role="menuitem"]')].filter(item => controlText(item) === 'Grant access')).toHaveLength(0);
+  button('Gateway settings').click(); await settle();
 }
 function grantMemberManagement() {
   const checkbox = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
