@@ -9450,6 +9450,17 @@ export function EnvironmentSplitActionButton(
   }>,
 ) {
   const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0 || !!props.gatewayAction);
+  const menuGroups = createMemo(() => {
+    const actions = props.presentation.menu_actions;
+    if (!props.gatewayAction) return [{ actions, gatewayAction: undefined }];
+    const cloudIndex = actions.findIndex(item => item.action.intent === 'connect_provider_runtime'
+      || item.action.intent === 'disconnect_provider_runtime');
+    const accessIndex = cloudIndex < 0 ? actions.length : cloudIndex;
+    return [
+      { actions: actions.slice(0, accessIndex), gatewayAction: undefined },
+      { actions: actions.slice(accessIndex), gatewayAction: props.gatewayAction },
+    ].filter(group => group.actions.length > 0 || group.gatewayAction);
+  });
   const guidanceNotice = createMemo(() => guidanceSessionNotice(props.guidanceSession));
   const sessionPopoverOverlay = createMemo<
     Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | undefined
@@ -9951,90 +9962,94 @@ export function EnvironmentSplitActionButton(
             menuRef = element;
           }}
         >
-          <Show when={props.gatewayAction}>
-            {(action) => (
-              <button
-                type="button"
-                role="menuitem"
-                class="redeven-split-menu-item"
-                data-tone="primary"
-                disabled={action().disabled}
-                onClick={() => {
-                  if (action().disabled) return;
-                  closeMenu();
-                  action().onRun();
-                }}
-              >
-                <span class="redeven-split-menu-item-icon"><Link /></span>
-                <span class="redeven-control-label">{action().label}</span>
-              </button>
-            )}
-          </Show>
-          <Show when={props.gatewayAction && props.presentation.menu_actions.length > 0}>
-            <div class="my-1 border-t border-border/60" role="separator" />
-          </Show>
-          <For each={props.presentation.menu_actions}>
-            {(item: EnvironmentActionMenuItemModel) => {
-              const icon = () => splitMenuIcon(item.action.intent);
-              const tone = () => splitMenuItemToneData(item.action.intent);
-              const disabledByOperation = () =>
-                props.operationState.actionsDisabled && environmentActionUsesLifecycleOwner(item.action);
-              const disabledReason = () => {
-                if (!item.action.enabled) {
-                  return item.action.disabled_reason;
-                }
-                if (!disabledByOperation()) {
-                  return undefined;
-                }
-                const activeProgress = props.operationState.activeProgress;
-                return activeProgress
-                  ? props.i18n.t('environmentAction.blockedByActiveOperation', {
-                      operation: localizedProgressTitle(props.i18n, activeProgress),
-                      action: item.label,
-                    })
-                  : props.i18n.t('environmentAction.waitForOperationAcceptance', {
-                      action: item.label,
-                    });
-              };
-              const disabled = () => !item.action.enabled || disabledByOperation();
-              return (
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="redeven-split-menu-item"
-                  data-tone={tone() || undefined}
-                  disabled={disabled()}
-                  title={disabledReason() ?? item.label}
-                  aria-describedby={
-                    disabled() && disabledReason() ? `${props.environmentID}-${item.id}-disabled-reason` : undefined
-                  }
-                  onClick={() => {
-                    if (disabled()) {
-                      return;
-                    }
-                    closeMenu();
-                    props.onRunAction(item.action);
+          <For each={menuGroups()}>
+            {(group, index) => <>
+                <Show when={index() > 0}>
+                  <div class="my-1 border-t border-border/60" role="separator" />
+                </Show>
+                <Show when={group.gatewayAction}>
+                  {(action) => (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class="redeven-split-menu-item"
+                      data-tone="primary"
+                      disabled={action().disabled}
+                      onClick={() => {
+                        if (action().disabled) return;
+                        closeMenu();
+                        action().onRun();
+                      }}
+                    >
+                      <span class="redeven-split-menu-item-icon"><Link /></span>
+                      <span class="redeven-control-label">{action().label}</span>
+                    </button>
+                  )}
+                </Show>
+                <For each={group.actions}>
+                  {(item: EnvironmentActionMenuItemModel) => {
+                    const icon = () => splitMenuIcon(item.action.intent);
+                    const tone = () => splitMenuItemToneData(item.action.intent);
+                    const disabledByOperation = () =>
+                      props.operationState.actionsDisabled && environmentActionUsesLifecycleOwner(item.action);
+                    const disabledReason = () => {
+                      if (!item.action.enabled) {
+                        return item.action.disabled_reason;
+                      }
+                      if (!disabledByOperation()) {
+                        return undefined;
+                      }
+                      const activeProgress = props.operationState.activeProgress;
+                      return activeProgress
+                        ? props.i18n.t('environmentAction.blockedByActiveOperation', {
+                            operation: localizedProgressTitle(props.i18n, activeProgress),
+                            action: item.label,
+                          })
+                        : props.i18n.t('environmentAction.waitForOperationAcceptance', {
+                            action: item.label,
+                          });
+                    };
+                    const disabled = () => !item.action.enabled || disabledByOperation();
+                    return (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="redeven-split-menu-item"
+                        data-tone={tone() || undefined}
+                        disabled={disabled()}
+                        title={disabledReason() ?? item.label}
+                        aria-describedby={
+                          disabled() && disabledReason() ? `${props.environmentID}-${item.id}-disabled-reason` : undefined
+                        }
+                        onClick={() => {
+                          if (disabled()) {
+                            return;
+                          }
+                          closeMenu();
+                          props.onRunAction(item.action);
+                        }}
+                      >
+                        <Show when={icon()}>
+                          {(Icon) => {
+                            const MenuIcon = Icon();
+                            return (
+                              <span class="redeven-split-menu-item-icon">
+                                <MenuIcon />
+                              </span>
+                            );
+                          }}
+                        </Show>
+                        <span class="redeven-control-label">{item.label}</span>
+                        <Show when={disabled() && disabledReason()}>
+                          <span id={`${props.environmentID}-${item.id}-disabled-reason`} class="sr-only">
+                            {disabledReason()}
+                          </span>
+                        </Show>
+                      </button>
+                    );
                   }}
-                >
-                  <Show when={icon()}>
-                    {(Icon) => {
-                      const MenuIcon = Icon();
-                      return (
-                        <span class="redeven-split-menu-item-icon">
-                          <MenuIcon />
-                        </span>
-                      );
-                    }}
-                  </Show>
-                  <span class="redeven-control-label">{item.label}</span>
-                  <Show when={disabled() && disabledReason()}>
-                    <span id={`${props.environmentID}-${item.id}-disabled-reason`} class="sr-only">
-                      {disabledReason()}
-                    </span>
-                  </Show>
-                </button>
-              );
-            }}
+                </For>
+            </>}
           </For>
         </DesktopAnchoredOverlaySurface>
       </Show>
