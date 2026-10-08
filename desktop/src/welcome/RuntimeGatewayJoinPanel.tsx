@@ -1,9 +1,8 @@
 import { ChevronDown, Info } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createSignal, onCleanup, onMount, For, Show, type JSX } from 'solid-js';
 import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import { normalizeGatewayInvitation, type GatewayMembershipStatus, type GatewayMembershipOperation } from '../shared/gatewayJoin';
-import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { GatewayMemberInvitation } from '../shared/gatewayMembership';
 import type { DesktopI18n } from '../shared/i18n';
 
@@ -11,7 +10,7 @@ import type { DesktopI18n } from '../shared/i18n';
 export function RuntimeGatewayJoinPanel(props: Readonly<{
   targetID: DesktopProviderRuntimeLinkTargetID; i18n: DesktopI18n; disabled?: boolean;
   invitation?: GatewayMemberInvitation; focusOwner?: () => void;
-  gateways?: readonly DesktopGatewaySource[]; embedded?: boolean; onClose?: () => void;
+  embedded?: boolean; onClose?: () => void;
   openRequest?: number; hideTrigger?: boolean;
 }>) {
   const [open, setOpen] = createSignal(false);
@@ -22,7 +21,6 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const [replacing, setReplacing] = createSignal(false);
   const [updatingEndpoints, setUpdatingEndpoints] = createSignal(false);
   const [leaving, setLeaving] = createSignal(false);
-  const [gatewayID, setGatewayID] = createSignal('');
   const [choice, setChoice] = createSignal<'preserve' | 'new'>();
   const [invitationFileName, setInvitationFileName] = createSignal('');
   const [now, setNow] = createSignal(Date.now());
@@ -92,22 +90,6 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     }
   }
   onMount(() => { if (props.embedded) { setOpen(true); void act('status'); } });
-  async function createInvitation() {
-    const current = generation;
-    setBusy(true); setError(''); clearTimeout(timer);
-    try {
-      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'invite_gateway_runtime', gateway_id: gatewayID() });
-      if (current !== generation) return;
-      if (!result?.ok || !result.gateway_invitation) throw new Error();
-      setInvitation(result.gateway_invitation);
-    } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.failed')); }
-    finally {
-      if (current === generation) {
-        setBusy(false);
-        if (open()) timer = setTimeout(() => void act('status'), 3000);
-      }
-    }
-  }
   const selectedInvitation = () => invitation() ?? props.invitation;
   const invitationExpiry = (value: number) => props.i18n.t('gatewayJoin.expiresIn', {
     minutes: Math.max(0, Math.ceil((value - now()) / 60_000)),
@@ -132,15 +114,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         <Show when={status()?.joined === false || replacing() || updatingEndpoints()}>
           <section class="redeven-gateway-join-section">
             <h3>{props.i18n.t('gatewayJoin.connectTitle')}</h3>
-            <Show when={props.gateways?.some(gateway => gateway.connection_kind !== 'url' && gateway.permissions?.manage_members)}>
-              <div class="redeven-gateway-field" role="group" aria-label={props.i18n.t('gatewayJoin.chooseGateway')}><span>{props.i18n.t('gatewayJoin.chooseGateway')}</span>
-                <Select class="h-9" value={gatewayID()} disabled={busy()}
-                  options={[{ value: '', label: props.i18n.t('gatewayJoin.importInvitation') }, ...(props.gateways?.filter(gateway => gateway.connection_kind !== 'url' && gateway.permissions?.manage_members && gateway.local_enabled && gateway.member_endpoints?.length) ?? []).map(gateway => ({ value: gateway.gateway_id, label: gateway.display_name }))]}
-                  onChange={value => { setGatewayID(value); setInvitation(undefined); setInvitationFileName(''); }} />
-              </div>
-              <Show when={gatewayID()}><Button class="cursor-pointer" size="sm" variant="outline" disabled={busy()} onClick={() => void createInvitation()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button></Show>
-            </Show>
-            <Show when={!gatewayID()}><div class="space-y-2">
+            <div class="space-y-2">
               <span class="block text-sm font-medium">{props.i18n.t('gatewayJoin.material')}</span>
               <div class="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
                 <Button class="shrink-0 cursor-pointer" size="sm" variant="outline" disabled={busy()} onClick={() => invitationInput?.click()}>{props.i18n.t('gatewayJoin.chooseFile')}</Button>
@@ -148,7 +122,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
               </div>
               <input ref={invitationInput} id="gateway-invitation-file" type="file" accept=".json,application/json" class="sr-only"
                 disabled={busy()} onChange={event => void readInvitation(event.currentTarget.files?.[0])} />
-            </div></Show>
+            </div>
             <Show when={selectedInvitation()}>{current => <div class="redeven-gateway-content-enter redeven-gateway-join-invitation">
               <p class="flex items-center gap-2 text-sm font-semibold text-primary"><span class="h-2 w-2 rounded-full bg-primary" />{props.i18n.t('gatewayJoin.invitationReady')}</p>
               <div class="redeven-gateway-join-summary">

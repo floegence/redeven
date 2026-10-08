@@ -55,7 +55,7 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
       <div class="redeven-gateway-cloud-layout">
         <div class="redeven-gateway-cloud-state">
           <p class="redeven-gateway-cloud-state__name">{props.gatewayName}</p>
-          <Show when={status()}>{value => <div role="status" class="redeven-gateway-cloud-state__status"><span>{props.i18n.t(`gatewayCloud.${value().state}`)}</span><Show when={value().namespace_public_id}><code>{value().namespace_public_id}</code></Show></div>}</Show>
+          <Show when={status()}>{value => <div role="status" class="redeven-gateway-cloud-state__status"><span>{props.i18n.t(`gatewayCloud.${value().state}`)}</span></div>}</Show>
           <Show when={needsConfiguration()}><p class="redeven-gateway-help">{props.i18n.t('gatewayCloud.nextStep')}</p></Show>
         </div>
         <Show when={error()}><p role="alert" class="redeven-gateway-content-enter rounded-md bg-destructive/10 px-3 py-2 text-sm text-error">{error()}</p></Show>

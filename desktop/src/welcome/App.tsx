@@ -6167,7 +6167,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   return (
     <>
       <RuntimeGatewaySetupDialog environment={snapshot().environments.find(environment => environment.id === gatewaySetupEnvironmentID())}
-        gateways={snapshot().gateway_sources} i18n={i18n()} close={() => {
+        i18n={i18n()} close={() => {
           const id = gatewaySetupEnvironmentID(); setGatewaySetupEnvironmentID('');
           requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(id)}"]`)?.focus());
         }}

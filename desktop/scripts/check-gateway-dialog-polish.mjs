@@ -118,9 +118,15 @@ try {
         assert.equal(await dialog.locator('.redeven-gateway-settings-dialog__content').evaluate(element => getComputedStyle(element).overflowY), 'hidden');
         assert.equal(await dialog.locator('.redeven-gateway-settings-panels').evaluate(element => getComputedStyle(element).overflowY), 'auto');
         for (const translationKey of ['runtimes', 'clientAccess', 'connectionSettings']) {
-          await dialog.getByRole('tab', { name: i18n.t(`gatewayClients.${translationKey}`), exact: true }).click();
+          const tab = dialog.getByRole('tab', { name: i18n.t(`gatewayClients.${translationKey}`), exact: true });
+          await tab.click();
           await page.waitForTimeout(240);
           assert.ok(Math.abs((await dialog.boundingBox()).height - fixedHeight) < 1, 'Gateway dialog height stays fixed across tabs');
+          const underline = await tab.evaluate(element => {
+            const style = getComputedStyle(element, '::after');
+            return { left: style.left, right: style.right, opacity: style.opacity };
+          });
+          assert.deepEqual(underline, { left: '0px', right: '0px', opacity: '1' }, 'Selected tab underline spans the full tab button');
         }
         await dialog.getByRole('tab', { name: i18n.t('gatewayClients.clientAccess'), exact: true }).click();
         await dialog.getByText('Studio Desktop', { exact: true }).waitFor();
@@ -182,10 +188,26 @@ try {
         await owner.getByRole('button', { name: i18n.t('environmentAction.runtimeActions'), exact: true }).click();
         await page.getByRole('menuitem', { name: i18n.t('gatewayJoin.menuAction'), exact: true }).click();
         dialog = page.getByRole('dialog'); await checkDialog(dialog, width);
-        const chooser = dialog.getByRole('button', { name: i18n.t('gatewayJoin.importInvitation'), exact: true });
-        await chooser.click();
-        await page.getByRole('menuitem', { name: gateway.display_name, exact: true }).waitFor();
-        await page.keyboard.press('Escape');
+        assert.equal(await dialog.locator('select').count(), 0, 'Runtime access does not choose a Gateway locally');
+        assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).count(), 0, 'Runtime access does not create invitations');
+        await dialog.locator('input[type="file"]').setInputFiles({
+          name: 'gateway-invitation.json',
+          mimeType: 'application/json',
+          buffer: Buffer.from(JSON.stringify({
+            protocol_version: catalogFixture.protocol_version,
+            gateway_id: gateway.gateway_id,
+            gateway_name: gateway.display_name,
+            invitation_id: 'polish-invitation',
+            endpoints: gateway.member_endpoints,
+            gateway_public_key: 'a'.repeat(43),
+            gateway_tls_root_pem: '-----BEGIN CERTIFICATE-----\\ntest',
+            token: 'b'.repeat(43),
+            signature: 'c'.repeat(86),
+            issued_at_unix_ms: Date.now(),
+            expires_at_unix_ms: Date.now() + 600_000,
+          })),
+        });
+        await dialog.getByText(i18n.t('gatewayJoin.invitationReady'), { exact: true }).waitFor();
         assert.equal(await dialog.isVisible(), true);
         const about = dialog.locator('details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayJoin.aboutConnection') }) }).first();
         await capture(page, `${locale}-${width}-${reducedMotion}-runtime-compact`);

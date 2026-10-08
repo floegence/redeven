@@ -439,14 +439,30 @@ describe('Desktop shared i18n dictionaries', () => {
     const zhCN = DESKTOP_I18N_DICTIONARIES['zh-CN'];
     expect(enUS.gatewayJoin.title).toBe('Add Gateway access');
     expect(enUS.gatewayJoin.approve).toBe('Enable Gateway access');
-    expect(enUS.gatewayJoin.joinGateway).toBe('After setup, add Gateway access');
+    expect(enUS.gatewayJoin.joinGateway).toBe('After setup, import a Gateway invitation');
     expect(enUS.gatewayCloud.title).toBe('Connect to Cloud');
     expect(enUS.gatewayCloud.configure).toBe('Connect to Cloud');
     expect(zhCN.gatewayJoin.title).toBe('添加 Gateway 访问');
     expect(zhCN.gatewayJoin.approve).toBe('启用 Gateway 访问');
-    expect(zhCN.gatewayJoin.consent).toContain('Gateway 无法管理此运行时');
+    expect(zhCN.gatewayJoin.consent).toContain('Gateway 不会管理此运行时');
     expect(zhCN.gatewayCloud.title).toBe('接入 Cloud');
     expect(zhCN.gatewayCloud.configure).toBe('接入 Cloud');
+    expect(zhCN.gatewayCloud.pending).toBe('等待 Cloud 批准。');
+    expect(zhCN.gatewayCloud.manage).toBe('在 Cloud 中打开');
+    expect(enUS.gatewayCloud.description).toContain('each Runtime connects to Cloud');
+    expect(enUS.gatewayClients.hostAccess).toContain('device running this Gateway');
+    expect(enUS.gatewayClients.clientOnly).toContain('open the Runtimes it provides');
+    for (const locale of REDEVEN_SUPPORTED_LOCALES) {
+      const dictionary = DESKTOP_I18N_DICTIONARIES[locale];
+      const gatewayHelp = [
+        dictionary.gatewayCloud.pending,
+        dictionary.gatewayCloud.manage,
+        dictionary.gatewayJoin.preserveHelp,
+        dictionary.gatewayJoin.replaceHelp,
+        dictionary.gatewayJoin.bindingProofRequired,
+      ].join(' ').toLowerCase();
+      expect(gatewayHelp, locale).not.toMatch(/namespace|命名空间|命名空間/u);
+    }
   });
 
   it('keeps Flower surface copy localized for every supported Desktop locale', () => {
