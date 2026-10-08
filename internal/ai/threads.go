@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/tessiven"
 )
 
 func newProductRequestID(prefix string) (string, error) {
@@ -1272,6 +1273,15 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	if endpointID == "" {
 		return errors.New("invalid request")
+	}
+	if s.tessiven != nil {
+		referenced, referenceErr := s.tessiven.FlowerThreadReferenced(ctxOrBackground(ctx), threadID)
+		if referenceErr != nil {
+			return referenceErr
+		}
+		if referenced {
+			return tessiven.ErrFlowerThreadReferenced
+		}
 	}
 
 	s.mu.Lock()
