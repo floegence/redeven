@@ -65,6 +65,47 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
   return { setRequest, sent, connections, navigate, push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
 }
 const editor = () => page.getByRole('textbox');
+const replyMenu = () => page.getByRole('button', { name: 'Reply actions', exact: true });
+const expectConversationAction = async (available: boolean) => {
+  await replyMenu().click();
+  const action = page.getByRole('menuitem', { name: 'Open conversation', exact: true });
+  if (available) await expect.element(action).toBeVisible();
+  else await expect.element(action).not.toBeInTheDocument();
+  await userEvent.keyboard('{Escape}');
+};
+it('keeps a quiet reply titlebar with secondary actions in an accessible menu', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount();
+  await expect.element(editor()).toBeVisible();
+  const titlebar = document.querySelector<HTMLElement>('.tessiven-flower-output [data-floe-floating-window-titlebar]')!;
+  expect(titlebar.querySelectorAll('button, [role="button"]').length).toBeGreaterThanOrEqual(3);
+  expect(titlebar.querySelector('h2')?.textContent).toBe('Flower');
+  expect(titlebar.querySelector('h2 svg')).not.toBeNull();
+  expect(titlebar.getBoundingClientRect().height).toBe(43);
+  expect(document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().width).toBe(356);
+  await expect.element(page.getByRole('button', { name: 'Reply actions', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Reply actions', exact: true }).click();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('menuitem', { name: 'Flower settings', exact: true })).toBeVisible();
+  expect(document.querySelector('[role="menu"]')?.closest('[data-floe-surface="floating"]')).not.toBeNull();
+  await expect.poll(() => document.activeElement?.getAttribute('role')).toBe('menuitem');
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('[role="menu"]')?.getAttribute('data-floating-presence')).not.toBe('open');
+  expect(document.querySelector('.tessiven-flower-output')).not.toBeNull();
+  await editor().fill('Open a conversation');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('canvas-thread');
+  await page.getByRole('button', { name: 'Reply actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Open conversation', exact: true }).click();
+  expect(runtime.navigate).toHaveBeenCalledWith('canvas-thread');
+  await page.getByRole('button', { name: 'Reply actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'New conversation', exact: true }).click();
+  await editor().fill('A separate conversation');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
+  expect(runtime.sent.mock.calls[1][0].thread_id).toBeUndefined();
+});
 it('keeps the whole canvas implicit in a clean default composer', async () => {
   await page.viewport(1200, 800);
   const runtime = mount();
@@ -172,6 +213,34 @@ it('uses the shared local floating layer inside a projected canvas', async () =>
   expect(rect.right).toBeLessThanOrEqual(bounds.right);
 });
 
+it('opens native subagent and settings surfaces from the projected reply menu', async () => {
+  await page.viewport(1200, 800);
+  mount(true);
+  await expect.element(editor()).toBeVisible();
+  await replyMenu().click();
+  const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+  expect(menu.closest('[data-floe-local-interaction-surface]')).not.toBeNull();
+  expect(menu.style.position).not.toBe('fixed');
+  const bounds = host.getBoundingClientRect();
+  const rect = menu.getBoundingClientRect();
+  expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+  expect(rect.right).toBeLessThanOrEqual(bounds.right);
+  await page.getByRole('menuitem', { name: 'Open subagents', exact: true }).click();
+  await expect.element(page.getByRole('dialog', { name: 'Subagents', exact: true })).toBeVisible();
+  const subagents = document.querySelector('.flower-subagents-dropdown')!;
+  expect(subagents.closest('[data-floe-local-interaction-surface]')).not.toBeNull();
+  await expect.poll(() => document.activeElement === subagents).toBe(true);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('.flower-subagents-dropdown')).toBeNull();
+  expect(document.querySelector('.tessiven-flower-output')).not.toBeNull();
+  await expect.poll(() => document.activeElement?.getAttribute('aria-label')).toBe('Reply actions');
+  await replyMenu().click();
+  await page.getByRole('menuitem', { name: 'Flower settings', exact: true }).click();
+  await expect.element(page.getByRole('button', { name: 'Back to chat', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to chat', exact: true }).click();
+  await expect.element(editor()).toBeVisible();
+});
+
 it('moves and resizes replies without moving the composer or selecting canvas text', async () => {
   await page.viewport(1200, 800);
   mount();
@@ -190,6 +259,80 @@ it('moves and resizes replies without moving the composer or selecting canvas te
   expect(host.querySelector('.tessiven-flower-composer')!.getBoundingClientRect().toJSON()).toEqual(composer.toJSON());
 });
 
+it('preserves native tool disclosure and live progress in the refined reading surface', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount(false, {}, true);
+  await expect.element(editor()).toBeVisible();
+  await editor().fill('Arrange the service architecture horizontally');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  const input = runtime.sent.mock.calls[0][0];
+  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+    thread_id: 'canvas-thread', view_version: 2, activity: 'active', turn_id: 'turn', run_id: 'run',
+    run_progress: { phase: 'tool_execution' }, queue: [], interactions: [], items: [
+      { id: `user:${input.client_request_id}`, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: input.prompt },
+      { id: 'reply', turn_id: 'turn', run_id: 'run', ordinal: 2, kind: 'assistant', text: 'I will read the selected canvas and its schema first.' },
+      { id: 'canvas-read', turn_id: 'turn', run_id: 'run', ordinal: 3, kind: 'tool', activity: {
+        item_id: 'canvas-read', tool_id: 'canvas-read', tool_name: 'terminal.exec', kind: 'tool', status: 'success',
+        severity: 'normal', needs_attention: false, requires_approval: false,
+        presentation: { label: 'tessiven schema', renderer: 'terminal', payload: {
+          operation: 'execute', command: 'tessiven schema', output: 'ServiceCanvas schema loaded', exit_code: 0,
+        } },
+      } },
+    ],
+  } });
+  const row = () => document.querySelector<HTMLElement>('.tessiven-flower-output [data-flower-activity-item-id="canvas-read"]');
+  await expect.poll(row).not.toBeNull();
+  await expect.poll(() => document.querySelector('.tessiven-flower-output .flower-model-status-indicator')?.textContent).toContain('Using a tool');
+  const disclosure = row()!.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+  expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+  disclosure.click();
+  await expect.poll(() => disclosure.getAttribute('aria-expanded')).toBe('true');
+  await expect.element(page.getByText('ServiceCanvas schema loaded', { exact: true })).toBeVisible();
+  disclosure.click();
+  for (const name of ['porcelain-light', 'porcelain-dark']) {
+    const preset = builtInShellThemePresets.find(item => item.name === name)!;
+    document.documentElement.classList.toggle('dark', preset.mode === 'dark');
+    for (const [token, value] of Object.entries(preset.semanticTokens ?? {}))
+      if (value) document.documentElement.style.setProperty(token, value);
+    await page.screenshot({ element: host, path: `__screenshots__/tessiven-reply-activity-${name}.png` });
+  }
+});
+
+it('keeps touch controls usable and the reading surface legible in forced colors', async () => {
+  const media = commands as unknown as {
+    emulateTouchInput: (enabled: boolean) => Promise<void>;
+    emulateMediaPreferences: (preferences: { forcedColors: 'active' | 'none' }) => Promise<void>;
+  };
+  await page.viewport(1200, 844);
+  try {
+    await media.emulateTouchInput(true);
+    mount();
+    host.style.cssText = 'position:absolute;inset:0;width:1100px;height:844px';
+    await expect.element(editor()).toBeVisible();
+    await expect.poll(() => matchMedia('(pointer: coarse)').matches).toBe(true);
+    await expect.element(replyMenu()).toBeVisible();
+    const titlebar = document.querySelector<HTMLElement>('.tessiven-flower-output [data-floe-floating-window-titlebar]')!;
+    for (const control of titlebar.querySelectorAll('button, [role="button"]')) {
+      expect(control.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
+    await replyMenu().click();
+    await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
+    await expect.poll(() => document.activeElement?.getAttribute('role')).toBe('menuitem');
+    await userEvent.keyboard('{Escape}');
+    await page.screenshot({ element: host, path: '__screenshots__/tessiven-reply-touch.png' });
+    await media.emulateMediaPreferences({ forcedColors: 'active' });
+    await expect.element(replyMenu()).toBeVisible();
+    const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
+    expect(getComputedStyle(output).color).not.toBe(getComputedStyle(output).backgroundColor);
+    await page.screenshot({ element: host, path: '__screenshots__/tessiven-reply-forced-colors.png' });
+  } finally {
+    await media.emulateTouchInput(false);
+    await media.emulateMediaPreferences({ forcedColors: 'none' });
+  }
+});
+
 it('keeps late acceptance bound to its original canvas and resumes the accepted conversation', async () => {
   await page.viewport(1200, 800);
   let accept!: (value: Awaited<ReturnType<FlowerSurfaceAdapter['launchTurn']>>) => void;
@@ -202,9 +345,9 @@ it('keeps late acceptance bound to its original canvas and resumes the accepted 
   await editor().fill('Unsaved analytics draft');
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
   await expect.element(editor()).toHaveValue('Unsaved analytics draft');
-  await expect.element(page.getByRole('button', { name: 'Open conversation', exact: true })).not.toBeInTheDocument();
+  await expectConversationAction(false);
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 2 });
-  await expect.element(page.getByRole('button', { name: 'Open conversation', exact: true })).toBeVisible();
+  await expectConversationAction(true);
   await expect.element(editor()).toHaveValue('');
   await editor().fill('Continue commerce');
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 3 });
@@ -227,14 +370,15 @@ it('reopens replies on send and does not reopen an older conversation after star
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   await expect.element(page.getByRole('button', { name: 'Hide replies', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+  await replyMenu().click();
+  await page.getByRole('menuitem', { name: 'New conversation', exact: true }).click();
   await editor().fill('A separate question');
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
   await expect.element(editor()).toHaveValue('A separate question');
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 1 });
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 2 });
   await expect.element(editor()).toHaveValue('A separate question');
-  await expect.element(page.getByRole('button', { name: 'Open conversation', exact: true })).not.toBeInTheDocument();
+  await expectConversationAction(false);
 });
 
 it('retries an uncertain send with its original canvas identity after the selection changes', async () => {
@@ -287,8 +431,7 @@ it('keeps reply text, context and controls legible across every theme and clamps
       const b = luminance(getComputedStyle(document.querySelector(background)!).backgroundColor);
       expect((Math.max(a, b) + .05) / (Math.min(a, b) + .05), `${preset.name}: ${selector}`).toBeGreaterThanOrEqual(minimum);
     }
-    if (['porcelain-light', 'porcelain-dark', 'nord', 'solarized-light'].includes(preset.name))
-      await page.screenshot({ path: `__screenshots__/tessiven-floating-${preset.name}.png` });
+    await page.screenshot({ path: `__screenshots__/tessiven-floating-${preset.name}.png` });
   }
   await page.viewport(390, 844); host.style.cssText = 'position:absolute;inset:0;width:390px;height:844px';
   await expect.poll(() => document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().right).toBeLessThanOrEqual(390);
@@ -328,7 +471,7 @@ it('keeps native approval controls usable at the bottom while replies are hidden
   await expect.element(editor()).toBeVisible();
   await editor().fill('Inspect Orders');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect.element(page.getByRole('button', { name: 'Open conversation', exact: true })).toBeVisible();
+  await expectConversationAction(true);
   await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
   runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
     thread_id: 'canvas-thread', view_version: 3, activity: 'active', turn_id: 'turn', run_id: 'run', queue: [], items: [],

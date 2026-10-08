@@ -1320,28 +1320,78 @@
 .tessiven-flower-composer .flower-chat-bottom-dock-track { width: 100%; max-width: none; padding: 0; }
 .tessiven-flower-composer .flower-composer { background: var(--card); }
 .tessiven-flower-output {
+  --tessiven-flower-surface: color-mix(in srgb, var(--card) 94%, var(--background));
+  --floe-window-background: var(--tessiven-flower-surface);
+  --floe-window-titlebar-background: var(--tessiven-flower-surface);
+  --floe-window-foreground: var(--foreground);
+  --floe-window-muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--tessiven-flower-surface));
+  --floe-window-border: color-mix(in srgb, var(--border) 72%, var(--tessiven-flower-surface));
+  --floe-radius-floating: 12px;
+  --floe-window-shadow: 0 1px 2px color-mix(in srgb, var(--redeven-shadow-color) 30%, transparent),
+    0 5px 14px color-mix(in srgb, var(--redeven-shadow-color) 25%, transparent),
+    0 12px 24px color-mix(in srgb, var(--redeven-shadow-color) 40%, transparent);
   pointer-events: auto;
-  background: var(--background);
-  border-radius: 12px;
-  box-shadow: 0 12px 36px -8px var(--redeven-shadow-color), 0 2px 6px var(--redeven-shadow-color);
+  background: var(--tessiven-flower-surface);
+  border-color: var(--floe-window-border);
+  box-shadow: var(--floe-window-shadow);
 }
-.tessiven-flower-output .flower-chat-header-actions { display: flex; align-items: center; gap: 2px; }
 .tessiven-flower-output [data-floe-floating-window-titlebar] {
-  height: 40px;
-  /* Keep the reply surface continuous through Floe's active and inactive chrome. */
-  background: var(--redeven-surface-main, var(--background)) !important;
-  border-bottom: 1px solid var(--border);
+  height: 43px;
+  min-height: 43px;
+  padding: 0 9px 0 7px;
+  /* Active and inactive chrome keep the same quiet, opaque reading material. */
+  background: var(--tessiven-flower-surface) !important;
+  border-bottom: 0;
+}
+.tessiven-flower-output [data-floe-floating-window-titlebar] h2 { font-size: 12px; font-weight: 600; gap: 7px; }
+.tessiven-flower-output [data-floe-floating-window-title-icon] { width: 18px; height: 18px; }
+.tessiven-flower-output [data-floe-floating-window-title-icon] svg { width: 18px; height: 18px; }
+.tessiven-flower-output [data-floe-floating-window-header-actions] { gap: 2px; }
+.tessiven-flower-output [data-floe-floating-window-header-actions] > span[aria-hidden] { display: none; }
+.tessiven-flower-output [data-floe-floating-window-control] {
+  width: 27px;
+  height: 27px;
+  align-self: center;
+  margin-left: 2px;
+  border-radius: 5px;
+  color: var(--muted-foreground);
+}
+.tessiven-flower-output [data-floe-floating-window-control]:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--tessiven-flower-surface));
+  color: var(--foreground);
 }
 .tessiven-flower-output [data-floe-floating-window-content] { padding: 0; overflow: hidden; }
-.tessiven-flower-output .tessiven-icon-button { width: 28px; height: 28px; color: var(--muted-foreground); }
-.tessiven-flower-output .tessiven-icon-button svg { width: 15px; height: 15px; }
+.tessiven-flower-output .tessiven-icon-button { width: 27px; height: 27px; border-radius: 5px; color: var(--muted-foreground); }
+.tessiven-flower-output .tessiven-icon-button svg { width: 14px; height: 14px; }
+.tessiven-flower-menu-trigger { display: grid; place-items: center; }
 .tessiven-flower-conversation,
 .tessiven-flower-conversation .flower-component-main { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.tessiven-flower-conversation { user-select: text; pointer-events: auto; }
+.tessiven-flower-conversation {
+  --flower-chat-surface: var(--tessiven-flower-surface);
+  --flower-chat-surface-elevated: var(--tessiven-flower-surface);
+  background: var(--tessiven-flower-surface);
+  user-select: text;
+  pointer-events: auto;
+}
 .tessiven-flower-conversation .flower-chat-shell { flex: 1; min-height: 0; }
 .tessiven-flower-conversation .flower-chat-main { min-height: 0; flex: 1; }
-.tessiven-flower-conversation .flower-chat-transcript { padding: 16px; flex: 1; min-height: 0; }
-.tessiven-flower-conversation .flower-transcript-stack { max-width: 100%; }
+.tessiven-flower-conversation .flower-chat-transcript { padding: 6px 18px 16px; flex: 1; min-height: 0; scrollbar-gutter: auto; }
+.tessiven-flower-conversation .flower-transcript-stack { max-width: 100%; gap: 14px; }
+.tessiven-flower-conversation :is(.flower-body-copy, .flower-message-bubble) { font-size: 13px; line-height: 1.85; }
+.tessiven-flower-conversation .flower-message-bubble-user {
+  font-size: 12px;
+  line-height: 1.65;
+  max-width: 86%;
+  padding: 9px 12px;
+  border-radius: 10px 10px 3px 10px;
+  background: color-mix(in srgb, var(--foreground) 8%, var(--tessiven-flower-surface));
+  color: var(--foreground);
+}
+.tessiven-flower-conversation .flower-model-status-lane--conversation {
+  margin: 0 18px;
+  padding: 10px 0 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, var(--tessiven-flower-surface));
+}
 .tessiven-flower-welcome { display: flex; flex-direction: column; align-items: flex-start; padding: 20px 4px; gap: 14px; }
 .tessiven-flower-welcome > svg { width: 28px; height: 28px; }
 .tessiven-flower-welcome strong { font-size: 16px; font-weight: 550; letter-spacing: -.02em; }
@@ -1354,6 +1404,10 @@
 }
 .tessiven-flower-restore svg { width: 18px; height: 18px; }
 .tessiven-flower-restore:hover { background: var(--muted); }
+@media (pointer: coarse) {
+  .tessiven-flower-output [data-floe-floating-window-titlebar] { height: 52px; min-height: 52px; }
+  .tessiven-flower-output :is([data-floe-floating-window-control], .tessiven-icon-button) { width: 44px; height: 44px; }
+}
 @media (max-width: 850px) {
   .tessiven-canvas-tools { top: 12px; bottom: auto; left: auto; right: 12px; }
   .tessiven-flower-composer { width: calc(100% - 24px); margin-bottom: 12px; }
