@@ -17,12 +17,12 @@ function fixture() {
   const challenge = {
     protocol_version: GATEWAY_PROTOCOL_VERSION, gateway_id: 'machine_stable', gateway_nonce: 'nonce',
     gateway_public_key: machine.client_public_key, gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(machine.client_public_key),
-    expires_at_unix_ms: 2000, pairing_code: '123456', signature: '',
+    expires_at_unix_ms: 2000, compatibility_epoch: 43, signature: '',
   };
   challenge.signature = signGatewayPayload(machine.client_private_key, pairingChallengePayload({
     protocol_version: challenge.protocol_version, client_nonce: material.client_nonce, gateway_nonce: challenge.gateway_nonce,
     gateway_id: challenge.gateway_id, binding_audience: material.binding_audience, client_public_key: material.client_public_key,
-    gateway_public_key: challenge.gateway_public_key, expires_at_unix_ms: challenge.expires_at_unix_ms, pairing_code: challenge.pairing_code,
+    gateway_public_key: challenge.gateway_public_key, expires_at_unix_ms: challenge.expires_at_unix_ms, compatibility_epoch: challenge.compatibility_epoch,
   }));
   const pair = () => completeGatewayPairing({ record, material, challenge, secret_store, trust_accepted: true, now_unix_ms: 1000 });
   return { record, material, machine, challenge, values, secret_store, pair };
@@ -44,7 +44,7 @@ describe('Gateway v4 trust', () => {
       { gateway_public_key_fingerprint: 'wrong' }, { expires_at_unix_ms: 1000 }, { signature: 'wrong' }, { protocol_version: 'redeven-gateway-v3' }]) {
       expect(() => assertGatewayPairingChallenge({ record, material: f.material, challenge: { ...f.challenge, ...patch }, now_unix_ms: 1000 })).toThrow();
     }
-    expect(() => assertGatewayPairingChallenge({ record, material: f.material, challenge: f.challenge, expected_pairing_code: 'other', now_unix_ms: 1000 })).toThrow();
+    expect(() => assertGatewayPairingChallenge({ record, material: f.material, challenge: { ...f.challenge, compatibility_epoch: 42 }, now_unix_ms: 1000 })).toThrow();
     expect(() => assertGatewayPairingChallenge({ record, material: { ...f.material, binding_audience: 'https://other.example/' }, challenge: f.challenge, now_unix_ms: 1000 })).toThrow();
   });
   it('requires explicit trust consent before storing any private key', async () => {
@@ -52,21 +52,21 @@ describe('Gateway v4 trust', () => {
     await expect(completeGatewayPairing({ ...f, trust_accepted: false, now_unix_ms: 1000 })).rejects.toThrow();
     expect(f.values.size).toBe(0);
   });
-  it('binds the exact independent permissions into both pairing proofs', () => {
+  it('enrolls an access-only identity without caller-selected permissions', () => {
     const f = fixture();
-    const permissions: GatewayPermissions = { access: true, manage_members: true, configure_cloud: false };
-    const request = buildPairingCompleteRequest(f.material, f.challenge, permissions);
+    const permissions: GatewayPermissions = { access: true, manage_members: false, configure_cloud: false };
+    const request = buildPairingCompleteRequest(f.material, f.challenge);
     const { proof, ...payload } = request;
     expect(verifyGatewaySignature(f.material.client_public_key, pairingProofPayload(payload), proof)).toBe(true);
-    expect(verifyGatewaySignature(f.material.client_public_key, pairingProofPayload({ ...payload, permissions: { ...permissions, configure_cloud: true } }), proof)).toBe(false);
+    expect(verifyGatewaySignature(f.material.client_public_key, pairingProofPayload({ ...payload, client_key_id: 'forged' }), proof)).toBe(false);
     const response = { protocol_version: GATEWAY_PROTOCOL_VERSION, gateway_id: f.challenge.gateway_id,
       client_key_id: f.material.client_key_id, paired_at_unix_ms: 1000, permissions, proof: '' };
     const { proof: _responseProof, ...body } = response;
     response.proof = signGatewayPayload(f.machine.client_private_key, pairingCompleteResponsePayload({ ...body,
       client_nonce: f.material.client_nonce, gateway_nonce: f.challenge.gateway_nonce, binding_audience: f.material.binding_audience }));
-    expect(() => assertGatewayPairingCompleteResponse(f.material, f.challenge, response, permissions)).not.toThrow();
-    expect(() => assertGatewayPairingCompleteResponse(f.material, f.challenge, { ...response, permissions: { ...permissions, configure_cloud: true } }, permissions)).toThrow();
-    expect(buildPairingCompleteRequest(f.material, f.challenge).permissions).toEqual({ access: true, manage_members: false, configure_cloud: false });
+    expect(() => assertGatewayPairingCompleteResponse(f.material, f.challenge, response)).not.toThrow();
+    expect(() => assertGatewayPairingCompleteResponse(f.material, f.challenge, { ...response, permissions: { ...permissions, configure_cloud: true } })).toThrow();
+    expect(buildPairingCompleteRequest(f.material, f.challenge)).not.toHaveProperty('permissions');
   });
   it('fences unpaired, revoked and edited destinations and deletes the revoked secure key', async () => {
     const f = fixture();
@@ -88,7 +88,7 @@ describe('Gateway v4 trust', () => {
    const connection = { kind: 'url' as const, base_url: 'https://new-gateway.example/' };
    let proof: Record<string, unknown> = {};
    const updated = await verifyGatewayConnectionChange(record, connection, async candidate => {
-     proof = { binding_audience: connection.base_url, expires_at_unix_ms: 2000, gateway_id: profile.gateway_id,
+     proof = { binding_audience: connection.base_url, compatibility_epoch: 43, expires_at_unix_ms: 2000, gateway_id: profile.gateway_id,
        nonce, protocol_version: GATEWAY_PROTOCOL_VERSION, signature: '' };
      proof.signature = signGatewayPayload(f.machine.client_private_key, JSON.stringify(proof));
      assertGatewayAddressProof(candidate, nonce, proof, 1000);

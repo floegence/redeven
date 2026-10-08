@@ -7,6 +7,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { GatewayClient, normalizeGatewayCatalogResponse, redactGatewayDiagnosticValue } from './gatewayClient';
 
 describe('Gateway access client contracts', () => {
+  it('rejects URL management before signing or network delivery', async () => {
+    const record: GatewayRecord = { schema_version: 4, gateway_id: 'consumer', display_name: 'URL client', local_enabled: true, connection: { kind: 'url', base_url: 'https://gateway.example/' }, created_at_ms: 1, updated_at_ms: 1 };
+    const secretStore = { readSecret: vi.fn(), writeSecret: vi.fn(), deleteSecret: vi.fn() };
+    const client = new GatewayClient(secretStore);
+    for (const action of [() => client.issueAccessCode(record), () => client.listClients(record), () => client.revokeClient(record, 'other')]) {
+      await expect(action()).rejects.toMatchObject({ code: 'HOST_MANAGEMENT_REQUIRED' });
+    }
+    expect(secretStore.readSecret).not.toHaveBeenCalled();
+  });
+
   it('rejects old protocols, duplicate members and malformed policies', () => {
     expect(() => normalizeGatewayCatalogResponse({ ...catalogFixture, protocol_version: 'redeven-gateway-v3' })).toThrow();
     expect(() => normalizeGatewayCatalogResponse({ ...catalogFixture, members: [...catalogFixture.members, ...catalogFixture.members] })).toThrow();

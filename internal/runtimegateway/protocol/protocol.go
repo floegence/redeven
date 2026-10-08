@@ -12,15 +12,16 @@ type IdentityRequest struct {
 	Nonce           string `json:"nonce"`
 }
 type IdentityResponse struct {
-	BindingAudience string `json:"binding_audience"`
-	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms"`
-	GatewayID       string `json:"gateway_id"`
-	Nonce           string `json:"nonce"`
-	ProtocolVersion string `json:"protocol_version"`
-	Signature       string `json:"signature"`
+	BindingAudience    string `json:"binding_audience"`
+	ExpiresAtUnixMS    int64  `json:"expires_at_unix_ms"`
+	GatewayID          string `json:"gateway_id"`
+	Nonce              string `json:"nonce"`
+	CompatibilityEpoch int    `json:"compatibility_epoch"`
+	ProtocolVersion    string `json:"protocol_version"`
+	Signature          string `json:"signature"`
 }
 
-// Permissions are distinct grants. Existing paired clients retain access only;
+// Permissions are read-only request capabilities computed by the Gateway;
 // retired profile-write grants never become member or Cloud management grants.
 type GatewayPermissions struct {
 	Access         bool `json:"access"`
@@ -109,7 +110,8 @@ type PairingChallengeRequest struct {
 	ClientNonce     string `json:"client_nonce"`
 	ClientPublicKey string `json:"client_public_key"`
 	BindingAudience string `json:"binding_audience"`
-	PairingCode     string `json:"pairing_code,omitempty"`
+	AccessCode      string `json:"access_code,omitempty"`
+	ClientName      string `json:"client_name,omitempty"`
 }
 
 type PairingChallengeResponse struct {
@@ -118,20 +120,19 @@ type PairingChallengeResponse struct {
 	GatewayPublicKey            string `json:"gateway_public_key"`
 	GatewayPublicKeyFingerprint string `json:"gateway_public_key_fingerprint"`
 	GatewayNonce                string `json:"gateway_nonce"`
-	PairingCode                 string `json:"pairing_code,omitempty"`
+	CompatibilityEpoch          int    `json:"compatibility_epoch"`
 	ExpiresAtUnixMS             int64  `json:"expires_at_unix_ms"`
 	Signature                   string `json:"signature"`
 }
 
 type PairingCompleteRequest struct {
-	ProtocolVersion string             `json:"protocol_version"`
-	ClientNonce     string             `json:"client_nonce"`
-	GatewayNonce    string             `json:"gateway_nonce"`
-	GatewayID       string             `json:"gateway_id"`
-	BindingAudience string             `json:"binding_audience"`
-	ClientKeyID     string             `json:"client_key_id"`
-	Permissions     GatewayPermissions `json:"permissions"`
-	Proof           string             `json:"proof"`
+	ProtocolVersion string `json:"protocol_version"`
+	ClientNonce     string `json:"client_nonce"`
+	GatewayNonce    string `json:"gateway_nonce"`
+	GatewayID       string `json:"gateway_id"`
+	BindingAudience string `json:"binding_audience"`
+	ClientKeyID     string `json:"client_key_id"`
+	Proof           string `json:"proof"`
 }
 
 type PairingCompleteResponse struct {
@@ -145,7 +146,6 @@ type PairingCompleteResponse struct {
 
 var (
 	ErrUnsupportedProtocolVersion = errors.New("unsupported protocol_version")
-	ErrInvalidPermissions         = errors.New("invalid Gateway permissions")
 )
 
 func ValidateProtocolVersion(version string) error {
@@ -168,8 +168,30 @@ func ValidatePairingCompleteRequest(req PairingCompleteRequest) error {
 	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
 		return err
 	}
-	if !req.Permissions.Access && !req.Permissions.ManageMembers && !req.Permissions.ConfigureCloud {
-		return ErrInvalidPermissions
-	}
 	return nil
+}
+
+type ClientAccessCodeRequest struct {
+	ProtocolVersion string `json:"protocol_version"`
+}
+type ClientAccessCodeResponse struct {
+	AccessCode      string `json:"access_code"`
+	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms"`
+}
+type ClientListRequest struct {
+	ProtocolVersion string `json:"protocol_version"`
+}
+type GatewayClientRecord struct {
+	ClientKeyID        string `json:"client_key_id"`
+	ClientName         string `json:"client_name"`
+	PairedAtUnixMS     int64  `json:"paired_at_unix_ms"`
+	LastVerifiedUnixMS int64  `json:"last_verified_at_unix_ms"`
+	RevokedAtUnixMS    int64  `json:"revoked_at_unix_ms"`
+}
+type ClientListResponse struct {
+	Clients []GatewayClientRecord `json:"clients"`
+}
+type ClientRevokeRequest struct {
+	ProtocolVersion string `json:"protocol_version"`
+	ClientKeyID     string `json:"client_key_id"`
 }

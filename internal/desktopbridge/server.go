@@ -103,11 +103,11 @@ func NewTrustedBridgeSurfaceDialer(localUIBridgeURL string, runtimeControlURL st
 	return newSurfaceDialer(localUIAddr, dialAddrFromURL(runtimeControlURL), "", "", ""), nil
 }
 
-func NewGatewaySurfaceDialer(gatewayURL, memberURL, managedGatewayBridgeToken string) SurfaceDialer {
-	return newSurfaceDialer("", "", dialAddrFromURL(gatewayURL), dialAddrFromURL(memberURL), managedGatewayBridgeToken)
+func NewGatewaySurfaceDialer(gatewayURL, memberURL, hostAdminToken string) SurfaceDialer {
+	return newSurfaceDialer("", "", dialAddrFromURL(gatewayURL), dialAddrFromURL(memberURL), hostAdminToken)
 }
 
-func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr string, memberAddr string, managedGatewayBridgeToken string) SurfaceDialer {
+func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr string, memberAddr string, hostAdminToken string) SurfaceDialer {
 	return func(ctx context.Context, surface StreamSurface) (net.Conn, error) {
 		addr := ""
 		switch surface {
@@ -130,10 +130,10 @@ func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr
 		if err != nil {
 			return nil, err
 		}
-		if surface == StreamSurfaceGatewayProtocol && strings.TrimSpace(managedGatewayBridgeToken) != "" {
+		if surface == StreamSurfaceGatewayProtocol && strings.TrimSpace(hostAdminToken) != "" {
 			return &gatewayProtocolHeaderConn{
 				Conn:  conn,
-				token: strings.TrimSpace(managedGatewayBridgeToken),
+				token: strings.TrimSpace(hostAdminToken),
 			}, nil
 		}
 		return conn, nil
@@ -189,9 +189,19 @@ func (c *gatewayProtocolHeaderConn) Write(p []byte) (int, error) {
 		c.injected = true
 		return 0, fmt.Errorf("gateway handshake exceeds %d bytes", maxHandshakeBytes)
 	}
-	managedHeader := []byte("X-Redeven-Gateway-Managed-Bridge-Token: " + c.token)
+	managedHeader := []byte("X-Redeven-Gateway-Host-Token: " + c.token)
 	header := make([]byte, 0, headerEnd+len(managedHeader)+len("\r\n\r\n\r\n"))
-	header = append(header, c.buffer[:headerEnd]...)
+
+	for index, line := range bytes.Split(c.buffer[:headerEnd], []byte("\r\n")) {
+		if index > 0 {
+			name, _, _ := bytes.Cut(line, []byte(":"))
+			if strings.EqualFold(string(name), "X-Redeven-Gateway-Host-Token") || strings.EqualFold(string(name), "X-Redeven-Gateway-Managed-Bridge-Token") {
+				continue
+			}
+			header = append(header, '\r', '\n')
+		}
+		header = append(header, line...)
+	}
 	header = append(header, '\r', '\n')
 	header = append(header, managedHeader...)
 	header = append(header, c.buffer[headerEnd:headerEnd+len("\r\n\r\n")]...)

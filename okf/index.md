@@ -145,6 +145,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## Gateway
 
 - [Gateway Cloud access](gateway/gateway-cloud-access.md) - Publish unified Runtime members through Namespace approval and track recovery and independent closure receipts.
+- [Gateway client access](gateway/gateway-client-access.md) - Verify host management and enroll, reconnect or revoke environment-only URL clients.
 - [Gateway service](gateway/gateway-service.md) - Manage invitations, membership and policy without Runtime lifecycle authority.
 - [Gateway Desktop interactions](gateway/gateway-desktop-interactions.md) - Manage environments in place and verify clear counts, contextual forms, access actions and operation feedback.
 - [Gateway access sessions](gateway/gateway-access-sessions.md) - Open outbound members with isolated TLS, Runtime authentication and bounded reverse streams.

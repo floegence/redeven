@@ -160,13 +160,17 @@ export class GatewayLifecycleManager {
 
   async refreshCatalog(record: GatewayRecord, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayCatalogResponse> {
     if (record.connection.kind === 'url') {
-      return new GatewayClient(this.options.secret_store).catalog(record, options);
+      const client = new GatewayClient(this.options.secret_store);
+      await client.verifyAddress(record, options);
+      return client.catalog(record, options);
     }
-    return (await this.ensureGatewayReady(record, {
+    const client = (await this.ensureGatewayReady(record, {
       startPolicy: options.startPolicy ?? 'require_ready',
       signal: options.signal,
       onProgress: options.onProgress,
-    })).client.catalog(record, options);
+    })).client;
+    await client.verifyAddress(record, options);
+    return client.catalog(record, options);
   }
 
   async client(record: GatewayRecord, options: Readonly<{

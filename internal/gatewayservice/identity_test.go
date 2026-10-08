@@ -26,7 +26,7 @@ func TestGatewayAddressProofUsesPersistentMachineKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	challenge, err := server.trust.PairingChallenge(gp.PairingChallengeRequest{ProtocolVersion: gp.Version, ClientNonce: "identity-test-client-nonce", ClientPublicKey: client.PublicKeyPEM, BindingAudience: "https://first.example"})
+	challenge, err := server.trust.PairingChallenge(gp.PairingChallengeRequest{ProtocolVersion: gp.Version, ClientNonce: "identity-test-client-nonce", ClientPublicKey: client.PublicKeyPEM, BindingAudience: "https://first.example"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

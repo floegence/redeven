@@ -1,4 +1,4 @@
-import { Button, Checkbox, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, Info, Plus, Trash, Download } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
@@ -9,9 +9,9 @@ import type { DesktopI18n } from '../shared/i18n';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { DesktopTooltip } from './DesktopTooltip';
 
-export function GatewayMembersDialog(props: Readonly<{
+export function GatewayMembersPanel(props: Readonly<{
   gateway?: DesktopGatewaySource; i18n: DesktopI18n; targets: readonly DesktopProviderRuntimeLinkTarget[];
-  onClose: () => void; refresh: () => Promise<unknown>; focusOwner?: (gatewayID: string) => void;
+  section?: 'connection' | 'runtimes'; refresh: () => Promise<unknown>;
 }>) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
@@ -110,21 +110,13 @@ export function GatewayMembersDialog(props: Readonly<{
     const result = await perform({ kind: 'update_gateway_endpoints', gateway_id: props.gateway.gateway_id, endpoints });
     if (result) { setSavedEndpoints(endpoints); setEndpointDraft(endpoints); setInvitation(undefined); }
   }
-  function close() {
-    const id = props.gateway?.gateway_id;
-    props.onClose();
-    if (id) queueMicrotask(() => props.focusOwner?.(id));
-  }
-  return <Dialog open={!!props.gateway} onOpenChange={open => { if (!open) close(); }}
-    title={props.i18n.t('gatewayMembers.title')} bodyDescription={props.gateway?.display_name} closeLabel={props.i18n.t('common.close')}
-    class="redeven-gateway-dialog" contentClass="redeven-gateway-dialog__content"
-    footer={<div class="flex justify-end gap-2"><Button class="cursor-pointer" variant="outline" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'refresh_gateway_catalog', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.refresh')}</Button>
-      <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t('common.close')}</Button></div>}>
+  return (
     <div class="space-y-5">
       <Show when={props.gateway?.rebuild_required}><div class="space-y-2 rounded-md border border-warning p-3 text-sm">
         <p>{props.i18n.t('gatewayMembers.rebuild')}</p>
         <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'dismiss_gateway_rebuild', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.close')}</Button>
       </div></Show>
+      <Show when={props.section === 'connection'}>
       <details class="redeven-gateway-disclosure group border-b border-border/60 pb-3">
         <summary class="flex cursor-pointer list-none items-center justify-between text-sm [&::-webkit-details-marker]:hidden"><span>{props.i18n.t('gatewayMembers.listenerAddress')}</span><ChevronDown class="h-3.5 w-3.5 transition-transform group-open:rotate-180" /></summary>
         <div>
@@ -169,6 +161,8 @@ export function GatewayMembersDialog(props: Readonly<{
         </div>
         <Show when={endpointsDirty()}><p role="status" class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.saveFirst')}</p></Show>
       </section>
+      </Show>
+      <Show when={props.section !== 'connection'}>
       <section class="space-y-3">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0">
@@ -177,6 +171,7 @@ export function GatewayMembersDialog(props: Readonly<{
           </div>
           <Button class="cursor-pointer" size="sm" disabled={busy() || !props.gateway?.permissions?.manage_members || savedEndpoints().length === 0 || endpointsDirty() || !endpointsValid()} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
         </div>
+        <Show when={!savedEndpoints().length}><p role="status" class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
         <Show when={invitation() && !endpointsDirty()}>
           <div class="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
             <p role="status" class="text-xs text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
@@ -245,7 +240,8 @@ export function GatewayMembersDialog(props: Readonly<{
           <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => void saveMembers()}>{props.i18n.t('gatewayMembers.confirmSave')}</Button>
         </Show>
       </section>
+      </Show>
       <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
     </div>
-  </Dialog>;
+  );
 }

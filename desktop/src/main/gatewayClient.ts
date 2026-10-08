@@ -15,7 +15,7 @@ import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBrid
 import {
   GATEWAY_PROTOCOL_VERSION, type GatewayPermissions, type GatewayMember, type GatewayEndpoint,
   type GatewayPolicy, type GatewayMemberInvitation, type GatewayMemberOffer,
-  type GatewayMemberOperationResult, type GatewayCloudPermission, type GatewayHookStatuses, type GatewayHookStatus,
+  type GatewayMemberOperationResult, type GatewayCloudPermission, type GatewayHookStatuses, type GatewayHookStatus, type GatewayClientAccessCode, type GatewayAuthorizedClient,
 } from '../shared/gatewayMembership';
 
 export type GatewayRequestOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal }>;
@@ -157,6 +157,9 @@ export class GatewayClient {
   }
 
   private async request(record: GatewayRecord, route: string, body: unknown, options: GatewayRequestOptions, authenticated = true): Promise<unknown> {
+    if (!this.bridge && !['identity', 'catalog', 'pairing/challenge', 'pairing/complete', 'access/open', 'access/service'].includes(route)) {
+      throw new GatewayClientError('HOST_MANAGEMENT_REQUIRED', 'Manage this Gateway through its host connection.');
+    }
     const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 20_000)]) : AbortSignal.timeout(options.timeoutMs ?? 20_000);
     signal.throwIfAborted();
     const path = `/gateway/v5/${route}`;
@@ -211,11 +214,24 @@ export class GatewayClient {
     return catalog;
   }
 
-  async pairingChallenge(record: GatewayRecord, request: Readonly<{ protocol_version: typeof GATEWAY_PROTOCOL_VERSION; client_nonce: string; client_public_key: string; binding_audience: string; pairing_code?: string }>, options: GatewayRequestOptions = {}): Promise<GatewayPairingChallengeResponse> {
+
+  async issueAccessCode(record: GatewayRecord): Promise<GatewayClientAccessCode> {
+    const value = object(await this.request(record, 'clients/access-codes', { protocol_version: GATEWAY_PROTOCOL_VERSION }, {}));
+    return { access_code: text(value.access_code, 128), expires_at_unix_ms: integer(value.expires_at_unix_ms, 1) };
+  }
+  async listClients(record: GatewayRecord): Promise<readonly GatewayAuthorizedClient[]> {
+    const value = object(await this.request(record, 'clients/list', { protocol_version: GATEWAY_PROTOCOL_VERSION }, {}));
+    if (!Array.isArray(value.clients) || value.clients.length > 4096) return invalid();
+    return value.clients.map(raw => { const item = object(raw); return { client_key_id: id(item.client_key_id), client_name: text(item.client_name, 160), paired_at_unix_ms: integer(item.paired_at_unix_ms, 1), last_verified_at_unix_ms: integer(item.last_verified_at_unix_ms), revoked_at_unix_ms: integer(item.revoked_at_unix_ms) }; });
+  }
+  async revokeClient(record: GatewayRecord, clientKeyID: string): Promise<void> {
+    await this.request(record, 'clients/revoke', { protocol_version: GATEWAY_PROTOCOL_VERSION, client_key_id: clientKeyID }, {});
+  }
+  async pairingChallenge(record: GatewayRecord, request: Readonly<{ protocol_version: typeof GATEWAY_PROTOCOL_VERSION; client_nonce: string; client_public_key: string; binding_audience: string; access_code?: string; client_name?: string }>, options: GatewayRequestOptions = {}): Promise<GatewayPairingChallengeResponse> {
     const value = object(await this.request(record, 'pairing/challenge', request, options, false));
     return { protocol_version: version(value.protocol_version), gateway_id: id(value.gateway_id), gateway_public_key: text(value.gateway_public_key),
       gateway_public_key_fingerprint: text(value.gateway_public_key_fingerprint), gateway_nonce: text(value.gateway_nonce),
-      ...(value.pairing_code ? { pairing_code: text(value.pairing_code) } : {}), expires_at_unix_ms: integer(value.expires_at_unix_ms, 1), signature: text(value.signature) };
+      compatibility_epoch: integer(value.compatibility_epoch, 1), expires_at_unix_ms: integer(value.expires_at_unix_ms, 1), signature: text(value.signature) };
   }
 
   async completePairing(record: GatewayRecord, request: GatewayPairingCompleteRequest, options: GatewayRequestOptions = {}): Promise<GatewayPairingCompleteResponse> {

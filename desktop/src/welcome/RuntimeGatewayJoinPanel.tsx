@@ -131,10 +131,10 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         <Show when={status()?.joined === false || replacing() || updatingEndpoints()}>
           <section class="space-y-3">
             <h3 class="text-sm font-medium">{props.i18n.t('gatewayJoin.connectTitle')}</h3>
-            <Show when={props.gateways?.some(gateway => gateway.permissions?.manage_members)}>
+            <Show when={props.gateways?.some(gateway => gateway.connection_kind !== 'url' && gateway.permissions?.manage_members)}>
               <div class="redeven-gateway-field" role="group" aria-label={props.i18n.t('gatewayJoin.chooseGateway')}><span>{props.i18n.t('gatewayJoin.chooseGateway')}</span>
                 <Select class="h-9" value={gatewayID()} disabled={busy()}
-                  options={[{ value: '', label: props.i18n.t('gatewayJoin.importInvitation') }, ...(props.gateways?.filter(gateway => gateway.permissions?.manage_members && gateway.local_enabled && gateway.member_endpoints?.length) ?? []).map(gateway => ({ value: gateway.gateway_id, label: gateway.display_name }))]}
+                  options={[{ value: '', label: props.i18n.t('gatewayJoin.importInvitation') }, ...(props.gateways?.filter(gateway => gateway.connection_kind !== 'url' && gateway.permissions?.manage_members && gateway.local_enabled && gateway.member_endpoints?.length) ?? []).map(gateway => ({ value: gateway.gateway_id, label: gateway.display_name }))]}
                   onChange={value => { setGatewayID(value); setInvitation(undefined); setInvitationFileName(''); }} />
               </div>
               <Show when={gatewayID()}><Button class="cursor-pointer" size="sm" variant="outline" disabled={busy()} onClick={() => void createInvitation()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button></Show>

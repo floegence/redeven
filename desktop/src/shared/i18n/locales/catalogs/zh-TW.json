@@ -1732,7 +1732,7 @@
     "gatewayActionEnable": "啟用網關",
     "gatewayActionDisable": "停用網關",
     "gatewayActionPauseSync": "暫停同步",
-    "gatewayActionDelete": "刪除網關",
+    "gatewayActionDelete": "移除連線",
     "gatewayActionSync": "重新整理網關",
     "gatewayActionCheck": "重新整理網關",
     "gatewayActionSyncFailed": "刷新失敗",
@@ -2063,9 +2063,6 @@
     "gatewayUrl": "網關 URL",
     "gatewayUrlPlaceholder": "https://gateway.example.com",
     "gatewayUrlHelp": "Desktop 連線至此 Gateway 並列出已加入的執行環境。內網成員存取不依賴 Redeven Cloud。",
-    "gatewayPairingCode": "配對碼",
-    "gatewayPairingCodePlaceholder": "閘道管理員的一次性代碼",
-    "gatewayPairingCodeHelp": "URL 閘道需要配對碼才能建立信任。 Desktop 僅將其用於此儲存操作，並未儲存在網關清單中。",
     "gatewayTransportUrl": "URL",
     "gatewayTransportSshHost": "SSH 主機",
     "gatewayTransportSshContainer": "SSH 貨櫃",
@@ -2154,7 +2151,10 @@
     "validationChooseContainer": "請選擇執行中的容器。",
     "validationChooseContainerFromList": "請從目前列表選擇執行中的容器。",
     "validationRuntimeRootRequired": "需要運行時根。",
-    "validationSshPasswordRequired": "使用密碼驗證時必須填寫 SSH 密碼。"
+    "validationSshPasswordRequired": "使用密碼驗證時必須填寫 SSH 密碼。",
+    "gatewayAccessCode": "存取碼",
+    "gatewayAccessCodePlaceholder": "閘道管理員的一次性代碼",
+    "gatewayAccessCodeHelp": "請私下將 Gateway 位址和存取碼傳送給用戶端。存取碼在 10 分鐘內有效，只能使用一次；不授予 Gateway 管理權，也不取代執行階段登入。"
   },
   "confirm": {
     "reinstallTargetTitle": "重新安裝此環境？",
@@ -2183,9 +2183,9 @@
     "removeEnvironmentQuestion": "要從 Desktop 移除 {label} 嗎？",
     "removeEnvironmentDescription": "只會移除 Desktop 中的註冊，不會刪除遠端 Redeven 資料。",
     "removeEnvironmentBusyDescription": "Desktop 會立即移除註冊，並在背景完成本機清理。",
-    "deleteGatewayTitle": "刪除網關",
-    "deleteGatewayConfirm": "刪除網關",
-    "deleteGatewayQuestion": "從此 Desktop 刪除 {label}？",
+    "deleteGatewayTitle": "移除連線",
+    "deleteGatewayConfirm": "移除連線",
+    "deleteGatewayQuestion": "從此 Desktop 移除連線「{label}」？Gateway 服務和執行階段不會停止或刪除。",
     "deleteGatewayDescription": "這將從該 Desktop 中刪除本地網關連線、信任資料和同步目錄。它不會從網關主機中刪除網關服務或環境。",
     "cancel": "取消",
     "cloudSignOutTitle": "登出 Redeven Cloud",
@@ -3055,20 +3055,6 @@
     "editorUnavailableDetail": "無法開啟編輯器。請返回 Codespaces 後重試。",
     "technicalDetails": "技術詳細資料"
   },
-  "gatewayDesktopAccess": {
-    "title": "此 Desktop 的操作權限",
-    "viewer": "使用環境",
-    "viewerHelp": "開啟透過此 Gateway 共用的環境。",
-    "administrator": "管理 Gateway",
-    "administratorHelp": "建立邀請、管理存取及設定 Cloud；仍須 Cloud 管理員核准。",
-    "custom": "自訂權限",
-    "customHelp": "保留現有授權，或調整下方的個別權限。",
-    "customize": "調整個別權限",
-    "boundary": "這些權限授予目前的 Desktop，而非已加入的執行階段；不會授予執行階段管理權，也不會核准 Cloud 存取。",
-    "access": "開啟共用環境",
-    "members": "建立邀請及移除執行階段存取",
-    "cloud": "設定此 Gateway 的 Cloud 存取"
-  },
   "gatewayCloud": {
     "title": "連線至 Cloud",
     "description": "可選：透過 Redeven Cloud 發布已加入的執行階段。Cloud 使用此 Gateway 作為存取入口，不會直接連線執行階段。",
@@ -3224,5 +3210,27 @@
     "remove": "移除成員",
     "refreshFailed": "操作已成功，但成員清單重新整理失敗。操作結果已保留，請重新整理以查看最新狀態。",
     "hookInvalid": "設定無效，操作將遭到拒絕"
+  },
+  "gatewayClients": {
+    "connectionSettings": "連線設定",
+    "runtimes": "執行階段",
+    "clientAccess": "用戶端存取",
+    "hostAccess": "透過此主機連線管理 Gateway。",
+    "hostVerification": "驗證主機權限後才能管理 Gateway。",
+    "clientOnly": "透過 Gateway 使用環境，此連線無法管理 Gateway。",
+    "createCode": "建立存取碼",
+    "codeHelp": "請私下將 Gateway 位址和存取碼傳送給用戶端。存取碼在 10 分鐘內有效，只能使用一次；不授予 Gateway 管理權，也不取代執行階段登入。",
+    "codeExpires": "剩餘 {time}",
+    "codeExpired": "已過期，請建立新的存取碼。",
+    "authorizedClients": "已授權用戶端",
+    "emptyClients": "尚無透過存取碼授權的用戶端。",
+    "unnamedClient": "未命名用戶端",
+    "revoked": "存取已撤銷",
+    "revoke": "撤銷存取",
+    "confirmRevoke": "確認撤銷",
+    "revokeHelp": "將關閉此用戶端的 Gateway 存取；執行階段成員、其他用戶端及主機權限不變。",
+    "authorizedAt": "授權時間",
+    "lastSeen": "最近存取",
+    "codeHelpTitle": "如何使用存取碼"
   }
 }

@@ -2,12 +2,14 @@ package trust
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/floegence/redeven/internal/gatewaystate"
 	"github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/runtimegateway/security"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 const challengeTTL = 5 * time.Minute
@@ -30,21 +33,19 @@ type pendingChallenge struct {
 	ClientNonce     string
 	ClientPublicKey string
 	BindingAudience string
-	PairingCode     string
-	ExpiresAtUnixMS int64
-}
-
-type PendingChallenge struct {
-	ClientNonce     string
-	BindingAudience string
-	PairingCode     string
+	AccessCodeHash  string
+	ClientName      string
+	HostAdmin       bool
+	Completion      *protocol.PairingCompleteResponse
+	CompletionProof string
 	ExpiresAtUnixMS int64
 }
 
 type fileState struct {
-	SchemaVersion int                  `json:"schema_version"`
-	Gateway       gatewayIdentity      `json:"gateway"`
-	Clients       map[string]clientKey `json:"clients"`
+	SchemaVersion int                   `json:"schema_version"`
+	Gateway       gatewayIdentity       `json:"gateway"`
+	Clients       map[string]clientKey  `json:"clients"`
+	AccessCodes   map[string]accessCode `json:"access_codes"`
 }
 
 type gatewayIdentity struct {
@@ -55,12 +56,15 @@ type gatewayIdentity struct {
 }
 
 type clientKey struct {
-	ClientKeyID        string                      `json:"client_key_id"`
-	ClientPublicKey    string                      `json:"client_public_key"`
-	BindingAudience    string                      `json:"binding_audience"`
-	Permissions        protocol.GatewayPermissions `json:"permissions"`
-	PairedAtUnixMS     int64                       `json:"paired_at_unix_ms"`
-	LastVerifiedUnixMS int64                       `json:"last_verified_at_unix_ms,omitempty"`
+	ClientKeyID        string `json:"client_key_id"`
+	ClientPublicKey    string `json:"client_public_key"`
+	BindingAudience    string `json:"binding_audience"`
+	Access             bool   `json:"access"`
+	HostManaged        bool   `json:"host_managed,omitempty"`
+	ClientName         string `json:"client_name"`
+	RevokedAtUnixMS    int64  `json:"revoked_at_unix_ms,omitempty"`
+	PairedAtUnixMS     int64  `json:"paired_at_unix_ms"`
+	LastVerifiedUnixMS int64  `json:"last_verified_at_unix_ms,omitempty"`
 }
 
 func NewStore(filePath string) *Store {
@@ -86,22 +90,62 @@ func (s *Store) GatewayMetadata(bindingAudience string) (protocol.GatewayMetadat
 	}, fingerprint, nil
 }
 
-func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol.PairingChallengeResponse, error) {
-	if strings.TrimSpace(req.ProtocolVersion) != protocol.Version {
-		return protocol.PairingChallengeResponse{}, errors.New("protocol_version is not supported")
+type accessCode struct {
+	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms"`
+	ClientKeyID     string `json:"client_key_id,omitempty"`
+}
+
+func accessCodeHash(code string) string {
+	digest := sha256.Sum256([]byte(strings.TrimSpace(code)))
+	return base64.RawURLEncoding.EncodeToString(digest[:])
+}
+
+func (s *Store) IssueAccessCode() (protocol.ClientAccessCodeResponse, error) {
+	if _, err := s.ensureStateForRead(); err != nil {
+		return protocol.ClientAccessCodeResponse{}, err
+	}
+	code, err := randomB64u(18)
+	if err != nil {
+		return protocol.ClientAccessCodeResponse{}, err
+	}
+	expires := time.Now().Add(10 * time.Minute).UnixMilli()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.state
+	next.AccessCodes = maps.Clone(next.AccessCodes)
+	if next.AccessCodes == nil {
+		next.AccessCodes = map[string]accessCode{}
+	}
+	for id, value := range next.AccessCodes {
+		if value.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+			delete(next.AccessCodes, id)
+		}
+	}
+	if len(next.AccessCodes) >= 128 {
+		return protocol.ClientAccessCodeResponse{}, errors.New("too many active access codes")
+	}
+	next.AccessCodes[accessCodeHash(code)] = accessCode{ExpiresAtUnixMS: expires}
+	if err := s.saveStateLocked(next); err != nil {
+		return protocol.ClientAccessCodeResponse{}, err
+	}
+	return protocol.ClientAccessCodeResponse{AccessCode: code, ExpiresAtUnixMS: expires}, nil
+}
+
+func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest, hostAdmin bool) (protocol.PairingChallengeResponse, error) {
+	if err := protocol.ValidateProtocolVersion(req.ProtocolVersion); err != nil {
+		return protocol.PairingChallengeResponse{}, err
 	}
 	req.ClientNonce = strings.TrimSpace(req.ClientNonce)
 	req.ClientPublicKey = strings.TrimSpace(req.ClientPublicKey)
 	req.BindingAudience = strings.TrimSpace(req.BindingAudience)
-	req.PairingCode = strings.TrimSpace(req.PairingCode)
-	if req.ClientNonce == "" || req.ClientPublicKey == "" || req.BindingAudience == "" {
+	req.ClientName = strings.TrimSpace(req.ClientName)
+	if req.ClientNonce == "" || req.BindingAudience == "" || len(req.ClientName) > 160 || len(req.AccessCode) > 128 {
 		return protocol.PairingChallengeResponse{}, errors.New("pairing challenge request is incomplete")
 	}
-	state, err := s.ensureStateForPairing(req.BindingAudience)
-	if err != nil {
+	if _, err := security.PublicKeyFingerprint(req.ClientPublicKey); err != nil {
 		return protocol.PairingChallengeResponse{}, err
 	}
-	fingerprint, err := security.PublicKeyFingerprint(state.Gateway.PublicKey)
+	state, err := s.ensureStateForPairing(req.BindingAudience)
 	if err != nil {
 		return protocol.PairingChallengeResponse{}, err
 	}
@@ -109,21 +153,14 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 	if err != nil {
 		return protocol.PairingChallengeResponse{}, err
 	}
-	expiresAt := time.Now().Add(challengeTTL).UnixMilli()
-	challengeFields := map[string]any{
-		"binding_audience":   req.BindingAudience,
-		"client_nonce":       req.ClientNonce,
-		"client_public_key":  req.ClientPublicKey,
-		"expires_at_unix_ms": expiresAt,
-		"gateway_id":         state.Gateway.GatewayID,
-		"gateway_nonce":      gatewayNonce,
-		"gateway_public_key": state.Gateway.PublicKey,
-		"protocol_version":   protocol.Version,
+	fingerprint, err := security.PublicKeyFingerprint(state.Gateway.PublicKey)
+	if err != nil {
+		return protocol.PairingChallengeResponse{}, err
 	}
-	if req.PairingCode != "" {
-		challengeFields["pairing_code"] = req.PairingCode
-	}
-	payload, err := security.CanonicalJSON(challengeFields)
+	epoch := runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch
+	expires := time.Now().Add(challengeTTL).UnixMilli()
+	fields := map[string]any{"binding_audience": req.BindingAudience, "client_nonce": req.ClientNonce, "client_public_key": req.ClientPublicKey, "expires_at_unix_ms": expires, "gateway_id": state.Gateway.GatewayID, "gateway_nonce": gatewayNonce, "gateway_public_key": state.Gateway.PublicKey, "protocol_version": protocol.Version, "compatibility_epoch": epoch}
+	payload, err := security.CanonicalJSON(fields)
 	if err != nil {
 		return protocol.PairingChallengeResponse{}, err
 	}
@@ -132,6 +169,13 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 		return protocol.PairingChallengeResponse{}, err
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	codeHash := accessCodeHash(req.AccessCode)
+	if !hostAdmin {
+		if err := s.checkAccessCodeLocked(codeHash, security.ClientKeyID(req.ClientPublicKey)); err != nil {
+			return protocol.PairingChallengeResponse{}, err
+		}
+	}
 	if s.pending == nil {
 		s.pending = map[string]pendingChallenge{}
 	}
@@ -141,137 +185,154 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 		}
 	}
 	if len(s.pending) >= 128 {
-		s.mu.Unlock()
 		return protocol.PairingChallengeResponse{}, errors.New("too many pending pairings")
 	}
-	s.pending[gatewayNonce] = pendingChallenge{
-		ClientNonce:     req.ClientNonce,
-		ClientPublicKey: req.ClientPublicKey,
-		BindingAudience: req.BindingAudience,
-		PairingCode:     req.PairingCode,
-		ExpiresAtUnixMS: expiresAt,
-	}
-	s.mu.Unlock()
-	return protocol.PairingChallengeResponse{
-		ProtocolVersion:             protocol.Version,
-		GatewayID:                   state.Gateway.GatewayID,
-		GatewayPublicKey:            state.Gateway.PublicKey,
-		GatewayPublicKeyFingerprint: fingerprint,
-		GatewayNonce:                gatewayNonce,
-		PairingCode:                 req.PairingCode,
-		ExpiresAtUnixMS:             expiresAt,
-		Signature:                   signature,
-	}, nil
+	s.pending[gatewayNonce] = pendingChallenge{ClientNonce: req.ClientNonce, ClientPublicKey: req.ClientPublicKey, BindingAudience: req.BindingAudience, AccessCodeHash: codeHash, ClientName: req.ClientName, HostAdmin: hostAdmin, ExpiresAtUnixMS: expires}
+	return protocol.PairingChallengeResponse{ProtocolVersion: protocol.Version, GatewayID: state.Gateway.GatewayID, GatewayPublicKey: state.Gateway.PublicKey, GatewayPublicKeyFingerprint: fingerprint, GatewayNonce: gatewayNonce, CompatibilityEpoch: epoch, ExpiresAtUnixMS: expires, Signature: signature}, nil
 }
 
-func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.PairingCompleteResponse, error) {
+func (s *Store) checkAccessCodeLocked(hash, clientKeyID string) error {
+	code, ok := s.state.AccessCodes[hash]
+	if !ok || code.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+		return errors.New("ACCESS_CODE_INVALID_OR_EXPIRED")
+	}
+	if code.ClientKeyID != "" && code.ClientKeyID != clientKeyID {
+		return errors.New("ACCESS_CODE_USED")
+	}
+	if code.ClientKeyID != "" && !s.state.Clients[clientKeyID].Access {
+		return errors.New("CLIENT_ACCESS_REVOKED")
+	}
+	return nil
+}
+
+func (s *Store) CompletePairing(req protocol.PairingCompleteRequest, hostAdmin bool) (protocol.PairingCompleteResponse, error) {
 	if err := protocol.ValidatePairingCompleteRequest(req); err != nil {
 		return protocol.PairingCompleteResponse{}, err
 	}
 	req = protocol.NormalizePairingCompleteRequest(req)
-	if req.ClientNonce == "" || req.GatewayNonce == "" || req.GatewayID == "" || req.BindingAudience == "" || req.ClientKeyID == "" || req.Proof == "" {
-		return protocol.PairingCompleteResponse{}, errors.New("pairing completion request is incomplete")
+	if req.Proof == "" {
+		return protocol.PairingCompleteResponse{}, errors.New("pairing proof is required")
 	}
-	state, err := s.ensureStateForRead()
-	if err != nil {
+	if _, err := s.ensureStateForRead(); err != nil {
 		return protocol.PairingCompleteResponse{}, err
 	}
-	if err := s.validateBindingAudience(state, req.BindingAudience); err != nil {
-		return protocol.PairingCompleteResponse{}, err
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	challenge, ok := s.pending[req.GatewayNonce]
+	if !ok || challenge.ClientNonce != req.ClientNonce || challenge.BindingAudience != req.BindingAudience || req.GatewayID != s.state.Gateway.GatewayID || security.ClientKeyID(challenge.ClientPublicKey) != req.ClientKeyID || (challenge.HostAdmin && !hostAdmin) {
+		return protocol.PairingCompleteResponse{}, errors.New("pairing challenge is invalid")
 	}
-	if req.GatewayID != state.Gateway.GatewayID {
-		return protocol.PairingCompleteResponse{}, errors.New("gateway_id does not match this Gateway")
+	if challenge.Completion != nil {
+		if challenge.CompletionProof != req.Proof || !s.state.Clients[req.ClientKeyID].Access {
+			return protocol.PairingCompleteResponse{}, errors.New("CLIENT_ACCESS_REVOKED")
+		}
+		return *challenge.Completion, nil
 	}
-	challenge, ok := s.consumeChallenge(req.GatewayNonce)
-	if !ok || challenge.ClientNonce != req.ClientNonce || challenge.BindingAudience != req.BindingAudience || challenge.ExpiresAtUnixMS <= time.Now().UnixMilli() {
-		return protocol.PairingCompleteResponse{}, errors.New("pairing challenge is unknown or expired")
+	if challenge.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+		return protocol.PairingCompleteResponse{}, errors.New("pairing challenge expired")
 	}
-	if expectedClientKeyID := security.ClientKeyID(challenge.ClientPublicKey); expectedClientKeyID != req.ClientKeyID {
-		return protocol.PairingCompleteResponse{}, errors.New("client_key_id does not match client_public_key")
-	}
-	requestFields := map[string]any{
-		"binding_audience": req.BindingAudience,
-		"client_key_id":    req.ClientKeyID,
-		"client_nonce":     req.ClientNonce,
-		"gateway_id":       req.GatewayID,
-		"gateway_nonce":    req.GatewayNonce,
-		"protocol_version": protocol.Version,
-	}
-	requestFields["permissions"] = req.Permissions
-	requestPayload, err := security.CanonicalJSON(requestFields)
-	if err != nil {
-		return protocol.PairingCompleteResponse{}, err
-	}
-	if !security.VerifySignature(challenge.ClientPublicKey, requestPayload, req.Proof) {
+	fields := map[string]any{"binding_audience": req.BindingAudience, "client_key_id": req.ClientKeyID, "client_nonce": req.ClientNonce, "gateway_id": req.GatewayID, "gateway_nonce": req.GatewayNonce, "protocol_version": protocol.Version}
+	payload, err := security.CanonicalJSON(fields)
+	if err != nil || !security.VerifySignature(challenge.ClientPublicKey, payload, req.Proof) {
 		return protocol.PairingCompleteResponse{}, errors.New("pairing completion proof is invalid")
 	}
+	if !challenge.HostAdmin {
+		if err := s.checkAccessCodeLocked(challenge.AccessCodeHash, req.ClientKeyID); err != nil {
+			return protocol.PairingCompleteResponse{}, err
+		}
+	}
 	pairedAt := time.Now().UnixMilli()
-	client := clientKey{
-		ClientKeyID:     req.ClientKeyID,
-		ClientPublicKey: challenge.ClientPublicKey,
-		BindingAudience: req.BindingAudience,
-		Permissions:     req.Permissions,
-		PairedAtUnixMS:  pairedAt,
+	previous, exists := s.state.Clients[req.ClientKeyID]
+	if exists && previous.Access {
+		pairedAt = previous.PairedAtUnixMS
 	}
-	if err := s.saveClient(client); err != nil {
-		return protocol.PairingCompleteResponse{}, err
-	}
-	responseFields := map[string]any{
-		"binding_audience":  req.BindingAudience,
-		"client_key_id":     req.ClientKeyID,
-		"client_nonce":      req.ClientNonce,
-		"gateway_id":        req.GatewayID,
-		"gateway_nonce":     req.GatewayNonce,
-		"paired_at_unix_ms": pairedAt,
-		"protocol_version":  protocol.Version,
-	}
-	responseFields["permissions"] = req.Permissions
-	payload, err := security.CanonicalJSON(responseFields)
+	permissions := protocol.GatewayPermissions{Access: true}
+	fields["paired_at_unix_ms"] = pairedAt
+	fields["permissions"] = permissions
+	payload, err = security.CanonicalJSON(fields)
 	if err != nil {
 		return protocol.PairingCompleteResponse{}, err
 	}
-	proof, err := security.SignPayload(state.Gateway.PrivateKey, payload)
+	proof, err := security.SignPayload(s.state.Gateway.PrivateKey, payload)
 	if err != nil {
 		return protocol.PairingCompleteResponse{}, err
 	}
-	return protocol.PairingCompleteResponse{
-		ProtocolVersion: protocol.Version,
-		GatewayID:       state.Gateway.GatewayID,
-		ClientKeyID:     req.ClientKeyID,
-		PairedAtUnixMS:  pairedAt,
-		Permissions:     req.Permissions,
-		Proof:           proof,
-	}, nil
+	next := s.state
+	next.Clients = maps.Clone(next.Clients)
+	next.AccessCodes = maps.Clone(next.AccessCodes)
+	next.Clients[req.ClientKeyID] = clientKey{ClientKeyID: req.ClientKeyID, ClientPublicKey: challenge.ClientPublicKey, BindingAudience: req.BindingAudience, Access: true, HostManaged: challenge.HostAdmin, ClientName: challenge.ClientName, PairedAtUnixMS: pairedAt, LastVerifiedUnixMS: previous.LastVerifiedUnixMS}
+	if !challenge.HostAdmin {
+		code := next.AccessCodes[challenge.AccessCodeHash]
+		code.ClientKeyID = req.ClientKeyID
+		next.AccessCodes[challenge.AccessCodeHash] = code
+	}
+	if err := s.saveStateLocked(next); err != nil {
+		return protocol.PairingCompleteResponse{}, err
+	}
+	response := protocol.PairingCompleteResponse{ProtocolVersion: protocol.Version, GatewayID: req.GatewayID, ClientKeyID: req.ClientKeyID, PairedAtUnixMS: pairedAt, Permissions: permissions, Proof: proof}
+	challenge.Completion = &response
+	challenge.CompletionProof = req.Proof
+	s.pending[req.GatewayNonce] = challenge
+	return response, nil
 }
 
-func (s *Store) PendingChallenge(gatewayNonce string) (PendingChallenge, bool) {
+func (s *Store) ListClients() ([]protocol.GatewayClientRecord, error) {
+	state, err := s.ensureStateForRead()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]protocol.GatewayClientRecord, 0, len(state.Clients))
+	for _, client := range state.Clients {
+		if client.HostManaged {
+			continue
+		}
+		result = append(result, protocol.GatewayClientRecord{ClientKeyID: client.ClientKeyID, ClientName: client.ClientName, PairedAtUnixMS: client.PairedAtUnixMS, LastVerifiedUnixMS: client.LastVerifiedUnixMS, RevokedAtUnixMS: client.RevokedAtUnixMS})
+	}
+	sort.Slice(result, func(first, second int) bool { return result[first].PairedAtUnixMS > result[second].PairedAtUnixMS })
+	return result, nil
+}
+
+func (s *Store) RevokeClient(clientKeyID string) error {
+	if _, err := s.ensureStateForRead(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.pending == nil {
-		return PendingChallenge{}, false
-	}
-	challenge, ok := s.pending[strings.TrimSpace(gatewayNonce)]
+	client, ok := s.state.Clients[strings.TrimSpace(clientKeyID)]
 	if !ok {
-		return PendingChallenge{}, false
+		return errors.New("client is unknown")
 	}
-	return PendingChallenge{
-		ClientNonce:     challenge.ClientNonce,
-		BindingAudience: challenge.BindingAudience,
-		PairingCode:     challenge.PairingCode,
-		ExpiresAtUnixMS: challenge.ExpiresAtUnixMS,
-	}, true
+	if client.HostManaged {
+		return errors.New("HOST_CONNECTION_MANAGED_ON_HOST")
+	}
+	if client.RevokedAtUnixMS != 0 {
+		return nil
+	}
+	client.Access = false
+	client.RevokedAtUnixMS = time.Now().UnixMilli()
+	next := s.state
+	next.Clients = maps.Clone(next.Clients)
+	next.Clients[client.ClientKeyID] = client
+	return s.saveStateLocked(next)
 }
 
-func (s *Store) consumeChallenge(gatewayNonce string) (pendingChallenge, bool) {
+func (s *Store) RecordVerified(clientKeyID string, hostAdmin bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.pending == nil {
-		return pendingChallenge{}, false
+	client, ok := s.state.Clients[clientKeyID]
+	if !ok || !client.Access {
+		return errors.New("CLIENT_ACCESS_REVOKED")
 	}
-	key := strings.TrimSpace(gatewayNonce)
-	challenge, ok := s.pending[key]
-	delete(s.pending, key)
-	return challenge, ok
+	now := time.Now().UnixMilli()
+	if now-client.LastVerifiedUnixMS < 60_000 && (!hostAdmin || client.HostManaged) {
+		return nil
+	}
+	client.LastVerifiedUnixMS = now
+	client.HostManaged = client.HostManaged || hostAdmin
+	next := s.state
+	next.Clients = maps.Clone(next.Clients)
+	next.Clients[clientKeyID] = client
+	return s.saveStateLocked(next)
 }
 
 func (s *Store) GatewayPrivateKey() (string, error) {
@@ -303,7 +364,7 @@ func (s *Store) ClientPublicKey(clientKeyID string, bindingAudience string) (str
 		return "", false
 	}
 	client, ok := state.Clients[strings.TrimSpace(clientKeyID)]
-	if !ok {
+	if !ok || !client.Access || client.RevokedAtUnixMS != 0 {
 		return "", false
 	}
 	return client.ClientPublicKey, true
@@ -314,7 +375,8 @@ func (s *Store) ClientPermissions(clientKeyID string) protocol.GatewayPermission
 	if err != nil {
 		return protocol.GatewayPermissions{}
 	}
-	return state.Clients[strings.TrimSpace(clientKeyID)].Permissions
+	client := state.Clients[strings.TrimSpace(clientKeyID)]
+	return protocol.GatewayPermissions{Access: client.Access && client.RevokedAtUnixMS == 0}
 }
 
 // Initialize establishes a machine identity before any client is paired. Its ID
@@ -403,16 +465,27 @@ func (s *Store) loadState() (fileState, error) {
 			return fileState{}, errors.New("invalid paired Gateway client key")
 		}
 	}
-	if state.SchemaVersion == 1 {
+	if state.SchemaVersion == 1 || state.SchemaVersion == 2 {
+		var legacy struct {
+			Clients map[string]struct {
+				Permissions protocol.GatewayPermissions `json:"permissions"`
+			} `json:"clients"`
+		}
+		if err := json.Unmarshal(raw, &legacy); err != nil {
+			return fileState{}, err
+		}
 		for id, client := range state.Clients {
-			client.Permissions = protocol.GatewayPermissions{Access: true}
+			client.Access = state.SchemaVersion == 1 || legacy.Clients[id].Permissions.Access
+			if !client.Access && client.RevokedAtUnixMS == 0 {
+				client.RevokedAtUnixMS = max(int64(1), client.PairedAtUnixMS)
+			}
 			state.Clients[id] = client
 		}
-		state.SchemaVersion = 2
+		state.SchemaVersion = 3
 		if err := s.persistState(state); err != nil {
 			return fileState{}, err
 		}
-	} else if state.SchemaVersion != 2 {
+	} else if state.SchemaVersion != 3 {
 		return fileState{}, errors.New("unsupported Gateway trust schema")
 	}
 	if state.Clients == nil {
@@ -421,22 +494,8 @@ func (s *Store) loadState() (fileState, error) {
 	return state, nil
 }
 
-// Readers retain immutable snapshots; each writer clones the latest committed
-// map while holding the lock so concurrent pairings cannot lose one another.
-func (s *Store) saveClient(client clientKey) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	state := s.state
-	state.Clients = maps.Clone(state.Clients)
-	if state.Clients == nil {
-		state.Clients = map[string]clientKey{}
-	}
-	state.Clients[client.ClientKeyID] = client
-	return s.saveStateLocked(state)
-}
-
 func (s *Store) saveStateLocked(state fileState) error {
-	state.SchemaVersion = 2
+	state.SchemaVersion = 3
 	if state.Clients == nil {
 		state.Clients = map[string]clientKey{}
 	}
@@ -465,7 +524,7 @@ func newFileState(_ string) (fileState, error) {
 	}
 	gatewayID = "gw_" + gatewayID
 	return fileState{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		Gateway: gatewayIdentity{
 			GatewayID:   gatewayID,
 			DisplayName: "Redeven Gateway",

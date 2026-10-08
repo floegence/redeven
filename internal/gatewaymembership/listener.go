@@ -15,15 +15,17 @@ import (
 // Listener mounts the common member control endpoint and the Flowersec
 // acceptor. Egress, when configured, shares this TLS listener and member store.
 type Listener struct {
-	store       *Store
-	connections *Connections
-	mu          sync.Mutex
-	admissions  map[string]Admission
-	acceptor    *flowersec.Acceptor
+	store          *Store
+	connections    *Connections
+	mu             sync.Mutex
+	admissions     map[string]Admission
+	acceptor       *flowersec.Acceptor
+	desktopAllowed func(string) bool
+	clients        map[string]map[string]context.CancelFunc
 }
 
 func NewListener(store *Store, connections *Connections, desktopAllowed func(string) bool) (*Listener, error) {
-	l := &Listener{store: store, connections: connections, admissions: make(map[string]Admission)}
+	l := &Listener{store: store, connections: connections, admissions: make(map[string]Admission), desktopAllowed: desktopAllowed, clients: map[string]map[string]context.CancelFunc{}}
 	acceptor, err := flowersec.NewAcceptor(flowersec.AcceptorOptions{
 		CheckOrigin:       func(request *http.Request) bool { return originAllowed(store, request) },
 		MaxInboundStreams: gp.MaxMemberConnections,
@@ -100,6 +102,29 @@ func (l *Listener) serveSession(ctx context.Context, session flowersec.Session, 
 		}
 		return l.connections.ServeMember(ctx, admission, session)
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	l.mu.Lock()
+	if l.desktopAllowed == nil || !l.desktopAllowed(admission.DesktopKeyID) {
+		l.mu.Unlock()
+		return ErrDenied
+	}
+	if l.clients[admission.DesktopKeyID] == nil {
+		l.clients[admission.DesktopKeyID] = map[string]context.CancelFunc{}
+	}
+	l.clients[admission.DesktopKeyID][channelID] = cancel
+	l.mu.Unlock()
+	defer func() {
+		l.mu.Lock()
+		delete(l.clients[admission.DesktopKeyID], channelID)
+		if len(l.clients[admission.DesktopKeyID]) == 0 {
+			delete(l.clients, admission.DesktopKeyID)
+		}
+		l.mu.Unlock()
+	}()
+	stop := context.AfterFunc(ctx, func() { _ = session.Close() })
+	defer stop()
 	handlers, err := flowersec.NewStreamHandlers(flowersec.StreamHandlerOptions{MaxConcurrentStreams: gp.MaxMemberConnections})
 	if err != nil {
 		return err
@@ -131,4 +156,12 @@ func (l *Listener) serveSession(ctx context.Context, session flowersec.Session, 
 		return err
 	}
 	return handlers.Serve(ctx, session)
+}
+
+func (l *Listener) RevokeClient(clientKeyID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, cancel := range l.clients[clientKeyID] {
+		cancel()
+	}
 }

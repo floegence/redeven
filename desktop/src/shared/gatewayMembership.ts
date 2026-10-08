@@ -88,3 +88,9 @@ export type GatewayMemberOperationResult = Readonly<{
 }>;
 
 export type GatewayMemberServiceResponse = Pick<GatewayMemberOffer, 'protocol_version' | 'member_id' | 'member_version' | 'service' | 'delegation'>;
+
+export type GatewayClientAccessCode = Readonly<{ access_code: string; expires_at_unix_ms: number }>;
+export type GatewayAuthorizedClient = Readonly<{
+ client_key_id: string; client_name: string; paired_at_unix_ms: number;
+ last_verified_at_unix_ms: number; revoked_at_unix_ms: number;
+}>;

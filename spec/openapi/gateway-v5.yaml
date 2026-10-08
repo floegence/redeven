@@ -169,11 +169,8 @@
     "/gateway/v5/cloud/configure": {
       "post": {
         "operationId": "gateway_v5_cloud_configure",
-        "description": "Configure the Cloud association using explicit Cloud configuration authority. Reauthorization cannot restore a retired registration.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
-          {
-            "GatewaySignature": []
-          },
           {
             "HostAdministrator": []
           }
@@ -227,11 +224,8 @@
     "/gateway/v5/cloud/status": {
       "post": {
         "operationId": "gateway_v5_cloud_status",
-        "description": "Read the live Cloud association without credentials.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
-          {
-            "GatewaySignature": []
-          },
           {
             "HostAdministrator": []
           }
@@ -285,11 +279,8 @@
     "/gateway/v5/members/reevaluate": {
       "post": {
         "operationId": "gateway_v5_members_reevaluate",
-        "description": "Reevaluate the current configured Cloud policy hook for a member.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
-          {
-            "GatewaySignature": []
-          },
           {
             "HostAdministrator": []
           }
@@ -401,11 +392,8 @@
     "/gateway/v5/invitations": {
       "post": {
         "operationId": "gateway_v5_invitations",
-        "description": "Issue a ten-minute one-use invitation. Requires member management permission.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
-          {
-            "GatewaySignature": []
-          },
           {
             "HostAdministrator": []
           }
@@ -459,24 +447,73 @@
     "/gateway/v5/endpoints": {
       "post": {
         "operationId": "gateway_v5_endpoints",
-        "description": "Save administrator-confirmed Runtime connection addresses without changing Gateway or member identities. Requires member management permission. An empty list disables invitations; remote reachability is not inferred from local listeners.",
-        "security": [{ "GatewaySignature": [] }, { "HostAdministrator": [] }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EndpointUpdateRequest" } } } },
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
+        "security": [
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndpointUpdateRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "200": { "description": "Updated Runtime connection endpoints", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/EndpointUpdateResponse" } } }] } } } },
-          "400": { "description": "Invalid connection endpoints", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "403": { "description": "Member management permission required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }
+          "200": {
+            "description": "Updated Runtime connection endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/EndpointUpdateResponse"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid connection endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Member management permission required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/gateway/v5/members/remove": {
       "post": {
         "operationId": "gateway_v5_members_remove",
-        "description": "Remove the exact member version; fence LAN and Cloud connections and persist Cloud revocation work.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
-          {
-            "GatewaySignature": []
-          },
           {
             "HostAdministrator": []
           }
@@ -530,11 +567,8 @@
     "/gateway/v5/members/policy": {
       "post": {
         "operationId": "gateway_v5_members_policy",
-        "description": "Update Cloud permission independently for each member; successful items survive partial failure.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
-          {
-            "GatewaySignature": []
-          },
           {
             "HostAdministrator": []
           }
@@ -591,11 +625,8 @@
     "/gateway/v5/policy": {
       "post": {
         "operationId": "gateway_v5_policy",
-        "description": "Update Gateway Cloud policy using an expected revision. Automatic mode requires separate Namespace authorization.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
-          {
-            "GatewaySignature": []
-          },
           {
             "HostAdministrator": []
           }
@@ -765,11 +796,8 @@
     "/gateway/v5/migration/dismiss": {
       "post": {
         "operationId": "gateway_v5_migration_dismiss",
-        "description": "Dismiss the one-time member rebuilding notice.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
-          {
-            "GatewaySignature": []
-          },
           {
             "HostAdministrator": []
           }
@@ -1108,6 +1136,175 @@
           }
         }
       }
+    },
+    "/gateway/v5/clients/access-codes": {
+      "post": {
+        "operationId": "clients_access_codes",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Issues a ten-minute, one-use client access code. Only its digest is persisted; it never grants Gateway or Runtime administration.",
+        "security": [
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientAccessCodeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ClientAccessCodeResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Host administrator: clients/access-codes"
+      }
+    },
+    "/gateway/v5/clients/list": {
+      "post": {
+        "operationId": "clients_list",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
+        "security": [
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ClientListResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Host administrator: clients/list"
+      }
+    },
+    "/gateway/v5/clients/revoke": {
+      "post": {
+        "operationId": "clients_revoke",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Persists revocation and closes only this client's Gateway access, including pending tickets and connecting sessions; Runtime memberships and Cloud bindings remain intact.",
+        "security": [
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientRevokeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Responses use Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Host administrator: clients/revoke"
+      }
     }
   },
   "components": {
@@ -1122,7 +1319,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-Redeven-Gateway-Host-Token",
-        "description": "Private host credential; accepted only on the administration listener from loopback. Separate from Desktop bridge credentials. Never accepted on Runtime member endpoints."
+        "description": "The Gateway's private host credential, attached only inside a verified target-host bridge or host CLI. Accepted only from loopback on the administration listener, never from Runtime channels. Signed host requests must also retain and verify the real client identity."
       },
       "MemberTLS": {
         "type": "mutualTLS",
@@ -1201,6 +1398,9 @@
           },
           "signature": {
             "type": "string"
+          },
+          "compatibility_epoch": {
+            "type": "integer"
           }
         },
         "required": [
@@ -1209,7 +1409,8 @@
           "gateway_id",
           "nonce",
           "protocol_version",
-          "signature"
+          "signature",
+          "compatibility_epoch"
         ]
       },
       "GatewayPermissions": {
@@ -1230,45 +1431,99 @@
           "access",
           "manage_members",
           "configure_cloud"
-        ]
+        ],
+        "readOnly": true
       },
       "GatewayEndpoint": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "endpoint_id": { "type": "string" },
-          "address": { "type": "string", "format": "uri" },
-          "scope": { "type": "string", "enum": ["lan", "overlay", "public"] },
-          "priority": { "type": "integer", "minimum": 0, "maximum": 1000 }
+          "endpoint_id": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "lan",
+              "overlay",
+              "public"
+            ]
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          }
         },
-        "required": ["endpoint_id", "address", "scope", "priority"]
+        "required": [
+          "endpoint_id",
+          "address",
+          "scope",
+          "priority"
+        ]
       },
       "MemberConnectRequest": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
-          "endpoint": { "$ref": "#/components/schemas/GatewayEndpoint" }
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v5"
+          },
+          "endpoint": {
+            "$ref": "#/components/schemas/GatewayEndpoint"
+          }
         },
-        "required": ["protocol_version", "endpoint"]
+        "required": [
+          "protocol_version",
+          "endpoint"
+        ]
       },
       "EndpointUpdateRequest": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
-          "endpoints": { "type": "array", "maxItems": 16, "items": { "$ref": "#/components/schemas/GatewayEndpoint" } }
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v5"
+          },
+          "endpoints": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/GatewayEndpoint"
+            }
+          }
         },
-        "required": ["protocol_version", "endpoints"]
+        "required": [
+          "protocol_version",
+          "endpoints"
+        ]
       },
       "EndpointUpdateResponse": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
-          "endpoints": { "type": "array", "maxItems": 16, "items": { "$ref": "#/components/schemas/GatewayEndpoint" } }
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v5"
+          },
+          "endpoints": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/GatewayEndpoint"
+            }
+          }
         },
-        "required": ["protocol_version", "endpoints"]
+        "required": [
+          "protocol_version",
+          "endpoints"
+        ]
       },
       "GatewayMetadata": {
         "type": "object",
@@ -1286,12 +1541,27 @@
           "listener_address": {
             "type": "string"
           },
-          "listener_addresses": { "type": "array", "items": { "type": "string" } },
-          "listener_running": { "type": "boolean" },
-          "endpoint_last_used_at": { "type": "object", "additionalProperties": { "type": "integer", "format": "int64" } },
+          "listener_addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "listener_running": {
+            "type": "boolean"
+          },
+          "endpoint_last_used_at": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
           "member_endpoints": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/GatewayEndpoint" }
+            "items": {
+              "$ref": "#/components/schemas/GatewayEndpoint"
+            }
           },
           "member_tls_root_pem": {
             "type": "string"
@@ -1533,8 +1803,12 @@
           "binding_audience": {
             "type": "string"
           },
-          "pairing_code": {
+          "access_code": {
             "type": "string"
+          },
+          "client_name": {
+            "type": "string",
+            "maxLength": 160
           }
         },
         "required": [
@@ -1564,15 +1838,15 @@
           "gateway_nonce": {
             "type": "string"
           },
-          "pairing_code": {
-            "type": "string"
-          },
           "expires_at_unix_ms": {
             "type": "integer",
             "format": "int64"
           },
           "signature": {
             "type": "string"
+          },
+          "compatibility_epoch": {
+            "type": "integer"
           }
         },
         "required": [
@@ -1582,7 +1856,8 @@
           "gateway_public_key_fingerprint",
           "gateway_nonce",
           "expires_at_unix_ms",
-          "signature"
+          "signature",
+          "compatibility_epoch"
         ]
       },
       "PairingCompleteRequest": {
@@ -1608,9 +1883,6 @@
           "client_key_id": {
             "type": "string"
           },
-          "permissions": {
-            "$ref": "#/components/schemas/GatewayPermissions"
-          },
           "proof": {
             "type": "string"
           }
@@ -1622,7 +1894,6 @@
           "gateway_id",
           "binding_audience",
           "client_key_id",
-          "permissions",
           "proof"
         ]
       },
@@ -1674,12 +1945,18 @@
           "gateway_id": {
             "type": "string"
           },
-          "gateway_name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "gateway_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
           "endpoints": {
             "type": "array",
             "minItems": 1,
             "maxItems": 16,
-            "items": { "$ref": "#/components/schemas/GatewayEndpoint" }
+            "items": {
+              "$ref": "#/components/schemas/GatewayEndpoint"
+            }
           },
           "gateway_public_key": {
             "type": "string"
@@ -2559,6 +2836,112 @@
       "Empty": {
         "type": "object",
         "additionalProperties": false
+      },
+      "ClientAccessCodeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v5"
+          }
+        },
+        "required": [
+          "protocol_version"
+        ]
+      },
+      "ClientListRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v5"
+          }
+        },
+        "required": [
+          "protocol_version"
+        ]
+      },
+      "ClientAccessCodeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "access_code": {
+            "type": "string"
+          },
+          "expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "access_code",
+          "expires_at_unix_ms"
+        ]
+      },
+      "GatewayClientRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "client_key_id": {
+            "type": "string"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "paired_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_verified_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "revoked_at_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "client_key_id",
+          "client_name",
+          "paired_at_unix_ms",
+          "last_verified_at_unix_ms",
+          "revoked_at_unix_ms"
+        ]
+      },
+      "ClientListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GatewayClientRecord"
+            }
+          }
+        },
+        "required": [
+          "clients"
+        ]
+      },
+      "ClientRevokeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "redeven-gateway-v5"
+          },
+          "client_key_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "client_key_id"
+        ]
       }
     }
   }

@@ -1,4 +1,4 @@
-import type { GatewayEndpoint, GatewayMember, GatewayPermissions, GatewayPolicy, GatewayMemberInvitation, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
+import type { GatewayEndpoint, GatewayMember, GatewayClientAccessCode, GatewayAuthorizedClient, GatewayPolicy, GatewayMemberInvitation, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
 import { normalizeGatewayInvitation, type GatewayMembershipStatus, type GatewayMembershipOperation } from './gatewayJoin';
 import { normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from './gatewayCloud';
 import type { EnvironmentAccessRoute } from './environmentAccess';
@@ -245,6 +245,9 @@ export type DesktopLauncherActionKind =
   | 'delete_gateway'
   | 'upsert_environment_registration'
   | 'invite_gateway_runtime'
+  | 'issue_gateway_access_code'
+  | 'list_gateway_clients'
+  | 'revoke_gateway_client'
   | 'update_gateway_endpoints'
   | 'remove_gateway_member'
   | 'reevaluate_gateway_member'
@@ -791,8 +794,7 @@ export type DesktopLauncherActionRequest = Readonly<
       display_name: string;
       connection_kind: 'url';
       gateway_url: string;
-      pairing_code?: string;
-      permissions?: GatewayPermissions;
+      access_code?: string;
       allow_loopback_http: boolean;
     }
   | {
@@ -800,7 +802,6 @@ export type DesktopLauncherActionRequest = Readonly<
       gateway_id?: string;
       display_name: string;
       connection_kind: Exclude<DesktopGatewayConnectionKind, 'url'>;
-    permissions?: GatewayPermissions;
       host_access: DesktopRuntimeHostAccess;
       placement: DesktopRuntimePlacement;
       ssh_password?: string;
@@ -870,6 +871,9 @@ export type DesktopLauncherActionRequest = Readonly<
       registration: DesktopEnvironmentRegistrationUpsert;
     }
   | { kind: 'invite_gateway_runtime'; gateway_id: string }
+  | { kind: 'issue_gateway_access_code'; gateway_id: string }
+  | { kind: 'list_gateway_clients'; gateway_id: string }
+  | { kind: 'revoke_gateway_client'; gateway_id: string; client_key_id: string }
   | { kind: 'update_gateway_endpoints'; gateway_id: string; endpoints: readonly GatewayEndpoint[] }
   | { kind: 'remove_gateway_member'; gateway_id: string; member_id: string; member_version: number }
   | { kind: 'reevaluate_gateway_member'; gateway_id: string; member_id: string; member_version: number }
@@ -905,6 +909,8 @@ export type DesktopLauncherActionRequest = Readonly<
 >;
 
 export type DesktopLauncherActionSuccess = Readonly<{
+  gateway_access_code?: GatewayClientAccessCode;
+  gateway_clients?: readonly GatewayAuthorizedClient[];
   gateway_invitation?: GatewayMemberInvitation;
   gateway_member_results?: readonly GatewayMemberOperationResult[];
   gateway_cloud?: GatewayCloudSummary;
@@ -1173,6 +1179,13 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   const candidate = value as Partial<DesktopLauncherActionRequest>;
   const kind = compact(candidate.kind) as DesktopLauncherActionKind;
   switch (kind) {
+    case 'revoke_gateway_client': {
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const clientKeyID = compact((candidate as { client_key_id?: unknown }).client_key_id);
+      return gatewayID && /^[A-Za-z0-9_-]{1,160}$/u.test(clientKeyID) ? { kind, gateway_id: gatewayID, client_key_id: clientKeyID } : null;
+    }
+    case 'issue_gateway_access_code':
+    case 'list_gateway_clients':
     case 'invite_gateway_runtime':
     case 'dismiss_gateway_rebuild': {
       const gateway_id = compact((candidate as { gateway_id?: unknown }).gateway_id);
@@ -1459,9 +1472,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'upsert_gateway': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id) || undefined;
       const displayName = compact((candidate as { display_name?: unknown }).display_name);
-      const rawPermissions = (candidate as { permissions?: unknown }).permissions;
-      const permissions = normalizeGatewayPermissions(rawPermissions);
-      if (rawPermissions !== undefined && !permissions) return null;
+      if ((candidate as { permissions?: unknown }).permissions !== undefined) return null;
       const connectionKind = compact((candidate as { connection_kind?: unknown }).connection_kind);
       if (connectionKind === '' || connectionKind === 'url') {
         const gatewayURL = compact((candidate as { gateway_url?: unknown }).gateway_url);
@@ -1474,9 +1485,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           display_name: displayName,
           connection_kind: 'url',
           gateway_url: gatewayURL,
-          permissions,
-          ...(compact((candidate as { pairing_code?: unknown }).pairing_code)
-            ? { pairing_code: compact((candidate as { pairing_code?: unknown }).pairing_code) }
+          ...(compact((candidate as { access_code?: unknown }).access_code)
+            ? { access_code: compact((candidate as { access_code?: unknown }).access_code) }
             : {}),
           allow_loopback_http: (candidate as { allow_loopback_http?: unknown }).allow_loopback_http === true,
         };
@@ -1498,7 +1508,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         const passwordMode = compact(raw.ssh_password_mode);
         if (passwordMode && !['keep', 'replace', 'clear'].includes(passwordMode)) return null;
         return { kind, gateway_id: gatewayID, display_name: displayName, connection_kind: expected,
-          host_access: hostAccess, placement, permissions,
+          host_access: hostAccess, placement,
           ssh_password: typeof raw.ssh_password === 'string' ? raw.ssh_password : undefined,
           ssh_password_mode: (passwordMode || 'keep') as 'keep' | 'replace' | 'clear' };
       } catch { return null; }
@@ -1705,12 +1715,4 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     default:
       return null;
   }
-}
-
-function normalizeGatewayPermissions(value: unknown): GatewayPermissions | undefined {
-  if (value === undefined) return undefined;
-  const permissions = value as Partial<GatewayPermissions> | null;
-  if (!permissions || typeof permissions.access !== 'boolean' || typeof permissions.manage_members !== 'boolean'
-    || typeof permissions.configure_cloud !== 'boolean') return undefined;
-  return { access: permissions.access, manage_members: permissions.manage_members, configure_cloud: permissions.configure_cloud };
 }

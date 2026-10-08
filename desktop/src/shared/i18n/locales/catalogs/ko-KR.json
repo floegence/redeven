@@ -1732,7 +1732,7 @@
     "gatewayActionEnable": "게이트웨이 활성화",
     "gatewayActionDisable": "게이트웨이 비활성화",
     "gatewayActionPauseSync": "동기화 일시 중지",
-    "gatewayActionDelete": "게이트웨이 삭제",
+    "gatewayActionDelete": "연결 제거",
     "gatewayActionSync": "게이트웨이 새로 고침",
     "gatewayActionCheck": "게이트웨이 새로 고침",
     "gatewayActionSyncFailed": "새로 고침 실패",
@@ -2063,9 +2063,6 @@
     "gatewayUrl": "게이트웨이 URL",
     "gatewayUrlPlaceholder": "https://gateway.example.com",
     "gatewayUrlHelp": "Desktop은 이 Gateway에 연결하여 가입한 멤버를 표시합니다. 로컬 멤버 접근에는 Redeven Cloud가 필요하지 않습니다.",
-    "gatewayPairingCode": "페어링 코드",
-    "gatewayPairingCodePlaceholder": "게이트웨이 관리자의 일회성 코드",
-    "gatewayPairingCodeHelp": "URL 게이트웨이에는 신뢰가 설정되기 전에 페어링 코드가 필요합니다. Desktop는 이 저장 작업에만 이를 사용하고 게이트웨이 목록에 저장하지 않습니다.",
     "gatewayTransportUrl": "URL",
     "gatewayTransportSshHost": "SSH 호스트",
     "gatewayTransportSshContainer": "SSH 컨테이너",
@@ -2154,7 +2151,10 @@
     "validationChooseContainer": "실행 중인 컨테이너를 선택하세요.",
     "validationChooseContainerFromList": "현재 목록에서 실행 중인 컨테이너를 선택하세요.",
     "validationRuntimeRootRequired": "런타임 루트가 필요합니다. 비밀번호 인증을 위해서는",
-    "validationSshPasswordRequired": "SSH 비밀번호가 필요합니다."
+    "validationSshPasswordRequired": "SSH 비밀번호가 필요합니다.",
+    "gatewayAccessCode": "접근 코드",
+    "gatewayAccessCodePlaceholder": "게이트웨이 관리자의 일회성 코드",
+    "gatewayAccessCodeHelp": "Gateway 주소와 코드를 클라이언트에게 비공개로 전달하세요. 코드는 10분 동안 유효하며 한 번만 사용할 수 있습니다. Gateway 관리 권한을 부여하지 않으며 런타임 로그인은 별도로 필요합니다."
   },
   "confirm": {
     "reinstallTargetTitle": "이 환경을 재설치할까요?",
@@ -2183,9 +2183,9 @@
     "removeEnvironmentQuestion": "Desktop에서 {label}을(를) 제거하시겠습니까?",
     "removeEnvironmentDescription": "Desktop 등록만 제거합니다. 원격 Redeven 데이터는 삭제되지 않습니다.",
     "removeEnvironmentBusyDescription": "Desktop이 등록을 즉시 제거하고 백그라운드에서 로컬 정리를 마칩니다.",
-    "deleteGatewayTitle": "게이트웨이 삭제",
-    "deleteGatewayConfirm": "게이트웨이 삭제",
-    "deleteGatewayQuestion": "이 Desktop에서 {label}을 삭제할까요?",
+    "deleteGatewayTitle": "연결 제거",
+    "deleteGatewayConfirm": "연결 제거",
+    "deleteGatewayQuestion": "이 Desktop에서 “{label}” 연결을 제거할까요? Gateway 서비스와 런타임은 중지되거나 삭제되지 않습니다.",
     "deleteGatewayDescription": "이렇게 하면 이 Desktop에서 로컬 게이트웨이 연결, 신뢰 데이터 및 동기화된 카탈로그가 제거됩니다. 게이트웨이 호스트에서 게이트웨이 서비스 또는 환경을 삭제하지 않습니다.",
     "cancel": "취소",
     "cloudSignOutTitle": "Redeven Cloud 로그아웃",
@@ -3055,20 +3055,6 @@
     "editorUnavailableDetail": "편집기를 열지 못했습니다. Codespaces로 돌아가 다시 시도하세요.",
     "technicalDetails": "기술 세부 정보"
   },
-  "gatewayDesktopAccess": {
-    "title": "이 Desktop에서 할 수 있는 작업",
-    "viewer": "환경 사용",
-    "viewerHelp": "이 Gateway를 통해 공유된 환경을 엽니다.",
-    "administrator": "Gateway 관리",
-    "administratorHelp": "초대 생성, 접근 관리 및 Cloud 설정을 수행합니다. Cloud 승인은 별도로 필요합니다.",
-    "custom": "권한 선택",
-    "customHelp": "기존 권한을 유지하거나 아래에서 개별 권한을 조정합니다.",
-    "customize": "Desktop 권한 조정",
-    "boundary": "이 권한은 연결된 런타임이 아닌 현재 Desktop에 부여됩니다. 런타임 관리나 Cloud 접근 승인을 허용하지 않습니다.",
-    "access": "공유 환경 열기",
-    "members": "초대 생성 및 런타임 접근 제거",
-    "cloud": "이 Gateway의 Cloud 접근 설정"
-  },
   "gatewayCloud": {
     "title": "Cloud에 연결",
     "description": "선택 사항: 가입한 런타임을 Redeven Cloud를 통해 게시합니다. Cloud는 이 Gateway를 액세스 지점으로 사용하며 런타임에 직접 연결하지 않습니다.",
@@ -3224,5 +3210,27 @@
     "remove": "멤버 제거",
     "refreshFailed": "작업은 성공했지만 멤버 목록을 새로 고치지 못했습니다. 결과는 유지됩니다. 새로 고쳐 최신 상태를 확인하세요.",
     "hookInvalid": "설정이 잘못되어 작업이 거부됩니다"
+  },
+  "gatewayClients": {
+    "connectionSettings": "연결 설정",
+    "runtimes": "런타임",
+    "clientAccess": "클라이언트 접근",
+    "hostAccess": "이 호스트 연결로 Gateway를 관리합니다.",
+    "hostVerification": "Gateway를 관리하려면 호스트 권한을 확인해야 합니다.",
+    "clientOnly": "Gateway를 통해 환경을 사용합니다. 이 연결로는 Gateway를 관리할 수 없습니다.",
+    "createCode": "접근 코드 생성",
+    "codeHelp": "Gateway 주소와 코드를 클라이언트에게 비공개로 전달하세요. 코드는 10분 동안 유효하며 한 번만 사용할 수 있습니다. Gateway 관리 권한을 부여하지 않으며 런타임 로그인은 별도로 필요합니다.",
+    "codeExpires": "만료까지 {time}",
+    "codeExpired": "만료되었습니다. 새 코드를 생성하세요.",
+    "authorizedClients": "승인된 클라이언트",
+    "emptyClients": "접근 코드로 승인된 클라이언트가 없습니다.",
+    "unnamedClient": "이름 없는 클라이언트",
+    "revoked": "접근 취소됨",
+    "revoke": "접근 취소",
+    "confirmRevoke": "취소 확인",
+    "revokeHelp": "이 클라이언트의 Gateway 접근을 종료합니다. 런타임 등록, 다른 클라이언트와 호스트 권한은 변경되지 않습니다.",
+    "authorizedAt": "승인 시간",
+    "lastSeen": "최근 접근",
+    "codeHelpTitle": "접근 코드 사용 방법"
   }
 }

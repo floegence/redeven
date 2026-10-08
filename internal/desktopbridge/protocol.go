@@ -50,7 +50,8 @@ type HelloLocalUI struct {
 }
 
 type GatewayProtocol struct {
-	Available bool `json:"available"`
+	Available          bool `json:"available"`
+	CompatibilityEpoch int  `json:"compatibility_epoch"`
 }
 
 type GatewayService struct {

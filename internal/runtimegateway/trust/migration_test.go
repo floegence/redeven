@@ -48,7 +48,7 @@ func TestLegacyPairingPreservesAccessWithoutPromotingProfileWrite(t *testing.T) 
 		t.Fatal(err)
 	}
 	var state fileState
-	if json.Unmarshal(migrated, &state) != nil || state.SchemaVersion != 2 {
+	if json.Unmarshal(migrated, &state) != nil || state.SchemaVersion != 3 {
 		t.Fatal("migration was not persisted")
 	}
 }
