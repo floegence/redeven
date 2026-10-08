@@ -3,13 +3,39 @@ import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { TessivenLibraryCard } from '../../../../tessiven_ui/src/TessivenLibraryCard';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Canvas, TessivenTransport, Version } from '../../../../tessiven_ui/src/types';
 
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
-afterEach(() => { dispose?.(); host?.remove(); });
+afterEach(() => {
+  dispose?.();
+  host?.remove();
+  document.documentElement.classList.remove('dark', 'light');
+  document.documentElement.removeAttribute('data-floe-shell-theme');
+  document.documentElement.removeAttribute('style');
+});
+
+function applyTheme(preset: (typeof builtInShellThemePresets)[number]): void {
+  const root = document.documentElement;
+  root.removeAttribute('style');
+  root.classList.toggle('dark', preset.mode === 'dark');
+  root.classList.toggle('light', preset.mode === 'light');
+  root.dataset.floeShellTheme = preset.name;
+  for (const [name, value] of Object.entries(preset.semanticTokens ?? {}))
+    if (value) root.style.setProperty(name, value);
+}
+
+function resolvedThemeColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.cssText = `position:absolute;visibility:hidden;color:var(${token})`;
+  host.append(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
 
 const canvas: Canvas = {
   id: 'commerce', title: 'Commerce / Production',
@@ -51,7 +77,7 @@ it('previews the saved topology with groups and routed relationships under an in
   await page.viewport(1200, 800);
   host = document.createElement('div');
   host.className = 'tessiven';
-  host.style.cssText = 'width:340px;height:280px';
+  host.style.cssText = 'width:340px;height:280px;margin:32px';
   document.body.append(host);
   const open = vi.fn();
   const request = vi.fn(async () => version);
@@ -62,10 +88,33 @@ it('previews the saved topology with groups and routed relationships under an in
   const button = host.querySelector('button')!;
   const overlay = host.querySelector('.tessiven-card-information')!;
   expect(getComputedStyle(overlay).position).toBe('absolute');
+  expect(getComputedStyle(overlay).backdropFilter).toContain('blur(14px)');
   expect(host.querySelectorAll('button, [tabindex]')).toHaveLength(1);
   expect(request).toHaveBeenCalledWith('GET', '/canvases/commerce/versions/3');
   await page.screenshot({ element: host, path: '__screenshots__/tessiven-card-initial.png' });
+  expect(builtInShellThemePresets).toHaveLength(26);
+  for (const preset of builtInShellThemePresets) {
+    applyTheme(preset);
+    expect(getComputedStyle(overlay).color, preset.name).toBe(resolvedThemeColor('--foreground'));
+    expect(getComputedStyle(host.querySelector('.tessiven-card-meta')!).color, preset.name)
+      .toBe(resolvedThemeColor('--muted-foreground'));
+    expect(getComputedStyle(overlay).borderRadius, preset.name).toBe('7px');
+    await page.screenshot({
+      element: host,
+      path: `../../.vitest-attachments/tessiven-card-themes/${preset.name}-idle.png`,
+    });
+  }
   await userEvent.hover(page.elementLocator(button));
+  await expect
+    .poll(() => getComputedStyle(host.querySelector('.tessiven-card-reveal')!).gridTemplateRows)
+    .not.toBe('0px');
+  for (const preset of builtInShellThemePresets) {
+    applyTheme(preset);
+    await page.screenshot({
+      element: host,
+      path: `../../.vitest-attachments/tessiven-card-themes/${preset.name}-hover.png`,
+    });
+  }
   await page.screenshot({ element: host, path: '__screenshots__/tessiven-card-hover.png' });
   const initialBounds = button.getBoundingClientRect().toJSON();
   expect(initialBounds.height).toBeGreaterThan(250);
@@ -83,6 +132,7 @@ it('previews the saved topology with groups and routed relationships under an in
   await media.emulateMediaPreferences({ forcedColors: 'active' });
   expect(getComputedStyle(overlay).borderTopWidth).toBe('1px');
   await media.emulateMediaPreferences({ forcedColors: 'none' });
+  host.style.margin = '0';
   await page.viewport(360, 780);
   await page.screenshot({ element: host, path: '__screenshots__/tessiven-card-narrow.png' });
   await touch.emulateTouchInput(true);
