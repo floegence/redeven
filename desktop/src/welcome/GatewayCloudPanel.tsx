@@ -51,20 +51,22 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
     <Button ref={trigger} size="sm" variant="outline" class="cursor-pointer" disabled={props.disabled} onClick={() => { setOpen(true); void load(); }}>{props.i18n.t('gatewayCloud.title')}</Button>
     <Dialog open={open()} onOpenChange={value => { if (!value) close(); }} title={props.i18n.t('gatewayCloud.title')}
       bodyDescription={props.i18n.t('gatewayCloud.description')} closeLabel={props.i18n.t('common.close')}
-      class="redeven-gateway-dialog" contentClass="redeven-gateway-dialog__content">
-      <div class="space-y-4">
-        <p class="font-medium">{props.gatewayName}</p>
-        <Show when={status()}>{value => <p role="status" class="text-sm text-muted-foreground">{props.i18n.t(`gatewayCloud.${value().state}`)}<Show when={value().namespace_public_id}><span class="ml-2 font-mono text-xs">{value().namespace_public_id}</span></Show></p>}</Show>
-        <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
-        <Show when={needsConfiguration()}><p class="text-sm text-muted-foreground">{props.i18n.t('gatewayCloud.nextStep')}</p></Show>
-        <div class="flex flex-wrap justify-end gap-2">
+      class="redeven-gateway-dialog redeven-gateway-cloud-dialog" contentClass="redeven-gateway-dialog__content">
+      <div class="redeven-gateway-cloud-layout">
+        <div class="redeven-gateway-cloud-state">
+          <p class="redeven-gateway-cloud-state__name">{props.gatewayName}</p>
+          <Show when={status()}>{value => <div role="status" class="redeven-gateway-cloud-state__status"><span>{props.i18n.t(`gatewayCloud.${value().state}`)}</span><Show when={value().namespace_public_id}><code>{value().namespace_public_id}</code></Show></div>}</Show>
+          <Show when={needsConfiguration()}><p class="redeven-gateway-help">{props.i18n.t('gatewayCloud.nextStep')}</p></Show>
+        </div>
+        <Show when={error()}><p role="alert" class="redeven-gateway-content-enter rounded-md bg-destructive/10 px-3 py-2 text-sm text-error">{error()}</p></Show>
+        <Show when={busy()}><p role="status" aria-live="polite" class="text-sm text-muted-foreground">{props.i18n.t('gatewayCloud.working')}</p></Show>
+        <div class="redeven-gateway-dialog-actions">
           <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t(busy() ? 'common.cancel' : 'common.close')}</Button>
           <Button class="cursor-pointer" variant="outline" disabled={busy()} onClick={() => void load()}>{props.i18n.t('common.refresh')}</Button>
           <Show when={!needsConfiguration()} fallback={<Button class="cursor-pointer" disabled={busy()} onClick={() => void load(true)}>{props.i18n.t('gatewayCloud.configure')}</Button>}>
             <Button class="cursor-pointer" disabled={busy()} onClick={() => void manage()}>{props.i18n.t('gatewayCloud.manage')}</Button>
           </Show>
         </div>
-        <Show when={busy()}><p role="status" aria-live="polite" class="text-sm text-muted-foreground">{props.i18n.t('gatewayCloud.working')}</p></Show>
       </div>
     </Dialog>
   </>;

@@ -13398,7 +13398,7 @@ function GatewaySetupDialog(props: Readonly<{
       )}
     >
       <div class="redeven-gateway-settings-body">
-        <div class="rounded-lg border border-border bg-muted/15 px-3 py-2 text-xs text-muted-foreground">{props.i18n.t(connectionKind() === 'url' ? 'gatewayClients.clientOnly' : props.gateway?.permissions?.manage_members ? 'gatewayClients.hostAccess' : 'gatewayClients.hostVerification')}</div>
+        <div class="redeven-gateway-authority">{props.i18n.t(connectionKind() === 'url' ? 'gatewayClients.clientOnly' : props.gateway?.permissions?.manage_members ? 'gatewayClients.hostAccess' : 'gatewayClients.hostVerification')}</div>
         <Show when={props.gateway?.permissions?.manage_members && connectionKind() !== 'url'}>
           <div class="redeven-gateway-settings-tablist" role="tablist" aria-label={props.i18n.t('environmentCenter.gatewayActionOpenSettings')}>
             <For each={tabs}>{tab => <button type="button" class="redeven-gateway-settings-tab cursor-pointer" id={'gateway-settings-tab-' + tab} role="tab" aria-controls={'gateway-settings-panel-' + tab} aria-selected={activeTab() === tab} tabIndex={activeTab() === tab ? 0 : -1} onClick={() => selectTab(tab)} onKeyDown={event => {
@@ -13410,8 +13410,8 @@ function GatewaySetupDialog(props: Readonly<{
         </Show>
         <div class="redeven-gateway-settings-panels">
         <div id="gateway-settings-panel-connection" class={cn('redeven-gateway-settings-panel', activeTab() !== 'connection' && 'redeven-gateway-settings-panel--inactive')} role={canManage() ? 'tabpanel' : undefined} aria-labelledby={canManage() ? 'gateway-settings-tab-connection' : undefined} aria-hidden={canManage() && activeTab() !== 'connection' ? 'true' : undefined} inert={canManage() && activeTab() !== 'connection'}>
-        <div class="space-y-1.5">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <div class="redeven-gateway-settings-section redeven-gateway-connection-kind">
+          <div class="redeven-gateway-eyebrow">
             {props.i18n.t('connectionDialog.gatewayTransport')}
           </div>
           <div class="flex flex-wrap gap-2" role="group" aria-label={props.i18n.t('connectionDialog.gatewayTransport')}>
@@ -13427,19 +13427,19 @@ function GatewaySetupDialog(props: Readonly<{
                 onClick={() => props.updateField('connection_kind', option.kind)}>{props.i18n.t(option.key)}</Button>}
             </For>
           </div>
-          <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+          <div class="redeven-gateway-context-help">
             {props.i18n.t(connectionKind() === 'url' ? 'connectionDialog.gatewayUrlHelp' : 'gatewayAccess.managedServiceHelp')}
           </div>
         </div>
 
         <Show when={connectionKind() === 'url'}>
-          <div class="redeven-dialog-section">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div class="redeven-gateway-form-section">
+            <div class="redeven-gateway-eyebrow">
               {props.i18n.t('connectionDialog.connectionUrl')}
             </div>
-            <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+            <div class="redeven-gateway-form-group">
               <div class="space-y-1.5">
-                <label for="gateway-url" class="block text-xs font-medium text-foreground">
+                <label for="gateway-url" class="redeven-gateway-form-label">
                   {props.i18n.t('connectionDialog.gatewayUrl')} <span class="text-destructive">*</span>
                 </label>
                 <Input
@@ -13461,7 +13461,7 @@ function GatewaySetupDialog(props: Readonly<{
                 </Show>
               </div>
               <div class="mt-3 space-y-1.5">
-                <label for="gateway-access-code" class="block text-xs font-medium text-foreground">
+                <label for="gateway-access-code" class="redeven-gateway-form-label">
                   {props.i18n.t('connectionDialog.gatewayAccessCode')}
                 </label>
                 <Input
@@ -13477,7 +13477,7 @@ function GatewaySetupDialog(props: Readonly<{
                   class="w-full"
                   spellcheck={false}
                 />
-                <div class={cn('text-[11px] leading-5', props.fieldErrors.access_code ? 'text-destructive' : 'text-muted-foreground')}>
+                <div class={cn('redeven-gateway-help', props.fieldErrors.access_code && 'text-destructive')}>
                   {props.i18n.t('connectionDialog.gatewayAccessCodeHelp')}
                 </div>
               </div>
@@ -13486,14 +13486,14 @@ function GatewaySetupDialog(props: Readonly<{
         </Show>
 
         <Show when={isSSHBacked()}>
-          <div class="redeven-dialog-section">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div class="redeven-gateway-form-section">
+            <div class="redeven-gateway-eyebrow">
               {props.i18n.t('connectionDialog.sshHostSection')}
             </div>
-            <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+            <div class="redeven-gateway-form-group">
               <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
                 <div class="space-y-1.5">
-                  <label for="gateway-ssh-destination" class="block text-xs font-medium text-foreground">
+                  <label for="gateway-ssh-destination" class="redeven-gateway-form-label">
                     {props.i18n.t('connectionDialog.sshDestination')} <span class="text-destructive">*</span>
                   </label>
                   <SSHDestinationCombobox
@@ -13520,7 +13520,7 @@ function GatewaySetupDialog(props: Readonly<{
                   </Show>
                 </div>
                 <div class="space-y-1.5">
-                  <label for="gateway-ssh-port" class="block text-xs font-medium text-foreground">{props.i18n.t('settings.portLabel')}</label>
+                  <label for="gateway-ssh-port" class="redeven-gateway-form-label">{props.i18n.t('settings.portLabel')}</label>
                   <Input
                     id="gateway-ssh-port"
                     value={props.state?.ssh_port ?? ''}
@@ -13682,11 +13682,11 @@ function GatewaySetupDialog(props: Readonly<{
         </Show>
 
         <Show when={connectionKind() === 'local_container' || connectionKind() === 'ssh_container'}>
-          <div class="redeven-dialog-section">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div class="redeven-gateway-form-section">
+            <div class="redeven-gateway-eyebrow">
               {props.i18n.t('connectionDialog.container')}
             </div>
-            <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+            <div class="redeven-gateway-form-group">
               <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
                 <div class="space-y-1.5">
                   <div class="flex h-7 items-center">
@@ -13733,16 +13733,16 @@ function GatewaySetupDialog(props: Readonly<{
 
         <Show when={connectionKind() === 'local_host' || connectionKind() === 'local_container'}>
           <div class="space-y-1.5">
-            <label for="gateway-data-root" class="block text-xs font-medium">{props.i18n.t('connectionDialog.gatewayDataRoot')}</label>
+            <label for="gateway-data-root" class="redeven-gateway-form-label">{props.i18n.t('connectionDialog.gatewayDataRoot')}</label>
             <Input id="gateway-data-root" value={props.state?.runtime_root ?? ''} size="sm"
               placeholder={DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL} spellcheck={false}
               onInput={event => props.updateField('runtime_root', event.currentTarget.value)} />
-            <p class="text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.gatewayRuntimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}</p>
+            <p class="redeven-gateway-help">{props.i18n.t('connectionDialog.gatewayRuntimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}</p>
           </div>
         </Show>
 
-        <div class="space-y-1.5 rounded-md border border-dashed border-border/30 bg-background/40 px-3 py-3">
-          <label for="gateway-name" class="block text-xs font-medium text-foreground">
+        <div class="redeven-gateway-form-field">
+          <label for="gateway-name" class="redeven-gateway-form-label">
             {props.i18n.t('connectionDialog.gatewayName')} <span class="text-destructive">*</span>
           </label>
           <Input
@@ -13763,11 +13763,11 @@ function GatewaySetupDialog(props: Readonly<{
         </div>
 
         <Show when={connectionKind() === 'url'}>
-          <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+          <div class="redeven-gateway-setting-toggle">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0">
-                <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.allowLoopbackHttp')}</div>
-                <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                <div class="redeven-gateway-form-label">{props.i18n.t('connectionDialog.allowLoopbackHttp')}</div>
+                <div class="redeven-gateway-help mt-1">
                   {props.i18n.t('connectionDialog.allowLoopbackHttpHelp')}
                 </div>
               </div>
