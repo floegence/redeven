@@ -49,6 +49,33 @@ canvas context and in-flight delivery follow the
 [canvas contract](tessiven-canvas.md) and
 [composer reference contract](flower-composer-references.md).
 
+# Product verification
+
+Component rendering and an HTTP 200 from a frontend development server do not
+qualify a connected Env App. Workbench requires its Runtime layout snapshot,
+initial persistence and reload; canvas updates and Flower require the acquired
+session transport. A standalone Vite server supplies none of these endpoints.
+Do not hide a layout-load error to make an unconnected preview appear healthy.
+
+The focused `test:canvas-runtime` qualification starts an isolated Runtime from
+the built bundle with its published plugin sidecars and a fresh state root.
+It loads the full Env App, verifies Workbench persistence and reload, opens the
+standalone canvas through its Dock action, and opens the Activity canvas through
+the Activity Bar with its navigation rail visible. Both surfaces send a Flower turn,
+display the canonical streamed reply and exercise the reply menu in the compact
+window. Light and dark screenshots and a machine-readable report provide
+reviewable evidence. Only the model response is scripted; this does not qualify
+model reasoning, generation quality, or a real provider's availability.
+
+Run it after building the Env App assets and Runtime bundle:
+
+```sh
+pnpm test:canvas-runtime --binary /path/to/bundle/redeven --output /path/to/evidence
+```
+
+This focused local qualification is not added to ordinary source CI or the
+bounded push gate. It never attaches to an existing user browser or Runtime.
+
 # Evidence
 
 - `internal/tessiven_ui/src/TessivenFlowerPanel.tsx`: placement, More menu and restore behavior.
@@ -56,3 +83,4 @@ canvas context and in-flight delivery follow the
 - `internal/flower_ui/src/FlowerSurface.tsx`: canonical header action definitions and live conversation.
 - `internal/envapp/ui_src/src/styles/tessiven-flower.browser.test.tsx`: themes, geometry, native disclosure, menu focus and projected owners.
 - `internal/envapp/ui_src/src/ui/FlowerSurface.sendFeedback.browser.test.tsx`: continuous delivery and run feedback.
+- `internal/envapp/ui_src/scripts/checkCanvasRuntime.mjs`: complete product entry, Runtime layout, session transport and reply-window evidence.
