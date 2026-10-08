@@ -20,7 +20,7 @@ remain separate; simulated events must never be reported as those checks.
 ## Released capabilities
 
 The current integration consumes Floe Native Apps v0.22.19 and Floe webapp core
-0.85.1 with `GOWORK=off`. Exact-tag native amd64/arm64 qualification covers the
+0.86.0 with `GOWORK=off`. Exact-tag native amd64/arm64 qualification covers the
 combined Wayland/Xwayland component, package adapters, native text contexts,
 input ordering, portals and retained Xpra. The
 [desktop compatibility record](host-application-desktop-validation.md) owns the

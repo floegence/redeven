@@ -9,6 +9,7 @@ import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Canvas, TessivenTransport, Version } from '../../../../tessiven_ui/src/types';
 import hadoopDocument from './fixtures/tessiven-hadoop.json';
 import { projectCanvas } from '../../../../tessiven_ui/src/projection';
+import { sharedHostsVersion } from './tessiven-shared-hosts.fixture';
 
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
@@ -74,6 +75,24 @@ const version: Version = {
 };
 const media = commands as unknown as { emulateMediaPreferences: (preferences: { forcedColors?: 'active' | 'none'; reducedMotion?: 'reduce' | 'no-preference' }) => Promise<void> };
 const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+
+it('previews shared physical hosts inside each logical group with full inventories', async () => {
+  await page.viewport(1200,800);
+  host = document.createElement('div');
+  host.className = 'tessiven';
+  host.style.cssText = 'width:340px;height:280px;margin:32px';
+  document.body.append(host);
+  const saved = sharedHostsVersion();
+  const record = { ...canvas, id:saved.canvas_id, title:saved.document.metadata.title };
+  dispose = render(() => <TessivenLibraryCard canvas={record} transport={{request:vi.fn(async () => saved)} as unknown as TessivenTransport} t={tessivenText('en-US')} onOpen={vi.fn()} />,host);
+  await expect.poll(() => host.querySelectorAll('[data-preview-object]').length).toBe(7);
+  for (const id of ['hdfs::node-1','zk::node-1']) {
+    expect([...host.querySelectorAll(`[data-preview-object="${id}"] .tessiven-thumbnail-service`)].map(row => row.textContent))
+      .toEqual(['NameNode','ZooKeeper']);
+  }
+  expect(host.querySelector('.tessiven-preview-placeholder')).toBeNull();
+  expect(host.querySelectorAll('[data-preview-edge]')).toHaveLength(1);
+});
 
 it('previews every object and relationship in the saved Hadoop canvas with crowded hints', async () => {
   await page.viewport(1200, 800);

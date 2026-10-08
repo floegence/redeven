@@ -1,4 +1,7 @@
 {
+  "groupMemberships": "所屬分組",
+  "sharedHost": "共用主機 · {count} 個分組",
+  "locateInGroup": "定位至 {name}",
   "subtitle": "服務關係與管理畫布",
   "libraryTitle": "我的畫布",
   "libraryDescription": "將服務關係整理成畫布，與 Flower 一起完善。",

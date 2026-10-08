@@ -240,9 +240,20 @@
           "items": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
-            "description": "Member node ID. Each node belongs to at most one group."
+            "description": "Member physical node ID. A node may appear in multiple logical groups; every appearance shows its complete hosted inventory."
           },
           "uniqueItems": true,
+          "maxItems": 20000
+        },
+        "instanceRefs": {
+          "type": "array",
+          "description": "Optional exact logical service-instance membership. Each instance must run on a member node. Omit to include all instances on member nodes. Use this to distinguish cohosted projects or clusters without duplicating physical nodes or instances.",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "uniqueItems": true,
+          "minItems": 1,
           "maxItems": 20000
         }
       },

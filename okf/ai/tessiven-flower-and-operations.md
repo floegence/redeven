@@ -32,6 +32,10 @@ outcome, so the user must inspect the original manager before trying again.
   management bindings to example identities.
 - Flower preserves stable object IDs, adds evidence and observation times, and
   never guesses a management identity from a name, address, or process.
+- Mixed deployments reuse physical node IDs across logical group `nodeRefs`
+  and use exact `instanceRefs` to distinguish projects and same-type clusters.
+  They never duplicate hosts, instances, bindings, or permissions to create a
+  second visual appearance.
 - Generation defaults to automatic layout. Flower preserves intentional existing
   hints and adds coordinates only for a requested arrangement; it does not guess
   compact card geometry. Schema validation and saving prove document validity
@@ -49,6 +53,8 @@ outcome, so the user must inspect the original manager before trying again.
 - Selection summaries prioritize requested objects and include node, instance,
   and external-resource observation evidence. Truncation is explicit; Flower
   reads the exact saved version for additional detail.
+  Host and instance selections also include their logical group membership;
+  this addition does not select unrelated hosts in those groups.
 - The UI shows confirmed, refused, and unknown outcomes distinctly. Unknown
   mutation outcomes disable another mutation until the original manager has
   been inspected.
@@ -65,6 +71,8 @@ Managed Services and Containers retain execution and progress ownership.
 External and unmanaged resources support inspection and explanation only.
 
 # Evidence
+
+- `internal/tessiven/context_test.go` - Canonical host and instance selections retain logical membership.
 
 - `internal/ai/system_skills/redeven-tessiven/SKILL.md`
 - `internal/ai/tessiven_tools.go`

@@ -1,4 +1,7 @@
 {
+  "groupMemberships": "Groupes",
+  "sharedHost": "Hôte partagé · {count} groupes",
+  "locateInGroup": "Localiser dans {name}",
   "subtitle": "Relations et gestion des services",
   "libraryTitle": "Vos canevas",
   "libraryDescription": "Une vue claire de vos services, à construire avec Flower.",

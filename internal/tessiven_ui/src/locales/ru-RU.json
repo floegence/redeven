@@ -1,4 +1,7 @@
 {
+  "groupMemberships": "Группы",
+  "sharedHost": "Общий хост · группы: {count}",
+  "locateInGroup": "Найти в {name}",
   "subtitle": "Связи и управление сервисами",
   "libraryTitle": "Ваши схемы",
   "libraryDescription": "Наглядные связи между сервисами. Создавайте их вместе с Flower.",

@@ -1,4 +1,7 @@
 {
+  "groupMemberships": "소속 그룹",
+  "sharedHost": "공유 호스트 · 그룹 {count}개",
+  "locateInGroup": "{name}에서 위치 보기",
   "subtitle": "서비스 관계 및 관리 캔버스",
   "libraryTitle": "내 캔버스",
   "libraryDescription": "서비스 관계를 한눈에 보고 Flower와 함께 정리하세요.",

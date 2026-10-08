@@ -4,7 +4,7 @@ import {
   type GraphLayoutEngine,
   type GraphLayoutNode,
 } from '@floegence/floe-webapp-core/graph';
-import { projectCanvas } from './projection';
+import { projectCanvas, projectPositions } from './projection';
 import { TessivenIcon } from './TessivenIcon';
 import type { CanvasDocument, TessivenText } from './types';
 
@@ -22,15 +22,12 @@ export function TessivenThumbnail(props: {
     ),
   );
   const [layout] = createResource(projection, async (projected) => {
-    const visible = new Set(projected.graph.nodes.map(node => node.id));
     try {
       return await props.engine.layout(projected.graph, {
-        direction: 'RIGHT', spacing: 64,
+        direction: 'RIGHT', aspectRatio: 1.6, spacing: 32,
         positionMode: 'preferred',
         groupPadding: { top: 108, right: 20, bottom: 20, left: 20 },
-        positions: (props.document.presentation?.positions ?? [])
-          .filter(position => visible.has(position.objectRef))
-          .map(position => ({ nodeId: position.objectRef, x: position.x, y: position.y })),
+        positions: projectPositions(props.document, projected),
       });
     } catch {
       return undefined;

@@ -18,6 +18,9 @@
   --ts-glyph: #765597;
   --ts-glyph-accent: #b37b37;
   --ts-glyph-cut: var(--card);
+  --ts-linked: #557492;
+  --ts-linked-surface: color-mix(in oklab, var(--ts-linked) 14%, var(--ts-node));
+  --ts-linked-header: color-mix(in oklab, var(--ts-linked) 80%, var(--ts-header));
 }
 :root[data-theme='dark'] .tessiven,
 .dark .tessiven {
@@ -32,6 +35,8 @@
   --ts-storage: #503b30;
   --ts-glyph: #b49acb;
   --ts-glyph-accent: #d7b175;
+  --ts-linked: #a4bed5;
+  --ts-linked-header: color-mix(in oklab, var(--ts-linked) 30%, var(--ts-header));
 }
 .tessiven button,
 .tessiven select,
@@ -733,6 +738,29 @@
   font-size: 20px;
   padding: 3px;
 }
+.tessiven-node,
+.tessiven-node > header {
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.tessiven-node[data-linked='true'] {
+  background: var(--ts-linked-surface);
+  border-color: var(--ts-linked);
+  box-shadow: 0 0 0 2px var(--ts-linked), 0 7px 14px rgb(25 30 38 / 10%);
+}
+.tessiven-node[data-linked='true'] > header {
+  background: var(--ts-linked-header);
+}
+.tessiven-node[data-linked='true'] .tessiven-icon[data-kind='node'] {
+  --ts-glyph-cut: var(--ts-linked-header);
+}
+.tessiven-node > header > .tessiven-shared-host {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 10px/1.4 var(--font-mono, monospace);
+  color: #dedede;
+}
 .tessiven-node-body {
   padding: 8px 10px;
 }
@@ -793,6 +821,14 @@
   font: 9px/1.5 var(--font-mono, monospace);
   letter-spacing: 0.4px;
   color: var(--ts-muted);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tessiven-service[data-member='true'] {
+  box-shadow: inset 3px 0 color-mix(in oklab, var(--ts-glyph) 65%, var(--card));
+  background: color-mix(in oklab, var(--ts-glyph) 10%, var(--card));
 }
 .tessiven-service:hover {
   background: color-mix(in oklab, var(--ts-glyph) 13%, var(--card));
@@ -1017,6 +1053,58 @@
 .tessiven-detail-object p {
   line-height: 1.6;
   margin: 8px 0;
+}
+.tessiven-memberships {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.tessiven-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-bottom: 4px;
+}
+.tessiven-memberships button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 6px;
+  border-radius: 5px;
+  text-align: left;
+}
+.tessiven-memberships button span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tessiven-memberships button svg {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+.tessiven-memberships button:hover,
+.tessiven-memberships button[aria-current='location'] {
+  background: color-mix(in oklab, var(--ring) 10%, var(--card));
+}
+@media (prefers-reduced-motion: reduce) {
+  .tessiven-node,
+  .tessiven-node > header {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .tessiven-node[data-linked='true'] {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+  }
+  .tessiven-node[data-linked='true'] > header {
+    background: Highlight;
+    color: HighlightText;
+  }
 }
 .tessiven-evidence {
   margin: 12px 0 0;

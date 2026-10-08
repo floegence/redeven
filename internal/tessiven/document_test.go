@@ -101,3 +101,32 @@ func TestDocumentValidation(t *testing.T) {
 		t.Fatalf("cycle rejected: %+v", r.Diagnostics)
 	}
 }
+
+func TestSharedHostGroups(t *testing.T) {
+	source := strings.Replace(exampleDocument, "nodeRefs: [core-01]}", "nodeRefs: [core-01], instanceRefs: [orders-01]}\n  - {id: shared, name: Shared host, nodeRefs: [core-01], instanceRefs: [orders-01]}", 1)
+	result := Validate(source)
+	if !result.Valid {
+		t.Fatalf("shared host rejected: %+v", result.Diagnostics)
+	}
+	encoded, err := documentYAML(result.Document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next := Validate(encoded); !next.Valid || len(next.Document.Groups) != 2 || !strings.Contains(encoded, "instanceRefs") {
+		t.Fatalf("membership lost on round trip: %+v", next)
+	}
+	for _, invalid := range []string{
+		strings.Replace(source, "instanceRefs: [orders-01]", "instanceRefs: [missing]", 1),
+		strings.Replace(source, "nodeRefs: [core-01], instanceRefs", "nodeRefs: [], instanceRefs", 1),
+		strings.Replace(source, "instanceRefs: [orders-01]", "instanceRefs: [orders-01, orders-01]", 1),
+	} {
+		if next := Validate(invalid); next.Valid {
+			t.Fatalf("invalid group membership accepted: %s", invalid)
+		}
+	}
+	// Existing node-only membership continues to include the host's full inventory.
+	legacy := strings.Replace(exampleDocument, "name: Application nodes, nodeRefs: [core-01]}", "name: Application nodes, nodeRefs: [core-01]}\n  - {id: shared, name: Shared host, nodeRefs: [core-01]}", 1)
+	if next := Validate(legacy); !next.Valid {
+		t.Fatalf("node-only shared membership rejected: %+v", next.Diagnostics)
+	}
+}

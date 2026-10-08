@@ -1,4 +1,7 @@
 {
+  "groupMemberships": "Groups",
+  "sharedHost": "Shared host · {count} groups",
+  "locateInGroup": "Locate in {name}",
   "subtitle": "Service relationships and management",
   "libraryTitle": "Your canvases",
   "libraryDescription": "A shared view of your services. Shape it with Flower.",

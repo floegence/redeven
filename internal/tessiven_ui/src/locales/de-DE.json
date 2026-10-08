@@ -1,4 +1,7 @@
 {
+  "groupMemberships": "Gruppen",
+  "sharedHost": "Gemeinsamer Host · {count} Gruppen",
+  "locateInGroup": "In {name} anzeigen",
   "subtitle": "Dienstbeziehungen und Verwaltung",
   "libraryTitle": "Ihre Arbeitsflächen",
   "libraryDescription": "Servicebeziehungen im Überblick. Gemeinsam mit Flower gestalten.",

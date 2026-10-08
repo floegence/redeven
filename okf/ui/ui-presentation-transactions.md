@@ -23,7 +23,7 @@ Resource collections follow the same stable-presentation rule. A first Codespace
 
 ## Activity and retained content
 
-Activity uses the Shell UI-first mode and after-paint `ActivityAppsMain` activation. Activity and Workbench are also two kept-alive views with after-paint activation. Floe Webapp 0.85.1 exposes committed `visible()` separately from deferred `active()`, with visibility constrained by ancestor providers. Hidden views remain mounted, inert, and absent from accessibility navigation.
+Activity uses the Shell UI-first mode and after-paint `ActivityAppsMain` activation. Activity and Workbench are also two kept-alive views with after-paint activation. Floe Webapp 0.86.0 exposes committed `visible()` separately from deferred `active()`, with visibility constrained by ancestor providers. Hidden views remain mounted, inert, and absent from accessibility navigation.
 
 A retained terminal restores its latest atomic canvas during the visibility commit, without rebuilding a parser or replaying raw output. This minimal paint work runs after navigation intent and does not grant focus, input, or controller ownership. Activation effects remain deferred until the content paint opportunity.
 
