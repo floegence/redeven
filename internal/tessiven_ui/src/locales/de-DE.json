@@ -176,6 +176,7 @@
   "source.created": "Erstellt",
   "libraryMenu": "Aktionen für die Canvas-Bibliothek",
   "flowerReference": "Referenz",
+  "removeFlowerReference": "Referenz {name} entfernen",
   "flowerConversation": "Unterhaltung öffnen",
   "showReplies": "Antworten anzeigen",
   "hideReplies": "Antworten ausblenden",

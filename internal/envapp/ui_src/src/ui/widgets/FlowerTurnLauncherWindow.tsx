@@ -46,6 +46,7 @@ function createFlowerTurnLauncherCopy(i18n: ReturnType<typeof useI18n>): FlowerT
     working_directory_unavailable: i18n.t('flowerTurnLauncher.workingDirectoryUnavailable'),
     sending: i18n.t('flowerTurnLauncher.sending'),
     linked_context_label: i18n.t('flowerTurnLauncher.linkedContextLabel'),
+    remove_reference: (path) => i18n.t('flowerSurface.chat.composerReferenceRemove', { path }),
     you_label: i18n.t('flowerTurnLauncher.youLabel'),
     reply_to_flower_label: i18n.t('flowerTurnLauncher.replyToFlowerLabel'),
     send_turn: i18n.t('flowerTurnLauncher.launchTurn'),

@@ -92,6 +92,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Activity: Icon,
     AlertTriangle: Icon,
     Terminal: Icon,
+    X: Icon,
     ArrowUp: () => <span data-testid="arrow-up-icon" />,
   };
 });

@@ -176,6 +176,7 @@
   "source.created": "Créé",
   "libraryMenu": "Actions de la bibliothèque",
   "flowerReference": "Référence",
+  "removeFlowerReference": "Supprimer la référence {name}",
   "flowerConversation": "Ouvrir la conversation",
   "showReplies": "Afficher les réponses",
   "hideReplies": "Masquer les réponses",

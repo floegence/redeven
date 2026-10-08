@@ -9,6 +9,7 @@ import {
   type FlowerTurnLauncherSubmitInput,
 } from './FlowerTurnLauncherWindow';
 import { flowerTurnAdmissionError } from './flowerTurnAdmission';
+import { setFlowerTurnLauncherAttachmentSourcePath } from './flowerTurnLauncherCopy';
 
 const intent: FlowerTurnLauncherIntent = {
   id: 'launcher-panel-test',
@@ -56,7 +57,7 @@ afterEach(() => {
 
 function renderPanel(overrides: Partial<Parameters<typeof FlowerTurnLauncherPanel>[0]> = {}) {
   const onClose = vi.fn();
-  const onSubmit = vi.fn(async () => undefined);
+  const onSubmit = vi.fn(async (_input: FlowerTurnLauncherSubmitInput) => undefined);
   const onContextAction = vi.fn();
 
   dispose = render(() => (
@@ -74,6 +75,58 @@ function renderPanel(overrides: Partial<Parameters<typeof FlowerTurnLauncherPane
 }
 
 describe('FlowerTurnLauncherPanel', () => {
+  it('removes a reference from both the visible input and the submitted action without replacing the draft', async () => {
+    const contextItems = [intent.context_items[0], { kind: 'file_path' as const, path: '/workspace/redeven/worker.go', is_directory: false }];
+    const action = {
+      schema_version: 2, action_id: 'assistant.ask.flower', provider: 'flower',
+      target: { target_id: 'local:local', locality: 'current_runtime' },
+      source: { surface: 'file_preview' }, context: contextItems,
+      presentation: { label: 'Ask Flower', priority: 100 },
+    };
+    const { onSubmit } = renderPanel({ intent: { ...intent, context_items: contextItems, context_action: action } });
+    const textarea = host.querySelector('textarea')!;
+    textarea.value = 'Keep my question';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const remove = host.querySelector<HTMLButtonElement>('button[aria-label="Remove reference main.go"]');
+    expect(remove).not.toBeNull();
+    remove!.click();
+    expect(host.querySelector('.flower-composer-context-references')?.textContent).toBe('worker.go');
+    expect(textarea.value).toBe('Keep my question');
+    (host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ prompt: 'Keep my question', intent: {
+      context_items: [contextItems[1]], context_action: { ...action, context: [contextItems[1]] },
+    } });
+  });
+
+  it('drops the action envelope when the last explicit reference is removed', async () => {
+    const { onSubmit } = renderPanel({ intent: { ...intent, context_action: {
+      schema_version: 2, action_id: 'assistant.ask.flower', provider: 'flower',
+      target: { target_id: 'local:local', locality: 'current_runtime' },
+      source: { surface: 'file_preview' }, context: intent.context_items,
+      presentation: { label: 'Ask Flower', priority: 100 },
+    } } });
+    host.querySelector<HTMLButtonElement>('button[aria-label="Remove reference main.go"]')?.click();
+    expect(host.querySelector('.flower-composer-context-references')).toBeNull();
+    (host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ intent: { context_items: [] } });
+    expect(onSubmit.mock.calls[0]?.[0].intent.context_action).toBeUndefined();
+  });
+
+  it('removes consolidated attachment snapshots along with their live file reference', async () => {
+    const file = new File(['package main'], 'main.go');
+    const other = new File(['diagram'], 'diagram.png');
+    setFlowerTurnLauncherAttachmentSourcePath(file, '/workspace/redeven/main.go');
+    const { onSubmit } = renderPanel({ intent: { ...intent, pending_attachments: [file, other] } });
+    host.querySelector<HTMLButtonElement>('button[aria-label="Remove reference main.go"]')!.click();
+    expect(host.querySelector('.flower-composer-context-references')?.textContent).toBe('diagram.png');
+    (host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(onSubmit.mock.calls[0]?.[0].intent.context_items).toEqual([]);
+    expect(onSubmit.mock.calls[0]?.[0].intent.pending_attachments).toEqual([other]);
+  });
+
   it('renders the shared prompt, context projection, notes, and footer without FloatingWindow chrome', () => {
     const { onClose, onContextAction } = renderPanel();
 
@@ -107,7 +160,7 @@ describe('FlowerTurnLauncherPanel', () => {
     } });
     const input = host.querySelector('[data-testid="flower-turn-launcher-editor-shell"]')!;
     const buttons = Array.from(input.querySelectorAll<HTMLButtonElement>('.flower-composer-context-reference button'));
-    expect(buttons).toHaveLength(2);
+    expect(buttons).toHaveLength(3);
     buttons[0].click();
     expect(onContextAction).toHaveBeenLastCalledWith(
       expect.objectContaining({ type: 'open_text_context_preview', body: 'func main() {}' }),
@@ -192,6 +245,9 @@ describe('FlowerTurnLauncherPanel', () => {
     sendButton.click();
     await flushAsync();
     expect((host.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    const remove = host.querySelector<HTMLButtonElement>('button[aria-label="Remove reference main.go"]');
+    expect(remove?.disabled).toBe(true);
+    remove?.click();
     sendButton.click();
     await flushAsync();
 
@@ -199,5 +255,6 @@ describe('FlowerTurnLauncherPanel', () => {
     expect(onSubmit.mock.calls[0]?.[0].client_request_id).toBe(
       onSubmit.mock.calls[1]?.[0].client_request_id,
     );
+    expect(onSubmit.mock.calls[1]?.[0].intent).toBe(onSubmit.mock.calls[0]?.[0].intent);
   });
 });

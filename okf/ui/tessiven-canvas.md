@@ -27,10 +27,11 @@ text. Flower is the editing surface; the canvas has no manual content editor.
   changing card geometry, while touch displays those details by default.
 - The canonical Flower composer stays at the bottom of the canvas. There is no
   editor drawer, additional status bar, or repeated canvas identity/version row
-  above the input. A compact quoted object or canvas name appears inside the
+  above the input. Compact removable object chips appear inside the
   input under the [Flower reference contract](flower-composer-references.md),
   with version metadata confined to its hover title and no instructional
-  placeholder. The Flower request carries the exact visible canvas/version
+  placeholder. Default whole-canvas context is implicit and stays hidden;
+  removing the last object returns to that default. The Flower request carries the exact visible canvas/version
   and selected-object context through its context action.
 - Replies, tool activity, questions, approvals and errors use the same Flower
   surface runtime. Its conversation is placed in an upper-left floating window;

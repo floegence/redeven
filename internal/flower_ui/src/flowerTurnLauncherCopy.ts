@@ -59,6 +59,7 @@ export type FlowerTurnLauncherProjectedCopy = Readonly<{
 export type FlowerTurnLauncherWindowChromeCopy = Readonly<{
   window_title: string;
   linked_context_label: string;
+  remove_reference: (name: string) => string;
   working_dir_label: string;
   working_directory_unavailable: string;
   ready: string;
@@ -138,6 +139,7 @@ export type FlowerTurnLauncherWindowCopyInput = Partial<FlowerTurnLauncherWindow
 export const DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY: FlowerTurnLauncherWindowCopy = {
   window_title: 'Ask Flower',
   linked_context_label: 'Linked context',
+  remove_reference: (name) => `Remove reference ${name}`,
   working_dir_label: 'Working dir',
   working_directory_unavailable: 'Working directory unavailable',
   ready: 'Ready',

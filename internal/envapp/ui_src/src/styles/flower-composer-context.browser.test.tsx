@@ -61,12 +61,12 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
   expect(rows[0].textContent).toBe('checkout.ts');
   expect(input.querySelector('.flower-composer-context-heading')).toBeNull();
   expect(document.querySelector('.flower-turn-launcher-message-surface')?.textContent).not.toContain('selected content');
-  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+  expect(list.clientHeight).toBeLessThanOrEqual(80);
   expect(list.getAttribute('data-redeven-workbench-wheel-role')).toBe('local-scroll-viewport');
   for (const row of rows) {
     const style = getComputedStyle(row);
-    expect(style.borderRadius).toBe('0px');
-    expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(parseFloat(style.borderWidth)).toBe(0);
+    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(24);
   }
   const preview = rows[0].querySelector('button')!;
   await userEvent.click(preview);
@@ -84,10 +84,30 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
     expect.objectContaining({ type: 'open_process_snapshot_preview', pid: 1842 }),
     expect.objectContaining({ tone: 'process' }),
   );
-  expect(rows[5].querySelector('button')).toBeNull();
+  expect(rows[5].querySelector('button.flower-composer-context-source')).toBeNull();
+  expect(rows[5].querySelector('.flower-composer-context-remove')).not.toBeNull();
+  expect(rows[0].getBoundingClientRect().top).toBe(rows[1].getBoundingClientRect().top);
   await page.getByRole('textbox').fill('Explain these references');
   await page.getByRole('button', { name: 'Launch turn', exact: true }).click();
   expect(runtime.onSubmit).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Explain these references', intent }));
+});
+
+it('wraps many references into a bounded viewport and restores editor focus after the last removal', async () => {
+  await page.viewport(390, 700);
+  mount({ ...intent, context_items: Array.from({ length: 18 }, (_, index) => (
+    { kind: 'file_path', path: `/workspace/service-${index}/configuration.ts`, is_directory: false }
+  )) });
+  await expect.element(page.getByRole('textbox')).toBeVisible();
+  const list = document.querySelector<HTMLElement>('.flower-composer-context-list')!;
+  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+  expect(list.clientHeight).toBeLessThanOrEqual(80);
+  await page.getByRole('textbox').fill('Preserve this draft');
+  while (document.querySelector('.flower-composer-context-remove')) {
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-composer-context-remove')!);
+  }
+  expect(document.querySelector('.flower-composer-context-references')).toBeNull();
+  await expect.poll(() => document.activeElement?.tagName).toBe('TEXTAREA');
+  await expect.element(page.getByRole('textbox')).toHaveValue('Preserve this draft');
 });
 
 it('renders restrained reference styling in every theme without changing input focus geometry', async () => {

@@ -116,11 +116,11 @@ export function TessivenPage(props: {
     flowerSessions().find(session => session.id === canvas()?.id)?.request() ?? previous,
   );
 
-  function askSelection(value: Selection, prompt?: string) {
+  function selectionLabels(value: Selection) {
     const doc = version()?.document;
-    const names = value.object_refs.map((id) => {
+    return Object.fromEntries(value.object_refs.map((id) => {
       const item = (doc?.instances ?? []).find((item) => item.id === id);
-      return (
+      return [id,
         item?.name ??
         (item &&
           doc?.services?.find((service) => service.id === item.serviceRef)
@@ -132,11 +132,14 @@ export function TessivenPage(props: {
           ...(doc?.resources ?? []),
         ].find((item) => item.id === id)?.name ??
         id
-      );
-    });
+      ];
+    }));
+  }
+
+  function askSelection(value: Selection, prompt?: string) {
     const next = {
       selection: value,
-      label: names.length ? names.join(', ') : (doc?.metadata.title ?? ''),
+      labels: selectionLabels(value),
       prompt,
       nonce: Date.now(),
     };
@@ -157,6 +160,13 @@ export function TessivenPage(props: {
     const value = selection();
     if (value) askSelection(value, prompt);
   };
+  const removeFlowerReference = (objectRef: string) => {
+    const session = flowerSessions().find(item => item.id === canvas()?.id);
+    if (!session) return;
+    const previous = session.request();
+    const selection = { ...previous.selection, object_refs: previous.selection.object_refs.filter(id => id !== objectRef) };
+    session.update({ ...previous, selection, labels: selectionLabels(selection), prompt: undefined });
+  };
   createEffect(() => {
     const current = version();
     if (!current) return;
@@ -167,7 +177,7 @@ export function TessivenPage(props: {
       if (!session) {
         const [request, update] = createSignal<CanvasFlowerRequest>({
           selection: { canvas_id: current.canvas_id, version_id: current.number, object_refs: [] },
-          label: current.document.metadata.title, nonce: 0,
+          labels: {}, nonce: 0,
         });
         setFlowerSessions(sessions => [...sessions, { id: current.canvas_id, request, update }]);
         return;
@@ -178,9 +188,7 @@ export function TessivenPage(props: {
         ...previous,
         prompt: undefined,
         selection: { ...previous.selection, version_id: current.number },
-        label: previous.selection.object_refs.length
-          ? previous.label
-          : current.document.metadata.title,
+        labels: selectionLabels(previous.selection),
       });
     });
   });
@@ -669,6 +677,7 @@ export function TessivenPage(props: {
         <Show when={flowerSessions().length > 0}>
           <TessivenFlowerPanel
             request={flowerRequest()!}
+            onRemoveReference={removeFlowerReference}
             visible={props.visible !== false && !!canvas()}
             t={props.t}
             renderSurface={props.renderFlower}

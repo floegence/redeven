@@ -176,6 +176,7 @@
   "source.created": "作成",
   "libraryMenu": "キャンバス一覧の操作",
   "flowerReference": "参照",
+  "removeFlowerReference": "{name} の参照を削除",
   "flowerConversation": "会話を開く",
   "showReplies": "返信を表示",
   "hideReplies": "返信を折りたたむ",

@@ -5722,9 +5722,9 @@ webSearch: model.web_search,
       }
     });
   });
-  createEffect(on(() => props.embeddedConversation?.request?.nonce, (nonce) => {
+  createEffect(on(() => props.embeddedConversation?.request?.nonce, (nonce, previousNonce) => {
     const request = props.embeddedConversation?.request;
-    if (!nonce || !request) return;
+    if (!nonce || nonce === previousNonce || !request) return;
     untrack(() => {
       if (request.prompt !== undefined) updateComposerSessionText(currentComposerSessionKey(), request.prompt);
       returnToChat();

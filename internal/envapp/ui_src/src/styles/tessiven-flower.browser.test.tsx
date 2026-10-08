@@ -25,7 +25,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
   host.style.cssText = `position:absolute;left:30px;top:30px;width:1100px;height:700px;${transformed ? 'transform:scale(.8);transform-origin:top left;' : ''}`;
   document.body.append(host);
   const [request, setRequest] = createSignal<CanvasFlowerRequest>({
-    selection: { canvas_id: 'commerce', version_id: 2, object_refs: ['orders'] }, label: 'Orders API', nonce: 0,
+    selection: { canvas_id: 'commerce', version_id: 2, object_refs: ['orders'] }, labels: { orders: 'Orders API' }, nonce: 0,
   });
   const base = { ...canvasFlowerAdapter(), ...overrides };
   const sent = vi.fn(base.launchTurn);
@@ -57,11 +57,55 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
         } }} />}
     <TessivenFlowerPanel
     request={request()} visible t={tessivenText('en-US')} onOpenConversation={navigate}
+    onRemoveReference={id => setRequest(previous => ({ ...previous, selection: {
+      ...previous.selection, object_refs: previous.selection.object_refs.filter(ref => ref !== id),
+    } }))}
     renderSurface={surface => <CanvasFlowerTestSurface {...surface} adapter={adapter} />}
   /></LayoutProvider></FloeConfigProvider>, host);
   return { setRequest, sent, connections, navigate, push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
 }
 const editor = () => page.getByRole('textbox');
+it('keeps the whole canvas implicit in a clean default composer', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount();
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 0 });
+  await expect.element(editor()).toBeVisible();
+  expect(host.querySelector('.flower-composer-context-references')).toBeNull();
+  await editor().fill('Draw the architecture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  expect(runtime.sent.mock.calls[0][0].context_action).toMatchObject({ context: [
+    { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: [] },
+  ] });
+});
+
+it('places small object references side by side and removes their actual context while preserving the draft', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount(false, {}, true);
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: ['orders', 'db'] },
+    labels: { orders: 'Orders API', db: 'Orders database' }, nonce: 1 });
+  await expect.element(editor()).toBeVisible();
+  await editor().fill('Keep this question');
+  const chips = [...host.querySelectorAll<HTMLElement>('.flower-composer-context-reference')];
+  expect(chips).toHaveLength(2);
+  expect(chips[0].getBoundingClientRect().top).toBe(chips[1].getBoundingClientRect().top);
+  expect(chips[0].getBoundingClientRect().height).toBeLessThanOrEqual(24);
+  expect(parseFloat(getComputedStyle(chips[0].querySelector('.flower-composer-context-label')!).fontSize)).toBeLessThanOrEqual(11);
+  await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(1);
+  await page.screenshot({ element: host, path: '__screenshots__/tessiven-reference-chips.png' });
+  await page.getByRole('button', { name: 'Remove reference Orders API', exact: true }).click();
+  await expect.poll(() => document.activeElement?.getAttribute('aria-label')).toBe('Remove reference Orders database');
+  await expect.element(editor()).toHaveValue('Keep this question');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  expect(runtime.sent.mock.calls[0][0].context_action).toMatchObject({ context: [
+    { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: ['db'] },
+  ] });
+  await page.getByRole('button', { name: 'Remove reference Orders database', exact: true }).click();
+  expect(host.querySelector('.flower-composer-context-references')).toBeNull();
+  await expect.poll(() => document.activeElement === host.querySelector('.flower-composer textarea')).toBe(true);
+});
+
 it('keeps the canonical composer at the bottom and displays real conversation output in the floating window', async () => {
   await page.viewport(1200, 800);
   const runtime = mount();
@@ -101,15 +145,15 @@ it('keeps drafts isolated by canvas and a single workspace connection while reta
   const runtime = mount();
   await expect.element(editor()).toBeVisible();
   await editor().fill('Commerce draft');
-  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, label: 'Analytics', nonce: 1 });
+  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 1 });
   await expect.element(editor()).toHaveValue('');
-  expect(host.querySelector('.flower-composer-context-references')?.textContent).toContain('Analytics');
+  expect(host.querySelector('.flower-composer-context-references')).toBeNull();
   await editor().fill('Analytics draft');
-  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 1, object_refs: ['db'] }, label: 'Database', nonce: 2 });
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 1, object_refs: ['db'] }, labels: { db: 'Database' }, nonce: 2 });
   await expect.element(editor()).toHaveValue('Commerce draft');
   expect(host.querySelector('.flower-composer-context-references')?.textContent).toContain('Database');
   expect(host.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('Version 1');
-  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 3, object_refs: ['db'] }, label: 'Database', nonce: 2 });
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 3, object_refs: ['db'] }, labels: { db: 'Database' }, nonce: 2 });
   await expect.element(editor()).toHaveValue('Commerce draft');
   expect(host.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('Version 3');
   expect(runtime.sent).not.toHaveBeenCalled();
@@ -154,18 +198,18 @@ it('keeps late acceptance bound to its original canvas and resumes the accepted 
   await editor().fill('Inspect commerce');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
-  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, label: 'Analytics', nonce: 1 });
+  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 1 });
   await editor().fill('Unsaved analytics draft');
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
   await expect.element(editor()).toHaveValue('Unsaved analytics draft');
   await expect.element(page.getByRole('button', { name: 'Open conversation', exact: true })).not.toBeInTheDocument();
-  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, label: 'Commerce', nonce: 2 });
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 2 });
   await expect.element(page.getByRole('button', { name: 'Open conversation', exact: true })).toBeVisible();
   await expect.element(editor()).toHaveValue('');
   await editor().fill('Continue commerce');
-  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, label: 'Analytics', nonce: 3 });
+  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 3 });
   await expect.element(editor()).toHaveValue('Unsaved analytics draft');
-  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, label: 'Commerce', nonce: 4 });
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 4 });
   await expect.element(editor()).toHaveValue('Continue commerce');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
@@ -187,8 +231,8 @@ it('reopens replies on send and does not reopen an older conversation after star
   await editor().fill('A separate question');
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
   await expect.element(editor()).toHaveValue('A separate question');
-  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, label: 'Analytics', nonce: 1 });
-  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, label: 'Commerce', nonce: 2 });
+  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 1 });
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 2 });
   await expect.element(editor()).toHaveValue('A separate question');
   await expect.element(page.getByRole('button', { name: 'Open conversation', exact: true })).not.toBeInTheDocument();
 });
@@ -205,7 +249,7 @@ it('retries an uncertain send with its original canvas identity after the select
   await editor().fill('Explain Orders');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
-  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 7, object_refs: ['cache'] }, label: 'Analytics cache', nonce: 1 });
+  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 7, object_refs: ['cache'] }, labels: { cache: 'Analytics cache' }, nonce: 1 });
   await editor().fill('Separate draft');
   fail(flowerTurnAdmissionError('unknown', new Error('Test response lost')));
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);

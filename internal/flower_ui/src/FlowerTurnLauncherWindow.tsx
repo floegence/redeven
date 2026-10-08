@@ -11,6 +11,7 @@ import { createFlowerClientRequestID } from './flowerRequestIdentity';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { flowerTurnAdmissionFailureKind } from './flowerTurnAdmission';
 import { FlowerComposerContextReference, FlowerComposerContextReferences } from './composer/FlowerComposerContextReferences';
+import { removeFlowerTurnLauncherReference } from './composer/removeFlowerTurnLauncherReference';
 import {
   DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY,
   buildFlowerTurnLauncherCopy,
@@ -164,7 +165,7 @@ function shouldSubmitOnEnterKeydown(event: KeyboardEvent, composing: boolean): b
 
 function copyValue(
   copy: FlowerTurnLauncherWindowCopyInput | undefined,
-  key: keyof FlowerTurnLauncherWindowChromeCopy,
+  key: Exclude<keyof FlowerTurnLauncherWindowChromeCopy, 'remove_reference'>,
 ): string {
   return compact(copy?.[key]) || DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY[key];
 }
@@ -213,9 +214,13 @@ export function createFlowerTurnLauncherPanelController(
   const [sending, setSending] = createSignal(false);
   const [clientRequestID, setClientRequestID] = createSignal('');
   const [pendingRequestPrompt, setPendingRequestPrompt] = createSignal('');
+  const [editableIntent, setEditableIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   let textareaEl: HTMLTextAreaElement | undefined;
 
-  const projected = createMemo(() => (props.intent ? buildFlowerTurnLauncherCopy(props.intent, props.copy) : null));
+  const projected = createMemo(() => {
+    const intent = editableIntent();
+    return intent ? buildFlowerTurnLauncherCopy(intent, props.copy) : null;
+  });
   const userPrompt = () => props.draft ?? internalUserPrompt();
   const admissionUnknown = () => launchErrorKind() === 'unknown' && Boolean(launchError());
   const visiblePrompt = () => admissionUnknown() ? pendingRequestPrompt() : userPrompt();
@@ -227,6 +232,7 @@ export function createFlowerTurnLauncherPanelController(
   const suggestedWorkingDir = createMemo(() => compact(props.intent?.suggested_working_dir));
 
   const resetLauncherState = (intent: FlowerTurnLauncherIntent | null) => {
+    setEditableIntent(intent);
     setValidationError('');
     setLaunchError('');
     setLaunchErrorKind('failure');
@@ -256,7 +262,7 @@ export function createFlowerTurnLauncherPanelController(
 
   const submit = async () => {
     if (sending()) return;
-    const intent = props.intent;
+    const intent = editableIntent();
     const requestID = clientRequestID();
     const retryingUnknownAdmission = admissionUnknown();
     const prompt = compact(retryingUnknownAdmission
@@ -294,6 +300,12 @@ export function createFlowerTurnLauncherPanelController(
     void props.onContextAction?.(action, entry);
   };
 
+  const removeReference = (entry: FlowerTurnLauncherContextChip) => {
+    const intent = editableIntent();
+    if (!intent || sending() || admissionUnknown()) return;
+    setEditableIntent(removeFlowerTurnLauncherReference(intent, entry));
+  };
+
   return {
     footerPlacement,
     visiblePrompt,
@@ -317,6 +329,7 @@ export function createFlowerTurnLauncherPanelController(
     textareaValue: () => textareaEl?.value ?? visiblePrompt(),
     submit,
     runContextAction,
+    removeReference,
   };
 }
 
@@ -385,6 +398,7 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
     textareaValue,
     submit,
     runContextAction,
+    removeReference,
   } = controller;
 
   return (
@@ -446,6 +460,9 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                                 <FlowerComposerContextReference label={entry.tone === 'selection' ? entry.detail : entry.label}
                                   title={`${entry.title}${entry.detail ? `\n${entry.detail}` : ''}`}
                                   icon={entryIcon(entry)} disabled={sending()}
+                                  removalDisabled={admissionUnknown()}
+                                  removeLabel={(props.copy?.remove_reference ?? DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY.remove_reference)(entry.tone === 'selection' ? entry.detail : entry.label)}
+                                  onRemove={() => removeReference(entry)}
                                   onPreview={entry.primary_action ? () => runContextAction(entry.primary_action, entry) : undefined}
                                   actions={<For each={entry.secondary_actions}>{action => (
                                     <button type="button" class="flower-composer-context-action"
