@@ -61,8 +61,9 @@ item and interaction, including historical rows after restart. It also retains
 the exact active RunID and one process-local `RunProgress` phase. Flower rejects
 an incomplete or conflicting identity before detail enters `ThreadCache`; it
 never assigns an empty identity or substitutes the latest run. Flower renders
-the active phase only in the fixed lane above the
-composer; it never inserts a transient timeline row. One RunID keeps the same
+the active phase in one fixed lane above the composer, or at the bottom of the
+reply window when Tessiven places the composer separately. It never inserts a
+transient timeline row or duplicates progress in both placements. One RunID keeps the same
 indicator, Flower, and dots DOM nodes while phase text changes, so CSS animation
 time remains continuous. Active tool titles and progress text opt into the
 shared glyph-only flow described by the [surface contract](surface-material.md);
@@ -72,6 +73,15 @@ indicator. Waiting for interaction and terminal views clear it. Messages and
 Activity still provide transcript and collapsed-summary content, but never
 decide the lifecycle phase. Redeven has no model-I/O stream, message-content
 phase inference, TurnID-as-RunID fallback, polling, or second progress state.
+
+Before canonical admission, the same lane shows delivery feedback directly from
+the selected composer's unresolved transport outbox entry. This uses the exact
+product request identity and the localized sending label, never an invented RunID
+or model phase. Canonical progress takes priority after admission. Outbox
+confirmation, rejection or terminal restoration clears delivery feedback through
+the existing owner; switching canvas scopes never retargets a pending send or
+blocks editing another canvas. Reduced motion keeps the label visible without
+animation.
 
 Floret v7.25.2 publishes an approval interaction and its cleared active progress
 in one transition. Active summaries without an unresolved interaction retain
@@ -185,6 +195,7 @@ and short ThreadID. Display labels never become canonical titles.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Rejects null, missing, empty, and incomplete pending-input question contracts.
 - `redeven:internal/flower_ui/src/flowerLiveProgress.ts` - Single truthful current-turn progress projection for expanded and companion presentation.
 - `redeven:internal/flower_ui/src/flowerLiveProgress.test.ts` - Waiting, thinking, tool, output, terminal, and stopped-turn isolation coverage.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.sendFeedback.browser.test.tsx` - Delayed admission, truthful request-to-run feedback, reply-window placement, phase continuity, terminal clearing, scope isolation and reduced motion.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Retained Flower product placement across Activity and Workbench hosts.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Workbench host registration without a second Flower instance.
 - `redeven:internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts` - Single receiver and obsolete-path removal checks.

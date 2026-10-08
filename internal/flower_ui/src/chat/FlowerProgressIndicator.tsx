@@ -11,20 +11,23 @@ export type FlowerProgressIndicatorState = Readonly<{
 
 export type FlowerProgressIndicatorProps = Readonly<{
   progress: FlowerProgressIndicatorState | null;
+  pendingRequestID?: string;
   label: string;
 }>;
 
 export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = (props) => {
   const runID = () => trimString(props.progress?.runID) || null;
+  const pendingRequestID = () => runID() ? null : trimString(props.pendingRequestID) || null;
   const label = () => props.label.replace(/\.\.\.$/, '');
 
   return (
-    <Show keyed when={runID()}>
-      {(activeRunID) => (
+    <Show keyed when={runID() || pendingRequestID()}>
+      {(_identity) => (
         <div
           class="flower-model-status-indicator"
-          data-flower-progress-kind={props.progress?.kind}
-          data-flower-progress-run-id={activeRunID}
+          data-flower-progress-kind={runID() ? props.progress?.kind : 'sending'}
+          data-flower-progress-run-id={runID() ?? undefined}
+          data-flower-progress-request-id={pendingRequestID() ?? undefined}
         >
           <span class="flower-model-status-flower" aria-hidden="true">
             <FlowerIcon class="flower-model-status-flower-icon" />
