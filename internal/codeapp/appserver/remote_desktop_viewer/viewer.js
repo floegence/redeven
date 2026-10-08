@@ -152,7 +152,32 @@ async function setAudio(enabled) {
     input.bindTarget(active(generation) ? generation : null);
   }
 }
-function status(key, hint = '') { $('connection').hidden = key === '' || state === 'locked' && painted; $('status').textContent = key ? copy(key) : ''; $('hint').textContent = hint ? copy(hint) : ''; }
+function status(key, hint = '') {
+  $('connection').hidden = key === '' || state === 'locked' && painted;
+  if (key) $('status').dataset.copy = key; else $('status').removeAttribute('data-copy');
+  if (hint) $('hint').dataset.copy = hint; else $('hint').removeAttribute('data-copy');
+  $('status').textContent = key ? copy(key) : ''; $('hint').textContent = hint ? copy(hint) : '';
+}
+function unavailableHint(code) {
+  switch (code) {
+    case 'DISPLAY_DISCONNECTED': return 'displayDisconnected';
+    case 'DISPLAY_INACTIVE': return 'displayInactive';
+    case 'GPU_SCANOUT_UNSUPPORTED': return 'gpuUnsupported';
+    case 'LOGIN_SESSION_UNSUPPORTED': return 'sessionUnsupported';
+    default: return 'unsupportedHint';
+  }
+}
+function showUnavailable(code) {
+  epoch++;
+  revoke();
+  state = 'unavailable'; reason = code || 'REMOTE_DESKTOP_UNAVAILABLE'; generation = 0;
+  unlocking = false; awaitingState = false; session.unlock = false;
+  status('unsupported', unavailableHint(reason));
+  const retryable = ['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE'].includes(reason);
+  $('reconnect').hidden = !retryable;
+  updateTransitionControls();
+  control?.close(); media?.close();
+}
 function startUnlock() {
   if (state !== 'locked' || !painted || !session.unlock) return;
   unlocking = true; input.bindTarget(unlockAuthorized(generation) ? generation : null); input.focus(); status('unlocking', 'unlockPhysicalOnly'); updateTransitionControls();
@@ -253,7 +278,11 @@ async function connect() {
         capabilities = message.capabilities;
         backend = message.capabilities.backend;
         session.unlock = !!message.capabilities.unlock;
-        const displays = message.capabilities.displays;
+        if (message.capabilities.screen === false || ['unsupported', 'unavailable'].includes(message.capabilities.state)) {
+          showUnavailable(message.capabilities.reason);
+          return;
+        }
+        const displays = message.capabilities.displays ?? [];
         const display = displays.length && !displays.some(item => item.id === session.display_id) ? '' : session.display_id;
         session.display_id = display;
         command('connect', { mode: session.mode, display_id: display, picture: picture() });
@@ -284,6 +313,7 @@ async function connect() {
           status(message.code === 'AUTHORIZATION_PENDING' ? 'approvalBusy' : 'approvalUnknown', message.code === 'AUTHORIZATION_PENDING' ? '' : 'approvalRestoreFailed');
           $('reconnect').hidden = false;
         }
+        else if (['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED'].includes(message.code)) showUnavailable(message.code);
         else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });
         else if (/UNLOCK|LOGIN_SERVICE/.test(message.code)) { status('locked', 'unlockFailed'); notice('unlockFailed'); updateTransitionControls(); }
         else notice(message.code.includes('CLIPBOARD') ? 'clipboardFailed' : 'failure');

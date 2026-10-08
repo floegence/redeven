@@ -285,7 +285,7 @@
               "runtime",
               "security"
             ],
-            "summary": "Redeven owns remote desktop authorization, ephemeral sessions, window placement,\nconfiguration and audit. Published `floe-native-apps` v0.22.26 owns current-desktop\nselection, OS authorization, native input, capture, codecs, bounded playback and\nLinux component acquisition and the privileged physical-desktop service.\nA desktop session shares the existing signed-in macOS or Linux desktop. It never\ncreates an application-private desktop, changes system security policy or grants\naccess to a lower-permission user. Disconnect releases remote input and media;\nhost applications and unsaved work survive. Platform unavailability revokes\ninput and requires a fresh active frame before recovery.",
+            "summary": "Redeven owns remote desktop authorization, ephemeral sessions, window placement,\nconfiguration and audit. Published `floe-native-apps` v0.22.27 owns current-desktop\nselection, OS authorization, native input, capture, codecs, bounded playback and\nLinux component acquisition and the privileged physical-desktop service.\nA desktop session shares the existing signed-in macOS or Linux desktop. It never\ncreates an application-private desktop, changes system security policy or grants\naccess to a lower-permission user. Disconnect releases remote input and media;\nhost applications and unsaved work survive. Platform unavailability revokes\ninput and requires a fresh active frame before recovery.",
             "section_count": 2
           },
           {
@@ -17153,7 +17153,7 @@
         "type": "Runtime Contract"
       },
       "body_length": 11291,
-      "summary": "Redeven owns remote desktop authorization, ephemeral sessions, window placement,\nconfiguration and audit. Published `floe-native-apps` v0.22.26 owns current-desktop\nselection, OS authorization, native input, capture, codecs, bounded playback and\nLinux component acquisition and the privileged physical-desktop service.\nA desktop session shares the existing signed-in macOS or Linux desktop. It never\ncreates an application-private desktop, changes system security policy or grants\naccess to a lower-permission user. Disconnect releases remote input and media;\nhost applications and unsaved work survive. Platform unavailability revokes\ninput and requires a fresh active frame before recovery.",
+      "summary": "Redeven owns remote desktop authorization, ephemeral sessions, window placement,\nconfiguration and audit. Published `floe-native-apps` v0.22.27 owns current-desktop\nselection, OS authorization, native input, capture, codecs, bounded playback and\nLinux component acquisition and the privileged physical-desktop service.\nA desktop session shares the existing signed-in macOS or Linux desktop. It never\ncreates an application-private desktop, changes system security policy or grants\naccess to a lower-permission user. Disconnect releases remote input and media;\nhost applications and unsaved work survive. Platform unavailability revokes\ninput and requires a fresh active frame before recovery.",
       "sections": [
         {
           "id": "contract",
@@ -17170,7 +17170,7 @@
           "char_count": 519
         }
       ],
-      "snippet": "Redeven owns remote desktop authorization, ephemeral sessions, window placement, configuration and audit. Published `floe-native-apps` v0.22.26 owns current-desktop selection, OS authorization, native input, capture, codecs, bounded playbac",
+      "snippet": "Redeven owns remote desktop authorization, ephemeral sessions, window placement, configuration and audit. Published `floe-native-apps` v0.22.27 owns current-desktop selection, OS authorization, native input, capture, codecs, bounded playbac",
       "links": [
         {
           "label": "graphical window transport",
@@ -35301,5 +35301,5 @@
       ]
     }
   ],
-  "source_sha256": "ae729a0c63a01c0024af91287f5b78426c5fe48e4ca75a5ccf96018dd887270b"
+  "source_sha256": "519dee156d655708f3970f19e751c158f1af63c3af0a6a6018f8fc03211e81cc"
 }
