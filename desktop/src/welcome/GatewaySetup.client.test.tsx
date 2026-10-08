@@ -67,6 +67,46 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway setup and own-service actions', () => {
+  it.each([true, false])('uses matching icon containers for every Gateway menu action, member management=%s', async manageMembers => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, connection_kind: 'local_host', management_capability: 'managed_local_host',
+      permissions: { access: true, manage_members: manageMembers, configure_cloud: true },
+      service_state: { status: 'service_needs_update', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } });
+    button('Gateways').click(); await settle();
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]')!.click(); await settle();
+    const items = [...document.querySelectorAll<HTMLElement>('.redeven-gateway-menu [role="menuitem"]')];
+    expect(items.map(controlText)).toEqual(['Stop Gateway', 'Restart Gateway', 'Refresh', 'Disable Gateway',
+      ...(manageMembers ? ['Invite Runtime'] : []), 'Gateway settings', 'Delete Gateway']);
+    for (const item of items) {
+      expect(item.firstElementChild?.className, controlText(item)).toBe('redeven-split-menu-item-icon');
+      expect(item.querySelectorAll('.redeven-split-menu-item-icon > svg'), controlText(item)).toHaveLength(1);
+      expect(item.querySelector(':scope > svg'), controlText(item)).toBeNull();
+    }
+    expect(button('Delete Gateway').dataset.tone).toBe('danger');
+    expect(button('Disable Gateway').dataset.tone).toBe('accent');
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes restart from refresh and retains explicit restart confirmation', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, connection_kind: 'local_host', management_capability: 'managed_local_host',
+      service_state: { status: 'service_needs_update', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } });
+    button('Gateways').click(); await settle();
+    const initialGlyph = document.querySelector('.redeven-gateway-card__primary-button svg')!.innerHTML;
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]')!.click(); await settle();
+    const restart = button('Restart Gateway');
+    const restartGlyph = restart.querySelector('svg')!.innerHTML;
+    expect(restartGlyph).not.toBe(button('Refresh').querySelector('svg')!.innerHTML);
+    restart.click(); await settle();
+    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-menu')).toBeNull());
+    expect(document.querySelector('.redeven-gateway-action-popover-surface')?.textContent).toContain('Restart Gateway');
+    expect(document.querySelector('.redeven-gateway-card__primary-button svg')?.innerHTML).toBe(restartGlyph);
+    expect(perform).not.toHaveBeenCalled();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBeNull());
+    expect(document.querySelector('.redeven-gateway-card__primary-button svg')?.innerHTML).toBe(initialGlyph);
+  });
+
   it('offers explicit authorization for a read-only Gateway without granting it automatically', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount({ ...source, capabilities: ['member_access'], permissions: { access: true, manage_members: false, configure_cloud: false } });

@@ -40,7 +40,7 @@ import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
 import { buildRuntimeConnectionRows, isShareableConnectionAddress, type DesktopShareableConnectionAddress, type AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { Dynamic, Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import qrcode from 'qrcode-generator';
 import {
@@ -67,6 +67,7 @@ import {
   HelpIcon,
   Play,
   Plus,
+  PowerIcon,
   Refresh,
   Save,
   Search,
@@ -75,6 +76,7 @@ import {
   Shield,
   ShieldCheck,
   Stop,
+  Trash,
   X,
 } from '@floegence/floe-webapp-core/icons';
 import { BottomBarItem, TopBarIconButton } from '@floegence/floe-webapp-core/layout';
@@ -12026,16 +12028,28 @@ function GatewaySourceCard(props: Readonly<{
                         closeMoreActions();
                         props.openGatewayMembers(props.gateway);
                       }}>
-                        <Plus class="h-3.5 w-3.5" />
+                        <span class="redeven-split-menu-item-icon">
+                          <Plus class="h-3.5 w-3.5" />
+                        </span>
                         {props.i18n.t('gatewayMembers.invite')}
                       </button>
                     </Show>
                     <button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
                       closeMoreActions(); props.openCreateGatewaySetup(props.gateway, canAuthorizeManagement() ? 'identity_trust' : undefined);
-                    }}><Settings class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionOpenSettings')}</button>
+                    }}>
+                      <span class="redeven-split-menu-item-icon">
+                        <Settings class="h-3.5 w-3.5" />
+                      </span>
+                      {props.i18n.t('environmentCenter.gatewayActionOpenSettings')}
+                    </button>
                     <button type="button" role="menuitem" class="redeven-split-menu-item" data-tone="danger" onClick={() => {
                       closeMoreActions(); props.deleteGateway(props.gateway);
-                    }}><X class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionDelete')}</button>
+                    }}>
+                      <span class="redeven-split-menu-item-icon">
+                        <Trash class="h-3.5 w-3.5" />
+                      </span>
+                      {props.i18n.t('environmentCenter.gatewayActionDelete')}
+                    </button>
                   </div>
                 </DesktopAnchoredOverlaySurface>
               </Show>
@@ -12257,27 +12271,22 @@ function GatewaySourceActionIcon(
     class?: string;
   }>,
 ) {
-  const iconClass = () => props.class ?? 'mr-1 h-3.5 w-3.5';
-  switch (props.intent) {
-    case 'manage_gateway_members':
-      return <Plus class={iconClass()} />;
-    case 'view_gateway_environments':
-      return <ChevronRight class={iconClass()} />;
-    case 'enable_gateway':
-      return <Check class={iconClass()} />;
-    case 'disable_gateway':
-      return <GatewayDisabledIcon class={iconClass()} />;
-    case 'start_gateway': return <Play class={iconClass()} />;
-    case 'stop_gateway': return <Stop class={iconClass()} />;
-    case 'restart_gateway':
-    case 'update_gateway':
-    case 'refresh_gateway':
-      return <Refresh class={iconClass()} />;
-    case 'setup_gateway':
-      return <Settings class={iconClass()} />;
-    case 'cancel_gateway_action':
-      return <X class={iconClass()} />;
-  }
+  const icon = createMemo(() => {
+    switch (props.intent) {
+      case 'manage_gateway_members': return Plus;
+      case 'view_gateway_environments': return ChevronRight;
+      case 'enable_gateway': return Check;
+      case 'disable_gateway': return GatewayDisabledIcon;
+      case 'start_gateway': return Play;
+      case 'stop_gateway': return Stop;
+      case 'restart_gateway': return PowerIcon;
+      case 'update_gateway':
+      case 'refresh_gateway': return Refresh;
+      case 'setup_gateway': return Settings;
+      case 'cancel_gateway_action': return X;
+    }
+  });
+  return <Dynamic component={icon()} class={props.class ?? 'mr-1 h-3.5 w-3.5'} />;
 }
 
 function GatewayDisabledIcon(props: Readonly<{ class?: string }>) {
