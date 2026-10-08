@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop Environment library
 description: Browse one relationship card through independent Runtime and Cloud access perspectives, including Cloud source grids.
 tags: [desktop, environment, cloud, welcome]
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -38,6 +38,10 @@ Cards use one compact responsive column model with a 16.25rem minimum column and
 
 The retained Environment page keeps its last visible layout measurement while hidden behind Flower. A zero-width hidden element is not a one-column viewport. Returning to the page preserves card positions without replaying entrance motion. Open and equivalent health refreshes preserve card count, order, DOM identity and geometry. Deliberate Environment Center tab selection follows the separate [Welcome navigation presentation contract](desktop-welcome-navigation.md); its transient visual translation does not change card layout or restart on snapshots.
 
+## Environment action menu
+
+The Environment card's action menu keeps direct Runtime operations in their existing order. Gateway access and Cloud connection, recovery, and disconnection actions form one adjacent access group after those operations, separated from them by a single divider. No divider or lifecycle action appears between Gateway access and Cloud actions. Without Gateway access, the existing menu order remains unchanged; unavailable actions retain their original capability and disabled-state checks.
+
 ## Cloud sources and counts
 
 Redeven Cloud presents one vertical section per signed-in account, followed by its shared Environment grid. The account overview separates Cloud-marked account identity and address, three numeric inventory metrics with icons, and a synchronization strip. Account identity and actions adapt to narrow layouts without hiding controls; long identity values retain their full text in titles. Each Cloud Environment appears once, including both linked Runtime pairs and pure remote environments. Source facts navigate directly to the corresponding Cloud section. Browsing either page creates no registration.
@@ -66,6 +70,7 @@ Overview counts do not depend on the selected tab. Count each group once and sum
 - `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Deferred health probes preserve Local, SSH and WSL pairs while withdrawing presence and respecting completed unlinking.
 - `redeven:desktop/src/welcome/environmentRelation.test.ts` - Real snapshot builder coverage for Local, SSH, WSL, transitions and failed Cloud synchronization.
 - `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Owner action isolation, source search, pin scope and refresh continuity.
+- `redeven:desktop/scripts/check-environment-access-menu.mjs` - Adjacent Gateway and Cloud access actions, one group divider, unchanged card geometry, narrow layouts and keyboard traversal.
 - `redeven:desktop/scripts/check-environment-relations.mjs` - Mixed grids, real browser actions, tab focus and ten-locale narrow/dark/enlarged-text acceptance.
 - `redeven:desktop/scripts/check-welcome-card-stability.mjs` - Normal-motion per-frame Open, checking snapshots and retained-page return geometry in English and Simplified Chinese.
 - `redeven:desktop/scripts/check-welcome-toolbar.mjs` - Single-row toolbar alignment, touch targets, concise labels, tooltips, and keyboard-activated creation workflows across every locale and narrow, wide, and enlarged-text layouts.

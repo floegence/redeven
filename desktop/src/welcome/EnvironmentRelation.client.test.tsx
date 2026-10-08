@@ -53,6 +53,50 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('linked environment owner interactions', () => {
+  it.each(['connected', 'authorization_required', 'unlinked'] as const)(
+    'groups Gateway access with the %s Cloud actions after Runtime operations',
+    async connectionState => {
+      const fixture = mixedEnvironmentFixture({ linkState: connectionState === 'unlinked' ? 'unbound' : 'linked' });
+      const original = fixture.snapshot.environments.find(entry => entry.kind === 'local_environment')!;
+      const runtime = { ...original,
+        runtime_service: { ...original.runtime_service!, capabilities: { ...original.runtime_service!.capabilities!,
+          runtime_gateway: { supported: true },
+        } },
+        provider_runtime_link_target: { ...original.provider_runtime_link_target!,
+          provider_connection_state: connectionState, can_connect_provider: true, can_disconnect_provider: true,
+        },
+      };
+      const harness = await mount({ ...fixture.snapshot,
+        environments: fixture.snapshot.environments.map(entry => entry.id === runtime.id ? runtime : entry),
+      });
+      const owner = document.querySelector<HTMLElement>(`[data-owner-id="${runtime.id}"]`)!;
+      button(owner, 'Actions').click(); await settle();
+      const menu = document.querySelector('[role="menu"]')!;
+      const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+      const gatewayIndex = items.findIndex(item => item.textContent?.trim() === 'Add Gateway access');
+      const cloudLabel = connectionState === 'connected' ? 'Disconnect'
+        : connectionState === 'unlinked' ? 'Connect...' : 'Restore Redeven Cloud connection';
+      const cloudIndex = items.findIndex(item => item.textContent?.trim() === cloudLabel);
+      expect(gatewayIndex).toBeGreaterThan(0);
+      expect(cloudIndex).toBe(gatewayIndex + 1);
+      expect(items[gatewayIndex - 1].textContent).toContain('Uninstall');
+      expect(items[gatewayIndex].previousElementSibling?.getAttribute('role')).toBe('separator');
+      expect(items[cloudIndex].previousElementSibling).toBe(items[gatewayIndex]);
+      expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(1);
+      expect(harness.performAction).not.toHaveBeenCalled();
+      const withoutGateway = { ...runtime, runtime_service: { ...runtime.runtime_service,
+        capabilities: { ...runtime.runtime_service.capabilities, runtime_gateway: { supported: false } },
+      } };
+      harness.publish({ ...fixture.snapshot,
+        environments: fixture.snapshot.environments.map(entry => entry.id === runtime.id ? withoutGateway : entry),
+      });
+      await settle();
+      expect([...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent?.trim()))
+        .toEqual(items.filter((_item, index) => index !== gatewayIndex).map(item => item.textContent?.trim()));
+      expect(document.querySelectorAll('[role="menu"] [role="separator"]')).toHaveLength(0);
+    },
+  );
+
   it('explains an expired Cloud connection on either tab and routes recovery to the exact Runtime owner', async () => {
     const f = linkedEnvironmentFixture();
     const runtime = { ...f.runtime, provider_runtime_link_target: { ...f.runtime.provider_runtime_link_target!,
