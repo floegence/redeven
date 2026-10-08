@@ -28,8 +28,8 @@ export function TessivenFlowerPanel(props: {
   t: TessivenText;
   renderSurface: (props: CanvasFlowerSurfaceProps) => JSX.Element;
   onOpenConversation: (threadID: string) => void;
-    onRemoveReference: (objectRef: string) => void;
-  onThreadBound: (threadID: string) => void;
+  onRemoveReference: (objectRef: string) => void;
+  onThreadBound?: (threadID: string) => void;
 }) {
   const [repliesOpen, setRepliesOpen] = createSignal(true);
   const [boundary, setBoundary] = createSignal<HTMLDivElement>();
@@ -82,6 +82,7 @@ export function TessivenFlowerPanel(props: {
   };
   const embedded: FlowerEmbeddedConversation = {
     get scope() { return `tessiven:${props.request.selection.canvas_id}`; },
+    get threadID() { return props.request.flower_thread_id; },
     get contextAction() { return contextAction(); },
     get request() { return props.request.nonce ? props.request : undefined; },
     onThreadBound: props.onThreadBound,
