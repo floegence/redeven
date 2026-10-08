@@ -129,25 +129,25 @@ export function GatewayMembersPanel(props: Readonly<{
     }, 180);
   }
   return (
-    <div class="space-y-5">
-      <Show when={props.gateway?.rebuild_required}><div class="space-y-2 rounded-md border border-warning p-3 text-sm">
+    <div class="redeven-gateway-members-panel">
+      <Show when={props.gateway?.rebuild_required}><div class="space-y-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm">
         <p>{props.i18n.t('gatewayMembers.rebuild')}</p>
         <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'dismiss_gateway_rebuild', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.close')}</Button>
       </div></Show>
       <Show when={props.section === 'connection'}>
-      <details class="redeven-gateway-disclosure group border-b border-border/60 pb-3">
-        <summary class="flex cursor-pointer list-none items-center justify-between text-sm [&::-webkit-details-marker]:hidden"><span>{props.i18n.t('gatewayMembers.listenerAddress')}</span><ChevronDown class="h-3.5 w-3.5 transition-transform group-open:rotate-180" /></summary>
-        <div>
-          <p class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.listenerAddressHelp')}</p>
+      <details class="redeven-gateway-disclosure redeven-gateway-listen-details group">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden"><span>{props.i18n.t('gatewayMembers.listenerAddress')}</span><ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+        <div class="redeven-gateway-help pt-1">
+          <p>{props.i18n.t('gatewayMembers.listenerAddressHelp')}</p>
         </div>
-        <div class="mt-2 flex flex-wrap items-center justify-between gap-3 bg-muted/20 px-3 py-2 text-xs">
+        <div class="redeven-gateway-listen-value">
           <span class="break-all font-mono text-foreground">{props.gateway?.listener_addresses?.join(', ') || props.gateway?.listener_address || '—'}</span>
           <span class="text-muted-foreground">{props.i18n.t(props.gateway?.listener_running ? 'gatewayMembers.listenerActive' : 'gatewayMembers.localOnly')}</span>
         </div>
       </details>
-      <section class="space-y-3">
+      <section class="redeven-gateway-settings-section">
         <div>
-          <h3 class="flex items-center gap-2 text-sm font-semibold">{props.i18n.t('gatewayMembers.connectionAddresses')}<DesktopTooltip content={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><button type="button" class="cursor-pointer text-muted-foreground" aria-label={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><Info class="h-3.5 w-3.5" /></button></DesktopTooltip></h3>
+          <h3 class="redeven-gateway-section-title flex items-center gap-2">{props.i18n.t('gatewayMembers.connectionAddresses')}<DesktopTooltip content={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><button type="button" class="cursor-pointer text-muted-foreground" aria-label={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><Info class="h-4 w-4" /></button></DesktopTooltip></h3>
         </div>
         <div class="redeven-gateway-endpoint-list">
           <For each={endpointDraft()}>{(endpoint, index) => <div class="redeven-gateway-endpoint-shell" data-endpoint-id={endpoint.endpoint_id} classList={{ 'redeven-gateway-endpoint-shell--removing': removingEndpointID() === endpoint.endpoint_id }} inert={removingEndpointID() === endpoint.endpoint_id}>
@@ -159,7 +159,7 @@ export function GatewayMembersPanel(props: Readonly<{
               </label>
               <DesktopTooltip content={props.i18n.t('gatewayMembers.removeAddress')}><Button class="h-8 w-8 cursor-pointer" size="xs" variant="ghost" aria-label={props.i18n.t('gatewayMembers.removeAddress')} disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} onClick={() => removeEndpoint(endpoint.endpoint_id)}><Trash class="h-3.5 w-3.5" /></Button></DesktopTooltip>
             </div>
-            <span class="text-xs text-muted-foreground">{props.gateway?.endpoint_last_used_at?.[endpoint.endpoint_id] ? `${props.i18n.t('gatewayMembers.usedByRuntime')} · ${new Date(props.gateway.endpoint_last_used_at[endpoint.endpoint_id]!).toLocaleString(props.i18n.locale)}` : props.i18n.t('gatewayMembers.notVerified')}</span>
+            <span class="redeven-gateway-endpoint__meta">{props.gateway?.endpoint_last_used_at?.[endpoint.endpoint_id] ? `${props.i18n.t('gatewayMembers.usedByRuntime')} · ${new Date(props.gateway.endpoint_last_used_at[endpoint.endpoint_id]!).toLocaleString(props.i18n.locale)}` : props.i18n.t('gatewayMembers.notVerified')}</span>
             </div>
           </div>}</For>
           <Show when={!endpointDraft().length}><p class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
@@ -172,22 +172,22 @@ export function GatewayMembersPanel(props: Readonly<{
       </section>
       </Show>
       <Show when={props.section !== 'connection'}>
-      <section class="space-y-3">
-        <div class="flex flex-wrap items-start justify-between gap-3">
+      <section class="redeven-gateway-settings-section">
+        <div class="redeven-gateway-section-heading">
           <div class="min-w-0">
-            <h3 class="text-sm font-semibold">{props.i18n.t('gatewayMembers.invite')}</h3>
-            <p class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.inviteHelp')}</p>
+            <h3>{props.i18n.t('gatewayMembers.invite')}</h3>
+            <p>{props.i18n.t('gatewayMembers.inviteHelp')}</p>
           </div>
           <Button class="cursor-pointer" size="sm" disabled={busy() || !props.gateway?.permissions?.manage_members || savedEndpoints().length === 0 || endpointsDirty() || !endpointsValid()} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
         </div>
-        <Show when={!savedEndpoints().length}><p role="status" class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
+        <Show when={!savedEndpoints().length}><p role="status" class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
         <Show when={invitation() && !endpointsDirty()}>
-          <div class="redeven-gateway-content-enter space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
-            <p role="status" class="text-xs text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
-            <dl class="grid grid-cols-2 gap-2 text-xs"><div><dt class="text-muted-foreground">{props.i18n.t('gatewayJoin.gateway')}</dt><dd class="break-words font-medium">{invitation()?.gateway_name}</dd></div><div><dt class="text-muted-foreground">{props.i18n.t('gatewayJoin.connectionOptions')}</dt><dd>{invitation()?.endpoints.length}</dd></div><div><dt class="text-muted-foreground">{props.i18n.t('gatewayJoin.invitationType')}</dt><dd>{props.i18n.t('gatewayJoin.oneTime')}</dd></div><div><dt class="text-muted-foreground">{props.i18n.t('gatewayJoin.expiry')}</dt><dd>{new Date(invitation()!.expires_at_unix_ms).toLocaleTimeString(props.i18n.locale)}</dd></div></dl>
+          <div class="redeven-gateway-content-enter redeven-gateway-invitation-card">
+            <p role="status" class="text-sm font-medium text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
+            <dl class="redeven-gateway-join-summary"><div><span>{props.i18n.t('gatewayJoin.gateway')}</span><strong>{invitation()?.gateway_name}</strong></div><div><span>{props.i18n.t('gatewayJoin.connectionOptions')}</span><strong>{invitation()?.endpoints.length}</strong></div><div><span>{props.i18n.t('gatewayJoin.invitationType')}</span><strong>{props.i18n.t('gatewayJoin.oneTime')}</strong></div><div><span>{props.i18n.t('gatewayJoin.expiry')}</span><strong>{new Date(invitation()!.expires_at_unix_ms).toLocaleTimeString(props.i18n.locale)}</strong></div></dl>
             <Button class="cursor-pointer" size="sm" variant="outline" icon={Download} onClick={download}>{props.i18n.t('gatewayMembers.download')}</Button>
             <label class="block space-y-1 text-xs"><span>{props.i18n.t('gatewayMembers.chooseRuntime')}</span>
-              <select class="w-full cursor-pointer rounded border border-border bg-background p-2" value={targetID()} onChange={event => setTargetID(event.currentTarget.value)}>
+              <select class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5 text-sm" value={targetID()} onChange={event => setTargetID(event.currentTarget.value)}>
                 <option value="">{props.i18n.t('gatewayMembers.importOnRuntime')}</option>
                 <For each={targets()}>{item => <option value={item.id}>{item.label}</option>}</For>
               </select>
@@ -196,8 +196,9 @@ export function GatewayMembersPanel(props: Readonly<{
           </div>
         </Show>
       </section>
-      <Show when={policy()}>{current => <details class="redeven-gateway-disclosure group space-y-3 border-t border-border pt-4">
-        <summary class="flex cursor-pointer list-none items-center justify-between text-sm font-semibold [&::-webkit-details-marker]:hidden">{props.i18n.t('gatewayMembers.policy')}<ChevronDown class="h-3.5 w-3.5 transition-transform group-open:rotate-180" /></summary>
+      <Show when={policy()}>{current => <details class="redeven-gateway-disclosure redeven-gateway-policy group">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">{props.i18n.t('gatewayMembers.policy')}<ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+        <div class="redeven-gateway-policy-content">
         <Checkbox label={props.i18n.t('gatewayMembers.defaultAllow')} checked={current().default_cloud_allowed}
           disabled={busy() || !props.gateway?.permissions?.configure_cloud}
           onChange={default_cloud_allowed => { setDraftPolicy({ ...current(), default_cloud_allowed }); setSavingPolicy(false); }} />
@@ -219,11 +220,12 @@ export function GatewayMembersPanel(props: Readonly<{
             <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => savingPolicy() ? void savePolicy() : setSavingPolicy(true)}>{props.i18n.t(savingPolicy() ? 'gatewayMembers.confirmSave' : 'common.save')}</Button>
           </div>
         </Show>
+        </div>
       </details>}</Show>
-      <section class="space-y-3 border-t border-border pt-4">
-        <h3 class="text-sm font-semibold">{props.i18n.t('gatewayMembers.members')}</h3>
-        <Show when={members().length} fallback={<p class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.empty')}</p>}>
-          <ul class="space-y-3"><For each={members()}>{member => <li class="space-y-2 rounded-md border border-border p-3">
+      <section class="redeven-gateway-settings-section redeven-gateway-section-divider">
+        <h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayMembers.members')}</h3>
+        <Show when={members().length} fallback={<p class="redeven-gateway-empty-state redeven-gateway-member-empty">{props.i18n.t('gatewayMembers.empty')}</p>}>
+          <ul class="redeven-gateway-member-list"><For each={members()}>{member => <li class="redeven-gateway-member-row">
             <div class="flex flex-wrap items-center justify-between gap-2"><strong class="break-all text-sm">{member.display_name}</strong>
               <span class="text-xs">{props.i18n.t(member.connected ? 'gatewayMembers.connected' : 'gatewayMembers.offline')}</span></div>
             <p class="break-all text-xs text-muted-foreground">{member.member_id}</p>

@@ -43,6 +43,7 @@ async function capture(page, filename) {
     for (let parent = dialog; parent; parent = parent.parentElement) if (Number(getComputedStyle(parent).opacity) < .99) return false;
     return Boolean(dialog);
   });
+  await page.waitForTimeout(220);
   await page.screenshot({ path: `${output}/${filename}.png` });
 }
 try {
@@ -77,7 +78,12 @@ try {
         await page.evaluate(() => {
           window.settingsFixture.actionResult = request => request.kind === 'manage_runtime_gateway'
             ? { ok: true, outcome: 'runtime_gateway_status', gateway_membership: { joined: false, existing_environment_id: 'env_current' } }
-            : request.kind === 'inspect_gateway_cloud' ? { ok: true, outcome: 'gateway_cloud_inspected', gateway_cloud: { configured: false, state: 'unconfigured' } } : undefined;
+            : request.kind === 'inspect_gateway_cloud' ? { ok: true, outcome: 'gateway_cloud_inspected', gateway_cloud: { configured: false, state: 'unconfigured' } }
+              : request.kind === 'list_gateway_clients' ? { ok: true, gateway_clients: [
+                { client_key_id: 'client-one', client_name: 'Studio Desktop', paired_at_unix_ms: 1_790_000_000_000, last_verified_at_unix_ms: 1_790_000_010_000, revoked_at_unix_ms: 0 },
+              ] }
+                : request.kind === 'issue_gateway_access_code' ? { ok: true, gateway_access_code: { access_code: 'studio-access-42', expires_at_unix_ms: Date.now() + 600_000 } }
+                  : undefined;
         });
         await page.evaluate(() => document.fonts.ready);
         await page.getByRole('button', { name: i18n.t('environmentCenter.gatewaysSection'), exact: true }).click();
@@ -95,6 +101,12 @@ try {
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
         await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), snapshot);
         assert.equal(await card.getByRole('button', { name: i18n.t('gatewayCloud.title'), exact: true }).count(), 1);
+        await card.getByRole('button', { name: i18n.t('gatewayCloud.title'), exact: true }).click();
+        dialog = page.getByRole('dialog');
+        await checkDialog(dialog, width);
+        await dialog.getByText(i18n.t('gatewayCloud.unconfigured'), { exact: true }).waitFor();
+        await capture(page, `${locale}-${width}-${reducedMotion}-cloud`);
+        await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
         await more.click();
         await page.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
         dialog = page.getByRole('dialog'); await checkDialog(dialog, width);
@@ -110,6 +122,13 @@ try {
           await page.waitForTimeout(240);
           assert.ok(Math.abs((await dialog.boundingBox()).height - fixedHeight) < 1, 'Gateway dialog height stays fixed across tabs');
         }
+        await dialog.getByRole('tab', { name: i18n.t('gatewayClients.clientAccess'), exact: true }).click();
+        await dialog.getByText('Studio Desktop', { exact: true }).waitFor();
+        await dialog.getByRole('button', { name: i18n.t('gatewayClients.createCode'), exact: true }).click();
+        await dialog.getByText('studio-access-42', { exact: true }).waitFor();
+        await capture(page, `${locale}-${width}-${reducedMotion}-clients`);
+        await dialog.getByRole('tab', { name: i18n.t('gatewayClients.connectionSettings'), exact: true }).click();
+        await page.waitForTimeout(240);
         const endpointRows = dialog.locator('.redeven-gateway-endpoint-shell');
         await dialog.getByRole('button', { name: i18n.t('gatewayMembers.addAddress'), exact: true }).click();
         assert.equal(await endpointRows.count(), 2);

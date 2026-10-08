@@ -1,17 +1,43 @@
 .redeven-gateway-dialog {
   width: min(52rem, calc(100vw - 2rem));
   max-width: min(52rem, calc(100vw - 2rem));
-  border-radius: .75rem;
+  max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
+  overflow: hidden;
+  border-radius: .875rem;
+  font-size: var(--floe-type-body);
+}
+
+.redeven-gateway-dialog > div:first-child {
+  flex: none;
+  padding: 1.25rem 1.5rem .875rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.redeven-gateway-dialog h2 {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.4;
 }
 
 .redeven-gateway-settings-dialog {
-  height: min(44.5rem, var(--redeven-welcome-dialog-panel-max-height));
+  --redeven-welcome-dialog-panel-max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
+  height: min(41rem, var(--redeven-welcome-dialog-panel-max-height));
   max-height: var(--redeven-welcome-dialog-panel-max-height);
 }
 
 .redeven-gateway-dialog__content {
-  padding: 1.25rem;
+  min-height: 0;
+  padding: 1rem 1.5rem 1.25rem;
+  color: var(--foreground);
   scrollbar-gutter: stable;
+}
+
+.redeven-gateway-dialog__content > p {
+  margin: 0 0 .875rem;
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .redeven-gateway-settings-dialog__content {
@@ -19,16 +45,28 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden !important;
-  padding: 1.25rem;
+  padding: 0 !important;
 }
 
 .redeven-gateway-settings-body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: .875rem;
   min-height: 0;
   overflow: hidden;
+  padding: 1rem 1.5rem 1.25rem;
+}
+
+.redeven-gateway-authority {
+  flex: none;
+  border-inline-start: 2px solid color-mix(in srgb, var(--primary) 65%, transparent);
+  border-radius: .25rem;
+  background: color-mix(in srgb, var(--primary) 5%, var(--background));
+  padding: .55rem .75rem;
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+  line-height: 1.45;
 }
 
 .redeven-gateway-settings-tablist {
@@ -95,13 +133,116 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  padding-inline: .25rem;
 }
 
 .redeven-gateway-settings-panel {
   min-width: 0;
+  padding: .25rem 0 .5rem;
   opacity: 1;
   transform: translateY(0);
   transition: opacity 180ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 180ms;
+}
+
+.redeven-gateway-members-panel,
+.redeven-gateway-clients-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  color: var(--foreground);
+  font-size: .875rem;
+  line-height: 1.5;
+}
+
+.redeven-gateway-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+}
+
+.redeven-gateway-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem 1rem;
+}
+
+.redeven-gateway-section-heading h3,
+.redeven-gateway-section-title {
+  color: var(--foreground);
+  font-size: .9375rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.redeven-gateway-section-heading p {
+  max-width: 46rem;
+  margin-top: .25rem;
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+  line-height: 1.55;
+}
+
+.redeven-gateway-section-divider {
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-top: 1.125rem;
+}
+
+.redeven-gateway-settings-panel .redeven-gateway-eyebrow {
+  color: var(--muted-foreground);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
+}
+
+.redeven-gateway-connection-kind { gap: .625rem; }
+
+.redeven-gateway-context-help {
+  border-inline-start: 2px solid color-mix(in srgb, var(--border) 85%, transparent);
+  padding: .125rem 0 .125rem .75rem;
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+
+.redeven-gateway-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-top: 1rem;
+}
+
+.redeven-gateway-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+}
+
+.redeven-gateway-form-group label,
+.redeven-gateway-form-field label {
+  color: var(--foreground);
+  font-size: .8125rem;
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.redeven-gateway-form-field {
+  display: grid;
+  gap: .5rem;
+  border-block: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-block: 1rem;
+}
+
+.redeven-gateway-setting-toggle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-top: 1rem;
 }
 
 .redeven-gateway-settings-panel--inactive {
@@ -122,8 +263,23 @@
 
 .redeven-gateway-field > span {
   color: var(--muted-foreground);
-  font-size: .75rem;
-  font-weight: 500;
+  font-size: .8125rem;
+  font-weight: 550;
+}
+
+.redeven-gateway-field label,
+.redeven-gateway-field > label,
+.redeven-gateway-form-label {
+  color: var(--foreground);
+  font-size: .8125rem;
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.redeven-gateway-help {
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+  line-height: 1.55;
 }
 
 .redeven-gateway-endpoint-list {
@@ -188,6 +344,360 @@
   gap: .5rem;
 }
 
+.redeven-gateway-endpoint__meta {
+  color: var(--muted-foreground);
+  font-size: .75rem;
+  line-height: 1.45;
+}
+
+.redeven-gateway-listen-details {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-bottom: .875rem;
+}
+
+.redeven-gateway-listen-details > summary,
+.redeven-gateway-policy > summary {
+  min-height: 2.5rem;
+  color: var(--foreground);
+  font-size: .875rem;
+  font-weight: 600;
+}
+
+.redeven-gateway-listen-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem .75rem;
+  margin-top: .625rem;
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--muted) 30%, var(--background));
+  padding: .625rem .75rem;
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+
+.redeven-gateway-policy {
+  border-block: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-block: .5rem 1rem;
+}
+
+.redeven-gateway-policy-content {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+  padding-top: .5rem;
+}
+
+.redeven-gateway-member-list,
+.redeven-gateway-authorized-client-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.redeven-gateway-member-row,
+.redeven-gateway-authorized-client-row {
+  display: flex;
+  flex-direction: column;
+  gap: .625rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding: .75rem .125rem;
+}
+
+.redeven-gateway-member-row:first-child,
+.redeven-gateway-authorized-client-row:first-child {
+  border-top: 0;
+  padding-top: .25rem;
+}
+
+.redeven-gateway-client-access {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+  padding-bottom: 1.125rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.redeven-gateway-invitation-card,
+.redeven-gateway-join-invitation {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: .625rem;
+  background: color-mix(in srgb, var(--primary) 4%, var(--background));
+  padding: 1rem;
+}
+
+.redeven-gateway-access-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: .625rem;
+  background: color-mix(in srgb, var(--primary) 4%, var(--background));
+  padding: .875rem 1rem;
+}
+
+.redeven-gateway-access-code code {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: .9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.redeven-gateway-client-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 2rem;
+  color: var(--muted-foreground);
+  font-size: .75rem;
+  line-height: 1.45;
+}
+
+.redeven-gateway-client-metadata dt {
+  margin-bottom: .125rem;
+  color: var(--muted-foreground);
+}
+
+.redeven-gateway-client-metadata dd {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.redeven-gateway-empty-state {
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--muted) 24%, var(--background));
+  padding: .875rem 1rem;
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+  line-height: 1.55;
+}
+
+.redeven-gateway-member-empty {
+  display: grid;
+  min-height: 8rem;
+  place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--border) 82%, transparent);
+  background: transparent;
+  text-align: center;
+}
+
+.redeven-gateway-setup-empty {
+  display: grid;
+  gap: .375rem;
+  align-content: center;
+  min-height: 10rem;
+  padding: 1.25rem;
+}
+
+.redeven-gateway-setup-empty p + p {
+  max-width: 32rem;
+}
+
+.redeven-gateway-join-dialog {
+  --redeven-welcome-dialog-panel-max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
+  display: flex;
+  flex-direction: column;
+  height: min(43rem, var(--redeven-welcome-dialog-panel-max-height));
+}
+
+.redeven-gateway-join-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.redeven-gateway-join-content > p {
+  flex: none;
+  margin: 0;
+  padding: .875rem 1.5rem 0;
+}
+
+.redeven-gateway-join-layout {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.redeven-gateway-join-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 1rem 1.5rem;
+}
+
+.redeven-gateway-join-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--background) 96%, transparent);
+  padding: .875rem 1.5rem;
+}
+
+.redeven-gateway-join-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem 1rem;
+  border-radius: .625rem;
+  background: color-mix(in srgb, var(--muted) 28%, var(--background));
+  padding: .75rem 1rem;
+}
+
+.redeven-gateway-join-section {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+}
+
+.redeven-gateway-join-section > h3,
+.redeven-gateway-join-section > legend {
+  color: var(--foreground);
+  font-size: .9375rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.redeven-gateway-join-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+  border-radius: .625rem;
+  background: color-mix(in srgb, var(--primary) 4%, var(--background));
+  padding: .875rem 1rem;
+}
+
+.redeven-gateway-join-summary > div {
+  display: grid;
+  gap: .2rem;
+  min-width: 0;
+  font-size: .8125rem;
+  line-height: 1.45;
+}
+
+.redeven-gateway-join-summary > div > span {
+  color: var(--muted-foreground);
+  font-size: .75rem;
+}
+
+.redeven-gateway-join-summary strong {
+  color: var(--foreground);
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.redeven-gateway-join-choice {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: .625rem;
+  border: 1px solid var(--border);
+  border-radius: .5rem;
+  padding: .75rem .875rem;
+  color: var(--foreground);
+  font-size: .8125rem;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.redeven-gateway-join-choice:has(input:checked) {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--background));
+}
+
+.redeven-gateway-cloud-state {
+  display: flex;
+  flex-direction: column;
+  gap: .625rem;
+  border-block: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-block: 1rem;
+}
+
+.redeven-gateway-cloud-state__name {
+  color: var(--foreground);
+  font-size: .9375rem;
+  font-weight: 600;
+}
+
+.redeven-gateway-cloud-state__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .5rem .75rem;
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+}
+
+.redeven-gateway-cloud-state__status code {
+  color: var(--foreground);
+  font-size: .75rem;
+  overflow-wrap: anywhere;
+}
+
+.redeven-gateway-cloud-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.redeven-gateway-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-top: .875rem;
+}
+
+.redeven-gateway-join-disclosure {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: .5rem;
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+}
+
+.redeven-gateway-join-disclosure > summary {
+  min-height: 2.625rem;
+  padding: .625rem .75rem;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.redeven-gateway-join-disclosure > summary:hover {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  color: var(--foreground);
+}
+
+.redeven-gateway-join-disclosure__content {
+  display: grid;
+  gap: .5rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  padding: .75rem;
+  color: var(--muted-foreground);
+  font-size: .8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .redeven-gateway-disclosure {
   interpolate-size: allow-keywords;
 }
@@ -220,8 +730,16 @@
 }
 
 @media (max-width: 480px) {
-  .redeven-gateway-dialog__content,
-  .redeven-gateway-settings-dialog__content { padding: 1rem; }
+  .redeven-gateway-dialog > div:first-child { padding: 1rem 1rem .75rem; }
+  .redeven-gateway-dialog__content { padding: .875rem 1rem 1rem; }
+  .redeven-gateway-settings-body { padding: .875rem 1rem 1rem; }
+  .redeven-gateway-join-content > p { padding: .75rem 1rem 0; }
+  .redeven-gateway-join-scroll { padding: .875rem 1rem; }
+  .redeven-gateway-join-actions { padding: .75rem 1rem; }
+  .redeven-gateway-join-summary { gap: .625rem .75rem; padding: .75rem; }
+  .redeven-gateway-section-heading { align-items: stretch; flex-direction: column; }
+  .redeven-gateway-section-heading > button { align-self: flex-start; }
+  .redeven-gateway-settings-tab { padding-inline: .625rem; }
   .redeven-gateway-endpoint { padding: .75rem; }
   .redeven-gateway-field input,
   .redeven-gateway-field [role="button"] { min-height: 2.75rem; }
@@ -233,6 +751,7 @@
   .redeven-gateway-settings-panel,
   .redeven-gateway-endpoint-shell,
   .redeven-gateway-endpoint,
+  .redeven-gateway-join-choice,
   .redeven-gateway-content-enter { transition: none; animation: none; }
   .redeven-gateway-disclosure::details-content { transition: none; }
   .redeven-gateway-disclosure > summary svg { transition: none; }
