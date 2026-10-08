@@ -588,6 +588,8 @@ export type FlowerSurfaceNotification = Readonly<{
 /** Two placements over the same Flower conversation, drafts and live runtime. */
 export type FlowerEmbeddedConversation = Readonly<{
   scope: string;
+  /** Durable conversation identity supplied by an embedding surface. */
+  threadID?: string;
   contextAction?: ContextActionEnvelope;
   request?: Readonly<{ nonce: number; prompt?: string }>;
   placeholder?: string;
@@ -5739,7 +5741,7 @@ webSearch: model.web_search,
     untrack(() => {
       if (embeddedSessionKey && selectedThreadID()) embeddedThreads.set(embeddedSessionKey, selectedThreadID());
       embeddedSessionKey = sessionKey;
-      const threadID = embeddedThreads.get(sessionKey);
+      const threadID = embeddedThreads.get(sessionKey) ?? trimString(props.embeddedConversation?.threadID);
       if (threadID) selectThread(threadID);
       else {
         cancelDeferredThreadSelection();

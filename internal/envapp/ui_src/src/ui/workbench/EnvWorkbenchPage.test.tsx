@@ -4036,17 +4036,17 @@ describe('EnvWorkbenchPage', () => {
     expect(host.querySelector('[data-workbench-plugin-placement]')).toBeNull();
   });
 
-  it('does not save an empty layout after its initial read fails and offers an explicit retry', async () => {
+  it('retries an initial layout read without saving an empty layout', async () => {
     layoutApiMocks.getWorkbenchLayoutSnapshot.mockRejectedValueOnce(new Error('read failed'));
     const host = document.createElement('div'); document.body.append(host);
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
     await vi.advanceTimersByTimeAsync(2000);
-    expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalled();
-    const retry = host.querySelector<HTMLButtonElement>('[data-workbench-layout-error="load"] button')!;
-    expect(retry).not.toBeNull(); retry.click();
-    await flushMicrotasks();
     expect(layoutApiMocks.getWorkbenchLayoutSnapshot).toHaveBeenCalledTimes(2);
+    expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalledWith(expect.objectContaining({ widgets: [] }));
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledWith(expect.objectContaining({
+      widgets: expect.arrayContaining([expect.objectContaining({ widget_type: 'redeven.files' })]),
+    }));
     expect(host.querySelector('[data-workbench-layout-error]')).toBeNull();
   });
 
