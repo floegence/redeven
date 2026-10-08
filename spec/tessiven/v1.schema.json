@@ -109,6 +109,7 @@
         },
         "positions": {
           "type": "array",
+          "description": "Optional preferred world coordinates, not fixed constraints. Omit for automatic layout. The renderer adjusts crowded positions and group bounds to keep cards and relationships visible; saved hints remain unchanged.",
           "maxItems": 20000,
           "items": {
             "type": "object",

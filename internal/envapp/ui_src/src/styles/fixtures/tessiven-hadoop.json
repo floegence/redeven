@@ -1,0 +1,942 @@
+{
+  "apiVersion": "redeven.io/tessiven/v1",
+  "kind": "ServiceCanvas",
+  "metadata": {
+    "title": "Hadoop 服务架构图（HDFS + YARN HA 参考架构）",
+    "description": "概念性参考架构，不描述任何当前连接或已观测的 Runtime：分层、服务与依赖均依据 Apache Hadoop 3.3.5 官方文档（HDFS HA + QJM、ResourceManager HA、HDFS/YARN/MapReduce 架构）推导。nodes 的 runtimeRef 只是占位描述，不可连接、不授予任何权限；所有 relation 的证据来源为推断与标准配置项，未在真实集群上观测。"
+  },
+  "nodes": [
+    {
+      "id": "n-client",
+      "name": "客户端节点（Hadoop Client）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/client-01"
+    },
+    {
+      "id": "n-master-a",
+      "name": "主控节点 A（NameNode Active / ResourceManager Active）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/master-01"
+    },
+    {
+      "id": "n-master-b",
+      "name": "主控节点 B（NameNode Standby / ResourceManager Standby）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/master-02"
+    },
+    {
+      "id": "n-coord-1",
+      "name": "协调节点 1（ZooKeeper / JournalNode）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/coord-01"
+    },
+    {
+      "id": "n-coord-2",
+      "name": "协调节点 2（ZooKeeper / JournalNode）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/coord-02"
+    },
+    {
+      "id": "n-coord-3",
+      "name": "协调节点 3（ZooKeeper / JournalNode）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/coord-03"
+    },
+    {
+      "id": "n-worker-1",
+      "name": "工作节点 1（DataNode / NodeManager）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/worker-01"
+    },
+    {
+      "id": "n-worker-2",
+      "name": "工作节点 2（DataNode / NodeManager）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/worker-02"
+    },
+    {
+      "id": "n-worker-3",
+      "name": "工作节点 3（DataNode / NodeManager）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/worker-03"
+    },
+    {
+      "id": "n-eco",
+      "name": "生态服务节点（Hive / HBase）",
+      "runtimeRef": "conceptual:hadoop-ref-arch/eco-01"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-access",
+      "name": "客户端接入层",
+      "nodeRefs": [
+        "n-client"
+      ]
+    },
+    {
+      "id": "g-master",
+      "name": "HDFS 元数据与 YARN 调度主控层",
+      "nodeRefs": [
+        "n-master-a",
+        "n-master-b"
+      ]
+    },
+    {
+      "id": "g-coord",
+      "name": "协调与仲裁层（ZooKeeper 集群 + JournalNode 集群）",
+      "nodeRefs": [
+        "n-coord-1",
+        "n-coord-2",
+        "n-coord-3"
+      ]
+    },
+    {
+      "id": "g-worker",
+      "name": "数据与计算工作节点层",
+      "nodeRefs": [
+        "n-worker-1",
+        "n-worker-2",
+        "n-worker-3"
+      ]
+    },
+    {
+      "id": "g-eco",
+      "name": "生态服务层",
+      "nodeRefs": [
+        "n-eco"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "id": "svc-hdfs-namenode",
+      "name": "HDFS NameNode",
+      "kind": "service",
+      "description": "HDFS 命名空间与块映射的唯一元数据服务，HA 下为一主一备。"
+    },
+    {
+      "id": "svc-hdfs-journalnode",
+      "name": "HDFS JournalNode",
+      "kind": "service",
+      "description": "共享 Edit Log（Quorum Journal Manager）仲裁存储，Active 写入、Standby 读取，至少 3 个节点。"
+    },
+    {
+      "id": "svc-hdfs-datanode",
+      "name": "HDFS DataNode",
+      "kind": "worker",
+      "description": "数据块存储与副本复制，向所有 NameNode 上报块位置与心跳。"
+    },
+    {
+      "id": "svc-yarn-resourcemanager",
+      "name": "YARN ResourceManager",
+      "kind": "service",
+      "description": "YARN 资源与作业调度主控，Active/Standby 通过内嵌 ZooKeeper 选举器选主。"
+    },
+    {
+      "id": "svc-yarn-nodemanager",
+      "name": "YARN NodeManager",
+      "kind": "worker",
+      "description": "单节点资源管理与容器执行代理，向 ResourceManager 汇报并领取容器。"
+    },
+    {
+      "id": "svc-mapreduce-am",
+      "name": "MapReduce ApplicationMaster",
+      "kind": "worker",
+      "description": "每个作业一个，向 ResourceManager 申请容器并调度 Map/Reduce 任务。"
+    },
+    {
+      "id": "svc-mapreduce-jhs",
+      "name": "MapReduce JobHistoryServer",
+      "kind": "service",
+      "description": "MapReduce 作业历史与日志归档查询服务。"
+    },
+    {
+      "id": "svc-zookeeper",
+      "name": "ZooKeeper 仲裁集群",
+      "kind": "service",
+      "description": "HDFS 自动故障转移与 YARN RM 选举的协调服务，通常 3 或 5 个节点。"
+    },
+    {
+      "id": "svc-zkfc",
+      "name": "HDFS ZKFailoverController（ZKFC）",
+      "kind": "service",
+      "description": "与 NameNode 同机部署，负责健康监控与基于 ZooKeeper 的 Active 选举。"
+    },
+    {
+      "id": "svc-hadoop-client",
+      "name": "Hadoop 客户端（CLI / REST / FUSE）",
+      "kind": "api",
+      "description": "通过 HDFS 客户端与 YARN 客户端访问集群，含 hdfs dfs、distcp 等命令。"
+    },
+    {
+      "id": "svc-hiveserver2",
+      "name": "HiveServer2",
+      "kind": "api",
+      "description": "对外提供 JDBC/ODBC/Thrift 查询入口。"
+    },
+    {
+      "id": "svc-hive-metastore",
+      "name": "Hive Metastore",
+      "kind": "service",
+      "description": "Hive 表结构等元数据服务，元数据持久化在外部关系型数据库。"
+    },
+    {
+      "id": "svc-hbase-master",
+      "name": "HBase Master",
+      "kind": "database",
+      "description": "HBase 集群管理与 Region 分配，可主备 HA。"
+    },
+    {
+      "id": "svc-hbase-regionserver",
+      "name": "HBase RegionServer",
+      "kind": "database",
+      "description": "HBase Region 读写服务，数据以 HFile 形式存放于 HDFS。"
+    }
+  ],
+  "instances": [
+    {
+      "id": "inst-nn-a",
+      "name": "NameNode nn1（Active）",
+      "nodeRef": "n-master-a",
+      "serviceRef": "svc-hdfs-namenode",
+      "role": "primary"
+    },
+    {
+      "id": "inst-nn-b",
+      "name": "NameNode nn2（Standby）",
+      "nodeRef": "n-master-b",
+      "serviceRef": "svc-hdfs-namenode",
+      "role": "replica"
+    },
+    {
+      "id": "inst-jn-1",
+      "name": "JournalNode 1",
+      "nodeRef": "n-coord-1",
+      "serviceRef": "svc-hdfs-journalnode",
+      "role": "peer"
+    },
+    {
+      "id": "inst-jn-2",
+      "name": "JournalNode 2",
+      "nodeRef": "n-coord-2",
+      "serviceRef": "svc-hdfs-journalnode",
+      "role": "peer"
+    },
+    {
+      "id": "inst-jn-3",
+      "name": "JournalNode 3",
+      "nodeRef": "n-coord-3",
+      "serviceRef": "svc-hdfs-journalnode",
+      "role": "peer"
+    },
+    {
+      "id": "inst-dn-1",
+      "name": "DataNode 1",
+      "nodeRef": "n-worker-1",
+      "serviceRef": "svc-hdfs-datanode",
+      "role": "peer"
+    },
+    {
+      "id": "inst-dn-2",
+      "name": "DataNode 2",
+      "nodeRef": "n-worker-2",
+      "serviceRef": "svc-hdfs-datanode",
+      "role": "peer"
+    },
+    {
+      "id": "inst-dn-3",
+      "name": "DataNode 3",
+      "nodeRef": "n-worker-3",
+      "serviceRef": "svc-hdfs-datanode",
+      "role": "peer"
+    },
+    {
+      "id": "inst-rm-a",
+      "name": "ResourceManager rm1（Active）",
+      "nodeRef": "n-master-a",
+      "serviceRef": "svc-yarn-resourcemanager",
+      "role": "primary"
+    },
+    {
+      "id": "inst-rm-b",
+      "name": "ResourceManager rm2（Standby）",
+      "nodeRef": "n-master-b",
+      "serviceRef": "svc-yarn-resourcemanager",
+      "role": "replica"
+    },
+    {
+      "id": "inst-nm-1",
+      "name": "NodeManager 1",
+      "nodeRef": "n-worker-1",
+      "serviceRef": "svc-yarn-nodemanager",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-nm-2",
+      "name": "NodeManager 2",
+      "nodeRef": "n-worker-2",
+      "serviceRef": "svc-yarn-nodemanager",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-nm-3",
+      "name": "NodeManager 3",
+      "nodeRef": "n-worker-3",
+      "serviceRef": "svc-yarn-nodemanager",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-am-1",
+      "name": "MapReduce ApplicationMaster",
+      "nodeRef": "n-worker-1",
+      "serviceRef": "svc-mapreduce-am",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-jhs",
+      "name": "JobHistoryServer",
+      "nodeRef": "n-master-b",
+      "serviceRef": "svc-mapreduce-jhs",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-zk-1",
+      "name": "ZooKeeper myid=1",
+      "nodeRef": "n-coord-1",
+      "serviceRef": "svc-zookeeper",
+      "role": "peer"
+    },
+    {
+      "id": "inst-zk-2",
+      "name": "ZooKeeper myid=2",
+      "nodeRef": "n-coord-2",
+      "serviceRef": "svc-zookeeper",
+      "role": "peer"
+    },
+    {
+      "id": "inst-zk-3",
+      "name": "ZooKeeper myid=3",
+      "nodeRef": "n-coord-3",
+      "serviceRef": "svc-zookeeper",
+      "role": "peer"
+    },
+    {
+      "id": "inst-zkfc-a",
+      "name": "ZKFC（随 NameNode A）",
+      "nodeRef": "n-master-a",
+      "serviceRef": "svc-zkfc",
+      "role": "peer"
+    },
+    {
+      "id": "inst-zkfc-b",
+      "name": "ZKFC（随 NameNode B）",
+      "nodeRef": "n-master-b",
+      "serviceRef": "svc-zkfc",
+      "role": "peer"
+    },
+    {
+      "id": "inst-client-1",
+      "name": "Hadoop 客户端",
+      "nodeRef": "n-client",
+      "serviceRef": "svc-hadoop-client",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-hs2",
+      "name": "HiveServer2",
+      "nodeRef": "n-eco",
+      "serviceRef": "svc-hiveserver2",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-hms",
+      "name": "Hive Metastore",
+      "nodeRef": "n-eco",
+      "serviceRef": "svc-hive-metastore",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-hbase-master",
+      "name": "HBase Master",
+      "nodeRef": "n-eco",
+      "serviceRef": "svc-hbase-master",
+      "role": "standalone"
+    },
+    {
+      "id": "inst-rs-1",
+      "name": "RegionServer 1",
+      "nodeRef": "n-worker-1",
+      "serviceRef": "svc-hbase-regionserver",
+      "role": "peer"
+    },
+    {
+      "id": "inst-rs-2",
+      "name": "RegionServer 2",
+      "nodeRef": "n-worker-2",
+      "serviceRef": "svc-hbase-regionserver",
+      "role": "peer"
+    },
+    {
+      "id": "inst-rs-3",
+      "name": "RegionServer 3",
+      "nodeRef": "n-worker-3",
+      "serviceRef": "svc-hbase-regionserver",
+      "role": "peer"
+    }
+  ],
+  "resources": [
+    {
+      "id": "r-ha-proxy",
+      "name": "HA 访问入口负载均衡",
+      "kind": "load_balancer",
+      "description": "为 Active NameNode / ResourceManager 的 Web UI 与 REST 提供稳定入口，按 /isActive 探针转发。"
+    },
+    {
+      "id": "r-kdc",
+      "name": "Kerberos KDC（外部认证中心）",
+      "kind": "external",
+      "description": "安全模式下集群守护进程与客户端的统一身份认证来源。"
+    },
+    {
+      "id": "r-metastore-db",
+      "name": "Hive Metastore 元数据库（MySQL / PostgreSQL）",
+      "kind": "database",
+      "description": "存放 Hive 表结构、分区等元数据。"
+    },
+    {
+      "id": "r-object-store",
+      "name": "对象存储归档（S3 / OSS）",
+      "kind": "object_store",
+      "description": "HDFS 冷数据归档与分层存储目标，经 DistCp 写入。"
+    },
+    {
+      "id": "r-monitoring",
+      "name": "监控与告警平台（Prometheus / Grafana）",
+      "kind": "external",
+      "description": "采集 NameNode、DataNode、NodeManager、RegionServer 指标并告警。"
+    }
+  ],
+  "relations": [
+    {
+      "id": "rel-client-proxy",
+      "kind": "accesses",
+      "from": "inst-client-1",
+      "to": "r-ha-proxy",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-proxy-namenode",
+      "kind": "forwards",
+      "from": "r-ha-proxy",
+      "to": "svc-hdfs-namenode",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-hdfs-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-proxy-resourcemanager",
+      "kind": "forwards",
+      "from": "r-ha-proxy",
+      "to": "svc-yarn-resourcemanager",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-yarn-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-client-namenode-rpc",
+      "kind": "calls",
+      "from": "inst-client-1",
+      "to": "svc-hdfs-namenode",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-hdfs-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-client-resourcemanager-submit",
+      "kind": "calls",
+      "from": "inst-client-1",
+      "to": "svc-yarn-resourcemanager",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-yarn-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-client-datanode-io",
+      "kind": "writes",
+      "from": "inst-client-1",
+      "to": "svc-hdfs-datanode",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-client-hiveserver2",
+      "kind": "calls",
+      "from": "inst-client-1",
+      "to": "svc-hiveserver2",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-client-kdc",
+      "kind": "calls",
+      "from": "inst-client-1",
+      "to": "r-kdc",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-namenode-write-shared-edits",
+      "kind": "writes",
+      "from": "svc-hdfs-namenode",
+      "to": "svc-hdfs-journalnode",
+      "evidenceRefs": [
+        "ev-hdfs-ha-doc",
+        "ev-hdfs-config"
+      ]
+    },
+    {
+      "id": "rel-namenode-read-shared-edits",
+      "kind": "reads",
+      "from": "svc-hdfs-namenode",
+      "to": "svc-hdfs-journalnode",
+      "evidenceRefs": [
+        "ev-hdfs-ha-doc",
+        "ev-hdfs-config"
+      ]
+    },
+    {
+      "id": "rel-nn-a-nn-b-peers",
+      "kind": "peers",
+      "from": "inst-nn-a",
+      "to": "inst-nn-b",
+      "evidenceRefs": [
+        "ev-hdfs-ha-doc",
+        "ev-hdfs-config"
+      ]
+    },
+    {
+      "id": "rel-rm-a-rm-b-peers",
+      "kind": "peers",
+      "from": "inst-rm-a",
+      "to": "inst-rm-b",
+      "evidenceRefs": [
+        "ev-yarn-ha-doc",
+        "ev-yarn-config"
+      ]
+    },
+    {
+      "id": "rel-zkfc-a-namenode-health",
+      "kind": "calls",
+      "from": "inst-zkfc-a",
+      "to": "svc-hdfs-namenode",
+      "evidenceRefs": [
+        "ev-hdfs-ha-doc",
+        "ev-hdfs-config"
+      ]
+    },
+    {
+      "id": "rel-zkfc-a-zookeeper-election",
+      "kind": "peers",
+      "from": "inst-zkfc-a",
+      "to": "svc-zookeeper",
+      "evidenceRefs": [
+        "ev-hdfs-ha-doc",
+        "ev-hdfs-config"
+      ]
+    },
+    {
+      "id": "rel-zkfc-b-zookeeper-election",
+      "kind": "peers",
+      "from": "inst-zkfc-b",
+      "to": "svc-zookeeper",
+      "evidenceRefs": [
+        "ev-hdfs-ha-doc",
+        "ev-hdfs-config"
+      ]
+    },
+    {
+      "id": "rel-resourcemanager-zookeeper-elect",
+      "kind": "peers",
+      "from": "svc-yarn-resourcemanager",
+      "to": "svc-zookeeper",
+      "evidenceRefs": [
+        "ev-yarn-ha-doc",
+        "ev-yarn-config"
+      ]
+    },
+    {
+      "id": "rel-zookeeper-peer-1-2",
+      "kind": "peers",
+      "from": "inst-zk-1",
+      "to": "inst-zk-2",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-zookeeper-peer-2-3",
+      "kind": "peers",
+      "from": "inst-zk-2",
+      "to": "inst-zk-3",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-namenode-datanode-blocks",
+      "kind": "calls",
+      "from": "svc-hdfs-namenode",
+      "to": "svc-hdfs-datanode",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-hdfs-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-datanode-namenode-report",
+      "kind": "accesses",
+      "from": "svc-hdfs-datanode",
+      "to": "svc-hdfs-namenode",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-hdfs-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-resourcemanager-nodemanager",
+      "kind": "calls",
+      "from": "svc-yarn-resourcemanager",
+      "to": "svc-yarn-nodemanager",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-yarn-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-nodemanager-resourcemanager-report",
+      "kind": "accesses",
+      "from": "svc-yarn-nodemanager",
+      "to": "svc-yarn-resourcemanager",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-yarn-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-appmaster-resourcemanager",
+      "kind": "calls",
+      "from": "svc-mapreduce-am",
+      "to": "svc-yarn-resourcemanager",
+      "evidenceRefs": [
+        "ev-hadoop-arch",
+        "ev-yarn-ha-doc"
+      ]
+    },
+    {
+      "id": "rel-appmaster-nodemanager",
+      "kind": "calls",
+      "from": "svc-mapreduce-am",
+      "to": "svc-yarn-nodemanager",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-appmaster-datanode-write",
+      "kind": "writes",
+      "from": "svc-mapreduce-am",
+      "to": "svc-hdfs-datanode",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-jobhistory-datanode-read",
+      "kind": "reads",
+      "from": "svc-mapreduce-jhs",
+      "to": "svc-hdfs-datanode",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-datanode-replicate-1-2",
+      "kind": "replicates",
+      "from": "inst-dn-1",
+      "to": "inst-dn-2",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-datanode-replicate-2-3",
+      "kind": "replicates",
+      "from": "inst-dn-2",
+      "to": "inst-dn-3",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-hiveserver2-metastore",
+      "kind": "calls",
+      "from": "svc-hiveserver2",
+      "to": "svc-hive-metastore",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-hiveserver2-resourcemanager",
+      "kind": "calls",
+      "from": "svc-hiveserver2",
+      "to": "svc-yarn-resourcemanager",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-metastore-database",
+      "kind": "writes",
+      "from": "svc-hive-metastore",
+      "to": "r-metastore-db",
+      "evidenceRefs": [
+        "ev-hive-config"
+      ]
+    },
+    {
+      "id": "rel-hbase-master-zookeeper",
+      "kind": "peers",
+      "from": "svc-hbase-master",
+      "to": "svc-zookeeper",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-hbase-master-regionserver",
+      "kind": "calls",
+      "from": "svc-hbase-master",
+      "to": "svc-hbase-regionserver",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-hbase-master-namenode",
+      "kind": "calls",
+      "from": "svc-hbase-master",
+      "to": "svc-hdfs-namenode",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-regionserver-datanode-write",
+      "kind": "writes",
+      "from": "svc-hbase-regionserver",
+      "to": "svc-hdfs-datanode",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-namenode-kdc",
+      "kind": "calls",
+      "from": "svc-hdfs-namenode",
+      "to": "r-kdc",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-resourcemanager-kdc",
+      "kind": "calls",
+      "from": "svc-yarn-resourcemanager",
+      "to": "r-kdc",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-namenode-monitoring",
+      "kind": "calls",
+      "from": "svc-hdfs-namenode",
+      "to": "r-monitoring",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-nodemanager-monitoring",
+      "kind": "calls",
+      "from": "svc-yarn-nodemanager",
+      "to": "r-monitoring",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    },
+    {
+      "id": "rel-client-archive-objectstore",
+      "kind": "writes",
+      "from": "svc-hadoop-client",
+      "to": "r-object-store",
+      "evidenceRefs": [
+        "ev-hadoop-arch"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-hadoop-arch",
+      "source": "inference",
+      "locator": "Apache Hadoop 3.3.5 官方文档 HDFS Architecture、YARN Architecture 与 MapReduce Tutorial；Apache HBase Reference Guide（HBase on HDFS 与 ZooKeeper 协调）",
+      "summary": "Hadoop/HBase 通用参考架构推导：NameNode 块管理与 DataNode 副本复制、YARN 容器调度、MapReduce 作业执行、HBase 数据落 HDFS。本画布为逻辑参考架构，未在真实集群上观测。",
+      "observedAt": "2026-10-08T09:00:00+08:00"
+    },
+    {
+      "id": "ev-hdfs-ha-doc",
+      "source": "inference",
+      "locator": "https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html",
+      "summary": "《HDFS High Availability Using the Quorum Journal Manager》：NameNode Active/Standby、Active 写共享 Edit Log 到多数派 JournalNode、Standby 读取并应用 edits、DataNode 向所有 NameNode 上报块位置与心跳、ZKFC 基于 ZooKeeper 实现自动故障转移。",
+      "observedAt": "2026-10-08T09:00:00+08:00"
+    },
+    {
+      "id": "ev-yarn-ha-doc",
+      "source": "inference",
+      "locator": "https://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/ResourceManagerHA.html",
+      "summary": "《ResourceManager High Availability》：RM Active/Standby、内嵌 ActiveStandbyElector 依赖 ZooKeeper 选主、客户端/ApplicationMaster/NodeManager 轮询连接 Active RM、ZKRMStateStore 保存 RM 状态。",
+      "observedAt": "2026-10-08T09:00:00+08:00"
+    },
+    {
+      "id": "ev-hdfs-config",
+      "source": "configuration",
+      "locator": "hdfs-site.xml 与 core-site.xml 关键配置项 dfs.namenode.shared.edits.dir、dfs.ha.automatic-failover.enabled、ha.zookeeper.quorum、dfs.nameservices、dfs.ha.namenodes",
+      "summary": "由标准 HDFS HA 配置项推导 NameNode、JournalNode 与 ZooKeeper 之间的依赖关系。",
+      "observedAt": "2026-10-08T09:00:00+08:00"
+    },
+    {
+      "id": "ev-yarn-config",
+      "source": "configuration",
+      "locator": "yarn-site.xml 关键配置项 yarn.resourcemanager.ha.enabled、yarn.resourcemanager.ha.rm-ids、yarn.resourcemanager.cluster-id、hadoop.zk.address",
+      "summary": "由标准 YARN ResourceManager HA 配置项推导 RM 主备与 ZooKeeper 选举依赖。",
+      "observedAt": "2026-10-08T09:00:00+08:00"
+    },
+    {
+      "id": "ev-hive-config",
+      "source": "configuration",
+      "locator": "hive-site.xml 与 metastore-site.xml 关键配置项 javax.jdo.option.ConnectionURL、hive.metastore.uris、hive.metastore.warehouse.dir",
+      "summary": "Hive Metastore 通过 JDBC 连接外部关系型数据库持久化表与分区元数据。",
+      "observedAt": "2026-10-08T09:00:00+08:00"
+    }
+  ],
+  "presentation": {
+    "initiallyExpanded": [
+      "g-access",
+      "g-master",
+      "g-coord",
+      "g-worker",
+      "g-eco"
+    ],
+    "order": [
+      "g-access",
+      "n-client",
+      "g-master",
+      "n-master-a",
+      "n-master-b",
+      "g-coord",
+      "n-coord-1",
+      "n-coord-2",
+      "n-coord-3",
+      "g-worker",
+      "n-worker-1",
+      "n-worker-2",
+      "n-worker-3",
+      "g-eco",
+      "n-eco",
+      "r-ha-proxy",
+      "r-kdc",
+      "r-metastore-db",
+      "r-object-store",
+      "r-monitoring"
+    ],
+    "positions": [
+      {
+        "objectRef": "r-ha-proxy",
+        "x": 0,
+        "y": -960
+      },
+      {
+        "objectRef": "n-client",
+        "x": 0,
+        "y": -700
+      },
+      {
+        "objectRef": "r-kdc",
+        "x": -560,
+        "y": -420
+      },
+      {
+        "objectRef": "n-master-a",
+        "x": -200,
+        "y": -420
+      },
+      {
+        "objectRef": "n-master-b",
+        "x": 200,
+        "y": -420
+      },
+      {
+        "objectRef": "n-coord-1",
+        "x": -440,
+        "y": -140
+      },
+      {
+        "objectRef": "n-coord-2",
+        "x": 0,
+        "y": -140
+      },
+      {
+        "objectRef": "n-coord-3",
+        "x": 440,
+        "y": -140
+      },
+      {
+        "objectRef": "n-worker-1",
+        "x": -440,
+        "y": 180
+      },
+      {
+        "objectRef": "n-worker-2",
+        "x": 0,
+        "y": 180
+      },
+      {
+        "objectRef": "n-worker-3",
+        "x": 440,
+        "y": 180
+      },
+      {
+        "objectRef": "r-object-store",
+        "x": 800,
+        "y": 180
+      },
+      {
+        "objectRef": "n-eco",
+        "x": 0,
+        "y": 480
+      },
+      {
+        "objectRef": "r-metastore-db",
+        "x": 440,
+        "y": 480
+      },
+      {
+        "objectRef": "r-monitoring",
+        "x": -440,
+        "y": 480
+      }
+    ]
+  }
+}

@@ -1616,9 +1616,9 @@ SOFTWARE.
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/floe-webapp-boot | 0.81.5 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.81.5 |  |
-| @floegence/floe-webapp-boot | 0.84.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.84.0 |  |
-| @floegence/floe-webapp-core | 0.84.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.84.0 |  |
-| @floegence/floe-webapp-protocol | 0.84.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.84.0 |  |
+| @floegence/floe-webapp-boot | 0.85.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.85.1 |  |
+| @floegence/floe-webapp-core | 0.85.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.85.1 |  |
+| @floegence/floe-webapp-protocol | 0.85.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.85.1 |  |
 | @floegence/floebrowser | 0.1.27 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.27 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.10.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.10.5 |  |
@@ -1977,8 +1977,8 @@ SOFTWARE.
 | color-name | 1.1.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/color-name/v/1.1.4 |  |
 | combined-stream | 1.0.8 | MIT | Desktop shell | https://www.npmjs.com/package/combined-stream/v/1.0.8 |  |
 | comma-separated-tokens | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/comma-separated-tokens/v/2.0.3 |  |
+| commander | 15.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/commander/v/15.0.0 |  |
 | commander | 7.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/commander/v/7.2.0 |  |
-| commander | 8.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/commander/v/8.3.0 |  |
 | commander | 9.5.0 | MIT | Desktop shell | https://www.npmjs.com/package/commander/v/9.5.0 |  |
 | compare-version | 0.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/compare-version/v/0.1.2 |  |
 | compress-commons | 4.1.2 | MIT | Env App UI | https://www.npmjs.com/package/compress-commons/v/4.1.2 |  |
@@ -2214,7 +2214,7 @@ SOFTWARE.
 | jsonfile | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/jsonfile/v/4.0.0 |  |
 | jsonfile | 6.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jsonfile/v/6.2.1 |  |
 | jszip | 3.10.1 | (MIT OR GPL-3.0-or-later) | Env App UI | https://www.npmjs.com/package/jszip/v/3.10.1 | Redeven uses this dual-licensed package under the MIT option. |
-| katex | 0.16.47 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/katex/v/0.16.47 |  |
+| katex | 0.18.10 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/katex/v/0.18.10 |  |
 | kebab-case | 1.0.2 | MIT | Env App UI | https://www.npmjs.com/package/kebab-case/v/1.0.2 |  |
 | keyv | 4.5.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/keyv/v/4.5.4 |  |
 | khroma | 2.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/khroma/v/2.1.0 | The published README declares MIT copyright for the package authors. |
@@ -2427,11 +2427,8 @@ SOFTWARE.
 | semver | 7.8.1 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/7.8.1 | License verified from the exact registry package manifest. |
 | semver | 7.8.5 | ISC | Env App UI | https://www.npmjs.com/package/semver/v/7.8.5 |  |
 | serialize-error | 7.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/serialize-error/v/7.0.1 |  |
-| seroval-plugins | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.5.4 | License verified from the exact registry package manifest. |
-| seroval-plugins | 1.5.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.5.6 |  |
-| seroval | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.5.4 | License verified from the exact registry package manifest. |
-| seroval | 1.5.6 | MIT | Desktop shell | https://www.npmjs.com/package/seroval/v/1.5.6 |  |
-| seroval | 1.6.8 | MIT | Env App UI | https://www.npmjs.com/package/seroval/v/1.6.8 |  |
+| seroval-plugins | 1.6.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.6.8 |  |
+| seroval | 1.6.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.6.8 |  |
 | setimmediate | 1.0.5 | MIT | Env App UI | https://www.npmjs.com/package/setimmediate/v/1.0.5 |  |
 | shebang-command | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/shebang-command/v/2.0.0 |  |
 | shebang-regex | 3.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/shebang-regex/v/3.0.0 |  |
@@ -2440,9 +2437,7 @@ SOFTWARE.
 | signal-exit | 3.0.7 | ISC | Desktop shell | https://www.npmjs.com/package/signal-exit/v/3.0.7 |  |
 | simple-update-notifier | 2.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/simple-update-notifier/v/2.0.0 |  |
 | sirv | 3.0.2 | MIT | Env App UI | https://www.npmjs.com/package/sirv/v/3.0.2 |  |
-| solid-js | 1.9.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.13 | License verified from the exact registry package manifest. |
-| solid-js | 1.9.15 | MIT | Desktop shell | https://www.npmjs.com/package/solid-js/v/1.9.15 |  |
-| solid-js | 1.9.6 | MIT | Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.6 |  |
+| solid-js | 1.9.17 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.17 |  |
 | solid-motionone | 1.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-motionone/v/1.0.4 |  |
 | solid-refresh | 0.6.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-refresh/v/0.6.3 |  |
 | source-map-js | 1.2.1 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/source-map-js/v/1.2.1 | License verified from the exact registry package manifest. |

@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TessivenGraph } from '../../../../tessiven_ui/src/TessivenGraph';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Version } from '../../../../tessiven_ui/src/types';
+import hadoopDocument from './fixtures/tessiven-hadoop.json';
+import { projectCanvas } from '../../../../tessiven_ui/src/projection';
 function fixture(count = 2): Version {
   const nodes = Array.from({ length: count }, (_, i) => ({
     id: `node-${i}`,
@@ -156,6 +158,56 @@ afterEach(() => {
   document.documentElement.classList.remove('dark', 'light');
 });
 describe('Tessiven real graph interactions', () => {
+  it('renders the saved Hadoop topology despite crowded coordinate hints', async () => {
+    // This Chinese fixture is the unchanged user-generated document that
+    // reproduced the blank canvas, including all 40 relationships and hints.
+    const version: Version = {
+      ...fixture(), number: 2,
+      document: hadoopDocument as Version['document'],
+    };
+    mount(10, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(10);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    const projected = projectCanvas(version.document, new Set(version.document.presentation?.initiallyExpanded), {});
+    expect([...projected.relations.values()].flat()).toHaveLength(40);
+    expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
+      .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+    const cards = [...host.querySelectorAll<HTMLElement>('.floe-graph__node')];
+    for (const [index, card] of cards.entries()) {
+      const a = card.getBoundingClientRect();
+      for (const other of cards.slice(index + 1)) {
+        const b = other.getBoundingClientRect();
+        expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true);
+      }
+    }
+    for (const theme of builtInShellThemePresets.filter(theme => ['porcelain-light', 'porcelain-dark'].includes(theme.name))) {
+      document.documentElement.classList.toggle('dark', theme.mode === 'dark');
+      for (const [name, value] of Object.entries(theme.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
+      await page.screenshot({ path: `../../.vitest-attachments/redeven-hadoop-${theme.name}.png` });
+    }
+  });
+  it('renders collapsed Hadoop groups without applying hidden members coordinate hints', async () => {
+    const document = structuredClone(hadoopDocument) as Version['document'];
+    document.presentation!.initiallyExpanded = [];
+    mount(10, { ...fixture(), document });
+    await expect.poll(() => host.querySelectorAll('.tessiven-group').length).toBe(5);
+    expect(host.querySelectorAll('.tessiven-node')).toHaveLength(0);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    const projected = projectCanvas(document, new Set(), {});
+    expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
+      .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+  });
+  it('renders the complete Hadoop topology with automatic layout', async () => {
+    const document = structuredClone(hadoopDocument) as Version['document'];
+    delete document.presentation!.positions;
+    mount(10, { ...fixture(), document });
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(10);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    const projected = projectCanvas(document, new Set(document.presentation?.initiallyExpanded), {});
+    expect([...projected.relations.values()].flat()).toHaveLength(40);
+    expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
+      .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+  });
   it('lays out runtime nodes and opens details on click with immutable Ask context', async () => {
     const { ask, setVisible } = mount();
     await expect

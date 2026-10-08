@@ -42,6 +42,12 @@ such nodes unbound; an explicitly requested observation may be recorded as
 - Separate logical services from concrete instances. Roles belong to instances;
   shard identity is separate. Groups are visual membership, not runtime entities.
   Databases and caches may be hosted instances or external resources.
+- Prefer automatic layout: omit `presentation.positions` unless the user asks
+  for a particular arrangement or existing intentional hints need preservation.
+  Positions are preferred coordinates, not fixed constraints. The renderer
+  adjusts spacing and group bounds for actual card sizes; never guess compact
+  coordinates to make a diagram look finished. Schema validation and saving
+  confirm document validity and persistence, not visual verification.
 - Every relationship needs evidence. Distinguish code, configuration, runtime
   observations, and inference. Include observation time for runtime facts;
   absent evidence means unknown. Do not include credentials, executable commands,

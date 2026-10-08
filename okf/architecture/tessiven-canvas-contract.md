@@ -25,6 +25,10 @@ failed validation or version conflict leaves the last saved document intact.
   explicitly unknown.
 - The schema accepts data and presentation hints only. It does not accept
   executable scripts, credentials, arbitrary styles, or management commands.
+  Position coordinates express preferred placement, not fixed geometry. Their
+  schema describes automatic layout as the default; collision resolution belongs
+  to the published renderer under the [canvas UI contract](../ui/tessiven-canvas.md).
+  Validation and save success confirm valid persisted data, not visual acceptance.
 - Saves use an expected latest version and an idempotent request ID. Flower
   content changes produce complete new versions; history is immutable.
 - A fresh empty library receives one fictional example before accepting

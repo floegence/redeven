@@ -7,6 +7,8 @@ import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { TessivenLibraryCard } from '../../../../tessiven_ui/src/TessivenLibraryCard';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Canvas, TessivenTransport, Version } from '../../../../tessiven_ui/src/types';
+import hadoopDocument from './fixtures/tessiven-hadoop.json';
+import { projectCanvas } from '../../../../tessiven_ui/src/projection';
 
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
@@ -72,6 +74,23 @@ const version: Version = {
 };
 const media = commands as unknown as { emulateMediaPreferences: (preferences: { forcedColors?: 'active' | 'none'; reducedMotion?: 'reduce' | 'no-preference' }) => Promise<void> };
 const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+
+it('previews every object and relationship in the saved Hadoop canvas with crowded hints', async () => {
+  await page.viewport(1200, 800);
+  host = document.createElement('div');
+  host.className = 'tessiven';
+  host.style.cssText = 'width:340px;height:280px;margin:32px';
+  document.body.append(host);
+  const saved: Version = { ...version, number: 2, document: hadoopDocument as Version['document'] };
+  const record: Canvas = { ...canvas, title: saved.document.metadata.title, latest_version: 2 };
+  dispose = render(() => <TessivenLibraryCard canvas={record} transport={{ request: vi.fn(async () => saved) } as unknown as TessivenTransport} t={tessivenText('zh-CN')} onOpen={vi.fn()} />, host);
+  await expect.poll(() => host.querySelectorAll('[data-preview-object]').length).toBe(20);
+  expect(host.querySelector('.tessiven-preview-placeholder')).toBeNull();
+  const projected = projectCanvas(saved.document, new Set(saved.document.presentation?.initiallyExpanded), {});
+  expect([...host.querySelectorAll('[data-preview-edge]')].map(edge => edge.getAttribute('data-preview-edge')).sort())
+    .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+  await page.screenshot({ element: host, path: '../../.vitest-attachments/redeven-hadoop-thumbnail.png' });
+});
 
 it('previews the saved topology with groups and routed relationships under an information overlay', async () => {
   await page.viewport(1200, 800);
