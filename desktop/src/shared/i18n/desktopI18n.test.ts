@@ -440,9 +440,13 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(enUS.gatewayJoin.title).toBe('Add Gateway access');
     expect(enUS.gatewayJoin.approve).toBe('Enable Gateway access');
     expect(enUS.gatewayJoin.joinGateway).toBe('After setup, add Gateway access');
+    expect(enUS.gatewayCloud.title).toBe('Connect to Cloud');
+    expect(enUS.gatewayCloud.configure).toBe('Connect to Cloud');
     expect(zhCN.gatewayJoin.title).toBe('添加 Gateway 访问');
     expect(zhCN.gatewayJoin.approve).toBe('启用 Gateway 访问');
     expect(zhCN.gatewayJoin.consent).toContain('Gateway 无法管理此运行时');
+    expect(zhCN.gatewayCloud.title).toBe('接入 Cloud');
+    expect(zhCN.gatewayCloud.configure).toBe('接入 Cloud');
   });
 
   it('keeps Flower surface copy localized for every supported Desktop locale', () => {

@@ -13,7 +13,7 @@ let dispose: (() => void) | undefined;
 const i18n = createDesktopI18n('en-US');
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
 function button(key: Parameters<typeof i18n.t>[0]) {
-  const found = [...document.querySelectorAll('button')].find(element => controlText(element) === i18n.t(key));
+  const found = [...document.querySelectorAll<HTMLElement>('button, [role="button"]')].find(element => controlText(element) === i18n.t(key));
   if (!found) throw new Error(`Missing button ${key}`);
   return found;
 }
@@ -42,8 +42,9 @@ it('starts the selected Runtime, issues an invitation from the selected Gateway,
   button('gatewayJoin.startAndContinue').click(); await settle();
   expect(start).toHaveBeenCalledExactlyOnceWith(environment);
   expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'status' });
-  const selection = document.querySelector('select')!;
-  selection.value = gateway.gateway_id; selection.dispatchEvent(new Event('change', { bubbles: true }));
+  button('gatewayJoin.importInvitation').click(); await settle();
+  const selection = [...document.querySelectorAll<HTMLButtonElement>('button')].find(element => element.textContent?.trim() === gateway.display_name)!;
+  selection.click();
   await settle(); button('gatewayMembers.createInvitation').click(); await settle();
   expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'invite_gateway_runtime', gateway_id: gateway.gateway_id });
   expect(perform).toHaveBeenCalledTimes(2);

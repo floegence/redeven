@@ -18,7 +18,8 @@ try {
   const source = compactEnvironmentPreviewFixture().coverage;
   const members = ['Inherited', 'Explicit'].map((display_name, i) => ({ ...memberFixture, member_id: `member_${i}`, display_name, cloud_permission: i ? 'deny' : 'inherit' }));
   const gateway = { ...source.gateway_sources[0], sync_state: 'ready', policy: catalogFixture.policy,
-    permissions: catalogFixture.gateway.permissions, environments: members };
+    permissions: catalogFixture.gateway.permissions, member_endpoints: catalogFixture.gateway.member_endpoints,
+    listener_addresses: catalogFixture.gateway.listener_addresses, listener_running: true, environments: members };
   const snapshot = { ...source, open_windows: [], environments: [], gateway_sources: [gateway] };
   const locales = process.argv.length > 2 ? process.argv.slice(2) : REDEVEN_SUPPORTED_LOCALES;
   assert.ok(locales.every(locale => REDEVEN_SUPPORTED_LOCALES.includes(locale)));
@@ -61,6 +62,7 @@ try {
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.download'), exact: true }).waitFor();
       // A policy preview only includes inherited members; saving requires a second explicit action.
+      await dialog.locator('summary').filter({ hasText: i18n.t('gatewayMembers.policy') }).click();
       await dialog.getByRole('checkbox', { name: i18n.t('gatewayMembers.defaultAllow'), exact: true }).focus();
       await page.keyboard.press('Space');
       const preview = dialog.locator('p').filter({ hasText: i18n.t('gatewayMembers.affected') });

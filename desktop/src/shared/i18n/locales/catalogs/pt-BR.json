@@ -3062,13 +3062,13 @@
     "technicalDetails": "Detalhes técnicos"
   },
   "gatewayCloud": {
-    "title": "Publicação na Cloud",
+    "title": "Conectar ao Cloud",
     "description": "Opcional: publique ambientes ingressados pelo Redeven Cloud. A Cloud usa este Gateway como ponto de acesso; não se conecta diretamente a um ambiente.",
     "nextStep": "Aprove este Gateway no Redeven Cloud e escolha seu Namespace. Outros clientes aprovados ainda podem usar o Gateway de forma independente.",
     "cloudOrigin": "Endereço da nuvem",
     "gatewayURL": "Endereço do gateway acessível pelos ambiente de execuçãos",
     "listenAddress": "Endereço de escuta do gateway",
-    "configure": "Ativar publicação na Cloud",
+    "configure": "Conectar ao Cloud",
     "manage": "Abrir configurações da Cloud",
     "unconfigured": "O acesso à nuvem não está configurado.",
     "pending": "Aguardando aprovação na nuvem.",

@@ -3056,13 +3056,13 @@
     "technicalDetails": "技术详情"
   },
   "gatewayCloud": {
-    "title": "Cloud 发布",
+    "title": "接入 Cloud",
     "description": "可选：通过 Redeven Cloud 发布已加入的运行时。Cloud 使用此 Gateway 作为访问入口，不会直接连接运行时。",
     "nextStep": "请在 Redeven Cloud 中批准此 Gateway，然后选择所属 Namespace。其他获准客户端仍可独立使用此 Gateway。",
     "cloudOrigin": "云端地址",
     "gatewayURL": "运行时可访问的网关地址",
     "listenAddress": "网关监听地址",
-    "configure": "启用 Cloud 发布",
+    "configure": "接入 Cloud",
     "manage": "打开 Cloud 设置",
     "unconfigured": "尚未配置云端接入。",
     "pending": "等待命名空间批准。",

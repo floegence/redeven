@@ -3056,13 +3056,13 @@
     "technicalDetails": "기술 세부 정보"
   },
   "gatewayCloud": {
-    "title": "Cloud 게시",
+    "title": "Cloud에 연결",
     "description": "선택 사항: 가입한 런타임을 Redeven Cloud를 통해 게시합니다. Cloud는 이 Gateway를 액세스 지점으로 사용하며 런타임에 직접 연결하지 않습니다.",
     "nextStep": "Redeven Cloud에서 이 Gateway를 승인하고 소속 Namespace를 선택하세요. 승인된 다른 클라이언트도 Gateway를 계속 독립적으로 사용할 수 있습니다.",
     "cloudOrigin": "클라우드 주소",
     "gatewayURL": "런타임에서 접근할 수 있는 게이트웨이 주소",
     "listenAddress": "게이트웨이 수신 주소",
-    "configure": "Cloud 게시 활성화",
+    "configure": "Cloud에 연결",
     "manage": "Cloud 설정 열기",
     "unconfigured": "클라우드 접근이 설정되지 않았습니다.",
     "pending": "클라우드 승인을 기다리는 중입니다.",

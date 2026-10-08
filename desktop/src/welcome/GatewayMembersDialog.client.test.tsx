@@ -37,6 +37,17 @@ beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLEleme
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway member management', () => {
+  it('labels the address, network and priority separately without compressing the address field', async () => {
+    mount(vi.fn()); await settle();
+    const endpoint = document.querySelector('.redeven-gateway-endpoint')!;
+    expect(endpoint.querySelector('label')?.textContent).toContain(i18n.t('gatewayMembers.address'));
+    expect(endpoint.querySelector('.redeven-gateway-endpoint__options')?.textContent).toContain(i18n.t('gatewayMembers.scope'));
+    expect(endpoint.querySelector('input[type="number"]')?.closest('label')?.textContent).toContain(i18n.t('gatewayMembers.priority'));
+    expect(endpoint.querySelector('select')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')?.classList.contains('redeven-gateway-dialog')).toBe(true);
+    expect([...document.querySelectorAll('details')].every(detail => detail.classList.contains('redeven-gateway-disclosure'))).toBe(true);
+  });
+
   it('requires a saved reachable address before creating an invitation', async () => {
     const perform = vi.fn();
     mount(perform, undefined, { ...gateway, member_endpoints: [] }); await settle();

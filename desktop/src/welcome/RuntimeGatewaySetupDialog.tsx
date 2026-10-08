@@ -31,8 +31,8 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
     finally { if (current === generation) setBusy(false); }
   }
   return <Dialog open={!!props.environment} onOpenChange={value => { if (!value) props.close(); }} title={props.i18n.t('gatewayJoin.title')}
-    bodyDescription={props.i18n.t('gatewayJoin.consent')} closeLabel={props.i18n.t('common.close')} class="w-[min(38rem,calc(100vw-2rem))]">
-    <Show when={target()?.id} keyed fallback={<div class="space-y-4 p-4">
+    bodyDescription={props.i18n.t('gatewayJoin.consent')} closeLabel={props.i18n.t('common.close')} class="redeven-gateway-dialog" contentClass="redeven-gateway-dialog__content">
+    <Show when={target()?.id} keyed fallback={<div class="space-y-4">
       <div class="rounded-lg border border-border/70 bg-muted/20 p-4">
         <p class="text-sm font-medium">{props.i18n.t('gatewayJoin.startTitle')}</p>
         <p class="mt-1 text-sm leading-6 text-muted-foreground">{props.i18n.t('gatewayJoin.startHelp')}</p>

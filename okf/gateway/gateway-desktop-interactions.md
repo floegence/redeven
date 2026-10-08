@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Gateway Desktop interactions
 description: Invite Runtime members and manage policy with explicit consent, retained drafts and truthful status.
 tags: [gateway, desktop, interaction, validation]
-timestamp: 2026-10-07T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -13,9 +13,9 @@ Desktop presents Gateway members, invitations, permissions, policy and optional 
 
 ## Runtime joining
 
-Creating a managed Runtime offers Not now or Join Gateway. Joining starts only through the explicit trusted Runtime start action. A user who manages a Gateway can select it and issue an invitation; otherwise they import an invitation file. Both feed the same Runtime join call. Issuing an invitation does not silently consent or join.
+Creating a managed Runtime offers Not now or After setup, add Gateway access. Joining starts only through the explicit trusted Runtime start action. A user who manages a Gateway can select it and issue an invitation; otherwise they import an invitation file. Both feed the same Runtime join call. Issuing an invitation does not silently consent or join.
 
-The confirmation describes delegated LAN access and later Cloud publication. Existing Cloud environments require an explicit preserve/new choice. Replace explains possible interruption and fences the old path. Update address accepts a fresh signed descriptor from the same Gateway while preserving membership. Normal Runtime startup reconnects without showing this dialog. Background status polling never owns or resets Cloud credential recovery, continues after transient failures, and displays Runtime publication diagnostics. It updates observations only: imported invitations, ownership choices and leave confirmations survive until an explicit operation succeeds or the user closes the panel.
+Add Gateway access describes an approved network path, not Runtime administration; Cloud remains optional. Existing Cloud environments require an explicit preserve/new choice. Replace explains possible interruption and fences the old path. Update connection endpoints accepts a fresh signed descriptor from the same Gateway while preserving membership. Normal Runtime startup reconnects without showing this dialog. Background status polling never owns or resets Cloud credential recovery, continues after transient failures, and displays Runtime publication diagnostics. It updates observations only: imported invitations, ownership choices and leave confirmations survive until an explicit operation succeeds or the user closes the panel.
 
 The panel exposes current membership, retry, leave and replace. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending are distinct states. Local Runtime management remains available only through its trusted owner, never through a Gateway member card.
 
@@ -27,9 +27,13 @@ Default Cloud permission and each member's inherit/allow/deny override are separ
 
 Pairing grants access, member management and Cloud configuration independently. A saved registration can be started explicitly if the service is stopped. Saving or refreshing cannot implicitly start or update it. Gateway lifecycle actions continue to use the existing confirmation and operation surface.
 
+Gateway settings is the sole registration and authorization entry. An access-only Gateway does not offer a duplicate Grant access action or a misleading Invite Runtime action. Once member management is authorized, Invite Runtime opens the separate invitation, connection-endpoint and member-policy surface. Connect to Cloud names the optional Cloud association action; opening either surface never grants permissions or publishes a Runtime.
+
 ## Presentation and accessibility
 
 All shipped locales have explicit translations. Interactive controls provide pointer feedback, keyboard access, visible focus and disabled semantics. Dialog headers contain identity and controls; descriptions belong in the body. Cancel restores the originating control or its surviving owner. Narrow layouts wrap content without hiding actions. Async operations show actual stages rather than invented percentages.
+
+Gateway dialogs use a comfortably wide, viewport-bounded panel and the published Dialog's scrolling body. Connection addresses occupy a full-width labelled row; network scope and numeric priority have separate visible labels and stack on narrow screens. The published Select owns Gateway and endpoint-scope choice, including keyboard navigation and Escape dismissal before the enclosing dialog. Native disclosures animate height and opacity in both directions and respect reduced-motion preferences.
 
 The upgrade rebuild notice explains that obsolete Gateway entries must be rejoined. It does not manufacture a migration list or imply that old URL profiles remain executable.
 
@@ -45,3 +49,4 @@ This surface presents current Gateway state and starts explicit user-authorized 
 - `redeven:desktop/src/welcome/GatewayMembersDialog.client.test.tsx` — Partial failure and retained data.
 - `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.client.test.tsx` — Failed start and invitation consent.
 - `redeven:desktop/scripts/check-gateway-access-ui.mjs` — Browser layout, keyboard and locale qualification.
+- `redeven:desktop/scripts/check-gateway-dialog-polish.mjs` — Single settings entry, endpoint layout, nested selection and reversible disclosure motion.

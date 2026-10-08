@@ -12014,20 +12014,17 @@ function GatewaySourceCard(props: Readonly<{
                       )}
                     </For>
                     <Show when={menuActions().length > 0}><div class="my-1 border-t border-border/60" role="separator" /></Show>
-                    <Show when={canManageMembers() || canAuthorizeManagement()}>
+                    <Show when={canManageMembers()}>
                       <button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
                         closeMoreActions();
-                        if (canAuthorizeManagement()) props.openCreateGatewaySetup(props.gateway, 'identity_trust');
-                        else props.openGatewayMembers(props.gateway);
+                        props.openGatewayMembers(props.gateway);
                       }}>
-                        <Show when={canAuthorizeManagement()} fallback={<Plus class="h-3.5 w-3.5" />}>
-                          <Lock class="h-3.5 w-3.5" />
-                        </Show>
-                        {props.i18n.t(canAuthorizeManagement() ? 'gatewayMembers.grantAccess' : 'gatewayMembers.invite')}
+                        <Plus class="h-3.5 w-3.5" />
+                        {props.i18n.t('gatewayMembers.invite')}
                       </button>
                     </Show>
                     <button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
-                      closeMoreActions(); props.openCreateGatewaySetup(props.gateway);
+                      closeMoreActions(); props.openCreateGatewaySetup(props.gateway, canAuthorizeManagement() ? 'identity_trust' : undefined);
                     }}><Settings class="h-3.5 w-3.5" />{props.i18n.t('environmentCenter.gatewayActionOpenSettings')}</button>
                     <button type="button" role="menuitem" class="redeven-split-menu-item" data-tone="danger" onClick={() => {
                       closeMoreActions(); props.deleteGateway(props.gateway);
@@ -13373,7 +13370,7 @@ function GatewaySetupDialog(props: Readonly<{
       open={isOpen()}
       onOpenChange={props.onOpenChange}
       title={props.i18n.t(props.state?.mode === 'edit' ? 'environmentCenter.gatewayActionEditSettings' : 'connectionDialog.addGatewayTitle')}
-      class={CONNECTION_DIALOG_CLASS}
+      class={cn(CONNECTION_DIALOG_CLASS, 'redeven-gateway-dialog')}
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
