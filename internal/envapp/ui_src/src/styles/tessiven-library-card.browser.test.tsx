@@ -88,7 +88,7 @@ it('previews the saved topology with groups and routed relationships under an in
   const button = host.querySelector('button')!;
   const overlay = host.querySelector('.tessiven-card-information')!;
   expect(getComputedStyle(overlay).position).toBe('absolute');
-  expect(getComputedStyle(overlay).backdropFilter).toContain('blur(14px)');
+  expect(getComputedStyle(overlay).backdropFilter).toContain('blur(8px)');
   expect(host.querySelectorAll('button, [tabindex]')).toHaveLength(1);
   expect(request).toHaveBeenCalledWith('GET', '/canvases/commerce/versions/3');
   await page.screenshot({ element: host, path: '__screenshots__/tessiven-card-initial.png' });
@@ -98,7 +98,7 @@ it('previews the saved topology with groups and routed relationships under an in
     expect(getComputedStyle(overlay).color, preset.name).toBe(resolvedThemeColor('--foreground'));
     expect(getComputedStyle(host.querySelector('.tessiven-card-meta')!).color, preset.name)
       .toBe(resolvedThemeColor('--muted-foreground'));
-    expect(getComputedStyle(overlay).borderRadius, preset.name).toBe('7px');
+    expect(getComputedStyle(overlay).borderRadius, preset.name).toBe('0px');
     await page.screenshot({
       element: host,
       path: `../../.vitest-attachments/tessiven-card-themes/${preset.name}-idle.png`,
@@ -117,6 +117,9 @@ it('previews the saved topology with groups and routed relationships under an in
   }
   await page.screenshot({ element: host, path: '__screenshots__/tessiven-card-hover.png' });
   const initialBounds = button.getBoundingClientRect().toJSON();
+  const overlayBounds = overlay.getBoundingClientRect();
+  expect(Math.abs(overlayBounds.left - button.getBoundingClientRect().left)).toBeLessThan(1);
+  expect(Math.abs(overlayBounds.right - button.getBoundingClientRect().right)).toBeLessThan(1);
   expect(initialBounds.height).toBeGreaterThan(250);
   expect(overlay.getBoundingClientRect().bottom <= overlay.closest('.tessiven-library-card')!.getBoundingClientRect().bottom).toBe(true);
   button.blur();
@@ -130,7 +133,7 @@ it('previews the saved topology with groups and routed relationships under an in
   expect(getComputedStyle(host.querySelector('.tessiven-thumbnail')!).transitionDuration).toBe('0s');
   await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
   await media.emulateMediaPreferences({ forcedColors: 'active' });
-  expect(getComputedStyle(overlay).borderTopWidth).toBe('1px');
+  expect(getComputedStyle(overlay).backdropFilter).toBe('none');
   await media.emulateMediaPreferences({ forcedColors: 'none' });
   host.style.margin = '0';
   await page.viewport(360, 780);
