@@ -476,7 +476,7 @@ try {
   await page.keyboard.press('Control+v');
   await page.keyboard.press('Meta+v');
   await page.keyboard.press('Shift+Insert');
-  await page.evaluate(() => document.querySelector('.floe-remote-input').dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true })));
+      await page.evaluate(() => document.querySelector('.floe-remote-input').dispatchEvent(new window.ClipboardEvent('paste', { bubbles: true, cancelable: true })));
   await page.keyboard.down('Shift');
   await page.locator('#settings').focus();
   await page.waitForFunction(() => document.querySelector('.floe-remote-input').disabled === false);
