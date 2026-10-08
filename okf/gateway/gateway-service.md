@@ -35,7 +35,7 @@ Gateway updates prepare the complete package before stopping the existing servic
 
 ## Address changes and upgrade
 
-Gateway listener bindings describe sockets on the device. Reachable connection endpoints describe the LAN, overlay or public addresses a Runtime can use, including DNS names and port-forwarded addresses that differ from those sockets. Administrators confirm and prioritize up to sixteen endpoints. Local interfaces are not automatically published, and deleted endpoints do not return after restart. With no confirmed endpoints, invitation creation is disabled.
+Gateway listener bindings describe sockets on the device. Reachable connection endpoints describe the addresses a Runtime can use, including DNS names and port-forwarded addresses that differ from those sockets. Administrators explicitly publish up to sixteen addresses; the Gateway keeps any transport classification and failover ordering as internal metadata. Local interfaces are not automatically published, and deleted endpoints do not return after restart. With no confirmed endpoints, invitation creation is disabled.
 
 The invitation signs the Gateway name, stable identity and endpoint set. Runtime keeps the most recently connected endpoint first, then administrator priority; a failed session tries another approved endpoint. If all fail, the membership stays intact and reports Gateway unavailable. Endpoint usage is recorded only after a Runtime session succeeds. A listening socket or configured public address does not prove remote reachability. No Cloud origin or listener binding is embedded in the invitation.
 

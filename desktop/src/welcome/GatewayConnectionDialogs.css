@@ -4,9 +4,113 @@
   border-radius: .75rem;
 }
 
+.redeven-gateway-settings-dialog {
+  height: min(44.5rem, var(--redeven-welcome-dialog-panel-max-height));
+  max-height: var(--redeven-welcome-dialog-panel-max-height);
+}
+
 .redeven-gateway-dialog__content {
   padding: 1.25rem;
   scrollbar-gutter: stable;
+}
+
+.redeven-gateway-settings-dialog__content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden !important;
+  padding: 1.25rem;
+}
+
+.redeven-gateway-settings-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.redeven-gateway-settings-tablist {
+  display: flex;
+  flex: none;
+  gap: .25rem;
+  margin: 0 -.25rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding-inline: .25rem;
+}
+
+.redeven-gateway-settings-tab {
+  position: relative;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: .5rem .5rem 0 0;
+  background: transparent;
+  padding: .625rem .875rem .75rem;
+  color: var(--muted-foreground);
+  font-size: var(--floe-type-control);
+  font-weight: 550;
+  line-height: 1.25;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.redeven-gateway-settings-tab::after {
+  position: absolute;
+  right: .75rem;
+  bottom: -.0625rem;
+  left: .75rem;
+  height: .125rem;
+  border-radius: 999px;
+  background: var(--primary);
+  content: '';
+  opacity: 0;
+  transform: scaleX(.35);
+  transition: opacity 180ms ease, transform 180ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.redeven-gateway-settings-tab:hover {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  color: var(--foreground);
+}
+
+.redeven-gateway-settings-tab[aria-selected='true'] {
+  color: var(--foreground);
+}
+
+.redeven-gateway-settings-tab[aria-selected='true']::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.redeven-gateway-settings-tab:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.redeven-gateway-settings-panels {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.redeven-gateway-settings-panel {
+  min-width: 0;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 180ms;
+}
+
+.redeven-gateway-settings-panel--inactive {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(.375rem);
 }
 
 .redeven-gateway-field {
@@ -22,6 +126,35 @@
   font-weight: 500;
 }
 
+.redeven-gateway-endpoint-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.redeven-gateway-endpoint-shell {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-block-end: .5rem;
+  opacity: 1;
+  transition: grid-template-rows 180ms cubic-bezier(.2, .8, .2, 1), margin-block-end 180ms ease, opacity 180ms ease;
+}
+
+.redeven-gateway-endpoint-shell:last-child {
+  margin-block-end: 0;
+}
+
+.redeven-gateway-endpoint-shell--removing {
+  grid-template-rows: 0fr;
+  margin-block-end: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.redeven-gateway-endpoint-shell > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .redeven-gateway-endpoint {
   display: grid;
   min-width: 0;
@@ -30,6 +163,22 @@
   border: 1px solid var(--border);
   border-radius: .625rem;
   background: color-mix(in srgb, var(--muted) 12%, var(--background));
+  animation: redeven-gateway-endpoint-in 180ms cubic-bezier(.2, .8, .2, 1) both;
+  transition: opacity 180ms ease, transform 180ms cubic-bezier(.2, .8, .2, 1), border-color 150ms ease, background-color 150ms ease;
+}
+
+.redeven-gateway-content-enter {
+  animation: redeven-gateway-content-in 180ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes redeven-gateway-endpoint-in {
+  from { opacity: 0; transform: translateY(.375rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes redeven-gateway-content-in {
+  from { opacity: 0; transform: translateY(.25rem); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .redeven-gateway-endpoint__address {
@@ -37,13 +186,6 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: .5rem;
-}
-
-.redeven-gateway-endpoint__options {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(7rem, .4fr);
-  align-items: end;
-  gap: .75rem;
 }
 
 .redeven-gateway-disclosure {
@@ -78,14 +220,20 @@
 }
 
 @media (max-width: 480px) {
-  .redeven-gateway-dialog__content { padding: 1rem; }
+  .redeven-gateway-dialog__content,
+  .redeven-gateway-settings-dialog__content { padding: 1rem; }
   .redeven-gateway-endpoint { padding: .75rem; }
-  .redeven-gateway-endpoint__options { grid-template-columns: minmax(0, 1fr); }
   .redeven-gateway-field input,
   .redeven-gateway-field [role="button"] { min-height: 2.75rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .redeven-gateway-settings-tab,
+  .redeven-gateway-settings-tab::after,
+  .redeven-gateway-settings-panel,
+  .redeven-gateway-endpoint-shell,
+  .redeven-gateway-endpoint,
+  .redeven-gateway-content-enter { transition: none; animation: none; }
   .redeven-gateway-disclosure::details-content { transition: none; }
   .redeven-gateway-disclosure > summary svg { transition: none; }
 }

@@ -100,18 +100,59 @@ try {
         dialog = page.getByRole('dialog'); await checkDialog(dialog, width);
         const address = dialog.getByRole('textbox', { name: i18n.t('gatewayMembers.address'), exact: true });
         if (width > 1000) assert.ok((await address.boundingBox()).width > 600);
-        assert.equal(await dialog.getByRole('spinbutton', { name: i18n.t('gatewayMembers.priority'), exact: true }).inputValue(), '0');
-        const network = dialog.locator('.redeven-gateway-endpoint__options').getByRole('button', { name: i18n.t('gatewayMembers.scopeLAN'), exact: true });
-        await network.click();
-        await page.keyboard.press('Escape');
-        assert.equal(await dialog.isVisible(), true, 'Select closes before its enclosing dialog');
-        await dialog.getByRole('tab', { name: i18n.t('gatewayClients.runtimes'), exact: true }).click();
+        assert.equal(await dialog.getByRole('spinbutton').count(), 0, 'Endpoint priority is not user-configured');
+        assert.equal(await dialog.locator('.redeven-gateway-endpoint__options').count(), 0, 'Endpoint scope is not user-configured');
+        const fixedHeight = (await dialog.boundingBox()).height;
+        assert.equal(await dialog.locator('.redeven-gateway-settings-dialog__content').evaluate(element => getComputedStyle(element).overflowY), 'hidden');
+        assert.equal(await dialog.locator('.redeven-gateway-settings-panels').evaluate(element => getComputedStyle(element).overflowY), 'auto');
+        for (const translationKey of ['runtimes', 'clientAccess', 'connectionSettings']) {
+          await dialog.getByRole('tab', { name: i18n.t(`gatewayClients.${translationKey}`), exact: true }).click();
+          await page.waitForTimeout(240);
+          assert.ok(Math.abs((await dialog.boundingBox()).height - fixedHeight) < 1, 'Gateway dialog height stays fixed across tabs');
+        }
+        const endpointRows = dialog.locator('.redeven-gateway-endpoint-shell');
+        await dialog.getByRole('button', { name: i18n.t('gatewayMembers.addAddress'), exact: true }).click();
+        assert.equal(await endpointRows.count(), 2);
+        const endpointMotion = await endpointRows.nth(1).locator('.redeven-gateway-endpoint').evaluate(element => ({ name: getComputedStyle(element).animationName, reduced: matchMedia('(prefers-reduced-motion: reduce)').matches }));
+        assert.equal(endpointMotion.name, reducedMotion ? 'none' : 'redeven-gateway-endpoint-in', JSON.stringify(endpointMotion));
+        const newEndpoint = endpointRows.nth(1);
+        await newEndpoint.getByRole('button', { name: i18n.t('gatewayMembers.removeAddress'), exact: true }).click();
+        if (reducedMotion) {
+          await page.waitForTimeout(30);
+          assert.equal(await endpointRows.count(), 1, 'Reduced motion removes the row without an animated delay');
+        } else {
+          assert.ok((await newEndpoint.getAttribute('class')).includes('redeven-gateway-endpoint-shell--removing'));
+          await page.waitForTimeout(80);
+          assert.equal(await endpointRows.count(), 2, 'The row remains during its collapse animation');
+          await page.waitForTimeout(150);
+          assert.equal(await endpointRows.count(), 1, 'The row is removed after its collapse animation');
+        }
+        for (let index = 0; index < 4; index++) await dialog.getByRole('button', { name: i18n.t('gatewayMembers.addAddress'), exact: true }).click();
+        const panelScroller = dialog.locator('.redeven-gateway-settings-panels');
+        assert.equal(await panelScroller.evaluate(element => element.scrollHeight > element.clientHeight), true, 'Long tab content scrolls inside the fixed dialog');
+        await panelScroller.evaluate(element => { element.scrollTop = element.scrollHeight; });
+        assert.ok(await panelScroller.evaluate(element => element.scrollTop > 0));
+        const tabOpacityFrames = await page.evaluate(async () => {
+          const panel = document.getElementById('gateway-settings-panel-runtimes');
+          document.getElementById('gateway-settings-tab-runtimes')?.click();
+          const frames = [];
+          const started = performance.now();
+          while (performance.now() - started < 240) {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            frames.push(Number(getComputedStyle(panel).opacity));
+          }
+          return frames;
+        });
+        if (!reducedMotion) assert.ok(tabOpacityFrames.some(opacity => opacity > 0.05 && opacity < 0.95), 'Tab panels cross-fade smoothly');
+        assert.equal(await panelScroller.evaluate(element => element.scrollTop), 0, 'Tab changes start at the top of the selected panel');
+        await dialog.getByRole('heading', { name: i18n.t('gatewayMembers.invite'), exact: true }).waitFor();
         const policy = dialog.locator('details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayMembers.policy') }) }).first();
         await capture(page, `${locale}-${width}-${reducedMotion}-members-compact`);
         const policyOpening = await checkDisclosure(policy, reducedMotion);
         await capture(page, `${locale}-${width}-${reducedMotion}-members`);
         const policyClosing = await checkDisclosure(policy, reducedMotion);
         await dialog.getByRole('tab', { name: i18n.t('gatewayClients.connectionSettings'), exact: true }).click();
+        await page.waitForTimeout(240);
         const listener = dialog.locator('details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayMembers.listenerAddress') }) }).first();
         await listener.locator('summary').focus(); await page.keyboard.press('Enter');
         assert.equal(await listener.getAttribute('open'), '');

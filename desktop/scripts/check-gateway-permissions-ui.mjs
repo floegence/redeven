@@ -56,6 +56,12 @@ try {
         assert.equal(await dialog.locator('fieldset').count(), 0);
         const bounds = await dialog.boundingBox();
         assert.ok(bounds.width <= width - 16 && (width < 1000 || bounds.width >= 760));
+        const fixedHeight = bounds.height;
+        for (const translationKey of ['runtimes', 'clientAccess', 'connectionSettings']) {
+          await dialog.getByRole('tab', { name: i18n.t(`gatewayClients.${translationKey}`), exact: true }).click();
+          await page.waitForTimeout(240);
+          assert.ok(Math.abs((await dialog.boundingBox()).height - fixedHeight) < 1, `${locale}/${width}: fixed dialog height across tabs`);
+        }
         assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
         const connection = dialog.getByRole('tab', { name: i18n.t('gatewayClients.connectionSettings'), exact: true });
         await connection.focus(); await page.keyboard.press('End');
@@ -66,6 +72,7 @@ try {
         assert.equal(await dialog.getByRole('button', { name: i18n.t('connectionDialog.saveGateway'), exact: true }).count(), 0);
         await dialog.getByRole('button', { name: i18n.t('gatewayClients.createCode'), exact: true }).click();
         await dialog.getByText('private-one-time-code', { exact: true }).waitFor();
+        assert.equal(await dialog.locator('.redeven-gateway-content-enter').filter({ hasText: 'private-one-time-code' }).evaluate(element => getComputedStyle(element).animationName), 'redeven-gateway-content-in');
         const detail = dialog.locator('details:visible').first();
         assert.equal(await detail.getAttribute('open'), null);
         await detail.locator('summary').focus(); await page.keyboard.press('Enter'); await page.waitForTimeout(280);
@@ -78,6 +85,7 @@ try {
         await dialog.getByRole('button', { name: i18n.t('gatewayClients.revoke'), exact: true }).click();
         assert.equal(await page.evaluate(() => window.settingsFixture.requests.length), beforeRevoke);
         await dialog.getByText(i18n.t('gatewayClients.revokeHelp'), { exact: true }).waitFor();
+        assert.equal(await dialog.locator('div.redeven-gateway-content-enter').filter({ hasText: i18n.t('gatewayClients.revokeHelp') }).evaluate(element => getComputedStyle(element).animationName), 'redeven-gateway-content-in');
         await dialog.getByRole('button', { name: i18n.t('gatewayClients.confirmRevoke'), exact: true }).click();
         await dialog.getByText(i18n.t('gatewayClients.revoked'), { exact: true }).waitFor();
         assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);

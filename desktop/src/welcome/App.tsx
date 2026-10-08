@@ -13339,14 +13339,10 @@ function GatewaySetupDialog(props: Readonly<{
   const tabs = ['connection', 'runtimes', 'clients'] as const;
   const canManage = createMemo(() => connectionKind() !== 'url' && props.gateway?.permissions?.manage_members === true);
   const activeTab = createMemo(() => canManage() ? props.state?.settings_tab ?? 'connection' : 'connection');
-  const [visited, setVisited] = createSignal<readonly string[]>(['connection']);
-  createEffect(() => {
-    if (!props.state) { setVisited(['connection']); return; }
-    const tab = activeTab();
-    setVisited(previous => previous.includes(tab) ? previous : [...previous, tab]);
-  });
   function selectTab(tab: typeof tabs[number]) {
     props.updateField('settings_tab', tab);
+    const panels = document.querySelector<HTMLElement>('.redeven-gateway-settings-panels');
+    if (panels) panels.scrollTop = 0;
     queueMicrotask(() => document.getElementById('gateway-settings-tab-' + tab)?.focus());
   }
   const isOpen = createMemo(() => props.state !== null);
@@ -13379,7 +13375,8 @@ function GatewaySetupDialog(props: Readonly<{
       onOpenChange={props.onOpenChange}
       onPresenceChange={present => { if (!present && !props.state) queueMicrotask(props.restoreFocus); }}
       title={props.i18n.t(props.state?.mode === 'edit' ? 'environmentCenter.gatewayActionOpenSettings' : 'connectionDialog.addGatewayTitle')}
-      class={cn(CONNECTION_DIALOG_CLASS, 'redeven-gateway-dialog')}
+      class={cn(CONNECTION_DIALOG_CLASS, 'redeven-gateway-dialog', 'redeven-gateway-settings-dialog')}
+      contentClass="redeven-gateway-settings-dialog__content"
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
@@ -13400,18 +13397,19 @@ function GatewaySetupDialog(props: Readonly<{
         </div>
       )}
     >
-      <div class="space-y-5">
+      <div class="redeven-gateway-settings-body">
         <div class="rounded-lg border border-border bg-muted/15 px-3 py-2 text-xs text-muted-foreground">{props.i18n.t(connectionKind() === 'url' ? 'gatewayClients.clientOnly' : props.gateway?.permissions?.manage_members ? 'gatewayClients.hostAccess' : 'gatewayClients.hostVerification')}</div>
         <Show when={props.gateway?.permissions?.manage_members && connectionKind() !== 'url'}>
-          <div class="flex flex-wrap gap-2" role="tablist" aria-label={props.i18n.t('environmentCenter.gatewayActionOpenSettings')}>
-            <For each={tabs}>{tab => <Button id={'gateway-settings-tab-' + tab} role="tab" aria-controls={'gateway-settings-panel-' + tab} aria-selected={activeTab() === tab} tabIndex={activeTab() === tab ? 0 : -1} size="sm" variant={activeTab() === tab ? 'default' : 'ghost'} onClick={() => selectTab(tab)} onKeyDown={event => {
+          <div class="redeven-gateway-settings-tablist" role="tablist" aria-label={props.i18n.t('environmentCenter.gatewayActionOpenSettings')}>
+            <For each={tabs}>{tab => <button type="button" class="redeven-gateway-settings-tab cursor-pointer" id={'gateway-settings-tab-' + tab} role="tab" aria-controls={'gateway-settings-panel-' + tab} aria-selected={activeTab() === tab} tabIndex={activeTab() === tab ? 0 : -1} onClick={() => selectTab(tab)} onKeyDown={event => {
               const index = tabs.indexOf(tab);
               const target = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length] : event.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length] : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : undefined;
               if (target) { event.preventDefault(); selectTab(target); }
-            }}>{props.i18n.t(tab === 'connection' ? 'gatewayClients.connectionSettings' : tab === 'runtimes' ? 'gatewayClients.runtimes' : 'gatewayClients.clientAccess')}</Button>}</For>
+            }}>{props.i18n.t(tab === 'connection' ? 'gatewayClients.connectionSettings' : tab === 'runtimes' ? 'gatewayClients.runtimes' : 'gatewayClients.clientAccess')}</button>}</For>
           </div>
         </Show>
-        <div id="gateway-settings-panel-connection" role={canManage() ? 'tabpanel' : undefined} aria-labelledby={canManage() ? 'gateway-settings-tab-connection' : undefined} hidden={activeTab() !== 'connection'}>
+        <div class="redeven-gateway-settings-panels">
+        <div id="gateway-settings-panel-connection" class={cn('redeven-gateway-settings-panel', activeTab() !== 'connection' && 'redeven-gateway-settings-panel--inactive')} role={canManage() ? 'tabpanel' : undefined} aria-labelledby={canManage() ? 'gateway-settings-tab-connection' : undefined} aria-hidden={canManage() && activeTab() !== 'connection' ? 'true' : undefined} inert={canManage() && activeTab() !== 'connection'}>
         <div class="space-y-1.5">
           <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             {props.i18n.t('connectionDialog.gatewayTransport')}
@@ -13785,8 +13783,9 @@ function GatewaySetupDialog(props: Readonly<{
 
         <Show when={props.gateway?.permissions?.manage_members && connectionKind() !== 'url'}><GatewayMembersPanel gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="connection" /></Show>
         </div>
-        <Show when={canManage() && visited().includes('runtimes')}><div id="gateway-settings-panel-runtimes" role="tabpanel" aria-labelledby="gateway-settings-tab-runtimes" hidden={activeTab() !== 'runtimes'}><GatewayMembersPanel gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="runtimes" /></div></Show>
-        <Show when={canManage() && visited().includes('clients')}><div id="gateway-settings-panel-clients" role="tabpanel" aria-labelledby="gateway-settings-tab-clients" hidden={activeTab() !== 'clients'}><GatewayClientsPanel gatewayID={props.gateway!.gateway_id} i18n={props.i18n} /></div></Show>
+        <Show when={canManage()}><div id="gateway-settings-panel-runtimes" class={cn('redeven-gateway-settings-panel', activeTab() !== 'runtimes' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-runtimes" aria-hidden={activeTab() !== 'runtimes' ? 'true' : undefined} inert={activeTab() !== 'runtimes'}><GatewayMembersPanel gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="runtimes" /></div></Show>
+        <Show when={canManage()}><div id="gateway-settings-panel-clients" class={cn('redeven-gateway-settings-panel', activeTab() !== 'clients' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-clients" aria-hidden={activeTab() !== 'clients' ? 'true' : undefined} inert={activeTab() !== 'clients'}><GatewayClientsPanel gatewayID={props.gateway!.gateway_id} i18n={props.i18n} /></div></Show>
+        </div>
         <Show when={props.recovery}>
           {recovery => <GatewayActionRecoveryNotice i18n={props.i18n} recovery={recovery()}
             busy={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onStart={props.onStart} />}

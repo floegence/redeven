@@ -37,12 +37,12 @@ beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLEleme
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway member management', () => {
-  it('labels the address, network and priority separately without compressing the address field', async () => {
+  it('keeps the connection editor focused on reachable addresses', async () => {
     mount(vi.fn(), undefined, gateway, 'connection'); await settle();
     const endpoint = document.querySelector('.redeven-gateway-endpoint')!;
     expect(endpoint.querySelector('label')?.textContent).toContain(i18n.t('gatewayMembers.address'));
-    expect(endpoint.querySelector('.redeven-gateway-endpoint__options')?.textContent).toContain(i18n.t('gatewayMembers.scope'));
-    expect(endpoint.querySelector('input[type="number"]')?.closest('label')?.textContent).toContain(i18n.t('gatewayMembers.priority'));
+    expect(endpoint.querySelector('.redeven-gateway-endpoint__options')).toBeNull();
+    expect(endpoint.querySelector('input[type="number"]')).toBeNull();
     expect(endpoint.querySelector('select')).toBeNull();
     expect(document.querySelector('.redeven-gateway-endpoint')).toBeTruthy();
     expect([...document.querySelectorAll('details')].every(detail => detail.classList.contains('redeven-gateway-disclosure'))).toBe(true);
@@ -53,6 +53,25 @@ describe('Gateway member management', () => {
     mount(perform, undefined, { ...gateway, member_endpoints: [] }); await settle();
     expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
     expect(perform).not.toHaveBeenCalled();
+  });
+  it('preserves Gateway transport metadata while saving only the configured addresses', async () => {
+    const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_endpoints_updated' });
+    mount(perform, undefined, gateway, 'connection'); await settle();
+    const address = document.querySelector<HTMLInputElement>('.redeven-gateway-endpoint input')!;
+    address.value = 'https://gateway.example:7443';
+    address.dispatchEvent(new Event('input', { bubbles: true }));
+    button(i18n.t('gatewayMembers.saveAddresses')).click(); await settle();
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_endpoints', gateway_id: gateway.gateway_id,
+      endpoints: [{ ...catalogFixture.gateway.member_endpoints[0]!, address: 'https://gateway.example:7443' }] });
+  });
+  it('cancels an address-removal animation when the edited Gateway changes', async () => {
+    const setGateway = mount(vi.fn(), undefined, gateway, 'connection'); await settle();
+    document.querySelector<HTMLButtonElement>(`.redeven-gateway-endpoint-shell button[aria-label="${i18n.t('gatewayMembers.removeAddress')}"]`)!.click();
+    const replacement = { ...catalogFixture.gateway.member_endpoints[0]!, endpoint_id: 'replacement_endpoint' };
+    setGateway({ ...gateway, gateway_id: 'replacement_gateway', member_endpoints: [replacement] }); await settle();
+    await new Promise(resolve => setTimeout(resolve, 220));
+    expect(document.querySelector('[data-endpoint-id="replacement_endpoint"]')).toBeTruthy();
+    expect(document.querySelector('.redeven-gateway-endpoint-shell--removing')).toBeNull();
   });
   it('reevaluates the selected member without applying an unsaved policy edit', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated' });
