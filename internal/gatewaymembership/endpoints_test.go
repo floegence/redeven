@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -14,6 +15,20 @@ import (
 
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
+
+func TestEmptyEndpointCatalogEncodesAsArray(t *testing.T) {
+	store, _ := membershipStore(t)
+	if err := store.UpdateEndpoints(nil); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(store.Endpoints())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded) != "[]" {
+		t.Fatalf("empty connection options encoded as %s, want []", encoded)
+	}
+}
 
 func TestEndpointProofCoversEveryConnectionOption(t *testing.T) {
 	store, identity := membershipStore(t)
