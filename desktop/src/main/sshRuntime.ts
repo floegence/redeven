@@ -1311,6 +1311,7 @@ async function runSSHControlCommand(
   stdinData?: Buffer,
   options: Readonly<{
     timeout_ms?: number;
+    stdin_progress_timeout_ms?: number;
     record_stdout?: boolean;
   }> = {},
 ): Promise<SSHCommandResult> {
@@ -1320,6 +1321,7 @@ async function runSSHControlCommand(
       signal: session.signal,
       onStderr: (chunk) => appendSSHRuntimeLog(session.logs, 'control_stderr', chunk, session.onLog),
       timeout_ms: options.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+      stdin_progress_timeout_ms: options.stdin_progress_timeout_ms,
     });
     if (options.record_stdout !== false) {
       appendSSHRuntimeLog(session.logs, 'control_stdout', result.stdout, session.onLog);
@@ -1667,7 +1669,7 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
         remoteArchivePath,
       ]),
       args.archiveData,
-      { timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS },
+      { timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS, stdin_progress_timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS },
     );
     if (uploadResult.exit_code !== 0) {
       throw readinessFailure(

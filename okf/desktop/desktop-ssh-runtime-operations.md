@@ -27,6 +27,8 @@ Runtime package admission limits the compressed archive to 256 MiB and its entir
 
 Source package preparation builds from a clean checkout against published dependencies. Embedded asset preparation installs Desktop dependencies before compiling Env App, because the shared Flower surface resolves its imports from Desktop. A package build must not depend on a developer's existing `node_modules`.
 
+Bulk package uploads use bounded pipe writes and a progress deadline. A continuously progressing upload may exceed the ordinary command deadline; a stalled write still terminates the owned SSH command. After the final write, the ordinary completion deadline applies until the remote command exits. Pipe progress does not certify remote receipt: package admission and target verification remain mandatory. Cancellation and transport loss retain their existing authority, and administrator credential streams do not use the bulk-upload deadline.
+
 Desktop stages every managed Runtime package with private metadata independent of the target user's shell `umask`: `runtime`, `runtime/managed`, and `runtime/managed/bin` are mode `0700`; the `redeven` and `redevplugin-runtime` executables are mode `0700`; and the managed stamp plus ReDevPlugin evidence files are mode `0600`. Upload, remote-install, container, and reinstall paths consume this one slot contract. A metadata-normalization failure leaves the live slot unchanged, while ReDevPlugin remains the final fail-closed executable-admission authority at startup.
 
 ## Host and container behavior
