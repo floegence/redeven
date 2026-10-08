@@ -7,25 +7,6 @@ export function isComputerSafetyAssistanceKind(value: unknown): value is string 
   return typeof value === 'string' && ['access', 'target', 'captcha', 'verification', 'login', 'private_input', 'inspection', 'untrusted_content', 'paused'].includes(value);
 }
 
-export function computerAssistanceFromError(error: unknown): ComputerAssistanceObservation | undefined {
-  if (!error || typeof error !== 'object') return;
-  const response = error as { code?: unknown; data?: { computer_assistance?: ComputerAssistanceObservation } };
-  const observed = response.data?.computer_assistance;
-  if (response.code !== 'computer_control_not_ready' || !observed || typeof observed !== 'object'
-    || !isComputerSafetyAssistanceKind(observed.kind)) return;
-  let origin: string | undefined;
-  if (typeof observed.origin === 'string') {
-    try {
-      const url = new URL(observed.origin);
-      if (['https:', 'http:'].includes(url.protocol) && url.origin === observed.origin) origin = url.origin;
-    } catch { /* Invalid display facts never become grants. */ }
-  }
-  const app = typeof observed.app === 'string' && observed.app.length > 0 && observed.app.length <= 255
-    && observed.app.trim() === observed.app && !['\0', '\r', '\n', '/', '\\'].some(value => observed.app!.includes(value)) ? observed.app : undefined;
-  if (observed.kind === 'access' && !origin && !app && observed.foreground !== true) return;
-  return { kind: observed.kind, origin, app, foreground: observed.foreground === true };
-}
-
 // Derive presentation from canonical tool facts. There is no separate waiting
 // state: the current InputRequired interaction still owns continuation.
 export function computerAssistance(item: FlowerActivityItem | undefined, copy: FlowerComputerCopy, observed?: ComputerAssistanceObservation, fullAccess = false) {

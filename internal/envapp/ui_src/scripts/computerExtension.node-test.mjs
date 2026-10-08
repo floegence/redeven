@@ -299,11 +299,11 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     const cancelled = { result: await waiting };
     assert.equal(cancelled.result.safety.level, 'takeover');
     assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {} } })).safety.level, 'routine');
-    await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', return_control: true, allowed_origins: origins } });
+    await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', recovery_observation: true, allowed_origins: origins } });
     await task.keyboard.press('Escape');
     assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query' }, text: 'Continued' })).safety.level, 'routine');
     assert.equal(await task.locator('input').inputValue(), 'Continued');
-    await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', return_control: true, allowed_origins: origins } });
+    await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', recovery_observation: true, allowed_origins: origins } });
     await user.bringToFront();
     const activeBeforeDownload = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
     await execute('computer.action', { action: 'click', selector: { role: 'link', name: 'Export' } });

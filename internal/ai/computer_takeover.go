@@ -134,24 +134,32 @@ func computerAssistanceInstructions(safety InteractionSafetyDecision) (string, s
 		}
 		return "Allow access to continue", "Review the requested access for this task: " + strings.Join(requested, ", ") + ". Choose Allow and continue. You do not need to operate the browser."
 	case "captcha":
-		return "Complete the CAPTCHA", "Open the selected page and complete its human verification challenge. Then choose Done, continue. Flower will inspect the page again before resuming."
+		return "Complete the CAPTCHA", "Open the selected page and complete its human verification challenge. Then choose Continue check. Flower will inspect the page again."
 	case "verification":
-		return "Enter the verification code on the page", "Open the selected page and enter the one-time verification code there. Do not send the code in the conversation. Then choose Done, continue."
+		return "Enter the verification code on the page", "Open the selected page and enter the one-time verification code there. Do not send the code in the conversation. Then choose Continue check."
 	case "login":
-		return "Sign in on the selected page", "Open the selected page and complete sign-in there. Passwords and verification codes stay out of the conversation. Then choose Done, continue."
+		return "Sign in on the selected page", "Open the selected page and complete sign-in there. Passwords and verification codes stay out of the conversation. Then choose Continue check."
 	case "private_input":
-		return "Complete the private input on the page", "Open the selected page and finish the password or verification field there. Do not send private values in the conversation. Then choose Done, continue."
+		return "Complete the private input on the page", "Open the selected page and finish the password or verification field there. Do not send private values in the conversation. Then choose Continue check."
 	case "untrusted_content":
 		return "Review unexpected page instructions", "The page contains instructions directed at the agent. Open the page and leave or dismiss that content before continuing; it cannot authorize changes to your task."
 	case "paused":
-		return "Browser or desktop actions are paused", "Finish your changes on the selected page or application, then choose Done, continue when Flower may resume."
+		return "Browser or desktop actions are paused", "Finish your changes on the selected page or application, then choose Continue check. Flower will inspect the current state before acting again."
 	default:
-		return "Flower could not safely inspect this page", "Open the selected page to check its current state. A sign-in or verification requirement has not been confirmed. Once the page is ready, choose Done, continue to check it again."
+		return "Flower could not safely inspect this page", "Open the selected page to check its current state. A sign-in or verification requirement has not been confirmed. Choose Continue check when Flower may inspect it again."
 	}
 }
 
-// Re-observation is a host control command, never replay of the paused model
-// action. Canonical tool provenance selects the target even if current changed.
+func computerRecoveryAllowsTool(toolName string) bool {
+	switch strings.TrimSpace(toolName) {
+	case "computer.targets", "computer.select_target", "computer.observe", "computer.screenshot":
+		return true
+	default:
+		return false
+	}
+}
+
+// Canonical tool provenance identifies the original resource even if selection changed.
 func computerControlCall(view flruntime.ThreadView, interaction flruntime.ThreadInteraction) (TargetToolCall, bool, error) {
 	if computerConnectionInteraction(view, interaction) || computerInstallInteraction(view, interaction) {
 		return TargetToolCall{}, false, nil
@@ -220,47 +228,12 @@ func (s *Service) respondComputerControl(ctx context.Context, meta *session.Meta
 		}
 		return respond()
 	}
-	call, computer, err := computerControlCall(view, interaction)
-	if err != nil {
-		return flruntime.ThreadView{}, err
-	}
+	_, computer, _ := computerControlCall(view, interaction)
 	if !computer {
 		return respond()
 	}
 	if len(answers) != 1 || answers["computer_control"] != "Return control to Flower" {
 		return flruntime.ThreadView{}, errors.New("invalid computer control acknowledgement")
 	}
-	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
-	if !ok {
-		return flruntime.ThreadView{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "control_return_unavailable"}
-	}
-	call.ToolName, call.Arguments, call.liveFrame, call.controlReturn = "computer.screenshot", nil, true, true
-	control, unlock, err := host.acquireComputerControl(ctx, call)
-	if err != nil {
-		return flruntime.ThreadView{}, err
-	}
-	defer unlock()
-	if _, err := s.pendingComputerControl(ctx, meta, string(view.ThreadID), interaction.ID); err != nil {
-		return flruntime.ThreadView{}, err
-	}
-	if _, err := host.executeComputerToolLocked(ctx, call, control); err != nil {
-		return flruntime.ThreadView{}, err
-	}
-	// Keep the gate until Respond commits. A queued private input must recheck
-	// canonical authority after this point instead of reclaiming the target.
-	result, err := respond()
-	if err != nil {
-		control.mu.Lock()
-		if control.threadID == call.ThreadID && control.runID == call.RunID {
-			control.pauseForUser()
-		}
-		control.mu.Unlock()
-	}
-	return result, err
-}
-
-func (r *ComputerUseRuntime) ReobserveComputerTarget(ctx context.Context, call TargetToolCall) error {
-	call.ToolName, call.Arguments, call.liveFrame, call.controlReturn = "computer.screenshot", nil, true, true
-	_, err := r.ExecuteTargetTool(ctx, call)
-	return err
+	return respond()
 }

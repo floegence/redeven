@@ -378,7 +378,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 			return result, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 		}
 	}
-	if call.controlReturn || private {
+	if call.recoveryObservation || private {
 		e.atspi.revision.Add(1)
 		clear(e.atspi.references)
 	}

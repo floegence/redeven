@@ -83,8 +83,8 @@ export class BrowserComputerController {
       if (privateInput) {
         if (!['computer.screenshot', 'computer.click', 'computer.key', 'computer.type', 'computer.scroll'].includes(request.tool_name)) throw new Error('TARGET_NOT_ALLOWED');
       } else {
-        if (request.return_control) {
-          if (request.tool_name !== 'computer.screenshot') throw new Error('TARGET_NOT_ALLOWED');
+        if (request.recovery_observation) {
+          if (!['computer.observe', 'computer.screenshot'].includes(request.tool_name)) throw new Error('TARGET_NOT_ALLOWED');
           page.handback();
         }
         if (request.tool_name === 'computer.select_target' && !page.stopped) {

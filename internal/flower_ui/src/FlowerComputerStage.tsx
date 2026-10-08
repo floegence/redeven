@@ -38,7 +38,7 @@ export type FlowerComputerStageCopy = Readonly<{
   state: Readonly<Record<FlowerComputerStageSessionState, string>>;
 }>;
 
-export type FlowerComputerStageSessionState = 'running' | 'awaiting_user' | 'completed' | 'failed' | 'taking_control' | 'user_control' | 'returning_control' | 'paused' | 'historical' | 'stopped' | 'disconnected' | 'awaiting_control';
+export type FlowerComputerStageSessionState = 'running' | 'awaiting_user' | 'completed' | 'failed' | 'taking_control' | 'user_control' | 'checking' | 'paused' | 'historical' | 'stopped' | 'disconnected' | 'awaiting_control';
 
 export type FlowerComputerStageProps = Readonly<{
   snapshot: FlowerComputerStageSnapshot;

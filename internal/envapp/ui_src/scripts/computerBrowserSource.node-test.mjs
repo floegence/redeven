@@ -199,10 +199,10 @@ test('source ownership releases AI navigation restrictions only for user browsin
     assert.equal(await page.title(), 'Personal navigation');
     assert.equal((await execute('computer.observe')).error, 'TARGET_NOT_ALLOWED', 'User ownership rejects observation before reading the page');
     await owner.setUserBrowsing(false);
-    const denied = await execute('browser.navigate', { url: origin }, { return_control: true });
+    const denied = await execute('browser.navigate', { url: origin }, { recovery_observation: true });
     assert.equal(denied.result.code, 'TAKEOVER_REQUIRED', 'Handback cannot replay a navigation');
     assert.equal(denied.result.action_executed, false);
-    const returned = await execute('computer.screenshot', {}, { return_control: true, allowed_origins: [origin] });
+    const returned = await execute('computer.screenshot', {}, { recovery_observation: true, allowed_origins: [origin] });
     assert.equal(returned.error, undefined);
     assert.equal(returned.safety.safe_to_send_to_model, true);
     assert.equal((await execute('browser.navigate', { url: origin })).result.code, 'TAKEOVER_REQUIRED', 'AI still needs its current explicit origin grant');

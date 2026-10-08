@@ -153,7 +153,7 @@ func (e *NativeDesktopTargetExecutor) executeTargetTool(ctx context.Context, cal
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	payload, err := json.Marshal(map[string]any{"protocol_version": 3, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_apps": call.allowedApps, "allow_foreground": call.allowForeground, "script_operation": call.scriptOperation, "user_control": userControl, "return_control": call.controlReturn})
+	payload, err := json.Marshal(map[string]any{"protocol_version": 3, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_apps": call.allowedApps, "allow_foreground": call.allowForeground, "script_operation": call.scriptOperation, "user_control": userControl, "recovery_observation": call.recoveryObservation})
 	if err != nil {
 		return TargetToolResult{}, err
 	}

@@ -249,7 +249,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         disconnected: t(i18n, k('chat.computerStageStatus.disconnected')),
         taking_control: t(i18n, k('chat.computerStageStatus.taking_control')),
         user_control: t(i18n, k('chat.computerStageStatus.user_control')),
-        returning_control: t(i18n, k('chat.computerStageStatus.returning_control')),
+        checking: t(i18n, k('chat.computerStageStatus.checking')),
         paused: t(i18n, k('chat.computerStageStatus.paused')),
 
         running: t(i18n, k('chat.computerStageStatus.running')),
@@ -413,7 +413,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       computerControlTaken: t(i18n, k('chat.computerControlTaken')),
       computerControlNotReady: t(i18n, k('chat.computerControlNotReady')),
       computerTakeControl: t(i18n, k('chat.computerTakeControl')),
-      computerReturnControl: t(i18n, k('chat.computerReturnControl')),
+      computerContinueCheck: t(i18n, k('chat.computerContinueCheck')),
       computerControlHint: t(i18n, k('chat.computerControlHint')),
       computerControlFailed: t(i18n, k('chat.computerControlFailed')),
       inputRequestTitle: t(i18n, k('chat.inputRequestTitle')),

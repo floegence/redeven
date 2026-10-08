@@ -1,7 +1,7 @@
 ---
 type: Architecture Contract
 title: Private browser observation and input
-description: Fence secret-surface observation, private frames, ordered input and explicit handback to a canonical interaction.
+description: Fence secret-surface observation, private frames, ordered input and recovery checks around a canonical interaction.
 tags: [ai, computer-use, browser, privacy]
 timestamp: 2026-09-24T00:00:00Z
 ---
@@ -12,8 +12,9 @@ interaction and continuation through the [takeover contract](computer-use-takeov
 The user can finish a secret or verification step without exposing its content
 to model history. Every operation binds the current observer, viewer revision,
 thread, run and target. Unknown input outcomes never replay. Disconnect disables
-input immediately; explicit recovery and a newly decoded matching frame are
-required before control resumes.
+input immediately; after the canonical answer, Flower resumes in a new Run and
+judges the current page through a fresh observation. Private input resumes only
+after a newly decoded frame matches the current observer, interaction and target.
 
 # Contract
 
@@ -56,17 +57,19 @@ model attachments or durable media entries. Input, pixels and raw helper errors
 must not enter Activity, history, audit or debug logs. Desktop carries these
 bytes through its existing private IPC boundary.
 
-Handback stops new UI input, drains submitted commands and holds the target gate
-across safe re-observation and canonical `Respond`. Queued input rechecks its
-interaction after acquiring the gate, preventing late commands from reclaiming
-returned control. Unsafe handback returns `computer_control_not_ready`; Flower
-keeps the original interaction and explains inline that sign-in or verification
-still needs completion. It resumes private viewing without replaying actions.
+Submitting the canonical answer does not capture a screenshot or wait for the
+target gate. The answer reaches Floret's provider continuation unchanged; the
+button text **Continue check** authorizes inspection only. Floret admits the
+exact interaction before Runtime updates the matching target lease for the new
+Run. Queued private input rechecks canonical interaction authority after taking
+the gate, so late commands cannot reclaim control. If the resource is absent,
+the model receives explicit target/tool feedback and may discover or select a
+target. It does not infer success or replay the original action.
 
 The localized input card has a compact status heading, muted explanation and
 inline validation notice. Its wrapping footer groups Stop on the left and
-content-sized takeover/handback buttons on the right. Handback replaces the
-generic question Continue action. Stop retains ordinary canonical cancellation.
+content-sized takeover/check buttons on the right. The check button submits the
+canonical response and Stop retains ordinary canonical cancellation.
 Explicit takeover opens the media-only Stage. Keyboard and pointer actions go to the
 private endpoint; only the acknowledgement goes through `submitInput`. Images
 are decoded before replacement and Blob URLs are retired on disposal. Failed
@@ -86,14 +89,15 @@ allow late results to reopen the window. Reopening rechecks canonical authority.
 A workspace connection boundary immediately disables private input, discards
 unsent commands, invalidates the observer/viewer revision and rejects late frames.
 The same interface retains its last decoded image with Connection lost. A new
-`ready` never resumes private control. Resume control explicitly authorizes the
-latest interaction and observer; only a matching newly decoded private frame
-reenables input. An ended interaction collapses the viewer. Closing or switching
-threads during recovery cancels decoding and prevents reopening. A new client
-shows Waiting for you to take control; it does not infer Runtime restart. No
-navigation, page restoration, or private input is replayed. Ordinary preview
-reconnection never grants private input. Historical display and terminal collapse
-follow the [media contract](computer-use-media.md).
+`ready` never resumes private control. Resource availability arrives as ephemeral
+`computer.status` metadata in the workspace stream and does not restore pixels or
+private authority. Resume control explicitly authorizes the latest interaction
+and observer; only a matching newly decoded private frame reenables input. An
+ended interaction collapses the viewer. Closing or switching threads during
+recovery cancels decoding and prevents reopening. A new client does not infer
+Runtime restart. No navigation, page restoration, or private input is replayed.
+Ordinary preview reconnection never grants private input. Historical display and
+terminal collapse follow the [media contract](computer-use-media.md).
 
 Every admitted computer tool converts a typed safety pause through one result
 boundary, including pre-dispatch selection checks. Confirmed script steps and
@@ -122,4 +126,4 @@ Activity or logs. Full product and native IME acceptance remain governed by
 - `redeven:internal/ai/computer_user_control.go` - authenticated non-model input.
 - `redeven:scripts/check_computer_host_safety.mjs` - isolated real-browser safety and private form fixtures with cleanup.
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs` - isolated built Desktop, scripted provider, real private stream, delayed pixels, header FPS, paste, native IME and handback.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - user-only Stage pixels and chat-input separation.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - user-only Stage pixels, resource loss/recovery and chat-input separation.

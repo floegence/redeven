@@ -213,7 +213,7 @@ function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapter
 function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerLiveStreamEnvelope {
   const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const kind = trim(value.kind);
-  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'computer.frame') {
+  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'computer.frame' && kind !== 'computer.status') {
     throw new Error('Flower live stream returned an unsupported envelope.');
   }
   const summaries = Array.isArray(value.summaries)
@@ -250,6 +250,21 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
       ...(Number.isFinite(Number(rawFrame.captured_at_ms)) ? { captured_at_ms: Number(rawFrame.captured_at_ms) } : {}),
     }
     : undefined;
+  const rawStatus = value.computer_status && typeof value.computer_status === 'object' ? value.computer_status as Record<string, unknown> : undefined;
+  const statusReason = typeof rawStatus?.reason_code === 'string' && ['connection_required', 'target_closed', 'source_fault', 'target_unavailable'].includes(rawStatus.reason_code)
+    ? rawStatus.reason_code
+    : undefined;
+  const computerStatus = rawStatus && typeof rawStatus.thread_id === 'string' && typeof rawStatus.target_id === 'string'
+    && ['available', 'unavailable', 'changed'].includes(String(rawStatus.state)) && Number.isFinite(Number(rawStatus.at_unix_ms))
+    ? {
+      thread_id: rawStatus.thread_id,
+      ...(typeof rawStatus.interaction_id === 'string' ? { interaction_id: rawStatus.interaction_id } : {}),
+      target_id: rawStatus.target_id,
+      state: String(rawStatus.state) as 'available' | 'unavailable' | 'changed',
+      ...(statusReason ? { reason_code: statusReason } : {}),
+      at_unix_ms: Number(rawStatus.at_unix_ms),
+    }
+    : undefined;
   const subagents = mapFlowerSubagents(value.subagents, 'live.subagents');
   return {
     schema_version: Math.floor(Number(value.schema_version)),
@@ -264,6 +279,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(computerFrame ? { computer_frame: computerFrame } : {}),
+    ...(computerStatus ? { computer_status: computerStatus } : {}),
     ...(kind === 'viewer.read_state' ? { read_status: mapFlowerReadStatus(value.read_status) } : {}),
   } as FlowerLiveStreamEnvelope;
 }

@@ -503,6 +503,9 @@ func (r *ComputerUseRuntime) selectComputerTarget(ctx context.Context, call Targ
 	control.mu.Lock()
 	busy := control.threadID != "" && (control.threadID != call.ThreadID || call.RunID == "" || control.runID != "" && control.runID != call.RunID)
 	pauseErr := control.pauseError(call)
+	if control.permitsRecoveryContinuation(call) {
+		pauseErr = nil
+	}
 	control.mu.Unlock()
 	if busy {
 		return target, computerTargetFailure(call, "TARGET_IN_USE")
@@ -555,6 +558,12 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	}
 	runID, threadID, turnID := r.floretCanonicalIdentity()
 	call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: toolID, ToolName: toolName, revalidate: r.computerToolRevalidator(toolID, toolName)}
+	if continuation := r.computerContinuation; continuation != nil && continuation.RunID != runID &&
+		continuation.ThreadID == threadID && continuation.TurnID == turnID && continuation.interactionID != "" &&
+		(toolName == "computer.targets" || toolName == "computer.select_target") {
+		call.interactionID = continuation.interactionID
+		call.recoverySelection = true
+	}
 	if toolName == "computer.targets" {
 		call.Arguments, _ = json.Marshal(args)
 		inventory, err := host.ComputerTargets(ctx, call, r.toolTargetPolicy)
@@ -602,7 +611,7 @@ func (r *ComputerUseRuntime) requireComputerSelectionOpen(call TargetToolCall) e
 	for targetID, control := range r.controls {
 		control.mu.Lock()
 		var err error
-		if control.threadID == call.ThreadID {
+		if control.threadID == call.ThreadID && !control.permitsRecoveryContinuation(call) {
 			blocked := call
 			blocked.TargetID = targetID
 			err = control.pauseError(blocked)

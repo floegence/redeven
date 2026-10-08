@@ -81,7 +81,7 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     assert.equal(denied.screenshot, undefined);
     // An allowed URL may redirect to an ungranted origin. Fetch interception
     // stops the document request before Chromium contacts the new site.
-    await send('computer.screenshot', {}, { return_control: true });
+    await send('computer.screenshot', {}, { recovery_observation: true });
     const redirect = await send('browser.navigate', { url: origin + '/redirect' }, { script_operation: true });
     assert.equal(redirect.safety.level, 'takeover');
     assert.equal(redirect.safety.required_origin, 'https://unapproved.invalid');
@@ -320,7 +320,7 @@ test('sensitive DOM transitions during observation discard pixels even after the
     assert.ok(result.safety.reason_codes.includes('secret_input'));
     assert.equal(result.screenshot, undefined); assert.equal(JSON.stringify(result).includes('private-fixture'), false);
     session.send = send;
-    assert.equal((await controller.execute({ tool_name: 'computer.screenshot', return_control: true })).safety.level, 'routine');
+    assert.equal((await controller.execute({ tool_name: 'computer.screenshot', recovery_observation: true })).safety.level, 'routine');
     await page.evaluate(() => {
       const host = document.createElement('div'); document.body.append(host);
       host.attachShadow({ mode: 'open' }).innerHTML = '<input autocomplete="one-time-code" aria-label="Private code" value="fixture-code">';
@@ -462,7 +462,7 @@ test('full access permits new sites and redirects while preserving private input
     assert.equal(JSON.stringify(sensitive).includes('private-fixture'), false);
     await page.setContent('<h1>Signed in</h1>');
     assert.equal((await execute('computer.observe')).safety.level, 'routine', 'the helper reports current safety; Runtime owns the control barrier');
-    assert.equal((await execute('computer.screenshot', {}, { return_control: true })).safety.level, 'routine');
+    assert.equal((await execute('computer.screenshot', {}, { recovery_observation: true })).safety.level, 'routine');
     const revoked = await execute('computer.observe', {}, { full_access: false });
     assert.equal(revoked.safety.required_origin, destinationOrigin);
     assert.equal(revoked.result.observation, undefined);

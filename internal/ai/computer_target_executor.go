@@ -53,15 +53,15 @@ type playwrightTargetClient struct {
 }
 
 type playwrightTargetRequest struct {
-	FullAccess      bool           `json:"full_access"`
-	AllowedOrigins  []string       `json:"allowed_origins"`
-	ScriptOperation bool           `json:"script_operation,omitempty"`
-	UserControl     bool           `json:"user_control,omitempty"`
-	ReturnControl   bool           `json:"return_control,omitempty"`
-	ID              string         `json:"id"`
-	TargetID        string         `json:"target_id"`
-	ToolName        string         `json:"tool_name"`
-	Args            map[string]any `json:"args"`
+	FullAccess          bool           `json:"full_access"`
+	AllowedOrigins      []string       `json:"allowed_origins"`
+	ScriptOperation     bool           `json:"script_operation,omitempty"`
+	UserControl         bool           `json:"user_control,omitempty"`
+	RecoveryObservation bool           `json:"recovery_observation,omitempty"`
+	ID                  string         `json:"id"`
+	TargetID            string         `json:"target_id"`
+	ToolName            string         `json:"tool_name"`
+	Args                map[string]any `json:"args"`
 }
 
 type playwrightTargetResponse struct {
@@ -175,7 +175,7 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	request := playwrightTargetRequest{FullAccess: call.fullAccess, AllowedOrigins: call.allowedOrigins, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
+	request := playwrightTargetRequest{FullAccess: call.fullAccess, AllowedOrigins: call.allowedOrigins, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, RecoveryObservation: call.recoveryObservation}
 	failedExchange := func(err error) (TargetToolResult, error) {
 		return TargetToolResult{}, computerBrowserExchangeFailure(call, userControl, err)
 	}

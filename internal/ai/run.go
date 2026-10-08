@@ -172,10 +172,11 @@ type run struct {
 	activityFileActions      map[string]FlowerActivityFileAction
 	activityFileActionSeq    int64
 
-	muFloretIdentity    sync.Mutex
-	floretEventIdentity floretRuntimeEventIdentity
-	muFloretContract    sync.Mutex
-	floretContractErr   error
+	muFloretIdentity     sync.Mutex
+	floretEventIdentity  floretRuntimeEventIdentity
+	computerContinuation *TargetToolCall
+	muFloretContract     sync.Mutex
+	floretContractErr    error
 
 	muCanonicalAttachments sync.Mutex
 	canonicalAttachmentIDs []string
@@ -257,6 +258,9 @@ func (r *run) observeFloretCanonicalIdentity(runID, threadID, turnID string) err
 	r.floretEventIdentity = floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: runID, threadID: threadID, turnID: turnID}
 	if computer, ok := r.targetToolExecutor.(*ComputerUseRuntime); ok {
 		computer.continueComputerControl(threadID, turnID, runID)
+		if r.computerContinuation != nil {
+			computer.resumeComputerControl(*r.computerContinuation, runID)
+		}
 	}
 	if r.threadRuntime == nil {
 		r.id, r.turnID, r.messageID = runID, turnID, turnID
@@ -3213,6 +3217,14 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		gate = defaultInteractionSafetyGate{}
 	}
 	call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: strings.TrimSpace(toolID), TargetID: targetID, ToolName: strings.TrimSpace(toolName), RequiredCapabilities: requiredTargetCapabilities(toolName)}
+	if continuation := r.computerContinuation; continuation != nil && continuation.RunID != runID &&
+		continuation.ThreadID == threadID && continuation.TurnID == turnID && continuation.TargetID == targetID && continuation.interactionID != "" {
+		call.interactionID = continuation.interactionID
+		call.recoveryObservation = toolName == "computer.observe" || toolName == "computer.screenshot"
+	}
+	if continuation := r.computerContinuation; continuation != nil && isComputerUseTool(toolName) && !computerRecoveryAllowsTool(toolName) {
+		return nil, &targetToolPolicyError{code: "recovery_observation_required", tool: toolName, target: targetID}
+	}
 	if progress, ok := ctx.Value(computerProgressKey{}).(func(TargetDescriptor, string, string)); ok {
 		call.progress = func(mode, reason string) { progress(target, mode, reason) }
 	}
@@ -3287,6 +3299,9 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	}
 	if result.Safety == nil {
 		result.Safety = &decision
+	}
+	if continuation := r.computerContinuation; continuation != nil && (toolName == "computer.observe" || toolName == "computer.screenshot") && result.Safety.Level == "routine" && result.Safety.SafeToSendToModel {
+		r.computerContinuation = nil
 	}
 	if result.TargetName == "" {
 		result.TargetName = target.DisplayName
@@ -3442,6 +3457,8 @@ func (e *targetToolPolicyError) Error() string {
 		return "The previous page or window is unavailable. Use computer.targets to discover current resources, select a suitable candidate, and observe before continuing. Do not ask the user to configure a target or replay completed actions."
 	case "target_observation_unavailable":
 		return "The page could not be inspected. Observe it again before acting; do not repeat completed actions. If inspection keeps failing, reconnect the browser."
+	case "recovery_observation_required":
+		return "A fresh observation is required before computer actions can resume. Use computer.targets and computer.select_target if the previous page is unavailable, then inspect the selected page with computer.observe or computer.screenshot. Do not repeat completed actions."
 	case "frame_unavailable":
 		return "The screenshot is unavailable. Observe the target before continuing; do not replay the previous action."
 	case "invalid_computer_arguments":

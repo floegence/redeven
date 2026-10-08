@@ -47,6 +47,7 @@ const (
 	FlowerLiveStreamThreadBatch     FlowerLiveStreamKind = "thread.batch"
 	FlowerLiveStreamViewerReadState FlowerLiveStreamKind = "viewer.read_state"
 	FlowerLiveStreamComputerFrame   FlowerLiveStreamKind = "computer.frame"
+	FlowerLiveStreamComputerStatus  FlowerLiveStreamKind = "computer.status"
 )
 
 type FlowerLiveStreamRequest struct{}
@@ -65,6 +66,7 @@ type FlowerLiveStreamEnvelope struct {
 	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
 	ReadStatus          *FlowerThreadReadView      `json:"read_status,omitempty"`
 	ComputerFrame       *FlowerComputerFrame       `json:"computer_frame,omitempty"`
+	ComputerStatus      *FlowerComputerStatus      `json:"computer_status,omitempty"`
 }
 
 type FlowerComputerFrame struct {
@@ -83,6 +85,17 @@ type FlowerComputerFrame struct {
 	Height         int    `json:"height,omitempty"`
 	Sequence       uint64 `json:"sequence"`
 	CapturedAtMS   int64  `json:"captured_at_ms,omitempty"`
+}
+
+// FlowerComputerStatus is an ephemeral, target-scoped fact for the current
+// workspace. It never becomes thread history or a recovery decision.
+type FlowerComputerStatus struct {
+	ThreadID      string `json:"thread_id"`
+	InteractionID string `json:"interaction_id,omitempty"`
+	TargetID      string `json:"target_id"`
+	State         string `json:"state"`
+	ReasonCode    string `json:"reason_code,omitempty"`
+	AtMS          int64  `json:"at_unix_ms"`
 }
 
 // PublishFlowerComputerFrame sends only the latest target-scoped frame metadata
@@ -115,6 +128,66 @@ func (s *Service) PublishFlowerComputerFrame(meta *session.Meta, frame FlowerCom
 		}
 	}
 	return nil
+}
+
+func (s *Service) publishFlowerComputerStatus(endpointID string, requested FlowerComputerStatus) {
+	if s == nil || s.threadRuntime == nil || strings.TrimSpace(endpointID) == "" || strings.TrimSpace(requested.ThreadID) == "" || strings.TrimSpace(requested.TargetID) == "" {
+		return
+	}
+	current, err := s.threadRuntime.View(context.Background(), identity.ThreadID(strings.TrimSpace(requested.ThreadID)))
+	if err != nil {
+		return
+	}
+	for _, status := range s.flowerComputerStatusesForCurrent(context.Background(), current, strings.TrimSpace(requested.TargetID)) {
+		batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamComputerStatus, ThreadID: status.ThreadID, ComputerStatus: &status})
+		s.mu.Lock()
+		for _, subscriber := range s.flowerLiveSubscribers {
+			if subscriber.endpointID == endpointID && !subscriber.closed {
+				enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+func (s *Service) flowerComputerStatusesForCurrent(ctx context.Context, current flruntime.ThreadView, onlyTarget string) []FlowerComputerStatus {
+	if s == nil || current.ThreadID == "" || s.targetResolver == nil {
+		return nil
+	}
+	var statuses []FlowerComputerStatus
+	for _, interaction := range current.Interactions {
+		if interaction.Resolved || interaction.Kind != flruntime.ThreadInteractionInput {
+			continue
+		}
+		call, computer, err := computerControlCall(current, interaction)
+		if err != nil || !computer || onlyTarget != "" && call.TargetID != onlyTarget {
+			continue
+		}
+		target, resolveErr := s.targetResolver.ResolveTarget(ctx, call.TargetID)
+		status := FlowerComputerStatus{ThreadID: current.ThreadID.String(), InteractionID: interaction.ID, TargetID: call.TargetID, AtMS: time.Now().UnixMilli()}
+		if resolveErr != nil {
+			status.State, status.ReasonCode = "unavailable", "target_closed"
+		} else if !target.Ready {
+			status.State, status.ReasonCode = "unavailable", computerStatusReason(target.State)
+		} else {
+			status.State = "available"
+		}
+		statuses = append(statuses, status)
+	}
+	return statuses
+}
+
+func computerStatusReason(state string) string {
+	switch strings.TrimSpace(state) {
+	case "connection_required":
+		return "connection_required"
+	case "target_closed", "stopped":
+		return "target_closed"
+	case "source_fault":
+		return "source_fault"
+	default:
+		return "target_unavailable"
+	}
 }
 
 type FlowerLiveStreamFrame struct {
@@ -215,6 +288,15 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 				ThreadID:      summary.ThreadID,
 				Current:       &copy,
 			}))
+			for _, status := range s.flowerComputerStatusesForCurrent(ctxOrBackground(ctx), current, "") {
+				statusCopy := status
+				currentBaselines = append(currentBaselines, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+					SchemaVersion:  FlowerLiveSchemaVersion,
+					Kind:           FlowerLiveStreamComputerStatus,
+					ThreadID:       status.ThreadID,
+					ComputerStatus: &statusCopy,
+				}))
+			}
 		}
 	}
 	ready := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
@@ -224,6 +306,25 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber, ready, currentBaselines)
 	s.mu.Unlock()
 	return &FlowerLiveStreamSubscription{service: s, subscriber: subscriber}, nil
+}
+
+func (s *Service) refreshPendingComputerStatus(ctx context.Context, meta *session.Meta, targetID string) {
+	if s == nil || meta == nil || s.threadRuntime == nil {
+		return
+	}
+	summaries, err := s.listFlowerLiveBaseline(ctxOrBackground(ctx), meta)
+	if err != nil {
+		return
+	}
+	for _, summary := range summaries {
+		current, err := s.threadRuntime.View(ctxOrBackground(ctx), identity.ThreadID(summary.ThreadID))
+		if err != nil {
+			continue
+		}
+		for _, status := range s.flowerComputerStatusesForCurrent(ctxOrBackground(ctx), current, targetID) {
+			s.publishFlowerComputerStatus(meta.EndpointID, status)
+		}
+	}
 }
 
 func (s *Service) listFlowerLiveBaseline(ctx context.Context, meta *session.Meta) ([]ThreadView, error) {
@@ -312,12 +413,15 @@ func (s *Service) broadcastFlowerRuntimeCurrent(endpointID string, current flrun
 	}
 	batch := newFlowerLiveEncodedBatch(envelope)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, subscriber := range s.flowerLiveSubscribers {
 		if subscriber.endpointID != endpointID || subscriber.closed {
 			continue
 		}
 		enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
+	}
+	s.mu.Unlock()
+	for _, status := range s.flowerComputerStatusesForCurrent(context.Background(), current, "") {
+		s.publishFlowerComputerStatus(endpointID, status)
 	}
 }
 

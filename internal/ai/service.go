@@ -207,7 +207,11 @@ func (s *Service) ConnectComputerBrowser(ctx context.Context, meta *session.Meta
 	if !ok {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_unavailable"}
 	}
-	return resolver.ConnectBrowser(ctx, connection)
+	target, err := resolver.ConnectBrowser(ctx, connection)
+	if err == nil {
+		s.refreshPendingComputerStatus(ctx, meta, target.ID)
+	}
+	return target, err
 }
 
 // ResolveTargetToolAttachment exposes a short-lived target screenshot to the
@@ -461,6 +465,14 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		computer.mu.Lock()
 		computer.bindings = ts
 		computer.mu.Unlock()
+		computer.setComputerStatusPublisher(func(status FlowerComputerStatus) {
+			lookupCtx, cancel := context.WithTimeout(context.Background(), persistTO)
+			defer cancel()
+			endpointID, _, err := svc.resolveFlowerRuntimeRoute(lookupCtx, status.ThreadID)
+			if err == nil {
+				svc.publishFlowerComputerStatus(endpointID, status)
+			}
+		})
 	}
 	if svc.flowerReadStateCleaner == nil {
 		svc.flowerReadStateCleaner = reads

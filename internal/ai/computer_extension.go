@@ -859,7 +859,7 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 		return TargetToolResult{}, computerBrowserExchangeFailure(call, private, err)
 	}
 	var raw json.RawMessage
-	err := e.sourceHost.call(ctx, "source.tool", map[string]any{"target": e.targetID, "request": map[string]any{"target_id": e.targetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_origins": call.allowedOrigins, "script_operation": call.scriptOperation, "return_control": call.controlReturn, "user_control": private}}, &raw)
+	err := e.sourceHost.call(ctx, "source.tool", map[string]any{"target": e.targetID, "request": map[string]any{"target_id": e.targetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_origins": call.allowedOrigins, "script_operation": call.scriptOperation, "recovery_observation": call.recoveryObservation, "user_control": private}}, &raw)
 	if err != nil {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		drained := e.sourceHost.call(cleanup, "source.cancel", map[string]string{"target": e.targetID}, nil)

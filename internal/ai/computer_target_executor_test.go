@@ -128,7 +128,7 @@ func TestPlaywrightHelperCannotOwnTurnControl(t *testing.T) {
 		if _, exists := wire["session_id"]; exists {
 			t.Fatal("helper received a second turn-control identity")
 		}
-		if wire["user_control"] == true || wire["return_control"] == true {
+		if wire["user_control"] == true || wire["recovery_observation"] == true {
 			t.Fatal("model arguments changed trusted control fields")
 		}
 		count++

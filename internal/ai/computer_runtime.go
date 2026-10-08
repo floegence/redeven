@@ -37,6 +37,25 @@ type ComputerUseRuntime struct {
 	liveWG                 sync.WaitGroup
 	controls               map[string]*computerTargetControl
 	scripts                map[computerScriptKey]*computerScriptProcess
+	statusPublisher        func(FlowerComputerStatus)
+}
+
+func (r *ComputerUseRuntime) setComputerStatusPublisher(publish func(FlowerComputerStatus)) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.statusPublisher = publish
+	r.mu.Unlock()
+}
+
+func (r *ComputerUseRuntime) publishComputerStatus(status FlowerComputerStatus) {
+	r.mu.RLock()
+	publish := r.statusPublisher
+	r.mu.RUnlock()
+	if publish != nil {
+		publish(status)
+	}
 }
 
 // ConnectBrowser registers an explicitly authorized Chrome CDP session. A
@@ -286,6 +305,12 @@ func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDes
 	return target, nil
 }
 func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	if !call.liveFrame && !call.userInput && (call.ToolName == "computer.observe" || call.ToolName == "computer.screenshot") {
+		control := r.controlForTarget(call.TargetID)
+		control.mu.Lock()
+		call.recoveryObservation = control.pause != nil && control.threadID == call.ThreadID && control.turnID == call.TurnID && control.runID == call.RunID && control.recheckInteractionID != "" && call.interactionID == control.recheckInteractionID
+		control.mu.Unlock()
+	}
 	if err := r.checkManagedTarget(call.TargetID); err != nil {
 		return TargetToolResult{}, err
 	}
@@ -334,7 +359,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	if err := r.authorizeComputerCall(ctx, &call); err != nil {
 		return TargetToolResult{}, err
 	}
-	if call.controlReturn {
+	if call.recoveryObservation {
 		control.mu.Lock()
 		safety := control.pause
 		missing := safety != nil && !call.fullAccess && ((safety.RequiredOrigin != "" && !slices.Contains(call.allowedOrigins, safety.RequiredOrigin)) || (safety.RequiredApp != "" && !slices.Contains(call.allowedApps, safety.RequiredApp)) || (slices.Contains(safety.ReasonCodes, "foreground_permission") && !call.allowForeground))
@@ -353,7 +378,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	}
 	r.releasePreviousComputerTarget(call)
 	captureCtx := ctx
-	if call.liveFrame && call.ToolName == "computer.screenshot" && !call.userInput && !call.controlReturn {
+	if call.liveFrame && call.ToolName == "computer.screenshot" && !call.userInput && !call.recoveryObservation {
 		// Hiding a viewer must not interrupt JSONL and retire a healthy browser.
 		// Cancel lock acquisition normally, then drain only the admitted passive
 		// capture within a deadline. The sampler discards it after viewer close.
@@ -417,14 +442,14 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			}
 		}
 	}
-	if call.controlReturn && err == nil {
+	if call.recoveryObservation && err == nil {
 		if result.TargetID != call.TargetID || result.Safety == nil {
 			return TargetToolResult{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "control_observation_unavailable"}
 		}
 		if result.Safety.Level != "routine" || !result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel {
 			return TargetToolResult{}, &targetToolPolicyError{code: "interaction_takeover_required", tool: call.ToolName, target: call.TargetID, safety: result.Safety}
 		}
-		if len(result.Attachments) != 1 || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil {
+		if call.ToolName == "computer.screenshot" && (len(result.Attachments) != 1 || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
 			return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
 		}
 		control.mu.Lock()
@@ -441,6 +466,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			}
 		}
 		control.pause = nil
+		control.recheckInteractionID = ""
 		control.mu.Unlock()
 	}
 	return result, err

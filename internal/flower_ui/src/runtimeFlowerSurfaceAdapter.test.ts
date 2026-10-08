@@ -155,6 +155,20 @@ describe('runtime Flower surface adapter read state', () => {
     expect(frames[1]).toEqual(frame);
   });
 
+  it('keeps computer status reasons inside the closed, non-sensitive contract', async () => {
+    const statuses = [
+      { thread_id: 'task', interaction_id: 'input-1', target_id: 'browser-1', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 },
+      { thread_id: 'task', interaction_id: 'input-1', target_id: 'browser-1', state: 'unavailable', reason_code: 'password=secret', at_unix_ms: 11 },
+    ];
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
+      for (const computer_status of statuses) yield { schema_version: 1, kind: 'computer.status', thread_id: 'task', computer_status };
+    } }));
+    const received = [];
+    for await (const envelope of adapter.connectLiveStream!({ signal: new AbortController().signal })) received.push(envelope.computer_status);
+    expect(received[0]).toEqual({ ...statuses[0] });
+    expect(received[1]).toEqual({ thread_id: 'task', interaction_id: 'input-1', target_id: 'browser-1', state: 'unavailable', at_unix_ms: 11 });
+  });
+
   it('returns a named fork summary without coupling creation to detail loading', async () => {
     const forkThread = vi.fn(async () => ({
       client_request_id: 'fork-request',

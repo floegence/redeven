@@ -12,13 +12,14 @@ import (
 // The canonical terminal view releases it. Each target serializes observations,
 // actions and handback so screenshots cannot race a different thread's input.
 type computerTargetControl struct {
-	gate     chan struct{}
-	mu       sync.Mutex
-	threadID string
-	turnID   string
-	runID    string
-	pause    *InteractionSafetyDecision
-	browser  *browserTargetLease
+	gate                 chan struct{}
+	mu                   sync.Mutex
+	threadID             string
+	turnID               string
+	runID                string
+	pause                *InteractionSafetyDecision
+	recheckInteractionID string
+	browser              *browserTargetLease
 }
 
 // The Runtime owns the barrier. Helpers report observations, not a second
@@ -36,6 +37,14 @@ func (control *computerTargetControl) pauseError(call TargetToolCall) error {
 	safety := *control.pause
 	safety.ReasonCodes = slices.Clone(safety.ReasonCodes)
 	return &targetToolPolicyError{code: "interaction_takeover_required", tool: call.ToolName, target: call.TargetID, safety: &safety}
+}
+
+func (control *computerTargetControl) permitsRecoveryContinuation(call TargetToolCall) bool {
+	allowedTool := call.recoveryObservation && (call.ToolName == "computer.observe" || call.ToolName == "computer.screenshot") ||
+		call.recoverySelection && (call.ToolName == "computer.targets" || call.ToolName == "computer.select_target")
+	return control.pause != nil && allowedTool && call.interactionID != "" &&
+		control.threadID == call.ThreadID && control.turnID == call.TurnID && control.runID == call.RunID &&
+		control.recheckInteractionID == call.interactionID
 }
 
 func (control *computerTargetControl) recordPause(call TargetToolCall, result TargetToolResult, err error) {
@@ -92,7 +101,7 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 	// A recovered pending interaction may be the first browser operation after
 	// restart. Prepare its Runtime-owned profile before acquiring the target gate.
 	// Passive samples never launch resources or wait on connection ownership.
-	if !call.passiveCapture && (call.userInput || call.controlReturn) {
+	if !call.passiveCapture && (call.userInput || call.recoveryObservation) {
 		if _, err := r.prepareInitialManagedTarget(ctx, TargetDescriptor{ID: call.TargetID}); err != nil {
 			return nil, nil, err
 		}
@@ -125,25 +134,43 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 	}
 	control.mu.Lock()
 	defer control.mu.Unlock()
+	if control.browser != nil && call.recoveryObservation && control.threadID == call.ThreadID && control.runID == call.RunID && control.recheckInteractionID != "" {
+		lease := control.browser
+		lease.revoke()
+		control.mu.Unlock()
+		err := lease.drain(ctx)
+		control.mu.Lock()
+		if err != nil {
+			unlock()
+			return nil, nil, err
+		}
+		if control.browser == lease {
+			control.browser = nil
+		}
+	}
 	if control.browser != nil {
 		unlock()
 		return nil, nil, computerTargetFailure(call, "TARGET_IN_USE")
 	}
-	if call.liveFrame && !call.controlReturn && !call.userInput && control.threadID == "" {
+	if call.liveFrame && !call.recoveryObservation && !call.userInput && control.threadID == "" {
 		unlock()
 		return nil, nil, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 	}
-	if control.threadID != "" && (control.threadID != call.ThreadID || ((!call.liveFrame || call.controlReturn || call.userInput) && control.runID != "" && control.runID != call.RunID)) {
+	if control.threadID != "" && (control.threadID != call.ThreadID || ((!call.liveFrame || call.recoveryObservation || call.userInput) && control.runID != "" && control.runID != call.RunID)) {
 		unlock()
 		return nil, nil, computerTargetFailure(call, "TARGET_IN_USE")
 	}
-	if control.pause != nil && !call.controlReturn && !call.userInput {
+	if control.pause != nil && !call.recoveryObservation && !call.recoverySelection && !call.userInput {
+		if call.interactionID != "" && control.threadID == call.ThreadID && control.turnID == call.TurnID && control.runID == call.RunID && control.recheckInteractionID == call.interactionID {
+			unlock()
+			return nil, nil, &targetToolPolicyError{code: "recovery_observation_required", tool: call.ToolName, target: call.TargetID}
+		}
 		unlock()
 		return nil, nil, control.pauseError(call)
 	}
-	if (!call.liveFrame || call.controlReturn) && call.ThreadID != "" && !call.bindSelection {
+	if (!call.liveFrame || call.recoveryObservation) && call.ThreadID != "" && !call.bindSelection {
 		control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
-		if call.controlReturn {
+		if call.recoveryObservation {
 			control.pauseForUser()
 		}
 	}
@@ -168,6 +195,26 @@ func (r *ComputerUseRuntime) continueComputerControl(threadID, turnID, runID str
 	}
 }
 
+// Only a resolved canonical interaction can authorize a fresh safety observation.
+// The pause remains until that observation succeeds; ordinary continuation cannot clear it.
+func (r *ComputerUseRuntime) resumeComputerControl(call TargetToolCall, runID string) {
+	if call.ThreadID == "" || call.TurnID == "" || call.RunID == "" || call.TargetID == "" || call.interactionID == "" || runID == "" {
+		return
+	}
+	control := r.controlForTarget(call.TargetID)
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	if control.threadID != "" && (control.threadID != call.ThreadID || control.turnID != call.TurnID || control.runID != call.RunID) {
+		return
+	}
+	control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, runID
+	control.pauseForUser()
+	control.recheckInteractionID = call.interactionID
+	if control.browser != nil {
+		control.browser.revoke()
+	}
+}
+
 func (r *ComputerUseRuntime) releaseComputerControl(threadID, runID string) {
 	released := false
 	r.mu.RLock()
@@ -182,6 +229,7 @@ func (r *ComputerUseRuntime) releaseComputerControl(threadID, runID string) {
 				}
 			}
 			control.threadID, control.turnID, control.runID, control.pause = "", "", "", nil
+			control.recheckInteractionID = ""
 			released = true
 		}
 		control.mu.Unlock()
