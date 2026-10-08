@@ -411,8 +411,8 @@ it('keeps global navigation and library text visible in every published theme', 
         3,
       ],
       ['.tessiven-heading h1', '.tessiven', 'color', 4.5],
-      ['.tessiven-card-information h3', '.tessiven-card-information', 'color', 4.5],
-      ['.tessiven-card-meta', '.tessiven-card-information', 'color', 4.5],
+      ['.tessiven-card-information h3', '.tessiven-library-card', 'color', 4.5],
+      ['.tessiven-card-meta', '.tessiven-library-card', 'color', 4.5],
     ] as const) {
       const foreground = getComputedStyle(
         host.querySelector(selector)!,

@@ -159,15 +159,15 @@
   border-radius: 8px;
   overflow: hidden;
   background: var(--card);
-  box-shadow: 0 2px 5px rgb(0 0 0 / 3%);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 5%);
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease,
     transform 180ms ease;
 }
 .tessiven-library-card:hover {
-  border-color: color-mix(in srgb, var(--foreground) 30%, var(--border));
-  box-shadow: 0 12px 28px rgb(0 0 0 / 14%);
+  border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
+  box-shadow: 0 12px 28px rgb(0 0 0 / 11%);
   transform: translateY(-3px);
 }
 .tessiven-library-card > button {
@@ -191,7 +191,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 18px 14px 72px;
+  padding: 18px 14px 56px;
   background: color-mix(in srgb, var(--muted) 56%, var(--background));
   border-bottom: 0;
 }
@@ -201,7 +201,7 @@
   inset: 0;
   background-image: radial-gradient(
     circle,
-    color-mix(in srgb, var(--foreground) 10%, transparent) 0.6px,
+    color-mix(in srgb, var(--foreground) 7%, transparent) 0.6px,
     transparent 0.7px
   );
   background-size: 14px 14px;
@@ -349,19 +349,27 @@
 }
 .tessiven-card-information {
   position: absolute;
-  inset: auto 0 0;
+  inset: auto 12px 12px;
   z-index: 2;
-  padding: 14px 16px;
-  color: #fff;
-  background: rgb(7 11 17 / 94%);
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 7px;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.12);
+  backdrop-filter: blur(14px) saturate(1.12);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 8%);
   pointer-events: none;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
-.tessiven-card-information::before {
-  content: '';
-  position: absolute;
-  inset: -36px 0 auto;
-  height: 36px;
-  background: linear-gradient(to bottom, transparent, rgb(7 11 17 / 94%));
+.tessiven-library-card:hover .tessiven-card-information,
+.tessiven-library-card:focus-within .tessiven-card-information {
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border-color: color-mix(in srgb, var(--border) 92%, transparent);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 10%);
 }
 .tessiven-card-title {
   display: flex;
@@ -391,8 +399,8 @@
   align-items: center;
   gap: 10px;
   font-size: 11px;
-  color: rgb(255 255 255 / 72%);
-  margin-top: 8px;
+  color: var(--muted-foreground);
+  margin-top: 6px;
 }
 .tessiven-card-reveal {
   display: grid;
@@ -406,7 +414,7 @@
   display: -webkit-box;
   overflow: hidden;
   margin: 8px 0 0;
-  color: rgb(255 255 255 / 78%);
+  color: var(--muted-foreground);
   font-size: 11px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
@@ -416,13 +424,20 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px 12px;
-  margin: 10px 0 0;
-  color: rgb(255 255 255 / 72%);
+  margin: 9px 0 0;
+  color: var(--muted-foreground);
   font-size: 10px;
 }
-.tessiven-card-counts div { display: flex; gap: 4px; }
-.tessiven-card-counts dt::after { content: ':'; }
-.tessiven-card-counts dd { margin: 0; font-weight: 650; color: #fff; }
+.tessiven-card-counts div {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+}
+.tessiven-card-counts dd { margin: 0; font-weight: 650; color: var(--foreground); }
 .tessiven-card-meta time::before {
   content: '·';
   padding-right: 10px;
@@ -1176,8 +1191,7 @@
   .tessiven-card-reveal { grid-template-rows: 1fr; }
 }
 @media (forced-colors: active) {
-  .tessiven-card-information { background: Canvas; color: CanvasText; border-top: 1px solid CanvasText; padding-top: 14px; }
-  .tessiven-card-information::before { display: none; }
+  .tessiven-card-information { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
   .tessiven-card-meta,
   .tessiven-card-reveal p,
   .tessiven-card-counts,
