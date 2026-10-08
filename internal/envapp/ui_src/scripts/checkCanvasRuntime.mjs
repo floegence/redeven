@@ -140,11 +140,21 @@ try {
   });
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, locale: 'en-US' });
+  let browserLayoutRequests = 0;
+  await context.route('**/_redeven_proxy/api/workbench/layout/snapshot', async route => {
+    browserLayoutRequests++;
+    if (browserLayoutRequests === 1) {
+      await route.abort('failed');
+      return;
+    }
+    await route.continue();
+  });
   const page = await context.newPage(), errors = observe(page);
   await page.goto(new URL('/_redeven_proxy/env/', origin).href);
   await page.getByRole('tab', { name: 'Workbench', exact: true }).waitFor();
   await until(async () => (await requestJSON(origin, '/_redeven_proxy/api/workbench/layout/snapshot')).revision > 0, 'Workbench initial layout persisted');
   await page.locator('[data-workbench-dock-action="tessiven"]').waitFor();
+  assert.ok(browserLayoutRequests >= 2, 'Workbench retries a transient layout request failure');
   assert.equal(await page.locator('[data-workbench-layout-error]').count(), 0, 'Workbench must load without a layout error');
   await page.screenshot({ path: path.join(output, 'workbench.png'), animations: 'disabled' });
   await page.reload();
