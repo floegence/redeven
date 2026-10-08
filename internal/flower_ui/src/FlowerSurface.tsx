@@ -597,10 +597,20 @@ export type FlowerEmbeddedConversation = Readonly<{
   render: (parts: FlowerConversationParts) => JSX.Element;
 }>;
 
+export type FlowerConversationAction = Readonly<{
+  id: string;
+  label: string;
+  icon: () => JSX.Element;
+  disabled?: boolean;
+  run: (source: HTMLElement) => void;
+}>;
+
 export type FlowerConversationParts = Readonly<{
   conversation: JSX.Element;
   composer: JSX.Element;
-  actions: JSX.Element;
+  actions: Accessor<readonly FlowerConversationAction[]>;
+  actionOverlays: JSX.Element;
+  trailingActions?: JSX.Element;
   threadID: Accessor<string>;
   newConversation: () => void;
 }>;
@@ -1042,7 +1052,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let composerControlsMeasureRef: HTMLDivElement | undefined;
   let composerMoreButtonRef: HTMLButtonElement | undefined;
   let composerMorePanelRef: HTMLDivElement | undefined;
-  let subagentTriggerRef: HTMLButtonElement | undefined;
+  let subagentTriggerRef: HTMLElement | undefined;
   let subagentDropdownRef: HTMLDivElement | undefined;
   let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
@@ -10408,6 +10418,7 @@ webSearch: model.web_search,
     <Show when={subagentDropdownOpen()}>
       <SurfaceFloatingLayer
         position={subagentDropdownPosition()}
+        owner={subagentTriggerRef}
         estimatedSize={SUBAGENT_DROPDOWN_ESTIMATED_SIZE}
         class="flower-subagents-dropdown-layer"
         data-flower-floating-layer="true"
@@ -11884,6 +11895,41 @@ webSearch: model.web_search,
       </div>
   );
 
+  const computerHeaderLabel = () => isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest())
+    ? selectedComputerAssistance().title
+    : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`;
+  const subagentHeaderLabel = () => selectedSubagentItems().length > 0
+    ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel;
+  const headerActionDefinitions: readonly (Omit<FlowerConversationAction, 'label' | 'disabled'> & {
+    visible: Accessor<boolean>;
+    label: Accessor<string>;
+    disabled?: Accessor<boolean>;
+  })[] = [
+    { id: 'connections', visible: () => Boolean(selectedThreadID() && props.adapter.computerManagement),
+      label: () => copy().computer.title, icon: () => <Link class="h-4 w-4" aria-hidden="true" />,
+      run: () => setComputerDialog('settings') },
+    { id: 'computer-stage', visible: () => Boolean(computerStageAvailable() && selectedComputerStage()),
+      label: computerHeaderLabel, icon: () => <MonitorPointer size={15} aria-hidden="true" />,
+      run: source => {
+        if (isBrowserInstallInput(selectedInputRequest())) { setComputerDialog('installation'); return; }
+        if (isBrowserConnectionInput(selectedInputRequest())) { setComputerDialog('connection'); return; }
+        if (selectedThread()?.status === 'running') setComputerFrameSelection(undefined);
+        restoreComputerStage(source);
+      } },
+    { id: 'new-conversation', visible: () => presentation() === 'companion' && !props.embeddedConversation,
+      label: () => copy().chat.newChat, icon: () => <Plus class="h-4 w-4" aria-hidden="true" />,
+      disabled: surfaceWarmupActive, run: startCompose },
+    { id: 'subagents', visible: () => true, label: subagentHeaderLabel,
+      icon: () => <Bot class="h-4 w-4" aria-hidden="true" />,
+      run: source => { subagentTriggerRef = source; openSubagents(); } },
+    { id: 'settings', visible: () => true, label: () => copy().chat.settingsLabel,
+      icon: () => <Settings class="h-4 w-4" aria-hidden="true" />, run: openSettings },
+  ];
+  const conversationHeaderActions = createMemo<readonly FlowerConversationAction[]>(() => headerActionDefinitions
+    .filter(action => action.visible()).map(action => ({
+      id: action.id, label: action.label(), icon: action.icon, disabled: action.disabled?.(), run: action.run,
+    })));
+
   const chatHeaderActions = () => (
           <div class="flower-chat-header-actions">
             <Show when={!props.embeddedConversation}><FlowerWorkingDirectoryControl
@@ -11898,51 +11944,37 @@ webSearch: model.web_search,
                 void browseWorkingDirectory({ path, ...(threadID ? { thread_id: threadID } : {}) }, event.currentTarget);
               }}
             /></Show>
-            <Show when={selectedThreadID() && props.adapter.computerManagement}>
-              <button type="button" class="flower-header-icon-button" aria-label={copy().computer.title} title={copy().computer.title}
-                aria-haspopup="dialog" aria-expanded={computerDialog() !== null} onClick={() => setComputerDialog('settings')}><Link class="h-4 w-4" aria-hidden="true" /></button>
-            </Show>
-            <Show when={computerStageAvailable() && selectedComputerStage()}>
+            <For each={headerActionDefinitions}>{action => <Show when={action.visible()}><Switch fallback={
+              <button type="button" class="flower-header-icon-button" aria-label={action.label()} title={action.label()}
+                disabled={action.disabled?.()} aria-haspopup={action.id === 'connections' ? 'dialog' : undefined}
+                aria-expanded={action.id === 'connections' ? computerDialog() !== null : undefined}
+                onClick={event => action.run(event.currentTarget)}>{action.icon()}</button>
+            }>
+              <Match when={action.id === 'computer-stage'}>
               <button type="button" class="flower-computer-entry" aria-expanded={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? computerDialog() !== null : computerStageOpen()}
                 data-session-state={computerStageSessionState()}
                 data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'surface' : undefined}
                 title={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? selectedComputerAssistance().title : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
-                aria-label={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? selectedComputerAssistance().title : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
-                onClick={(event) => {
-                  if (isBrowserInstallInput(selectedInputRequest())) { setComputerDialog('installation'); return; }
-                  if (isBrowserConnectionInput(selectedInputRequest())) { setComputerDialog('connection'); return; }
-                  if (selectedThread()?.status === 'running') setComputerFrameSelection(undefined);
-                  restoreComputerStage(event.currentTarget);
-                }}>
-                <MonitorPointer size={15} aria-hidden="true" />
+                aria-label={action.label()}
+                onClick={event => action.run(event.currentTarget)}>
+                {action.icon()}
                 <span class="flower-computer-entry-label" role="status" data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'text' : undefined}>{computerStageEntryLabel()}</span>
               </button>
-            </Show>
-            <Show when={presentation() === 'companion' && !props.embeddedConversation}>
-              <button
-                type="button"
-                class="flower-header-icon-button"
-                aria-label={copy().chat.newChat}
-                title={copy().chat.newChat}
-                disabled={surfaceWarmupActive()}
-                onClick={startCompose}
-              >
-                <Plus class="h-4 w-4" />
-              </button>
-            </Show>
+              </Match>
+              <Match when={action.id === 'subagents'}>
             <div class="flower-subagents-anchor">
               <button
-                ref={subagentTriggerRef}
+                ref={element => { subagentTriggerRef = element; }}
                 type="button"
                 class={cn('flower-header-icon-button', (subagentDropdownOpen() || activeSubagentID()) && 'flower-header-icon-button-active')}
-                aria-label={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
-                title={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
+                aria-label={action.label()}
+                title={action.label()}
                 aria-haspopup="dialog"
                 aria-expanded={subagentDropdownOpen()}
                 aria-controls="flower-subagents-dropdown"
-                onClick={openSubagents}
+                onClick={event => action.run(event.currentTarget)}
               >
-                <Bot class="h-4 w-4" />
+                {action.icon()}
                 <Show when={selectedSubagentItems().length > 0}>
                   <span
                     class="flower-header-icon-badge"
@@ -11953,17 +11985,10 @@ webSearch: model.web_search,
                   </span>
                 </Show>
               </button>
-              {subagentDropdown()}
             </div>
-            <button
-              type="button"
-              class="flower-header-icon-button"
-              aria-label={copy().chat.settingsLabel}
-              title={copy().chat.settingsLabel}
-              onClick={openSettings}
-            >
-              <Settings class="h-4 w-4" />
-            </button>
+              </Match>
+            </Switch></Show>}</For>
+            {subagentDropdown()}
             {props.headerTrailingActions}
           </div>
   );
@@ -12417,7 +12442,8 @@ webSearch: model.web_search,
         <GripVertical class="h-3.5 w-3.5" />
       </button>
       <Show when={props.embeddedConversation} fallback={conversationPanel()}>
-        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), actions: chatHeaderActions(),
+        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), actions: conversationHeaderActions,
+          actionOverlays: subagentDropdown(), get trailingActions() { return props.headerTrailingActions; },
           threadID: selectedThreadID, newConversation: startCompose })}
       </Show>
       <FlowerWorkingDirPickerDialog

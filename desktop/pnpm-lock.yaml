@@ -37,11 +37,11 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-boot':
-        specifier: 0.86.0
-        version: 0.86.0
+        specifier: 0.86.5
+        version: 0.86.5
       '@floegence/floe-webapp-core':
-        specifier: 0.86.0
-        version: 0.86.0(solid-js@1.9.17)
+        specifier: 0.86.5
+        version: 0.86.5(solid-js@1.9.17)
       '@floegence/flowersec-core':
         specifier: 5.10.5
         version: 5.10.5
@@ -540,12 +540,12 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@floegence/floe-webapp-boot@0.86.0':
-    resolution: {integrity: sha512-vzU1SYZO/acH4vycl3MZGnkQdb+/FWOxvB/2SDrLs2Toj6cIyoNkluJBzES8CjYcFPlF6LlXrPj+RkT98aWVeg==}
+  '@floegence/floe-webapp-boot@0.86.5':
+    resolution: {integrity: sha512-nIat8UnxDzKYaAmm9A8/wTf/qijsCzGDyzw8cmTzShPif4+mGLVM6snkK9eovUBaL//c4G9KGqSfLLf5x1V0dQ==}
     engines: {node: '>=24.20.0'}
 
-  '@floegence/floe-webapp-core@0.86.0':
-    resolution: {integrity: sha512-FjOUFZ9kRkuVyO3ghNr5n+tz9B/pFjSkLHzr1P8aVl5XhmgFdP932TYA6eYTcu1Z7JBZ34tjTOkECgZjhEGnNw==}
+  '@floegence/floe-webapp-core@0.86.5':
+    resolution: {integrity: sha512-FDRNM0V3cRZqlsgWARngfwSD5VBnUCGKKhLW7aTOV16z90iD8SkbhZasOwOn3my7NiT3wG9Ja07PfR/A2NAG7w==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.9.17
@@ -3714,7 +3714,7 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 2.4.0
 
-  '@floegence/floe-webapp-boot@0.86.0':
+  '@floegence/floe-webapp-boot@0.86.5':
     dependencies:
       '@floegence/flowersec-core': 5.10.5
       '@noble/hashes': 2.4.0
@@ -3722,7 +3722,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.86.0(solid-js@1.9.17)':
+  '@floegence/floe-webapp-core@0.86.5(solid-js@1.9.17)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4

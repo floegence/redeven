@@ -39,15 +39,10 @@ positions remain preferred hints, and expansion retains the inspected anchor.
   placeholder. Default whole-canvas context is implicit and stays hidden;
   removing the last object returns to that default. The Flower request carries the exact visible canvas/version
   and selected-object context through its context action.
-- Replies, tool activity, questions, approvals and errors use the same Flower
-  surface runtime. Its conversation is placed in an upper-left floating window;
-  pending delivery and canonical run feedback stay visible at that window's
-  bottom under the [live timeline contract](flower-live-timeline.md).
-  Floe owns dragging, resizing, clamping, maximize/restore and local interaction
-  ownership. The composer is excluded from the window's safe boundary.
-- Hiding replies leaves the composer and conversation alive. A small restore
-  control returns the window; sending reopens it. Hidden replies never acknowledge
-  unread output. Narrow layouts fit the available boundary.
+- Replies and tool activity use the canonical Flower runtime in a quiet
+  upper-left floating window under the
+  [canvas reply contract](tessiven-flower-replies.md). The composer remains
+  outside its safe boundary; hiding replies preserves the conversation.
 - Empty-canvas suggestions and every Ask Flower action focus the composer with
   exact canvas/version/object context. Opening never sends automatically.
 - Each canvas retains its draft and selected conversation within the mounted

@@ -161,6 +161,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## UI
 
 - [Tessiven canvas](ui/tessiven-canvas.md) - Render progressively detailed Runtime topology with readable grouping, muted relationships, and accessible Ask Flower context.
+- [Tessiven Flower replies](ui/tessiven-flower-replies.md) - Read live canvas replies in a refined floating window with canonical actions and projected menu ownership.
 
 - [Runtime settings](ui/runtime-settings.md) - Navigate runtime configuration with retained drafts, responsive controls, and confirmed maintenance.
 - [Flower Skills and MCP](ui/flower-extensions.md) - Manage instructions and external tools in the conversation rail’s shared two-tab page.
