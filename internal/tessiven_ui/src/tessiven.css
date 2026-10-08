@@ -349,27 +349,19 @@
 }
 .tessiven-card-information {
   position: absolute;
-  inset: auto 12px 12px;
+  inset: auto 0 0;
   z-index: 2;
-  padding: 11px 13px;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 7px;
+  padding: 28px 16px 10px;
   color: var(--foreground);
-  background: color-mix(in srgb, var(--card) 88%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(1.12);
-  backdrop-filter: blur(14px) saturate(1.12);
-  box-shadow: 0 6px 18px rgb(0 0 0 / 8%);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--card) 84%, transparent) 24px,
+    color-mix(in srgb, var(--card) 94%, transparent)
+  );
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   pointer-events: none;
-  transition:
-    background-color 180ms ease,
-    border-color 180ms ease,
-    box-shadow 180ms ease;
-}
-.tessiven-library-card:hover .tessiven-card-information,
-.tessiven-library-card:focus-within .tessiven-card-information {
-  background: color-mix(in srgb, var(--card) 92%, transparent);
-  border-color: color-mix(in srgb, var(--border) 92%, transparent);
-  box-shadow: 0 8px 22px rgb(0 0 0 / 10%);
 }
 .tessiven-card-title {
   display: flex;
@@ -423,7 +415,7 @@
 .tessiven-card-counts {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 5px 14px;
   margin: 9px 0 0;
   color: var(--muted-foreground);
   font-size: 10px;
@@ -431,11 +423,7 @@
 .tessiven-card-counts div {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 7px;
-  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--muted) 72%, transparent);
+  gap: 4px;
 }
 .tessiven-card-counts dd { margin: 0; font-weight: 650; color: var(--foreground); }
 .tessiven-card-meta time::before {
@@ -1191,7 +1179,12 @@
   .tessiven-card-reveal { grid-template-rows: 1fr; }
 }
 @media (forced-colors: active) {
-  .tessiven-card-information { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
+  .tessiven-card-information {
+    background: Canvas;
+    color: CanvasText;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
   .tessiven-card-meta,
   .tessiven-card-reveal p,
   .tessiven-card-counts,
