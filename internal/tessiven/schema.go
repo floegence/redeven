@@ -9,10 +9,10 @@ import (
 )
 
 const schemaKind = "tessiven_canvas_library"
-const schemaVersion = 1
+const schemaVersion = 2
 
 var schemaStatements = []string{
-	`CREATE TABLE canvases (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, latest_version INTEGER NOT NULL CHECK(latest_version > 0), archived INTEGER NOT NULL CHECK(archived IN (0,1)), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+	`CREATE TABLE canvases (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, latest_version INTEGER NOT NULL CHECK(latest_version > 0), archived INTEGER NOT NULL CHECK(archived IN (0,1)), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, flower_thread_id TEXT NOT NULL DEFAULT '')`,
 	`CREATE TABLE versions (canvas_id TEXT NOT NULL REFERENCES canvases(id), number INTEGER NOT NULL CHECK(number > 0), document_yaml TEXT NOT NULL, digest TEXT NOT NULL, created_at INTEGER NOT NULL, source TEXT NOT NULL, summary TEXT NOT NULL, PRIMARY KEY(canvas_id,number))`,
 	`CREATE TABLE requests (request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result_json TEXT NOT NULL)`,
 	`CREATE TRIGGER versions_immutable_update BEFORE UPDATE ON versions BEGIN SELECT RAISE(ABORT, 'Tessiven versions are immutable'); END`,
@@ -20,7 +20,11 @@ var schemaStatements = []string{
 }
 
 func schemaSpec() sqliteutil.Spec {
-	return sqliteutil.Spec{Kind: schemaKind, CurrentVersion: schemaVersion, MinimumVersion: 1, Pragmas: []string{"PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON", "PRAGMA busy_timeout=3000"}, ValidateExisting: validateExistingSchema, Initialize: initializeSchema, Verify: verifySchema}
+	return sqliteutil.Spec{Kind: schemaKind, CurrentVersion: schemaVersion, MinimumVersion: 1, Pragmas: []string{"PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON", "PRAGMA busy_timeout=3000"}, ValidateExisting: validateExistingSchema, Initialize: initializeSchema, Migrations: []sqliteutil.Migration{{FromVersion: 1, ToVersion: 2, Apply: migrateToV2}}, Verify: verifySchema}
+}
+func migrateToV2(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE canvases ADD COLUMN flower_thread_id TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 func initializeSchema(tx *sql.Tx) error {
 	for _, statement := range schemaStatements {

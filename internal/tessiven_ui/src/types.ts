@@ -81,6 +81,7 @@ export type Canvas = {
   archived: boolean;
   created_at: number;
   updated_at: number;
+  flower_thread_id?: string;
 };
 export type Version = {
   canvas_id: string;
