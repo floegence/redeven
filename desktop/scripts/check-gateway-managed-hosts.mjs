@@ -114,7 +114,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     assert.equal(restored.policy.default_cloud_allowed, true);
     assert.equal(restored.gateway.gateway_id, invitation.gateway_id);
     assert.deepEqual(restored.gateway.member_endpoints, endpoints);
-    await session.client.updateEndpoints(record, []);
+    await (await lifecycle.client(record, { startPolicy: 'require_ready' })).updateEndpoints(record, []);
     await lifecycle.restartGateway(record);
     assert.deepEqual((await lifecycle.catalog(record)).gateway.member_endpoints, []);
     await lifecycle.stopGateway(record);
