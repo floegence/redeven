@@ -20,6 +20,7 @@ const token = 'qualification-private-ticket';
 const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includes('--wayland') ? 'wayland' : 'x11';
 const separateCursor = backend !== 'macos' && !process.argv.includes('--embedded-cursor');
 const controlCursor = separateCursor ? 'default' : 'none';
+const unsupportedReason = process.argv.includes('--unsupported-gpu') ? 'GPU_SCANOUT_UNSUPPORTED' : '';
 let messages = [], controls = [], sockets = [], generation = 0, frame = 0, selectedMode = 'control';
 let control, media, display = 'one', connectionCount = 0, disconnects = 0, ticketFailures = 0;
 let conflictNextConnect = false;
@@ -89,7 +90,9 @@ server.on('upgrade', (request, socket, head) => {
       control = connection; controls.push(connection);
       connection.on('message', data => {
         const packet = JSON.parse(data); const command = packet.command; messages.push(packet);
-        if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: { backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: true } }));
+        if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: unsupportedReason
+          ? { backend: 'linux-drm-kms', state: 'unavailable', reason: unsupportedReason, screen: false, input: false, unlock: false, locked_screen: false, audio: false, clipboard: false, displays: [] }
+          : { backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: true } }));
         if (command.method === 'connect') {
           if (lockedNextConnect) {
             lockedNextConnect = false;
@@ -167,6 +170,27 @@ try {
     Object.defineProperty(navigator, 'clipboard', { value: { readText: denied, writeText: denied } });
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/_redeven_desktop/`);
+  if (unsupportedReason) {
+    await page.waitForFunction(() => document.querySelector('#status').textContent === 'Desktop unavailable');
+    assert.equal(await page.locator('#hint').textContent(), 'This graphics device cannot provide the desktop image required for remote control.');
+    assert(await page.locator('#reconnect').isHidden(), 'unsupported graphics should not expose a misleading retry action');
+    assert(await page.locator('.floe-remote-input').isDisabled(), 'unsupported graphics enabled remote input');
+    assert(await page.locator('#unlock-bar').isHidden(), 'unsupported graphics exposed unlock controls');
+    assert.equal(messages.filter(item => item.command.method === 'connect').length, 0, 'unsupported graphics attempted a desktop connection');
+    const catalogs = await page.evaluate(() => window.remoteDesktopCatalog);
+    for (const [locale, catalog] of Object.entries(catalogs)) {
+      await page.evaluate(locale => { document.documentElement.lang = locale; }, locale);
+      await page.waitForTimeout(40);
+      const shown = await page.evaluate(() => ({ status: document.querySelector('#status').textContent, hint: document.querySelector('#hint').textContent }));
+      assert.equal(shown.status, catalog.unsupported, `${locale} unsupported state was not localized`);
+      assert.equal(shown.hint, catalog.gpuUnsupported, `${locale} GPU limitation was not localized`);
+    }
+    const unsupportedTickets = connectionCount;
+    await page.waitForTimeout(900);
+    assert.equal(connectionCount, unsupportedTickets, 'unsupported graphics triggered an automatic reconnect loop');
+    assert.deepEqual(errors, []);
+    console.log(JSON.stringify({ passed: true, backend: 'linux-drm-kms', checks: ['unsupported scanout reason', 'input disabled', 'unlock hidden', 'no misleading retry', 'no connect command'] }));
+  } else {
   await page.waitForFunction(() => document.querySelector('#connection').hidden);
   const canvasCursor = () => page.locator('#desktop').evaluate(element => getComputedStyle(element).cursor);
   assert.notEqual(await canvasCursor(), 'none', 'waiting for the first picture must retain the local cursor');
@@ -649,6 +673,7 @@ try {
     '/_redeven_desktop/disconnect', 'response:/_redeven_desktop/disconnect', 'disposed',
   ], 'disconnect must finish through the native transport before disposal');
   console.log(JSON.stringify({ passed: true, backend, separateCursor, checks: ['painted cursor ownership', 'pointer and drag without media or animation frames', 'captured view-only cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'shortcut receipts', 'browser and Desktop files', 'clipboard epoch fencing', 'fullscreen hide and pin', 'disconnect retry and cleared pixels'] }));
+  }
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));
   if (directory) await rm(directory, { recursive: true, force: true });
