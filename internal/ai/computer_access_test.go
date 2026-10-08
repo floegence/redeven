@@ -97,8 +97,13 @@ func TestComputerFullAccessRechecksAnExistingPermissionPause(t *testing.T) {
 			control.threadID, control.turnID, control.runID = "thread-first", turn, "run"
 			control.pauseForUser()
 			control.pause = &InteractionSafetyDecision{Level: "takeover", RequiredOrigin: "https://example.test", RequiredApp: "dev.Notes", ReasonCodes: []string{"foreground_permission"}}
-			call := TargetToolCall{ThreadID: "thread-first", TurnID: turn, RunID: "run", TargetID: "browser-main", ToolName: "computer.screenshot", controlReturn: true}
-			_, err := runtime.ExecuteTargetTool(t.Context(), call)
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: turn, RunID: "run", TargetID: "browser-main", ToolName: "computer.screenshot", interactionID: "resolved-input"}
+			runtime.resumeComputerControl(call, call.RunID)
+			permissionType := "full_access"
+			if !full {
+				permissionType = "approval_required"
+			}
+			_, err := runtime.ExecuteTargetTool(computerPermissionContext(t, permissionType), call)
 			if full {
 				var unavailable *TargetStartupError
 				if len(executor.calls) != 1 || !errors.As(err, &unavailable) || unavailable.Reason != "control_observation_unavailable" {

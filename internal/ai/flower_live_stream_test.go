@@ -13,8 +13,10 @@ import (
 
 	flconfig "github.com/floegence/floret/v7/config"
 	"github.com/floegence/floret/v7/identity"
+	"github.com/floegence/floret/v7/observation"
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -37,6 +39,89 @@ func TestFlowerWorkspaceStreamAcceptsEmptySelectionAndReceivesBackgroundThreadUp
 	frame := nextFlowerLiveStreamFrame(t, subscription)
 	if frame.Kind != FlowerLiveStreamThreadBatch {
 		t.Fatalf("workspace update kind=%q, want thread.batch", frame.Kind)
+	}
+}
+
+func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *testing.T) {
+	ctx := context.Background()
+	svc := newSendTurnTestService(t)
+	meta := &session.Meta{
+		ChannelID: "channel_computer_status", EndpointID: "env_computer_status",
+		UserPublicID: "user_computer_status", NamespacePublicID: "namespace_computer_status",
+		CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	thread, err := svc.CreateThread(ctx, meta, "Computer recovery", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const turnID, runID, callID, interactionID = "turn-computer-status", "run-computer-status", "call-computer-status", "tool-input:computer-status"
+	current := flruntime.ThreadView{
+		ThreadID: identity.ThreadID(thread.ThreadID), TurnID: turnID, RunID: runID,
+		Activity: flruntime.ThreadActivityActive, Attention: flruntime.AttentionSummary{InputCount: 1},
+		Items: []flruntime.ThreadItem{{
+			ID: callID, TurnID: turnID, RunID: runID, Kind: flruntime.ThreadItemTool,
+			Activity: &observation.ActivityItem{ItemID: callID, ToolID: callID, ToolName: "browser.navigate", Kind: observation.ActivityKindTool,
+				Status: observation.ActivityStatusSuccess, Presentation: &tools.ActivityPresentation{TargetRefs: []tools.ActivityTargetRef{{Kind: "computer_control", ResourceRef: "browser-main"}}}},
+		}},
+		Interactions: []flruntime.ThreadInteraction{{
+			ID: interactionID, TurnID: turnID, RunID: runID, Kind: flruntime.ThreadInteractionInput, ToolCallID: callID,
+			Input: &flruntime.InputPresentation{Summary: "External step", Questions: []flruntime.InputQuestion{{ID: "computer_control", Kind: "select", Options: []string{"Return control to Flower"}}}},
+		}},
+	}
+	canonical, err := svc.threadRuntime.List(ctx, flruntime.ThreadScope{})
+	if err != nil || len(canonical) != 1 {
+		t.Fatalf("initial canonical list=%#v, err=%v", canonical, err)
+	}
+	summary := canonical[0]
+	summary.Activity, summary.TurnID, summary.RunID = flruntime.ThreadActivityActive, turnID, runID
+	summary.Attention = flruntime.AttentionSummary{InputCount: 1}
+	summary.PendingInput = current.Interactions[0].Input
+	runtime := &authorityContinuityRuntime{ThreadService: svc.threadRuntime}
+	runtime.list = func(context.Context, flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
+		return []flruntime.ThreadSummary{summary}, nil
+	}
+	runtime.view = func(context.Context, identity.ThreadID) (flruntime.ThreadView, error) { return current, nil }
+	svc.threadRuntime = runtime
+	registry := NewTargetRegistry()
+	if err := registry.Register(TargetDescriptor{ID: "browser-main", Kind: "browser.managed", State: "connection_required", Ready: false}); err != nil {
+		t.Fatal(err)
+	}
+	svc.targetResolver = registry
+
+	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	if got := nextFlowerLiveStreamFrame(t, subscription).Kind; got != FlowerLiveStreamReady {
+		t.Fatalf("first baseline kind=%q, want ready", got)
+	}
+	if got := nextFlowerLiveStreamFrame(t, subscription).Kind; got != FlowerLiveStreamThreadBatch {
+		t.Fatalf("second baseline kind=%q, want thread.batch", got)
+	}
+	statusFrame := nextFlowerLiveStreamFrame(t, subscription)
+	if statusFrame.Kind != FlowerLiveStreamComputerStatus {
+		t.Fatalf("third baseline kind=%q, want computer.status", statusFrame.Kind)
+	}
+	var baseline FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(statusFrame.Data, &baseline); err != nil {
+		t.Fatal(err)
+	}
+	if baseline.ThreadID != thread.ThreadID || baseline.ComputerStatus == nil || baseline.ComputerStatus.ThreadID != thread.ThreadID || baseline.ComputerStatus.InteractionID != interactionID || baseline.ComputerStatus.TargetID != "browser-main" || baseline.ComputerStatus.State != "unavailable" || baseline.ComputerStatus.ReasonCode != "connection_required" {
+		t.Fatalf("computer status baseline=%#v", baseline)
+	}
+
+	svc.publishFlowerComputerStatus(meta.EndpointID, FlowerComputerStatus{ThreadID: thread.ThreadID, TargetID: "browser-main"})
+	statusFrame = nextFlowerLiveStreamFrame(t, subscription)
+	var update FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(statusFrame.Data, &update); err != nil {
+		t.Fatal(err)
+	}
+	if update.Kind != FlowerLiveStreamComputerStatus || update.ThreadID != thread.ThreadID || update.ComputerStatus == nil || update.ComputerStatus.InteractionID != interactionID {
+		t.Fatalf("computer status update=%#v", update)
+	}
+	if strings.Contains(string(statusFrame.Data), "password") || strings.Contains(string(statusFrame.Data), "secret") {
+		t.Fatalf("status included private observation data: %s", statusFrame.Data)
 	}
 }
 

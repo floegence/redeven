@@ -133,7 +133,9 @@ type TargetToolCall struct {
 	revalidate           func(context.Context) error
 	scriptOperation      bool
 	liveFrame            bool
-	controlReturn        bool
+	recoveryObservation  bool
+	recoverySelection    bool
+	interactionID        string
 	userInput            bool
 	passiveCapture       bool
 	ThreadID             string          `json:"thread_id,omitempty"`

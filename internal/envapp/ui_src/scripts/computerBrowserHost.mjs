@@ -225,7 +225,7 @@ export async function createComputerBrowserHost(options) {
       const source = requireSource(id);
       const provenance = { id: request.id, target_id: source.id, execution_location: source.descriptor.managed ? `${process.platform}_headless_browser` : 'connected_browser' };
       if (request.target_id && request.target_id !== source.id) throw new Error('BROWSER_SOURCE_IDENTITY_CHANGED');
-      if (source.busy || isPrivate(id) && request.user_control !== true && request.return_control !== true) return { ...provenance, error: 'TARGET_IN_USE' };
+      if (source.busy || isPrivate(id) && request.user_control !== true && request.recovery_observation !== true) return { ...provenance, error: 'TARGET_IN_USE' };
       source.busy = true;
       let completed;
       const task = { cancelled: false, done: new Promise(resolve => { completed = resolve; }) };
@@ -233,7 +233,8 @@ export async function createComputerBrowserHost(options) {
       try {
         // Only a Runtime command admitted through its target gate reaches here.
         // This changes navigation authority, never thread/run ownership.
-        await source.owner.setUserBrowsing(false);
+        if (request.recovery_observation === true) await source.owner.prepareRecoveryObservation();
+        else await source.owner.setUserBrowsing(false);
         if (task.cancelled) throw new Error('BROWSER_TOOL_CANCELLED');
         return { ...provenance, ...await source.owner.controller.execute(request) };
       } finally { source.busy = false; source.toolTask = undefined; completed(); }

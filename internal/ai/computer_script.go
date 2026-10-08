@@ -411,7 +411,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	default:
 		return TargetToolCall{}, computerTargetFailure(parent, "INVALID_REQUEST")
 	}
-	for _, key := range []string{"target", "target_id", "thread_id", "turn_id", "run_id", "user_control", "return_control", "allow_foreground", "full_access", "allowed_origins", "allowed_apps"} {
+	for _, key := range []string{"target", "target_id", "thread_id", "turn_id", "run_id", "user_control", "recovery_observation", "allow_foreground", "full_access", "allowed_origins", "allowed_apps"} {
 		if _, ok := args[key]; ok {
 			return TargetToolCall{}, computerTargetFailure(parent, "TARGET_NOT_ALLOWED")
 		}

@@ -444,7 +444,10 @@ func TestManagedBrowserPrivateRecoverySharesProfileOwner(t *testing.T) {
 	if owner == nil {
 		t.Fatal("private recovery bypassed the managed profile owner")
 	}
-	if err := runtime.ReobserveComputerTarget(ctx, call); err != nil {
+	call.interactionID = "resolved-input"
+	runtime.resumeComputerControl(call, call.RunID)
+	call.ToolName = "computer.screenshot"
+	if _, err := runtime.ExecuteTargetTool(ctx, call); err != nil {
 		t.Fatal(err)
 	}
 	target, err = runtime.PrepareTarget(ctx, target)

@@ -69,12 +69,12 @@ func handle(_ line: String) {
         guard let selected = accessibility.windows[target] else { throw HostFailure(code: "TARGET_CONNECTION_REQUIRED", message: "Select an application window before using it.") }
         window = selected; foreground.target = selected
         let privateInput = request["user_control"] as? Bool == true
-        let returning = request["return_control"] as? Bool == true
+        let returning = request["recovery_observation"] as? Bool == true
         let fullAccess = request["full_access"] as? Bool == true
         let allowForeground = fullAccess || request["allow_foreground"] as? Bool == true
         let allowedApps = request["allowed_apps"] as? [String] ?? []
         if returning {
-            guard tool == "computer.screenshot" else { throw NativeInput.invalid("Handback requires a fresh observation.") }
+            guard ["computer.observe", "computer.screenshot"].contains(tool) else { throw NativeInput.invalid("Recovery requires a fresh observation.") }
             selected.userInControl = false; selected.invalidate()
         }
         if privateInput {

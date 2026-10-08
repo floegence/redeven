@@ -18,6 +18,12 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	r.mu.RLock()
 	closed := r.closed
 	executor := r.executors[event.Target]
+	threadID := ""
+	if control := r.controls[event.Target]; control != nil {
+		control.mu.Lock()
+		threadID = control.threadID
+		control.mu.Unlock()
+	}
 	r.mu.RUnlock()
 	if closed {
 		return
@@ -44,6 +50,9 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 		if target, err := r.registry.ResolveTarget(ctx, event.Target); err == nil {
 			target.Ready, target.State = false, "connection_required"
 			_ = r.registry.Update(target)
+		}
+		if threadID != "" {
+			r.publishComputerStatus(FlowerComputerStatus{ThreadID: threadID, TargetID: event.Target, State: "unavailable", ReasonCode: "source_fault"})
 		}
 		return
 	}
@@ -74,6 +83,9 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	r.releaseScripts(func(key computerScriptKey) bool { return key.target == event.Target })
 	if closer, ok := executor.(interface{ Close() error }); ok {
 		_ = closer.Close()
+	}
+	if threadID != "" {
+		r.publishComputerStatus(FlowerComputerStatus{ThreadID: threadID, TargetID: event.Target, State: "unavailable", ReasonCode: "target_closed"})
 	}
 }
 

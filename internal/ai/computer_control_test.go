@@ -2,9 +2,113 @@ package ai
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestComputerRecoveryRejectsWritesUntilFreshObservation(t *testing.T) {
+	executor := &recordingTargetExecutor{}
+	continuation := &TargetToolCall{ThreadID: "thread", TurnID: "turn", RunID: "waiting-run", TargetID: "target", interactionID: "tool-input:resolved"}
+	r := &run{
+		threadID: "thread", turnID: "turn", id: "recovery-run",
+		targetResolver:     staticTargetResolver{target: TargetDescriptor{ID: "target", Kind: "browser.managed", State: "ready", Ready: true}},
+		targetToolExecutor: executor, computerContinuation: continuation,
+		floretEventIdentity: floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: "recovery-run", threadID: "thread", turnID: "turn"},
+	}
+	_, err := r.execTargetTool(t.Context(), "write", "computer.click", map[string]any{"target": "target"})
+	var policy *targetToolPolicyError
+	if !errors.As(err, &policy) || policy.code != "recovery_observation_required" {
+		t.Fatalf("write before observation returned %v", err)
+	}
+	for _, instruction := range []string{"fresh observation", "computer.targets", "computer.select_target", "Do not repeat completed actions"} {
+		if !strings.Contains(err.Error(), instruction) {
+			t.Fatalf("model feedback omitted %q: %v", instruction, err)
+		}
+	}
+	if len(executor.calls) != 0 {
+		t.Fatalf("write reached target before observation: %+v", executor.calls)
+	}
+}
+
+func TestComputerRecoverySelectionRequiresCanonicalInteraction(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		turnID        string
+		runID         string
+		interactionID string
+		allowed       bool
+	}{
+		{name: "exact response", turnID: "recovery-turn", runID: "recovery-run", interactionID: "tool-input:resolved", allowed: true},
+		{name: "wrong interaction", turnID: "recovery-turn", runID: "recovery-run", interactionID: "tool-input:other"},
+		{name: "old run", turnID: "recovery-turn", runID: "waiting-run", interactionID: "tool-input:resolved"},
+		{name: "old turn", turnID: "waiting-turn", runID: "recovery-run", interactionID: "tool-input:resolved"},
+		{name: "missing interaction", turnID: "recovery-turn", runID: "recovery-run"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			host, _, _, _ := computerBindingFixture(t)
+			control := host.controlForTarget("browser-main")
+			control.threadID, control.turnID, control.runID = "thread-first", "recovery-turn", "recovery-run"
+			control.pause = &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control"}}
+			control.recheckInteractionID = "tool-input:resolved"
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: test.turnID, RunID: test.runID, interactionID: test.interactionID, recoverySelection: true, ToolName: "computer.targets"}
+			err := host.requireComputerSelectionOpen(call)
+			if test.allowed && err != nil {
+				t.Fatalf("canonical recovery could not inspect targets: %v", err)
+			}
+			if !test.allowed && err == nil {
+				t.Fatal("target selection bypassed the exact canonical interaction")
+			}
+		})
+	}
+}
+
+func TestComputerRecoveryCanSelectDiscoveredReplacement(t *testing.T) {
+	host, _, store, _ := computerBindingFixture(t)
+	if err := store.SetComputerTarget(t.Context(), "thread-first", "browser-main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.registry.Update(TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "Desktop", State: "ready", Ready: true}); err != nil {
+		t.Fatal(err)
+	}
+	control := host.controlForTarget("browser-main")
+	control.threadID, control.turnID, control.runID = "thread-first", "recovery-turn", "recovery-run"
+	control.pause = &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control"}}
+	control.recheckInteractionID = "tool-input:resolved"
+	host.registry.remove("browser-main")
+	host.registry.remove("browser-main")
+	continuation := TargetToolCall{ThreadID: "thread-first", TurnID: "recovery-turn", RunID: "waiting-run", TargetID: "browser-main", interactionID: "tool-input:resolved"}
+	r := &run{
+		threadID: "thread-first", turnID: "recovery-turn", id: "recovery-run",
+		targetResolver: host, targetToolExecutor: host, computerContinuation: &continuation,
+		floretEventIdentity: floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: "recovery-run", threadID: "thread-first", turnID: "recovery-turn"},
+	}
+	inventoryValue, err := r.execComputerManagement(computerAuthorizedTestContext(t, r, "discover", "computer.targets"), "discover", "computer.targets", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory, ok := inventoryValue.(ComputerTargetInventory)
+	if !ok {
+		t.Fatalf("target discovery returned %T", inventoryValue)
+	}
+	var candidate string
+	for _, item := range inventory.Candidates {
+		if item.TargetID == "desktop-main" {
+			candidate = item.CandidateRef
+		}
+	}
+	if candidate == "" {
+		t.Fatalf("replacement was not discovered: %+v", inventory)
+	}
+	if _, err := r.execComputerManagement(computerAuthorizedTestContext(t, r, "select", "computer.select_target"), "select", "computer.select_target", map[string]any{"candidate_ref": candidate}); err != nil {
+		t.Fatalf("Flower could not select discovered replacement: %v", err)
+	}
+	selected, err := store.GetComputerTarget(t.Context(), "thread-first")
+	if err != nil || selected != "desktop-main" {
+		t.Fatalf("selected target=%q err=%v", selected, err)
+	}
+}
 
 func TestComputerControlRejectsOtherThreadsAndRequiresExplicitReturn(t *testing.T) {
 	body, attachment := computerFrameFixture(t)
@@ -27,7 +131,10 @@ func TestComputerControlRejectsOtherThreadsAndRequiresExplicitReturn(t *testing.
 	if executor.observations.Load() != 0 {
 		t.Fatal("unauthorized observation reached adapter")
 	}
-	if err := runtime.ReobserveComputerTarget(t.Context(), owner); err != nil {
+	owner.interactionID = "resolved-input"
+	runtime.resumeComputerControl(owner, "resumed")
+	owner.RunID, owner.ToolName = "resumed", "computer.screenshot"
+	if _, err := runtime.ExecuteTargetTool(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	if executor.observations.Load() != 1 {
@@ -47,7 +154,7 @@ func TestComputerControlRejectsOtherThreadsAndRequiresExplicitReturn(t *testing.
 	if _, err := runtime.ExecuteTargetTool(t.Context(), other); err == nil {
 		t.Fatal("stale release stole current target")
 	}
-	runtime.releaseComputerControl("owner", "run")
+	runtime.releaseComputerControl("owner", "resumed")
 	if _, err := runtime.ExecuteTargetTool(t.Context(), other); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +215,11 @@ func TestComputerControlContinuationKeepsTurnAndUserBoundaries(t *testing.T) {
 		t.Fatal("continuation returned user control without handback")
 	}
 	executor.safe.Store(true)
-	if err := runtime.ReobserveComputerTarget(t.Context(), owner); err != nil {
+	owner.interactionID = "resolved-input"
+	runtime.resumeComputerControl(owner, owner.RunID)
+	observation := owner
+	observation.ToolName = "computer.screenshot"
+	if _, err := runtime.ExecuteTargetTool(t.Context(), observation); err != nil {
 		t.Fatal(err)
 	}
 	for _, identity := range [][3]string{{"other", "turn", "resumed"}, {"owner", "other-turn", "resumed"}, {"owner", "", "resumed"}} {

@@ -785,7 +785,7 @@ export type FlowerThreadView = Readonly<{
 
 export type FlowerLiveStreamEnvelope = Readonly<{
   schema_version: number;
-  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'computer.frame';
+  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'computer.frame' | 'computer.status';
   observer_id?: string;
   thread_id?: string;
   summaries?: readonly FlowerThreadSnapshot[];
@@ -814,6 +814,14 @@ export type FlowerLiveStreamEnvelope = Readonly<{
     height?: number;
     sequence: number;
     captured_at_ms?: number;
+  }>;
+  computer_status?: Readonly<{
+    thread_id: string;
+    interaction_id?: string;
+    target_id: string;
+    state: 'available' | 'unavailable' | 'changed';
+    reason_code?: string;
+    at_unix_ms: number;
   }>;
 }>;
 

@@ -12,7 +12,7 @@ import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtime
 import { FlowerComputerStage } from '../../../../flower_ui/src/FlowerComputerStage';
 import { activityItem, activityTimeline, adapter, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-const STAGE_STATES = { awaiting_control: 'Waiting for you to take control', historical: 'Historical screenshot', stopped: 'Computer task stopped', disconnected: 'Connection lost', taking_control:'Taking control', user_control:'You are controlling', returning_control:'Returning control', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
+const STAGE_STATES = { awaiting_control: 'Waiting for you to take control', historical: 'Historical screenshot', stopped: 'Computer task stopped', disconnected: 'Connection lost', taking_control:'Taking control', user_control:'You are controlling', checking: 'Checking page', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
 
 function computerBootstrap(snapshot: FlowerThreadSnapshot) {
   const base = runtimeCurrentView(snapshot, 1);
@@ -380,12 +380,12 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   const png = () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' });
   const inputComputerControl = vi.fn(async (_input: FlowerComputerUserInput) => undefined);
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:result-control', current: { ...canonical, view_version: 3, activity: 'idle' as const, interactions: [], last_outcome: 'completed' as const } }));
-  submitInput.mockRejectedValueOnce(Object.assign(new Error('safety requires user control'), { code: 'computer_control_not_ready' }));
   const saveRate = vi.fn();
   let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
+  let autoFrame = true;
   let sequence = 0;
   const setComputerViewer = vi.fn(async (request: { observer_id: string; revision: number; thread_id?: string; target_id?: string; interaction_id?: string; fps?: number }) => {
-    if (request.interaction_id) setTimeout(() => deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: {
+    if (request.interaction_id && autoFrame) setTimeout(() => deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: {
       session_id: request.observer_id, viewer_revision: request.revision, target_id: 'browser-main', interaction_id: request.interaction_id, frame_id: String(++sequence), mime_type: 'image/png', sequence,
     } }), 20);
   });
@@ -422,8 +422,9 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await waitFor(() => setComputerViewer.mock.calls.at(-1)?.[0].fps === 30);
   expect(saveRate).toHaveBeenLastCalledWith(30);
   await waitFor(() => Boolean(document.querySelector('.flower-computer-stage textarea')));
-  const keyboard = document.querySelector('.flower-computer-stage textarea') as HTMLTextAreaElement;
   const sendKey = (key: string) => {
+    const keyboard = document.querySelector('.flower-computer-stage textarea') as HTMLTextAreaElement | null;
+    if (!keyboard) return;
     if (key.length === 1) {
       keyboard.value = key;
       keyboard.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: key, bubbles: true }));
@@ -439,7 +440,31 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src !== firstURL);
   expect(inputComputerControl).toHaveBeenCalledTimes(1);
   expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer');
-  const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Done, continue')!;
+  autoFrame = false;
+  deliver({ schema_version: 1, kind: 'computer.status', thread_id: 'another-thread', computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  deliver({ schema_version: 1, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'old-interaction', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  deliver({ schema_version: 1, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'other-target', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(document.querySelector('.flower-computer-state')?.getAttribute('data-session-state')).toBe('user_control');
+  deliver({ schema_version: 1, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 20 } });
+  await waitFor(() => document.querySelector('.flower-computer-state')?.getAttribute('data-session-state') === 'disconnected');
+  const inputCountBeforeRecovery = inputComputerControl.mock.calls.length;
+  deliver({ schema_version: 1, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'available', at_unix_ms: 19 } });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(document.querySelector('.flower-computer-state')?.getAttribute('data-session-state')).toBe('disconnected');
+  deliver({ schema_version: 1, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'available', at_unix_ms: 21 } });
+  await waitFor(() => setComputerViewer.mock.calls.length > 2);
+  const recoveredViewer = setComputerViewer.mock.calls.at(-1)![0];
+  expect(recoveredViewer.revision).toBeGreaterThan(viewer.revision);
+  expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(inputComputerControl).toHaveBeenCalledTimes(inputCountBeforeRecovery);
+  deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: recoveredViewer.observer_id, viewer_revision: recoveredViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:result-control', frame_id: String(++sequence), sequence, mime_type: 'image/png' } });
+  await waitFor(() => document.querySelector('.flower-computer-state')?.getAttribute('data-session-state') === 'user_control');
+  await waitFor(() => document.querySelector('.flower-computer-stage textarea') !== null);
+  const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Continue check')!;
   await new Promise(resolve => setTimeout(resolve, 50));
   const privateURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
   deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...canonical, view_version: 2 } });
@@ -474,11 +499,6 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   handback.click();
   await waitFor(() => submitInput.mock.calls.length === 1);
   expect(submitInput).toHaveBeenCalledWith(expect.objectContaining({ answers: { computer_control: { choice_id: 'Return control to Flower' } } }));
-  await waitFor(() => Boolean(surface.querySelector('[role="alert"]')?.textContent?.includes('not ready')));
-  await waitFor(() => Boolean(document.querySelector('.flower-computer-stage textarea')));
-  expect(document.querySelector('.flower-computer-state')?.getAttribute('data-session-state')).toBe('user_control');
-  handback.click();
-  await waitFor(() => submitInput.mock.calls.length === 2);
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
 });
 

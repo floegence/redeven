@@ -3,7 +3,7 @@ import '../index.css';
 import './flower-feature.css';
 import { expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
-import type { FlowerBrowserInstallationSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerBrowserInstallationSnapshot, FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -34,6 +34,8 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   const loadExtensionStatus = vi.fn(async (): Promise<FlowerChromeStatus> => ({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'personal', name: 'Personal' }] }));
   const loadAccess = vi.fn(async () => ({ origins: ['https://existing.test'], apps: ['dev.Notes'], allow_foreground: false }));
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:step', current: { ...current, view_version: 2, activity: 'idle' as const, last_outcome: 'completed' as const, interactions: [] } }));
+  const inputComputerControl = vi.fn(async (_input: FlowerComputerUserInput) => undefined);
+  const setComputerViewer = vi.fn(async (_request: { interaction_id?: string }) => undefined);
   const browser = { storage_bytes: 600000, enabled: true, state: 'not_installed' as const, launch: { state: 'installation_required' as const }, directory: '/state/browser', received_bytes: 0,
     package: { name: 'Chrome for Testing', id: 'fixture', version: '148', platform: 'linux', architecture: 'amd64', url: 'https://cdn.playwright.dev/fixture.zip', sha256: '0'.repeat(64), size_bytes: 180000000, installed_bytes: 390000000 } };
   const loadBrowserInstallation = vi.fn().mockResolvedValue(browser);
@@ -45,17 +47,26 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   });
   const publishInstallation = (value: FlowerBrowserInstallationSnapshot) => receiveInstallation!(value);
   const installBrowser = vi.fn().mockResolvedValue({ ...browser, state: 'downloading', launch: { state: 'installation_required' as const }, operation_id: 'confirmed' });
-  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput,
+  let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
+  const publishStatus = (computer_status: NonNullable<FlowerLiveStreamEnvelope['computer_status']>, thread_id = computer_status.thread_id) => deliver({ schema_version: 1, kind: 'computer.status', thread_id, computer_status });
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput, inputComputerControl, setComputerViewer,
     computerManagement: { loadBrowserInstallation, subscribeBrowserInstallation, installBrowser, saveBrowserEnabled: vi.fn(), openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
-      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      while (!signal.aborted) {
+        const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>((resolve) => {
+          const abort = () => resolve(undefined);
+          deliver = (value) => { signal.removeEventListener('abort', abort); resolve(value); };
+          signal.addEventListener('abort', abort, { once: true });
+        });
+        if (envelope) yield envelope;
+      }
     },
   }, { focusThreadRequest: { request_id: 'select-assistance', thread_id: threadID }, layout: true });
   Object.assign(surface.style, { width: '1200px', height: '800px' });
   await waitFor(() => !!surface.querySelector('.flower-computer-control-heading'));
-  return { surface, gate, saveAccess, loadAccess, submitInput, loadExtensionStatus, loadBrowserInstallation, installBrowser, browser, publishInstallation, unsubscribeInstallation };
+  return { surface, gate, saveAccess, loadAccess, submitInput, inputComputerControl, setComputerViewer, publishStatus, loadExtensionStatus, loadBrowserInstallation, installBrowser, browser, publishInstallation, unsubscribeInstallation };
 }
 
 it('explains the exact site grant and grants it once before continuing without manual browser control', async () => {
@@ -129,7 +140,7 @@ it('names the CAPTCHA task and tells the user where to perform it', async () => 
   const s = await setup('captcha');
   expect(s.surface.querySelector('.flower-computer-control-heading')?.textContent).toContain('Complete the CAPTCHA');
   expect(s.surface.querySelector('[data-computer-control-action="take"]')?.textContent).toBe('Open page');
-  expect(s.surface.querySelector('[data-computer-control-action="return"]')?.textContent).toBe('Done, continue');
+  expect(s.surface.querySelector('[data-computer-control-action="return"]')?.textContent).toBe('Continue check');
   expect(s.saveAccess).not.toHaveBeenCalled();
 });
 
@@ -139,35 +150,38 @@ it('does not invent a sign-in requirement when page inspection fails', async () 
   expect(s.surface.querySelector('.flower-computer-control-heading')?.textContent).not.toContain('Complete sign-in');
 });
 
-it('shows the newly observed CAPTCHA after access was saved instead of asking for access again', async () => {
-  const s = await setup();
-  s.submitInput.mockRejectedValueOnce(Object.assign(new Error('page needs attention'), {
-    code: 'computer_control_not_ready', data: { computer_assistance: { kind: 'captcha' } },
-  }));
-  s.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="grant"]')!.click();
-  await waitFor(() => s.saveAccess.mock.calls.length === 1);
-  s.gate.resolve();
-  await waitFor(() => s.surface.querySelector('.flower-computer-control-title')?.textContent === 'Complete the CAPTCHA');
-  expect(s.surface.querySelector('[data-computer-control-action="grant"]')).toBeNull();
-  expect(s.surface.querySelector('[data-computer-control-action="take"]')?.textContent).toBe('Open page');
-  expect(s.surface.querySelector('.flower-activity-inline-title')?.textContent).toBe('Open page');
+it('submits the canonical check answer without opening or capturing the page first', async () => {
+  const s = await setup('captcha');
+  expect(document.querySelector('.flower-computer-stage')).toBeNull();
+  s.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="return"]')!.click();
+  await waitFor(() => s.submitInput.mock.calls.length === 1);
+  expect(s.submitInput).toHaveBeenCalledWith(expect.objectContaining({ answers: { computer_control: { choice_id: 'Return control to Flower' } } }));
+  expect(s.setComputerViewer).not.toHaveBeenCalled();
+  expect(document.querySelector('.flower-computer-stage')).toBeNull();
 });
 
-it('shows a newly observed site scope and grants only that scope on the next explicit click', async () => {
-  const s = await setup();
-  s.submitInput.mockRejectedValueOnce(Object.assign(new Error('page needs attention'), {
-    code: 'computer_control_not_ready', data: { computer_assistance: { kind: 'access', origin: 'https://identity.test' } },
-  }));
-  s.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="grant"]')!.click();
-  await waitFor(() => s.saveAccess.mock.calls.length === 1);
-  s.gate.resolve();
-  await waitFor(() => s.surface.querySelector('.flower-computer-control-resource')?.textContent === 'https://identity.test');
-  expect(getComputedStyle(s.surface.querySelector('.flower-computer-control-resource')!).fontSize).toBe('12px');
-  expect(s.saveAccess).toHaveBeenCalledTimes(1);
-  s.loadAccess.mockResolvedValue({ origins: ['https://existing.test', 'https://www.google.com'], apps: ['dev.Notes'], allow_foreground: false });
-  s.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="grant"]')!.click();
-  await waitFor(() => s.saveAccess.mock.calls.length === 2);
-  expect(s.saveAccess).toHaveBeenLastCalledWith('assistance-fixture', { origins: ['https://existing.test', 'https://www.google.com', 'https://identity.test'], apps: ['dev.Notes'], allow_foreground: false });
+it('shows target loss from a workspace event without an open viewer and ignores stale or mismatched events', async () => {
+  const s = await setup('captcha');
+  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
+  const initialHint = card.querySelector('p')!.textContent;
+  const unavailable = { thread_id: 'assistance-fixture', interaction_id: 'tool-input:step', target_id: 'browser-main', state: 'unavailable' as const, reason_code: 'target_closed', at_unix_ms: 100 };
+  s.publishStatus(unavailable, 'another-thread');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  s.publishStatus({ ...unavailable, interaction_id: 'old-interaction' });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  s.publishStatus({ ...unavailable, target_id: 'another-target' });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(card.querySelector('p')!.textContent).toBe(initialHint);
+  expect(card.querySelector('[data-computer-control-action="take"]')).not.toBeNull();
+
+  s.publishStatus(unavailable);
+  await waitFor(() => Boolean(card.querySelector('p')?.textContent?.includes('available targets')));
+  expect(card.querySelector('[data-computer-control-action="take"]')).toBeNull();
+  s.publishStatus({ ...unavailable, state: 'available', reason_code: undefined, at_unix_ms: 99 });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(card.querySelector('[data-computer-control-action="take"]')).toBeNull();
+  s.publishStatus({ ...unavailable, state: 'available', reason_code: undefined, at_unix_ms: 101 });
+  await waitFor(() => card.querySelector('[data-computer-control-action="take"]') !== null);
 });
 
 

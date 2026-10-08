@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-10-08 — Flower computer recovery
+
+- Document that Floret admits the user's answer unchanged while Flower judges
+  recovery from fresh target observations in a new Run.
+- Replace screenshot-before-response and failed-handback guidance with exact
+  interaction lease updates, ephemeral resource status and fresh-frame privacy
+  requirements in [computer takeover](ai/computer-use-takeover.md) and
+  [private browser control](ai/computer-use-private-browser-control.md).
+
 ## 2026-10-05 — Stable Flower media loading
 
 - Documented one Desktop Flower adapter per selected environment and filesystem

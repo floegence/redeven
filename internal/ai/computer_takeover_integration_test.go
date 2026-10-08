@@ -77,11 +77,12 @@ func TestComputerTakeoverStopsProductionProviderLoop(t *testing.T) {
 	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: view.WaitingPrompt.PromptID,
 			Answers: map[string]RequestUserInputAnswer{"computer_control": {ChoiceID: "Return control to Flower"}}},
-	}); err == nil {
-		t.Fatal("return control resumed without a host observation boundary")
+	}); err != nil {
+		t.Fatal(err)
 	}
-	if providerCalls.Load() != 1 {
-		t.Fatal("invalid return continued provider")
+	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" || providerCalls.Load() > 1 })
+	if providerCalls.Load() != 2 {
+		t.Fatalf("canonical answer did not reach the provider: requests=%d", providerCalls.Load())
 	}
 	if _, err := svc.threadRuntime.Cancel(t.Context(), flruntime.CancelInput{ThreadID: identity.ThreadID(thread.ThreadID), RequestKey: "cancel"}); err != nil {
 		t.Fatal(err)
@@ -152,11 +153,11 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "pause", "status": "completed", "output": []any{item}}})
 					return
 				}
-				if requestNumber == 2 {
-					item := map[string]any{"type": "function_call", "id": "fc_resumed", "call_id": "resumed-observation", "name": "computer_screenshot", "arguments": `{"target":"browser.managed"}`}
+				if requestNumber == 2 || requestNumber == 3 {
+					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_resumed_%d", requestNumber), "call_id": fmt.Sprintf("resumed-observation-%d", requestNumber), "name": "computer_screenshot", "arguments": `{"target":"browser.managed"}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
-					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "resumed-observation", "status": "completed", "output": []any{item}}})
+					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": fmt.Sprintf("resumed-observation-%d", requestNumber), "status": "completed", "output": []any{item}}})
 					return
 				}
 				writeDeepSeekIntegrationNaturalResponse(w, flusher, "continued", "Control returned.")
@@ -284,16 +285,37 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				t.Fatal("user input leaked into canonical current view")
 			}
 			response := SubmitRequestUserInputResponseRequest{ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: waiting.WaitingPrompt.PromptID, Answers: map[string]RequestUserInputAnswer{"computer_control": {ChoiceID: "Return control to Flower"}}}}
-			if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, response); err == nil {
-				t.Fatal("sensitive page resumed")
-			} else if detail := ComputerControlErrorDetails(err); detail == nil || detail["computer_assistance"].(map[string]any)["kind"] != "login" {
-				t.Fatalf("re-observation lost the actual sign-in requirement: %v (%v)", detail, err)
+			if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, response); err != nil {
+				t.Fatal(err)
 			}
-			if requests.Load() != 1 || executor.effects.Load() != 1 || executor.observations.Load() != 1 {
-				t.Fatal("failed observation replayed or continued action")
+			resolvedView, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolved := false
+			for _, interaction := range resolvedView.Interactions {
+				if interaction.ID != waiting.WaitingPrompt.PromptID || !interaction.Resolved {
+					continue
+				}
+				call, computer, err := computerControlCall(resolvedView, interaction)
+				if err != nil || !computer || call.TargetID != "target" || call.TurnID != string(interaction.TurnID) || call.RunID != string(interaction.RunID) {
+					t.Fatalf("resolved interaction lost canonical target provenance: call=%+v computer=%t error=%v", call, computer, err)
+				}
+				resolved = true
+				break
+			}
+			if !resolved {
+				t.Fatal("submitted interaction was not resolved canonically")
+			}
+			waitingAgain := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool {
+				return v.WaitingPrompt != nil && v.WaitingPrompt.PromptID != waiting.WaitingPrompt.PromptID
+			})
+			if requests.Load() != 2 || executor.effects.Load() != 1 || executor.observations.Load() != 1 || waitingAgain.WaitingPrompt == nil {
+				t.Fatalf("fresh observation did not create a new canonical wait: requests=%d effects=%d observations=%d", requests.Load(), executor.effects.Load(), executor.observations.Load())
 			}
 			// The actual user finishes outside model history, then explicitly returns.
 			executor.safe.Store(true)
+			response.Response.PromptID = waitingAgain.WaitingPrompt.PromptID
 			if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, response); err != nil {
 				t.Fatal(err)
 			}
@@ -301,7 +323,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 			if err := svc.InputComputerControl(t.Context(), meta, userInput); err == nil {
 				t.Fatal("resolved interaction retained user control")
 			}
-			if requests.Load() != 3 || executor.effects.Load() != 1 || executor.observations.Load() != 3 {
+			if requests.Load() != 4 || executor.effects.Load() != 1 || executor.observations.Load() != 2 {
 				t.Fatalf("requests=%d effects=%d observations=%d", requests.Load(), executor.effects.Load(), executor.observations.Load())
 			}
 		})

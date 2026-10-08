@@ -11,8 +11,8 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 import { FlowerActivityRows } from './FlowerActivityRows';
 import { FlowerComputerConnections, type FlowerRequestedComputerAccess } from './FlowerComputerConnections';
-import { computerAssistance, computerAssistanceFromError, type ComputerAssistanceObservation } from './computerAssistance';
-import { computerFrameRate, computerControlErrorCode } from './computerViewer';
+import { computerAssistance } from './computerAssistance';
+import { computerFrameRate } from './computerViewer';
 import type { FlowerComputerFrameSource, FlowerComputerInputCommand, FlowerThreadPinMetadata, FlowerThreadPinPosition } from './contracts/flowerSurfaceContracts';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { WebSearchCapabilityBadge } from './WebSearchCapabilityBadge';
@@ -4638,6 +4638,24 @@ webSearch: model.web_search,
       if (elapsed >= 1000) { setReceivedComputerFPS(Math.round(computerRateFrames * 10000 / elapsed) / 10); computerRateWindow = Date.now(); computerRateFrames = 0; }
       return;
     }
+    if (envelope.kind === 'computer.status') {
+      const status = envelope.computer_status;
+      if (!status || envelope.thread_id !== status.thread_id || status.thread_id !== selectedThreadID() || status.interaction_id !== selectedInputRequest()?.prompt_id
+        || status.target_id !== selectedComputerStage()?.targetID) return;
+      const previous = computerResourceStatus();
+      if (previous && previous.thread_id === status.thread_id && previous.interaction_id === status.interaction_id
+        && previous.target_id === status.target_id && previous.at_unix_ms > status.at_unix_ms) return;
+      setComputerResourceStatus(status);
+      if (status.state === 'unavailable') {
+        setComputerControlDisconnected(true);
+        setComputerControlReady(false);
+        computerInputGeneration++; queuedComputerText = undefined;
+      } else if (status.state === 'available' || status.state === 'changed') {
+        setComputerControlDisconnected(false);
+        setComputerControlReady(false);
+      }
+      return;
+    }
     if (envelope.kind === 'ready') { setComputerObserverID(envelope.observer_id ?? ''); setComputerLiveFrame(undefined); }
     if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
       if (envelope.kind === 'ready') flowerLiveReadyCount += 1;
@@ -5789,11 +5807,11 @@ webSearch: model.web_search,
   const [viewerFPS, setViewerFPS] = createSignal(computerFrameRate(props.adapter.computerFrameRate?.read()));
   const [privateControlRequested, setPrivateControlRequested] = createSignal(false);
   const [computerControlDisconnected, setComputerControlDisconnected] = createSignal(false);
+  const [computerResourceStatus, setComputerResourceStatus] = createSignal<FlowerLiveStreamEnvelope['computer_status']>();
   const [computerControlReady, setComputerControlReady] = createSignal(false);
-  const [computerReturning, setComputerReturning] = createSignal(false);
-  const [computerHandbackCommitting, setComputerHandbackCommitting] = createSignal(false);
-  const [computerHandbackError, setComputerHandbackError] = createSignal('');
-  const [computerRecheck, setComputerRecheck] = createSignal<{ threadID: string; promptID: string; observation: ComputerAssistanceObservation }>();
+  const [computerResponseSubmitting, setComputerResponseSubmitting] = createSignal(false);
+  const [computerResponseCommitting, setComputerResponseCommitting] = createSignal(false);
+  const [computerResponseError, setComputerResponseError] = createSignal('');
   const [computerViewFailed, setComputerViewFailed] = createSignal(false);
   const [computerViewerAssistance, setComputerViewerAssistance] = createSignal<string>();
   const [computerViewerRetry, setComputerViewerRetry] = createSignal(0);
@@ -5811,7 +5829,7 @@ webSearch: model.web_search,
   const resumeComputerViewer = () => batch(() => {
     if (computerControlDisconnected() && (!computerObserverID() || !computerCurrentVerified())) return;
     setComputerControlDisconnected(false);
-    setComputerControlError(false); setComputerViewFailed(false); setComputerViewerAssistance(undefined); setComputerHandbackError('');
+    setComputerControlError(false); setComputerViewFailed(false); setComputerViewerAssistance(undefined);
     setComputerControlReady(false); setComputerViewerRetry(value => value + 1);
   });
   const takeComputerControl = (source: HTMLElement) => batch(() => {
@@ -5836,7 +5854,7 @@ webSearch: model.web_search,
     const thread_id = selectedThreadID();
     const control = props.adapter.inputComputerControl;
     if (!thread_id || !request || !isComputerInput(request) || !control) return;
-    if (computerControlDisconnected() || computerRateChanging || computerControlError() || computerViewFailed() || computerReturning() || !computerControlReady()) return;
+    if (computerControlDisconnected() || computerRateChanging || computerControlError() || computerViewFailed() || computerResponseSubmitting() || !computerControlReady()) return;
     if (input.action === 'type' && queuedComputerText && queuedComputerText.text.length + (input.text?.length ?? 0) <= 4000) {
       queuedComputerText.text += input.text ?? '';
       return;
@@ -5870,8 +5888,9 @@ webSearch: model.web_search,
     computerInputGeneration++;
     queuedComputerText = undefined;
     setComputerControlDisconnected(false);
+    setComputerResourceStatus(undefined);
     setPrivateControlRequested(false); setComputerControlReady(false); setComputerControlError(false);
-    setComputerReturning(false); setComputerHandbackCommitting(false); setComputerHandbackError(''); setComputerViewFailed(false);
+    setComputerResponseSubmitting(false); setComputerResponseCommitting(false); setComputerResponseError(''); setComputerViewFailed(false);
   });
   const selectedComputerStage = createMemo<FlowerComputerStageSnapshot | null>(() => {
     const entries = selectedTimelineEntries();
@@ -5932,12 +5951,13 @@ webSearch: model.web_search,
     return Boolean(selectedComputerFrame()) || (status !== 'running' && status !== 'waiting_user' && status !== 'waiting_approval');
   });
   const selectedComputerAssistance = createMemo(() => {
-    const recheck = computerRecheck();
     if (isBrowserInstallInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'installation' });
     if (isBrowserConnectionInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'connection' });
-    return computerAssistance(selectedComputerStage()?.item, copy().computer,
-      recheck?.threadID === selectedThreadID() && recheck.promptID === selectedInputRequest()?.prompt_id ? recheck.observation : undefined, selectedThread()?.permission_type === 'full_access');
+    return computerAssistance(selectedComputerStage()?.item, copy().computer, undefined, selectedThread()?.permission_type === 'full_access');
   });
+  const selectedComputerAssistanceInstruction = createMemo(() => computerResourceStatus()?.state === 'unavailable'
+    ? copy().chat.computerControlNotReady
+    : selectedComputerAssistance().instruction);
   const requestedComputerAccess = createMemo<FlowerRequestedComputerAccess>(() => selectedComputerAssistance().requested);
   const computerExecutionMode = () => {
     const mode = selectedComputerStage()?.item.chips?.find(chip => chip.kind === 'execution_mode')?.value;
@@ -5953,7 +5973,7 @@ webSearch: model.web_search,
       }
     }
     if (computerControlDisconnected()) return 'disconnected';
-    if (computerReturning()) return 'returning_control';
+    if (computerResponseSubmitting()) return 'checking';
     if (computerViewFailed() || computerControlError()) return 'paused';
     if (privateControlRequested() && isComputerInput(selectedInputRequest())) return computerControlReady() ? 'user_control' : 'taking_control';
     if (isComputerInput(selectedInputRequest())) return 'awaiting_control';
@@ -5995,7 +6015,7 @@ webSearch: model.web_search,
   });
   const computerViewerKey = createMemo(() => {
     const stage = selectedComputerStage();
-    if (!computerCurrentVerified() || computerStageHistorical() || computerControlDisconnected() || selectedComputerFrame() || !computerStageOpen() || !documentVisible() || !computerObserverID() || !stage?.targetID || computerHandbackCommitting() || computerViewFailed()) return '';
+    if (!computerCurrentVerified() || computerStageHistorical() || computerControlDisconnected() || computerResourceStatus()?.state === 'unavailable' || selectedComputerFrame() || !computerStageOpen() || !documentVisible() || !computerObserverID() || !stage?.targetID || computerResponseCommitting() || computerViewFailed()) return '';
     const interaction = privateControlRequested() && isComputerInput(selectedInputRequest()) ? selectedInputRequest()?.prompt_id : '';
     if (!interaction && (!stage.runID || stage.runID !== selectedThread()?.active_run_id || selectedThread()?.status !== 'running')) return '';
     return JSON.stringify([computerObserverID(), selectedThreadID(), stage.targetID, interaction || '', viewerFPS(), computerViewerRetry()]);
@@ -7798,11 +7818,10 @@ webSearch: model.web_search,
     let accessSaved = !grant;
     try {
       if (computer) {
-        setComputerReturning(true); setComputerHandbackError('');
+        setComputerResponseSubmitting(true); setComputerResponseError('');
         await computerInputQueue;
         if (requestEpoch !== liveTransport.connectionEpoch()) return;
         if (threadID !== selectedThreadID() || selectedInputRequest()?.prompt_id !== request.prompt_id) return;
-        if (computerControlError()) { setComputerHandbackError(copy().chat.computerControlFailed ?? ''); return; }
         if (grant) {
           const management = props.adapter.computerManagement;
           if (!management) throw new Error('computer access unavailable');
@@ -7816,7 +7835,7 @@ webSearch: model.web_search,
           accessSaved = true;
           if (requestEpoch !== liveTransport.connectionEpoch() || threadID !== selectedThreadID() || selectedInputRequest()?.prompt_id !== request.prompt_id) return;
         }
-        setComputerHandbackCommitting(true);
+        setComputerResponseCommitting(true);
       }
       const receipt: FlowerSubmitInputReceipt = await props.adapter.submitInput({
         thread_id: thread.thread_id,
@@ -7839,14 +7858,12 @@ webSearch: model.web_search,
       if (requestEpoch !== liveTransport.connectionEpoch()) return;
       if (selectedThreadDetailMatches(threadID) && selectedInputRequest()?.prompt_id === request.prompt_id) {
         if (computer) {
-          const observation = computerAssistanceFromError(error);
-          if (observation) setComputerRecheck({ threadID, promptID: request.prompt_id, observation });
-          setComputerHandbackError(!accessSaved ? copy().computer.accessFailed : observation ? '' : computerControlErrorCode(error) === 'computer_control_not_ready' ? copy().chat.computerControlNotReady : copy().chat.computerControlFailed ?? '');
+          setComputerResponseError(!accessSaved ? copy().computer.accessFailed : copy().chat.computerControlFailed ?? '');
         }
         else notifyComposerError(getErrorMessage(error));
       }
     } finally {
-      if (computer && selectedThreadID() === threadID) { setComputerReturning(false); setComputerHandbackCommitting(false); }
+      if (computer && selectedThreadID() === threadID) { setComputerResponseSubmitting(false); setComputerResponseCommitting(false); }
       setDecisionSubmitting(threadID, request.prompt_id, false);
     }
   };
@@ -8081,17 +8098,17 @@ webSearch: model.web_search,
               <span class="flower-computer-control-icon" aria-hidden="true"><MonitorPointer class="h-4 w-4" /></span>
               <div class="flower-computer-control-copy">
                 <div class="flower-computer-control-title">{selectedComputerAssistance().title}</div>
-                <p class="flower-computer-control-hint">{selectedComputerAssistance().instruction}</p>
+                <p class="flower-computer-control-hint">{selectedComputerAssistanceInstruction()}</p>
                 <Show when={requestedComputerAccess().origin || requestedComputerAccess().app || requestedComputerAccess().foreground}>
                   <p class="flower-computer-control-resource">{[requestedComputerAccess().origin, requestedComputerAccess().app, requestedComputerAccess().foreground ? copy().computer.foreground : ''].filter(Boolean).join(' · ')}</p>
                 </Show>
                 <Show when={selectedComputerStage()?.target}><p class="flower-computer-control-hint">{selectedComputerStage()?.target}</p></Show>
               </div>
             </div>
-            <Show when={computerControlError() || computerViewFailed() || computerHandbackError()}>
+            <Show when={computerControlError() || computerViewFailed() || computerResponseError()}>
               <div class="flower-computer-control-notice" role="alert">
                 <AlertCircle class="h-4 w-4" aria-hidden="true" />
-                <p>{(computerControlError() || computerViewFailed()) ? copy().chat.computerControlFailed : computerHandbackError()}</p>
+                <p>{(computerControlError() || computerViewFailed()) ? copy().chat.computerControlNotReady : computerResponseError()}</p>
               </div>
             </Show>
             <div class="flower-computer-control-footer">
@@ -8104,8 +8121,8 @@ webSearch: model.web_search,
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
               <Show when={props.adapter.computerManagement && (selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'target')}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerDialog('settings')}>{copy().computer.title}</Button></Show>
-              <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target'}>
-              <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
+              <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target' && computerResourceStatus()?.state !== 'unavailable'}>
+              <Button variant="secondary" data-computer-control-action="take" disabled={computerResponseSubmitting() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               </Show>
               <Show when={selectedComputerAssistance().kind === 'installation'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('installation')}>{copy().computer.browserInstallTitle}</Button></Show>
               <Show when={selectedComputerAssistance().kind === 'connection'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('connection')}>{copy().computer.connectionTitle}</Button></Show>
@@ -8115,7 +8132,7 @@ webSearch: model.web_search,
                 if (!question || !choice) return;
                 selectInputChoice(question, choice);
                 void submitInputRequest(selectedComputerAssistance().kind === 'access' ? requestedComputerAccess() : undefined);
-              }}>{selectedComputerAssistance().kind === 'access' ? copy().computer.allowContinue : selectedComputerAssistance().kind === 'authorized' ? copy().computer.continueTask : copy().chat.computerReturnControl}</Button></Show>
+              }}>{selectedComputerAssistance().kind === 'access' ? copy().computer.allowContinue : selectedComputerAssistance().kind === 'authorized' ? copy().computer.continueTask : copy().chat.computerContinueCheck}</Button></Show>
               </div>
             </div>
           </Show>
@@ -12504,7 +12521,7 @@ webSearch: model.web_search,
                   && privateFrame?.interaction_id === selectedInputRequest()?.prompt_id) setComputerControlReady(true);
               }}
               onFrameError={() => setComputerViewFailed(true)} onRetry={resumeComputerViewer}
-              onInput={!computerStageHistorical() && !computerControlDisconnected() && computerStageOpen() && computerControlReady() && privateControlRequested() && !computerReturning() && !computerControlError() && !computerViewFailed() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
+              onInput={!computerStageHistorical() && !computerControlDisconnected() && computerStageOpen() && computerControlReady() && privateControlRequested() && !computerResponseSubmitting() && !computerControlError() && !computerViewFailed() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
               boundary={computerStageBoundary()}
               launcherBoundary={computerLauncherBoundary()}
               threadID={selectedThreadID()}

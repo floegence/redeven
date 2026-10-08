@@ -67,7 +67,7 @@ func (r *ComputerUseRuntime) authorizeComputerCall(ctx context.Context, call *Ta
 	permissionType := settings.PermissionType
 	// User control carries TurnID only for interaction provenance. Its policy
 	// comes from the saved setting; model calls require their invocation proof.
-	if call.TurnID != "" && !call.userInput && !call.controlReturn {
+	if call.TurnID != "" && !call.userInput {
 		snapshot, ok := toolAuthorizationSnapshotFromContext(ctx)
 		if !ok {
 			return errors.New("computer invocation permission snapshot is unavailable")

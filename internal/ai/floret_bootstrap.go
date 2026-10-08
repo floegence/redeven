@@ -109,6 +109,21 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 		effect.builder.threadID = request.ThreadID.String()
 		effect.builder.turnID = request.TurnID.String()
 		effect.builder.messageID = request.TurnID.String()
+		if request.InteractionID != "" {
+			view, err := service.threadRuntime.View(ctx, request.ThreadID)
+			if err != nil {
+				return nil, err
+			}
+			for _, interaction := range view.Interactions {
+				if interaction.ID != request.InteractionID || !interaction.Resolved || interaction.TurnID != request.TurnID {
+					continue
+				}
+				if call, computer, err := computerControlCall(view, interaction); computer && err == nil {
+					call.interactionID = interaction.ID
+					effect.builder.computerContinuation = &call
+				}
+			}
+		}
 	}
 	return service.buildThreadEffectAgent(ctx, effect)
 }

@@ -104,7 +104,7 @@ try {
         }
         assert.equal(stillPaused.safety?.level, 'routine', 'helper must report current page safety; Runtime controls dispatch');
         assert.equal(Boolean(stillPaused.screenshot), true, JSON.stringify(stillPaused));
-        const returned = await send('return', 'computer.screenshot', {}, { return_control: true });
+        const returned = await send('return', 'computer.screenshot', {}, { recovery_observation: true });
         assert.equal(returned.safety?.level, 'routine');
         assert.equal(Boolean(returned.screenshot), true);
         const continued = await send('continue', 'computer.screenshot');

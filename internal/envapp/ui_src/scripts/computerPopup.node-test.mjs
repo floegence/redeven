@@ -85,7 +85,7 @@ test('native popup workflows preserve effects and require separate target author
               assert.equal(denied.safety.level, 'takeover');
               assert.equal(denied.safety.required_origin, `http://localhost:${server.address().port}`);
               assert.equal(denied.result.observation, undefined);
-              const allowed = await childController.execute({ tool_name: 'computer.screenshot', args: {}, full_access: true, return_control: true });
+              const allowed = await childController.execute({ tool_name: 'computer.screenshot', args: {}, full_access: true, recovery_observation: true });
               assert.equal(allowed.safety.level, 'routine');
               assert.ok(allowed.screenshot);
               assert.ok((await childController.execute({ tool_name: 'computer.observe', args: {}, full_access: true })).result.observation);

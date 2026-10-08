@@ -164,7 +164,11 @@ func (s *Service) DisconnectComputerBrowser(ctx context.Context, meta *session.M
 	if !ok {
 		return errors.New("computer runtime is unavailable")
 	}
-	return host.disconnectBrowser(ctx, targetID)
+	if err := host.disconnectBrowser(ctx, targetID); err != nil {
+		return err
+	}
+	s.refreshPendingComputerStatus(ctx, meta, targetID)
+	return nil
 }
 
 func (r *ComputerUseRuntime) disconnectBrowser(ctx context.Context, targetID string) error {

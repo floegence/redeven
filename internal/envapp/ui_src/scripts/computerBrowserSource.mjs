@@ -129,6 +129,11 @@ async function createSourceOwner(source, disposeSource, captureDownloads) {
         controller.page.focusedSessions.add(transport);
       }
     },
+    async prepareRecoveryObservation() {
+      if (disposed) throw new Error('TARGET_CONNECTION_REQUIRED');
+      controller.page.handback();
+      await this.setUserBrowsing(false);
+    },
     dispose() {
       if (disposal) return disposal;
       disposed = true;

@@ -401,7 +401,7 @@ export type FlowerSurfaceCopy = Readonly<{
     computerStageZoomIn: string;
     computerStageZoomOut: string;
     computerStageRestore: string;
-    computerStageStatus: Readonly<Record<'running' | 'awaiting_user' | 'completed' | 'failed' | 'taking_control' | 'user_control' | 'returning_control' | 'paused' | 'historical' | 'stopped' | 'disconnected' | 'awaiting_control', string>>;
+    computerStageStatus: Readonly<Record<'running' | 'awaiting_user' | 'completed' | 'failed' | 'taking_control' | 'user_control' | 'checking' | 'paused' | 'historical' | 'stopped' | 'disconnected' | 'awaiting_control', string>>;
     computerStageMove: string;
     computerStageClose: string;
     handlerRetry: string;
@@ -575,7 +575,7 @@ export type FlowerSurfaceCopy = Readonly<{
     computerControlTaken: string;
     computerControlNotReady: string;
     computerTakeControl?: string;
-    computerReturnControl?: string;
+    computerContinueCheck?: string;
     computerControlHint?: string;
     computerControlFailed?: string;
     inputRequestTitle?: string;
@@ -733,7 +733,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       disconnected: "Connection lost",
       taking_control: "Taking control\u2026",
       user_control: "You are controlling",
-      returning_control: "Returning control\u2026",
+      checking: "Checking\u2026",
       paused: "Viewing paused",
 
       "running": "Computer running",
@@ -926,11 +926,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     computerFrameRateHint: "Higher frame rates use more bandwidth. Actual updates depend on your device and connection.",
     computerReceivedFrameRate: "Receiving {fps} FPS",
     computerControlTaken: "You have control",
-    computerControlNotReady: "The page is not ready yet. Complete the step described above, then try again.",
+    computerControlNotReady: "The selected page is unavailable. Continue and Flower will check the available targets.",
     computerTakeControl: "Open page",
-    computerReturnControl: "Done, continue",
+    computerContinueCheck: "Continue check",
     computerControlHint: "Complete sign-in in the image using your mouse and keyboard. Passwords and codes stay out of the conversation.",
-    computerControlFailed: "Control could not be updated. Check the page before trying again.",
+    computerControlFailed: "Your answer could not be delivered. Try again.",
     inputRequestTitle: 'Waiting for your reply',
     inputRequestSubmit: 'Continue',
     inputRequestRetry: 'Retry',

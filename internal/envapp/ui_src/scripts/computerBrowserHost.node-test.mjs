@@ -63,13 +63,13 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   await host.cancel('source-1');
   await cancelled;
   assert.equal(await pages[1].getByRole('textbox', { name: 'Name' }).inputValue(), '', 'Cancellation before dispatch cannot run the later input');
-  assert.equal((await tool('source-1', 'computer.screenshot', {}, { return_control: true })).error, undefined);
+  assert.equal((await tool('source-1', 'computer.screenshot', {}, { recovery_observation: true })).error, undefined);
 
   host.privacy('source-0', true);
   assert.equal((await tool('source-0', 'computer.observe')).error, 'TARGET_IN_USE');
   assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
   host.privacy('source-0', false);
-  const returned = await tool('source-0', 'computer.screenshot', {}, { return_control: true });
+  const returned = await tool('source-0', 'computer.screenshot', {}, { recovery_observation: true });
   assert.equal(returned.error, undefined);
   assert.equal(returned.safety.safe_to_send_to_model, true);
   await host.remove('source-0');
@@ -86,7 +86,7 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   assert.equal(extensionInventory[0].title, '');
   assert.equal((await tool('source-1', 'computer.observe')).error, 'TARGET_IN_USE');
   assert.ok((await tool('source-1', 'computer.screenshot', {}, { user_control: true })).screenshot);
-  assert.equal((await tool('source-1', 'computer.screenshot', {}, { return_control: true })).safety.safe_to_send_to_model, true);
+  assert.equal((await tool('source-1', 'computer.screenshot', {}, { recovery_observation: true })).safety.safe_to_send_to_model, true);
   assert.equal((await tool('source-1', 'computer.observe')).error, 'TARGET_IN_USE', 'Only Runtime may release privacy after validating handback');
   host.privacy('source-1', false);
   assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
