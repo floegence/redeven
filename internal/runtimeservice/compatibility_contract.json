@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
-    "reviewed_at": "2026-10-07",
+    "reviewed_at": "2026-10-08",
     "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Epoch 42 requires Gateway v5 signed connection endpoints and endpoint update management. Runtime, Gateway and Desktop must be upgraded together; existing v4 durable membership identities migrate without re-enrollment.",
-    "same_window_rationale": "Epoch 42 changes the trusted Gateway management API from a single address to signed connection endpoints. The epoch fence requires matching Desktop and Runtime even though the release minimum version floors remain unchanged.",
+    "summary": "Epoch 43 requires Gateway host-derived administration and access-only client enrollment. Existing Gateway identities, Runtime memberships, endpoints and Cloud bindings are preserved.",
+    "same_window_rationale": "Gateway/Desktop authorization handshake now requires epoch 43. Runtime membership remains v5; stored client management grants are removed without granting previously denied access.",
     "checked_surfaces": [
+      "Gateway host bridge, signed identity and access-code enrollment, client revocation, Desktop local/SSH/container management and URL-only access require compatibility epoch 43.",
       "Gateway v5 invitation import, automatic endpoint selection, failover, endpoint updates, durable membership migration, Cloud egress and closure delivery. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume compatibility epoch 42.",
       "Gateway v4 replaces URL profiles with Runtime-initiated membership, isolated reverse HTTPS access and Cloud v2 Namespace publication. Trusted Runtime management includes explicit environment preservation or replacement consent. Runtime Service, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 41; prior Gateway protocols and Cloud enrollment paths are not supported.",
       "Epoch 40 covers Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, mixed Tessiven selection/file context validation, and canonical Flower composer delivery. No database schema changes.",
@@ -89,7 +90,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 42,
+  "compatibility_epoch": 43,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -123,7 +124,8 @@
     38,
     39,
     40,
-    41
+    41,
+    42
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

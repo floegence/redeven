@@ -23,14 +23,7 @@ async function openGatewayAccess() {
   expect([...document.querySelectorAll('[role="menuitem"]')].filter(item => controlText(item) === 'Grant access')).toHaveLength(0);
   button('Gateway settings').click(); await settle();
 }
-function grantMemberManagement() {
-  const disclosure = [...document.querySelectorAll('summary')].find(element => element.textContent?.includes('Customize Desktop access'));
-  if (!disclosure?.parentElement?.hasAttribute('open')) disclosure?.click();
-  const checkbox = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
-    .find(element => element.closest('label')?.textContent?.includes('Create invitations and remove Runtime access')
-      || element.getAttribute('aria-label') === 'Create invitations and remove Runtime access');
-  expect(checkbox).toBeTruthy(); checkbox!.click();
-}
+
 function button(label: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>('button')].find(element =>
     !element.closest('[hidden], [aria-hidden="true"]') && (controlText(element) === label || element.getAttribute('aria-label') === label));
@@ -76,13 +69,13 @@ describe('Gateway setup and own-service actions', () => {
     document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]')!.click(); await settle();
     const items = [...document.querySelectorAll<HTMLElement>('.redeven-gateway-menu [role="menuitem"]')];
     expect(items.map(controlText)).toEqual(['Stop Gateway', 'Restart Gateway', 'Refresh', 'Disable Gateway',
-      ...(manageMembers ? ['Invite Runtime'] : []), 'Gateway settings', 'Delete Gateway']);
+      'Gateway settings', 'Remove connection']);
     for (const item of items) {
       expect(item.firstElementChild?.className, controlText(item)).toBe('redeven-split-menu-item-icon');
       expect(item.querySelectorAll('.redeven-split-menu-item-icon > svg'), controlText(item)).toHaveLength(1);
       expect(item.querySelector(':scope > svg'), controlText(item)).toBeNull();
     }
-    expect(button('Delete Gateway').dataset.tone).toBe('danger');
+    expect(button('Remove connection').dataset.tone).toBe('danger');
     expect(button('Disable Gateway').dataset.tone).toBe('accent');
     expect(perform).not.toHaveBeenCalled();
   });
@@ -111,11 +104,11 @@ describe('Gateway setup and own-service actions', () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount({ ...source, capabilities: ['member_access'], permissions: { access: true, manage_members: false, configure_cloud: false } });
     await openGatewayAccess();
-    expect(document.getElementById('gateway-pairing-code')).toBeTruthy();
+    expect(document.getElementById('gateway-access-code')).toBeTruthy();
     expect(perform).not.toHaveBeenCalled();
   });
 
-  it('preserves existing pairing permissions when saving only a Gateway name', async () => {
+  it('preserves existing the client credential when saving only a Gateway name', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const permissions = { access: true, manage_members: false, configure_cloud: true };
     const perform = await mount({ ...source, permissions, gateway_url: 'https://gateway.example/' });
@@ -123,11 +116,11 @@ describe('Gateway setup and own-service actions', () => {
     const cloud = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
       .find(element => element.closest('label')?.textContent?.includes("Set up this Gateway's Cloud access")
         || element.getAttribute('aria-label') === "Set up this Gateway's Cloud access");
-    expect(cloud?.getAttribute('aria-checked') === 'true' || (cloud as HTMLInputElement)?.checked).toBe(true);
+    expect(cloud).toBeUndefined();
     input('gateway-name', 'Renamed Gateway');
     button('Save Gateway').click(); await settle();
     expect(perform).toHaveBeenCalledOnce();
-    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway', display_name: 'Renamed Gateway', permissions: undefined });
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway', display_name: 'Renamed Gateway' });
   });
 
   it('opens Gateway environment rows explicitly through their owning Gateway', async () => {
@@ -168,10 +161,9 @@ describe('Gateway setup and own-service actions', () => {
     const perform = await mount();
     await openSetup('URL');
     input('gateway-url', 'https://gateway.example/');
-    grantMemberManagement();
     button('Save Gateway').click(); await settle();
     expect(perform).not.toHaveBeenCalled();
-    expect(document.getElementById('gateway-pairing-code')?.getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById('gateway-access-code')?.getAttribute('aria-invalid')).toBe('true');
   });
   it.each(['Local Container', 'SSH Container'])('submits valid %s coordinates from the container picker', async transport => {
     const perform = await mount();
@@ -187,15 +179,14 @@ describe('Gateway setup and own-service actions', () => {
       placement: { kind: 'container_process', container_id: 'test-container-id', container_ref: 'qualification', runtime_root: 'remote_default' } });
   });
 
-  it('submits a URL Gateway with explicit pairing and independent member management consent', async () => {
+  it('submits a URL Gateway with an access code without requested authority', async () => {
     const perform = await mount();
     await openSetup('URL');
     input('gateway-url', 'https://gateway.example/');
-    input('gateway-pairing-code', 'test-pairing-code');
-    grantMemberManagement();
+    input('gateway-access-code', 'test-pairing-code');
     button('Save Gateway').click(); await settle();
     expect(normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0])).toMatchObject({ kind: 'upsert_gateway',
-      connection_kind: 'url', gateway_url: 'https://gateway.example/', pairing_code: 'test-pairing-code', permissions: { access: true, manage_members: true, configure_cloud: false } });
+      connection_kind: 'url', gateway_url: 'https://gateway.example/', access_code: 'test-pairing-code' });
   });
 
   it.each(['Local host', 'SSH Host'])('submits valid default download coordinates for %s', async transport => {
@@ -208,22 +199,21 @@ describe('Gateway setup and own-service actions', () => {
     expect(request).toMatchObject({ kind: 'upsert_gateway', placement: { runtime_root: 'remote_default', release_base_url: '' } });
   });
 
-  it('preserves the saved identity and draft when explicit member management authorization needs Start', async () => {
+  it('preserves the saved identity and draft when host verification needs Start', async () => {
     const perform = await mount();
     await openSetup();
     input('gateway-name', 'Draft Gateway');
-    grantMemberManagement();
     perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Connection saved. Start before granting permission.',
       gateway_id: 'saved-fixture', continuation_action: { kind: 'start_gateway', gateway_id: 'saved-fixture' } });
     button('Save Gateway').click(); await settle();
-    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway', permissions: { access: true, manage_members: true, configure_cloud: false } });
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway' });
     expect((document.getElementById('gateway-name') as HTMLInputElement).value).toBe('Draft Gateway');
     perform.mockResolvedValueOnce({ ok: true, outcome: 'started_gateway' });
     button('Start Gateway').click(); await settle();
     expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['upsert_gateway', 'start_gateway']);
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Review your changes, then retry.');
     button('Save Gateway').click(); await settle();
-    expect(perform.mock.calls[2]?.[0]).toMatchObject({ kind: 'upsert_gateway', gateway_id: 'saved-fixture', display_name: 'Draft Gateway', permissions: { access: true, manage_members: true, configure_cloud: false } });
+    expect(perform.mock.calls[2]?.[0]).toMatchObject({ kind: 'upsert_gateway', gateway_id: 'saved-fixture', display_name: 'Draft Gateway' });
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
 
@@ -272,7 +262,7 @@ describe('Gateway setup and own-service actions', () => {
     button('Save Gateway').click(); await settle();
     expect(perform).toHaveBeenCalledWith(expect.objectContaining({ kind: 'upsert_gateway', connection_kind: 'local_host',
       host_access: { kind: 'local_host' }, placement: expect.objectContaining({ kind: 'host_process', runtime_root: '/tmp/gateway-fixture' }),
-      permissions: undefined }));
+       }));
     expect(perform.mock.calls.every(([request]) => request.kind === 'upsert_gateway')).toBe(true);
     expect(normalizeDesktopLauncherActionRequest(perform.mock.calls[0]?.[0])).not.toBeNull();
   });
@@ -299,7 +289,7 @@ describe('Gateway setup and own-service actions', () => {
       trust_state: 'unpaired', gateway_url: 'https://gateway.example', created_at_ms: 1, updated_at_ms: 1, environments: [] });
     button('Gateways').click(); await settle();
     button('Pair this Gateway').click(); await settle();
-    expect(document.getElementById('gateway-pairing-code')).toBeTruthy();
+    expect(document.getElementById('gateway-access-code')).toBeTruthy();
     expect(perform).not.toHaveBeenCalled();
   });
   it('lets users close and reopen live Gateway progress without canceling or repeating the operation', async () => {

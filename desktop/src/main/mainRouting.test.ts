@@ -2026,25 +2026,25 @@ describe('main routing', () => {
     const pairSrc = mainSrc.slice(pairStart, deleteStart);
 
     expect(helperSrc).toContain("record.connection.kind === 'url'");
-    expect(helperSrc).toContain("pairingChallengeRequestWithCode(material, options.pairingCode ?? '')");
-    expect(helperSrc).toContain('const challenge = await client.pairingChallenge(record, challengeRequest, {');
+    expect(helperSrc).toContain("pairingChallengeRequestWithCode(material, options.accessCode ?? '')");
+    expect(helperSrc).toContain('const challenge = await client.pairingChallenge(record, { ...challengeRequest, client_name: hostname().slice(0, 160) }, {');
     expect(helperSrc).toContain('assertGatewayPairingChallenge({');
     expect(pairSrc).not.toContain('confirmDesktopImpact({');
     expect(pairSrc).not.toContain("phase: 'waiting_for_identity_confirmation'");
-    expect(helperSrc).toContain("const permissions = options.permissions ?? { access: true, manage_members: false, configure_cloud: false };");
+    expect(helperSrc).not.toContain('options.permissions');
     expect(helperSrc).not.toContain('runtimeGrants');
     expect(helperSrc).not.toContain('runtime_grants');
     expect(helperSrc).toContain(
-      'const completionRequest = buildPairingCompleteRequest(material, challenge, permissions);',
+      'const completionRequest = buildPairingCompleteRequest(material, challenge);',
     );
-    expect(helperSrc).toContain('const completion = await client.completePairing(record, completionRequest, {');
-    expect(helperSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion, permissions);');
+    expect(helperSrc).toContain('completion = await client.completePairing(record, completionRequest, {');
+    expect(helperSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion);');
     expect(helperSrc).toContain('completeGatewayPairing({');
     expect(helperSrc).toContain('trust_accepted: true');
     expect(helperSrc.indexOf('assertGatewayPairingChallenge({')).toBeLessThan(
-      helperSrc.indexOf('const completion = await client.completePairing(record, completionRequest, {'),
+      helperSrc.indexOf('completion = await client.completePairing(record, completionRequest, {'),
     );
-    expect(helperSrc.indexOf('assertGatewayPairingCompleteResponse(material, challenge, completion, permissions);')).toBeLessThan(
+    expect(helperSrc.indexOf('assertGatewayPairingCompleteResponse(material, challenge, completion);')).toBeLessThan(
       helperSrc.indexOf('completeGatewayPairing({'),
     );
     expect(helperSrc.indexOf('completeGatewayPairing({')).toBeLessThan(

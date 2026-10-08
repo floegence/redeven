@@ -383,7 +383,7 @@ describe('DesktopWelcomeShell', () => {
     const gatewayDialogEnd = appSrc.indexOf('function ControlPlaneDialog');
     const gatewayDialogSrc = appSrc.slice(gatewayDialogStart, gatewayDialogEnd);
     expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayUrl')");
-    expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayPairingCode')");
+    expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayAccessCode')");
     expect(gatewayDialogSrc).toContain("connectionDialog.gatewayTransportSshHost");
     expect(gatewayDialogSrc).toContain("connectionDialog.gatewayTransportSshContainer");
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
@@ -468,7 +468,7 @@ describe('DesktopWelcomeShell', () => {
 
   it('uses member invitations instead of Gateway target configuration', () => {
     const appSrc = readWelcomeSource();
-    expect(appSrc).toContain('<GatewayMembersDialog');
+    expect(appSrc).toContain('<GatewayMembersPanel');
     expect(appSrc).not.toContain('GatewayURLProfileConnectionDialogState');
     expect(appSrc).not.toContain('GatewayProfileSourcePicker');
   });

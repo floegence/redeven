@@ -7,13 +7,13 @@ timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
-`redeven-gateway` owns one durable member directory, invitations, paired Desktop permissions, policy and restricted forwarding. Runtime initiates membership and every member connection. Gateway never dials a Runtime address, scans a network, or installs, starts, stops, updates or resets a Runtime. LAN access works without Cloud. Gateway loss interrupts its network paths; independently authorized Runtime management remains separate.
+`redeven-gateway` owns one durable member directory, invitations, client access grants, policy and restricted forwarding. Runtime initiates membership and every member connection. Gateway never dials a Runtime address, scans a network, or installs, starts, stops, updates or resets a Runtime. LAN access works without Cloud. Gateway loss interrupts its network paths; independently authorized Runtime management remains separate.
 
 # Contract
 
 ## Membership authority
 
-A host administrator or a paired Desktop with `manage_members` creates a ten-minute, single-use invitation. A trusted Runtime management channel or local `redeven gateway join --invitation-file <file>` records consent before delivery. The Runtime signs delegation for this exact Gateway to manage LAN access and subsequent Cloud publication. A lost response recovers the original durable delivery; it cannot create another member.
+An administrator verified through the Gateway host creates a ten-minute, single-use invitation. A trusted Runtime management channel or local `redeven gateway join --invitation-file <file>` records consent before delivery. The Runtime signs delegation for this exact Gateway to manage LAN access and subsequent Cloud publication. A lost response recovers the original durable delivery; it cannot create another member.
 
 Each Runtime has one Gateway membership. Startup reconnects the saved Gateway without prompting, switching Gateway, or falling back to a direct address. `replace` requires a fresh invitation and explicit local action. Gateway identity is a persisted machine key independent of its address. Each member has its own key, mTLS client certificate, service certificate and version. Credential rotation requires a currently valid identity; expired or revoked identity requires reauthorization.
 
@@ -29,9 +29,9 @@ Host-configured JSON hooks may further deny `member.admit`, `access.open` or `cl
 
 The separate Gateway archive and state root contain no Runtime lifecycle data. Desktop supports URL, local host, SSH host, local container and SSH container registrations. Host registrations expose explicit Gateway Start, Stop, Restart and Update through the existing lifecycle owner. Saving, refresh, pairing or member management never starts a stopped service implicitly.
 
-Paired permissions are `access`, `manage_members` and `configure_cloud`. Managed transport is not an automatic permission grant. Host CLI administration uses a separate local credential. Adding member management or Cloud configuration to an existing pairing requires new consent.
+Host administration and URL client access are separate, request-verified paths. See [Gateway client access](gateway-client-access.md) for host proof, enrollment, revocation and trust migration.
 
-Gateway updates prepare the complete package before stopping the existing service or replacing its Desktop bridge. A package preparation failure leaves both intact. Restart reuses a matching package; a stale package follows the same prepare-before-stop path. Source-built Gateway archives compile the standalone Gateway command without building Runtime frontend assets. Successful replacement retains the state root, Gateway identity, members and paired permissions. Preparation diagnostics retain a bounded redacted log head and tail so the compiler cause remains inspectable.
+Gateway updates prepare the complete package before stopping the existing service or replacing its Desktop bridge. A package preparation failure leaves both intact. Restart reuses a matching package; a stale package follows the same prepare-before-stop path. Source-built Gateway archives compile the standalone Gateway command without building Runtime frontend assets. Successful replacement retains the state root, Gateway identity, members and client access grants. Preparation diagnostics retain a bounded redacted log head and tail so the compiler cause remains inspectable.
 
 ## Address changes and upgrade
 
@@ -55,7 +55,7 @@ Gateway owns membership, policy, invitations, and restricted forwarding. Runtime
 - `redeven:internal/gatewaymembership/hooks.go` — Bounded deny-only hook execution.
 - `redeven:internal/gatewaymembership/address_test.go` — Address change preserves identity and rejects replacement keys.
 - `redeven:internal/gatewaymembership/network_acceptance_test.go` — Real socket failover and endpoint removal with stable membership.
-- `redeven:internal/gatewayservice/server.go` — Paired access and administration boundary.
+- `redeven:internal/gatewayservice/server.go` — Request-bound host administration and URL access boundary.
 - `redeven:cmd/redeven/gateway_membership.go` — Local membership commands.
 - `redeven:desktop/src/main/gatewayLifecycleManager.ts` — Independent Gateway process owner.
 - `redeven:desktop/scripts/check-gateway-local-update.mjs` — Real local update/restart, stable identity and failed-package service/bridge preservation.

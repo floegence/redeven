@@ -57,9 +57,9 @@ try {
   const material = trust.createGatewayPairingMaterial(record);
   const challenge = await session.client.pairingChallenge(record, trust.pairingChallengeRequest(material));
   trust.assertGatewayPairingChallenge({ record, material, challenge });
-  const request = trust.buildPairingCompleteRequest(material, challenge, { access: true, manage_members: true, configure_cloud: true });
+  const request = trust.buildPairingCompleteRequest(material, challenge);
   const completion = await session.client.completePairing(record, request);
-  trust.assertGatewayPairingCompleteResponse(material, challenge, completion, request.permissions);
+  trust.assertGatewayPairingCompleteResponse(material, challenge, completion);
   record = { ...record, trust_profile: await trust.completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }) };
   const endpoints = [{ endpoint_id: 'lan', address: 'https://localhost:7443', scope: 'lan', priority: 0 }];
   await session.client.updateEndpoints(record, endpoints);
@@ -89,7 +89,7 @@ try {
   assert.equal(updated.commit, commit);
   let restored = await lifecycle.catalog(record);
   assert.equal(restored.gateway.gateway_id, catalog.gateway.gateway_id);
-  assert.deepEqual(restored.gateway.permissions, request.permissions);
+  assert.deepEqual(restored.gateway.permissions, { access: true, manage_members: true, configure_cloud: true });
   assert.deepEqual(restored.gateway.member_endpoints, endpoints);
   report.cases.push({ updatePassed: true, identityAndPermissionsPreserved: true, pid: updated.service_pid, phases });
   const restartPhases = [];

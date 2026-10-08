@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,7 +37,8 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 	connections := NewConnections(budget)
 	defer connections.Close()
 	store.SetCommitHandler(connections.Apply)
-	endpoint, err := NewListener(store, connections, func(key string) bool { return key == "desktop" })
+	var revoked atomic.Bool
+	endpoint, err := NewListener(store, connections, func(key string) bool { return key == "desktop" && !revoked.Load() || key == "other-desktop" })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,6 +174,74 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 	if _, err := io.ReadFull(streaming.Body, prefix); err != nil {
 		t.Fatal(err)
 	}
+	pendingOffer, err := store.AccessOffer(ctx, member.MemberID, "desktop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherOffer, err := store.AccessOffer(ctx, member.MemberID, "other-desktop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherArtifact, err := flowersec.ParseArtifact(otherOffer.Artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherLease, err := flowersec.NewArtifactLease(otherArtifact, func(context.Context) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherSession, err := flowersec.Connect(ctx, otherLease, flowersec.ConnectorOptions{TrustRoots: roots, Origin: member.ConnectionEndpoints()[0].Address})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer otherSession.Close()
+	revoked.Store(true)
+	endpoint.RevokeClient("desktop")
+	interrupted := make(chan error, 1)
+	go func() { _, err := io.ReadAll(streaming.Body); interrupted <- err }()
+	select {
+	case err := <-interrupted:
+		if err == nil {
+			t.Fatal("revocation did not interrupt stream")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("revoked stream remains open")
+	}
+	pendingArtifact, err := flowersec.ParseArtifact(pendingOffer.Artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pendingLease, err := flowersec.NewArtifactLease(pendingArtifact, func(context.Context) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejected, err := flowersec.Connect(ctx, pendingLease, flowersec.ConnectorOptions{TrustRoots: roots, Origin: member.ConnectionEndpoints()[0].Address}); err == nil {
+		_ = rejected.Close()
+		t.Fatal("revoked pending ticket connected")
+	}
+	if !connections.IsConnected(member.MemberID) || runtime.Snapshot().State != flowersec.ConnectionConnected {
+		t.Fatal("client revocation disconnected Runtime membership")
+	}
+	originalDesktop := desktop
+	desktop = otherSession
+	if response, err := client.Get(offer.Service.Origin + "/app"); err != nil {
+		t.Fatal("other client access was interrupted", err)
+	} else {
+		body, err := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if err != nil || string(body) != "private-runtime-content" {
+			t.Fatal("other client failed", err)
+		}
+	}
+	streaming, err = client.Get(offer.Service.Origin + "/stream")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer streaming.Body.Close()
+	if _, err := io.ReadFull(streaming.Body, prefix); err != nil {
+		t.Fatal(err)
+	}
+	defer originalDesktop.Close()
 	if err := store.Remove(member.MemberID, member.MemberVersion); err != nil {
 		t.Fatal(err)
 	}

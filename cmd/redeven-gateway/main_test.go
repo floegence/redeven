@@ -76,7 +76,7 @@ func TestGatewayServiceStartsWithoutRuntimeState(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cli := &cli{stdin: strings.NewReader(""), stdout: &strings.Builder{}, stderr: &strings.Builder{}}
-	if got := cli.runGatewayService(ctx, stateRoot, "127.0.0.1:0", false, false, "", "127.0.0.1:0", "", ""); got != 0 {
+	if got := cli.runGatewayService(ctx, stateRoot, "127.0.0.1:0", false, false, "", "127.0.0.1:0", ""); got != 0 {
 		t.Fatalf("service exit = %d", got)
 	}
 	if _, err := os.Stat(filepath.Join(stateRoot, "runtime-lifecycle")); !os.IsNotExist(err) {

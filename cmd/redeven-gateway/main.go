@@ -27,6 +27,7 @@ import (
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/processenv"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	processlib "github.com/shirou/gopsutil/v4/process"
 )
 
@@ -81,7 +82,7 @@ func (c *cli) run(args []string) int {
 		return 0
 	}
 	switch strings.TrimSpace(strings.ToLower(args[0])) {
-	case "members", "invite", "policy", "endpoints":
+	case "members", "invite", "policy", "endpoints", "clients":
 		return c.membershipCmd(args)
 	case "cloud-status":
 		return c.cloudStatusCmd(args[1:])
@@ -155,7 +156,6 @@ func (c *cli) serveCmd(args []string) int {
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
 	memberURL := fs.String("member-url", "", "Advertised HTTPS member endpoint.")
 	memberListen := fs.String("member-listen", "", "Member TLS listen address (new Gateway default: :7443).")
-	pairingCode := fs.String("pairing-code", "", "One-time pairing code required by URL Gateway clients.")
 	if err := parseFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeText(c.stdout, serveHelpText())
@@ -179,7 +179,7 @@ func (c *cli) serveCmd(args []string) int {
 			return 1
 		}
 	}
-	return c.runGatewayService(ctx, stateRootValue, *listen, managedDesktopBridgeService(), true, *memberURL, *memberListen, *pairingCode, managedBridgeToken)
+	return c.runGatewayService(ctx, stateRootValue, *listen, managedDesktopBridgeService(), true, *memberURL, *memberListen, managedBridgeToken)
 }
 
 func (c *cli) desktopBridgeCmd(args []string) int {
@@ -204,10 +204,12 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 		return 1
 	}
 	managedBridgeToken := readManagedBridgeToken(stateRootValue)
-	if managedBridgeToken == "" {
-		writeError(c.stderr, "desktop-bridge failed: managed Gateway bridge token is missing")
+	hostClient, err := newHostAdminClient(stateRootValue)
+	if err != nil {
+		writeError(c.stderr, "desktop-bridge failed: Gateway host management credential is unavailable")
 		return 1
 	}
+	defer hostClient.transport.CloseIdleConnections()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	executablePath, err := os.Executable()
@@ -215,9 +217,9 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 		writeError(c.stderr, fmt.Sprintf("desktop-bridge failed: resolve Gateway executable: %v", err))
 		return 1
 	}
-	gatewayURL := fmt.Sprintf("http://%s/", strings.TrimSpace(status.Listen))
+	gatewayURL := hostClient.endpoint + "/"
 	bridge := desktopbridge.Server{
-		DialSurface: desktopbridge.NewGatewaySurfaceDialer(gatewayURL, "https://"+status.MemberListen, managedBridgeToken),
+		DialSurface: desktopbridge.NewGatewaySurfaceDialer(gatewayURL, "https://"+status.MemberListen, hostClient.token),
 		Hello: desktopbridge.Hello{
 			RuntimeVersion:  Version,
 			RuntimeCommit:   Commit,
@@ -228,7 +230,8 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 			},
 			RuntimeControl: desktopbridge.RuntimeControl{Available: false},
 			GatewayProtocol: desktopbridge.GatewayProtocol{
-				Available: true,
+				Available:          true,
+				CompatibilityEpoch: runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch,
 			},
 			GatewayService: &desktopbridge.GatewayService{
 				StateRoot:          stateRootValue,
@@ -420,7 +423,7 @@ func gatewayServiceStopped(stateRoot string, status serviceStatus) (bool, error)
 	return true, nil
 }
 
-func (c *cli) runGatewayService(ctx context.Context, stateRoot string, listen string, desktopBridgeTransport bool, printListen bool, memberURL string, memberListen string, pairingCode string, managedBridgeToken string) int {
+func (c *cli) runGatewayService(ctx context.Context, stateRoot string, listen string, desktopBridgeTransport bool, printListen bool, memberURL string, memberListen string, managedBridgeToken string) int {
 	stateRootValue := normalizeStateRoot(stateRoot)
 	if err := os.MkdirAll(stateRootValue, 0o700); err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Gateway state root: %v", err))
@@ -450,7 +453,6 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, listen st
 		DesktopBridgeTransport: desktopBridgeTransport,
 		MemberURL:              memberURL,
 		MemberListen:           memberListen,
-		PairingCode:            pairingCode,
 		ManagedBridgeToken:     managedBridgeToken,
 		HostAdminToken:         hostToken,
 	}

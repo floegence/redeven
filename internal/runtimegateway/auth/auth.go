@@ -100,6 +100,9 @@ func (v *Verifier) VerifyDigest(ctx context.Context, r *http.Request, bodyDigest
 	if !v.consumeNonce(clientKeyID, nonce, ts, now) {
 		return VerifiedRequest{}, errors.New("gateway authentication nonce was already used")
 	}
+	if err := v.store.RecordVerified(clientKeyID, false); err != nil {
+		return VerifiedRequest{}, err
+	}
 	return VerifiedRequest{
 		GatewayID:       gatewayID,
 		ClientKeyID:     clientKeyID,

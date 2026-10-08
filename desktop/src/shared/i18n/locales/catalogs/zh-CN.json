@@ -1732,7 +1732,7 @@
     "gatewayActionEnable": "启用网关",
     "gatewayActionDisable": "禁用网关",
     "gatewayActionPauseSync": "禁用网关",
-    "gatewayActionDelete": "删除网关",
+    "gatewayActionDelete": "移除连接",
     "gatewayActionSync": "刷新网关",
     "gatewayActionCheck": "刷新网关",
     "gatewayActionSyncFailed": "刷新失败",
@@ -2063,9 +2063,6 @@
     "gatewayUrl": "网关 URL",
     "gatewayUrlPlaceholder": "https://gateway.example.com",
     "gatewayUrlHelp": "Desktop 连接此 Gateway 并列出已加入的运行环境。内网成员访问不依赖 Redeven Cloud。",
-    "gatewayPairingCode": "配对码",
-    "gatewayPairingCodePlaceholder": "网关管理员提供的一次性代码",
-    "gatewayPairingCodeHelp": "URL 网关需要配对代码才能建立信任。 Desktop 仅将其用于此保存操作，并不将其存储在网关列表中。",
     "gatewayTransportUrl": "URL",
     "gatewayTransportSshHost": "SSH 主机",
     "gatewayTransportSshContainer": "SSH 容器",
@@ -2154,7 +2151,10 @@
     "validationChooseContainer": "请选择运行中的容器。",
     "validationChooseContainerFromList": "请从当前列表中选择运行中的容器。",
     "validationRuntimeRootRequired": "需要运行时根。",
-    "validationSshPasswordRequired": "使用密码认证时必须填写 SSH 密码。"
+    "validationSshPasswordRequired": "使用密码认证时必须填写 SSH 密码。",
+    "gatewayAccessCode": "访问码",
+    "gatewayAccessCodePlaceholder": "网关管理员提供的一次性代码",
+    "gatewayAccessCodeHelp": "请私下将 Gateway 地址和访问码发送给客户端。访问码 10 分钟内有效，只能使用一次；不授予 Gateway 管理权，也不替代运行时登录。"
   },
   "confirm": {
     "reinstallTargetTitle": "重装此环境？",
@@ -2183,9 +2183,9 @@
     "removeEnvironmentQuestion": "从 Desktop 移除 {label} 吗？",
     "removeEnvironmentDescription": "只会移除 Desktop 中的注册，不会删除远端 Redeven 数据。",
     "removeEnvironmentBusyDescription": "Desktop 会立即移除注册，并在后台完成本地清理。",
-    "deleteGatewayTitle": "删除网关",
-    "deleteGatewayConfirm": "删除网关",
-    "deleteGatewayQuestion": "从此 Desktop 删除 {label}？",
+    "deleteGatewayTitle": "移除连接",
+    "deleteGatewayConfirm": "移除连接",
+    "deleteGatewayQuestion": "从此 Desktop 移除连接“{label}”？Gateway 服务和运行时不会被停止或删除。",
     "deleteGatewayDescription": "这会从此 Desktop 中删除本地网关连接、信任数据和同步目录。它不会从网关主机中删除网关服务或环境。",
     "cancel": "取消",
     "cloudSignOutTitle": "退出 Redeven Cloud 登录",
@@ -3055,20 +3055,6 @@
     "editorUnavailableDetail": "编辑器未能打开。请返回 Codespaces 后重试。",
     "technicalDetails": "技术详情"
   },
-  "gatewayDesktopAccess": {
-    "title": "此 Desktop 的操作权限",
-    "viewer": "使用环境",
-    "viewerHelp": "打开通过此 Gateway 共享的环境。",
-    "administrator": "管理 Gateway",
-    "administratorHelp": "创建邀请、管理接入和配置 Cloud；仍需 Cloud 管理员批准。",
-    "custom": "自定义权限",
-    "customHelp": "保留现有授权，或调整下方的具体权限。",
-    "customize": "调整具体权限",
-    "boundary": "这些权限授予当前 Desktop，而不是已接入的运行时；不会授予运行时管理权，也不会批准 Cloud 接入。",
-    "access": "打开共享环境",
-    "members": "创建邀请及移除运行时接入",
-    "cloud": "配置此 Gateway 的 Cloud 接入"
-  },
   "gatewayCloud": {
     "title": "接入 Cloud",
     "description": "可选：通过 Redeven Cloud 发布已加入的运行时。Cloud 使用此 Gateway 作为访问入口，不会直接连接运行时。",
@@ -3224,5 +3210,27 @@
     "remove": "移除成员",
     "refreshFailed": "操作已成功，但成员列表刷新失败。操作结果已保留，请刷新查看最新状态。",
     "hookInvalid": "配置无效，操作将被拒绝"
+  },
+  "gatewayClients": {
+    "connectionSettings": "连接设置",
+    "runtimes": "运行时",
+    "clientAccess": "客户端访问",
+    "hostAccess": "通过此主机连接管理 Gateway。",
+    "hostVerification": "验证主机权限后才能管理 Gateway。",
+    "clientOnly": "通过 Gateway 使用环境，此连接不能管理 Gateway。",
+    "createCode": "创建访问码",
+    "codeHelp": "请私下将 Gateway 地址和访问码发送给客户端。访问码 10 分钟内有效，只能使用一次；不授予 Gateway 管理权，也不替代运行时登录。",
+    "codeExpires": "剩余 {time}",
+    "codeExpired": "已过期，请创建新的访问码。",
+    "authorizedClients": "已授权客户端",
+    "emptyClients": "尚无通过访问码授权的客户端。",
+    "unnamedClient": "未命名客户端",
+    "revoked": "访问已撤销",
+    "revoke": "撤销访问",
+    "confirmRevoke": "确认撤销",
+    "revokeHelp": "将关闭此客户端的 Gateway 访问；运行时成员、其他客户端及主机权限不变。",
+    "authorizedAt": "授权时间",
+    "lastSeen": "最近访问",
+    "codeHelpTitle": "如何使用访问码"
   }
 }

@@ -29,6 +29,25 @@ const validHello = {
 };
 
 describe('runtimePlacementBridgeProtocol', () => {
+  it('requires the current Gateway host-authority epoch before admitting a host bridge', () => {
+    const gatewayHello = {
+      ...validHello,
+      gateway_protocol: { available: true, compatibility_epoch: 43 },
+      gateway_service: {
+        state_root: '/gateway',
+        executable_path: '/bin/redeven-gateway',
+        service_pid: 123,
+        managed_bridge_token: '',
+      },
+    };
+    expect(parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify(gatewayHello))).gateway_service?.service_pid).toBe(123);
+    for (const compatibility_epoch of [42, 44, undefined]) {
+      expect(() => parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
+        ...gatewayHello, gateway_protocol: { ...gatewayHello.gateway_protocol, compatibility_epoch },
+      })))).toThrow();
+    }
+  });
+
   it('keeps the private HTTP/2 protocol and resource limits exact', () => {
     expect(RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION).toBe('redeven-desktop-placement-h2/1');
     expect(RUNTIME_PLACEMENT_BRIDGE_MAX_CONCURRENT_STREAMS).toBe(64);

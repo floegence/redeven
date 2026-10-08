@@ -25,17 +25,19 @@ The Gateway page's member dialog lists automatically joined members and offers i
 
 Default Cloud permission and each member's inherit/allow/deny override are separate controls. The default-change confirmation lists affected inherited members. A batch keeps successful and failed items independently; retry submits only unresolved items. Cloud automatic mode displays pending authorization until Namespace approval exists. Script hook status and explicit reevaluation are visible; executable configuration remains host-only.
 
-Pairing grants access, member management and Cloud configuration independently. A saved registration can be started explicitly if the service is stopped. Saving or refreshing cannot implicitly start or update it. Gateway lifecycle actions continue to use the existing confirmation and operation surface.
+Host management and URL client access have fixed, separate authority sources. A saved registration can be started explicitly if the service is stopped. Saving or refreshing cannot implicitly start or update it. Gateway lifecycle actions continue to use the existing confirmation and operation surface.
 
-Gateway settings names the permission recipient: this Desktop, not Runtime members. Use environments grants only environment access; Manage Gateway selects environment access, invitations/member removal and Gateway Cloud configuration. Customize Desktop access reveals the three independent controls. Existing partial grants remain unchanged until explicitly edited; renaming a registration or opening settings never grants additional permissions. Cloud configuration permission is not Cloud Namespace approval or Runtime lifecycle authority.
+Gateway settings has no editable roles or permission combinations. Verified host connections show a read-only host-management explanation and three tabs: Connection settings, Runtimes and Client access. URL connections show environment-consumer status and no service, endpoint, member or Cloud administration. A saved URL client's key reconnects without repeatedly asking for a code; changing connection coordinates must prove the pinned identity through the new actual connection.
 
-Gateway settings is the sole registration and authorization entry. An access-only Gateway does not offer a duplicate Grant access action or a misleading Invite Runtime action. Once member management is authorized, Invite Runtime opens the separate invitation, connection-endpoint and member-policy surface. Connect to Cloud names the optional Cloud association action; opening either surface never grants permissions or publishes a Runtime.
+Runtime invitations and client access codes are separate materials. The Runtimes tab creates invitations for a Runtime administrator's local approval. Client access creates a ten-minute one-use code for another Desktop, with countdown and copy. Additional explanation is folded. The enrolled-client list shows a device label, enrollment and last access; labels never establish identity. Revocation requires explicit confirmation and affects only that client's Gateway sessions. Remove connection removes this Desktop's saved registration, not the Gateway service or Runtime. Cloud access keeps its independent Connect to Cloud flow.
+
+The single settings entry owns all three management tabs. Keyboard arrows, Home and End select tabs with roving focus. Tab changes retain endpoint drafts, invitations and unexpired access codes; closing the window discards UI-only drafts and restores its originating card control. Runtime permissions and Cloud Namespace approval are never implied by opening settings or importing a client access code.
 
 ## Presentation and accessibility
 
 All shipped locales have explicit translations. Interactive controls provide pointer feedback, keyboard access, visible focus and disabled semantics. Dialog headers contain identity and controls; descriptions belong in the body. Cancel restores the originating control or its surviving owner. Narrow layouts wrap content without hiding actions. Async operations show actual stages rather than invented percentages.
 
-Every Gateway card menu action, including invitations, settings and deletion, uses the same icon container, spacing and label alignment. Restart uses a power-cycle icon distinct from Refresh; the menu, active card action and confirmation share a reactive icon projection so labels and icons stay in sync. Destructive and disabled styling, keyboard navigation and explicit lifecycle confirmation remain unchanged.
+Every Gateway card menu action, including settings and connection removal, uses the same icon container, spacing and label alignment. Restart uses a power-cycle icon distinct from Refresh; the menu, active card action and confirmation share a reactive icon projection so labels and icons stay in sync. Destructive and disabled styling, keyboard navigation and explicit lifecycle confirmation remain unchanged.
 
 Gateway dialogs use a comfortably wide, viewport-bounded panel and the published Dialog's scrolling body. Connection addresses occupy a full-width labelled row; network scope and numeric priority have separate visible labels and stack on narrow screens. The published Select owns Gateway and endpoint-scope choice, including keyboard navigation and Escape dismissal before the enclosing dialog. Native disclosures animate height and opacity in both directions and respect reduced-motion preferences.
 
@@ -47,6 +49,8 @@ This surface presents current Gateway state and starts explicit user-authorized 
 
 # Evidence
 
+- `redeven:desktop/src/welcome/GatewayClientsPanel.tsx` — Client enrollment, countdown and confirmed revocation.
+
 - `redeven:desktop/src/welcome/GatewayMembersDialog.tsx` — Invitations, policies, partial results and reevaluation.
 - `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.tsx` — One consent and recovery form.
 - `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.tsx` — Managed creation and explicit start.
@@ -54,5 +58,5 @@ This surface presents current Gateway state and starts explicit user-authorized 
 - `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.client.test.tsx` — Failed start and invitation consent.
 - `redeven:desktop/scripts/check-gateway-access-ui.mjs` — Browser layout, keyboard and locale qualification.
 - `redeven:desktop/scripts/check-gateway-dialog-polish.mjs` — Single settings entry, endpoint layout, nested selection and reversible disclosure motion.
-- `redeven:desktop/scripts/check-gateway-permissions-ui.mjs` — Permission recipient, explicit grants, retained permissions and localized keyboard/layout checks.
+- `redeven:desktop/scripts/check-gateway-permissions-ui.mjs` — Fixed host/client authority, access-code retention, revoke confirmation and localized keyboard/layout checks.
 - `redeven:desktop/scripts/check-gateway-menu-ui.mjs` — Uniform menu geometry, distinct restart icons, confirmation, keyboard navigation and focus across themes, locales and viewport sizes.

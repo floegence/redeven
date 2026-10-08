@@ -51,7 +51,7 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 	memberAddress := reservation.Addr().String()
 	reservation.Close()
 	hostToken := strings.Repeat("a", 43)
-	gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: filepath.Join(state, "gateway"), PairingCode: "qualification-code", HostAdminToken: hostToken, MemberURL: "https://" + memberAddress, MemberListen: memberAddress})
+	gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: filepath.Join(state, "gateway"), HostAdminToken: hostToken, MemberURL: "https://" + memberAddress, MemberListen: memberAddress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,9 +129,20 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 		}
 		return runtime, recovery
 	}
+	codeRequest := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/clients/access-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
+	codeRequest.RemoteAddr = "127.0.0.1:1234"
+	codeRequest.Header.Set(gatewayservice.HostAdminHeader, hostToken)
+	codeResponse := httptest.NewRecorder()
+	gateway.Handler().ServeHTTP(codeResponse, codeRequest)
+	var accessCode struct {
+		Data gp.ClientAccessCodeResponse `json:"data"`
+	}
+	if codeResponse.Code != 200 || json.Unmarshal(codeResponse.Body.Bytes(), &accessCode) != nil {
+		t.Fatal("client code unavailable")
+	}
 	plain, _ := start(false)
 	secure, recovery := start(true)
-	fixture := map[string]any{"gateway": "http://" + listeners[0].Addr().String() + "/", "plainMember": plain.a.GatewayMembership().MemberID, "secureMember": secure.a.GatewayMembership().MemberID, "recoveryCodes": recovery, "state": state, "goPID": os.Getpid(), "workspace": workspace, "webService": webService.URL}
+	fixture := map[string]any{"accessCode": accessCode.Data.AccessCode, "hostToken": hostToken, "gateway": "http://" + listeners[0].Addr().String() + "/", "plainMember": plain.a.GatewayMembership().MemberID, "secureMember": secure.a.GatewayMembership().MemberID, "recoveryCodes": recovery, "state": state, "goPID": os.Getpid(), "workspace": workspace, "webService": webService.URL}
 	configPath := filepath.Join(state, "fixture.json")
 	raw, err := json.Marshal(fixture)
 	if err != nil {

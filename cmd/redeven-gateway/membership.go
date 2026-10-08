@@ -24,6 +24,9 @@ const membershipHelp = `Usage:
   redeven-gateway invite --output PATH [--state-root PATH]
   redeven-gateway endpoints show [--state-root PATH]
   redeven-gateway endpoints set --file PATH [--state-root PATH]
+  redeven-gateway clients access-code [--state-root PATH]
+  redeven-gateway clients list [--state-root PATH]
+  redeven-gateway clients revoke --client ID [--state-root PATH]
   redeven-gateway members list [--state-root PATH]
   redeven-gateway members remove --member ID --version N [--state-root PATH]
   redeven-gateway members reevaluate --member ID --version N [--state-root PATH]
@@ -49,6 +52,7 @@ func (c *cli) membershipCmd(args []string) int {
 	root := flags.String("state-root", "", "Gateway state root")
 	output := flags.String("output", "", "Create a private invitation file; use - for stdout")
 	filePath := flags.String("file", "", "JSON file containing administrator-confirmed connection endpoints")
+	clientKeyID := flags.String("client", "", "Client key ID")
 	member := flags.String("member", "", "Member ID")
 	version := flags.Int64("version", 0, "Expected member version")
 	cloud := flags.String("cloud", "", "Member Cloud permission: inherit, allow, deny")
@@ -63,8 +67,12 @@ func (c *cli) membershipCmd(args []string) int {
 		writeError(c.stderr, err.Error())
 		return 2
 	}
-	valid := flags.NArg() == 0 && (command == "endpoints" || *filePath == "")
+	valid := flags.NArg() == 0 && (command == "endpoints" || *filePath == "") && ((command == "clients" && action == "revoke") || *clientKeyID == "")
 	switch command + "/" + action {
+	case "clients/access-code", "clients/list":
+		valid = valid && *clientKeyID == "" && *member == "" && *output == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
+	case "clients/revoke":
+		valid = valid && *clientKeyID != "" && *member == "" && *output == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
 	case "endpoints/show", "endpoints/set":
 		valid = valid && *output == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply && ((action == "show" && *filePath == "") || (action == "set" && *filePath != ""))
 	case "invite/":
@@ -94,6 +102,12 @@ func (c *cli) membershipCmd(args []string) int {
 	defer client.transport.CloseIdleConnections()
 	var result any
 	switch command + "/" + action {
+	case "clients/access-code":
+		err = client.request(ctx, "/gateway/v5/clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, &result)
+	case "clients/list":
+		err = client.request(ctx, "/gateway/v5/clients/list", gp.ClientListRequest{ProtocolVersion: gp.Version}, &result)
+	case "clients/revoke":
+		err = client.request(ctx, "/gateway/v5/clients/revoke", gp.ClientRevokeRequest{ProtocolVersion: gp.Version, ClientKeyID: *clientKeyID}, &result)
 	case "endpoints/set":
 		file, openErr := os.Open(*filePath)
 		if openErr != nil {

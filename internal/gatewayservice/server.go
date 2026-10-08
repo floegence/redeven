@@ -30,16 +30,13 @@ import (
 )
 
 const (
-	HostAdminHeader              = "X-Redeven-Gateway-Host-Token"
-	managedBridgeTransportHeader = "X-Redeven-Gateway-Transport"
-	managedBridgeTokenHeader     = "X-Redeven-Gateway-Managed-Bridge-Token"
+	HostAdminHeader = "X-Redeven-Gateway-Host-Token"
 )
 
 type Options struct {
 	Version                string
 	StateRoot              string
 	DesktopBridgeTransport bool
-	PairingCode            string
 	ManagedBridgeToken     string
 	HostAdminToken         string
 	MemberURL              string
@@ -49,23 +46,20 @@ type Options struct {
 }
 
 type Server struct {
-	cloud                  *gatewaycloud.Gateway
-	version                string
-	stateRoot              string
-	desktopBridgeTransport bool
-	pairingCode            string
-	managedBridgeToken     string
-	hostAdminToken         string
-	trust                  *gatewaytrust.Store
-	auth                   *gatewayauth.Verifier
-	members                *gatewaymembership.Store
-	connections            *gatewaymembership.Connections
-	memberListener         *gatewaymembership.Listener
-	hooks                  *gatewaymembership.PolicyHooks
-	migrationMu            sync.Mutex
-	rebuildRequired        bool
-	listenerMu             sync.Mutex
-	listenerAddresses      []string
+	cloud             *gatewaycloud.Gateway
+	version           string
+	stateRoot         string
+	hostAdminToken    string
+	trust             *gatewaytrust.Store
+	auth              *gatewayauth.Verifier
+	members           *gatewaymembership.Store
+	connections       *gatewaymembership.Connections
+	memberListener    *gatewaymembership.Listener
+	hooks             *gatewaymembership.PolicyHooks
+	migrationMu       sync.Mutex
+	rebuildRequired   bool
+	listenerMu        sync.Mutex
+	listenerAddresses []string
 }
 
 type envelope struct {
@@ -158,7 +152,7 @@ func New(options Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	server := &Server{cloud: cloud, version: options.Version, stateRoot: root, desktopBridgeTransport: options.DesktopBridgeTransport, pairingCode: strings.TrimSpace(options.PairingCode), managedBridgeToken: strings.TrimSpace(options.ManagedBridgeToken), hostAdminToken: options.HostAdminToken, trust: trust, auth: gatewayauth.NewVerifier(trust), members: members, connections: connections, memberListener: listener, hooks: hooks}
+	server := &Server{cloud: cloud, version: options.Version, stateRoot: root, hostAdminToken: options.HostAdminToken, trust: trust, auth: gatewayauth.NewVerifier(trust), members: members, connections: connections, memberListener: listener, hooks: hooks}
 	if err := server.migrateProfiles(); err != nil {
 		return nil, err
 	}
@@ -233,6 +227,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /gateway/v5/pairing/challenge", s.handlePairingChallenge)
 	mux.HandleFunc("POST /gateway/v5/pairing/complete", s.handlePairingComplete)
 	mux.HandleFunc("POST /gateway/v5/catalog", s.handleCatalog)
+	mux.HandleFunc("POST /gateway/v5/clients/access-codes", s.handleClientAccessCode)
+	mux.HandleFunc("POST /gateway/v5/clients/list", s.handleClientList)
+	mux.HandleFunc("POST /gateway/v5/clients/revoke", s.handleClientRevoke)
 	mux.HandleFunc("POST /gateway/v5/identity", s.handleIdentity)
 	mux.HandleFunc("POST /gateway/v5/cloud/configure", s.handleConfigureCloud)
 	mux.HandleFunc("POST /gateway/v5/cloud/status", s.handleCloudStatus)
@@ -316,22 +313,12 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 	return adminServer, listeners, nil
 }
 
-func (s *Server) isManagedDesktopBridgeRequest(r *http.Request) bool {
-	return s.desktopBridgeTransport && s.managedBridgeToken != "" && r.Header.Get(managedBridgeTransportHeader) == "desktop_bridge" && r.Header.Get(managedBridgeTokenHeader) == s.managedBridgeToken
-}
-func (s *Server) pairingAllowed(r *http.Request, code string) bool {
-	return s.isManagedDesktopBridgeRequest(r) || (s.pairingCode != "" && code == s.pairingCode)
-}
 func (s *Server) handlePairingChallenge(w http.ResponseWriter, r *http.Request) {
 	var request gp.PairingChallengeRequest
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	if !s.pairingAllowed(r, request.PairingCode) {
-		writeError(w, http.StatusForbidden, "PAIRING_REQUIRED")
-		return
-	}
-	response, err := s.trust.PairingChallenge(request)
+	response, err := s.trust.PairingChallenge(request, s.isHostAdminRequest(r))
 	writeResult(w, response, err)
 }
 func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
@@ -339,13 +326,52 @@ func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	challenge, ok := s.trust.PendingChallenge(request.GatewayNonce)
-	if !ok || !s.pairingAllowed(r, challenge.PairingCode) {
-		writeError(w, http.StatusForbidden, "PAIRING_REQUIRED")
+	response, err := s.trust.CompletePairing(request, s.isHostAdminRequest(r))
+	writeResult(w, response, err)
+}
+func (s *Server) handleClientAccessCode(w http.ResponseWriter, r *http.Request) {
+	var request gp.ClientAccessCodeRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
 		return
 	}
-	response, err := s.trust.CompletePairing(request)
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "HOST_MANAGEMENT_REQUIRED")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	response, err := s.trust.IssueAccessCode()
 	writeResult(w, response, err)
+}
+func (s *Server) handleClientList(w http.ResponseWriter, r *http.Request) {
+	var request gp.ClientListRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "HOST_MANAGEMENT_REQUIRED")
+		return
+	}
+	clients, err := s.trust.ListClients()
+	writeResult(w, gp.ClientListResponse{Clients: clients}, err)
+}
+func (s *Server) handleClientRevoke(w http.ResponseWriter, r *http.Request) {
+	var request gp.ClientRevokeRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "HOST_MANAGEMENT_REQUIRED")
+		return
+	}
+	if err := s.trust.RevokeClient(request.ClientKeyID); err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	s.memberListener.RevokeClient(request.ClientKeyID)
+	writeResult(w, struct{}{}, nil)
 }
 func (s *Server) authenticated(w http.ResponseWriter, r *http.Request, value any) (gatewayauth.VerifiedRequest, bool) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
@@ -355,12 +381,23 @@ func (s *Server) authenticated(w http.ResponseWriter, r *http.Request, value any
 	}
 	audience := strings.TrimSpace(r.Header.Get("X-Redeven-Gateway-Binding-Audience"))
 	var verified gatewayauth.VerifiedRequest
-	if s.isHostAdminRequest(r) {
-		// Host administration uses a separate private credential. Loopback alone
-		// and the Desktop bridge token never grant member management privileges.
-		verified = gatewayauth.VerifiedRequest{ClientKeyID: "gateway_host", Permissions: gp.GatewayPermissions{Access: true, ManageMembers: true, ConfigureCloud: true}}
+	hostAdmin := s.isHostAdminRequest(r)
+	signed := false
+	for _, header := range []string{"X-Redeven-Gateway-ID", "X-Redeven-Client-Key-ID", "X-Redeven-Client-Nonce", "X-Redeven-Request-Signature", "X-Redeven-Request-TS"} {
+		if r.Header.Get(header) != "" {
+			signed = true
+		}
+	}
+	if hostAdmin && !signed {
+		verified = gatewayauth.VerifiedRequest{ClientKeyID: "gateway_host"}
 	} else {
 		verified, err = s.auth.Verify(r.Context(), r, raw, audience)
+	}
+	if err == nil && hostAdmin && signed {
+		err = s.trust.RecordVerified(verified.ClientKeyID, true)
+	}
+	if err == nil && hostAdmin {
+		verified.Permissions = gp.GatewayPermissions{Access: true, ManageMembers: true, ConfigureCloud: true}
 	}
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED")
@@ -570,6 +607,10 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, value any) bool {
 	return true
 }
 func memberErrorCode(err error) string {
+	switch err.Error() {
+	case "ACCESS_CODE_INVALID_OR_EXPIRED", "ACCESS_CODE_USED", "CLIENT_ACCESS_REVOKED", "HOST_CONNECTION_MANAGED_ON_HOST":
+		return err.Error()
+	}
 	switch {
 	case errors.Is(err, gatewaymembership.ErrConflict):
 		return "MEMBER_VERSION_CONFLICT"

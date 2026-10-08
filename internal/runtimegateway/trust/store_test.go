@@ -42,7 +42,7 @@ func TestPairingChallengePreservesStableMachineIdentity(t *testing.T) {
 		ClientNonce:     "client-nonce",
 		ClientPublicKey: keys.PublicKeyPEM,
 		BindingAudience: audience,
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("PairingChallenge() error = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestPairingChallengePreservesStableMachineIdentity(t *testing.T) {
 	if challenge.GatewayID == security.StableGatewayID(audience) {
 		t.Fatal("Gateway identity still depends on its address")
 	}
-	changed, err := store.PairingChallenge(protocol.PairingChallengeRequest{ProtocolVersion: protocol.Version, ClientNonce: "other", ClientPublicKey: keys.PublicKeyPEM, BindingAudience: "https://new-address.internal"})
+	changed, err := store.PairingChallenge(protocol.PairingChallengeRequest{ProtocolVersion: protocol.Version, ClientNonce: "other", ClientPublicKey: keys.PublicKeyPEM, BindingAudience: "https://new-address.internal"}, true)
 	if err != nil || changed.GatewayID != challenge.GatewayID || changed.GatewayPublicKey != challenge.GatewayPublicKey {
 		t.Fatal("address change replaced identity", err)
 	}
@@ -80,47 +80,6 @@ func TestPairedMachineIdentitySurvivesAddressChange(t *testing.T) {
 	}
 }
 
-func TestPairingChallengeEchoesPairingCodeInSignedPayload(t *testing.T) {
-	store := NewStore(filepath.Join(t.TempDir(), "gateway-trust.json"))
-	audience := "https://gateway.example.internal"
-	keys, err := security.GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("GenerateKeyPair() error = %v", err)
-	}
-
-	challenge, err := store.PairingChallenge(protocol.PairingChallengeRequest{
-		ProtocolVersion: protocol.Version,
-		ClientNonce:     "client-nonce",
-		ClientPublicKey: keys.PublicKeyPEM,
-		BindingAudience: audience,
-		PairingCode:     "pair-123456",
-	})
-	if err != nil {
-		t.Fatalf("PairingChallenge() error = %v", err)
-	}
-
-	if challenge.PairingCode != "pair-123456" {
-		t.Fatalf("PairingCode = %q, want echoed pairing code", challenge.PairingCode)
-	}
-	payload, err := security.CanonicalJSON(map[string]any{
-		"binding_audience":   audience,
-		"client_nonce":       "client-nonce",
-		"client_public_key":  strings.TrimSpace(keys.PublicKeyPEM),
-		"expires_at_unix_ms": challenge.ExpiresAtUnixMS,
-		"gateway_id":         challenge.GatewayID,
-		"gateway_nonce":      challenge.GatewayNonce,
-		"gateway_public_key": challenge.GatewayPublicKey,
-		"pairing_code":       "pair-123456",
-		"protocol_version":   protocol.Version,
-	})
-	if err != nil {
-		t.Fatalf("CanonicalJSON() error = %v", err)
-	}
-	if !security.VerifySignature(challenge.GatewayPublicKey, payload, challenge.Signature) {
-		t.Fatalf("PairingChallenge() signature did not cover pairing_code")
-	}
-}
-
 func pairTrustTestClient(t *testing.T, store *Store, audience string) (string, string) {
 	t.Helper()
 	keys, err := security.GenerateKeyPair()
@@ -133,7 +92,7 @@ func pairTrustTestClient(t *testing.T, store *Store, audience string) (string, s
 		ClientNonce:     clientNonce,
 		ClientPublicKey: keys.PublicKeyPEM,
 		BindingAudience: audience,
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("PairingChallenge() error = %v", err)
 	}
@@ -146,7 +105,6 @@ func pairTrustTestClient(t *testing.T, store *Store, audience string) (string, s
 		"gateway_id":       challenge.GatewayID,
 		"gateway_nonce":    challenge.GatewayNonce,
 		"protocol_version": protocol.Version,
-		"permissions":      protocol.GatewayPermissions{Access: true},
 	})
 	if err != nil {
 		t.Fatalf("CanonicalJSON() error = %v", err)
@@ -162,9 +120,8 @@ func pairTrustTestClient(t *testing.T, store *Store, audience string) (string, s
 		GatewayID:       challenge.GatewayID,
 		BindingAudience: audience,
 		ClientKeyID:     clientKeyID,
-		Permissions:     protocol.GatewayPermissions{Access: true},
 		Proof:           proof,
-	}); err != nil {
+	}, true); err != nil {
 		t.Fatalf("CompletePairing() error = %v", err)
 	}
 	return clientKeyID, clientPublicKey
@@ -233,15 +190,15 @@ func TestFailedPairingDoesNotPublishTrust(t *testing.T) {
 	challenge, err := store.PairingChallenge(protocol.PairingChallengeRequest{
 		ProtocolVersion: protocol.Version, ClientNonce: "review-client",
 		ClientPublicKey: keys.PublicKeyPEM, BindingAudience: audience,
-	})
+	}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	clientID := security.ClientKeyID(strings.TrimSpace(keys.PublicKeyPEM))
 	payload, err := security.CanonicalJSON(map[string]any{
 		"protocol_version": protocol.Version,
-		"permissions":      protocol.GatewayPermissions{Access: true}, "client_nonce": "review-client",
-		"gateway_nonce": challenge.GatewayNonce, "gateway_id": challenge.GatewayID,
+		"client_nonce":     "review-client",
+		"gateway_nonce":    challenge.GatewayNonce, "gateway_id": challenge.GatewayID,
 		"binding_audience": audience, "client_key_id": clientID,
 	})
 	if err != nil {
@@ -260,8 +217,8 @@ func TestFailedPairingDoesNotPublishTrust(t *testing.T) {
 	_, err = store.CompletePairing(protocol.PairingCompleteRequest{
 		ProtocolVersion: protocol.Version, ClientNonce: "review-client",
 		GatewayNonce: challenge.GatewayNonce, GatewayID: challenge.GatewayID,
-		BindingAudience: audience, ClientKeyID: clientID, Permissions: protocol.GatewayPermissions{Access: true}, Proof: proof,
-	})
+		BindingAudience: audience, ClientKeyID: clientID, Proof: proof,
+	}, true)
 	if err == nil {
 		t.Fatal("expected injected persistence failure")
 	}

@@ -40,7 +40,7 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 	}
 	for _, value := range []any{
 		gc.RuntimeClosureExchangeRequest{}, gc.RuntimeClosureExchangeResponse{}, gc.BindingFence{}, gc.Closure{}, gp.IdentityRequest{}, gp.IdentityResponse{}, gp.ConfigureCloudRequest{}, gp.MemberCloudContext{}, gp.GatewayPermissions{}, gp.GatewayMetadata{}, gp.CatalogRequest{}, gp.CatalogResponse{}, gp.OpenSessionRequest{}, gp.MemberServiceRequest{}, gp.MemberServiceResponse{},
-		gp.InvitationRequest{}, gp.RemoveMemberRequest{}, gp.UpdatePolicyRequest{}, gp.UpdateMembersRequest{}, gp.PairingChallengeRequest{}, gp.PairingChallengeResponse{}, gp.PairingCompleteRequest{}, gp.PairingCompleteResponse{},
+		gp.ClientAccessCodeRequest{}, gp.ClientAccessCodeResponse{}, gp.ClientListRequest{}, gp.ClientListResponse{}, gp.ClientRevokeRequest{}, gp.GatewayClientRecord{}, gp.InvitationRequest{}, gp.RemoveMemberRequest{}, gp.UpdatePolicyRequest{}, gp.UpdateMembersRequest{}, gp.PairingChallengeRequest{}, gp.PairingChallengeResponse{}, gp.PairingCompleteRequest{}, gp.PairingCompleteResponse{},
 		gp.MemberInvitation{}, gp.MemberDelegation{}, gp.MemberService{}, gp.MemberMetadata{}, gp.MemberJoinRequest{}, gp.MemberJoinResponse{}, gp.MemberRotateRequest{}, gp.MemberRotateResponse{}, gp.GatewayEndpoint{}, gp.EndpointUpdateRequest{}, gp.EndpointUpdateResponse{},
 		gp.Member{}, gp.MemberConnectRequest{}, gp.GatewayPolicy{}, gp.MemberPolicyUpdate{}, gp.MemberOperationResult{}, gp.HookInput{}, gp.HookResult{}, gatewaymembership.ConnectionOffer{},
 	} {
@@ -66,7 +66,7 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 			}
 		}
 	}
-	expected := []string{"/gateway/v5/identity", "/v5/member/cloud-closure", "/gateway/v5/cloud/configure", "/gateway/v5/cloud/status", "/gateway/v5/members/reevaluate", "/v5/member/cloud", "/gateway/v5/pairing/challenge", "/gateway/v5/pairing/complete", "/gateway/v5/catalog", "/gateway/v5/invitations", "/gateway/v5/endpoints", "/gateway/v5/members/remove", "/gateway/v5/members/policy", "/gateway/v5/policy", "/gateway/v5/access/open", "/gateway/v5/access/service", "/gateway/v5/migration/dismiss", "/v5/member/join", "/v5/member/cancel-join", "/v5/member/rotate", "/v5/member/leave", "/v5/member/connect"}
+	expected := []string{"/gateway/v5/clients/access-codes", "/gateway/v5/clients/list", "/gateway/v5/clients/revoke", "/gateway/v5/identity", "/v5/member/cloud-closure", "/gateway/v5/cloud/configure", "/gateway/v5/cloud/status", "/gateway/v5/members/reevaluate", "/v5/member/cloud", "/gateway/v5/pairing/challenge", "/gateway/v5/pairing/complete", "/gateway/v5/catalog", "/gateway/v5/invitations", "/gateway/v5/endpoints", "/gateway/v5/members/remove", "/gateway/v5/members/policy", "/gateway/v5/policy", "/gateway/v5/access/open", "/gateway/v5/access/service", "/gateway/v5/migration/dismiss", "/v5/member/join", "/v5/member/cancel-join", "/v5/member/rotate", "/v5/member/leave", "/v5/member/connect"}
 	if len(spec.Paths) != len(expected) {
 		t.Fatal("OpenAPI contains unexpected routes")
 	}

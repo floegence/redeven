@@ -29,16 +29,15 @@ void app.whenReady().then(async () => {
   let record: GatewayRecord = { schema_version: 4, gateway_id: 'pending', display_name: 'Qualification Gateway', local_enabled: true,
     connection: { kind: 'url', base_url: fixture.gateway, allow_loopback_http: true }, created_at_ms: 1, updated_at_ms: 1 };
   const material = createGatewayPairingMaterial(record);
-  const challenge = await client.pairingChallenge(record, pairingChallengeRequestWithCode(material, 'qualification-code'));
+  const challenge = await client.pairingChallenge(record, pairingChallengeRequestWithCode(material, fixture.accessCode));
   record = { ...record, gateway_id: challenge.gateway_id };
-  const permissions = { access: true, manage_members: true, configure_cloud: true };
-  const completed = await client.completePairing(record, buildPairingCompleteRequest(material, challenge, permissions));
-  assertGatewayPairingCompleteResponse(material, challenge, completed, permissions);
+  const completed = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));
+  assertGatewayPairingCompleteResponse(material, challenge, completed);
   record = { ...record, trust_profile: await completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }) };
   const catalog = await client.catalog(record);
   assert.equal(catalog.members.length, 2);
   assert.ok(catalog.members.every(member => member.connected));
-  cases.push('v4 pairing and automatic directory from two outbound Runtime members without Cloud');
+  cases.push('v5 client enrollment and automatic directory from two outbound Runtime members without Cloud');
   const open = async (memberID: string) => {
     const member = catalog.members.find(member => member.member_id === memberID)!;
     const access = await prepareGatewayEnvironmentAccess(record, member, catalog, client);
@@ -144,7 +143,9 @@ void app.whenReady().then(async () => {
     await assert.rejects(rejected.loadURL(`${secure.transport.origin}/api/local/health`));
     cases.push('production partition verifier rejects a different Runtime certificate');
     const member = catalog.members.find(member => member.member_id === fixture.plainMember)!;
-    await client.removeMember(record, member.member_id, member.member_version);
+    await assert.rejects(client.removeMember(record, member.member_id, member.member_version), { code: 'HOST_MANAGEMENT_REQUIRED' });
+    const removal = await fetch(new URL('gateway/v5/members/remove', fixture.gateway), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Redeven-Gateway-Host-Token': fixture.hostToken }, body: JSON.stringify({ protocol_version: 'redeven-gateway-v5', member_id: member.member_id, expected_member_version: member.member_version }) });
+    assert.equal(removal.status, 200);
     await assert.rejects(prepareGatewayEnvironmentAccess(record, member, catalog, client));
     assert.equal((await client.catalog(record)).members.length, 1);
     assert.equal(await unlocked(secure), true);

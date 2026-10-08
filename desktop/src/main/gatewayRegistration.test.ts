@@ -7,10 +7,9 @@ const host = { kind: 'host_process', runtime_root: '/data/gateway' };
 const container = { kind: 'container_process', runtime_root: '/data/gateway', container_engine: 'docker', container_id: 'abc', container_ref: 'office', container_label: 'Office' };
 
 describe('explicit Gateway registration boundary', () => {
-  it('rejects remote Gateway management authorization without a pairing code', () => {
-    expect(() => gatewayConnectionFromSetup({ kind: 'upsert_gateway', connection_kind: 'url',
-      display_name: 'Office', gateway_url: 'https://gateway.example/', permissions: { access: true, manage_members: true, configure_cloud: false }, allow_loopback_http: false }))
-      .toThrow('pairing code');
+  it('rejects caller-selected management permissions even with an access code', () => {
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'upsert_gateway', connection_kind: 'url',
+      display_name: 'Office', gateway_url: 'https://gateway.example/', access_code: 'code', permissions: { access: true, manage_members: true, configure_cloud: true }, allow_loopback_http: false })).toBeNull();
   });
   it.each([
     ['local_host', { kind: 'local_host' }, host], ['local_container', { kind: 'local_host' }, container],
@@ -19,12 +18,12 @@ describe('explicit Gateway registration boundary', () => {
     const request = normalizeDesktopLauncherActionRequest({ kind: 'upsert_gateway', connection_kind: kind,
       gateway_id: 'office', display_name: 'Office', host_access: hostAccess, placement,
       ssh_password: ' password ', ssh_password_mode: 'replace', runtime_environment_id: 'injected-runtime',
-      permissions: { access: true, manage_members: true, configure_cloud: false }, proof: 'injected-proof', client_private_key: 'injected-key' });
+      proof: 'injected-proof', client_private_key: 'injected-key' });
     expect(request?.kind).toBe('upsert_gateway');
     if (request?.kind !== 'upsert_gateway') throw new Error('Fixture registration must normalize');
     const connection = gatewayConnectionFromSetup(request);
     expect(connection).toMatchObject({ kind, runtime_root: '/data/gateway' });
-    expect(request).toMatchObject({ permissions: { access: true, manage_members: true, configure_cloud: false }, ssh_password: ' password ' });
+    expect(request).toMatchObject({ ssh_password: ' password ' });
     expect(JSON.stringify(request)).not.toContain('injected-');
     expect(JSON.stringify(connection)).not.toContain('password ');
     expect(connection).not.toHaveProperty('runtime_state_root');

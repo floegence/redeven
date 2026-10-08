@@ -1741,7 +1741,7 @@
     "gatewayActionEnable": "Включить шлюз",
     "gatewayActionDisable": "Отключить шлюз",
     "gatewayActionPauseSync": "Приостановить синхронизацию",
-    "gatewayActionDelete": "Удалить шлюз",
+    "gatewayActionDelete": "Удалить подключение",
     "gatewayActionSync": "Обновить шлюз",
     "gatewayActionCheck": "Обновить шлюз",
     "gatewayActionSyncFailed": "Сбой обновления",
@@ -2072,9 +2072,6 @@
     "gatewayUrl": "Шлюз URL",
     "gatewayUrlPlaceholder": "https://gateway.example.com",
     "gatewayUrlHelp": "Desktop подключается к этому Gateway и показывает присоединившихся участников. Локальный доступ к участникам работает независимо от Redeven Cloud.",
-    "gatewayPairingCode": "Код сопряжения",
-    "gatewayPairingCodePlaceholder": "Одноразовый код от администратора шлюза",
-    "gatewayPairingCodeHelp": "URL Для установления доверия шлюзам требуется код сопряжения. Desktop использует его только для этого действия сохранения и не сохраняет в списке шлюзов.",
     "gatewayTransportUrl": "URL",
     "gatewayTransportSshHost": "SSH Хост",
     "gatewayTransportSshContainer": "SSH Контейнер",
@@ -2163,7 +2160,10 @@
     "validationChooseContainer": "Выберите запущенный контейнер.",
     "validationChooseContainerFromList": "Выберите запущенный контейнер из текущего списка.",
     "validationRuntimeRootRequired": "Требуется корень среды выполнения.",
-    "validationSshPasswordRequired": "Для аутентификации по паролю требуется SSH-пароль."
+    "validationSshPasswordRequired": "Для аутентификации по паролю требуется SSH-пароль.",
+    "gatewayAccessCode": "Код доступа",
+    "gatewayAccessCodePlaceholder": "Одноразовый код от администратора шлюза",
+    "gatewayAccessCodeHelp": "Передайте адрес Gateway и код клиенту конфиденциально. Код действителен 10 минут и используется один раз. Он не даёт права управления Gateway и не заменяет вход в среду выполнения."
   },
   "confirm": {
     "reinstallTargetTitle": "Переустановить эту среду?",
@@ -2192,9 +2192,9 @@
     "removeEnvironmentQuestion": "Удалить {label} из Desktop?",
     "removeEnvironmentDescription": "Удаляется только регистрация в Desktop. Удалённые данные Redeven не удаляются.",
     "removeEnvironmentBusyDescription": "Desktop сразу удалит регистрацию и завершит локальную очистку в фоновом режиме.",
-    "deleteGatewayTitle": "Удалить шлюз",
-    "deleteGatewayConfirm": "Удалить шлюз",
-    "deleteGatewayQuestion": "Удалить {label} с этого Desktop?",
+    "deleteGatewayTitle": "Удалить подключение",
+    "deleteGatewayConfirm": "Удалить подключение",
+    "deleteGatewayQuestion": "Удалить подключение «{label}» из этого Desktop? Служба Gateway и среды выполнения не будут остановлены или удалены.",
     "deleteGatewayDescription": "Это приведет к удалению локального подключения к шлюзу, доверительных данных и синхронизированного каталога из этого Desktop. Он не удаляет службу шлюза или среды с хоста шлюза.",
     "cancel": "Отмена",
     "cloudSignOutTitle": "Выйти из Redeven Cloud",
@@ -3091,20 +3091,6 @@
     "editorUnavailableDetail": "Не удалось открыть редактор. Вернитесь в Codespaces и повторите попытку.",
     "technicalDetails": "Технические сведения"
   },
-  "gatewayDesktopAccess": {
-    "title": "Разрешения этого Desktop",
-    "viewer": "Использовать среды",
-    "viewerHelp": "Открывать среды, доступные через этот Gateway.",
-    "administrator": "Управлять Gateway",
-    "administratorHelp": "Создавать приглашения, управлять доступом и настраивать Cloud. Одобрение Cloud требуется отдельно.",
-    "custom": "Выбрать разрешения",
-    "customHelp": "Сохранить текущие разрешения или изменить их ниже.",
-    "customize": "Настроить доступ Desktop",
-    "boundary": "Эти разрешения относятся к текущему Desktop, а не к подключённым средам выполнения. Они не дают права администрировать их или одобрять доступ к Cloud.",
-    "access": "Открывать общие среды",
-    "members": "Создавать приглашения и отзывать доступ сред выполнения",
-    "cloud": "Настраивать доступ этого Gateway к Cloud"
-  },
   "gatewayCloud": {
     "title": "Подключиться к Cloud",
     "description": "Необязательно: публикуйте подключённые среды выполнения через Redeven Cloud. Cloud использует этот Gateway как точку доступа и не подключается к среде напрямую.",
@@ -3260,5 +3246,27 @@
     "remove": "Удалить участника",
     "refreshFailed": "Операция выполнена, но список участников не удалось обновить. Результат сохранён. Обновите список, чтобы увидеть актуальное состояние.",
     "hookInvalid": "Недопустимая конфигурация — операции запрещены"
+  },
+  "gatewayClients": {
+    "connectionSettings": "Настройки подключения",
+    "runtimes": "Среды выполнения",
+    "clientAccess": "Доступ клиентов",
+    "hostAccess": "Управление Gateway через подключение к хосту.",
+    "hostVerification": "Для управления Gateway необходимо подтвердить доступ к хосту.",
+    "clientOnly": "Использование сред через Gateway. Это подключение не позволяет управлять Gateway.",
+    "createCode": "Создать код доступа",
+    "codeHelp": "Передайте адрес Gateway и код клиенту конфиденциально. Код действителен 10 минут и используется один раз. Он не даёт права управления Gateway и не заменяет вход в среду выполнения.",
+    "codeExpires": "Истекает через {time}",
+    "codeExpired": "Срок истёк. Создайте новый код.",
+    "authorizedClients": "Авторизованные клиенты",
+    "emptyClients": "Нет клиентов, авторизованных кодом доступа.",
+    "unnamedClient": "Клиент без имени",
+    "revoked": "Доступ отозван",
+    "revoke": "Отозвать доступ",
+    "confirmRevoke": "Подтвердить отзыв",
+    "revokeHelp": "Доступ этого клиента через Gateway будет закрыт. Участники среды выполнения, другие клиенты и права на хост не изменятся.",
+    "authorizedAt": "Авторизован",
+    "lastSeen": "Последний доступ",
+    "codeHelpTitle": "Как использовать этот код"
   }
 }

@@ -1732,7 +1732,7 @@
     "gatewayActionEnable": "Habilitar puerta de enlace",
     "gatewayActionDisable": "Deshabilitar puerta de enlace",
     "gatewayActionPauseSync": "Pausar sincronización",
-    "gatewayActionDelete": "Eliminar puerta de enlace",
+    "gatewayActionDelete": "Eliminar conexión",
     "gatewayActionSync": "Actualizar puerta de enlace",
     "gatewayActionCheck": "Actualizar puerta de enlace",
     "gatewayActionSyncFailed": "Error de actualización",
@@ -2063,9 +2063,6 @@
     "gatewayUrl": "Puerta de enlace URL",
     "gatewayUrlPlaceholder": "https://gateway.example.com",
     "gatewayUrlHelp": "Desktop se conecta a este Gateway y muestra los miembros que se han unido. El acceso local a los miembros funciona independientemente de Redeven Cloud.",
-    "gatewayPairingCode": "Código de emparejamiento",
-    "gatewayPairingCodePlaceholder": "Código de un solo uso del administrador de la puerta de enlace",
-    "gatewayPairingCodeHelp": "URL Las puertas de enlace requieren un código de emparejamiento antes de poder establecer la confianza. Desktop lo usa solo para esta acción de guardar y no lo almacena en la lista de puertas de enlace.",
     "gatewayTransportUrl": "URL",
     "gatewayTransportSshHost": "SSH Host",
     "gatewayTransportSshContainer": "SSH Contenedor",
@@ -2154,7 +2151,10 @@
     "validationChooseContainer": "Elige un contenedor en ejecución.",
     "validationChooseContainerFromList": "Elige un contenedor en ejecución de la lista actual.",
     "validationRuntimeRootRequired": "Se requiere raíz de tiempo de ejecución.",
-    "validationSshPasswordRequired": "La contraseña SSH es obligatoria para la autenticación con contraseña."
+    "validationSshPasswordRequired": "La contraseña SSH es obligatoria para la autenticación con contraseña.",
+    "gatewayAccessCode": "Código de acceso",
+    "gatewayAccessCodePlaceholder": "Código de un solo uso del administrador de la puerta de enlace",
+    "gatewayAccessCodeHelp": "Envía la dirección de Gateway y el código al cliente de forma privada. El código dura 10 minutos y solo se usa una vez. No permite gestionar Gateway ni sustituye el inicio de sesión del entorno de ejecución."
   },
   "confirm": {
     "reinstallTargetTitle": "¿Reinstalar este entorno?",
@@ -2183,9 +2183,9 @@
     "removeEnvironmentQuestion": "¿Eliminar {label} de Desktop?",
     "removeEnvironmentDescription": "Solo se elimina el registro de Desktop. Los datos remotos de Redeven no se eliminan.",
     "removeEnvironmentBusyDescription": "Desktop elimina el registro ahora y termina la limpieza local en segundo plano.",
-    "deleteGatewayTitle": "Eliminar puerta de enlace",
-    "deleteGatewayConfirm": "Eliminar puerta de enlace",
-    "deleteGatewayQuestion": "¿Eliminar {label} de este Desktop?",
+    "deleteGatewayTitle": "Eliminar conexión",
+    "deleteGatewayConfirm": "Eliminar conexión",
+    "deleteGatewayQuestion": "¿Quitar la conexión «{label}» de este Desktop? El servicio Gateway y los entornos de ejecución no se detendrán ni eliminarán.",
     "deleteGatewayDescription": "Esto elimina la conexión de puerta de enlace local, los datos de confianza y el catálogo sincronizado de este Desktop. No elimina el servicio ni los entornos de la puerta de enlace del host de la puerta de enlace.",
     "cancel": "Cancelar",
     "cloudSignOutTitle": "Cerrar sesión en Redeven Cloud",
@@ -3061,20 +3061,6 @@
     "editorUnavailableDetail": "No se pudo abrir el editor. Vuelve a Codespaces e inténtalo de nuevo.",
     "technicalDetails": "Detalles técnicos"
   },
-  "gatewayDesktopAccess": {
-    "title": "Permisos de este Desktop",
-    "viewer": "Usar entornos",
-    "viewerHelp": "Abrir los entornos compartidos a través de este Gateway.",
-    "administrator": "Administrar Gateway",
-    "administratorHelp": "Crear invitaciones, gestionar accesos y configurar Cloud. La aprobación de Cloud sigue siendo independiente.",
-    "custom": "Elegir permisos",
-    "customHelp": "Conservar los permisos actuales o ajustarlos a continuación.",
-    "customize": "Personalizar el acceso de Desktop",
-    "boundary": "Estos permisos corresponden a este Desktop, no a los entornos de ejecución conectados. No permiten administrarlos ni aprobar el acceso a Cloud.",
-    "access": "Abrir entornos compartidos",
-    "members": "Crear invitaciones y retirar el acceso de entornos de ejecución",
-    "cloud": "Configurar el acceso a Cloud de este Gateway"
-  },
   "gatewayCloud": {
     "title": "Conectar a Cloud",
     "description": "Opcional: publique los entornos unidos mediante Redeven Cloud. Cloud usa este Gateway como punto de acceso; no se conecta directamente a un entorno.",
@@ -3230,5 +3216,27 @@
     "remove": "Eliminar miembro",
     "refreshFailed": "La operación se completó, pero no se pudo actualizar la lista de miembros. El resultado se conserva. Actualice para ver el estado más reciente.",
     "hookInvalid": "Configuración no válida: se rechazan las operaciones"
+  },
+  "gatewayClients": {
+    "connectionSettings": "Configuración de conexión",
+    "runtimes": "Entornos de ejecución",
+    "clientAccess": "Acceso de clientes",
+    "hostAccess": "Gestionar Gateway mediante esta conexión al host.",
+    "hostVerification": "Verifica el acceso al host antes de gestionar Gateway.",
+    "clientOnly": "Usar entornos a través de Gateway. Esta conexión no permite gestionar Gateway.",
+    "createCode": "Crear código de acceso",
+    "codeHelp": "Envía la dirección de Gateway y el código al cliente de forma privada. El código dura 10 minutos y solo se usa una vez. No permite gestionar Gateway ni sustituye el inicio de sesión del entorno de ejecución.",
+    "codeExpires": "Caduca en {time}",
+    "codeExpired": "Caducado. Crea un nuevo código.",
+    "authorizedClients": "Clientes autorizados",
+    "emptyClients": "No hay clientes autorizados con un código de acceso.",
+    "unnamedClient": "Cliente sin nombre",
+    "revoked": "Acceso revocado",
+    "revoke": "Revocar acceso",
+    "confirmRevoke": "Confirmar revocación",
+    "revokeHelp": "Se cerrará el acceso de este cliente a Gateway. No cambiarán los miembros del entorno de ejecución, otros clientes ni los permisos del host.",
+    "authorizedAt": "Autorizado",
+    "lastSeen": "Último acceso",
+    "codeHelpTitle": "Cómo usar este código"
   }
 }

@@ -241,7 +241,6 @@ function gatewayBridgeIdentity(hello: RuntimePlacementBridgeHello): GatewayBridg
     || executablePath === ''
     || !Number.isInteger(servicePID)
     || servicePID <= 0
-    || managedBridgeToken === ''
   ) {
     throw new RuntimePlacementBridgeIdentityChangedError(
       'Runtime Placement Bridge did not report the complete managed Gateway service identity.',

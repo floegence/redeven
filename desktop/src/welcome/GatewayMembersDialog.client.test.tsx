@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
-import { GatewayMembersDialog } from './GatewayMembersDialog';
+import { GatewayMembersPanel } from './GatewayMembersDialog';
 import { createDesktopI18n } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
 import { catalogFixture, invitationFixture, memberFixture } from '../testSupport/gatewayMembershipFixture';
@@ -12,7 +12,7 @@ let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
 const i18n = createDesktopI18n('en-US');
 const gateway: DesktopGatewaySource = {
-  gateway_id: 'gateway_fixture', display_name: 'Gateway', local_enabled: true, connection_kind: 'url',
+  gateway_id: 'gateway_fixture', display_name: 'Gateway', local_enabled: true, connection_kind: 'local_host',
   management_capability: 'access_only', capabilities: ['member_access', 'member_manage', 'cloud_configure'],
   status: 'online', trust_state: 'paired', created_at_ms: 1, updated_at_ms: 1,
   listener_address: catalogFixture.gateway.listener_address,
@@ -26,11 +26,11 @@ function button(label: string) {
 function select(element: HTMLSelectElement, value: string) {
   element.value = value; element.dispatchEvent(new Event('change', { bubbles: true }));
 }
-function mount(perform: ReturnType<typeof vi.fn>, refresh = vi.fn(async () => {}), source = gateway) {
+function mount(perform: ReturnType<typeof vi.fn>, refresh = vi.fn(async () => {}), source = gateway, section: 'connection' | 'runtimes' = 'runtimes') {
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   const [current, setCurrent] = createSignal<DesktopGatewaySource | undefined>(source);
-  dispose = render(() => <GatewayMembersDialog gateway={current()} targets={[]} i18n={i18n} onClose={() => setCurrent(undefined)} refresh={refresh} />, root);
+  dispose = render(() => <GatewayMembersPanel gateway={current()} section={section} targets={[]} i18n={i18n} refresh={refresh} />, root);
   return setCurrent;
 }
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
@@ -38,13 +38,13 @@ afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlob
 
 describe('Gateway member management', () => {
   it('labels the address, network and priority separately without compressing the address field', async () => {
-    mount(vi.fn()); await settle();
+    mount(vi.fn(), undefined, gateway, 'connection'); await settle();
     const endpoint = document.querySelector('.redeven-gateway-endpoint')!;
     expect(endpoint.querySelector('label')?.textContent).toContain(i18n.t('gatewayMembers.address'));
     expect(endpoint.querySelector('.redeven-gateway-endpoint__options')?.textContent).toContain(i18n.t('gatewayMembers.scope'));
     expect(endpoint.querySelector('input[type="number"]')?.closest('label')?.textContent).toContain(i18n.t('gatewayMembers.priority'));
     expect(endpoint.querySelector('select')).toBeNull();
-    expect(document.querySelector('[role="dialog"]')?.classList.contains('redeven-gateway-dialog')).toBe(true);
+    expect(document.querySelector('.redeven-gateway-endpoint')).toBeTruthy();
     expect([...document.querySelectorAll('details')].every(detail => detail.classList.contains('redeven-gateway-disclosure'))).toBe(true);
   });
 
@@ -52,14 +52,11 @@ describe('Gateway member management', () => {
     const perform = vi.fn();
     mount(perform, undefined, { ...gateway, member_endpoints: [] }); await settle();
     expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
-    expect(document.body.textContent).toContain(i18n.t('gatewayMembers.noConnectionAddresses'));
     expect(perform).not.toHaveBeenCalled();
   });
   it('reevaluates the selected member without applying an unsaved policy edit', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated' });
     mount(perform); await settle();
-    expect(document.body.textContent).toContain(catalogFixture.gateway.listener_address);
-    expect(document.body.textContent).toContain(i18n.t('gatewayMembers.listenerAddress'));
     select(document.querySelector<HTMLSelectElement>('li select')!, 'allow');
     button(i18n.t('gatewayMembers.reevaluate')).click(); await settle();
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_member', gateway_id: gateway.gateway_id,
@@ -106,7 +103,7 @@ describe('Gateway member management', () => {
     const perform = vi.fn(() => new Promise(resolve => { complete = resolve; }));
     const setGateway = mount(perform); await settle();
     button(i18n.t('gatewayMembers.createInvitation')).click(); await settle();
-    button(i18n.t('common.close')).click(); await settle();
+    setGateway(undefined); await settle();
     setGateway(gateway); await settle();
     complete({ ok: true, outcome: 'gateway_invitation_created', gateway_invitation: invitationFixture }); await settle();
     expect([...document.querySelectorAll('button')].map(controlText)).not.toContain(i18n.t('gatewayMembers.download'));
@@ -119,8 +116,6 @@ describe('Gateway member management', () => {
     expect(button(i18n.t('gatewayMembers.reevaluate')).disabled).toBe(true);
     expect([...document.querySelectorAll('select')].every(select => select.disabled)).toBe(true);
     expect([...document.querySelectorAll('input')].filter(input => input.type !== 'hidden').every(input => input.disabled)).toBe(true);
-    expect(button(i18n.t('gatewayMembers.addAddress')).disabled).toBe(true);
-    expect(button(i18n.t('gatewayMembers.saveAddresses')).disabled).toBe(true);
     expect(perform).not.toHaveBeenCalled();
   });
 });

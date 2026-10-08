@@ -1,3 +1,4 @@
+import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import {
   createHash,
   generateKeyPairSync,
@@ -38,7 +39,7 @@ export type GatewayPairingChallengeResponse = Readonly<{
   gateway_public_key: string;
   gateway_public_key_fingerprint?: string;
   gateway_nonce: string;
-  pairing_code?: string;
+  compatibility_epoch: number;
   expires_at_unix_ms: number;
   signature: string;
 }>;
@@ -50,7 +51,6 @@ export type GatewayPairingCompleteRequest = Readonly<{
   gateway_id: string;
   binding_audience: string;
   client_key_id: string;
-  permissions: GatewayPermissions;
   proof: string;
 }>;
 
@@ -165,11 +165,11 @@ export function pairingChallengeRequest(material: GatewayPairingMaterial): Reado
 
 export function pairingChallengeRequestWithCode(
   material: GatewayPairingMaterial,
-  pairingCode: string,
-): ReturnType<typeof pairingChallengeRequest> & Readonly<{ pairing_code?: string }> {
+  accessCode: string,
+): ReturnType<typeof pairingChallengeRequest> & Readonly<{ access_code?: string }> {
   const base = pairingChallengeRequest(material);
-  return compact(pairingCode)
-    ? { ...base, pairing_code: compact(pairingCode) }
+  return compact(accessCode)
+    ? { ...base, access_code: compact(accessCode) }
     : base;
 }
 
@@ -180,7 +180,6 @@ export function pairingProofPayload(input: Readonly<{
   gateway_id: string;
   binding_audience: string;
   client_key_id: string;
-  permissions: GatewayPermissions;
 }>): string {
   return canonicalJSON(input);
 }
@@ -215,18 +214,14 @@ export function pairingChallengePayload(input: Readonly<{
   client_public_key: string;
   gateway_public_key: string;
   expires_at_unix_ms: number;
-  pairing_code?: string;
+  compatibility_epoch: number;
 }>): string {
-  return canonicalJSON({
-    ...input,
-    ...(compact(input.pairing_code) ? { pairing_code: compact(input.pairing_code) } : {}),
-  });
+  return canonicalJSON(input);
 }
 
 export function buildPairingCompleteRequest(
   material: GatewayPairingMaterial,
   challenge: GatewayPairingChallengeResponse,
-  permissions: GatewayPermissions = { access: true, manage_members: false, configure_cloud: false },
 ): GatewayPairingCompleteRequest {
   const gatewayID = compact(challenge.gateway_id);
   const gatewayNonce = compact(challenge.gateway_nonce);
@@ -240,7 +235,6 @@ export function buildPairingCompleteRequest(
     gateway_id: gatewayID,
     binding_audience: material.binding_audience,
     client_key_id: material.client_key_id,
-    permissions,
   };
   return {
     ...base,
@@ -274,7 +268,7 @@ export function assertGatewayPairingChallengeSignature(
     client_public_key: compact(material.client_public_key),
     gateway_public_key: challenge.gateway_public_key,
     expires_at_unix_ms: challenge.expires_at_unix_ms,
-    pairing_code: challenge.pairing_code,
+    compatibility_epoch: challenge.compatibility_epoch,
   });
   if (!verifyGatewaySignature(challenge.gateway_public_key, payload, challenge.signature)) {
     throw new GatewayTrustError('GATEWAY_PAIRING_SIGNATURE_INVALID', 'Gateway pairing challenge signature is invalid.');
@@ -285,7 +279,6 @@ export function assertGatewayPairingChallenge(input: Readonly<{
   record: GatewayRecord;
   material: GatewayPairingMaterial;
   challenge: GatewayPairingChallengeResponse;
-  expected_pairing_code?: string;
   now_unix_ms?: number;
 }>): string {
   const now = Math.floor(input.now_unix_ms ?? Date.now());
@@ -300,10 +293,7 @@ export function assertGatewayPairingChallenge(input: Readonly<{
   if (input.challenge.protocol_version !== GATEWAY_PROTOCOL_VERSION) {
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
   }
-  const expectedPairingCode = compact(input.expected_pairing_code);
-  if (expectedPairingCode !== '' && compact(input.challenge.pairing_code) !== expectedPairingCode) {
-    throw new GatewayTrustError('GATEWAY_PAIRING_CODE_MISMATCH', 'Gateway pairing challenge did not confirm the requested pairing code.');
-  }
+  if (input.challenge.compatibility_epoch !== RUNTIME_SERVICE_COMPATIBILITY_EPOCH) throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
   const expectedFingerprint = gatewayPublicKeyFingerprint(input.challenge.gateway_public_key);
   const observedFingerprint = compact(input.challenge.gateway_public_key_fingerprint) || expectedFingerprint;
   if (observedFingerprint !== expectedFingerprint) {
@@ -317,13 +307,12 @@ export function assertGatewayPairingCompleteResponse(
   material: GatewayPairingMaterial,
   challenge: GatewayPairingChallengeResponse,
   response: GatewayPairingCompleteResponse,
-  permissions: GatewayPermissions,
 ): void {
   if (response.protocol_version !== GATEWAY_PROTOCOL_VERSION) {
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
   }
   if (response.gateway_id !== challenge.gateway_id || response.client_key_id !== material.client_key_id
-    || canonicalJSON(response.permissions) !== canonicalJSON(permissions)) {
+    || canonicalJSON(response.permissions) !== canonicalJSON({ access: true, manage_members: false, configure_cloud: false })) {
     throw new GatewayTrustError('GATEWAY_PAIRING_COMPLETE_MISMATCH', 'Gateway pairing completion response does not match this pairing request.');
   }
   if (!Number.isFinite(Number(response.paired_at_unix_ms)) || Number(response.paired_at_unix_ms) <= 0) {
@@ -404,7 +393,8 @@ export function assertGatewayAddressProof(record: GatewayRecord, nonce: string, 
   const profile = assertGatewayTrustForCall(record);
   if (!response || typeof response !== 'object') throw new GatewayTrustError('GATEWAY_TRUST_CHANGED', 'Gateway identity proof is missing.');
   const item = response as Record<string, unknown>;
-  if (Object.keys(item).length !== 6 || item.protocol_version !== GATEWAY_PROTOCOL_VERSION
+  if (item.compatibility_epoch !== RUNTIME_SERVICE_COMPATIBILITY_EPOCH) throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
+  if (Object.keys(item).length !== 7 || item.protocol_version !== GATEWAY_PROTOCOL_VERSION
     || item.gateway_id !== profile.gateway_id || item.binding_audience !== profile.binding_audience || item.nonce !== nonce
     || !Number.isSafeInteger(item.expires_at_unix_ms) || Number(item.expires_at_unix_ms) <= now
     || Number(item.expires_at_unix_ms) > now + 120_000 || typeof item.signature !== 'string'

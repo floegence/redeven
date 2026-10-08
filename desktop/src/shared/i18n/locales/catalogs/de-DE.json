@@ -1732,7 +1732,7 @@
     "gatewayActionEnable": "Netzwerk-Gateway aktivieren",
     "gatewayActionDisable": "Netzwerk-Gateway deaktivieren",
     "gatewayActionPauseSync": "Sync pausieren",
-    "gatewayActionDelete": "Netzwerk-Gateway löschen",
+    "gatewayActionDelete": "Verbindung entfernen",
     "gatewayActionSync": "Netzwerk-Gateway aktualisieren",
     "gatewayActionCheck": "Netzwerk-Gateway aktualisieren",
     "gatewayActionSyncFailed": "Aktualisierung fehlgeschlagen",
@@ -2063,9 +2063,6 @@
     "gatewayUrl": "Netzwerk-Gateway URL",
     "gatewayUrlPlaceholder": "https://gateway.example.com",
     "gatewayUrlHelp": "Desktop verbindet sich mit diesem Gateway und zeigt dessen beigetretene Mitglieder. Der lokale Mitgliederzugriff funktioniert unabhängig von Redeven Cloud.",
-    "gatewayPairingCode": "Kopplungscode",
-    "gatewayPairingCodePlaceholder": "Einmaliger Code vom Netzwerk-Gateway-Administrator",
-    "gatewayPairingCodeHelp": "URL Netzwerk-Gateways erfordern einen Pairing-Code, bevor Vertrauen hergestellt werden kann. Desktop verwendet es nur für diese Speicheraktion und speichert es nicht in der Netzwerk-Gateway-Liste.",
     "gatewayTransportUrl": "URL",
     "gatewayTransportSshHost": "SSH Host",
     "gatewayTransportSshContainer": "SSH Container",
@@ -2154,7 +2151,10 @@
     "validationChooseContainer": "Wähle einen laufenden Container.",
     "validationChooseContainerFromList": "Wähle einen laufenden Container aus der aktuellen Liste.",
     "validationRuntimeRootRequired": "-Ausführungsumgebung ist erforderlich.",
-    "validationSshPasswordRequired": "Für Passwortauthentifizierung ist ein SSH-Passwort erforderlich."
+    "validationSshPasswordRequired": "Für Passwortauthentifizierung ist ein SSH-Passwort erforderlich.",
+    "gatewayAccessCode": "Zugriffscode",
+    "gatewayAccessCodePlaceholder": "Einmaliger Code vom Netzwerk-Gateway-Administrator",
+    "gatewayAccessCodeHelp": "Gateway-Adresse und Code vertraulich an den Client senden. Der Code gilt 10 Minuten und kann einmal verwendet werden. Er gewährt keine Gateway-Verwaltung und ersetzt nicht die Anmeldung an der Laufzeitumgebung."
   },
   "confirm": {
     "reinstallTargetTitle": "Diese Umgebung neu installieren?",
@@ -2183,9 +2183,9 @@
     "removeEnvironmentQuestion": "{label} aus Desktop entfernen?",
     "removeEnvironmentDescription": "Dadurch wird nur die Registrierung in Desktop entfernt. Remote-Redeven-Daten werden nicht gelöscht.",
     "removeEnvironmentBusyDescription": "Desktop entfernt die Registrierung sofort und schließt die lokale Bereinigung im Hintergrund ab.",
-    "deleteGatewayTitle": "Netzwerk-Gateway löschen",
-    "deleteGatewayConfirm": "Netzwerk-Gateway löschen",
-    "deleteGatewayQuestion": "{label} von diesem Desktop löschen?",
+    "deleteGatewayTitle": "Verbindung entfernen",
+    "deleteGatewayConfirm": "Verbindung entfernen",
+    "deleteGatewayQuestion": "Verbindung „{label}“ von diesem Desktop entfernen? Der Gateway-Dienst und die Laufzeitumgebungen werden weder gestoppt noch gelöscht.",
     "deleteGatewayDescription": "Dadurch werden die lokale Netzwerk-Gateway-Verbindung, Vertrauensdaten und der synchronisierte Katalog aus diesem Desktop entfernt. Der Netzwerk-Gateway-Dienst oder die Umgebungen werden nicht vom Netzwerk-Gateway-Host gelöscht.",
     "cancel": "Abbrechen",
     "cloudSignOutTitle": "Von Redeven Cloud abmelden",
@@ -3060,20 +3060,6 @@
     "editorUnavailableDetail": "Der Editor konnte nicht geöffnet werden. Kehren Sie zu Codespaces zurück und versuchen Sie es erneut.",
     "technicalDetails": "Technische Details"
   },
-  "gatewayDesktopAccess": {
-    "title": "Berechtigungen dieses Desktop",
-    "viewer": "Umgebungen nutzen",
-    "viewerHelp": "Über dieses Gateway freigegebene Umgebungen öffnen.",
-    "administrator": "Gateway verwalten",
-    "administratorHelp": "Einladungen erstellen, Zugriffe verwalten und Cloud einrichten. Die Cloud-Freigabe bleibt separat.",
-    "custom": "Berechtigungen wählen",
-    "customHelp": "Vorhandene Berechtigungen behalten oder unten einzeln anpassen.",
-    "customize": "Desktop-Zugriff anpassen",
-    "boundary": "Diese Berechtigungen gelten für dieses Desktop, nicht für verbundene Laufzeitumgebungen. Sie erlauben weder deren Verwaltung noch die Cloud-Freigabe.",
-    "access": "Freigegebene Umgebungen öffnen",
-    "members": "Einladungen erstellen und den Zugriff von Laufzeitumgebungen entfernen",
-    "cloud": "Cloud-Zugriff dieses Gateways einrichten"
-  },
   "gatewayCloud": {
     "title": "Mit Cloud verbinden",
     "description": "Optional: Veröffentlichen Sie beigetretene Laufzeitumgebungen über Redeven Cloud. Cloud nutzt dieses Gateway als Zugangspunkt und verbindet sich nicht direkt mit einer Laufzeitumgebung.",
@@ -3229,5 +3215,27 @@
     "remove": "Mitglied entfernen",
     "refreshFailed": "Der Vorgang war erfolgreich, aber die Mitgliederliste konnte nicht aktualisiert werden. Ihr Ergebnis bleibt erhalten. Aktualisieren Sie die Ansicht für den neuesten Stand.",
     "hookInvalid": "Ungültige Konfiguration – Vorgänge werden abgelehnt"
+  },
+  "gatewayClients": {
+    "connectionSettings": "Verbindungseinstellungen",
+    "runtimes": "Laufzeitumgebungen",
+    "clientAccess": "Client-Zugriff",
+    "hostAccess": "Gateway über diese Host-Verbindung verwalten.",
+    "hostVerification": "Zur Gateway-Verwaltung muss der Host-Zugriff bestätigt werden.",
+    "clientOnly": "Umgebungen über Gateway verwenden. Diese Verbindung kann Gateway nicht verwalten.",
+    "createCode": "Zugriffscode erstellen",
+    "codeHelp": "Gateway-Adresse und Code vertraulich an den Client senden. Der Code gilt 10 Minuten und kann einmal verwendet werden. Er gewährt keine Gateway-Verwaltung und ersetzt nicht die Anmeldung an der Laufzeitumgebung.",
+    "codeExpires": "Gültig für {time}",
+    "codeExpired": "Abgelaufen. Einen neuen Code erstellen.",
+    "authorizedClients": "Autorisierte Clients",
+    "emptyClients": "Noch keine Clients mit einem Zugriffscode autorisiert.",
+    "unnamedClient": "Unbenannter Client",
+    "revoked": "Zugriff widerrufen",
+    "revoke": "Zugriff widerrufen",
+    "confirmRevoke": "Widerruf bestätigen",
+    "revokeHelp": "Der Gateway-Zugriff dieses Clients wird beendet. Laufzeitmitgliedschaft, andere Clients und Host-Berechtigungen bleiben unverändert.",
+    "authorizedAt": "Autorisiert",
+    "lastSeen": "Letzter Zugriff",
+    "codeHelpTitle": "So verwenden Sie diesen Code"
   }
 }

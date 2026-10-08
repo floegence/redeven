@@ -34,7 +34,7 @@ import { CodeSpaceBrowserSessions } from './codespaceBrowserSessions';
 import { CodeSpaceNativeWindow, CodeSpaceNativeWindowError, codeSpaceWindowFailure } from './codespaceNativeWindows';
 import { createLocalNativeCodeSpaceRoute } from './codespaceNativeRoute';
 import type { GatewayMemberTransport } from './gatewayMemberTransport';
-import type { GatewayPermissions } from '../shared/gatewayMembership';
+import { hostname } from 'node:os';
 import { prepareGatewayEnvironmentAccess, type GatewayEnvironmentAccess } from './gatewayEnvironmentAccess';
 import { createRemoteNativeCodeSpaceRoute } from './codespaceNativeRemote';
 import { NativeCodeSpaceProfiles, nativeCodeSpaceIdentity } from './codespaceNativeProfiles';
@@ -5662,32 +5662,36 @@ async function pairGatewayWithClient(
   options: Readonly<{
     signal?: AbortSignal;
     onStage?: (stage: Extract<GatewayWorkflowStepID, 'fetching_pairing_challenge' | 'saving_trust_profile'>) => void;
-    pairingCode?: string;
-    permissions?: GatewayPermissions;
+    accessCode?: string;
     beforeStoreWrite?: () => Promise<GatewayRecord> | GatewayRecord;
   }> = {},
 ): Promise<GatewayRecord> {
   const material = createGatewayPairingMaterial(record);
   options.onStage?.('fetching_pairing_challenge');
   const challengeRequest = record.connection.kind === 'url'
-    ? pairingChallengeRequestWithCode(material, options.pairingCode ?? '')
+    ? pairingChallengeRequestWithCode(material, options.accessCode ?? '')
     : pairingChallengeRequest(material);
-  const challenge = await client.pairingChallenge(record, challengeRequest, {
+  const challenge = await client.pairingChallenge(record, { ...challengeRequest, client_name: hostname().slice(0, 160) }, {
     signal: options.signal,
   });
   assertGatewayPairingChallenge({
     record,
     material,
     challenge,
-    expected_pairing_code: record.connection.kind === 'url' ? options.pairingCode : undefined,
   });
   options.onStage?.('saving_trust_profile');
-  const permissions = options.permissions ?? { access: true, manage_members: false, configure_cloud: false };
-  const completionRequest = buildPairingCompleteRequest(material, challenge, permissions);
-  const completion = await client.completePairing(record, completionRequest, {
-    signal: options.signal,
-  });
-  assertGatewayPairingCompleteResponse(material, challenge, completion, permissions);
+  const completionRequest = buildPairingCompleteRequest(material, challenge);
+  let completion;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      completion = await client.completePairing(record, completionRequest, { signal: options.signal });
+      break;
+    } catch (error) {
+      if (options.signal?.aborted || !(error instanceof GatewayClientError) || error.code !== 'GATEWAY_UNREACHABLE' || attempt === 2) throw error;
+    }
+  }
+  if (!completion) throw new Error('Gateway enrollment did not complete.');
+  assertGatewayPairingCompleteResponse(material, challenge, completion);
   const currentRecord = await options.beforeStoreWrite?.() ?? record;
   const trustProfile = await completeGatewayPairing({
     record: currentRecord,
@@ -5983,14 +5987,10 @@ async function upsertGatewayFromLauncher(
     gatewaySyncStateByID.delete(gatewayID);
     gatewayDiagnosisByID.delete(gatewayID);
   }
-  if (request.connection_kind === 'url' && compact(request.pairing_code)) {
+  if (request.connection_kind === 'url' && compact(request.access_code)) {
     return pairGatewayWithClient(record, new GatewayClient(gatewaySecretStore()), gatewaySecretStore(), {
-      pairingCode: request.pairing_code, permissions: request.permissions,
+      accessCode: request.access_code,
     });
-  }
-  if (request.connection_kind !== 'url' && request.permissions) {
-    const client = await gatewayLifecycleManager().client(record, { startPolicy: 'require_ready' });
-    return pairGatewayWithClient(record, client, gatewaySecretStore(), { permissions: request.permissions });
   }
   return record;
 }
@@ -6027,13 +6027,20 @@ function runtimeLifecycleTitleKey(operation: 'start' | 'stop' | 'restart' | 'upd
 }
 
 async function manageGatewayMemberFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.gateway_id);
   if (!record) return launcherActionFailure('environment_missing', 'gateway', 'This Gateway is no longer available.', { shouldRefreshSnapshot: true });
+  if (record.connection.kind === 'url') return launcherActionFailure('gateway_not_manageable', 'gateway', 'Manage this Gateway through its host connection.');
   try {
     const client = await gatewayLifecycleManager().client(record, { startPolicy: 'require_ready' });
-	if (request.kind === 'invite_gateway_runtime') {
+    if (request.kind === 'issue_gateway_access_code') return { ...launcherActionSuccess('gateway_members_updated'), gateway_access_code: await client.issueAccessCode(record) };
+    if (request.kind === 'list_gateway_clients') return { ...launcherActionSuccess('gateway_members_updated'), gateway_clients: await client.listClients(record) };
+    if (request.kind === 'revoke_gateway_client') {
+      await client.revokeClient(record, request.client_key_id);
+      return { ...launcherActionSuccess('gateway_members_updated'), gateway_clients: await client.listClients(record) };
+    }
+    if (request.kind === 'invite_gateway_runtime') {
       return { ...launcherActionSuccess('gateway_invitation_created'), gateway_invitation: await client.invite(record) };
     }
     let results: DesktopLauncherActionSuccess['gateway_member_results'];
@@ -17865,6 +17872,9 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           error instanceof Error ? error.message : String(error),
         );
       }
+    case 'issue_gateway_access_code':
+    case 'list_gateway_clients':
+    case 'revoke_gateway_client':
     case 'invite_gateway_runtime':
     case 'update_gateway_endpoints':
     case 'remove_gateway_member':
