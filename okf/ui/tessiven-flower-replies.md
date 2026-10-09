@@ -19,7 +19,9 @@ The window uses a continuous opaque material across its titlebar and transcript,
 a subtle border and shadow, and compact readable message spacing. It derives
 colors from the selected theme; canvas nodes must not bleed through reply text.
 The default size is 356 by 440 pixels, clamped to the available safe boundary.
-The bottom composer remains outside that boundary.
+The composer belongs to the same window as the transcript, questions, approvals
+and retry controls. Dragging, resizing, hiding and restoring move or affect that
+single conversation surface.
 
 The titlebar contains the decorative Flower identity, a More menu and native
 maximize/restore and close controls. Its accessible title remains plain text.
@@ -43,11 +45,17 @@ The refinement does not aggregate or hide tool activity. Pending delivery and
 run feedback remain visible at the window bottom under the
 [live timeline contract](flower-live-timeline.md).
 
-Closing replies restores them through a small canvas control; sending also
-reopens them. Hidden replies never acknowledge unread output. Drafts, exact
+Closing the window restores it through a small canvas control; sending also
+reopens it. Hidden conversations never acknowledge unread output. Drafts, exact
 canvas context and in-flight delivery follow the
 [canvas contract](tessiven-canvas.md) and
 [composer reference contract](flower-composer-references.md).
+
+An empty new canvas starts with only the canonical Flower composer at the canvas
+bottom. The transcript window appears after the first send, and the same
+conversation surface then owns both transcript and composer. Existing canvases
+open the combined window directly. Reduced-motion settings disable the entry
+motion without changing placement or state.
 
 # Product verification
 

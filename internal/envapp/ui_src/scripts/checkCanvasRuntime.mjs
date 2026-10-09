@@ -82,12 +82,14 @@ async function verifyReplies(page, name) {
   const replies = page.locator('.tessiven-flower-output');
   await surface.getByRole('button', { name: 'Commerce / Example', exact: true }).click();
   await surface.locator('.tessiven-node').waitFor();
-  const composer = surface.locator('.flower-composer textarea');
+  const composer = replies.locator('.flower-composer textarea');
   await composer.waitFor();
-  assert.equal(await surface.locator('.flower-composer-context-reference').count(), 0, 'Whole canvas context stays implicit');
+  assert.equal(await replies.locator('.tessiven-flower-composer').count(), 1, 'Existing canvases put the composer inside the conversation window');
+  assert.equal(await page.locator('.tessiven-flower-composer--initial').count(), 0, 'Existing canvases do not use the new-canvas composer placement');
+  assert.equal(await page.locator('.flower-composer-context-reference').count(), 0, 'Whole canvas context stays implicit');
   const replyCount = (await replies.innerText()).split(reply).length;
   await composer.fill('Explain the storefront and database relationship.');
-  await surface.getByRole('button', { name: 'Send', exact: true }).click();
+  await replies.getByRole('button', { name: 'Send', exact: true }).click();
   await until(async () => (await replies.innerText()).split(reply).length > replyCount, 'new visible streamed Flower reply');
   await until(() => surface.locator('[data-flower-selected-thread-status="success"]').count(), 'canonical Flower completion');
   const title = replies.locator('[data-floe-floating-window-titlebar]');
@@ -107,6 +109,26 @@ async function verifyReplies(page, name) {
   await page.locator('html:not(.dark)').waitFor();
   assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0, 'Canvas and update connection have no error');
   report.scenarios.push(name);
+}
+
+async function verifyEmptyCanvas(page) {
+  const surface = page.locator('.tessiven');
+  await surface.getByRole('button', { name: 'Canvases', exact: true }).click();
+  await surface.getByRole('button', { name: 'New canvas', exact: true }).click();
+  const initialComposer = page.locator('.tessiven-flower-composer--initial');
+  await initialComposer.waitFor();
+  assert.equal(await page.locator('.tessiven-flower-output').count(), 0, 'An empty new canvas starts without a floating conversation window');
+  const textarea = initialComposer.locator('.flower-composer textarea');
+  await textarea.fill('Describe a small service architecture.');
+  await initialComposer.getByRole('button', { name: 'Send', exact: true }).click();
+  const replies = page.locator('.tessiven-flower-output');
+  await replies.waitFor();
+  assert.equal(await page.locator('.tessiven-flower-composer--initial').count(), 0, 'The initial composer moves into the conversation window after send');
+  assert.equal(await replies.locator('.flower-composer textarea').count(), 1, 'The conversation window contains the canonical composer');
+  await until(() => replies.getByText(reply, { exact: true }).count(), 'new-canvas Flower reply');
+  await until(() => surface.locator('[data-flower-selected-thread-status="success"]').count(), 'new-canvas Flower completion');
+  await page.screenshot({ path: path.join(output, 'activity-empty-canvas-chat-window.png'), animations: 'disabled' });
+  report.scenarios.push('empty-canvas-composer-transitions-into-conversation-window');
 }
 
 function readLibraryRecords(db) {
@@ -236,6 +258,7 @@ try {
   assert.ok(await activityBar.isVisible(), 'Activity keeps its navigation rail');
   assert.equal(await activityBar.getByRole('button', { name: 'Tessiven service canvas', exact: true }).getAttribute('aria-pressed'), 'true');
   await verifyReplies(page, 'activity-replies-light');
+  await verifyEmptyCanvas(page);
   if (originalRecords) {
     const surface = page.locator('.tessiven');
     for (const canvas of originalRecords.canvases.filter(canvas => !canvas.archived)) {
@@ -249,7 +272,7 @@ try {
   }
   assert.deepEqual(errors, [], 'Full Env App has no uncaught or layout-load errors');
   assert.deepEqual(popupErrors, [], 'Standalone canvas has no uncaught errors');
-  assert.ok(providerCalls >= 2, 'Both surfaces completed real Flower turns');
+  assert.ok(providerCalls >= 3, 'Both surfaces and the empty-canvas transition completed Flower turns');
   report.provider_calls = providerCalls;
   report.status = 'passed';
 } catch (error) {

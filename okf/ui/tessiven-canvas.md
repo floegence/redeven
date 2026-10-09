@@ -31,9 +31,13 @@ positions remain preferred hints, and expansion retains the inspected anchor.
   editable graph surface. Title, version, date, description, and object counts
   sit in a lower overlay; hover and keyboard focus reveal details without
   changing card geometry, while touch displays those details by default.
-- The canonical Flower composer stays at the bottom of the canvas. There is no
-  editor drawer, additional status bar, or repeated canvas identity/version row
-  above the input. Compact removable object chips appear inside the
+- A new empty canvas starts with the canonical Flower composer at the bottom;
+  no reply window appears before the first send. Sending moves into one movable
+  Flower window that contains the transcript, composer, questions, approvals
+  and retry controls. Existing canvases open this combined window directly.
+  Hiding and restoring affects the whole conversation and preserves its draft.
+  There is no editor drawer, additional status bar, or repeated canvas
+  identity/version row above the input. Compact removable object chips appear inside the
   input under the [Flower reference contract](flower-composer-references.md),
   with version metadata confined to its hover title and no instructional
   placeholder. Default whole-canvas context is implicit and stays hidden;
@@ -42,7 +46,7 @@ positions remain preferred hints, and expansion retains the inspected anchor.
 - Replies and tool activity use the canonical Flower runtime in a quiet
   upper-left floating window under the
   [canvas reply contract](tessiven-flower-replies.md). The composer remains
-  outside its safe boundary; hiding replies preserves the conversation.
+  inside that window after the first send; hiding it preserves the conversation.
 - Empty-canvas suggestions and every Ask Flower action focus the composer with
   exact canvas/version/object context. Opening never sends automatically.
 - Each canvas retains its draft and selected conversation within the mounted
