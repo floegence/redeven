@@ -3,7 +3,7 @@ type: Qualification Record
 title: Physical desktop responsiveness and local input
 description: Assess the physical-seat input and DRM capture changes on orange and udesk26, separating native feedback from client presentation.
 tags: [desktop, input, drm, latency, qualification]
-timestamp: 2026-10-09T19:42:00Z
+timestamp: 2026-10-09T20:40:52Z
 ---
 # Summary
 
@@ -105,6 +105,16 @@ about 33–42 ms. Capture wakes immediately and keeps sampling. This does not ye
 distinguish compositor submission from display-plane selection, nor establish
 physical scanout timing. No GPU-cache change or driver installation was made.
 
+Three additional ordinary-window rounds retain median / P95 values of
+111.870 / 262.390, 106.663 / 265.567 and 106.118 / 261.526 ms. Waiting three
+seconds before the first input instead of 850 ms retains 206.165, 269.847 and
+213.358 ms first responses; subsequent samples range from 76.051 to 120.169 ms.
+Fullscreen presentation and initial window settling therefore do not explain
+the remaining tail by themselves. A separate three-second Xorg ioctl sample
+observed no call longer than 1 ms, despite repeated display-detection log entries.
+That sample does not establish Xorg query stalls as the retained cause. The
+temporary decoder closure was removed and the original target fixture restored.
+
 The isolated Desktop was built from Redeven `f6c8c1093a62` with published
 dependencies and `GOWORK=off`. Its local Runtime listens on 24236. Desktop SSH
 started the task-owned udesk26 Runtime on 24246 with its own state directory.
@@ -121,15 +131,20 @@ not replace a real client-presentation performance sample.
 
 After rebasing onto local main, Go package/race/vet, the X11/Wayland/macOS browser
 Viewer fixtures, 96 panel/localization tests, UI lint/typecheck, Desktop typecheck,
-published dependency locks/notices and the Env App build passed. The new Electron
+published dependency locks/notices and the Env App build passed. After preserving
+local main's Floe Webapp v0.86.12 Env App dependency, its typecheck, 96 panel and
+localization tests, build, X11 Viewer fixture, OKF and notice verification passed
+again. The three affected Go packages and all 46 Desktop SSH/runtime deployment
+tests also passed on that combined dependency tip. The new Electron
 fixture run timed out at native fullscreen while the Mac was locked; it must pass
 again after manual unlock. This failure was not hidden by a retry or weakened test.
 
 The upstream v0.22.33 release qualification passed source, native amd64/arm64,
-host-desktop media amd64/arm64, macOS library and private desktop arm64 jobs. Its
-private-desktop amd64 job failed twice during component download, at approximately
-31 MB of 142.8 MB, before graphical qualification. Keep this external acquisition
-failure visible; the release-wide workflow has not passed.
+host-desktop media amd64/arm64, macOS library and private desktop amd64/arm64 jobs,
+including its final release gate. The private-desktop amd64 job initially failed
+twice during component download, at approximately 31 MB of 142.8 MB. Rerunning
+the failed job against the same immutable tag completed acquisition and all
+graphical checks; no downloader change or new release was used to recover it.
 
 Further real Viewer typing, pointer, lifecycle and presentation measurements
 were interrupted when the local Mac locked and the computer-control tool required
@@ -141,7 +156,7 @@ manual unlock. This is a retained verification boundary, not successful acceptan
 - Published Floe Native Apps `hostdesktop/login_latency_qualification_linux_test.go`, `hostdesktop/login_text_qualification_linux_test.go`, `hostdesktop/login_unlock_qualification_linux_test.go`: opt-in physical-host measurement and document assertions.
 - Published Floe Webapp `createRemotePointer` and `createRemoteInput`: bounded motion and explicit physical/text modes.
 - `internal/codeapp/appserver/remote_desktop_viewer/viewer.js` and `internal/envapp/ui_src/scripts/checkRemoteDesktopViewer.mjs`: product capability integration and local/physical input regression assertions.
-- [Native release qualification](https://github.com/floegence/floe-native-apps/actions/runs/37976652415): retained component-download failure and successful owning jobs.
+- [Native release qualification](https://github.com/floegence/floe-native-apps/actions/runs/37976652415): successful release gate and owning jobs, including recovery of the component-download interruption.
 - [RustDesk active-session reads](https://github.com/rustdesk/rustdesk/blob/001b0e96173cea4e49f9f7a67bea95a177dd1de3/src/platform/linux.rs) and [Sunshine ordered input dispatch](https://github.com/LizardByte/Sunshine/blob/899095522a9ed50bb511d6f1fd103b8ad716d527/src/input.cpp): pinned reference implementations used for architectural comparison.
 
 Raw host logs and captured test material remain in task artifacts outside the
