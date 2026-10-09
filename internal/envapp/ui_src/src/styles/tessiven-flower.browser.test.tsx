@@ -14,6 +14,7 @@ import { TessivenFlowerPanel, type CanvasFlowerRequest } from '../../../../tessi
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import { CanvasFlowerTestSurface, canvasFlowerAdapter } from './tessiven-flower.test-support';
 import { liveBootstrap, thread } from '../ui/FlowerSurface.media.test-support';
+import { inputRequest, liveBootstrap as interactionBootstrap, thread as interactionThread } from '../ui/FlowerSurface.navigation.testHarness';
 import type { FlowerLiveStreamEnvelope, FlowerSurfaceAdapter } from '../../../../flower_ui/src';
 beforeEach(async () => { await new Promise<void>((resolve, reject) => { const request = indexedDB.deleteDatabase('redeven-flower-transport'); request.onsuccess = () => resolve(); request.onerror = () => reject(request.error); }); });
 let dispose: (() => void) | undefined;
@@ -74,6 +75,126 @@ const expectConversationAction = async (available: boolean) => {
   else await expect.element(action).not.toBeInTheDocument();
   await userEvent.keyboard('{Escape}');
 };
+it('paints the canonical rounded input outline in the conversation window', async () => {
+  await page.viewport(1200, 800);
+  mount();
+  await expect.element(editor()).toBeVisible();
+  const composer = document.querySelector<HTMLElement>('.tessiven-flower-output .flower-composer')!;
+  expect(parseFloat(getComputedStyle(composer).borderTopWidth)).toBe(1);
+  expect(parseFloat(getComputedStyle(composer).borderRadius)).toBeGreaterThanOrEqual(8);
+  expect(composer.getBoundingClientRect().height).toBeGreaterThanOrEqual(84);
+});
+
+it('keeps long questions scrollable with all reply controls inside a short canvas window', async () => {
+  await page.viewport(800, 320);
+  const runtime = mount(false, {}, true);
+  host.style.cssText = 'position:absolute;inset:0;width:800px;height:320px';
+  await expect.element(editor()).toBeVisible();
+  await editor().fill('Help with this architecture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  const current = interactionBootstrap(interactionThread({ thread_id: 'canvas-thread', status: 'waiting_user',
+    input_request: inputRequest({ questions: [{ id: 'next', header: 'Next Step', question: 'What would you like me to do with the selected Hadoop canvas (version 4)?', response_mode: 'select_or_write', write_label: 'Describe your own request',
+      choices: [
+        { choice_id: 'explain', value: 'explain', label: 'Walk me through the current architecture', description: 'Explain the layers, services, instances and key relationships of version 4 as saved.', kind: 'select' },
+        { choice_id: 'change', value: 'change', label: 'Change the canvas', description: 'Add, remove or reorganize nodes, services, instances or relations, saved as a new version.', kind: 'select' },
+        { choice_id: 'history', value: 'history', label: 'Show version history', description: 'List saved versions and summarize what changed across them.', kind: 'select' },
+        { choice_id: 'runtime', value: 'runtime', label: 'Map it to a real environment', description: 'Inspect an explicitly connected Runtime and record observed services instead of the conceptual reference.', kind: 'select' },
+      ] }] }),
+  }), 2).current;
+  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current });
+  await expect.element(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
+  const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
+  const content = output.querySelector<HTMLElement>('[data-floe-floating-window-content]')!;
+  const questions = output.querySelector<HTMLElement>('.flower-input-request-questions')!;
+  for (const preset of builtInShellThemePresets) {
+    document.documentElement.classList.toggle('dark', preset.mode === 'dark');
+    for (const [token, value] of Object.entries(preset.semanticTokens ?? {}))
+      if (value) document.documentElement.style.setProperty(token, value);
+    for (const [width, height] of [[800, 320], [320, 320], [320, 170]]) {
+      await page.viewport(width, 320);
+      host.style.width = `${width}px`; host.style.height = `${height}px`;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      for (const button of output.querySelectorAll('.flower-input-request-actions button')) {
+        const rect = button.getBoundingClientRect();
+        expect(rect.bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom - 8);
+        expect(rect.right).toBeLessThanOrEqual(content.getBoundingClientRect().right - 8);
+      }
+      expect(questions.clientHeight).toBeGreaterThan(24);
+      expect(questions.scrollHeight).toBeGreaterThan(questions.clientHeight);
+      expect(questions.scrollWidth).toBeLessThanOrEqual(questions.clientWidth);
+      questions.scrollTop = 0;
+      await page.screenshot({ path: `__screenshots__/tessiven-short-question-${preset.name}-${width}-${height}.png` });
+      questions.scrollTop = questions.scrollHeight;
+      await expect.poll(() => questions.scrollTop).toBeGreaterThan(0);
+    }
+  }
+  await page.getByText('Map it to a real environment', { exact: true }).click();
+  await expect.element(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled();
+  const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+  try {
+    await touch.emulateTouchInput(true);
+    for (const button of output.querySelectorAll('.flower-input-request-actions button'))
+      expect(button.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom - 8);
+    host.style.height = '320px';
+    await page.getByText('Describe your own request', { exact: true }).click();
+    await editor().fill('Arrange the architecture horizontally.\n'.repeat(20));
+    for (const button of output.querySelectorAll('.flower-input-request-actions button')) {
+      const rect = button.getBoundingClientRect();
+      expect(rect.height).toBeGreaterThanOrEqual(44);
+      expect(rect.bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom - 8);
+    }
+    await page.screenshot({ path: '__screenshots__/tessiven-short-question-touch-custom.png' });
+  } finally { await touch.emulateTouchInput(false); }
+});
+
+it('keeps a long ordinary draft and its send action inside a short window', async () => {
+  await page.viewport(800, 320);
+  mount();
+  host.style.cssText = 'position:absolute;inset:0;width:800px;height:320px';
+  await editor().fill('Explain all service relationships.\n'.repeat(40));
+  const content = document.querySelector<HTMLElement>('.tessiven-flower-output [data-floe-floating-window-content]')!;
+  const textarea = content.querySelector<HTMLTextAreaElement>('textarea')!;
+  await expect.poll(() => textarea.scrollHeight).toBeGreaterThan(textarea.clientHeight);
+  const send = page.getByRole('button', { name: 'Send', exact: true });
+  await expect.element(send).toBeEnabled();
+  for (const [width, height] of [[800, 320], [800, 240], [320, 240]]) {
+    await page.viewport(width, height);
+    host.style.width = `${width}px`; host.style.height = `${height}px`;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(document.querySelector('.tessiven-flower-output .flower-composer-footer')!.getBoundingClientRect().bottom)
+      .toBeLessThanOrEqual(content.getBoundingClientRect().bottom - 8);
+    expect(textarea.clientHeight).toBeGreaterThanOrEqual(24);
+  }
+  await page.screenshot({ path: '__screenshots__/tessiven-short-long-draft.png' });
+});
+
+it('keeps a large approval queue scrollable inside a short narrow window', async () => {
+  await page.viewport(320, 320);
+  const runtime = mount();
+  host.style.cssText = 'position:absolute;inset:0;width:320px;height:320px';
+  await editor().fill('Inspect the deployment');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: interactionBootstrap(interactionThread({
+    thread_id: 'canvas-thread', status: 'waiting_approval', approval_actions: Array.from({ length: 10 }, (_, index) => ({
+      action_id: `approval-${index}`, turn_id: 'turn', origin: 'main_tool', run_id: 'run', tool_id: `tool-${index}`, tool_name: 'terminal.exec',
+      state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, queue_order: index,
+      summary: { label: `Inspect deployment service ${index + 1}`, command: 'systemctl status service' },
+    })),
+  }), 2).current });
+  await expect.poll(() => document.querySelector('.tessiven-flower-output .flower-approval-queue-footer')).not.toBeNull();
+  const content = document.querySelector<HTMLElement>('.tessiven-flower-output [data-floe-floating-window-content]')!;
+  for (const button of content.querySelectorAll('.flower-approval-queue-footer button'))
+    expect(button.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom - 8);
+  const list = content.querySelector<HTMLElement>('.flower-approval-queue-list')!;
+  expect(list.clientHeight).toBeGreaterThan(30);
+  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+  list.scrollTop = list.scrollHeight;
+  await expect.poll(() => list.scrollTop).toBeGreaterThan(0);
+  await page.screenshot({ path: '__screenshots__/tessiven-short-approvals.png' });
+});
+
 it('shows only the initial composer on a fresh canvas, then moves it into the reply window after sending', async () => {
   await page.viewport(1200, 800);
   const runtime = mount(false, {}, false, true);

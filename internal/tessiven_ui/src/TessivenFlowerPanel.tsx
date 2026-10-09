@@ -92,8 +92,12 @@ export function TessivenFlowerPanel(props: {
               {parts.actionOverlays}
               {parts.trailingActions}
             </>}>
-            <div class="tessiven-flower-conversation flower-surface flower-surface-companion">{parts.conversation}</div>
-            <div class="tessiven-flower-composer">{parts.composer}</div>
+            <div class="tessiven-flower-chat flower-surface flower-surface-companion">
+              <div class="flower-chat-main" data-flower-action-layout={parts.actionLayout()}>
+                <div class="tessiven-flower-conversation">{parts.conversation}</div>
+                <div class="tessiven-flower-composer">{parts.composer}</div>
+              </div>
+            </div>
           </FloatingWindow>
         </Show>
         <Show when={initialComposer()}>

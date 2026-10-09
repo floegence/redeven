@@ -611,6 +611,7 @@ export type FlowerConversationAction = Readonly<{
 export type FlowerConversationParts = Readonly<{
   conversation: JSX.Element;
   composer: JSX.Element;
+  actionLayout: Accessor<'chat' | 'input_request' | 'approval'>;
   actions: Accessor<readonly FlowerConversationAction[]>;
   actionOverlays: JSX.Element;
   trailingActions?: JSX.Element;
@@ -12463,7 +12464,7 @@ webSearch: model.web_search,
         <GripVertical class="h-3.5 w-3.5" />
       </button>
       <Show when={props.embeddedConversation} fallback={conversationPanel()}>
-        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), actions: conversationHeaderActions,
+        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), actionLayout: bottomActionMode, actions: conversationHeaderActions,
           actionOverlays: subagentDropdown(), get trailingActions() { return props.headerTrailingActions; },
           threadID: selectedThreadID, newConversation: startCompose })}
       </Show>

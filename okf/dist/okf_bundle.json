@@ -34277,15 +34277,15 @@
         "title": "Tessiven Flower replies",
         "type": "UI Contract"
       },
-      "body_length": 4915,
+      "body_length": 5586,
       "summary": "Redeven presents canvas replies in a compact, themed floating reading window.\nFlower owns the conversation, actions and live feedback; Floe owns window\ngeometry, pointer interaction and floating-layer projection. Hiding the window\nkeeps the composer and conversation alive. Errors, approvals and retry retain\ntheir canonical Flower behavior rather than a canvas-specific recovery path.",
       "sections": [
         {
           "id": "reading-surface",
           "title": "Reading surface",
           "level": 1,
-          "body": "The window uses a continuous opaque material across its titlebar and transcript,\na subtle border and shadow, and compact readable message spacing. It derives\ncolors from the selected theme; canvas nodes must not bleed through reply text.\nThe default size is 356 by 440 pixels, clamped to the available safe boundary.\nThe composer belongs to the same window as the transcript, questions, approvals\nand retry controls. Dragging, resizing, hiding and restoring move or affect that\nsingle conversation surface.\n\nThe titlebar contains the decorative Flower identity, a More menu and native\nmaximize/restore and close controls. Its accessible title remains plain text.\nPointer controls expand for coarse input. Reply text remains selectable;\ndragging and resizing belong to Floe and never move the composer.",
-          "char_count": 801
+          "body": "The window uses a continuous opaque material across its titlebar and transcript,\na subtle border and shadow, and compact readable message spacing. It derives\ncolors from the selected theme; canvas nodes must not bleed through reply text.\nThe default size is 356 by 440 pixels, clamped to the available safe boundary.\nThe composer belongs to the same window as the transcript, questions, approvals\nand retry controls. Dragging, resizing, hiding and restoring move or affect that\nsingle conversation surface.\n\nThe titlebar contains the decorative Flower identity, a More menu and native\nmaximize/restore and close controls. Its accessible title remains plain text.\nPointer controls expand for coarse input. Reply text remains selectable;\ndragging and resizing belong to Floe and keep the transcript and composer in\nthe same bounded window.\n\nThe conversation host owns a single height budget. The transcript yields space\nto the composer, while long questions, approvals, and multiline drafts scroll\ninside their own content region. The composer keeps the canonical rounded input\nsurface and its action controls remain inside the window at short heights.\nVery short hosts reduce inner spacing while retaining usable controls and a\nscrollable reading region; long drafts yield editor height to their footer.",
+          "char_count": 1302
         },
         {
           "id": "actions-and-continuity",
@@ -34298,8 +34298,8 @@
           "id": "product-verification",
           "title": "Product verification",
           "level": 1,
-          "body": "Component rendering and an HTTP 200 from a frontend development server do not\nqualify a connected Env App. Workbench requires its Runtime layout snapshot,\ninitial persistence and reload; canvas updates and Flower require the acquired\nsession transport. A standalone Vite server supplies none of these endpoints.\nDo not hide a layout-load error to make an unconnected preview appear healthy.\n\nThe focused `test:canvas-runtime` qualification starts an isolated Runtime from\nthe built bundle with its published plugin sidecars and a fresh state root.\nIt loads the full Env App, verifies Workbench persistence and reload, opens the\nstandalone canvas through its Dock action, and opens the Activity canvas through\nthe Activity Bar with its navigation rail visible. Both surfaces send a Flower turn,\ndisplay the canonical streamed reply and exercise the reply menu in the compact\nwindow. Light and dark screenshots and a machine-readable report provide\nreviewable evidence. Only the model response is scripted; this does not qualify\nmodel reasoning, generation quality, or a real provider's availability.\n\nRun it after building the Env App assets and Runtime bundle:\n\n```sh\npnpm test:canvas-runtime --binary /path/to/bundle/redeven --output /path/to/evidence\n```\n\nThis focused local qualification is not added to ordinary source CI or the\nbounded push gate. It never attaches to an existing user browser or Runtime.",
-          "char_count": 1409
+          "body": "Component rendering and an HTTP 200 from a frontend development server do not\nqualify a connected Env App. Workbench requires its Runtime layout snapshot,\ninitial persistence and reload; canvas updates and Flower require the acquired\nsession transport. A standalone Vite server supplies none of these endpoints.\nDo not hide a layout-load error to make an unconnected preview appear healthy.\n\nThe focused `test:canvas-runtime` qualification starts an isolated Runtime from\nthe built bundle with its published plugin sidecars and a fresh state root.\nIt loads the full Env App, verifies Workbench persistence and reload, opens the\nstandalone canvas through its Dock action, and opens the Activity canvas through\nthe Activity Bar with its navigation rail visible. Both surfaces send a Flower turn,\ndisplay the canonical streamed reply and exercise the reply menu in the compact\nwindow. Light and dark screenshots and a machine-readable report provide\nreviewable evidence. Short, narrow Activity and standalone windows also receive\na real `ask_user` interaction, scroll to its last choice and submit it through\nthe canonical Runtime boundary. Only the model response is scripted; this does not qualify\nmodel reasoning, generation quality, or a real provider's availability.\n\nRun it after building the Env App assets and Runtime bundle:\n\n```sh\npnpm test:canvas-runtime --binary /path/to/bundle/redeven --output /path/to/evidence\n```\n\nThis focused local qualification is not added to ordinary source CI or the\nbounded push gate. It never attaches to an existing user browser or Runtime.",
+          "char_count": 1579
         }
       ],
       "snippet": "Redeven presents canvas replies in a compact, themed floating reading window. Flower owns the conversation, actions and live feedback; Floe owns window geometry, pointer interaction and floating-layer projection. Hiding the window",
@@ -35330,5 +35330,5 @@
       ]
     }
   ],
-  "source_sha256": "7898929149b8d1f4bedde843ba7d60f2ac3727bb3bc88f1c8e153a974cb6a0ed"
+  "source_sha256": "5de7d238e604472308d376353c6fbc208b8fd1834d182cb0b44d42be89e1375c"
 }

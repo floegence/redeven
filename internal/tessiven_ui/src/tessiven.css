@@ -1281,7 +1281,7 @@
   .tessiven-library-card > button:focus-visible { outline-color: Highlight; }
 }
 
-/* The graph keeps the whole canvas. These two conversation surfaces float above it. */
+/* The graph keeps the whole canvas; Flower floats within its own height budget. */
 .tessiven-body { position: relative; }
 .tessiven-flower-canvas {
   position: absolute;
@@ -1329,8 +1329,38 @@
   bottom: auto;
   transform: none;
   width: 100%;
-  padding: 0 12px 12px;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
   flex: 0 0 auto;
+}
+.tessiven-flower-output .flower-chat-bottom-dock { padding: 0 12px 12px; }
+.tessiven-flower-chat {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  --flower-chat-surface: var(--tessiven-flower-surface);
+  --flower-chat-surface-elevated: var(--tessiven-flower-surface);
+}
+.tessiven-flower-chat > .flower-chat-main[data-flower-action-layout='chat'] { container: tessiven-flower-chat / size; }
+.tessiven-flower-chat .flower-chat-bottom-dock[data-flower-action-layout='chat'] {
+  display: flex;
+  min-height: 0;
+  max-height: 100cqh;
+}
+.tessiven-flower-chat .flower-chat-bottom-dock[data-flower-action-layout='chat'] :is(.flower-chat-bottom-dock-track, .flower-composer-anchor, .flower-composer) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.tessiven-flower-chat .flower-composer textarea { flex: 0 1 auto; }
+.tessiven-flower-chat .flower-composer-footer { flex: 0 0 auto; }
+@container (max-height: 179px) {
+  .tessiven-flower-chat .flower-chat-bottom-dock { padding: 0 8px 8px; }
+  .tessiven-flower-chat .flower-chat-bottom-dock .flower-composer[data-flower-bottom-mode] { padding: 6px; gap: 4px; }
 }
 .tessiven-flower-output--entering { animation: tessiven-flower-window-enter 260ms cubic-bezier(.2, .75, .25, 1) both; }
 .tessiven-flower-output--entering:has([data-floe-surface-interacting="true"]) { animation: none; }
