@@ -45,7 +45,11 @@ outcome, so the user must inspect the original manager before trying again.
   and persistence, while the [canvas UI contract](../ui/tessiven-canvas.md) owns
   actual rendering and preferred-coordinate collision resolution.
 - Ask Flower carries `canvas_id`, `version_id`, and bounded object references;
-  historical selections stay historical during the discussion.
+  historical selections stay historical during the discussion. Under the
+  [canvas context contract](../ui/tessiven-canvas.md), an implicit whole-canvas
+  snapshot initializes a new conversation only. Ordinary follow-ups reuse
+  canonical thread context, while explicit object and file references remain
+  attached when selected.
 - Canvas editing embeds the canonical Flower surface with its existing typed
   adapters and permission checks. Composer and floating output share one thread
   runtime. Sending, reading replies, answering questions and approving actions

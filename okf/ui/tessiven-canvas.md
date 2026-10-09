@@ -72,9 +72,13 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   identity/version row above the input. Compact removable object chips appear inside the
   input under the [Flower reference contract](flower-composer-references.md),
   with version metadata confined to its hover title and no instructional
-  placeholder. Default whole-canvas context is implicit and stays hidden;
-  removing the last object returns to that default. The Flower request carries the exact visible canvas/version
-  and selected-object context through its context action.
+  placeholder. Default whole-canvas context is implicit and stays hidden in
+  the composer. It is attached only to the first send that creates a conversation.
+  Follow-ups and restored conversations reuse their canonical thread context;
+  removing the last object returns to an ordinary follow-up without another
+  whole-canvas snapshot. Explicit object references carry the exact visible
+  canvas/version through their context action and take precedence over the
+  implicit initial context. Native file references remain independent.
 - Replies and tool activity use the canonical Flower runtime in a quiet
   upper-left floating window under the
   [canvas reply contract](tessiven-flower-replies.md). The composer remains
@@ -92,9 +96,11 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   use the native Flower controls. Opening the full conversation is optional.
   Env App and Desktop readiness keep the canvas visible and confine recovery controls to
   a bottom card; its wrapper never paints an opaque full-canvas background.
-- The visible version supplies the context for subsequent messages, including
-  explicit history. Saved-version events update current views only; they do not
-  infer completion of a Flower turn.
+- The visible version supplies initial conversation context and explicit object
+  references, including historical selections. A version change or view refresh
+  does not attach another implicit snapshot to subsequent messages. Starting a
+  new conversation includes its current initial context again. Saved-version
+  events update current views only; they do not infer completion of a Flower turn.
 - The graph surface disables native text selection and cancels `selectstart`,
   so dragging to pan never selects card labels or other graph content. Text
   outside the graph, including the Flower composer and document viewer, keeps

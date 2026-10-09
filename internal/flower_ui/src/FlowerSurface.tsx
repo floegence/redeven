@@ -590,6 +590,9 @@ export type FlowerEmbeddedConversation = Readonly<{
   scope: string;
   /** Durable conversation identity supplied by an embedding surface. */
   threadID?: string;
+  /** Implicit surface context for the first turn of a new conversation only. */
+  initialContextAction?: ContextActionEnvelope;
+  /** Explicit references selected by the user for the current composer. */
   contextAction?: ContextActionEnvelope;
   request?: Readonly<{ nonce: number; prompt?: string }>;
   placeholder?: string;
@@ -4984,7 +4987,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? 'preparing_long_text_submission' as const
       : 'ordinary' as const;
     const selectedID = trimString(selectedThreadID());
-    const frozenContextAction = props.embeddedConversation?.contextAction;
+    const frozenContextAction = props.embeddedConversation?.contextAction
+      ?? (!selectedID ? props.embeddedConversation?.initialContextAction : undefined);
     const frozenModelID = selectedComposerModelID();
     const frozenPermissionType = composerPermissionType();
     const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());

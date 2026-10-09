@@ -20,12 +20,12 @@ beforeEach(async () => { await new Promise<void>((resolve, reject) => { const re
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.removeAttribute('style'); document.documentElement.classList.remove('dark', 'light'); });
-function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {}, graph = false, initialComposer = false) {
+function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {}, graph = false, initialComposer = false, initialRequest?: CanvasFlowerRequest) {
   host = document.createElement('div');
   host.className = 'tessiven';
   host.style.cssText = `position:absolute;left:30px;top:30px;width:1100px;height:700px;${transformed ? 'transform:scale(.8);transform-origin:top left;' : ''}`;
   document.body.append(host);
-  const [request, setRequest] = createSignal<CanvasFlowerRequest>({
+  const [request, setRequest] = createSignal<CanvasFlowerRequest>(initialRequest ?? {
     selection: { canvas_id: 'commerce', version_id: 2, object_refs: ['orders'] }, labels: { orders: 'Orders API' }, nonce: 0,
   });
   const base = { ...canvasFlowerAdapter(), ...overrides };
@@ -35,7 +35,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
   const connections = vi.fn();
   const adapter: FlowerSurfaceAdapter = { ...base, launchTurn: sent, connectLiveStream: async function* ({ signal }) {
     connections();
-    yield { schema_version: 1, kind: 'ready', summaries: [] };
+    yield { schema_version: 1, kind: 'ready', summaries: await base.listThreads() };
     while (!signal.aborted) {
       const value = queued.shift();
       if (value) { yield value; continue; }
@@ -306,6 +306,51 @@ it('keeps the whole canvas implicit in a clean default composer', async () => {
   expect(runtime.sent.mock.calls[0][0].context_action).toMatchObject({ context: [
     { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: [] },
   ] });
+  await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('canvas-thread');
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 3, object_refs: [] }, labels: {}, nonce: 0 });
+  await editor().fill('Use a horizontal layout');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
+  expect(runtime.sent.mock.calls[1][0].thread_id).toBe('canvas-thread');
+  expect(runtime.sent.mock.calls[1][0].context_action).toBeUndefined();
+  await replyMenu().click();
+  await page.getByRole('menuitem', { name: 'New conversation', exact: true }).click();
+  await editor().fill('Inspect the updated canvas');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(3);
+  expect(runtime.sent.mock.calls[2][0].thread_id).toBeUndefined();
+  expect(runtime.sent.mock.calls[2][0].context_action).toMatchObject({ context: [
+    { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 3, object_refs: [] },
+  ] });
+});
+
+it('resumes a saved canvas thread without adding implicit whole-canvas context', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount(false, { listThreads: async () => [thread({ thread_id: 'saved-canvas-thread' })] }, false, false, {
+    selection: { canvas_id: 'commerce', version_id: 3, object_refs: [] }, labels: {}, nonce: 0,
+    flower_thread_id: 'saved-canvas-thread',
+  });
+  await expect.element(editor()).toBeVisible();
+  await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('saved-canvas-thread');
+  await editor().fill('Reduce the spacing');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  expect(runtime.sent.mock.calls[0][0].thread_id).toBe('saved-canvas-thread');
+  expect(runtime.sent.mock.calls[0][0].context_action).toBeUndefined();
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 1, object_refs: ['orders', 'app'] },
+    labels: { orders: 'Orders API', app: 'Application' }, nonce: 1, flower_thread_id: 'saved-canvas-thread' });
+  await editor().fill('Explain these objects from the historical version');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
+  expect(runtime.sent.mock.calls[1][0].context_action).toMatchObject({ context: [
+    { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 1, object_refs: ['orders', 'app'] },
+  ] });
+  await page.getByRole('button', { name: 'Remove reference Orders API', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove reference Application', exact: true }).click();
+  await editor().fill('Continue the discussion');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(3);
+  expect(runtime.sent.mock.calls[2][0].context_action).toBeUndefined();
 });
 
 it('places small object references side by side and removes their actual context while preserving the draft', async () => {
@@ -555,6 +600,7 @@ it('keeps late acceptance bound to its original canvas and resumes the accepted 
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
   expect(runtime.sent.mock.calls[1][0].thread_id).toBe('canvas-thread');
+  expect(runtime.sent.mock.calls[1][0].context_action).toBeUndefined();
   expect(runtime.connections).toHaveBeenCalledTimes(1);
 });
 
@@ -582,7 +628,7 @@ it('reopens replies on send and does not reopen an older conversation after star
   await expectConversationAction(false);
 });
 
-it('retries an uncertain send with its original canvas identity after the selection changes', async () => {
+it.each([{ objectRefs: [] }, { objectRefs: ['orders'] }])('retries an uncertain send with its original canvas references $objectRefs after the selection changes', async ({ objectRefs }) => {
   await page.viewport(1200, 800);
   let attempts = 0;
   let fail!: (cause: Error) => void;
@@ -590,10 +636,14 @@ it('retries an uncertain send with its original canvas identity after the select
     if (++attempts === 1) await new Promise<never>((_resolve, reject) => { fail = reject; });
     return canvasFlowerAdapter().launchTurn(input);
   } });
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: objectRefs }, labels: { orders: 'Orders API' }, nonce: 0 });
   await expect.element(editor()).toBeVisible();
   await editor().fill('Explain Orders');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  expect(runtime.sent.mock.calls[0][0].context_action).toMatchObject({ context: [
+    { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: objectRefs },
+  ] });
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 7, object_refs: ['cache'] }, labels: { cache: 'Analytics cache' }, nonce: 1 });
   await editor().fill('Separate draft');
   fail(flowerTurnAdmissionError('unknown', new Error('Test response lost')));
@@ -669,6 +719,7 @@ it('keeps reply text, context and controls legible across every theme and clamps
 it('sends native file references alongside the exact canvas selection', async () => {
   await page.viewport(1200, 800);
   const runtime = mount(false, {
+    loadThread: async id => liveBootstrap(thread({ thread_id: id, working_dir: '/workspace' }), 1),
     getWorkingDirectoryPathContext: async () => ({ agentHomePathAbs: '/workspace', homePathAbs: '/workspace', defaultRootId: 'workspace', roots: [
       { id: 'workspace', label: 'Workspace', pathAbs: '/workspace', kind: 'workspace', permissions: { read: true, write: true } },
     ] }),
@@ -683,6 +734,16 @@ it('sends native file references alongside the exact canvas selection', async ()
   const context = parseAskFlowerContextActionEnvelope(runtime.sent.mock.calls[0][0].context_action);
   expect(context?.context).toEqual([
     { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: ['orders'] },
+    { kind: 'file_path', path: '/workspace/orders.ts', is_directory: false },
+  ]);
+  await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('canvas-thread');
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 3, object_refs: [] }, labels: {}, nonce: 0 });
+  await editor().click(); await userEvent.keyboard('@');
+  await page.getByRole('option', { name: /orders.ts/ }).click();
+  await editor().fill('Explain this code');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
+  expect(parseAskFlowerContextActionEnvelope(runtime.sent.mock.calls[1][0].context_action)?.context).toEqual([
     { kind: 'file_path', path: '/workspace/orders.ts', is_directory: false },
   ]);
 });
