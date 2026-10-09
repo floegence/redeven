@@ -2,6 +2,7 @@ import type {
   GraphInput,
   GraphNode,
   GraphEdge,
+  GraphLayoutOptions,
 } from '@floegence/floe-webapp-core/graph';
 import type {
   CanvasDocument,
@@ -311,6 +312,29 @@ export function projectLayoutLayers(
   const visible = new Set(projection.graph.nodes.map(node => node.id));
   return authored.map(layer => layer.flatMap(id => visible.has(id) ? [id] : []))
     .filter(layer => layer.length > 0);
+}
+
+/** Product geometry budgets shared by the full canvas and its preview. */
+export function projectLayoutOptions(
+  document: CanvasDocument,
+  projection: Projection,
+  positionMode: GraphLayoutOptions['positionMode'] = 'preferred',
+): GraphLayoutOptions {
+  const relationRows = [...projection.internalRelations.entries()]
+    .filter(([id]) => {
+      const card = projection.cards.get(id);
+      return card?.kind === 'group' && card.expanded;
+    })
+    .map(([, relations]) => relations.length);
+  return {
+    direction: document.presentation?.direction ?? 'RIGHT',
+    layers: projectLayoutLayers(document, projection),
+    aspectRatio: 1.6,
+    spacing: 32,
+    groupPadding: { top: 108 + Math.max(0, ...relationRows) * 30, right: 20, bottom: 20, left: 20 },
+    positions: projectPositions(document, projection),
+    positionMode,
+  };
 }
 
 export type Difference = {

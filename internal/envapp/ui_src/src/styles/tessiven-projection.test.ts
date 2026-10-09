@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { projectCanvas, projectPositions } from '../../../../tessiven_ui/src/projection';
+import { projectCanvas, projectLayoutLayers, projectPositions } from '../../../../tessiven_ui/src/projection';
 import { sharedHostsDocument } from './tessiven-shared-hosts.fixture';
 
 describe('shared physical hosts in logical groups', () => {
+  it('inherits each declared group layer without promoting shared host appearances', () => {
+    const document = sharedHostsDocument();
+    document.presentation = { direction: 'LEFT', layers: [['hdfs'], ['zk']] };
+    for (const expanded of [new Set(['hdfs', 'zk']), new Set(['hdfs']), new Set<string>()]) {
+      const projection = projectCanvas(document, expanded, {});
+      expect(projectLayoutLayers(document, projection)).toEqual([['hdfs'], ['zk']]);
+      for (const id of projection.appearances.get('node-1') ?? [])
+        expect(projection.graph.nodes.find(node => node.id === id)?.parentId).toMatch(/^(hdfs|zk)$/);
+    }
+  });
   it('maps one canonical position hint to one visible appearance without changing saved data', () => {
     const document = sharedHostsDocument();
     document.presentation!.positions = [{objectRef:'node-1',x:600,y:500}];

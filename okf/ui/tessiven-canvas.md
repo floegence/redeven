@@ -36,9 +36,13 @@ bottom-to-top structure; unassigned roots join the nearest related layer, and
 disconnected components follow deterministically. Independent members remain
 readable peers inside their dashed logical group. Saved positions guide ordering
 within a layer and never override its rank. Folding and expanding compact only
-the visible subgraph, keep the selected object or its group anchored, and
-exclude hidden members from bounds. Relations retain their original endpoints
-and ports; grouping never invents a relationship.
+the visible subgraph, retain a visible selection and its world-coordinate anchor,
+and anchor its containing group when the selection becomes hidden. Subsequent
+host selection stays compact for that mounted canvas. The viewport center stays
+unchanged, and hidden members do not contribute to bounds. Browsing
+never rewrites saved hints or creates document versions. Relations retain their
+original endpoints and ports; grouping never invents a relationship. Invalid
+graph data and actual worker/routing failures remain visible errors.
 Published Floe jointly routes packed and positioned relationships orthogonally.
 Free anchors can use the available spans of all four node and dashed-group
 borders, favor nearby facing spans, and separate parallel paths into lanes.
@@ -153,13 +157,6 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   appearance retains the same complete inventory and local relation rows.
   Card and group bounds budget every service and relation row, including the
   expansion action, so content never spills outside its node or dashed frame.
-- Layout direction and layer membership are read from the saved document and
-  projected to the currently visible root objects. Both the canvas and library
-  thumbnail use the same published Floe constraints. Fold and expand relayout
-  the visible subgraph in compact mode, keep the selected object or containing
-  group anchored, and exclude hidden members from visible bounds. Saved hints
-  remain in the immutable document and are never rewritten by browsing. Invalid
-  graph data and actual worker/routing failures remain visible errors.
 - Theme tokens, high contrast, product locale, and accessible names are used
   for every card, edge, menu, and action.
 - Every schema service and external-resource kind has a distinct semantic

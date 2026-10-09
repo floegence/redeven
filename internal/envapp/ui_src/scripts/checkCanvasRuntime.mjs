@@ -25,6 +25,8 @@ const state = path.join(temp, 'state');
 const libraryPath = path.join(state, 'local-environment/apps/tessiven/canvases.sqlite');
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), scenarios: [], question_geometry: [] };
 let runtime, browser, runtimeLog = '', providerCalls = 0, questionNext = false;
+let canvasSaveNext;
+let layeredCanvas;
 const reply = 'The storefront calls Orders API, which reads the Orders database.';
 const question = {
   id: 'next', header: 'Next Step', question: 'What would you like me to do with the selected service canvas?',
@@ -48,6 +50,16 @@ const provider = http.createServer(async (request, response) => {
   providerCalls++;
   response.setHeader('Content-Type', 'text/event-stream');
   const send = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
+  if (canvasSaveNext && input.tools?.some(tool => tool.name === 'tessiven_save')) {
+    const item = { type: 'function_call', id: `canvas-${providerCalls}`, call_id: `canvas-${providerCalls}`, name: 'tessiven_save',
+      arguments: JSON.stringify(canvasSaveNext) };
+    canvasSaveNext = undefined;
+    send({ type: 'response.output_item.added', output_index: 0, item });
+    send({ type: 'response.output_item.done', output_index: 0, item });
+    send({ type: 'response.completed', response: { id: `response-${providerCalls}`, status: 'completed', output: [item], usage: { input_tokens: 20, output_tokens: 15 } } });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
   if (questionNext && input.tools?.some(tool => tool.name === 'ask_user')) {
     questionNext = false;
     const item = { type: 'function_call', id: `question-${providerCalls}`, call_id: `call-${providerCalls}`, name: 'ask_user',
@@ -257,6 +269,136 @@ async function verifyEmptyCanvas(page) {
   report.scenarios.push('empty-canvas-composer-transitions-into-conversation-window');
 }
 
+async function saveLayeredCanvas(page, origin) {
+  const document = JSON.parse(await readFile(path.join(root, 'internal/envapp/ui_src/src/styles/fixtures/tessiven-hadoop.json'), 'utf8'));
+  document.metadata.title = 'Hadoop / Layered acceptance';
+  const validation = await requestJSON(origin, '/_redeven_proxy/api/tessiven/validate', 'POST', { document_yaml: JSON.stringify(document) });
+  assert.equal(validation.valid, true, JSON.stringify(validation.diagnostics));
+  canvasSaveNext = { request_id: 'acceptance-layered-hadoop', expected_version: 0, document_yaml: JSON.stringify(document), summary: 'Arrange the five Hadoop architecture layers.' };
+  const replies = page.locator('.tessiven-flower-output');
+  await replies.locator('.flower-composer textarea').fill('Create a separate Hadoop architecture canvas with access, control, coordination, worker and ecosystem layers, in that left-to-right order.');
+  await replies.getByRole('button', { name: 'Send', exact: true }).click();
+  layeredCanvas = await until(async () => {
+    const approve = replies.locator('.flower-approval-decision-approve:not([disabled])');
+    if (await approve.count()) await approve.first().click();
+    const library = await requestJSON(origin, '/_redeven_proxy/api/tessiven/canvases');
+    return library.canvases.find(canvas => canvas.title === document.metadata.title);
+  }, 'Flower saves the layered Hadoop canvas');
+  const saved = await requestJSON(origin, `/_redeven_proxy/api/tessiven/canvases/${layeredCanvas.id}/versions/latest`);
+  assert.deepEqual(saved.document.presentation.layers, document.presentation.layers);
+  assert.deepEqual(saved.document.presentation.positions, document.presentation.positions, 'Saving retains historical coordinate hints');
+  report.scenarios.push('flower-validates-and-saves-layered-hadoop');
+}
+
+async function verifyLayeredCanvas(page, name) {
+  const surface = page.locator('.tessiven');
+  const replies = page.locator('.tessiven-flower-output');
+  if (await replies.count()) {
+    await replies.getByRole('button', { name: 'Hide replies', exact: true }).click();
+    await replies.waitFor({ state: 'detached' });
+  }
+  await surface.getByRole('button', { name: 'Canvases', exact: true }).click();
+  await surface.getByRole('button', { name: layeredCanvas.title, exact: true }).click();
+  await until(async () => await surface.locator('.tessiven-node').count() === 10, 'complete layered Hadoop graph');
+  if (await replies.count()) {
+    await replies.getByRole('button', { name: 'Hide replies', exact: true }).click();
+    await replies.waitFor({ state: 'detached' });
+  }
+  const roots = ['g-access', 'g-master', 'g-coord', 'g-worker', 'g-eco'];
+  const geometry = () => surface.locator('.floe-graph__node, .floe-graph__group').evaluateAll(nodes => nodes.map(node => ({
+    id: node.dataset.graphObject, x: parseFloat(node.style.left), y: parseFloat(node.style.top),
+    width: parseFloat(node.style.width), height: parseFloat(node.style.height),
+  })));
+  const ordered = nodes => {
+    const groups = roots.map(id => nodes.find(node => node.id === id));
+    assert.ok(groups.every(Boolean), 'All five declared layers remain visible');
+    for (let i = 1; i < groups.length; i++) assert.ok(groups[i].x >= groups[i - 1].x + groups[i - 1].width, 'Architecture layers never overlap or reverse');
+  };
+  const extent = nodes => Math.max(...nodes.map(node => node.x + node.width)) - Math.min(...nodes.map(node => node.x));
+  const initial = await geometry();
+  ordered(initial);
+  const graphBounds = await surface.locator('.floe-infinite-canvas').boundingBox();
+  const viewportTransform = () => surface.locator('.floe-infinite-canvas__viewport').evaluate(element => element.style.transform);
+  const panStart = await viewportTransform();
+  await page.mouse.move(graphBounds.x + graphBounds.width / 2, graphBounds.y + 96);
+  await page.mouse.down();
+  await page.mouse.move(graphBounds.x + graphBounds.width / 2 + 60, graphBounds.y + 136, { steps: 8 });
+  await page.mouse.up();
+  await until(async () => await viewportTransform() !== panStart, 'canvas drag changes the viewport');
+  assert.equal(await page.evaluate(() => globalThis.getSelection()?.toString() ?? ''), '', 'Dragging never selects canvas text');
+  const beforeZoom = await viewportTransform();
+  const zoomLabel = surface.locator('.tessiven-canvas-tools span');
+  const beforeZoomLabel = await zoomLabel.innerText();
+  await page.mouse.wheel(0, -200);
+  await until(async () => await viewportTransform() !== beforeZoom, 'canvas wheel zoom');
+  await until(async () => await zoomLabel.innerText() !== beforeZoomLabel, 'committed canvas zoom');
+  await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+  report.scenarios.push(`${name}-pan-zoom-without-text-selection`);
+  for (const mode of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme: mode });
+    await page.locator(mode === 'dark' ? 'html.dark' : 'html:not(.dark)').waitFor();
+    await page.screenshot({ path: path.join(output, `${name}-expanded-${mode}.png`), animations: 'disabled' });
+  }
+  await surface.locator('[data-graph-object="n-coord-1"] .tessiven-node > header strong').click();
+  await page.getByRole('dialog', { name: 'Details', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  let anchorId = await surface.locator('[data-graph-object][data-selected="true"]').getAttribute('data-graph-object');
+  for (const id of roots) {
+    const before = (await geometry()).find(node => node.id === id);
+    if (id === 'g-coord') anchorId = id;
+    const anchor = (await geometry()).find(node => node.id === anchorId);
+    const view = await viewportTransform();
+    await surface.locator(`[data-graph-object="${id}"]`).getByRole('button', { name: 'Collapse group', exact: true }).click();
+    await until(async () => {
+      const after = (await geometry()).find(node => node.id === id);
+      return after && (after.width !== before.width || after.height !== before.height);
+    }, `compact geometry for ${id}`);
+    const after = (await geometry()).find(node => node.id === anchorId);
+    assert.equal(after.x, anchor.x); assert.equal(after.y, anchor.y);
+    assert.equal(await viewportTransform(), view, 'Compaction preserves the viewport center');
+    assert.equal(await surface.locator('[data-graph-object][data-selected="true"]').getAttribute('data-graph-object'), anchorId);
+    ordered(await geometry());
+  }
+  assert.equal(await surface.locator('.tessiven-node').count(), 0);
+  const compact = await geometry();
+  assert.ok(extent(compact) < extent(initial), 'Hidden nodes no longer reserve the expanded horizontal bounds');
+  report.layer_geometry ??= [];
+  report.layer_geometry.push({ name, expanded: extent(initial), collapsed: extent(compact) });
+  await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+  await page.screenshot({ path: path.join(output, `${name}-collapsed.png`), animations: 'disabled' });
+  for (const id of roots) {
+    const before = (await geometry()).find(node => node.id === id);
+    const anchor = (await geometry()).find(node => node.id === anchorId);
+    await surface.locator(`[data-graph-object="${id}"]`).getByRole('button', { name: 'Expand group', exact: true }).click();
+    await until(async () => {
+      const after = (await geometry()).find(node => node.id === id);
+      return after && (after.width !== before.width || after.height !== before.height);
+    }, `expanded geometry for ${id}`);
+    const after = (await geometry()).find(node => node.id === anchorId);
+    assert.equal(after.x, anchor.x); assert.equal(after.y, anchor.y);
+    await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+    ordered(await geometry());
+  }
+  assert.equal(await surface.locator('.tessiven-node').count(), 10);
+  await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+  const viewport = page.viewportSize();
+  for (const size of [{ width: 480, height: 360 }, viewport]) {
+    await page.setViewportSize(size);
+    await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+    await page.screenshot({ path: path.join(output, `${name}-${size.width}.png`), animations: 'disabled' });
+  }
+  await page.emulateMedia({ forcedColors: 'active' });
+  await page.screenshot({ path: path.join(output, `${name}-high-contrast.png`), animations: 'disabled' });
+  await page.emulateMedia({ forcedColors: 'none', colorScheme: 'light' });
+  assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0);
+  await page.reload();
+  await surface.locator('.tessiven-library-card').first().waitFor();
+  await surface.getByRole('button', { name: layeredCanvas.title, exact: true }).click();
+  await until(async () => await surface.locator('.tessiven-node').count() === 10, 'layered canvas after refresh and reentry');
+  assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0);
+  report.scenarios.push(`${name}-layers-collapse-expand-themes-small-window-refresh`);
+}
+
 function readLibraryRecords(db) {
   return {
     canvases: db.prepare('SELECT id,title,description,latest_version,archived,created_at,updated_at FROM canvases ORDER BY id').all(),
@@ -375,6 +517,8 @@ try {
   assert.equal(await popup.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0, 'Standalone canvas has no Env App shell');
   await verifyReplies(popup, 'standalone-replies-light');
   await verifyShortQuestion(popup, 'standalone');
+  await saveLayeredCanvas(popup, origin);
+  await verifyLayeredCanvas(popup, 'standalone-hadoop');
   await popup.close();
 
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();
@@ -387,6 +531,7 @@ try {
   await verifyReplies(page, 'activity-replies-light');
   await verifyShortQuestion(page, 'activity');
   await verifyEmptyCanvas(page);
+  await verifyLayeredCanvas(page, 'activity-hadoop');
   if (originalRecords) {
     const surface = page.locator('.tessiven');
     for (const canvas of originalRecords.canvases.filter(canvas => !canvas.archived)) {

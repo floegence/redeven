@@ -2,6 +2,7 @@ package tessiven
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -78,6 +79,28 @@ func TestPresentationLayers(t *testing.T) {
 	if roundTrip := Validate(encoded); !roundTrip.Valid || roundTrip.Document.Presentation.Layers[1][0] != "assets" {
 		t.Fatalf("layers changed on round trip: %+v", roundTrip.Diagnostics)
 	}
+	for _, direction := range []LayoutDirection{"RIGHT", "DOWN", "LEFT", "UP"} {
+		result.Document.Presentation.Direction = direction
+		result.Document.Presentation.Positions = []Position{{ObjectRef: "application", X: 5000, Y: 3000}}
+		jsonSource, err := json.Marshal(result.Document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		roundTrip := Validate(string(jsonSource))
+		if !roundTrip.Valid || !reflect.DeepEqual(roundTrip.Document.Presentation, result.Document.Presentation) {
+			t.Fatalf("JSON layout contract changed for %s: %+v", direction, roundTrip.Diagnostics)
+		}
+	}
+	rootObjects := strings.Replace(exampleDocument,
+		"groups:\n  - {id: application, name: Application nodes, nodeRefs: [core-01]}\n", "", 1)
+	rootObjects = strings.Replace(rootObjects,
+		"services:\n  - {id: orders, name: Orders API, kind: api}",
+		"services:\n  - {id: orders, name: Orders API, kind: api}\n  - {id: catalog, name: Catalog API, kind: api}", 1)
+	rootObjects = strings.Replace(rootObjects, "evidence:\n",
+		"presentation:\n  direction: DOWN\n  layers:\n    - [core-01, catalog]\n    - [assets]\nevidence:\n", 1)
+	if result := Validate(rootObjects); !result.Valid {
+		t.Fatalf("ungrouped nodes and unplaced services must be valid root layer objects: %+v", result.Diagnostics)
+	}
 	for _, tc := range []struct {
 		name        string
 		replacement string
@@ -88,9 +111,12 @@ func TestPresentationLayers(t *testing.T) {
 		{"empty layer", "layers:\n    - []", "/presentation/layers/0"},
 		{"unknown object", "layers:\n    - [missing]", "/presentation/layers/0/0"},
 		{"object repeated across layers", "layers:\n    - [application]\n    - [application]", "/presentation/layers/1/0"},
+		{"object repeated within a layer", "layers:\n    - [application, application]", "/presentation/layers/0"},
 		{"grouped node", "layers:\n    - [core-01]", "/presentation/layers/0/0"},
 		{"placed service", "layers:\n    - [orders]", "/presentation/layers/0/0"},
 		{"instance", "layers:\n    - [orders-01]", "/presentation/layers/0/0"},
+		{"relation", "layers:\n    - [orders-assets]", "/presentation/layers/0/0"},
+		{"evidence", "layers:\n    - [storage-config]", "/presentation/layers/0/0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			source := strings.Replace(exampleDocument, "evidence:\n", "presentation:\n  "+tc.replacement+"\nevidence:\n", 1)
