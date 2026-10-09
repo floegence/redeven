@@ -92,6 +92,13 @@ does not hide product configuration or fail the request. This isolation does
 not create a second Agent source of truth: ready thread and lifecycle reads
 still call the exact Floret-backed `ai.Service` generation.
 
+Model directory discovery is also outside Flower admission. Runtime publishes
+an offline baseline projection first; dynamic provider, platform, and Desktop
+catalog checks run in one bounded complete read and report per-source status.
+Flower may show history, canvas bindings, drafts, and static selected models
+while a source is pending or unavailable. A directory refresh never changes
+selection intent, authorizes a send, or creates a second readiness controller.
+
 HTTP acquisition happens only after the exact route permission succeeds.
 Denied admin or full-access requests and unknown AI routes never obtain a
 generation lease. Incomplete provider leases fail closed, release any supplied

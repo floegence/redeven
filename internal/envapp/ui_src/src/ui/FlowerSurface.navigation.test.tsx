@@ -795,7 +795,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Ask Flower');
     expect(runtime.querySelector('.flower-empty-state')).toBeTruthy();
     expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
-    expect(runtime.querySelector('.flower-setup-inline')?.textContent).toContain('Set up a model provider to start chatting.');
+    expect(runtime.querySelector('.flower-setup-inline')?.textContent).toContain('This model is unavailable.');
     expect(runtime.querySelector('.flower-handler-error')).toBeNull();
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
 
@@ -809,19 +809,43 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-setup-inline')).toBeTruthy();
   });
 
-  it('shows a starting handler state before settings finish loading', async () => {
+  it('shows a recoverable platform directory failure without hiding the composer', async () => {
+    const snapshot: FlowerSettingsSnapshot = {
+      ...settingsSnapshot(false), model_profile: null,
+      model_directory: {
+        current_model_id: 'platform/missing',
+        models: [{ id: 'platform/missing', label: 'Selected platform model', source: 'platform', state: 'unavailable', reason: 'catalog_unavailable' }],
+        sources: [{ id: 'platform', kind: 'platform', state: 'unavailable', reason: 'catalog_unavailable' }],
+      },
+    };
+    const runtime = renderSurfaceWithAdapter({ ...adapter(false), loadSettings: vi.fn(async () => snapshot) });
+    await flush();
+    expect(runtime.querySelector('.flower-handler-error-card')?.textContent).toContain('This model is unavailable.');
+    expect(runtime.querySelector('textarea')).toBeTruthy();
+    expect(runtime.querySelector('.flower-model-reasoning-model-trigger')).toBeTruthy();
+  });
+
+  it('loads bound history and resolves the handler before settings finish loading', async () => {
     const settings = deferred<FlowerSettingsSnapshot>();
     const resolveHandler = vi.fn(async () => decision());
+    const boundThread = thread({ thread_id: 'thread-before-settings', messages: [{
+      id: 'history-before-settings', turn_id: 'turn-before-settings', run_id: 'run-before-settings',
+      role: 'assistant', content: 'Bound history is available', status: 'complete', created_at_ms: 21,
+    }] });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       loadSettings: vi.fn(() => settings.promise),
       resolveHandler,
+      listThreads: vi.fn(async () => [boundThread]),
+      loadThread: vi.fn(async () => liveBootstrap(boundThread)),
     });
-    await flush();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-before-settings"] button')));
+    (runtime.querySelector('[data-thread-id="thread-before-settings"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Bound history is available') === true);
 
-    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('No model selected');
+    expect(runtime.querySelector('.flower-model-reasoning-model-trigger')).toBeTruthy();
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
-    expect(resolveHandler).not.toHaveBeenCalled();
+    expect(resolveHandler).toHaveBeenCalledTimes(1);
 
     settings.resolve(settingsSnapshot(true));
     await waitFor(() => resolveHandler.mock.calls.length === 1);

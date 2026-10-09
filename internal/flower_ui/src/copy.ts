@@ -336,6 +336,8 @@ export type FlowerSurfaceCopy = Readonly<{
     restoredInputCopy: string;
 
     loadingSettings: string;
+    modelsChecking: string;
+    modelsUnavailable: string;
     warmupTitle: string;
     warmupDetail: string;
     warmupComposerPlaceholder: string;
@@ -654,6 +656,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     restoredInputCopy: 'Copy input',
 
     loadingSettings: 'Flower settings are still loading.',
+    modelsChecking: 'Checking model availability…',
+    modelsUnavailable: 'This model is unavailable. Refresh the list, select another model, or open settings.',
     warmupTitle: 'Preparing Flower',
     warmupDetail: 'Desktop is starting the Local Environment runtime before Flower loads conversations.',
     warmupComposerPlaceholder: 'Preparing Flower on Local Environment...',

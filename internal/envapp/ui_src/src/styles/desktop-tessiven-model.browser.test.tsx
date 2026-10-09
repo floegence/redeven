@@ -16,6 +16,7 @@ import { TessivenFlowerPanel } from '../../../../tessiven_ui/src/TessivenFlowerP
 import { TessivenGraph } from '../../../../tessiven_ui/src/TessivenGraph';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import { canvasFlowerAdapter } from './tessiven-flower.test-support';
+import { modelDirectoryWireFixture } from '../test/modelDirectoryWireFixture';
 import hadoop from './fixtures/tessiven-hadoop.json';
 import type { CanvasDocument } from '../../../../tessiven_ui/src/types';
 
@@ -44,11 +45,16 @@ it.each(['porcelain-light', 'porcelain-dark'])('recovers the Desktop canvas mode
     if (path.endsWith('/settings')) return { ok: true, data: { ai: { permission_type: 'full_access', current_model_id: 'deepseek/deepseek-flash', providers: [
       { id: 'deepseek', name: 'DeepSeek', type: 'deepseek', model_selection: { selected_models: ['deepseek-flash', 'deepseek-pro'] } },
     ] }, ai_secrets: { provider_api_key_set: { deepseek: true } } } };
-    if (path.endsWith('/models')) return { ok: true, data: { current_model: 'deepseek/deepseek-flash', models: [] } };
+    if (path.includes('/models')) return { ok: true, data: modelDirectoryWireFixture({ ai: { current_model_id: 'deepseek/deepseek-flash', providers: [{ id: 'deepseek', name: 'DeepSeek', type: 'deepseek', models: [], model_selection: { selected_models: ['deepseek-flash', 'deepseek-pro'] } }] } }, { current_model: 'deepseek/deepseek-flash', models: [{ id: 'deepseek/deepseek-flash', label: 'DeepSeek / deepseek-flash' }, { id: 'deepseek/deepseek-pro', label: 'DeepSeek / deepseek-pro' }] }) };
     throw new Error(`Unexpected model request: ${path}`);
   });
   const desktop = createLocalEnvironmentFlowerSurfaceAdapter({ requestRuntimeFlower: request } as unknown as DesktopSettingsBridge);
-  const adapter = { ...canvasFlowerAdapter(), loadSettings: desktop.loadSettings };
+  const adapter = {
+    ...canvasFlowerAdapter(),
+    loadSettings: desktop.loadSettings,
+    loadModelDirectory: desktop.loadModelDirectory,
+    subscribeModelDirectory: desktop.subscribeModelDirectory,
+  };
   const Canvas = () => {
     const drafts = createFlowerComposerDraftCoordinator();
     onCleanup(() => drafts.dispose());
@@ -89,5 +95,5 @@ it.each(['porcelain-light', 'porcelain-dark'])('recovers the Desktop canvas mode
   setState('degraded');
   await expect.element(page.getByRole('textbox')).toHaveValue('Arrange this architecture from left to right');
   await expect.poll(() => host.querySelector('.flower-composer')?.textContent).toContain('DeepSeek');
-  await expect.poll(() => request.mock.calls.length).toBe(4);
+  await expect.poll(() => request.mock.calls.length).toBe(3);
 });

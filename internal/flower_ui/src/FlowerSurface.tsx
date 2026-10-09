@@ -1,5 +1,5 @@
 import { flowerMenuModels } from './modelMenu';
-import { flowerProviderCredentialsReady } from './providerCredentials';
+import { flowerDirectoryDesktopStatus } from './modelDirectory';
 import {
   Input,
   StableText,
@@ -145,7 +145,7 @@ import {
   type FlowerSubagentPanelStatus,
 } from './flowerSubagentProjection';
 import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
-import { formatFlowerCurrentModelLabel } from './flowerModelLabel';
+import type { FlowerModelDirectory } from './contracts/flowerSurfaceContracts';
 import { FLOWER_COMPACT_CONTEXT_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
 import {
   pendingApprovalCommandForActivityItem,
@@ -2072,22 +2072,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPermissionMenuOpen(true);
     queueMicrotask(() => focusPermissionMenuItem(permissionMenuActiveIndex()));
   };
-  const applyPersistedDefaultModelLocally = (modelID: string) => {
-    const mid = trimString(modelID);
-    if (!mid) return;
-    setSnapshot((current) => {
-      if (current?.platform_model_source?.models.some((model) => model.id === mid)) {
-        return { ...current, platform_model_source: { ...current.platform_model_source, current_model_id: mid } };
-      }
-      if (!current?.model_profile) return current;
-      const profile = current.model_profile;
-      const belongsToProfile = profile.providers.some((provider) => (
-        provider.models.some((model) => `${trimString(provider.id)}/${trimString(model.model_name)}` === mid)
-      ));
-      if (!belongsToProfile) return current;
-      return { ...current, model_profile: { ...profile, current_model_id: mid } };
-    });
-  };
   const updateComposerModelID = async (modelID: string) => {
     const mid = trimString(modelID);
     if (!mid) return;
@@ -2106,10 +2090,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const previousSnapshot = snapshot();
       const pendingSessionKey = pendingDraftKey();
       setPendingModelPatch({ threadID: pendingSessionKey, requested: mid, previous });
-      applyPersistedDefaultModelLocally(mid);
       try {
         const next = await props.adapter.persistDefaultModel(mid);
         setSnapshot(next);
+        if (next.model_directory) setModelDirectory(next.model_directory);
         updateCurrentComposerSessionDraft((draft) => (
           trimString(draft.modelIDOverride) === mid ? { ...draft, modelIDOverride: '' } : draft
         ));
@@ -2136,7 +2120,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const live = await props.adapter.setThreadModel(threadID, mid);
       const updated = receiveThreadView(live, 'user_action', requestEpoch).thread;
       if (persistsRemoteDefault) {
-        applyPersistedDefaultModelLocally(mid);
         try {
           const next = await props.adapter.persistDefaultModel(mid);
           setSnapshot(next);
@@ -2644,12 +2627,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
-  const currentModelID = createMemo(() => {
-    const current = snapshot();
-    if (current?.platform_model_source?.current_model_id) return trimString(current.platform_model_source.current_model_id);
-    if (current?.model_profile?.current_model_id) return trimString(current.model_profile.current_model_id);
-    return current?.model_source?.state === 'ready' ? trimString(current.model_source.current_model_id) : '';
-  });
+  const [modelDirectory, setModelDirectory] = createSignal<FlowerModelDirectory | null>(null);
+  const currentModelID = createMemo(() => trimString(modelDirectory()?.current_model_id) || trimString(snapshot()?.model_profile?.current_model_id));
   const selectedComposerModelID = createMemo(() => {
     const pending = pendingModelPatch();
     const threadID = trimString(selectedThreadID());
@@ -2699,72 +2678,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     maxOutputTokens?: number;
     reasoningCapability?: FlowerReasoningCapability;
     defaultReasoningSelection?: FlowerReasoningSelection;
+    pending?: boolean;
   }>;
-  const configuredModelOptions = createMemo<readonly ComposerModelOption[]>(() => (
-    snapshot()?.model_profile?.providers.flatMap((provider) => {
-      const providerID = trimString(provider.id);
-      if (!providerID) return [];
-      const providerLabel = trimString(provider.name) || providerID;
-      return provider.models.map((model) => {
-        const modelName = trimString(model.model_name);
-        if (!modelName) return null;
-        return {
-          id: `${providerID}/${modelName}`,
-          label: `${providerLabel} / ${model.display_name || modelName}`,
-          name: model.display_name || modelName,
-          group: providerLabel,
-          disabled: model.unavailable,
-          quantization: model.quantization,
-          aliasKey: model.model_digest ? JSON.stringify([providerID, model.model_digest, model.context_window, model.max_output_tokens, model.effective_context_window_percent, model.input_modalities, model.reasoning_capability, model.default_reasoning_selection]) : undefined,
-          source: 'model_profile',
-          providerType: provider.type,
-          supportsImageInput: flowerModelSupportsImage(model.input_modalities),
-webSearch: model.web_search,
-          ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
-          ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
-          ...(model.reasoning_capability ? { reasoningCapability: model.reasoning_capability } : {}),
-          ...(model.default_reasoning_selection ? { defaultReasoningSelection: model.default_reasoning_selection } : {}),
-        } as ComposerModelOption;
-      }).filter((option): option is ComposerModelOption => option !== null);
-    }) ?? []
-  ));
-  const sourceModelOptions = createMemo<readonly ComposerModelOption[]>(() => {
-    const source = snapshot()?.model_source;
-    if (source?.kind !== 'desktop_model_source' || source.state !== 'ready') return [];
-    return source.models.map((model) => ({
-      id: trimString(model.id),
-      label: trimString(model.label) || trimString(model.id),
-      source: 'desktop_model_source' as const,
-      group: 'Desktop',
-      aliasKey: model.alias_group, quantization: model.quantization,
-      supportsImageInput: flowerModelSupportsImage(model.input_modalities),
-webSearch: model.web_search,
-      ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
-      ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
-      ...(model.reasoning_capability ? { reasoningCapability: model.reasoning_capability } : {}),
-    })).filter((option) => option.id);
-  });
-  const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => {
-    const seen = new Set<string>();
-    const platformOptions: ComposerModelOption[] = (snapshot()?.platform_model_source?.models ?? []).map((model) => ({
-      id: model.id, label: model.label, group: 'Redeven AI', source: 'platform',
-      supportsImageInput: flowerModelSupportsImage(model.input_modalities),
-      webSearch: model.web_search, contextWindow: model.context_window,
-      maxOutputTokens: model.max_output_tokens, reasoningCapability: model.reasoning_capability,
-    }));
-    return [...configuredModelOptions(), ...sourceModelOptions(), ...platformOptions].filter((option) => {
-      if (seen.has(option.id)) return false;
-      seen.add(option.id);
-      return true;
-    });
-  });
-  const currentModelLabel = createMemo(() => {
-    const catalogModel = catalogModelOptions().find((option) => option.id === currentModelID());
-    if (catalogModel) return catalogModel.label;
-    const current = snapshot();
-    if (settingsLoading()) return '';
-    return current?.model_profile ? formatFlowerCurrentModelLabel(current.model_profile, copy().chat.noModelSelected) : copy().chat.noModelSelected;
-  });
+  const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => (modelDirectory()?.models ?? []).map(model => ({
+    id: model.id, label: model.label || model.id,
+    name: model.label?.split(' / ').slice(1).join(' / ') || model.model_name,
+    group: model.provider_name || (model.source === 'platform' ? 'Redeven AI' : model.source === 'desktop_model_source' ? 'Desktop' : copy().settings.dialog.catalog.unavailableModel),
+    source: model.source === 'runtime_config' ? 'model_profile' : model.source || 'thread_snapshot',
+    disabled: model.state !== 'ready', pending: model.state === 'pending', providerType: model.provider_type,
+    aliasKey: model.alias_group, quantization: model.quantization,
+    supportsImageInput: flowerModelSupportsImage(model.input_modalities),
+    webSearch: model.web_search, contextWindow: model.context_window,
+    maxOutputTokens: model.max_output_tokens, reasoningCapability: model.reasoning_capability,
+    defaultReasoningSelection: model.default_reasoning_selection,
+  })));
+  const currentModelLabel = createMemo(() => catalogModelOptions().find(model => model.id === currentModelID())?.label || currentModelID() || copy().chat.noModelSelected);
   const reasoningControlLabel = createMemo(() => trimString(copy().chat.reasoningLabel) || DEFAULT_FLOWER_SURFACE_COPY.chat.reasoningLabel);
   const selectedThreadModelLabel = createMemo(() => {
     const threadModelID = selectedComposerModelID();
@@ -2774,7 +2702,7 @@ webSearch: model.web_search,
     return threadModelID;
   });
   const threadSnapshotModelOption = createMemo<ComposerModelOption | null>(() => {
-    const threadModelID = trimString(selectedThread()?.model_id);
+    const threadModelID = trimString(selectedThread()?.model_id) || selectedComposerModelID();
     if (!threadModelID || catalogModelOptions().some((option) => option.id === threadModelID)) return null;
     return {
       id: threadModelID,
@@ -2835,7 +2763,6 @@ webSearch: model.web_search,
   const composerModelInteractive = createMemo(() => (
     selectedThreadPreferenceEditable()
     && !pendingReasoningThreadIDs().has(trimString(selectedThreadID()))
-    && modelSelectOptions().length > 0
     && (!selectedThreadID() || typeof props.adapter.setThreadModel === 'function')
   ));
   const composerReasoningInteractive = createMemo(() => (
@@ -2846,33 +2773,12 @@ webSearch: model.web_search,
     && selectedThreadPreferenceEditable()
     && (!selectedThreadID() || typeof props.adapter.setThreadReasoningSelection === 'function')
   ));
-  const modelSource = createMemo(() => snapshot()?.model_source ?? null);
-  const modelOptionReady = (option: ComposerModelOption | null | undefined): boolean => {
-    if (!option) return false;
-    if (option.source === 'platform') return snapshot()?.platform_model_source?.models.some((model) => model.id === option.id) ?? false;
-    if (option.source === 'desktop_model_source') {
-      const source = modelSource();
-      return source?.kind === 'desktop_model_source'
-        && source.state === 'ready'
-        && source.models.some((model) => trimString(model.id) === option.id);
-    }
-    if (option.disabled || option.source !== 'model_profile') return false;
-    const providerID = option.id.split('/')[0] ?? '';
-    const provider = snapshot()?.model_profile?.providers.find((item) => trimString(item.id) === providerID);
-    if (!provider) return false;
-    const secrets = snapshot()?.provider_secrets.find((secret) => secret.provider_id === providerID);
-    return flowerProviderCredentialsReady(provider.type, secrets?.provider_api_key_configured === true);
-  };
+  const modelSource = createMemo(() => modelDirectory() ? flowerDirectoryDesktopStatus(modelDirectory()!) ?? null : null);
+  const modelOptionReady = (option: ComposerModelOption | null | undefined): boolean => Boolean(option && modelDirectory()?.models.some(model => model.id === option.id && model.state === 'ready'));
   const readyForChat = createMemo(() => modelOptionReady(selectedModelOption()));
   const anyModelReady = createMemo(() => catalogModelOptions().some((option) => modelOptionReady(option)));
-  const selectedModelNeedsAttention = createMemo(() => !readyForChat() && anyModelReady());
-  const platformCatalogErrorVisible = createMemo(() => {
-    const source = snapshot()?.platform_model_source;
-    if (!source?.error) return false;
-    const selected = selectedComposerModelID();
-    return selected.startsWith('platform/')
-      || (!selected && catalogModelOptions().length === 0);
-  });
+  const selectedModelNeedsAttention = createMemo(() => !readyForChat() && !modelDirectory()?.models.some(model => model.id === selectedComposerModelID() && model.state === 'pending'));
+  const platformCatalogErrorVisible = createMemo(() => Boolean(modelDirectory()?.sources.some(source => source.kind === 'platform' && source.state === 'unavailable') && (selectedComposerModelID().startsWith('platform/') || (!selectedComposerModelID() && catalogModelOptions().length === 0))));
   const unavailableModelSource = createMemo<UnavailableFlowerModelSourceStatus | null>(() => {
     const source = modelSource();
     if (source && (source.state === 'not_configured' || source.state === 'empty') && snapshot()?.model_profile) return null;
@@ -2951,7 +2857,6 @@ webSearch: model.web_search,
 
   const composerControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
     if (bottomActionMode() !== 'chat') return [];
-    if (needsSetup()) return [];
     if (selectedThreadReadOnly()) return ['permission', 'read_only'];
     return [
       'permission',
@@ -4286,6 +4191,7 @@ webSearch: model.web_search,
     const request = props.adapter.loadSettings().then((next) => {
       if (generation !== settingsRefreshGeneration || surfaceDisposed) return;
       setSnapshot(next);
+      if (next.model_directory) setModelDirectory(next.model_directory);
       setLoadError('');
     }).catch((error) => {
       if (generation === settingsRefreshGeneration && !surfaceDisposed) setLoadError(getErrorMessage(error));
@@ -4297,16 +4203,14 @@ webSearch: model.web_search,
     return request;
   };
 
+  const refreshDirectory = () => props.adapter.loadModelDirectory?.().then(directory => { if (!surfaceDisposed) setModelDirectory(directory); }).catch(() => undefined);
   const loadSurface = async () => {
-    try {
-      await refreshSettingsForRevision();
-      if (surfaceDisposed) return;
-      await resolveHandlerDecision().catch(() => undefined);
-      if (surfaceDisposed) return;
-      await refreshThreads();
-    } catch {
-      // refreshSettingsForRevision records the user-visible load error.
+    void refreshThreads();
+    void resolveHandlerDecision().catch(() => undefined);
+    try { await refreshSettingsForRevision(); } catch {
+      // Configuration errors do not gate conversation history or navigation.
     }
+    if (!surfaceDisposed) void refreshDirectory();
   };
 
   createEffect(on(
@@ -4314,9 +4218,9 @@ webSearch: model.web_search,
     (revision, previousRevision) => {
       if (previousRevision === undefined || revision === previousRevision) return;
       const hadInFlightRefresh = settingsRefreshRequest !== null;
-      void refreshSettingsForRevision(true).catch(() => undefined).finally(() => {
+      void refreshSettingsForRevision(true).then(() => refreshDirectory()).catch(() => undefined).finally(() => {
         if (!surfaceDisposed && (hadInFlightRefresh || (props.settingsRevision?.() ?? 0) !== revision)) {
-          void refreshSettingsForRevision(true).catch(() => undefined);
+          void refreshSettingsForRevision(true).then(() => refreshDirectory()).catch(() => undefined);
         }
       });
     },
@@ -4325,6 +4229,8 @@ webSearch: model.web_search,
 
   onMount(() => {
     setThreadRailWidth(loadThreadRailWidth());
+    const unsubscribe = props.adapter.subscribeModelDirectory?.(directory => { if (!surfaceDisposed) setModelDirectory(directory); });
+    onCleanup(() => unsubscribe?.());
     void loadSurface();
   });
 
@@ -4809,6 +4715,8 @@ webSearch: model.web_search,
     try {
       const next = await mutation();
       setSnapshot(next);
+      if (next.model_directory) setModelDirectory(next.model_directory);
+      void refreshDirectory();
       setSavedAt(Date.now());
       return next;
     } catch (error) {
@@ -4862,8 +4770,9 @@ webSearch: model.web_search,
     setModelSourceRefreshing(true);
     try {
       await props.adapter.retryModelSource?.();
-      setSnapshot(await props.adapter.loadSettings());
-      setLoadError('');
+      if (loadError()) await refreshSettingsForRevision();
+      const directory = await props.adapter.loadModelDirectory?.(true);
+      if (directory && !surfaceDisposed) setModelDirectory(directory);
     } catch (error) {
       notifyComposerError(getErrorMessage(error));
     } finally {
@@ -10716,7 +10625,7 @@ webSearch: model.web_search,
           <span class="flower-model-menu-name" title={option.label}>{option.name || option.label}</span>
           <span class="flower-model-menu-meta">
             <Show when={option.quantization}><span>{option.quantization} · </span></Show>
-            <Show when={option.disabled}><span>{copy().settings.dialog.catalog.unavailableModel}{option.contextWindow ? ' · ' : ''}</span></Show>
+            <Show when={option.disabled}><span>{option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel}{option.contextWindow ? ' · ' : ''}</span></Show>
             <Show when={option.contextWindow}>
               <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
             </Show>
@@ -10828,7 +10737,9 @@ webSearch: model.web_search,
             )}</For>
           </Show>
         </div>
+        <p class="flower-model-menu-empty" role="status"><Show when={composerModelLoading()} fallback={selectedModelNeedsAttention() ? copy().chat.modelsUnavailable : ''}>{copy().chat.modelsChecking}</Show></p>
         <div class="flower-model-menu-footer">
+          <Button size="sm" variant="ghost" icon={Refresh} disabled={modelSourceRefreshing()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
           <Show when={!modelQuery().trim() && !modelMenuExpanded() && menuModelOptions().total > menuModelOptions().models.length}>
             <Button size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
           </Show>
@@ -10839,10 +10750,10 @@ webSearch: model.web_search,
     </Show>
   );
 
-  const composerModelLoading = () => settingsLoading() && !surfaceWarmupActive();
+  const composerModelLoading = () => !surfaceWarmupActive() && (settingsLoading() || Boolean(modelDirectory()?.models.some(model => model.id === selectedComposerModelID() && model.state === 'pending')));
   const modelReasoningSelector = (location: FlowerComposerControlLocation = 'inline') => (
     <Show
-      when={!surfaceWarmupActive() && modelSelectOptions().length > 0}
+      when={!surfaceWarmupActive()}
       fallback={(
         <span class={cn('flower-model-chip', `flower-composer-control-${location}`, surfaceWarmupActive() && 'flower-model-chip-warmup')}
           role={composerModelLoading() ? 'status' : undefined}
@@ -10868,7 +10779,12 @@ webSearch: model.web_search,
           disabled={!composerModelInteractive() || modelPatchPending()}
           aria-haspopup="dialog"
           aria-expanded={modelMenuOpen()}
-          aria-label={selectedModelNeedsAttention()
+          role={composerModelLoading() ? 'status' : undefined}
+          aria-busy={composerModelLoading() ? 'true' : undefined}
+          aria-live={composerModelLoading() ? 'polite' : undefined}
+          aria-label={composerModelLoading()
+            ? copy().chat.loadingSettings
+            : selectedModelNeedsAttention()
             ? `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}. ${copy().chat.configureProviderBeforeChat}`
             : `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}`}
           title={selectedModelNeedsAttention()
@@ -10880,6 +10796,7 @@ webSearch: model.web_search,
           <Show when={selectedModelNeedsAttention()}>
             <AlertTriangle class="flower-model-reasoning-warning" aria-hidden="true" />
           </Show>
+          <Show when={composerModelLoading()}><Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" /></Show>
           <span class="flower-model-reasoning-model-label">{selectedThreadModelLabel()}</span>
           <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
         </button>
@@ -10948,6 +10865,7 @@ webSearch: model.web_search,
             data-has-reasoning={composerReasoningVisible() || composerReasoningLoading() ? 'true' : 'false'}
           >
             <span class="flower-model-reasoning-model-trigger">
+              <Show when={composerModelLoading()}><Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" /></Show>
               <span class="flower-model-reasoning-model-label">{selectedThreadModelLabel()}</span>
               <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
             </span>
@@ -11756,10 +11674,10 @@ webSearch: model.web_search,
                     onFocusFallback={() => attachmentPickerButtonRef?.focus()}
                   />
                 </Show>
-                <Show when={platformCatalogErrorVisible() && snapshot()?.platform_model_source?.error}>
-                  {(message) => <div class="flower-handler-error-card" role="alert">
+                <Show when={platformCatalogErrorVisible()}>
+                  <div class="flower-handler-error-card" role="alert">
                     <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
-                    <div class="flower-handler-error-copy">{message()}</div>
+                    <div class="flower-handler-error-copy">{copy().chat.modelsUnavailable}</div>
                     <button
                       type="button"
                       class="flower-handler-retry cursor-pointer disabled:cursor-not-allowed"
@@ -11769,7 +11687,7 @@ webSearch: model.web_search,
                     >
                       {copy().chat.handlerRetry}
                     </button>
-                  </div>}
+                  </div>
                 </Show>
                 <Show when={composerTextOverLimit()}>
                   <div class="flower-composer-over-limit" role="status">
@@ -11778,60 +11696,12 @@ webSearch: model.web_search,
                 </Show>
                 {composerTextEditor()}
                 <div class="flower-composer-footer">
-                  <Show
-                    when={!needsSetup() || platformCatalogErrorVisible()}
-                  fallback={(
-                    <Show
-                      when={unavailableModelSource()}
-                      fallback={(
-                        <div
-                          class="flower-setup-inline flower-model-source-status flower-model-source-status-footer"
-                          classList={{ 'flower-model-source-status-setup': noModelProfileSetupActions().length > 1 }}
-                          data-state="not_configured"
-                          data-placement="footer"
-                        >
-                          <AlertTriangle class="flower-model-source-status-icon" aria-hidden="true" />
-                          <span class="flower-model-source-status-message" title={copy().chat.configureProviderBeforeChat}>
-                            {copy().chat.configureProviderBeforeChat}
-                          </span>
-                          <span class="flower-model-source-status-actions">
-                            <For each={noModelProfileSetupActions()}>
-                              {(value) => (
-                                <button
-                                  type="button"
-                                  class="flower-model-source-status-action flower-model-source-status-action-text"
-                                  data-model-source-action={value.id}
-                                  aria-label={value.action.label}
-                                  title={value.action.label}
-                                  onClick={() => {
-                                    void value.action.run().catch((error) => notifyComposerError(getErrorMessage(error)));
-                                  }}
-                                >
-                                  {value.action.label}
-                                </button>
-                              )}
-                            </For>
-                            <Show when={noModelProfileSetupActions().length === 0}>
-                              <button
-                                type="button"
-                                class="flower-model-source-status-action"
-                                aria-label={copy().chat.settingsLabel}
-                                title={copy().chat.settingsLabel}
-                                onClick={openSettings}
-                              >
-                                <Settings class="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
-                            </Show>
-                          </span>
-                        </div>
-                      )}
-                    >
-                      {modelSourceStatusRow('footer')}
-                    </Show>
-                  )}
-                >
                     <div class="flower-model-stack">
                       {composerControls()}
+                      <Show when={needsSetup() && !composerModelLoading()}>
+                        <div class="flower-setup-inline" role="status">{selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
+                      </Show>
+                      <Show when={!anyModelReady() || selectedComposerModelID().startsWith('desktop:')}>{modelSourceStatusRow('footer')}</Show>
                       <Show when={handlerNotice()}>
                         {(notice) => <div role="alert" class="flower-handler-error-card">
                           <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
@@ -11906,7 +11776,6 @@ webSearch: model.web_search,
                         onClick={executeComposerPrimaryAction}
                       />
                     </div>
-                  </Show>
                 </div>
                   </Match>
                 </Switch>
@@ -12115,7 +11984,7 @@ webSearch: model.web_search,
         >
           <div class="flower-transcript-stack">
             <Show when={loadError()}>
-              {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
+              {(message) => errorNotice(copy().chat.loadErrorTitle, message(), <Button size="sm" variant="ghost" icon={Refresh} onClick={() => void refreshSettingsForRevision().then(() => refreshDirectory()).catch(() => undefined)}>{copy().chat.handlerRetry}</Button>)}
             </Show>
             <Show when={selectedThreadTerminalSyncing() && !threadLoadError()}>
               {threadSyncingLatestState()}

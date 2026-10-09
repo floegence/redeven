@@ -1,3 +1,4 @@
+import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
 import { Show, createEffect, createSignal, onCleanup, type Component, type JSX } from 'solid-js';
 import { Dynamic, render } from 'solid-js/web';
 import { afterEach, vi } from 'vitest';
@@ -19,7 +20,7 @@ const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (
   const adapter = props.adapter.connectLiveStream
     ? props.adapter
     : { ...props.adapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(legacy, input) };
-  return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
+  return <FlowerSurfaceComponent {...props} adapter={{ ...adapter, loadSettings: async () => withModelDirectoryFixture(await adapter.loadSettings()) }} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
 };
 
 const TestProviders: Component<{ children: JSX.Element; mobileQuery?: string }> = (props) => {

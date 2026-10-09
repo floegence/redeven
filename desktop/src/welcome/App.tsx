@@ -348,6 +348,7 @@ import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnima
 import { parseRuntimeMaintenanceMessage } from './runtimeMaintenanceMessage';
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
+  createDesktopFlowerModelReadResource,
   launchLocalEnvironmentFlowerTurn,
   type DesktopSettingsBridge,
 } from './flower/localEnvironmentFlowerSurfaceAdapter';
@@ -2924,6 +2925,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const environment = flowerRuntimeEnvironment();
     return JSON.stringify([environment?.id, environment?.runtime_started_at_unix_ms, environment?.open_session_key]);
   });
+  const [flowerModelSettingsRevision, setFlowerModelSettingsRevision] = createSignal(0);
+  const flowerModelReadResource = createDesktopFlowerModelReadResource(props.runtime.settings,
+    () => JSON.stringify([flowerFilesystemScopeKey(), flowerModelSettingsRevision()]));
+  createEffect(on(flowerFilesystemScopeKey, () => setFlowerModelSettingsRevision(value => value + 1), { defer: true }));
+  onCleanup(() => flowerModelReadResource.invalidate());
+  const flowerSettingsChanged = async () => { setFlowerModelSettingsRevision(value => value + 1); await refreshSnapshot(); };
   const flowerSurfaceCopy = createMemo(() => createDesktopFlowerSurfaceCopy(i18n()));
   const flowerRuntimeLifecycleProgress = createMemo(() => {
     const environment = localEnvironmentEntry();
@@ -6413,7 +6420,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
                 get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
                 get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
-                onSettingsChanged: refreshSnapshot,
+                onSettingsChanged: flowerSettingsChanged,
+                modelReadResource: flowerModelReadResource,
               });
               return <DesktopFlowerRuntimeBoundary embedded
                 snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())} i18n={i18n()}
@@ -6422,7 +6430,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <FlowerSurface adapter={adapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
                 engaged={surface.engaged} transcriptVisible={surface.transcriptVisible}
                 embeddedConversation={surface.embeddedConversation} copy={flowerSurfaceCopy()}
-                filesystemScopeKey={flowerFilesystemScopeKey()}
+                filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
                 notify={notice => showActionToast(notice.message, notice.tone, notice.title ? { title: notice.title } : {})} />
               </DesktopFlowerRuntimeBoundary>;
             }}
@@ -6438,7 +6446,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   runtimeEnvironmentID: environmentID === 'default' ? undefined : environmentID,
                   get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
                   get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
-                  onSettingsChanged: refreshSnapshot,
+                  onSettingsChanged: flowerSettingsChanged,
+                  modelReadResource: flowerModelReadResource,
                 });
                 return (
                   <DesktopFlowerRuntimeBoundary
@@ -6451,7 +6460,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                       engaged={flowerVisible()}
                       transcriptVisible={flowerVisible()}
                       draftCoordinator={flowerDraftCoordinator}
-                      filesystemScopeKey={flowerFilesystemScopeKey()}
+                      filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
                       adapter={adapter}
                       notify={(notice) => {
                         showActionToast(notice.message, notice.tone, {

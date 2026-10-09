@@ -129,6 +129,8 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   mapperOptions: FlowerLiveThreadMapperOptions;
   discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
+  loadModelDirectory?: FlowerSurfaceAdapter['loadModelDirectory'];
+  subscribeModelDirectory?: FlowerSurfaceAdapter['subscribeModelDirectory'];
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
@@ -318,6 +320,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     canMutate: options.canMutate !== false,
     keepLiveWhenHidden: Boolean(options.transport.connectLiveStream),
     loadSettings: options.loadSettings,
+    loadModelDirectory: options.loadModelDirectory,
+    subscribeModelDirectory: options.subscribeModelDirectory,
     discoverProviderModels: options.discoverProviderModels,
     saveDefaultPermission: options.saveDefaultPermission,
     ...(options.saveComputerUseEnabled ? { saveComputerUseEnabled: options.saveComputerUseEnabled } : {}),

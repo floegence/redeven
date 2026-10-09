@@ -96,6 +96,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
     rpc,
     settingsRevision: env.settingsSeq,
+    modelReadResource: env.flowerModelReadResource,
     isAvailable: () => {
       const state = readinessController.snapshot().state;
       return state === 'ready' || state === 'degraded';

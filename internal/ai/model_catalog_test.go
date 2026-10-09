@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -141,6 +142,77 @@ func TestOfflineOllamaDoesNotDisableOtherProviders(t *testing.T) {
 	resolved, err := resolveModelCatalogs(context.Background(), cfg, nil, "brand/gpt-6-astra")
 	if err != nil || !resolved.IsAllowedModelID("brand/gpt-6-astra") {
 		t.Fatalf("unrelated offline instance blocked resolution: %v", err)
+	}
+}
+
+func TestModelDirectoryPreservesUnavailableDesktopSelection(t *testing.T) {
+	selected := "desktop:model_" + strings.Repeat("a", 64)
+	source := &desktopModelSourceClient{}
+	source.SetCurrentModelID(selected)
+	svc := &Service{cfg: &config.AIConfig{CurrentModelID: "brand/gpt-6-astra", Providers: []config.AIProvider{
+		{ID: "brand", Type: "openai", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-6-astra"}}},
+	}}, desktopModelSource: source}
+	for _, baseline := range []bool{true, false} {
+		out, err := svc.readModelDirectory(t.Context(), nil, baseline)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out.CurrentModel != selected || !slices.ContainsFunc(out.Directory.Models, func(m ModelDirectoryModel) bool {
+			return m.ID == selected && m.Source == modelSourceDesktopModelSource && m.State == "unavailable"
+		}) {
+			t.Fatalf("baseline=%v lost the exact Desktop selection: %+v", baseline, out)
+		}
+	}
+}
+
+func TestModelDirectoryExcludesUnavailableModelsFromAvailableProjection(t *testing.T) {
+	svc := &Service{cfg: &config.AIConfig{CurrentModelID: "brand/gpt-6-astra", Providers: []config.AIProvider{
+		{ID: "brand", Type: "openai", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-6-astra"}}},
+	}}, resolveProviderKey: func(string) (string, bool, error) { return "", false, nil }}
+	for _, baseline := range []bool{true, false} {
+		out, err := svc.readModelDirectory(t.Context(), nil, baseline)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(out.Models) != 0 || len(out.Directory.Models) != 1 || out.Directory.Models[0].Reason != "missing_keys" {
+			t.Fatalf("baseline=%v exposed an unavailable model: %+v", baseline, out)
+		}
+	}
+}
+
+func TestAutomaticCatalogRefreshDoesNotStarveLaterProviders(t *testing.T) {
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer slow.Close()
+	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			_, _ = w.Write([]byte(`{"models":[{"name":"agent:latest"}]}`))
+		case "/api/ps":
+			_, _ = w.Write([]byte(`{"models":[]}`))
+		case "/api/show":
+			_, _ = w.Write([]byte(`{"capabilities":["tools"],"model_info":{"agent.context_length":32768}}`))
+		default:
+			t.Errorf("unexpected catalog request: %s", r.URL)
+		}
+	}))
+	defer fast.Close()
+	cfg := &config.AIConfig{CurrentModelID: "fast/agent:latest", Providers: []config.AIProvider{
+		{ID: "slow", Type: "ollama", BaseURL: slow.URL, ModelSelection: &config.AIModelSelection{SelectedModels: []string{"missing"}}},
+		{ID: "fast", Type: "ollama", BaseURL: fast.URL, ModelSelection: &config.AIModelSelection{SelectedModels: []string{"agent:latest"}}},
+	}}
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	resolved, err := resolveModelCatalogs(ctx, cfg, nil, "")
+	if err == nil {
+		t.Fatal("expected the slow catalog to time out")
+	}
+	if !resolved.IsAllowedModelID(cfg.CurrentModelID) {
+		t.Fatal("the slow provider starved the later available catalog")
+	}
+	if cfg.IsAllowedModelID(cfg.CurrentModelID) {
+		t.Fatal("inventory refresh mutated saved configuration")
 	}
 }
 

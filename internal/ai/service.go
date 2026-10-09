@@ -1001,7 +1001,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 	return s.ListModelsForSession(context.Background(), nil)
 }
 
-func (s *Service) listModels(ctx context.Context, cfg *config.AIConfig) (*ModelsResponse, error) {
+func (s *Service) listModels(cfg *config.AIConfig, sourceSnapshot *DesktopModelSourceModelSnapshot, runtimeStatus *AIRuntimeStatus) (*ModelsResponse, error) {
 	if s == nil {
 		return nil, ErrNotConfigured
 	}
@@ -1012,22 +1012,14 @@ func (s *Service) listModels(ctx context.Context, cfg *config.AIConfig) (*Models
 		modelSourceCurrent = modelSource.CurrentModelID()
 	}
 	s.mu.Unlock()
-	var catalogErr error
-	// Automatic inventory refresh must fit inside the Desktop bootstrap budget.
-	// A disconnected catalog cannot hold unrelated configured models hostage.
-	catalogCtx, cancelCatalog := context.WithTimeout(ctx, 5*time.Second)
-	cfg, catalogErr = resolveModelCatalogs(catalogCtx, cfg, s.resolveProviderKey, "")
-	cancelCatalog()
-
 	if !cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding()) {
 		return nil, ErrNotConfigured
 	}
-
-	out := NewModelsResponse(s.RuntimeStatus(context.Background()))
+	out := NewModelsResponse(runtimeStatus)
 	out.Runtime.RemoteConfigured = cfg.HasModelProfile()
 	configModels, currentModelID, err := configModelViews(cfg)
 	if err != nil && cfg.HasModelProfile() {
-		return nil, errors.Join(err, catalogErr)
+		return nil, err
 	}
 	if cfg != nil {
 		for _, provider := range cfg.Providers {
@@ -1072,67 +1064,56 @@ func (s *Service) listModels(ctx context.Context, cfg *config.AIConfig) (*Models
 		seen[id] = struct{}{}
 	}
 
-	if modelSource != nil && modelSource.hasBinding() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		snapshot, sourceErr := modelSource.ListModels(ctx)
-		cancel()
-		if sourceErr != nil && !cfg.HasModelProfile() {
-			return nil, sourceErr
+	if sourceSnapshot != nil {
+		snapshot := sourceSnapshot
+		sourceCurrent := ""
+		if modelSourceCurrent != "" && desktopModelSourceSnapshotHasModel(snapshot, modelSourceCurrent) {
+			sourceCurrent = modelSourceCurrent
+		} else if desktopModelSourceSnapshotHasModel(snapshot, snapshot.CurrentModel) {
+			sourceCurrent = strings.TrimSpace(snapshot.CurrentModel)
 		}
-		if sourceErr == nil && snapshot != nil {
-			sourceCurrent := ""
-			if modelSourceCurrent != "" && desktopModelSourceSnapshotHasModel(snapshot, modelSourceCurrent) {
-				sourceCurrent = modelSourceCurrent
-			} else if desktopModelSourceSnapshotHasModel(snapshot, snapshot.CurrentModel) {
-				sourceCurrent = strings.TrimSpace(snapshot.CurrentModel)
-			}
-			if sourceCurrent != "" && modelSourceCurrent != "" {
-				out.CurrentModel = sourceCurrent
-			} else if out.CurrentModel == "" {
-				out.CurrentModel = sourceCurrent
-			}
-			for _, m := range snapshot.Models {
-				modelID := strings.TrimSpace(m.ID)
-				if !isDesktopModelSourceModelID(modelID) {
-					continue
-				}
-				if _, exists := seen[modelID]; exists {
-					continue
-				}
-				label := strings.TrimSpace(m.Label)
-				if label == "" {
-					label = strings.TrimSpace(m.ID)
-				}
-				if label != "" {
-					label = "Desktop / " + label
-				}
-				capability := desktopModelSourceModelCapability(m)
-				model := Model{
-					WebSearch:           config.AIWebSearchAvailability{Status: "unavailable", Reason: "not_integrated"},
-					ID:                  modelID,
-					Label:               label,
-					AliasGroup:          m.AliasGroup,
-					Quantization:        m.Quantization,
-					Source:              modelSourceDesktopModelSource,
-					SourceLabel:         modelSourceDesktopModelSourceLabel,
-					ContextWindow:       capability.MaxContextTokens,
-					MaxOutputTokens:     capability.MaxOutputTokens,
-					InputModalities:     append([]string(nil), m.InputModalities...),
-					SupportsImageInput:  capability.SupportsImageInput,
-					ReasoningCapability: capability.ReasoningCapability,
-				}
-				if modelID == sourceCurrent && out.CurrentModel == sourceCurrent {
-					out.Models = append([]Model{model}, out.Models...)
-				} else {
-					out.Models = append(out.Models, model)
-				}
-				seen[modelID] = struct{}{}
-			}
+		if sourceCurrent != "" && modelSourceCurrent != "" {
+			out.CurrentModel = sourceCurrent
+		} else if out.CurrentModel == "" {
+			out.CurrentModel = sourceCurrent
 		}
-	}
-
-	if len(out.Models) == 0 && catalogErr != nil {
-		return nil, catalogErr
+		for _, m := range snapshot.Models {
+			modelID := strings.TrimSpace(m.ID)
+			if !isDesktopModelSourceModelID(modelID) {
+				continue
+			}
+			if _, exists := seen[modelID]; exists {
+				continue
+			}
+			label := strings.TrimSpace(m.Label)
+			if label == "" {
+				label = strings.TrimSpace(m.ID)
+			}
+			if label != "" {
+				label = "Desktop / " + label
+			}
+			capability := desktopModelSourceModelCapability(m)
+			model := Model{
+				WebSearch:           config.AIWebSearchAvailability{Status: "unavailable", Reason: "not_integrated"},
+				ID:                  modelID,
+				Label:               label,
+				AliasGroup:          m.AliasGroup,
+				Quantization:        m.Quantization,
+				Source:              modelSourceDesktopModelSource,
+				SourceLabel:         modelSourceDesktopModelSourceLabel,
+				ContextWindow:       capability.MaxContextTokens,
+				MaxOutputTokens:     capability.MaxOutputTokens,
+				InputModalities:     append([]string(nil), m.InputModalities...),
+				SupportsImageInput:  capability.SupportsImageInput,
+				ReasoningCapability: capability.ReasoningCapability,
+			}
+			if modelID == sourceCurrent && out.CurrentModel == sourceCurrent {
+				out.Models = append([]Model{model}, out.Models...)
+			} else {
+				out.Models = append(out.Models, model)
+			}
+			seen[modelID] = struct{}{}
+		}
 	}
 
 	return out, nil
@@ -1205,18 +1186,19 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 
 func configModelView(id string, label string, provider config.AIProvider, m config.AIProviderModel) Model {
 	return Model{
-		AliasGroup:          modelAliasGroup(provider, m),
-		Quantization:        m.Quantization,
-		WebSearch:           config.ResolveAIWebSearch(provider, m.EffectiveWireModelName(), false).AIWebSearchAvailability,
-		ID:                  strings.TrimSpace(id),
-		Label:               strings.TrimSpace(label),
-		Source:              modelSourceRuntimeConfig,
-		SourceLabel:         modelSourceRuntimeConfigLabel,
-		ContextWindow:       m.EffectiveInputWindowTokens(),
-		MaxOutputTokens:     m.MaxOutputTokens,
-		InputModalities:     m.NormalizedInputModalities(),
-		SupportsImageInput:  m.SupportsImageInput(),
-		ReasoningCapability: m.EffectiveReasoningCapability(provider.Type),
+		AliasGroup:                modelAliasGroup(provider, m),
+		Quantization:              m.Quantization,
+		WebSearch:                 config.ResolveAIWebSearch(provider, m.EffectiveWireModelName(), false).AIWebSearchAvailability,
+		ID:                        strings.TrimSpace(id),
+		Label:                     strings.TrimSpace(label),
+		Source:                    modelSourceRuntimeConfig,
+		SourceLabel:               modelSourceRuntimeConfigLabel,
+		ContextWindow:             m.EffectiveInputWindowTokens(),
+		MaxOutputTokens:           m.MaxOutputTokens,
+		InputModalities:           m.NormalizedInputModalities(),
+		SupportsImageInput:        m.SupportsImageInput(),
+		ReasoningCapability:       m.EffectiveReasoningCapability(provider.Type),
+		DefaultReasoningSelection: m.EffectiveDefaultReasoningSelection(provider.Type),
 	}
 }
 

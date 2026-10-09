@@ -1,3 +1,5 @@
+import { modelDirectoryWireFixture } from '../../../../internal/envapp/ui_src/src/test/modelDirectoryWireFixture';
+import { resolveFlowerProviderModels } from '../../../../internal/flower_ui/src/settings/modelSelection';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -106,13 +108,15 @@ function detailView(overrides: Record<string, unknown> = {}, currentOverrides: R
 }
 
 function bridgeFor(handler: (request: RuntimeFlowerRequest) => unknown | Promise<unknown>): DesktopSettingsBridge {
+  let settings = settingsResponse();
   return {
     ...attachmentBridgeStubs(),
     save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
-    requestRuntimeFlower: vi.fn(async (request: RuntimeFlowerRequest) => ({
-      ok: true as const,
-      data: await handler(request),
-    })),
+    requestRuntimeFlower: vi.fn(async (request: RuntimeFlowerRequest) => {
+      const data = await handler(request);
+      if (request.path === '/_redeven_proxy/api/settings') settings = data as AgentSettingsResponse;
+      return { ok: true as const, data: request.path.startsWith('/_redeven_proxy/api/ai/models') ? modelDirectoryWireFixture(settings, data as Record<string, unknown>) : data };
+    }),
     cancel: vi.fn(),
   };
 }
@@ -158,22 +162,26 @@ describe('Local Environment Flower surface adapter', () => {
       let available = true;
       const bridge = bridgeFor((request) => {
         if (request.path === '/_redeven_proxy/api/settings') return settings;
-        if (request.path === '/_redeven_proxy/api/ai/models') return { models: [] };
-        if (request.path === '/_redeven_proxy/api/ai/model_catalog') return { models: available
-          ? [{ model_name: 'agent', context_window: 131072, model_digest: 'digest', quantization: 'Q8_0' }, { model_name: 'new', context_window: 64000 }]
-          : [{ model_name: 'new', context_window: 64000 }] };
+        if (request.path.startsWith('/_redeven_proxy/api/ai/models')) {
+          const pending = request.path.endsWith('?mode=baseline');
+          return { current_model: 'dynamic/agent', directory: { models: [{
+            id: 'dynamic/agent', label: 'Agent', source: 'runtime_config', provider_id: 'dynamic', provider_type: type, model_name: 'agent',
+            state: pending ? 'pending' : available ? 'ready' : 'unavailable', quantization: 'Q8_0', alias_group: 'digest',
+          }], sources: [{ id: 'dynamic', kind: 'runtime_config', state: pending ? 'pending' : 'ready' }] } };
+        }
         throw new Error(`Unexpected request ${request.path}`);
       });
       const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
       const initial = await adapter.loadSettings();
-      expect(initial.model_profile?.providers[0].models).toEqual([expect.objectContaining({ model_name: 'agent', model_digest: 'digest', quantization: 'Q8_0' })]);
+      expect(initial.model_directory?.models[0].state).toBe('pending');
+      expect((await adapter.loadModelDirectory!()).models).toEqual([expect.objectContaining({ model_name: 'agent', alias_group: 'digest', quantization: 'Q8_0', state: 'ready' })]);
       available = false;
+      expect((await adapter.loadModelDirectory!(true)).models[0].state).toBe('unavailable');
       const missing = await adapter.loadSettings();
-      expect(missing.model_profile?.providers[0].models).toEqual([expect.objectContaining({ model_name: 'agent', unavailable: true })]);
-      const bundle = mapFlowerSettingsDraftToRuntimeBundle({ model_profile: missing.model_profile! });
+      const bundle = mapFlowerSettingsDraftToRuntimeBundle({ model_profile: { ...missing.model_profile!, providers: missing.model_profile!.providers.map(provider => ({ ...provider, models: resolveFlowerProviderModels(provider) })) } });
       expect(bundle.model_profile.providers[0].model_selection?.selected_models).toEqual(['agent']);
       available = true;
-      expect((await adapter.loadSettings()).model_profile?.providers[0].models[0].unavailable).not.toBe(true);
+      expect((await adapter.loadModelDirectory!(true)).models[0].state).toBe('ready');
     }
   });
 
@@ -435,7 +443,7 @@ describe('Local Environment Flower surface adapter', () => {
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1', models: [{ id: 'default/gpt-4.1' }] };
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1', models: [{ id: 'default/gpt-4.1' }] };
       if (request.path === '/_redeven_proxy/api/ai/threads?limit=200') return { threads: [threadView()] };
       if (request.path === '/_redeven_proxy/api/ai/turns') {
         return {
@@ -464,10 +472,8 @@ describe('Local Environment Flower surface adapter', () => {
     });
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
       'GET /_redeven_proxy/api/settings',
-      'GET /_redeven_proxy/api/ai/models',
+      'GET /_redeven_proxy/api/ai/models?mode=baseline',
       'GET /_redeven_proxy/api/ai/threads?limit=200',
-      'GET /_redeven_proxy/api/ai/models',
-      'GET /_redeven_proxy/api/settings',
       'POST /_redeven_proxy/api/ai/turns',
     ]);
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/turns')?.body).toMatchObject({
@@ -486,7 +492,7 @@ describe('Local Environment Flower surface adapter', () => {
   it('accepts a new-thread receipt while canonical detail is still unavailable', async () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/turns') {
         return {
           client_request_id: 'client-new',
@@ -508,7 +514,7 @@ describe('Local Environment Flower surface adapter', () => {
   it('rejects an acceptance receipt that changes the echoed client request identity', async () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
         return {
           client_request_id: 'client-other',
@@ -595,7 +601,7 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/settings') {
         return { ok: true as const, data: settingsResponse() };
       }
-      if (request.path === '/_redeven_proxy/api/ai/models') {
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') {
         return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
       }
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
@@ -628,7 +634,7 @@ describe('Local Environment Flower surface adapter', () => {
         if (request.path === '/_redeven_proxy/api/settings') {
           return { ok: true as const, data: settingsResponse() };
         }
-        if (request.path === '/_redeven_proxy/api/ai/models') {
+        if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') {
           return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
         }
         if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
@@ -654,7 +660,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     const malformedBridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
         return { client_request_id: 'client-malformed', thread_id: 'thread-existing' };
       }
@@ -676,7 +682,7 @@ describe('Local Environment Flower surface adapter', () => {
         if (request.path === '/_redeven_proxy/api/settings') {
           return { ok: true as const, data: settingsResponse() };
         }
-        if (request.path === '/_redeven_proxy/api/ai/models') {
+        if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') {
           return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
         }
         if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
@@ -712,7 +718,7 @@ describe('Local Environment Flower surface adapter', () => {
         if (request.path === '/_redeven_proxy/api/settings') {
           return { ok: true as const, data: settingsResponse() };
         }
-        if (request.path === '/_redeven_proxy/api/ai/models') {
+        if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') {
           return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
         }
         if (request.path === '/_redeven_proxy/api/ai/turns') {
@@ -796,6 +802,7 @@ describe('Local Environment Flower surface adapter', () => {
         body: { model_id: 'default/gpt-5.4' },
       },
       { method: 'GET', path: '/_redeven_proxy/api/settings' },
+      { method: 'GET', path: '/_redeven_proxy/api/ai/models?mode=baseline' },
     ]);
     expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
@@ -1186,7 +1193,7 @@ describe('Local Environment Flower surface adapter', () => {
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/turns') {
         return {
           client_request_id: 'client-card',
@@ -1250,7 +1257,7 @@ describe('Local Environment Flower surface adapter', () => {
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/turns') {
         return {
           client_request_id: 'client-reference',
@@ -1284,7 +1291,7 @@ describe('Local Environment Flower surface adapter', () => {
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
       throw new Error(`unexpected path: ${request.path}`);
     });
 
@@ -1310,7 +1317,7 @@ describe('Local Environment Flower surface adapter', () => {
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-upload/turns') {
         return {
           client_request_id: 'client-upload',

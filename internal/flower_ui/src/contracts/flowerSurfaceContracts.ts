@@ -115,6 +115,30 @@ export type FlowerModelSourceModel = Readonly<{
   reasoning_capability?: FlowerReasoningCapability;
 }>;
 
+export type FlowerModelDirectoryModel = FlowerModelSourceModel & Readonly<{
+  source?: 'runtime_config' | 'desktop_model_source' | 'platform';
+  state: 'ready' | 'pending' | 'unavailable';
+  reason?: string;
+  provider_id?: string;
+  provider_name?: string;
+  provider_type?: FlowerProviderType;
+  model_name?: string;
+  default_reasoning_selection?: FlowerReasoningSelection;
+}>;
+
+export type FlowerModelDirectory = Readonly<{
+  current_model_id: string;
+  models: readonly FlowerModelDirectoryModel[];
+  sources: readonly Readonly<{
+    id: string;
+    kind: 'runtime_config' | 'desktop_model_source' | 'platform';
+    state: 'ready' | 'pending' | 'unavailable';
+    reason?: string;
+    missing_key_provider_ids?: readonly string[];
+  }>[];
+  error?: 'directory_unavailable';
+}>;
+
 export type FlowerModelSourceStatus =
   | Readonly<{
       kind: 'desktop_model_source';
@@ -165,6 +189,7 @@ export type FlowerModelSourceRecovery = Readonly<{
 }>;
 
 export type FlowerSettingsSnapshot = Readonly<{
+  model_directory?: FlowerModelDirectory;
   defaults: Readonly<{
     permission_type: FlowerPermissionType;
     computer_use_enabled?: boolean;
@@ -1293,6 +1318,8 @@ export type FlowerSurfaceAdapter = Readonly<{
   keepLiveWhenHidden?: boolean;
   discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
+  loadModelDirectory?: (refresh?: boolean) => Promise<FlowerModelDirectory>;
+  subscribeModelDirectory?: (listener: (directory: FlowerModelDirectory) => void) => () => void;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;

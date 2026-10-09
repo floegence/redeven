@@ -1,3 +1,4 @@
+import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiven_ui/src/navigation';
 import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
@@ -1163,6 +1164,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
+  const flowerModelReadResource = createFlowerModelReadResource({
+    scope: () => JSON.stringify([envId(), resourceCacheAccess().generation, settingsSeq()]),
+    loadConfiguration: async () => {
+      const { mapEnvFlowerSettings } = await import('./flower/envLocalFlowerSurfaceAdapter');
+      return mapEnvFlowerSettings(await fetchLocalApiJSON('/_redeven_proxy/api/settings', { method: 'GET', signal: AbortSignal.timeout(6_000) }));
+    },
+    loadDirectory: async baseline => readFlowerModelDirectory(await fetchLocalApiJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal: AbortSignal.timeout(6_000) })),
+  });
+  onCleanup(() => flowerModelReadResource.invalidate());
   const debugConsole = createDebugConsoleController({
     protocolStatus: () => protocol.status(),
   });
@@ -2644,6 +2654,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
     const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
     const adapter = createEnvLocalFlowerSurfaceAdapter({
+      modelReadResource: flowerModelReadResource,
       envPublicID: trimString(envId()),
       envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
       desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
@@ -5360,6 +5371,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         resourceCacheAccess,
         flowerDraftCoordinator,
         aiReadinessController,
+        flowerModelReadResource,
         env_id: envId,
         env,
         localRuntime,
