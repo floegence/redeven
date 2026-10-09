@@ -138,8 +138,8 @@ type ModelsResponse struct {
 func NewModelsResponse(runtime *AIRuntimeStatus) *ModelsResponse {
 	return &ModelsResponse{
 		Directory: ModelDirectory{Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}},
-		Models:  make([]Model, 0),
-		Runtime: runtime,
+		Models:    make([]Model, 0),
+		Runtime:   runtime,
 	}
 }
 
