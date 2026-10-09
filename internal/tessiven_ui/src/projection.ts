@@ -30,9 +30,15 @@ export type Projection = {
   graph: GraphInput;
   cards: Map<string, Card>;
   relations: Map<string, Relation[]>;
+  internalRelations: Map<string, InternalRelation[]>;
   appearances: Map<string, string[]>;
   memberships: Map<string, Group[]>;
   instanceMemberships: Map<string, Group[]>;
+};
+export type InternalRelation = {
+  relation: Relation;
+  fromLabel: string;
+  toLabel: string;
 };
 
 // Rendering identities are derived from stable DSL IDs. Grouping never changes
@@ -52,10 +58,14 @@ export function projectCanvas(
   const instances = document.instances ?? [];
   const byNode = new Map<string, Instance[]>();
   const byID = new Map(instances.map((instance) => [instance.id, instance]));
+  const byService = new Map<string, Instance[]>();
   for (const instance of instances) {
     const list = byNode.get(instance.nodeRef) ?? [];
     list.push(instance);
     byNode.set(instance.nodeRef, list);
+    const serviceInstances = byService.get(instance.serviceRef) ?? [];
+    serviceInstances.push(instance);
+    byService.set(instance.serviceRef, serviceInstances);
   }
   const groups = document.groups ?? [];
   const groupInstances = new Map<string, Instance[]>();
@@ -88,7 +98,7 @@ export function projectCanvas(
       label: node.name,
       parentId: group?.id,
       width: 280,
-      height: 116 + serviceCount * 49,
+      height: 128 + serviceCount * 49,
     });
     const id = viewID(node.id, group);
     cards.set(id, { kind: 'node', node, instances: hosted, group, groupInstances: group ? groupInstances.get(group.id)! : [] });
@@ -119,7 +129,7 @@ export function projectCanvas(
       label: group.name,
       kind: open && members.length ? 'group' : 'node',
       width: 320,
-      height: 106 + Math.min(serviceIDs.size, 8) * 45,
+      height: open ? 108 : 116 + Math.min(serviceIDs.size, 8) * 49 + (serviceIDs.size > 8 ? 26 : 0),
     });
     cards.set(group.id, {
       kind: 'group',
@@ -185,28 +195,82 @@ export function projectCanvas(
       });
       serviceTargets.set(service.id, new Set([service.id]));
     }
-  const endpoints = (id: string): string[] => {
-    if (serviceTargets.has(id)) return [...serviceTargets.get(id)!];
+  const hostTargets = (nodeId: string): string[] => {
+    const owners = memberships.get(nodeId);
+    if (owners?.length) return [...new Set(owners.map(group => {
+      const view = viewID(nodeId, group);
+      return cards.has(view) ? view : group.id;
+    }))];
+    return [appearances.get(nodeId)?.[0] ?? nodeId];
+  };
+  type Endpoint = { id: string; hostId?: string };
+  const endpoints = (id: string): Endpoint[] => {
+    if (serviceTargets.has(id)) return [...serviceTargets.get(id)!].map(target => ({ id: target }));
     const instance = byID.get(id);
-    if (instance) return [...new Set(instanceTargets(instance, true))];
-    if (hosts.has(id) && memberships.has(id))
-      return memberships.get(id)!.map(group => {
-        const view = viewID(id, group);
-        return cards.has(view) ? view : group.id;
-      });
-    return [id];
+    if (instance) return [...new Set(instanceTargets(instance, true))].map(target => ({ id: target, hostId: instance.nodeRef }));
+    if (hosts.has(id)) return hostTargets(id).map(target => ({ id: target, hostId: id }));
+    return [{ id }];
   };
   const edges: GraphEdge[] = [];
-  for (const relation of document.relations ?? [])
+  const internalRelations = new Map<string, InternalRelation[]>();
+  const objectNames = new Map<string, string>();
+  for (const item of [...(document.nodes ?? []), ...(document.groups ?? []), ...(document.services ?? []), ...(document.resources ?? [])])
+    objectNames.set(item.id, item.name);
+  const endpointLabel = (id: string) => {
+    const instance = byID.get(id);
+    return objectNames.get(instance?.serviceRef ?? id) ?? id;
+  };
+  const addInternalRelation = (target: string, relation: Relation) => {
+    const values = internalRelations.get(target) ?? [];
+    if (!values.some(value => value.relation.id === relation.id)) {
+      values.push({ relation, fromLabel: endpointLabel(relation.from), toLabel: endpointLabel(relation.to) });
+      internalRelations.set(target, values);
+    }
+  };
+  const endpointInstances = (id: string): Instance[] => {
+    const instance = byID.get(id);
+    return instance ? [instance] : byService.get(id) ?? [];
+  };
+  for (const relation of document.relations ?? []) {
+    // Service-level relations are intentionally kept at the logical group
+    // level for routing. When both endpoints have instances on one host, add
+    // the same relation to that host card so a group self-loop is unnecessary.
+    const sourceInstances = endpointInstances(relation.from);
+    const targetHosts = new Set(endpointInstances(relation.to).map(instance => instance.nodeRef));
+    const sharedHosts = new Set(sourceInstances
+      .filter(instance => targetHosts.has(instance.nodeRef))
+      .map(instance => instance.nodeRef));
+    const localOwners = new Set<string>();
+    for (const nodeId of sharedHosts)
+      for (const owner of hostTargets(nodeId)) {
+        localOwners.add(owner);
+        const card = cards.get(owner);
+        if (card?.kind === 'node' && card.group) localOwners.add(card.group.id);
+        addInternalRelation(owner, relation);
+      }
     for (const source of endpoints(relation.from))
       for (const target of endpoints(relation.to)) {
-        const key = `${source}/${target}`;
+        if (source.hostId && source.hostId === target.hostId) {
+          for (const owner of hostTargets(source.hostId)) addInternalRelation(owner, relation);
+          continue;
+        }
+        const card = cards.get(source.id);
+        if (source.id === target.id && (card?.kind === 'node' || card?.kind === 'group')) {
+          // A relationship inside one visible card is a compact, inspectable
+          // row. Expanded hosts already show co-located calls, so the group
+          // header does not repeat the same row.
+          if (!localOwners.has(source.id)) addInternalRelation(source.id, relation);
+          continue;
+        }
+        const key = `${source.id}/${target.id}`;
         if (!relationGroups.has(key)) {
           relationGroups.set(key, []);
-          edges.push({ id: key, source, target, label: relation.kind });
+          edges.push({ id: key, source: source.id, target: target.id, label: relation.kind });
         }
         relationGroups.get(key)!.push(relation);
       }
+  }
+  for (const node of nodes) node.height += (internalRelations.get(node.id)?.length ?? 0) * 30;
   for (const edge of edges) {
     const values = relationGroups.get(edge.id)!;
     edge.label =
@@ -227,7 +291,7 @@ export function projectCanvas(
         return rank(a.id) - rank(b.id);
       },
     );
-  return { graph: { nodes, edges }, cards, relations: relationGroups, appearances, memberships, instanceMemberships: instanceGroups };
+  return { graph: { nodes, edges }, cards, relations: relationGroups, internalRelations, appearances, memberships, instanceMemberships: instanceGroups };
 }
 
 export function projectPositions(document: CanvasDocument, projection: Projection) {

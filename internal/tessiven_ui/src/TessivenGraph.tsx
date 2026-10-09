@@ -20,10 +20,11 @@ import {
   type GraphObjectRef,
 } from '@floegence/floe-webapp-core/graph';
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
-import { Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
+import { ArrowRight, Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
 import '@floegence/floe-webapp-core/graph.css';
 import { projectCanvas, projectPositions } from './projection';
 import { TessivenIcon } from './TessivenIcon';
+import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import type {
   Instance,
   Observation,
@@ -160,6 +161,13 @@ export function TessivenGraph(props: {
   };
   createEffect(() => {
     const projected = projection();
+    const expandedGroupRelationRows = [...projected.internalRelations.entries()]
+      .filter(([id]) => {
+        const card = projected.cards.get(id);
+        return card?.kind === 'group' && card.expanded;
+      })
+      .map(([, relations]) => relations.length);
+    const groupRelationPadding = Math.max(0, ...expandedGroupRelationRows) * 30;
     const input = {
       ...projected.graph,
       edges: projected.graph.edges.map((edge) => {
@@ -183,7 +191,7 @@ export function TessivenGraph(props: {
         direction: 'RIGHT',
         aspectRatio: 1.6,
         spacing: 32,
-        groupPadding: { top: 108, right: 20, bottom: 20, left: 20 },
+        groupPadding: { top: 108 + groupRelationPadding, right: 20, bottom: 20, left: 20 },
         positions: positions(),
         positionMode: 'preferred',
         anchor: anchor
@@ -407,6 +415,41 @@ export function TessivenGraph(props: {
       </>
     );
   };
+  const internalRelationRows = (ownerId: string): JSX.Element => {
+    const relations = projection().internalRelations.get(ownerId) ?? [];
+    return (
+      <Show when={relations.length}>
+        <div class="tessiven-local-relations">
+          <For each={relations}>
+            {(item) => {
+              const kind = () => item.relation.protocol ?? props.t(`relation.${item.relation.kind}`);
+              return (
+                <button
+                  class="tessiven-local-relation"
+                  aria-label={`${item.fromLabel} ${kind()} ${item.toLabel}`}
+                  onKeyDown={(event) => keyboardMenu(event, item.relation.id, [item.relation.id])}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    show(rowEvent(event, item.relation.id), [item.relation.id]);
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    show(rowEvent(event, item.relation.id), [item.relation.id], true);
+                  }}
+                >
+                  <span>{item.fromLabel}</span>
+                  <ArrowRight aria-hidden="true" />
+                  <span>{item.toLabel}</span>
+                  <small>{kind()}</small>
+                </button>
+              );
+            }}
+          </For>
+        </div>
+      </Show>
+    );
+  };
   const renderCard = (
     node: GraphLayoutNode,
     context: GraphNodeRenderContext,
@@ -475,6 +518,7 @@ export function TessivenGraph(props: {
               {props.t('expandNodes')}
             </button>
           </Show>
+          {internalRelationRows(node.id)}
         </section>
       );
     if (card.kind === 'node')
@@ -523,6 +567,7 @@ export function TessivenGraph(props: {
               <span>{card.instances.length}</span>
             </div>
             {serviceRows(card.instances, Infinity, node.id)}
+            {internalRelationRows(node.id)}
           </div>
         </section>
       );
@@ -813,11 +858,13 @@ export function TessivenGraph(props: {
               </div>
             </Show>
             <Button
+              class="tessiven-ask-flower"
               role={value.menu ? 'menuitem' : undefined}
               size="sm"
               variant="ghost"
               onClick={() => ask(value.refs)}
             >
+              <span class="tessiven-ask-flower-mark" aria-hidden="true"><FlowerIcon /></span>
               {props.t('askFlower')}
             </Button>
           </TessivenObjectPopup>

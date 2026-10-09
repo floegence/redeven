@@ -195,7 +195,12 @@ describe('Tessiven real graph interactions', () => {
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(10);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     const projected = projectCanvas(version.document, new Set(version.document.presentation?.initiallyExpanded), {});
-    expect([...projected.relations.values()].flat()).toHaveLength(40);
+    expect(new Set([
+      ...[...projected.relations.values()].flat().map(relation => relation.id),
+      ...[...projected.internalRelations.values()].flat().map(item => item.relation.id),
+    ]).size).toBe(40);
+    expect(projected.graph.edges.every(edge => edge.source !== edge.target)).toBe(true);
+    expect(projected.internalRelations.get('n-eco')?.map(item => item.relation.id)).toContain('rel-hiveserver2-metastore');
     await page.getByRole('button', { name: 'Fit canvas', exact: true }).hover();
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
       .toEqual(projected.graph.edges.map(edge => edge.id).sort());
@@ -222,6 +227,17 @@ describe('Tessiven real graph interactions', () => {
         expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true);
       }
     }
+    for (const node of host.querySelectorAll<HTMLElement>('.tessiven-node')) {
+      const bounds = node.getBoundingClientRect();
+      for (const service of node.querySelectorAll<HTMLElement>('.tessiven-service')) {
+        const row = service.getBoundingClientRect();
+        expect(row.left).toBeGreaterThanOrEqual(bounds.left - 0.5);
+        expect(row.right).toBeLessThanOrEqual(bounds.right + 0.5);
+        expect(row.bottom).toBeLessThanOrEqual(bounds.bottom + 0.5);
+      }
+      for (const relation of node.querySelectorAll<HTMLElement>('.tessiven-local-relation'))
+        expect(relation.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom + 0.5);
+    }
     for (const theme of builtInShellThemePresets.filter(theme => ['porcelain-light', 'porcelain-dark'].includes(theme.name))) {
       document.documentElement.classList.toggle('dark', theme.mode === 'dark');
       for (const [name, value] of Object.entries(theme.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
@@ -235,14 +251,14 @@ describe('Tessiven real graph interactions', () => {
       viewport: { x: 520, y: 420, scale: 0.65 } });
     host.style.width = '1540px';
     host.style.height = '920px';
-    await expect.poll(() => host.querySelectorAll('.floe-graph__edge').length).toBe(27);
+    await expect.poll(() => host.querySelectorAll('.floe-graph__edge').length).toBe(25);
     for (const theme of builtInShellThemePresets.filter(theme => ['porcelain-light', 'porcelain-dark'].includes(theme.name))) {
       document.documentElement.classList.toggle('dark', theme.mode === 'dark');
       for (const [name, value] of Object.entries(theme.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
       await page.screenshot({ path: `../../.vitest-attachments/redeven-hadoop-routing-detail-${theme.name}.png` });
     }
     await page.getByRole('group', { name: 'HDFS 元数据与 YARN 调度主控层', exact: true }).hover({ position: { x: 20, y: 20 } });
-    expect(host.querySelectorAll('.floe-graph__edge').length).toBeLessThan(27);
+    expect(host.querySelectorAll('.floe-graph__edge').length).toBeLessThan(25);
     expect(host.querySelectorAll('.floe-graph__edge').length).toBeGreaterThan(0);
     await page.screenshot({ path: '../../.vitest-attachments/redeven-hadoop-routing-hover.png' });
     await page.viewport(430, 740);
@@ -260,6 +276,11 @@ describe('Tessiven real graph interactions', () => {
     expect(host.querySelectorAll('.tessiven-node')).toHaveLength(0);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     const projected = projectCanvas(document, new Set(), {});
+    for (const group of host.querySelectorAll<HTMLElement>('.tessiven-group')) {
+      const bounds = group.getBoundingClientRect();
+      for (const row of group.querySelectorAll<HTMLElement>('.tessiven-service, .tessiven-more, .tessiven-local-relation'))
+        expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom - 5);
+    }
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
       .toEqual(projected.graph.edges.map(edge => edge.id).sort());
   });
@@ -270,7 +291,10 @@ describe('Tessiven real graph interactions', () => {
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(10);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     const projected = projectCanvas(document, new Set(document.presentation?.initiallyExpanded), {});
-    expect([...projected.relations.values()].flat()).toHaveLength(40);
+    expect(new Set([
+      ...[...projected.relations.values()].flat().map(relation => relation.id),
+      ...[...projected.internalRelations.values()].flat().map(item => item.relation.id),
+    ]).size).toBe(40);
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
       .toEqual(projected.graph.edges.map(edge => edge.id).sort());
   });
@@ -288,6 +312,7 @@ describe('Tessiven real graph interactions', () => {
     await expect
       .element(page.getByRole('dialog', { name: 'Details' }))
       .toBeVisible();
+    expect(document.querySelector('.tessiven-ask-flower-mark svg')).not.toBeNull();
     await page.getByRole('button', { name: 'Ask Flower' }).click();
     expect(ask).toHaveBeenCalledWith({
       canvas_id: 'commerce',

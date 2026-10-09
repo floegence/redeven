@@ -28,6 +28,8 @@ describe('shared physical hosts in logical groups', () => {
     expect(group?.kind === 'group' && group.instances.map(i => i.id)).toEqual(['nn-1', 'nn-2']);
     expect(projected.graph.edges.map(edge => [edge.source, edge.target])).toEqual([['hdfs', 'zk']]);
     expect([...projected.relations.values()].flat().map(r => r.id)).toEqual(['nn-zk']);
+    expect(projected.internalRelations.get('hdfs::node-1')?.map(item => item.relation.id)).toEqual(['nn-zk']);
+    expect(projected.internalRelations.get('zk::node-1')?.map(item => item.relation.id)).toEqual(['nn-zk']);
     expect(document.nodes).toHaveLength(3);
     expect(document.instances).toHaveLength(5);
   });
@@ -36,12 +38,45 @@ describe('shared physical hosts in logical groups', () => {
     const document = sharedHostsDocument();
     document.relations![0] = { ...document.relations![0], from: 'nn-1', to: 'zk-1' };
     const projected = projectCanvas(document, new Set(['hdfs', 'zk']), {});
-    const edge = projected.graph.edges[0];
-    expect(edge.source).not.toBe(edge.target);
-    expect(projected.graph.nodes.find(node => node.id === edge.source)?.parentId).toBe('hdfs');
-    expect(projected.graph.nodes.find(node => node.id === edge.target)?.parentId).toBe('zk');
+    expect(projected.graph.edges).toEqual([]);
+    expect(projected.internalRelations.get('hdfs::node-1')?.map(item => item.relation.id)).toEqual(['nn-zk']);
+    expect(projected.internalRelations.get('zk::node-1')?.map(item => item.relation.id)).toEqual(['nn-zk']);
     const collapsed = projectCanvas(document, new Set(), {});
-    expect(collapsed.graph.edges.map(edge => [edge.source,edge.target])).toEqual([['hdfs','zk']]);
+    expect(collapsed.graph.edges).toEqual([]);
+    expect(collapsed.internalRelations.get('hdfs')?.map(item => item.relation.id)).toEqual(['nn-zk']);
+    expect(collapsed.internalRelations.get('zk')?.map(item => item.relation.id)).toEqual(['nn-zk']);
+  });
+
+  it('keeps an explicit cross-host call external without inferring co-located replicas', () => {
+    const document = sharedHostsDocument();
+    document.relations![0] = { ...document.relations![0], from: 'nn-1', to: 'zk-2' };
+    const projected = projectCanvas(document, new Set(['hdfs', 'zk']), {});
+    expect(projected.graph.edges.map(edge => [edge.source, edge.target]))
+      .toEqual([['hdfs::node-1', 'zk::node-2']]);
+    expect(projected.internalRelations.size).toBe(0);
+  });
+
+  it('keeps a co-located service call inside the host instead of creating a group self-loop', () => {
+    const document = sharedHostsDocument();
+    document.nodes = [{ id: 'local', name: 'local', runtimeRef: 'local:local' }];
+    document.groups = [{ id: 'runtime', name: 'Runtime', nodeRefs: ['local'], instanceRefs: ['api-local', 'db-local'] }];
+    document.services = [
+      { id: 'api', name: 'HiveServer2', kind: 'api' },
+      { id: 'db', name: 'Hive Metastore', kind: 'database' },
+    ];
+    document.instances = [
+      { id: 'api-local', nodeRef: 'local', serviceRef: 'api', role: 'standalone' },
+      { id: 'db-local', nodeRef: 'local', serviceRef: 'db', role: 'standalone' },
+    ];
+    document.relations = [{ id: 'local-call', from: 'api', to: 'db', kind: 'calls', evidenceRefs: ['design'] }];
+
+    const expanded = projectCanvas(document, new Set(['runtime']), {});
+    expect(expanded.graph.edges).toEqual([]);
+    expect(expanded.internalRelations.get('local')?.map(item => item.relation.id)).toEqual(['local-call']);
+
+    const collapsed = projectCanvas(document, new Set(), {});
+    expect(collapsed.graph.edges).toEqual([]);
+    expect(collapsed.internalRelations.get('runtime')?.map(item => item.relation.id)).toEqual(['local-call']);
   });
 
   it('routes physical host relationships through visible appearances and collapsed groups', () => {
