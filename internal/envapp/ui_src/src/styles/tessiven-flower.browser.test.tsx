@@ -583,9 +583,21 @@ it('keeps reply text, context and controls legible across every theme and clamps
     const rgb = [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
     return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
   };
+  const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
+  const paintedSurface = (element: Element): string => {
+    for (let current: Element | null = element; current; current = current.parentElement) {
+      const background = getComputedStyle(current).backgroundColor;
+      if (background !== 'rgba(0, 0, 0, 0)') return background;
+    }
+    throw new Error('Conversation surface has no opaque background');
+  };
   for (const preset of builtInShellThemePresets) {
     document.documentElement.classList.toggle('dark', preset.mode === 'dark');
     for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
+    const surface = paintedSurface(output);
+    for (const selector of ['[data-floe-floating-window-titlebar]', '.flower-chat-transcript', '.flower-chat-bottom-dock'])
+      expect(paintedSurface(output.querySelector(selector)!), `${preset.name}: continuous ${selector} background`).toBe(surface);
+    expect(paintedSurface(output.querySelector('.flower-composer')!), `${preset.name}: distinct input fill`).not.toBe(surface);
     for (const [selector, background, minimum] of [
       ['.tessiven-flower-output h2', '.tessiven-flower-output', 4.5],
       ['.tessiven-flower-output .flower-chat-transcript', '.tessiven-flower-output', 4.5],
@@ -595,7 +607,17 @@ it('keeps reply text, context and controls legible across every theme and clamps
       const b = luminance(getComputedStyle(document.querySelector(background)!).backgroundColor);
       expect((Math.max(a, b) + .05) / (Math.min(a, b) + .05), `${preset.name}: ${selector}`).toBeGreaterThanOrEqual(minimum);
     }
-    await page.screenshot({ path: `__screenshots__/tessiven-floating-${preset.name}.png` });
+    await page.screenshot({ element: output, path: `__screenshots__/tessiven-floating-${preset.name}.png` });
+    await page.viewport(320, 240); host.style.cssText = 'position:absolute;inset:0;width:320px;height:240px';
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const content = output.querySelector('[data-floe-floating-window-content]')!;
+    const transcript = output.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    expect(transcript.scrollHeight).toBeGreaterThan(transcript.clientHeight);
+    expect(output.querySelector('.flower-composer-footer')!.getBoundingClientRect().bottom)
+      .toBeLessThanOrEqual(content.getBoundingClientRect().bottom - 8);
+    await page.screenshot({ element: output, path: `__screenshots__/tessiven-floating-short-${preset.name}.png` });
+    await page.viewport(1440, 920); host.style.cssText = 'position:absolute;left:30px;top:30px;width:1380px;height:850px';
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }
   await page.viewport(390, 844); host.style.cssText = 'position:absolute;inset:0;width:390px;height:844px';
   await expect.poll(() => document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().right).toBeLessThanOrEqual(390);
