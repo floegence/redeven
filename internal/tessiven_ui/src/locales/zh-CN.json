@@ -1,6 +1,8 @@
 {
   "groupMemberships": "所属分组",
-  "sharedHost": "共享主机 · {count} 个分组",
+  "sharedHost": "属于 {count} 个分组",
+  "sharedHostBadge": "{count} 组共享",
+  "belongsToMultipleGroups": "属于多个分组",
   "locateInGroup": "定位到 {name}",
   "subtitle": "服务关系与管理画布",
   "libraryTitle": "我的画布",

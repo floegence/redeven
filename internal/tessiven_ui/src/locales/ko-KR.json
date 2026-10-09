@@ -1,6 +1,8 @@
 {
   "groupMemberships": "소속 그룹",
-  "sharedHost": "공유 호스트 · 그룹 {count}개",
+  "sharedHost": "{count}개 그룹에 속함",
+  "sharedHostBadge": "공유 · {count}",
+  "belongsToMultipleGroups": "여러 그룹에 속함",
   "locateInGroup": "{name}에서 위치 보기",
   "subtitle": "서비스 관계 및 관리 캔버스",
   "libraryTitle": "내 캔버스",

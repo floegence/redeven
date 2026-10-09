@@ -105,20 +105,54 @@ describe('shared host canvas interactions', () => {
     expect(popup.style.position).not.toBe('fixed');
     expect(popup.querySelector('.tessiven-detail-object > code')?.textContent).toBe('node-1');
     expect(popup.querySelectorAll('.tessiven-memberships button')).toHaveLength(2);
+    const memberships = popup.querySelector<HTMLElement>('.tessiven-memberships')!;
+    expect(memberships.dataset.shared).toBe('true');
+    expect(memberships.textContent).toContain('Belongs to multiple groups');
+    expect(memberships.querySelector('.tessiven-membership-count')?.textContent).toBe('2');
+    expect(copy.querySelector('.tessiven-shared-host')?.textContent).toContain('Shared · 2');
+    expect(copy.querySelector('.tessiven-shared-host')?.getAttribute('aria-label')).toBe('Belongs to 2 groups');
     expect(popup.textContent).toContain('conceptual:demo/node-1');
     expect(document.querySelector('.tessiven-ask-flower-mark svg')).not.toBeNull();
     const askButton = popup.querySelector<HTMLElement>('.tessiven-ask-flower')!;
     const flowerMark = popup.querySelector<HTMLElement>('.tessiven-ask-flower-mark')!;
     for (const theme of builtInShellThemePresets) {
       applyTheme(theme);
+      const membershipStyle = getComputedStyle(memberships);
+      expect(membershipStyle.borderLeftWidth, theme.name).toBe('3px');
+      expect(membershipStyle.borderLeftStyle, theme.name).toBe('solid');
+      expect(membershipStyle.borderLeftColor, theme.name).not.toBe(getComputedStyle(popup).backgroundColor);
       expect(getComputedStyle(askButton).borderTopWidth, theme.name).toBe('0px');
       expect(getComputedStyle(askButton).backgroundColor, theme.name).not.toBe(getComputedStyle(popup).backgroundColor);
       expect(getComputedStyle(flowerMark).borderTopWidth, theme.name).toBe('0px');
       expect(getComputedStyle(flowerMark).borderRadius, theme.name).toBe('0px');
       expect(getComputedStyle(flowerMark).backgroundColor, theme.name).toBe('rgba(0, 0, 0, 0)');
+      if (['porcelain-light', 'porcelain-dark'].includes(theme.name)) {
+        await page.screenshot({path: `../../.vitest-attachments/shared-memberships-${theme.name}.png`});
+      }
     }
     await page.getByRole('button', {name:'Ask Flower',exact:true}).click();
     expect(ask).toHaveBeenCalledWith({canvas_id:'hadoop',version_id:3,object_refs:['node-1']});
+  });
+
+  it('makes group expansion a visible, theme-aware action', async () => {
+    await page.viewport(1300, 800);
+    const version = sharedHostsVersion();
+    version.document.presentation!.initiallyExpanded = [];
+    mount(false, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-group').length).toBe(2);
+    const group = host.querySelector<HTMLElement>('[data-graph-object="hdfs"] .tessiven-group')!;
+    const toggle = group.querySelector<HTMLButtonElement>('.tessiven-group-toggle')!;
+    expect(toggle.textContent).toContain('Expand group');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    for (const theme of builtInShellThemePresets) {
+      applyTheme(theme);
+      const style = getComputedStyle(toggle);
+      expect(toggle.getBoundingClientRect().height, theme.name).toBeGreaterThanOrEqual(28);
+      expect(style.backgroundColor, theme.name).not.toBe(getComputedStyle(group).backgroundColor);
+    }
+    await userEvent.click(toggle);
+    await expect.poll(() => host.querySelector('[data-graph-object="hdfs"] .tessiven-group-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelector('[data-graph-object="hdfs"] .tessiven-group-toggle')?.textContent).toContain('Collapse group');
   });
 
   it('locates an instance in its own logical group on a shared host', async () => {

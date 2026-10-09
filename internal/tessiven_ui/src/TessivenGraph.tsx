@@ -20,7 +20,7 @@ import {
   type GraphObjectRef,
 } from '@floegence/floe-webapp-core/graph';
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
-import { ArrowRight, Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
+import { ArrowRight, ChevronDown, Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
 import '@floegence/floe-webapp-core/graph.css';
 import { projectCanvas, projectPositions } from './projection';
 import { TessivenIcon } from './TessivenIcon';
@@ -472,10 +472,13 @@ export function TessivenGraph(props: {
             <strong>{card.group.name}</strong>
             <span class="tessiven-count">{card.nodes.length}</span>
             <button
+              class="tessiven-group-toggle"
               onClick={() => toggle(node.id)}
               aria-label={props.t(card.expanded ? 'collapse' : 'expand')}
+              aria-expanded={card.expanded}
             >
-              {card.expanded ? '−' : '+'}
+              <ChevronDown aria-hidden="true" />
+              <span>{props.t(card.expanded ? 'collapse' : 'expand')}</span>
             </button>
             <button
               onClick={context.openMenu}
@@ -514,9 +517,6 @@ export function TessivenGraph(props: {
             <div class="tessiven-group-services">
               {serviceRows(card.instances, 8)}
             </div>
-            <button class="tessiven-more" onClick={() => toggle(node.id)}>
-              {props.t('expandNodes')}
-            </button>
           </Show>
           {internalRelationRows(node.id)}
         </section>
@@ -532,7 +532,8 @@ export function TessivenGraph(props: {
             </span>
             <Show when={(projection().memberships.get(card.node.id)?.length ?? 0) > 1}>
               <span class="tessiven-shared-host" role="img" aria-label={props.t('sharedHost', { count: projection().memberships.get(card.node.id)!.length })}>
-                <Link class="size-3.5" />{projection().memberships.get(card.node.id)!.length}
+                <Link aria-hidden="true" />
+                <span>{props.t('sharedHostBadge', { count: projection().memberships.get(card.node.id)!.length })}</span>
               </span>
             </Show>
             <button
@@ -730,6 +731,7 @@ export function TessivenGraph(props: {
                           member.serviceRef === id || member.nodeRef === id,
                       ) ?? [];
                     const relatedGroups = instance ? projection().instanceMemberships.get(instance.id) ?? [] : projection().memberships.get(id) ?? [];
+                    const belongsToMultipleGroups = relatedGroups.length > 1;
                     return (
                       <section class="tessiven-detail-object">
                         <strong>{title}</strong>
@@ -803,14 +805,20 @@ export function TessivenGraph(props: {
                           <code>{String(item?.runtimeRef)}</code>
                         </Show>
                         <Show when={relatedGroups.length}>
-                          <section class="tessiven-memberships">
-                            <div class="tessiven-detail-heading"><span>{props.t('groupMemberships')}</span><span>{relatedGroups.length}</span></div>
+                          <section class="tessiven-memberships" data-shared={belongsToMultipleGroups}>
+                            <div class="tessiven-detail-heading">
+                              <Show when={belongsToMultipleGroups}>
+                                <Link aria-hidden="true" />
+                              </Show>
+                              <strong>{props.t(belongsToMultipleGroups ? 'belongsToMultipleGroups' : 'groupMemberships')}</strong>
+                              <span class="tessiven-membership-count">{relatedGroups.length}</span>
+                            </div>
                             <For each={relatedGroups}>
                               {(group) => <button
                                 aria-label={props.t('locateInGroup', { name: group.name })}
                                 aria-current={projection().cards.get(value.event.object?.id ?? '')?.kind === 'node' && appearance(instance?.nodeRef ?? id, group.id) === value.event.object?.id ? 'location' : undefined}
                                 onClick={() => locateNode(instance?.nodeRef ?? id, group.id)}
-                              ><span>{group.name}</span><ExternalLink class="size-3.5" /></button>}
+                              ><span class="tessiven-membership-mark" aria-hidden="true" /><span>{group.name}</span><ExternalLink aria-hidden="true" /></button>}
                             </For>
                           </section>
                         </Show>

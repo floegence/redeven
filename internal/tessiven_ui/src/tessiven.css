@@ -661,7 +661,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 24px;
+  height: 30px;
 }
 .tessiven-group > header strong {
   font-size: 14px;
@@ -675,6 +675,35 @@
   height: 24px;
   font-size: 17px;
   color: var(--ts-muted);
+}
+.tessiven-group > header .tessiven-group-toggle {
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--ts-group-line) 18%, var(--background));
+  color: var(--ts-ink);
+  font-size: 10px;
+  font-weight: 650;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.tessiven-group-toggle > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  transition: transform 140ms ease;
+}
+.tessiven-group-toggle[aria-expanded='true'] > svg {
+  transform: rotate(180deg);
+}
+.tessiven-group-toggle:hover {
+  background: color-mix(in oklab, var(--ts-group-line) 28%, var(--background));
+  color: var(--foreground);
 }
 .tessiven-group-caption {
   display: flex;
@@ -803,9 +832,26 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font: 10px/1.4 var(--font-mono, monospace);
-  color: #dedede;
+  gap: 5px;
+  max-width: 94px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 16%);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.tessiven-shared-host > svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+.tessiven-shared-host > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tessiven-node-body {
   padding: 8px 10px;
@@ -1106,31 +1152,64 @@
 }
 .tessiven-memberships {
   margin-top: 12px;
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
+  padding: 8px 0 0 11px;
+  border-left: 3px solid color-mix(in oklab, var(--primary) 76%, var(--border));
 }
 .tessiven-detail-heading {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: 11px;
-  color: var(--muted-foreground);
-  margin-bottom: 4px;
+  gap: 7px;
+  min-width: 0;
+  margin-bottom: 5px;
+  color: var(--foreground);
+}
+.tessiven-detail-heading > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--primary);
+}
+.tessiven-detail-heading > strong {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.tessiven-membership-count {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 13%, var(--card));
+  color: var(--foreground);
+  font: 600 10px/1.3 var(--font-mono, monospace);
 }
 .tessiven-memberships button {
   display: flex;
   width: 100%;
+  min-width: 0;
   align-items: center;
   gap: 8px;
-  padding: 9px 6px;
-  border-radius: 5px;
+  min-height: 34px;
+  padding: 6px 7px 6px 1px;
+  border-radius: 4px;
   text-align: left;
+}
+.tessiven-memberships button + button {
+  border-top: 1px solid color-mix(in oklab, var(--border) 48%, transparent);
 }
 .tessiven-memberships button span {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.tessiven-memberships button .tessiven-membership-mark {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--primary) 74%, var(--foreground));
 }
 .tessiven-memberships button svg {
   flex-shrink: 0;
@@ -1138,7 +1217,7 @@
 }
 .tessiven-memberships button:hover,
 .tessiven-memberships button[aria-current='location'] {
-  background: color-mix(in oklab, var(--ring) 10%, var(--card));
+  background: color-mix(in oklab, var(--primary) 8%, var(--card));
 }
 .tessiven-popup .tessiven-ask-flower {
   display: flex;
@@ -1235,6 +1314,19 @@
     background: Canvas;
     color: CanvasText;
     border-color: CanvasText;
+  }
+  .tessiven-group-toggle,
+  .tessiven-shared-host,
+  .tessiven-membership-count {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .tessiven-memberships {
+    border-left-color: CanvasText;
+  }
+  .tessiven-membership-mark {
+    background: CanvasText;
   }
   .tessiven-node > header {
     background: Canvas;
@@ -1572,6 +1664,12 @@
   .tessiven-flower-output .tessiven-flower-composer { width: 100%; margin: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .tessiven-group-toggle,
+  .tessiven-group-toggle > svg,
+  .tessiven-node,
+  .tessiven-node > header {
+    transition: none;
+  }
   .tessiven-flower-composer--initial,
   .tessiven-flower-output--entering { animation: none; }
 }

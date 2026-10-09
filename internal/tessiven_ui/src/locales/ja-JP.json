@@ -1,6 +1,8 @@
 {
   "groupMemberships": "所属グループ",
-  "sharedHost": "共有ホスト · {count} グループ",
+  "sharedHost": "{count} 個のグループに所属",
+  "sharedHostBadge": "{count} グループ",
+  "belongsToMultipleGroups": "複数のグループに所属",
   "locateInGroup": "{name} 内の位置を表示",
   "subtitle": "サービスの関係と管理をまとめるキャンバス",
   "libraryTitle": "キャンバス",

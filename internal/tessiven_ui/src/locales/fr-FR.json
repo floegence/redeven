@@ -1,6 +1,8 @@
 {
   "groupMemberships": "Groupes",
-  "sharedHost": "Hôte partagé · {count} groupes",
+  "sharedHost": "Appartient à {count} groupes",
+  "sharedHostBadge": "Partagé · {count}",
+  "belongsToMultipleGroups": "Appartient à plusieurs groupes",
   "locateInGroup": "Localiser dans {name}",
   "subtitle": "Relations et gestion des services",
   "libraryTitle": "Vos canevas",

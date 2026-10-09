@@ -124,11 +124,16 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   of groups without a tooltip. Counts, service operations and Flower references
   use canonical objects, never visual replicas.
 - Hover and focus apply the same title, surface and border color to all visible
-  appearances of the canonical host without opening a popup. Clicking retains
-  the existing object-details popup and adds a compact group list there.
-  Locating another appearance expands its group when necessary and preserves
-  the current object reference; closing restores focus. Service-row clicks
-  continue to open exact instance details and bound-service inspection.
+  appearances of the canonical host without opening a popup. Shared-host cards
+  show a compact linked-group badge. Clicking retains the existing object-details
+  popup; when the host belongs to multiple groups, its group section explicitly
+  says so, shows the count, and lists each group as a locate action. Locating
+  another appearance expands its group when necessary and preserves the current
+  object reference; closing restores focus. Service-row clicks continue to open
+  exact instance details and bound-service inspection.
+- Every logical group exposes a visible, labeled expand or collapse action with
+  a directional icon. The action remains in the group header in both states and
+  uses the same state as the projected group contents.
 - Clicking opens object details. Hover tracks related edges without opening
   explanatory UI; right-click, keyboard context menu, and touch context entry
   open Ask Flower with the exact immutable canvas/version selection.

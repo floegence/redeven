@@ -1,6 +1,8 @@
 {
   "groupMemberships": "Grupos",
-  "sharedHost": "Host compartilhado · {count} grupos",
+  "sharedHost": "Pertence a {count} grupos",
+  "sharedHostBadge": "Compartilhado · {count}",
+  "belongsToMultipleGroups": "Pertence a vários grupos",
   "locateInGroup": "Localizar em {name}",
   "subtitle": "Relações e gerenciamento de serviços",
   "libraryTitle": "Seus quadros",

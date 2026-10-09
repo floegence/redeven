@@ -1,6 +1,8 @@
 {
   "groupMemberships": "Grupos",
-  "sharedHost": "Host compartido · {count} grupos",
+  "sharedHost": "Pertenece a {count} grupos",
+  "sharedHostBadge": "Compartido · {count}",
+  "belongsToMultipleGroups": "Pertenece a varios grupos",
   "locateInGroup": "Localizar en {name}",
   "subtitle": "Relaciones y gestión de servicios",
   "libraryTitle": "Tus lienzos",
