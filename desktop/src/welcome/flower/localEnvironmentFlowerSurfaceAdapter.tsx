@@ -5,8 +5,8 @@ import { computerFramePath } from '../../../../internal/flower_ui/host/computerF
 import { messageFilePath } from '../../../../internal/flower_ui/host/messageFilePath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../internal/flower_ui/src/computerViewer';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../../shared/desktopCertificate';
-import { withFlowerWebSearchAvailability } from '../../../../internal/flower_ui/src/webSearchCapability';
-import { hydrateFlowerProviderCatalog, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../internal/flower_ui/src/settings/modelSelection';
+import { createFlowerModelReadResource, readFlowerModelDirectory, withFlowerModelDirectory, type FlowerModelReadResource } from '../../../../internal/flower_ui/src/modelDirectory';
+import { serializeFlowerProvider } from '../../../../internal/flower_ui/src/settings/modelSelection';
 import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import type {
   DesktopSettingsRequest,
@@ -105,22 +105,10 @@ export type DesktopSettingsBridge = Readonly<{
 
 export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
   runtimeEnvironmentID?: string;
+  modelReadResource?: FlowerModelReadResource;
   runtimeDisplayName?: string;
   runtimeSubtitle?: string;
   onSettingsChanged?: () => void | Promise<unknown>;
-}>;
-
-type ModelsResponse = Readonly<{
-  current_model?: string;
-  models?: readonly Readonly<{
-    id?: string;
-    label?: string;
-    context_window?: number;
-    max_output_tokens?: number;
-    input_modalities?: readonly string[];
-    web_search?: FlowerProviderModel['web_search'];
-    reasoning_capability?: FlowerProviderModel['reasoning_capability'];
-  }>[];
 }>;
 
 type ThreadReadStatus = FlowerThreadReadStatus;
@@ -385,7 +373,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
     ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
     ...(provider.web_search ? { web_search: { mode: provider.web_search.mode ?? 'disabled' } } : {}),
     model_selection: provider.model_selection,
-    models: resolveFlowerProviderModels(provider as FlowerProvider).map((model) => mapProviderModel(model as NonNullable<AIConfig['providers']>[number]['models'][number])).filter((model) => model.model_name),
+    models: (provider.models ?? []).map(mapProviderModel).filter(model => model.model_name),
   };
 }
 
@@ -497,21 +485,12 @@ function decision(): FlowerRouterDecision {
   };
 }
 
-function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse): string {
-  const configured = trim(snapshot.model_profile?.current_model_id);
-  if (configured) return configured;
-  return trim(models.current_model);
-}
-
-async function loadSettingsSnapshot(bridge: DesktopSettingsBridge, models?: ModelsResponse): Promise<FlowerSettingsSnapshot> {
-  const snapshot = mapRuntimeFlowerSettings(await runtimeJSON<AgentSettingsResponse>(bridge, 'GET', '/_redeven_proxy/api/settings'));
-  if (!snapshot.model_profile) return snapshot;
-  const providers = await Promise.all(snapshot.model_profile.providers.map((provider) => hydrateFlowerProviderCatalog(provider, (input) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/model_catalog', input))));
-  return withFlowerWebSearchAvailability({ ...snapshot, model_profile: { ...snapshot.model_profile, providers } }, (models ?? await loadModels(bridge)).models ?? []);
-}
-
-async function loadModels(bridge: DesktopSettingsBridge): Promise<ModelsResponse> {
-  return runtimeJSON<ModelsResponse>(bridge, 'GET', '/_redeven_proxy/api/ai/models');
+export function createDesktopFlowerModelReadResource(bridge: DesktopSettingsBridge, scope: () => string, runtimeEnvironmentID?: string): FlowerModelReadResource {
+  return createFlowerModelReadResource({
+    scope,
+    loadConfiguration: async () => mapRuntimeFlowerSettings(await runtimeJSON<AgentSettingsResponse>(bridge, 'GET', '/_redeven_proxy/api/settings', undefined, undefined, runtimeEnvironmentID)),
+    loadDirectory: async baseline => readFlowerModelDirectory(await runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), undefined, undefined, runtimeEnvironmentID)),
+  });
 }
 
 function localEnvironmentLiveMapperOptions() {
@@ -678,15 +657,15 @@ async function uploadRuntimeFlowerAttachment(
 export async function launchLocalEnvironmentFlowerTurn(
   bridge: DesktopSettingsBridge,
   input: FlowerTurnLaunchInput,
+  modelReadResource?: FlowerModelReadResource,
 ): Promise<FlowerTurnLaunchReceipt> {
   const prompt = input.prompt;
   const attachmentIDs = (input.attachment_ids ?? []).map(trim).filter(Boolean);
   const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
   if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error('Enter a message or add an attachment before sending.');
   const existingThreadID = trim(input.thread_id);
-  const models = existingThreadID ? null : await loadModels(bridge);
-  const snapshot = existingThreadID ? null : await loadSettingsSnapshot(bridge, models ?? undefined);
-  const modelID = trim(input.model_id) || (snapshot && models ? currentModelID(snapshot, models) : '');
+  const snapshot = !existingThreadID && !trim(input.model_id) ? await (modelReadResource ?? createDesktopFlowerModelReadResource(bridge, () => 'launch')).loadSettings() : null;
+  const modelID = trim(input.model_id) || trim(snapshot?.model_directory?.current_model_id) || trim(snapshot?.model_profile?.current_model_id);
   if (!existingThreadID && !modelID) throw new Error('Select a Flower model before starting a chat.');
   const permissionType = trim(input.permission_type)
     ? normalizePermissionType(input.permission_type)
@@ -725,6 +704,9 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   bridge: DesktopSettingsBridge,
   options: LocalEnvironmentFlowerSurfaceAdapterOptions = {},
 ): FlowerSurfaceAdapter {
+  const resource = options.modelReadResource ?? createDesktopFlowerModelReadResource(bridge, () => options.runtimeEnvironmentID ?? 'default', options.runtimeEnvironmentID);
+  const loadSettings = async () => { const snapshot = await resource.loadSettings(); return withFlowerModelDirectory(snapshot, snapshot.model_directory!); };
+  const reloadSettings = () => { resource.invalidate(); return loadSettings(); };
   return createRuntimeFlowerSurfaceAdapter({
     retryModelSource: async () => { await bridge.retryDesktopModels?.(); },
     runtime: {
@@ -827,19 +809,21 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     mapperOptions: localEnvironmentLiveMapperOptions(),
     extensions: flowerExtensionsAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), { canInteract: () => true, canAdmin: () => true }),
-    loadSettings: () => loadSettingsSnapshot(bridge),
+    loadSettings,
+    loadModelDirectory: resource.loadDirectory,
+    subscribeModelDirectory: resource.subscribe,
     discoverProviderModels: (input) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/model_catalog', input),
     saveDefaultPermission: async (permissionType) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/default_permission', {
         permission_type: normalizePermissionType(permissionType),
       });
-      return loadSettingsSnapshot(bridge);
+      return reloadSettings();
     },
     saveComputerUseEnabled: async (enabled) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/computer_use', {
         enabled,
       });
-      return loadSettingsSnapshot(bridge);
+      return reloadSettings();
     },
     loadComputerFrame: async (input) => {
       input.signal.throwIfAborted();
@@ -869,13 +853,13 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     computerManagement: { ...computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), `desktop:${options.runtimeEnvironmentID ?? 'default'}`) },
     saveModelProfile: async (draft) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
-      return loadSettingsSnapshot(bridge);
+      return reloadSettings();
     },
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
-      const models = await runtimeJSON<ModelsResponse>(bridge, 'PUT', '/_redeven_proxy/api/ai/current_model', { model_id: mid });
-      const snapshot = await loadSettingsSnapshot(bridge, models);
+      await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/current_model', { model_id: mid });
+      const snapshot = await reloadSettings();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -943,7 +927,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       return result.storage_generation;
     },
     launchTurn: async (input: FlowerTurnLaunchInput) => {
-      return launchLocalEnvironmentFlowerTurn(bridge, input);
+      return launchLocalEnvironmentFlowerTurn(bridge, input, resource);
     },
     retryThread: async (threadID) => {
       const tid = trim(threadID);

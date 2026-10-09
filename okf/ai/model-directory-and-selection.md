@@ -24,6 +24,24 @@ Ollama queries `/api/tags`, `/api/ps`, and `/api/show`; only installed local mod
 
 ## Settings interaction
 
+Runtime exposes two reads for the same directory projection. The baseline read
+returns static configuration, the saved current identity, and pending dynamic
+sources without contacting providers, Desktop, or the platform gateway. Flower
+uses it together with settings and thread history during initialization. The
+complete read refreshes dynamic sources concurrently under one five-second
+budget, limits provider work to four concurrent requests, and settles every
+source as ready or unavailable before returning. A source failure never clears
+selection intent or blocks history, drafts, canvas navigation, or an already
+usable static model.
+
+The directory is scoped to the Runtime route, instance, authorization session,
+and settings revision. Env Shell and Desktop App own one in-memory read resource
+per scope; Tessiven and full Flower share only when those scope facts match.
+Late responses are discarded after a scope or settings change, duplicate
+refreshes share one request, and unmounting releases the subscription. The
+directory is an observation, not a second persistence ledger or an execution
+authorization.
+
 Automatic model-list discovery has a five-second total catalog budget, shorter
 than Desktop's bootstrap request deadline. A slow or disconnected dynamic
 provider cannot prevent unrelated configured models from being listed. This
@@ -72,7 +90,9 @@ Gemini uses the supported OpenAI-compatible endpoint with model-specific effort 
 - `redeven:internal/config/ai_model_selection_upgrade_test.go` - Offline freeze, alias identity, rollback, restart, and unavailable selections.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx` - Search, alias presentation, keyboard, bounded menus, and narrow-screen geometry.
 - `redeven:internal/ai/model_catalog.go` - Read-only OpenRouter and Ollama queries.
+- `redeven:internal/ai/model_directory.go` - Baseline and bounded complete directory projection.
 - `redeven:internal/codeapp/appserver/server_model_catalog_test.go` - Admin authorization, input limits, and unchanged configuration.
+- `redeven:internal/envapp/ui_src/src/ui/flower/modelDirectory.test.ts` - Scoped single-flight reads, late-result fencing, and failure settlement.
 - `redeven:internal/flower_ui/src/settings/modelSelection.ts` - Shared UI selection owner.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Real published dialogs, scroll and focus continuity, narrow layouts, catalog refresh, and parameter editing.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx` - Real dialog search, collapse, switch, and reopen behavior.

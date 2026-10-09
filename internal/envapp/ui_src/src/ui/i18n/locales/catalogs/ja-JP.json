@@ -5130,6 +5130,8 @@
         }
       },
       "loadingSettings": "Flower 設定を読み込み中です。",
+      "modelsChecking": "モデルの利用可否を確認しています…",
+      "modelsUnavailable": "このモデルは利用できません。一覧を更新するか、別のモデルを選択するか、設定を開いてください。",
       "warmupTitle": "Flower を準備しています",
       "warmupDetail": "Flower が会話を読み込む前に、デスクトップがローカル環境のランタイムを起動しています。",
       "warmupComposerPlaceholder": "ローカル環境で Flower を準備しています...",

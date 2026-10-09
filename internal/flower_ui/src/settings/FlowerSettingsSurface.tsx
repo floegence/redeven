@@ -35,7 +35,7 @@ import {
   normalizeFlowerInputModalities,
   normalizeFlowerPositiveInteger,
 } from './providerCatalog';
-import { defaultFlowerProviderModels } from './modelSelection';
+import { defaultFlowerProviderModels, resolveFlowerProviderModels } from './modelSelection';
 import { FlowerProviderDialog, type FlowerProviderDialogMode } from './FlowerProviderDialog';
 import { FlowerAutoSaveIndicator, FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
 import type { FlowerProviderTypeLabels } from './providerTypeLabels';
@@ -70,7 +70,7 @@ function newProviderID(): string {
 function cloneProviderForForm(provider: NonNullable<FlowerSettingsSnapshot['model_profile']>['providers'][number]): FlowerProviderDraft {
   return {
     ...provider,
-    models: provider.models.map((model) => ({
+    models: resolveFlowerProviderModels(provider, provider.catalog_models).map((model) => ({
       ...model,
       input_modalities: model.input_modalities ? [...model.input_modalities] : undefined,
     })),

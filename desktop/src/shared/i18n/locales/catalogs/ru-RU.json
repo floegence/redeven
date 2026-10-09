@@ -238,6 +238,8 @@
         }
       },
       "loadingSettings": "Настройки Flower еще загружаются.",
+      "modelsChecking": "Проверка доступности моделей…",
+      "modelsUnavailable": "Эта модель недоступна. Обновите список, выберите другую модель или откройте настройки.",
       "warmupTitle": "Подготовка Flower",
       "warmupDetail": "Desktop запускает локальную среду выполнения, прежде чем Flower загрузит беседы.",
       "warmupComposerPlaceholder": "Подготовка Flower в локальной среде...",

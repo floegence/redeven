@@ -14,6 +14,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
@@ -258,40 +259,67 @@ func catalogJSON(ctx context.Context, client *http.Client, method, endpoint, key
 }
 
 func resolveModelCatalogs(ctx context.Context, cfg *config.AIConfig, resolveKey func(string) (string, bool, error), modelID string) (*config.AIConfig, error) {
+	next, _, err := resolveModelCatalogResults(ctx, cfg, resolveKey, modelID)
+	return next, err
+}
+
+// Each provider owns one result slot. Collection order follows configuration,
+// while a slow endpoint cannot consume another provider's discovery opportunity.
+func resolveModelCatalogResults(ctx context.Context, cfg *config.AIConfig, resolveKey func(string) (string, bool, error), modelID string) (*config.AIConfig, map[string]error, error) {
+	failures := make(map[string]error)
 	if cfg == nil {
-		return nil, nil
+		return nil, failures, nil
 	}
 	next := *cfg
 	next.Providers = append([]config.AIProvider(nil), cfg.Providers...)
-	var failures []error
+	results := make([]error, len(next.Providers))
+	slots := make(chan struct{}, 4)
+	var workers sync.WaitGroup
 	for i, p := range next.Providers {
 		if (p.Type != "ollama" && p.Type != "openrouter") || p.ModelSelection == nil || (modelID != "" && !strings.HasPrefix(modelID, p.ID+"/")) {
 			continue
 		}
 		if p.ModelSelection.SelectedModels == nil {
-			failures = append(failures, fmt.Errorf("provider %s requires model selection review in settings", p.ID))
+			results[i] = fmt.Errorf("provider %s requires model selection review in settings", p.ID)
 			continue
 		}
 		if len(p.ModelSelection.SelectedModels) == 0 {
 			continue
 		}
-		key := ""
-		if resolveKey != nil {
-			var err error
-			key, _, err = resolveKey(p.ID)
-			if err != nil {
-				failures = append(failures, err)
-				continue
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			select {
+			case slots <- struct{}{}:
+				defer func() { <-slots }()
+			case <-ctx.Done():
+				results[i] = ctx.Err()
+				return
 			}
-		}
-		models, err := discoverModelCatalog(ctx, ModelCatalogRequest{Type: p.Type, BaseURL: p.BaseURL, APIKey: key}, &http.Client{Timeout: 20 * time.Second})
-		if err != nil {
-			failures = append(failures, fmt.Errorf("%s catalog for %s: %w", p.Type, p.ID, err))
-			continue
-		}
-		next.Providers[i] = p.WithDiscoveredModels(models)
+			key := ""
+			if resolveKey != nil {
+				var err error
+				key, _, err = resolveKey(p.ID)
+				if err != nil {
+					results[i] = err
+					return
+				}
+			}
+			models, err := discoverModelCatalog(ctx, ModelCatalogRequest{Type: p.Type, BaseURL: p.BaseURL, APIKey: key}, &http.Client{Timeout: 20 * time.Second})
+			if err != nil {
+				results[i] = fmt.Errorf("%s catalog for %s: %w", p.Type, p.ID, err)
+				return
+			}
+			next.Providers[i] = p.WithDiscoveredModels(models)
+		}()
 	}
-	return &next, errors.Join(failures...)
+	workers.Wait()
+	for i, err := range results {
+		if err != nil {
+			failures[next.Providers[i].ID] = err
+		}
+	}
+	return &next, failures, errors.Join(results...)
 }
 
 // DiscoverProviderModels supplies startup migration with the same authenticated read-only inventory.

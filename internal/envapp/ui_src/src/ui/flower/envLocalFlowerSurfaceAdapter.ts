@@ -7,7 +7,7 @@ import type { FlowerComputerFrameSource } from '../../../../../flower_ui/src/con
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { withFlowerWebSearchAvailability } from '../../../../../flower_ui/src/webSearchCapability';
+import { createFlowerModelReadResource, readFlowerModelDirectory, withFlowerModelDirectory, type FlowerModelReadResource } from '../../../../../flower_ui/src/modelDirectory';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { readSessionEvents } from '../services/sessionHTTP';
 import {
@@ -32,7 +32,7 @@ import type {
   FlowerTurnLaunchInput,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
-  FlowerModelSourceModel,
+  FlowerModelDirectory,
   FlowerModelSourceRecovery,
   FlowerSurfaceAdapter,
   FlowerSubmitInputReceipt,
@@ -76,6 +76,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   canMutate?: boolean;
   canManageExtensions?: () => boolean;
   settingsRevision?: () => number;
+  modelReadResource?: FlowerModelReadResource;
   isAvailable?: () => boolean;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
   onSettingsChanged?: () => void | Promise<unknown>;
@@ -102,29 +103,6 @@ export type EnvLocalFlowerSurfaceAdapterCopy = Readonly<{
   selectModelBeforeChat: string;
   failedToCreateChat: string;
 }>;
-
-type ModelsResponse = Readonly<{
-  runtime?: Readonly<{ platform_error?: string }>;
-  current_model?: string;
-  models?: readonly Readonly<{
-    id?: string;
-    alias_group?: string;
-    quantization?: string;
-    label?: string;
-    source?: string;
-    context_window?: number;
-    max_output_tokens?: number;
-    input_modalities?: readonly string[];
-    web_search?: FlowerProviderModel['web_search'];
-    reasoning_capability?: FlowerProviderModel['reasoning_capability'];
-  }>[];
-}>;
-
-type DesktopModelCatalogLoad =
-  | Readonly<{ state: 'loaded'; response: ModelsResponse }>
-  | Readonly<{ state: 'failed'; message: string }>;
-
-const DESKTOP_MODEL_SOURCE_ID_PATTERN = /^desktop:model_[0-9a-f]{64}$/;
 
 type ThreadView = Readonly<{
   thread_id?: string;
@@ -385,128 +363,8 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
   };
 }
 
-function mapDesktopModels(models: ModelsResponse): readonly FlowerModelSourceModel[] {
-  const sourceModels = (models.models ?? []).flatMap((model) => {
-    const id = trim(model.id);
-    if (trim(model.source) !== 'desktop_model_source') {
-      if (DESKTOP_MODEL_SOURCE_ID_PATTERN.test(id)) {
-        throw new Error('Desktop model catalog contains an invalid model source.');
-      }
-      return [];
-    }
-    if (!DESKTOP_MODEL_SOURCE_ID_PATTERN.test(id)) {
-      throw new Error('Desktop model catalog contains an invalid opaque model id.');
-    }
-    const reasoningCapability = normalizeFlowerReasoningCapability(model.reasoning_capability);
-    return [{
-      id,
-      web_search: model.web_search,
-      label: trim(model.label) || id,
-      alias_group: model.alias_group, quantization: model.quantization,
-      ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
-      ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
-      ...(Array.isArray(model.input_modalities) ? { input_modalities: model.input_modalities.map(trim).filter(Boolean) } : {}),
-      ...(reasoningCapability ? { reasoning_capability: reasoningCapability } : {}),
-    }];
-  });
-  if (new Set(sourceModels.map((model) => model.id)).size !== sourceModels.length) {
-    throw new Error('Desktop model catalog contains duplicate opaque model ids.');
-  }
-  return sourceModels;
-}
-
-function mapDesktopModelSource(
-  settings: AgentSettingsResponse,
-  catalog?: DesktopModelCatalogLoad,
-): FlowerSettingsSnapshot['model_source'] {
-  const source = settings.ai_runtime?.desktop_model_source;
-  if (!source) return undefined;
-  if (trim(source.binding_state) === 'unsupported') {
-    return { kind: 'desktop_model_source', state: 'unsupported', label: 'Desktop' };
-  }
-  const bindingState = trim(source.binding_state);
-  if (bindingState === 'connecting' || bindingState === 'unbound' || bindingState === 'expired') {
-    return { kind: 'desktop_model_source', state: bindingState, label: 'Desktop' };
-  }
-  if (bindingState === 'error') {
-    const diagnosticMessage = trim(source.last_error);
-    return {
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      ...(diagnosticMessage ? { diagnostic_message: diagnosticMessage } : {}),
-    };
-  }
-  if (bindingState !== 'bound' || source.connected !== true) {
-    return {
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      diagnostic_message: 'Desktop model source returned an invalid binding contract.',
-    };
-  }
-  if (source.configured === false) {
-    return { kind: 'desktop_model_source', state: 'not_configured', label: 'Desktop' };
-  }
-  const missingKeyProviderIDs = (source.missing_key_provider_ids ?? []).map(trim).filter(Boolean);
-  if (missingKeyProviderIDs.length > 0) {
-    return {
-      kind: 'desktop_model_source',
-      state: 'missing_keys',
-      label: 'Desktop',
-      missing_key_provider_ids: missingKeyProviderIDs,
-    };
-  }
-  if (catalog?.state === 'failed') {
-    return {
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      diagnostic_message: catalog.message,
-    };
-  }
-  if (!catalog) {
-    return {
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      diagnostic_message: 'Desktop model catalog was not loaded.',
-    };
-  }
-  try {
-    const sourceModels = mapDesktopModels(catalog.response);
-    const [firstModel, ...remainingModels] = sourceModels;
-    if (!firstModel) {
-      return { kind: 'desktop_model_source', state: 'empty', label: 'Desktop' };
-    }
-    const currentModelCandidate = trim(catalog.response.current_model);
-    const currentModel = sourceModels.some((model) => model.id === currentModelCandidate)
-      ? currentModelCandidate
-      : '';
-    return {
-      kind: 'desktop_model_source',
-      state: 'ready',
-      label: 'Desktop',
-      models: [firstModel, ...remainingModels],
-      ...(currentModel ? { current_model_id: currentModel } : {}),
-    };
-  } catch (error) {
-    return {
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      diagnostic_message: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-function mapSettings(
-  settings: AgentSettingsResponse,
-  catalog?: DesktopModelCatalogLoad,
-  exposeDesktopModelSource = false,
-): FlowerSettingsSnapshot {
+export function mapEnvFlowerSettings(settings: AgentSettingsResponse): FlowerSettingsSnapshot {
   const ai = settings.ai;
-  const externalModelSource = exposeDesktopModelSource ? mapDesktopModelSource(settings, catalog) : undefined;
   const modelProfile = ai && (ai.providers ?? []).length > 0 && trim(ai.current_model_id)
     ? {
         schema_version: 1 as const,
@@ -527,7 +385,6 @@ function mapSettings(
       provider_api_key_configured: Boolean(providerSecrets[provider.id]),
       web_search_api_key_configured: Boolean(webSecrets[provider.id]),
     })),
-    ...(externalModelSource ? { model_source: externalModelSource } : {}),
   };
 }
 
@@ -603,83 +460,20 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
   };
 }
 
-async function loadSettingsSnapshot(
-  options: EnvLocalFlowerSurfaceAdapterOptions,
-  loadCatalog: () => Promise<ModelsResponse> = loadModels,
-): Promise<FlowerSettingsSnapshot> {
-  const assertAvailable = () => {
-    if (options.isAvailable?.() === false) throw new DOMException('Flower settings load cancelled.', 'AbortError');
+export function createEnvFlowerModelReadResource(scope: () => string): FlowerModelReadResource {
+  return createFlowerModelReadResource({
+    scope,
+    loadConfiguration: async () => mapEnvFlowerSettings(await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET', signal: AbortSignal.timeout(6_000) })),
+    loadDirectory: async baseline => readFlowerModelDirectory(await fetchLocalApiJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal: AbortSignal.timeout(6_000) })),
+  });
+}
+
+function visibleDirectory(directory: FlowerModelDirectory, exposeDesktop: boolean): FlowerModelDirectory {
+  if (exposeDesktop) return directory;
+  return { ...directory, current_model_id: directory.current_model_id.startsWith('desktop:') ? '' : directory.current_model_id,
+    models: directory.models.filter(model => model.source !== 'desktop_model_source'),
+    sources: directory.sources.filter(source => source.kind !== 'desktop_model_source'),
   };
-  const settings = await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
-  assertAvailable();
-  const exposeDesktopModelSource = options.desktopSessionTargetRoute === 'remote_desktop';
-  const desktopModelSource = settings.ai_runtime?.desktop_model_source;
-  let catalog: DesktopModelCatalogLoad | undefined;
-  if (
-    exposeDesktopModelSource
-    && trim(desktopModelSource?.binding_state) === 'bound'
-    && desktopModelSource?.connected === true
-    && desktopModelSource?.configured !== false
-    && (desktopModelSource.missing_key_provider_ids ?? []).length === 0
-  ) {
-    try {
-      catalog = { state: 'loaded', response: await loadDesktopModelCatalog(loadCatalog) };
-    } catch (error) {
-      catalog = { state: 'failed', message: error instanceof Error ? error.message : String(error) };
-    }
-  }
-  let snapshot = mapSettings(settings, catalog, exposeDesktopModelSource);
-  if (settings.ai_runtime?.platform_available) {
-    const response = catalog?.state === 'loaded' ? catalog.response : await loadCatalog();
-    const models = (response.models ?? []).filter((model) => trim(model.id).startsWith('platform/')).map((model) => ({
-      id: trim(model.id), label: trim(model.label) || trim(model.id),
-      context_window: model.context_window, max_output_tokens: model.max_output_tokens,
-      input_modalities: model.input_modalities, web_search: model.web_search,
-      reasoning_capability: normalizeFlowerReasoningCapability(model.reasoning_capability),
-    }));
-    snapshot = { ...snapshot, platform_model_source: {
-      models, error: response.runtime?.platform_error, ...(trim(response.current_model).startsWith('platform/') ? { current_model_id: response.current_model } : {}),
-    } };
-    assertAvailable();
-  }
-  if (!snapshot.model_profile) return snapshot;
-  const { hydrateFlowerProviderCatalog } = await import('../../../../../flower_ui/src/settings/modelSelection');
-  assertAvailable();
-  const providers = await Promise.all(snapshot.model_profile.providers.map((provider) =>
-    hydrateFlowerProviderCatalog(provider, (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }))));
-  assertAvailable();
-  return withFlowerWebSearchAvailability({ ...snapshot, model_profile: { ...snapshot.model_profile, providers } }, (catalog?.state === 'loaded' ? catalog.response : await loadCatalog()).models ?? []);
-}
-
-async function loadModels(): Promise<ModelsResponse> {
-  return fetchLocalApiJSON<ModelsResponse>('/_redeven_proxy/api/ai/models', { method: 'GET' });
-}
-
-async function loadDesktopModelCatalog(loadCatalog: () => Promise<unknown> = loadModels): Promise<ModelsResponse> {
-  const raw = await loadCatalog();
-  if (!raw || typeof raw !== 'object') {
-    throw new Error('Desktop model catalog response is invalid.');
-  }
-  const candidate = raw as ModelsResponse;
-  if (!Array.isArray(candidate.models) || candidate.models.some((model) => !model || typeof model !== 'object')) {
-    throw new Error('Desktop model catalog response is invalid.');
-  }
-  return candidate;
-}
-
-function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse): string {
-  if (snapshot.platform_model_source?.current_model_id) return snapshot.platform_model_source.current_model_id;
-  const configured = trim(snapshot.model_profile?.current_model_id);
-  if (configured) return configured;
-  return trim(models.current_model);
-}
-
-function profileContainsModel(snapshot: FlowerSettingsSnapshot, modelID: string): boolean {
-  const mid = trim(modelID);
-  if (snapshot.platform_model_source?.models.some((model) => model.id === mid)) return true;
-  return snapshot.model_profile?.providers.some((provider) => (
-    provider.models.some((model) => `${trim(provider.id)}/${trim(model.model_name)}` === mid)
-  )) ?? false;
 }
 
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
@@ -707,54 +501,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }
     : undefined;
 
-  const cacheTTLMS = 5_000;
-  let settingsRevision = 0;
-  let modelsRevision = 0;
-  let settingsCache: Readonly<{ value: FlowerSettingsSnapshot; expiresAtMS: number }> | null = null;
-  let modelsCache: Readonly<{ value: ModelsResponse; expiresAtMS: number }> | null = null;
-  let settingsRequest: Promise<FlowerSettingsSnapshot> | null = null;
-  let modelsRequest: Promise<ModelsResponse> | null = null;
-  let observedSettingsRevision = options.settingsRevision?.() ?? 0;
-  const loadCachedModels = (): Promise<ModelsResponse> => {
-    const now = Date.now();
-    if (modelsCache && modelsCache.expiresAtMS > now) return Promise.resolve(modelsCache.value);
-    if (modelsRequest) return modelsRequest;
-    const revision = modelsRevision;
-    const request = loadModels().then((value) => {
-      if (revision === modelsRevision) modelsCache = { value, expiresAtMS: Date.now() + cacheTTLMS };
-      return value;
-    }).finally(() => {
-      if (modelsRequest === request) modelsRequest = null;
-    });
-    modelsRequest = request;
-    return request;
-  };
-  const loadCachedSettings = (): Promise<FlowerSettingsSnapshot> => {
-    const externalRevision = options.settingsRevision?.() ?? 0;
-    if (externalRevision !== observedSettingsRevision) {
-      observedSettingsRevision = externalRevision;
-      invalidateSettingsCache();
-    }
-    const now = Date.now();
-    if (settingsCache && settingsCache.expiresAtMS > now) return Promise.resolve(settingsCache.value);
-    if (settingsRequest) return settingsRequest;
-    const revision = settingsRevision;
-    const request = loadSettingsSnapshot(options, loadCachedModels).then((value) => {
-      if (revision === settingsRevision) settingsCache = { value, expiresAtMS: Date.now() + cacheTTLMS };
-      return value;
-    }).finally(() => {
-      if (settingsRequest === request) settingsRequest = null;
-    });
-    settingsRequest = request;
-    return request;
-  };
-  const invalidateSettingsCache = () => {
-    settingsRevision += 1;
-    modelsRevision += 1;
-    settingsCache = null;
-    modelsCache = null;
-    settingsRequest = null;
-    modelsRequest = null;
+  const resource = options.modelReadResource ?? createEnvFlowerModelReadResource(() => String(options.settingsRevision?.() ?? 0));
+  const directoryForSurface = (directory: FlowerModelDirectory) => visibleDirectory(directory, options.desktopSessionTargetRoute === 'remote_desktop');
+  const loadSettings = async () => {
+    const snapshot = await resource.loadSettings();
+    if (options.isAvailable?.() === false) throw new DOMException('Flower settings load cancelled.', 'AbortError');
+    return withFlowerModelDirectory(snapshot, directoryForSurface(snapshot.model_directory!));
   };
 
   return createRuntimeFlowerSurfaceAdapter({
@@ -833,12 +585,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     },
     mapperOptions: envLiveMapperOptions(options),
     extensions: flowerExtensionsAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), { canInteract: () => options.isAvailable?.() ?? true, canAdmin: () => options.canManageExtensions?.() ?? false }),
-    loadSettings: loadCachedSettings,
+    loadSettings,
+    loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh)),
+    subscribeModelDirectory: listener => resource.subscribe(directory => listener(directoryForSurface(directory))),
     discoverProviderModels: (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }),
     saveDefaultPermission: async (permissionType) => {
       await updateDefaultAIPermission(normalizePermissionType(permissionType));
-      invalidateSettingsCache();
-      const snapshot = await loadCachedSettings();
+      resource.invalidate();
+      const snapshot = await loadSettings();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -848,8 +602,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         method: 'PUT',
         body: JSON.stringify({ enabled }),
       });
-      invalidateSettingsCache();
-      const snapshot = await loadCachedSettings();
+      resource.invalidate();
+      const snapshot = await loadSettings();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -878,20 +632,19 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           web_search_provider_key_patches: webSearchKeyPatches,
         }),
       });
-      invalidateSettingsCache();
-      return loadCachedSettings();
+      resource.invalidate();
+      return loadSettings();
     },
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
-      const current = await loadCachedSettings();
-      if (!profileContainsModel(current, mid)) throw new Error('Model is not part of the environment profile.');
-      await fetchLocalApiJSON<ModelsResponse>('/_redeven_proxy/api/ai/current_model', {
+      if (mid.startsWith('desktop:')) throw new Error('Model is not part of the environment profile.');
+      await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/current_model', {
         method: 'PUT',
         body: JSON.stringify({ model_id: mid }),
       });
-      invalidateSettingsCache();
-      const snapshot = await loadCachedSettings();
+      resource.invalidate();
+      const snapshot = await loadSettings();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -956,10 +709,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error(copy.enterMessageBeforeSending);
       const existingThreadID = trim(input.thread_id);
-      const [snapshot, models] = await Promise.all([
-        existingThreadID ? Promise.resolve<FlowerSettingsSnapshot | null>(null) : loadCachedSettings(),
-        existingThreadID ? Promise.resolve<ModelsResponse | null>(null) : loadCachedModels(),
-      ]);
+      const snapshot = !existingThreadID && !trim(input.model_id) ? await loadSettings() : null;
       const permissionType = trim(input.permission_type)
         ? normalizePermissionType(input.permission_type)
         : undefined;
@@ -975,8 +725,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }
       let turnModelID = trim(input.model_id);
       if (!existingThreadID) {
-        if (!models) throw new Error('Flower model catalog is unavailable.');
-        turnModelID = turnModelID || currentModelID(snapshot!, models);
+        turnModelID = turnModelID || trim(snapshot?.model_directory?.current_model_id) || trim(snapshot?.model_profile?.current_model_id);
         if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
       }
       const stagingHeaders = stagingScope ? flowerAttachmentStagingHeaders(stagingScope) : undefined;
@@ -1084,12 +833,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     ...(options.workingDirectoryActionAvailability ? { workingDirectoryActionAvailability: options.workingDirectoryActionAvailability } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
     retryModelSource: async () => {
-      invalidateSettingsCache();
+      resource.invalidate();
       try {
         await options.retryModelSource?.();
       } finally {
         // Recovery can overlap an existing refresh; discard every pre-recovery result.
-        invalidateSettingsCache();
+        resource.invalidate();
       }
     },
     ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),

@@ -1,10 +1,11 @@
 import { onCleanup } from 'solid-js';
 import { FlowerSurface, createFlowerComposerDraftCoordinator, type FlowerSurfaceAdapter } from '../../../../flower_ui/src';
+import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
 import type { CanvasFlowerSurfaceProps } from '../../../../tessiven_ui/src/TessivenFlowerPanel';
 import { adapter, liveBootstrap, thread } from '../ui/FlowerSurface.media.test-support';
 
 export function canvasFlowerAdapter(): FlowerSurfaceAdapter {
-  return {
+  const base = {
     ...adapter(true), listThreads: async () => [],
     loadThread: async id => liveBootstrap(thread({ thread_id: id }), 1),
     launchTurn: async input => ({ client_request_id: input.client_request_id, thread_id: input.thread_id ?? 'canvas-thread',
@@ -15,7 +16,8 @@ export function canvasFlowerAdapter(): FlowerSurfaceAdapter {
       yield { schema_version: 1, kind: 'ready', summaries: [] };
       if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
     },
-  };
+  } satisfies FlowerSurfaceAdapter;
+  return { ...base, loadSettings: async () => withModelDirectoryFixture(await base.loadSettings()) };
 }
 export function CanvasFlowerTestSurface(props: CanvasFlowerSurfaceProps & { adapter: FlowerSurfaceAdapter }) {
   const drafts = createFlowerComposerDraftCoordinator();

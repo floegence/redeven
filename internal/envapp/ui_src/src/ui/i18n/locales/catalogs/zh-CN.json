@@ -5130,6 +5130,8 @@
         }
       },
       "loadingSettings": "Flower 设置仍在加载。",
+      "modelsChecking": "正在检查模型可用性…",
+      "modelsUnavailable": "此模型暂不可用。请刷新列表、选择其他模型或打开设置。",
       "warmupTitle": "正在准备 Flower",
       "warmupDetail": "Desktop 在 Flower 加载对话之前启动本地环境运行时。",
       "warmupComposerPlaceholder": "正在本地环境中准备 Flower...",

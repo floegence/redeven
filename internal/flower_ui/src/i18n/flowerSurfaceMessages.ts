@@ -57,6 +57,8 @@ export const flowerSurfaceEnUS = {
     restoredInputCopy: "Copy input",
 
     loadingSettings: 'Flower settings are still loading.',
+    modelsChecking: 'Checking model availability…',
+    modelsUnavailable: 'This model is unavailable. Refresh the list, select another model, or open settings.',
     warmupTitle: 'Preparing Flower',
     warmupDetail: 'Desktop is starting the Local Environment runtime before Flower loads conversations.',
     warmupComposerPlaceholder: 'Preparing Flower on Local Environment...',

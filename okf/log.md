@@ -1,5 +1,15 @@
 # Redeven OKF Update Log
 
+## 2026-10-08 — Non-blocking Flower model directory
+
+- Keep Runtime baseline model facts, Flower settings, thread history, drafts,
+  and canvas-bound conversations available without waiting for provider or
+  Desktop catalog discovery.
+- Refresh dynamic sources concurrently under one bounded read, publish typed
+  per-source status, and fence results by Runtime/session/settings scope.
+- Keep model selection and execution admission unchanged; update the model
+  directory and Desktop session contracts for the shared in-memory resource.
+
 ## 2026-10-08 — Flower computer recovery
 
 - Document that Floret admits the user's answer unchanged while Flower judges

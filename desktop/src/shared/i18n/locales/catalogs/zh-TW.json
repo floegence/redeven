@@ -229,6 +229,8 @@
         }
       },
       "loadingSettings": "Flower 設定仍在載入。",
+      "modelsChecking": "正在檢查模型可用性…",
+      "modelsUnavailable": "此模型暫時無法使用。請重新整理清單、選擇其他模型或開啟設定。",
       "warmupTitle": "正在準備 Flower",
       "warmupDetail": "Desktop 會先啟動本機環境的執行階段，再讓 Flower 載入對話。",
       "warmupComposerPlaceholder": "正在本機環境中準備 Flower...",

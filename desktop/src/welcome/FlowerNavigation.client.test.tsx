@@ -6,6 +6,8 @@ import { testDesktopPreferences } from '../testSupport/desktopTestHelpers';
 import type { DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
 import { normalizeRuntimeServiceSnapshot, RUNTIME_SERVICE_COMPATIBILITY_EPOCH, RUNTIME_SERVICE_PROTOCOL_VERSION, type RuntimeServiceAIReadinessState } from '../shared/runtimeService';
 import type { RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
+import { modelDirectoryWireFixture } from '../../../internal/envapp/ui_src/src/test/modelDirectoryWireFixture';
+import type { AgentSettingsResponse } from '../../../internal/envapp/ui_src/src/ui/pages/settings/types';
 
 const disposers: Array<() => void> = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -33,9 +35,13 @@ async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_envir
   // Both IPC and runtime preparation stay pending throughout navigation.
   const performAction = vi.fn(() => new Promise<never>(() => {}));
   const getSnapshot = vi.fn(() => new Promise<never>(() => {}));
-  const requestRuntimeFlower = vi.fn((request: RuntimeFlowerRequest) => respond
-    ? Promise.resolve({ ok: true as const, data: respond(request) })
-    : new Promise<never>(() => {}));
+  let fixtureSettings = {} as AgentSettingsResponse;
+  const requestRuntimeFlower = vi.fn((request: RuntimeFlowerRequest) => {
+    if (!respond) return new Promise<never>(() => {});
+    const data = respond(request.path === '/_redeven_proxy/api/ai/models?mode=baseline' ? { ...request, path: '/_redeven_proxy/api/ai/models' } : request);
+    if (request.path === '/_redeven_proxy/api/settings') fixtureSettings = data as AgentSettingsResponse;
+    return Promise.resolve({ ok: true as const, data: request.path.startsWith('/_redeven_proxy/api/ai/models') ? modelDirectoryWireFixture(fixtureSettings, data as Record<string, unknown>) : data });
+  });
   const startRuntimeFlowerStream = vi.fn(() => new Promise<never>(() => {}));
   const cancelRuntimeFlowerStream = vi.fn();
   const settings = { load: vi.fn(), save: vi.fn(), cancel: vi.fn(), requestRuntimeFlower,

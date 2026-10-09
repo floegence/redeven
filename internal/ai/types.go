@@ -21,18 +21,19 @@ import (
 )
 
 type Model struct {
-	AliasGroup          string                         `json:"alias_group,omitempty"`
-	Quantization        string                         `json:"quantization,omitempty"`
-	WebSearch           config.AIWebSearchAvailability `json:"web_search"`
-	ID                  string                         `json:"id"`
-	Label               string                         `json:"label,omitempty"`
-	Source              string                         `json:"source,omitempty"`
-	SourceLabel         string                         `json:"source_label,omitempty"`
-	ContextWindow       int                            `json:"context_window,omitempty"`
-	MaxOutputTokens     int                            `json:"max_output_tokens,omitempty"`
-	InputModalities     []string                       `json:"input_modalities,omitempty"`
-	SupportsImageInput  bool                           `json:"supports_image_input,omitempty"`
-	ReasoningCapability config.AIReasoningCapability   `json:"reasoning_capability,omitempty"`
+	DefaultReasoningSelection config.AIReasoningSelection    `json:"default_reasoning_selection,omitempty"`
+	AliasGroup                string                         `json:"alias_group,omitempty"`
+	Quantization              string                         `json:"quantization,omitempty"`
+	WebSearch                 config.AIWebSearchAvailability `json:"web_search"`
+	ID                        string                         `json:"id"`
+	Label                     string                         `json:"label,omitempty"`
+	Source                    string                         `json:"source,omitempty"`
+	SourceLabel               string                         `json:"source_label,omitempty"`
+	ContextWindow             int                            `json:"context_window,omitempty"`
+	MaxOutputTokens           int                            `json:"max_output_tokens,omitempty"`
+	InputModalities           []string                       `json:"input_modalities,omitempty"`
+	SupportsImageInput        bool                           `json:"supports_image_input,omitempty"`
+	ReasoningCapability       config.AIReasoningCapability   `json:"reasoning_capability,omitempty"`
 }
 
 type RequestUserInputPrompt struct {
@@ -127,6 +128,7 @@ type SubmitRequestUserInputResponseResponse struct {
 // --- HTTP API types (snake_case, stable) ---
 
 type ModelsResponse struct {
+	Directory    ModelDirectory   `json:"directory"`
 	CurrentModel string           `json:"current_model"`
 	Models       []Model          `json:"models"`
 	Runtime      *AIRuntimeStatus `json:"runtime,omitempty"`
@@ -135,6 +137,7 @@ type ModelsResponse struct {
 // NewModelsResponse keeps the public models contract stable for empty results.
 func NewModelsResponse(runtime *AIRuntimeStatus) *ModelsResponse {
 	return &ModelsResponse{
+		Directory: ModelDirectory{Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}},
 		Models:  make([]Model, 0),
 		Runtime: runtime,
 	}

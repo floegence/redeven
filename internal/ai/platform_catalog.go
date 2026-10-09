@@ -160,41 +160,11 @@ func (s *Service) sessionModelConfig(ctx context.Context, meta *session.Meta, cf
 }
 
 func (s *Service) ListModelsForSession(ctx context.Context, meta *session.Meta) (*ModelsResponse, error) {
-	if s == nil {
-		return nil, ErrNotConfigured
-	}
-	s.mu.Lock()
-	cfg := s.cfg
-	s.mu.Unlock()
-	projected, platformErr := s.sessionModelConfig(ctx, meta, cfg)
-	if platformErr != nil {
-		var err error
-		projected, err = localModelConfig(cfg)
-		if err != nil {
-			return nil, err
-		}
-	}
-	models, err := s.listModels(ctx, projected)
-	selected := s.sessionSelectedModel(meta, cfg)
-	if (platformErr != nil || platformSessionAvailable(meta) || strings.HasPrefix(selected, "platform/")) && errors.Is(err, ErrNotConfigured) {
-		models, err = NewModelsResponse(s.RuntimeStatus(ctx)), nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	models.Runtime.PlatformAvailable = platformSessionAvailable(meta)
-	if platformErr != nil {
-		models.Runtime.PlatformError = "Redeven AI is currently unavailable. Select another model or try again."
-	}
-	// Keep the selection separate from the live catalog, including successful
-	// refreshes which remove a model. Alternatives must remain selectable.
-	if strings.HasPrefix(selected, "platform/") {
-		models.CurrentModel = selected
-		if platformErr == nil && !slices.ContainsFunc(models.Models, func(m Model) bool { return m.ID == selected }) {
-			models.Runtime.PlatformError = "The selected Redeven AI model is no longer available. Select another model or try again."
-		}
-	}
-	return models, nil
+	return s.readModelDirectory(ctx, meta, false)
+}
+
+func (s *Service) ListModelsBaselineForSession(ctx context.Context, meta *session.Meta) (*ModelsResponse, error) {
+	return s.readModelDirectory(ctx, meta, true)
 }
 
 // Version 1 uses 1–255 ASCII alias characters. The external Edge wire test

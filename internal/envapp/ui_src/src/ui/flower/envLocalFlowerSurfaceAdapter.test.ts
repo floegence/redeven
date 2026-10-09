@@ -4,6 +4,8 @@ import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
+import { modelDirectoryWireFixture } from '../../test/modelDirectoryWireFixture';
+import type { AgentSettingsResponse } from '../pages/settings/types';
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
 import type {
   FlowerAttachmentStagingScope,
@@ -18,15 +20,20 @@ vi.mock('../services/controlplaneApi', () => ({
 }));
 
 const fetchMock = vi.fn();
+let fixtureSettings: AgentSettingsResponse;
 
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 
 beforeEach(() => {
 	fetchMock.mockReset();
+  fixtureSettings = {} as AgentSettingsResponse;
 	clearLocalAccessResumeToken();
 });
 
 function jsonResponse(data: unknown): Response {
+  const value = data as Record<string, unknown> | null;
+  if (value && ('ai' in value || 'ai_runtime' in value)) fixtureSettings = value as AgentSettingsResponse;
+  if (value && ('models' in value || 'current_model' in value) && !('directory' in value)) data = modelDirectoryWireFixture(fixtureSettings, value);
   return {
     ok: true,
     status: 200,
@@ -52,7 +59,7 @@ const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
 it('loads authorized platform models without exposing editable provider credentials', async () => {
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url === '/_redeven_proxy/api/settings') return jsonResponse({ ai: null, ai_runtime: { platform_available: true } });
-    if (url === '/_redeven_proxy/api/ai/models' || url === '/_redeven_proxy/api/ai/current_model') return jsonResponse({
+    if (url === '/_redeven_proxy/api/ai/models?mode=baseline' || url === '/_redeven_proxy/api/ai/current_model') return jsonResponse({
       current_model: 'platform/available', models: [{ id: 'platform/available', label: 'Redeven AI / Available', input_modalities: ['text', 'image'], context_window: 64000, max_output_tokens: 2048 }],
     });
     throw new Error(`Unexpected request: ${init?.method} ${url}`);
@@ -71,16 +78,16 @@ it('retries a platform outage immediately instead of reusing the cached error', 
   let modelReads = 0;
   fetchMock.mockImplementation(async (url: string) => {
     if (url === '/_redeven_proxy/api/settings') return jsonResponse({ ai: null, ai_runtime: { platform_available: true } });
-    if (url === '/_redeven_proxy/api/ai/models') {
+    if (url === '/_redeven_proxy/api/ai/models?mode=baseline') {
       modelReads++;
       return jsonResponse({ current_model: 'platform/selected', models: recovered ? [{ id: 'platform/selected', name: 'Selected', source: 'platform', available: true }] : [], runtime: recovered ? {} : { platform_error: 'Redeven AI unavailable' } });
     }
     throw new Error(`Unexpected request: ${url}`);
   });
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
-  expect((await adapter.loadSettings()).platform_model_source?.error).toBe('Redeven AI unavailable');
+  expect((await adapter.loadSettings()).platform_model_source?.error).toBe('Redeven AI is currently unavailable. Select another model or try again.');
   recovered = true;
-  expect((await adapter.loadSettings()).platform_model_source?.error).toBe('Redeven AI unavailable');
+  expect((await adapter.loadSettings()).platform_model_source?.error).toBe('Redeven AI is currently unavailable. Select another model or try again.');
   expect(modelReads).toBe(1);
   expect(adapter.retryModelSource).toBeDefined();
   await adapter.retryModelSource?.();
@@ -94,12 +101,12 @@ it.each([false, true])('preserves an unavailable selection with replacement plat
   const models = hasReplacement ? [{ id: 'platform/replacement', label: 'Replacement', input_modalities: ['text'] }] : [];
   fetchMock.mockImplementation(async (url: string) => {
     if (url === '/_redeven_proxy/api/settings') return jsonResponse({ ai: null, ai_runtime: { platform_available: true } });
-    if (url === '/_redeven_proxy/api/ai/models') return jsonResponse({ current_model: 'platform/selected', models, runtime: { platform_error: 'Redeven AI unavailable' } });
+    if (url === '/_redeven_proxy/api/ai/models?mode=baseline') return jsonResponse({ current_model: 'platform/selected', models, runtime: { platform_error: 'Redeven AI unavailable' } });
     throw new Error(`Unexpected request: ${url}`);
   });
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
   const snapshot = await adapter.loadSettings();
-  expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/selected', models, error: 'Redeven AI unavailable' });
+  expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/selected', models, error: 'Redeven AI is currently unavailable. Select another model or try again.' });
 });
 
 function stagingScope(targetID: string): FlowerAttachmentStagingScope {
@@ -476,7 +483,7 @@ describe('Env local Flower surface adapter', () => {
           ai_runtime: { desktop_model_source: source },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({ models: [] });
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -498,7 +505,7 @@ describe('Env local Flower surface adapter', () => {
     expect(sourceStatus).not.toHaveProperty('ready');
     expect(sourceStatus).not.toHaveProperty('model_count');
     if (expectedState === 'not_configured') {
-      expect(fetchMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/ai/models')).toBe(false);
+      expect(fetchMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/ai/models?mode=baseline')).toBe(true);
     }
   });
 
@@ -529,7 +536,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({
           current_model: DESKTOP_MODEL_ID,
           models: [
@@ -547,12 +554,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_source).toEqual({
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      diagnostic_message: 'Desktop model catalog contains an invalid model source.',
-    });
+    expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
   });
 
   it('rejects a Desktop catalog entry with an invalid opaque id', async () => {
@@ -567,7 +569,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({
           models: [{ id: 'desktop:model_legacy', source: 'desktop_model_source' }],
         });
@@ -581,12 +583,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_source).toEqual({
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      diagnostic_message: 'Desktop model catalog contains an invalid opaque model id.',
-    });
+    expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
   });
 
   it('reports model catalog request failures as Desktop source errors', async () => {
@@ -601,7 +598,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         throw new Error('catalog unavailable');
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -613,12 +610,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_source).toEqual({
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      diagnostic_message: 'catalog unavailable',
-    });
+    expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
   });
 
   it('rejects a malformed Desktop model catalog response', async () => {
@@ -633,7 +625,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({ models: 'invalid' });
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -645,12 +637,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_source).toEqual({
-      kind: 'desktop_model_source',
-      state: 'error',
-      label: 'Desktop',
-      diagnostic_message: 'Desktop model catalog response is invalid.',
-    });
+    expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
   });
 
   it('loads permission-only settings without requesting runtime models', async () => {
@@ -673,8 +660,8 @@ describe('Env local Flower surface adapter', () => {
 
     expect(snapshot.defaults.permission_type).toBe('readonly');
     expect(snapshot.model_profile).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).not.toHaveBeenCalledWith('/_redeven_proxy/api/ai/models', expect.anything());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/models?mode=baseline', expect.anything());
   });
 
   it('deduplicates settings and model catalog reads across concurrent initial launches', async () => {
@@ -692,7 +679,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
       if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
@@ -723,7 +710,7 @@ describe('Env local Flower surface adapter', () => {
     ]);
 
     expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/settings')).toHaveLength(1);
-    expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/ai/models')).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/ai/models?mode=baseline')).toHaveLength(1);
     expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/ai/turns')).toHaveLength(2);
   });
 
@@ -801,6 +788,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline') return jsonResponse({ models: [] });
       throw new Error(`unexpected fetch: ${url}`);
     });
     const adapter = createEnvLocalFlowerSurfaceAdapter({
@@ -816,9 +804,8 @@ describe('Env local Flower surface adapter', () => {
     expect(snapshot.model_source).toMatchObject({
       kind: 'desktop_model_source',
       state: 'error',
-      diagnostic_message: 'Desktop source disconnected',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the remote model profile and Desktop catalog together for remote Desktop sessions', async () => {
@@ -851,7 +838,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({
           current_model: 'remote/gpt-5.4',
           models: [
@@ -927,7 +914,7 @@ describe('Env local Flower surface adapter', () => {
             },
           });
         }
-        if (url === '/_redeven_proxy/api/ai/models') return jsonResponse({ models: [{ id: 'remote/gpt-5.4', web_search: { status: 'available', reason: 'catalog_supported' } }] });
+        if (url === '/_redeven_proxy/api/ai/models?mode=baseline') return jsonResponse({ models: [{ id: 'remote/gpt-5.4', web_search: { status: 'available', reason: 'catalog_supported' } }] });
         throw new Error(`unexpected fetch: ${url}`);
       });
       const adapter = createEnvLocalFlowerSurfaceAdapter({
@@ -941,7 +928,7 @@ describe('Env local Flower surface adapter', () => {
 
       expect(snapshot.model_profile?.current_model_id).toBe('remote/gpt-5.4');
       expect(snapshot.model_source).toBeUndefined();
-      expect(snapshot.model_profile?.providers[0].models[0].web_search?.status).toBe('available');
+      expect(snapshot.model_directory?.models[0].web_search?.status).toBe('available');
       expect(fetchMock).toHaveBeenCalledTimes(2);
     },
   );
@@ -1103,7 +1090,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({
           current_model: DESKTOP_MODEL_ID,
           models: [
@@ -1190,7 +1177,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline') {
         return jsonResponse({ current_model: 'default/gpt-4.1' });
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -1356,7 +1343,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline') {
         return jsonResponse({ current_model: 'default/gpt-4.1' });
       }
       if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
@@ -1467,7 +1454,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline') {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
       if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
@@ -1534,7 +1521,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline') {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
@@ -1604,7 +1591,7 @@ describe('Env local Flower surface adapter', () => {
           ai_secrets: { provider_api_key_set: { default: true }, web_search_provider_api_key_set: {} },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline') {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
@@ -1915,7 +1902,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({ current_model: 'default/gpt-5.4', models: [{ id: 'default/gpt-5.4' }] });
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -1960,7 +1947,7 @@ describe('Env local Flower surface adapter', () => {
           },
         });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/models?mode=baseline' && init?.method === 'GET') {
         return jsonResponse({
           current_model: DESKTOP_MODEL_ID,
           models: [{ id: DESKTOP_MODEL_ID, source: 'desktop_model_source' }],

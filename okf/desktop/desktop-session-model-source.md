@@ -27,6 +27,16 @@ The same RPC carries final model results under one complete ToolCall contract: e
 
 Desktop Welcome has one Local Environment Flower readiness path for settings, thread inventory, and stream requests. It attaches immediately when Runtime Service is openable. A cold Runtime starts through the existing Desktop lifecycle coordinator, and concurrent first requests coalesce on one in-memory target-resolution promise and the same Start. Target resolution has a bounded Flower request deadline; a timed-out caller receives a retryable readiness error while the lifecycle owner continues and the in-flight promise is released when it settles. An active Start, Restart, or Update is joined, marked with the explicit `flower_warmup` presentation context, and awaited before Desktop revalidates Runtime Service, invalidates the stale local access session, and attaches again. An active Stop or Reinstall fails immediately and never triggers a replacement Start. Open or Refresh ownership permits only an already-openable attach; otherwise the existing lifecycle conflict is returned. Lifecycle failure remains structured and terminal for that request: Flower adds no retry, polling, cache, or second startup path. The Flower surface renders coordinated Start, Restart, and Update progress as warmup instead of treating the surface as stalled.
 
+Model directory reads are separate from that lifecycle. Desktop and Env Shell
+request a baseline directory alongside settings and begin thread history and
+canvas-bound Flower loading independently. The baseline never waits for the
+Desktop model-source catalog; a later complete read refreshes the same scoped
+resource and settles failures without replacing the selected opaque identity.
+Full Flower and Tessiven share the resource only for the same Runtime route,
+session, instance, and settings revision. Runtime restart, connection changes,
+or settings writes fence old responses and release subscriptions, while drafts,
+thread references, and persisted history remain owned by their canvas surface.
+
 Desktop Welcome uses the same Flower adapter contract as Env App for thread operations and split settings writes. Sending a turn posts through the runtime Flower IPC proxy, stop posts to the thread cancel route, and `/compact` posts to `/_redeven_proxy/api/ai/threads/{thread}/context/compact` before reloading the canonical live bootstrap. Default permission writes use the exact `PUT /_redeven_proxy/api/ai/default_permission` route, provider profile writes use `PUT /_redeven_proxy/api/ai/provider_bundle`, and composer model selection writes the future new-thread default through `PUT /_redeven_proxy/api/ai/current_model`. The Desktop bridge also exposes the Flower working-directory picker through exact read-only runtime FS paths: `GET /_redeven_proxy/api/fs/path_context` and `POST /_redeven_proxy/api/fs/list`. The bridge allowlist is a single route table that admits only declared paths, methods, and query shapes, so the permission route is PUT-only and path selection data travels in the POST body instead of opening arbitrary query-path proxying. The Desktop bridge treats compaction as a thread action, not as a transcript message or a local UI-only marker, so Desktop and Env App receive the same live timeline decorations and read-state patches from the runtime.
 
 # Boundaries

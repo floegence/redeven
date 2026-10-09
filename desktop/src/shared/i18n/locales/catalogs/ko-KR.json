@@ -229,6 +229,8 @@
         }
       },
       "loadingSettings": "Flower 설정을 불러오는 중입니다.",
+      "modelsChecking": "모델 사용 가능 여부 확인 중…",
+      "modelsUnavailable": "이 모델을 사용할 수 없습니다. 목록을 새로 고치거나 다른 모델을 선택하거나 설정을 여세요.",
       "warmupTitle": "Flower 준비 중",
       "warmupDetail": "Desktop은 Flower가 대화를 로드하기 전에 로컬 환경 런타임을 시작합니다.",
       "warmupComposerPlaceholder": "로컬 환경에서 Flower 준비 중...",

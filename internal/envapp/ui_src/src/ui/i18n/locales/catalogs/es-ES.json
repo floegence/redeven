@@ -5130,6 +5130,8 @@
         }
       },
       "loadingSettings": "La configuración de Flower aún se está cargando.",
+      "modelsChecking": "Comprobando la disponibilidad de los modelos…",
+      "modelsUnavailable": "Este modelo no está disponible. Actualiza la lista, selecciona otro modelo o abre la configuración.",
       "warmupTitle": "Preparando Flower",
       "warmupDetail": "Desktop está iniciando el tiempo de ejecución del entorno local antes de que Flower cargue las conversaciones.",
       "warmupComposerPlaceholder": "Preparando Flower en el entorno local...",

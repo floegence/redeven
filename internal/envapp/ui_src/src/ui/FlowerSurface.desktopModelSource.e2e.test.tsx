@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { desktopSessionContextSnapshotFromTarget } from '../../../../../desktop/src/main/desktopSessionContext';
 import { buildSSHDesktopTarget } from '../../../../../desktop/src/main/desktopTarget';
 import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
+import { modelDirectoryWireFixture } from '../test/modelDirectoryWireFixture';
 import {
   renderSurfaceWithAdapter,
   waitFor,
@@ -94,8 +95,8 @@ describe('Flower Desktop model source E2E', () => {
       if (url === '/_redeven_proxy/api/ai/storage-generation' && init?.method === 'GET') {
         return jsonResponse({ storage_generation: 'a'.repeat(32) });
       }
-      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
-        return jsonResponse({
+      if ((url === '/_redeven_proxy/api/ai/models' || url === '/_redeven_proxy/api/ai/models?mode=baseline') && init?.method === 'GET') {
+        return jsonResponse(modelDirectoryWireFixture({ ai: null }, {
           current_model: deepSeekModelID,
           models: [
             {
@@ -121,7 +122,7 @@ describe('Flower Desktop model source E2E', () => {
               input_modalities: ['text'],
             },
           ],
-        });
+        }));
       }
       if (url === `/_redeven_proxy/api/ai/attachments/capabilities?model_id=${encodeURIComponent(deepSeekModelID)}` && init?.method === 'GET') {
         return jsonResponse({

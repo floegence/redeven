@@ -2007,7 +2007,7 @@ func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsV
 		out.PermissionPolicy = cfg.PermissionPolicy
 		out.AI = cfg.AI
 		if aiSvc != nil {
-			out.AIRuntime = aiSvc.RuntimeStatus(context.Background())
+			out.AIRuntime = aiSvc.RuntimeStatusSnapshot()
 		}
 
 		if secrets != nil && cfg.AI != nil && len(cfg.AI.Providers) > 0 {
@@ -4581,11 +4581,23 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !aiSvc.EnabledForSession(meta) {
+		query := r.URL.Query()
+		baseline := query.Get("mode") == "baseline"
+		if r.URL.RawQuery != "" && (!baseline || len(query) != 1 || len(query["mode"]) != 1 || r.URL.RawQuery != "mode=baseline") {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid model directory mode"})
+			return
+		}
+		if !baseline && !aiSvc.EnabledForSession(meta) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
-		models, err := aiSvc.ListModelsForSession(r.Context(), meta)
+		var models *ai.ModelsResponse
+		var err error
+		if baseline {
+			models, err = aiSvc.ListModelsBaselineForSession(r.Context(), meta)
+		} else {
+			models, err = aiSvc.ListModelsForSession(r.Context(), meta)
+		}
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
