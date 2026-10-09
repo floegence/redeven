@@ -39,6 +39,7 @@ const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 const refreshLocalRuntimeMock = vi.fn();
 const reloadCurrentPageMock = vi.fn();
 const desktopAppReadyMock = vi.fn();
+const notificationErrorMock = vi.fn();
 const bootAppReadyMock = vi.fn();
 vi.mock('./services/envAppBootReady', () => ({ notifyEnvAppBootReady: bootAppReadyMock }));
 const registerServiceWorkerAndEnsureControlMock = vi.fn(async () => undefined);
@@ -500,7 +501,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
       setSidebarCollapsed: setSidebarCollapsedMock,
     };
   },
-  useNotification: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
+  useNotification: () => ({ error: notificationErrorMock, success: vi.fn(), info: vi.fn() }),
   useTheme: () => ({
     theme: () => 'system',
     resolvedTheme: () => 'dark',
@@ -1541,6 +1542,7 @@ afterEach(() => {
 });
 
 beforeEach(async () => {
+  notificationErrorMock.mockReset();
   cacheProbe.enabled = false;
   cacheScopeMock.mockReset().mockResolvedValue({ scope_id: 'a'.repeat(64) });
   const localStorage = createStorageMock();
@@ -3542,7 +3544,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('places Service Canvas after Workbench plugin apps and opens it in an independent window', async () => {
+  it.each([true, false])('opens Service Canvas after Workbench plugin apps with browser popup allowed=%s', async (allowed) => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
@@ -3556,7 +3558,7 @@ describe('EnvAppShell environment entry affordances', () => {
     window.localStorage.setItem('redeven.plugin-dock-pins:default', workbenchPins);
     window.localStorage.setItem('redeven.plugin-dock-pins:env_local', workbenchPins);
     const popup = { focus: vi.fn() } as unknown as Window;
-    const openWindow = vi.spyOn(window, 'open').mockReturnValue(popup);
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(allowed ? popup : null);
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -3578,9 +3580,36 @@ describe('EnvAppShell environment entry affordances', () => {
         'popup',
       );
       expect(openWindow.mock.calls[0][0]).toEqual(expect.stringContaining('window=service-canvas'));
-      expect(popup.focus).toHaveBeenCalled();
+      expect(popup.focus).toHaveBeenCalledTimes(allowed ? 1 : 0);
+      expect(notificationErrorMock).toHaveBeenCalledTimes(allowed ? 0 : 1);
     } finally {
       dispose();
+    }
+  }, 10000);
+
+  it.each(['success', 'refused', 'rejected'] as const)('uses the Desktop Service Canvas result for %s without a browser popup', async (result) => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const openServiceCanvasWindow = vi.fn().mockResolvedValue({ ok: result === 'success' });
+    if (result === 'rejected') openServiceCanvasWindow.mockRejectedValue(new Error('Native window unavailable'));
+    window.redevenDesktopShell = { openServiceCanvasWindow };
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-workbench-dock-action="tessiven"]')));
+      (host.querySelector('[data-workbench-dock-action="tessiven"]') as HTMLButtonElement).click();
+      await flushUntil(() => openServiceCanvasWindow.mock.calls.length === 1);
+      expect(openServiceCanvasWindow).toHaveBeenCalledWith({});
+      if (result !== 'success') await flushUntil(() => notificationErrorMock.mock.calls.length === 1);
+      expect(notificationErrorMock).toHaveBeenCalledTimes(result === 'success' ? 0 : 1);
+      expect(openWindow).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+      delete window.redevenDesktopShell;
     }
   }, 10000);
 

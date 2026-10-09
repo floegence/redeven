@@ -129,6 +129,18 @@ describe('bootstrapDesktopShellBridge', () => {
     });
   });
 
+  it('forwards Service Canvas identity and preserves native acknowledgement failures', async () => {
+    const { bootstrapDesktopShellBridge } = await import('./desktopShell');
+    bootstrapDesktopShellBridge();
+    const [, bridge] = exposeInMainWorld.mock.calls[0];
+    ipcRendererInvoke.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce(null);
+    await expect(bridge.openServiceCanvasWindow({ canvas_id: 'commerce', version: 4 })).resolves.toEqual({ ok: true });
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:shell-open-service-canvas-window', { canvas_id: 'commerce', version: 4 });
+    await expect(bridge.openServiceCanvasWindow({})).resolves.toEqual({ ok: false });
+    ipcRendererInvoke.mockRejectedValueOnce(new Error('Window creation failed'));
+    await expect(bridge.openServiceCanvasWindow({})).rejects.toThrow('Window creation failed');
+  });
+
   it('normalizes codespace loading and resource intents', async () => {
     const { normalizeDesktopShellOpenCodespaceWindowRequest } = await import('../shared/desktopShellCodespaceWindowIPC');
 

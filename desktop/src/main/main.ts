@@ -606,6 +606,12 @@ import {
   type NormalizedDesktopShellOpenWebServiceWindowRequest,
 } from '../shared/desktopShellWebServiceWindowIPC';
 import {
+  DESKTOP_SHELL_OPEN_SERVICE_CANVAS_WINDOW_CHANNEL,
+  normalizeDesktopShellOpenServiceCanvasWindowRequest,
+  type DesktopShellOpenServiceCanvasWindowResponse,
+} from '../shared/desktopShellServiceCanvasWindowIPC';
+import { LOCAL_UI_ENV_APP_ENTRY_PATH } from './localUIURL';
+import {
   DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL,
   DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL,
   DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL,
@@ -18935,6 +18941,32 @@ if (!app.requestSingleInstanceLock()) {
     const record = sessionRecordForWebContentsID(event.sender.id);
     if (normalized.preparation_id && (!record || event.senderFrame !== event.sender.mainFrame)) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
     return openWebServiceWindowFromShell(record, normalized, record ? `${record.session_key}:${event.sender.id}` : undefined);
+  });
+  ipcMain.handle(DESKTOP_SHELL_OPEN_SERVICE_CANVAS_WINDOW_CHANNEL, (event, request): DesktopShellOpenServiceCanvasWindowResponse => {
+    const normalized = normalizeDesktopShellOpenServiceCanvasWindowRequest(request);
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    const parent = BrowserWindow.fromWebContents(event.sender);
+    if (!normalized || !record || record.closing || !parent || event.senderFrame !== event.sender.mainFrame) return { ok: false };
+    const sourceURL = event.sender.getURL();
+    if (!isAllowedSessionNavigation(record.session_key, sourceURL) || new URL(sourceURL).pathname !== LOCAL_UI_ENV_APP_ENTRY_PATH) return { ok: false };
+    try {
+      const url = new URL(record.entry_url);
+      url.hash = '';
+      url.pathname = LOCAL_UI_ENV_APP_ENTRY_PATH;
+      url.searchParams.set('surface', 'tessiven');
+      url.searchParams.set('window', 'service-canvas');
+      url.searchParams.delete('canvas');
+      url.searchParams.delete('version');
+      if (normalized.canvas_id) url.searchParams.set('canvas', normalized.canvas_id);
+      if (normalized.version) url.searchParams.set('version', String(normalized.version));
+      const opened = openSessionChildWindow(record.session_key, url.toString(), parent, 'redeven-service-canvas');
+      return { ok: opened !== null };
+    } catch (error) {
+      recordWindowLifecycle(record.diagnostics, 'window_open_failed', 'Service Canvas window could not be opened.', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { ok: false };
+    }
   });
   ipcMain.handle(BROWSER_PACKAGE_CHANNEL, async (event, value: unknown) => {
     const record = sessionRecordForWebContentsID(event.sender.id);

@@ -8,6 +8,7 @@ import {
   type DesktopShellOpenCodespaceWindowRequest,
 } from '../../../../../../desktop/src/shared/desktopShellCodespaceWindowIPC';
 import type { DesktopShellOpenWebServiceWindowRequest } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
+import type { DesktopShellOpenServiceCanvasWindowRequest, DesktopShellOpenServiceCanvasWindowResponse } from '../../../../../../desktop/src/shared/desktopShellServiceCanvasWindowIPC';
 import type { HostApplicationPreparationRequest, HostApplicationPreparationResult } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
 import {
   normalizeDesktopShellRuntimeActionResponse,
@@ -53,6 +54,7 @@ export interface DesktopShellBridge {
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   openCodespaceWindow?: (request: DesktopShellCodespaceWindowOpenRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
   openWebServiceWindow?: (request: DesktopShellOpenWebServiceWindowRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
+  openServiceCanvasWindow?: (request: DesktopShellOpenServiceCanvasWindowRequest) => Promise<DesktopShellOpenServiceCanvasWindowResponse>;
   applicationComponents?: (request: HostApplicationComponentsRequest) => Promise<HostApplicationComponentsResult>;
   onApplicationComponentsProgress?: (listener: (value: HostApplicationComponentsProgress) => void) => () => void;
   applicationPreparation?: (request: HostApplicationPreparationRequest) => Promise<HostApplicationPreparationResult>;
@@ -92,6 +94,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.openExternalURL !== 'function'
       && typeof candidate.openCodespaceWindow !== 'function'
       && typeof candidate.openWebServiceWindow !== 'function'
+      && typeof candidate.openServiceCanvasWindow !== 'function'
       && typeof candidate.openDashboard !== 'function'
       && typeof candidate.getRuntimeMaintenanceContext !== 'function'
       && typeof candidate.notifyRuntimeMaintenanceStarted !== 'function'
@@ -265,6 +268,14 @@ export async function openWebServiceWindowInDesktopShell(
   const bridge = desktopShellBridge();
   if (!bridge || typeof bridge.openWebServiceWindow !== 'function') return null;
   return bridge.openWebServiceWindow(request);
+}
+
+export function desktopShellServiceCanvasWindowOpenAvailable(): boolean {
+  return typeof desktopShellBridge()?.openServiceCanvasWindow === 'function';
+}
+
+export async function openServiceCanvasWindowInDesktopShell(request: DesktopShellOpenServiceCanvasWindowRequest): Promise<DesktopShellOpenServiceCanvasWindowResponse | null> {
+  return desktopShellBridge()?.openServiceCanvasWindow?.(request) ?? null;
 }
 
 export async function openDashboardInDesktopShell(): Promise<DesktopShellExternalURLOpenResult | null> {

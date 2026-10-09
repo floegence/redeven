@@ -16,6 +16,15 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 
 # Contract
 
+Workbench opens Service Canvas as a standalone window. In Desktop, the renderer
+sends only an optional canvas and saved-version identity through the typed shell
+bridge. Main authorizes the owning Env App main frame, builds the address from
+that session, and creates or reuses its tracked child window. An explicit native
+acknowledgement owns success; Chromium's denied `window.open` return value does
+not describe whether Desktop created a window. Browsers retain popup-blocking
+feedback, and native refusal or failure remains visible through localized command
+feedback without starting another opening path.
+
 Automatic layout and library thumbnails use Floe's published compound packing
 with a landscape aspect ratio. Independent members are arranged as readable
 peers inside their dashed logical group. Relations retain their original
@@ -132,6 +141,10 @@ historical version cannot change its management permissions. Ask Flower focuses
 the canvas composer and never sends a message automatically.
 
 # Evidence
+
+- `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts` - Identity-only native window request and explicit acknowledgement.
+- `desktop/src/main/main.ts` - Session-authorized Service Canvas window creation and reuse.
+- `desktop/scripts/check-service-canvas-window.mjs` - Real Desktop opening, repeated activation, close/reopen, and invalid-request rejection.
 
 - `internal/tessiven_ui/src/TessivenPage.tsx`
 - `internal/tessiven_ui/src/TessivenLibraryCard.tsx`
