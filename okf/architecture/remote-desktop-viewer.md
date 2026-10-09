@@ -103,6 +103,19 @@ Lock host replaces the settings content inside the same modal and focuses
 Cancel. Only explicit confirmation sends the lock command; Cancel and Escape
 send nothing. Closing the confirmation restores focus to the settings trigger.
 A queued settings-close event must never dismiss or resolve its replacement.
+
+When a separate cursor packet is available, view-only mode renders its host
+shape and position in a pointer-events-none layer over the fitted picture.
+Control mode uses an immediate standard arrow until the hotspot is trusted, then
+uses the host shape. An explicit hide packet and every generation transition
+remove the old layer. Cursor geometry uses the same fitted-picture transform as
+pointer input, including scrolling and fullscreen, while toolbar and dialog
+controls retain the local pointer.
+
+If locked media decoding fails, the viewer revokes unlock input, requests a new
+keyframe and waits for a new generation plus painted frame before offering
+Start unlock again. A bounded recovery timeout exposes Reconnect and Disconnect;
+it never replays queued key or pointer events.
 Lock is available only after the current control generation has painted. Its
 confirmation belongs to that attachment and generation; losing authority disables
 it permanently, even if a successor becomes active. The user can cancel and open

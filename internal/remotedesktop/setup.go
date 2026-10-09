@@ -7,6 +7,10 @@ import (
 	nativeapps "github.com/floegence/floe-native-apps"
 )
 
+func (m *Manager) ServiceMediaCache() string {
+	return filepath.Join(m.state, "remote-desktop", "components")
+}
+
 func (m *Manager) setupManager() (*nativeapps.Manager, error) {
 	m.setupMu.Lock()
 	defer m.setupMu.Unlock()
@@ -22,7 +26,7 @@ func (m *Manager) setupManager() (*nativeapps.Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	m.setup, err = nativeapps.New(filepath.Join(m.state, "remote-desktop", "components"), pkg, nil)
+	m.setup, err = nativeapps.New(m.ServiceMediaCache(), pkg, nil)
 	return m.setup, err
 }
 func (m *Manager) SetupStatus(owner string) (nativeapps.Status, error) {

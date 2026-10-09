@@ -122,7 +122,7 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 			map[string]any{"rollback": request.Rollback}, nil)
 		value = map[string]any{"authorized": true}
 		if request.Phase == "authorize" {
-			value = map[string]any{"authorized": true, "runtime_pid": os.Getpid()}
+			value = map[string]any{"authorized": true, "runtime_pid": os.Getpid(), "media_cache": g.remoteDesktop.ServiceMediaCache()}
 		}
 	case r.URL.Path == remoteDesktopAPI+"/service/install" && r.Method == http.MethodPost:
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
@@ -251,6 +251,8 @@ func writeDesktopError(w http.ResponseWriter, err error) {
 		status, code = http.StatusNotImplemented, "DESKTOP_SERVICE_UNSUPPORTED"
 	case errors.Is(err, remotedesktop.ErrServiceUnavailable):
 		status, code = http.StatusServiceUnavailable, "DESKTOP_SERVICE_UNAVAILABLE"
+	case errors.Is(err, nativeapps.ErrServiceUpdateRequired):
+		status, code = http.StatusConflict, "SERVICE_UPDATE_REQUIRED"
 	case errors.Is(err, nativeapps.ErrBusy):
 		status, code = http.StatusConflict, "DESKTOP_SETUP_BUSY"
 	}

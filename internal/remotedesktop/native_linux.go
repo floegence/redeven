@@ -2,6 +2,7 @@ package remotedesktop
 
 import (
 	"context"
+	"errors"
 	nativeapps "github.com/floegence/floe-native-apps"
 	"io"
 	"os"
@@ -25,6 +26,9 @@ func (m *Manager) openLinux(ctx context.Context) (Transport, error) {
 		return nil, err
 	}
 	status, err := m.serviceStatus(ctx)
+	if errors.Is(err, nativeapps.ErrServiceUpdateRequired) {
+		return nil, err
+	}
 	if status.State == nativeapps.ServiceActive && err == nil {
 		return nativeapps.OpenLoginScreenSession(ctx, nativeapps.LoginServiceSocket)
 	}

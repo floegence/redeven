@@ -19014,19 +19014,19 @@ if (!app.requestSingleInstanceLock()) {
       });
       const value = await response.json();
       if (!response.ok || value.ok !== true) throw new DesktopDeploymentPermissionError();
-      return phase === 'authorize' ? Number(value.data?.runtime_pid) : undefined;
+      return phase === 'authorize' ? { runtimePID: Number(value.data?.runtime_pid), mediaCache: String(value.data?.media_cache ?? '') } : undefined;
     };
     let lease: Awaited<ReturnType<typeof desktopSSHTransportManager.acquire>> | undefined;
     try {
       const result = await remoteDesktopDeployment.manage(owner, async signal => {
         // Placement bridge startup describes its carrier. The full-permission
         // authorization response identifies the Runtime executing this action.
-        const runtimePID = await audit('authorize', undefined, undefined, signal);
+        const authority = await audit('authorize', undefined, undefined, signal);
         const preferences = await loadDesktopPreferencesCached();
         const saved = preferences.saved_runtime_targets.find(savedTarget => savedTarget.id === target.environment_id);
         lease = await desktopSSHTransportManager.acquire({ target, credentialScope: target.environment_id,
           sshPassword: saved?.ssh_password_configured ? saved.ssh_password : undefined, signal });
-        return { lease, runtimePID: Number(runtimePID),
+        return { lease, runtimePID: Number(authority?.runtimePID), mediaCache: authority?.mediaCache ?? '',
           loadKit: (architecture, signal) => loadDesktopServiceKit(bundledRuntimeExecutablePath(), architecture, signal) };
       }, request.operation, request.administratorPassword, progress => {
         if (!event.sender.isDestroyed()) event.sender.send(REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, progress);

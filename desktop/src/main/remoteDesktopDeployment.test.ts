@@ -3,9 +3,9 @@ import { PassThrough, Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { RemoteDesktopDeployment, DesktopDeploymentPermissionError } from './remoteDesktopDeployment';
 import type { DesktopSSHCommandResult, DesktopSSHTransportLease } from './sshTransportManager';
-import { parseDesktopDeploymentRequest, type DesktopDeploymentProgress } from '../shared/remoteDesktopDeployment';
+import { parseDesktopDeploymentRequest, parseDesktopDeploymentProgress, type DesktopDeploymentProgress, type DesktopDeploymentOperation } from '../shared/remoteDesktopDeployment';
 
-function fixture(mode: 'nopasswd' | 'password' | 'reject' | 'cancel' = 'nopasswd') {
+function fixture(mode: 'nopasswd' | 'password' | 'reject' | 'cancel' | 'prepare_failure' | 'prepare_cancel' = 'nopasswd') {
   const commands: string[] = [], writes: string[] = [], progress: DesktopDeploymentProgress[] = [];
   const sha = (data: Buffer) => createHash('sha256').update(data).digest('hex');
   const service = Buffer.from('reviewed-service'), worker = Buffer.from('reviewed-worker');
@@ -19,9 +19,23 @@ function fixture(mode: 'nopasswd' | 'password' | 'reject' | 'cancel' = 'nopasswd
       if (command.includes('mktemp')) return done(0, '/tmp/redeven-desktop-ssh-AbC123\n');
       return done();
     },
-    stream: (command: string) => {
+    stream: (command: string, options: { signal?: AbortSignal } = {}) => {
       commands.push(command);
       const stdout = new PassThrough(), stderr = new PassThrough();
+      if (command.startsWith('/proc/42/exe desktop-service-media')) {
+        let finish!: (value: DesktopSSHCommandResult) => void;
+        const result = new Promise<DesktopSSHCommandResult>(resolve => { finish = resolve; });
+        options.signal?.addEventListener('abort', () => finish(done(1)), { once: true });
+        const stdin = new Writable({ write(_data, _encoding, callback) { callback(); } });
+        queueMicrotask(() => {
+          stdout.write(JSON.stringify({ state: 'downloading', received_bytes: 5, expected_bytes: 10 }) + '\n');
+          if (mode !== 'prepare_cancel') {
+            stdout.write(JSON.stringify({ media_sha256: 'b'.repeat(64) }) + '\n');
+            finish(done(mode === 'prepare_failure' ? 1 : 0));
+          }
+        });
+        return { stdin, stdout, stderr, result, closed: result.then(() => {}), kill: () => finish(done(1)) };
+      }
       let finish!: (value: DesktopSSHCommandResult) => void;
       let accepted = false, complete = false;
       const result = new Promise<DesktopSSHCommandResult>(resolve => { finish = resolve; });
@@ -53,9 +67,10 @@ function fixture(mode: 'nopasswd' | 'password' | 'reject' | 'cancel' = 'nopasswd
       return { stdin, stdout, stderr, result, closed, kill: () => { throw new Error('must keep SSH alive for rollback'); } };
     },
   } as unknown as DesktopSSHTransportLease;
-  const run = (password?: string) => manager.manage(1, { lease, runtimePID: 42, loadKit: async () => kit }, 'install', password, event => {
+  const run = (password?: string, operation: DesktopDeploymentOperation = 'install') => manager.manage(1, { lease, runtimePID: 42, mediaCache: '/state/remote-desktop/components', loadKit: async () => kit }, operation, password, event => {
     progress.push(event);
     if (mode === 'cancel' && event.stage === 'starting_service') void manager.cancel(1);
+    if (mode === 'prepare_cancel' && event.stage === 'preparing_media' && event.received_bytes) void manager.cancel(1);
   });
   return { commands, writes, progress, run, kit };
 }
@@ -68,8 +83,41 @@ describe('SSH desktop deployment authorization', () => {
   it('never sends an unused administrator credential to a NOPASSWD service', async () => {
     const f = fixture(); expect(await f.run('ephemeral-admin')).toEqual({ ok: true, state: 'active' });
     expect(f.writes).toHaveLength(1);
-    expect(JSON.parse(f.writes[0])).toMatchObject({ operation: 'install', runtime_uid: 1000 });
+    expect(JSON.parse(f.writes[0])).toMatchObject({ operation: 'install', runtime_uid: 1000, media_sha256: 'b'.repeat(64) });
     expect(JSON.stringify([f.commands, f.writes, f.progress])).not.toContain('ephemeral-admin');
+  });
+  it('prepares the released media on the SSH host before requesting administrator authority', async () => {
+    const f = fixture(); expect((await f.run('ephemeral-admin')).ok).toBe(true);
+    const prepare = f.commands.findIndex(command => command.startsWith('/proc/42/exe desktop-service-media'));
+    const authorize = f.commands.findIndex(command => command.includes('sudo -n true'));
+    expect(prepare).toBeGreaterThan(0); expect(authorize).toBeGreaterThan(prepare);
+    expect(f.progress).toContainEqual({ stage: 'preparing_media', received_bytes: 5, expected_bytes: 10 });
+    expect(f.commands[prepare]).not.toContain('ephemeral-admin');
+  });
+  it('does not request root after failed media preparation', async () => {
+    const f = fixture('prepare_failure');
+    expect(await f.run('ephemeral-admin')).toEqual({ ok: false, code: 'deployment_failed' });
+    expect(f.writes).toEqual([]);
+    expect(f.commands.some(command => command.includes('sudo'))).toBe(false);
+    expect(f.commands.at(-1)).toContain('rm -rf');
+  });
+  it('cancels media preparation and cleans the private staging directory before requesting root', async () => {
+    const f = fixture('prepare_cancel');
+    expect(await f.run('ephemeral-admin')).toEqual({ ok: false, code: 'canceled' });
+    expect(f.writes).toEqual([]);
+    expect(f.commands.some(command => command.includes('sudo'))).toBe(false);
+    expect(f.commands.at(-1)).toContain('rm -rf');
+  });
+  it('does not download or prepare media for start, stop or uninstall', async () => {
+    for (const operation of ['start', 'stop', 'uninstall'] as const) {
+      const f = fixture(); expect((await f.run(undefined, operation)).ok).toBe(true);
+      expect(f.commands.some(command => command.includes('desktop-service-media'))).toBe(false);
+      expect(JSON.parse(f.writes[0])).not.toHaveProperty('media_sha256');
+    }
+  });
+  it('rejects unbounded preparation progress without exposing arbitrary source data', () => {
+    expect(parseDesktopDeploymentProgress({ stage: 'preparing_media', received_bytes: -1 })).toBeUndefined();
+    expect(parseDesktopDeploymentProgress({ stage: 'preparing_media', received_bytes: 5, secret: 'omitted' })).toEqual({ stage: 'preparing_media', received_bytes: 5 });
   });
   it('stages the verified management executable on the system service filesystem', async () => {
     const f = fixture(); expect((await f.run()).ok).toBe(true);

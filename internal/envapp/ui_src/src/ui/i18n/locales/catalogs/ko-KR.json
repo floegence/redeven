@@ -7316,6 +7316,7 @@
     "deployPassword": "관리자 암호(필요한 경우)",
     "deployPasswordHint": "이번 SSH 작업에만 사용됩니다. Redeven은 암호를 저장하거나 데스크톱 서비스에 전달하지 않습니다.",
     "deployConfirm": "승인하고 계속",
+    "serviceUpdateRequired": "이 런타임 버전을 사용하려면 환경 앱에서 원격 데스크톱을 업데이트하세요.",
     "deployChecking": "SSH 호스트 확인 중…",
     "deployTransferring": "구성 요소 전송 및 검증 중…",
     "deployAuthorizing": "이번 SSH 작업 승인 중…",

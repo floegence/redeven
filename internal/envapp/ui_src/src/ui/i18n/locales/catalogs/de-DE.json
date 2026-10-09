@@ -7320,6 +7320,7 @@
     "deployPassword": "Administratorpasswort (falls erforderlich)",
     "deployPasswordHint": "Wird nur für diesen SSH-Vorgang verwendet. Redeven speichert es nicht und gibt es nicht an den Desktopdienst weiter.",
     "deployConfirm": "Autorisieren und fortfahren",
+    "serviceUpdateRequired": "Aktualisieren Sie den Remote-Desktop in der Umgebungs-App, um diese Runtime-Version zu verwenden.",
     "deployChecking": "SSH-Host wird geprüft…",
     "deployTransferring": "Komponenten werden übertragen und geprüft…",
     "deployAuthorizing": "SSH-Vorgang wird autorisiert…",

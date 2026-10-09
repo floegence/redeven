@@ -1,4 +1,4 @@
-import { HostDesktopPlayer, unpackDesktopMedia } from './host_desktop_player.mjs';
+import { HostDesktopPlayer, unpackDesktopMedia, desktopPointerPosition } from './host_desktop_player.mjs';
 
 const config = window.remoteDesktopConfig;
 const windowTransport = RedevenWindowTransport.create(config.transport);
@@ -15,7 +15,7 @@ let original = false, quality = 'smooth', audio = false, volume = .7, pinned = f
 let textInput = 'host';
 let awaitingMedia = [], reconnectAttempts = 0, noticeTimer, awaitingState = false;
 let nativeFullscreen = false, pendingFullscreen;
-let audioRequest, disconnectBusy = false, panelTrigger;
+let audioRequest, disconnectBusy = false, panelTrigger, recoveryTimer;
 const windowBridge = window.redevenHostApplicationWindow;
 const displayOptions = $('display-options');
 $('files').hidden = !windowBridge && !window.opener;
@@ -43,7 +43,7 @@ new MutationObserver(localize).observe(document.documentElement, { attributes: t
 
 function notice(key) { $('notice').textContent = copy(key); clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('notice').textContent = ''; }, 6000); }
 function authorized(target) { return !audioRequest && !awaitingState && target === generation && painted && state === 'active' && session.mode === 'control' && control?.readyState === WebSocket.OPEN; }
-function unlockAuthorized(target) { return unlocking && !audioRequest && !awaitingState && target === generation && painted && state === 'locked' && session.mode === 'control' && control?.readyState === WebSocket.OPEN && lockedFrame > 0; }
+function unlockAuthorized(target) { return unlocking && !panel.open && !audioRequest && !awaitingState && target === generation && painted && state === 'locked' && session.mode === 'control' && control?.readyState === WebSocket.OPEN && lockedFrame > 0; }
 function active(target) { return !panel.open && authorized(target); }
 function command(method, values = {}, takeover = false) {
   if (control?.readyState !== WebSocket.OPEN) return false;
@@ -83,19 +83,11 @@ const pointer = hostApplicationPointer.createRemotePointer({
   sendPointer(packet, target) {
     if (unlockAuthorized(target) && !['text', 'paste'].includes(packet.kind)) {
       if (packet.kind === 'down' && packet.button !== 0) { notice('unlockPhysicalOnly'); return false; }
-      const rect = canvas.getBoundingClientRect();
-      const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
-      const width = canvas.width * scale, height = canvas.height * scale;
-      const x = Math.max(0, Math.min(1, (packet.clientX - rect.left - (rect.width - width) / 2) / width));
-      const y = Math.max(0, Math.min(1, (packet.clientY - rect.top - (rect.height - height) / 2) / height));
+      const { x, y } = desktopPointerPosition(canvas, packet.clientX, packet.clientY);
       return command('unlock_input', { frame_id: lockedFrame, input: { kind: packet.kind, x, y, button: packet.button ?? 0, clicks: packet.clicks ?? 0, dx: packet.dx ?? 0, dy: packet.dy ?? 0 } });
     }
     if (!active(target)) return false;
-    const rect = canvas.getBoundingClientRect();
-    const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
-    const width = canvas.width * scale, height = canvas.height * scale;
-    const x = Math.max(0, Math.min(1, (packet.clientX - rect.left - (rect.width - width) / 2) / width));
-    const y = Math.max(0, Math.min(1, (packet.clientY - rect.top - (rect.height - height) / 2) / height));
+    const { x, y } = desktopPointerPosition(canvas, packet.clientX, packet.clientY);
     return command('input', { input: { kind: packet.kind, x, y, button: packet.button ?? 0, clicks: packet.clicks ?? 0,
       dx: Math.max(-10000, Math.min(10000, packet.dx ?? 0)), dy: Math.max(-10000, Math.min(10000, packet.dy ?? 0)),
       shiftKey: !!packet.shiftKey, ctrlKey: !!packet.ctrlKey, altKey: !!packet.altKey, metaKey: !!packet.metaKey } });
@@ -103,6 +95,7 @@ const pointer = hostApplicationPointer.createRemotePointer({
 });
 function revoke() { stats = undefined; refreshStats(); painted = false; lockedFrame = 0; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
+  player?.setInteraction(!panel.open && (authorized(generation) || unlockAuthorized(generation)));
   canvas.dataset.mode = session.mode;
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'sound', 'text-input', 'volume']) {
     if ($(id)) $(id).disabled = !!audioRequest || awaitingState || state !== 'active';
@@ -129,9 +122,16 @@ function updateTransitionControls() {
 }
 function changeDesktop(method, values, takeover = false) {
   if (audioRequest || awaitingState) return;
-  revoke(); awaitingState = true; player?.reset(generation);
+  unlocking = false; revoke(); awaitingState = true; player?.reset(generation);
   updateTransitionControls();
   command(method, values, takeover);
+  clearTimeout(recoveryTimer);
+  recoveryTimer = setTimeout(() => {
+    if (stopped || painted) return;
+    epoch++; awaitingState = false; unlocking = false; revoke(); state = 'disconnected';
+    player?.reset(0); control?.close(); media?.close(); awaitingMedia = [];
+    status('disconnected', 'failure'); $('reconnect').hidden = false; updateTransitionControls();
+  }, 10000);
 }
 function picture() { return { mode: quality, max_dimension: quality === 'data' ? 1920 : 2560, frame_rate: quality === 'data' ? 30 : 60, audio, native_pixels: original }; }
 function configure() { if (state !== 'active') return; changeDesktop('configure', { picture: picture() }); }
@@ -164,6 +164,7 @@ function unavailableHint(code) {
     case 'DISPLAY_INACTIVE': return 'displayInactive';
     case 'GPU_SCANOUT_UNSUPPORTED': return 'gpuUnsupported';
     case 'LOGIN_SESSION_UNSUPPORTED': return 'sessionUnsupported';
+    case 'SERVICE_UPDATE_REQUIRED': return 'serviceUpdateRequired';
     default: return 'unsupportedHint';
   }
 }
@@ -204,7 +205,7 @@ function updateState(message) {
   const nextGeneration = message.generation ?? 0;
   const changed = generation !== nextGeneration;
   state = message.state; reason = message.code ?? ''; generation = nextGeneration;
-  if (state === 'active') unlocking = false;
+  if (changed || state === 'active') unlocking = false;
   awaitingState = false;
   if (state === 'active') session.mode = message.mode ?? session.mode;
   $('mode').value = session.mode;
@@ -238,7 +239,7 @@ function retryConnection() {
   if (!stopped && reconnectAttempts++ < 8) retry = setTimeout(() => void connect(), Math.min(5000, 400 * 2 ** reconnectAttempts));
 }
 async function connect() {
-  clearTimeout(retry); if (stopped) return;
+  clearTimeout(retry); clearTimeout(recoveryTimer); if (stopped) return;
   const current = ++epoch; revoke(); state = 'connecting'; generation = 0; sequence = 0; awaitingMedia = []; awaitingState = false; audioRequest = undefined;
   updateTransitionControls();
   player?.reset(0); control?.close(); media?.close(); status('connecting'); $('reconnect').hidden = true;
@@ -261,8 +262,8 @@ async function connect() {
     media.binaryType = 'arraybuffer';
     player ??= new HostDesktopPlayer(canvas, {
       acknowledge(g, frame) { if (!awaitingState && (state === 'active' || state === 'locked') && g === generation) { if (state === 'locked') lockedFrame = frame; command('frame_ack', { frame_id: frame }); } },
-      painted(g) { if (awaitingState || g !== generation || state !== 'active' && state !== 'locked') return; painted = true; canvas.setAttribute('data-painted', ''); input.bindTarget(active(g) || unlockAuthorized(g) ? g : null); updateTransitionControls(); reconnectAttempts = 0; },
-      recover() { revoke(); if (state === 'active') changeDesktop('keyframe'); },
+      painted(g) { if (awaitingState || g !== generation || state !== 'active' && state !== 'locked') return; clearTimeout(recoveryTimer); painted = true; canvas.setAttribute('data-painted', ''); input.bindTarget(active(g) || unlockAuthorized(g) ? g : null); updateTransitionControls(); reconnectAttempts = 0; },
+      recover() { if (state === 'active' || state === 'locked') changeDesktop('keyframe'); else revoke(); },
       statistics(value) { stats = value; refreshStats(); },
       audioState(value) { if (value === 'unavailable' || value === 'unsupported') notice('failure'); },
       workletURL: base + 'assets/host_desktop_audio.mjs',
@@ -313,7 +314,7 @@ async function connect() {
           status(message.code === 'AUTHORIZATION_PENDING' ? 'approvalBusy' : 'approvalUnknown', message.code === 'AUTHORIZATION_PENDING' ? '' : 'approvalRestoreFailed');
           $('reconnect').hidden = false;
         }
-        else if (['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED'].includes(message.code)) showUnavailable(message.code);
+        else if (['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED', 'SERVICE_UPDATE_REQUIRED'].includes(message.code)) showUnavailable(message.code);
         else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });
         else if (/UNLOCK|LOGIN_SERVICE/.test(message.code)) { status('locked', 'unlockFailed'); notice('unlockFailed'); updateTransitionControls(); }
         else notice(message.code.includes('CLIPBOARD') ? 'clipboardFailed' : 'failure');
@@ -348,12 +349,14 @@ function openPanel(title, children) {
   $('panel-title').textContent = copy(title); $('panel-body').replaceChildren(...children);
   if (panel.open) $('panel-body').querySelector('button, input, select, textarea')?.focus();
   else panel.showModal();
+  updateTransitionControls();
 }
 panel.addEventListener('close', () => {
   if (panel.contains(displayOptions)) $('panel-storage').append(displayOptions);
   panelTrigger?.setAttribute('aria-expanded', 'false');
   if (panelTrigger?.isConnected && !panelTrigger.disabled) panelTrigger.focus();
-  if (active(generation)) input.bindTarget(generation);
+  updateTransitionControls();
+  if (active(generation) || unlockAuthorized(generation)) input.bindTarget(generation);
   wakeToolbar();
 });
 $('display-settings').onclick = () => { openPanel('display', [displayOptions]); updateTransitionControls(); };
@@ -502,7 +505,7 @@ $('shortcuts').onclick = () => {
 $('files').onclick = () => { window.redevenHostApplicationWindow?.request('files'); window.opener?.postMessage({ type: 'redeven:remote-desktop:files', session_id: session.id }, '*'); window.dispatchEvent(new CustomEvent('redeven:remote-desktop:files')); };
 $('reconnect').onclick = () => { reconnectAttempts = 0; void connect(); };
 function stopViewer() {
-  stopped = true; clearTimeout(retry); clearTimeout(hideTimer); epoch++;
+  stopped = true; clearTimeout(retry); clearTimeout(hideTimer); clearTimeout(recoveryTimer); epoch++;
   revoke(); player?.close(); control?.close(); media?.close();
   canvas.width = canvas.width; // Erase retained pixels, including screenshots after disconnect.
   state = 'disconnected'; audioRequest = undefined; awaitingState = false;

@@ -7316,6 +7316,7 @@
     "deployPassword": "管理員密碼（如有需要）",
     "deployPasswordHint": "僅用於本次 SSH 操作。Redeven 不會儲存密碼，也不會將其傳給桌面服務。",
     "deployConfirm": "授權並繼續",
+    "serviceUpdateRequired": "請在環境應用程式中更新遠端桌面，以配合目前的執行階段版本使用。",
     "deployChecking": "正在檢查 SSH 主機…",
     "deployTransferring": "正在傳輸並驗證元件…",
     "deployAuthorizing": "正在授權本次 SSH 操作…",

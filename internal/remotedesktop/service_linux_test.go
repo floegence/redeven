@@ -54,3 +54,18 @@ func TestLinuxRuntimeRejectsPrivilegedServiceMutation(t *testing.T) {
 		}
 	}
 }
+
+func TestLinuxServiceProtocolMismatchRequiresUpdateWithoutDesktopFallback(t *testing.T) {
+	m := New(t.TempDir(), nil, nil)
+	defer m.Close()
+	m.serviceStatus = func(context.Context) (nativeapps.ServiceStatus, error) {
+		return nativeapps.ServiceStatus{State: nativeapps.ServiceFailed, Backend: "linux-drm-kms", Reason: "SERVICE_UPDATE_REQUIRED"}, nativeapps.ErrServiceUpdateRequired
+	}
+	if _, err := m.openLinux(t.Context()); !errors.Is(err, nativeapps.ErrServiceUpdateRequired) {
+		t.Fatalf("protocol mismatch lost update error: %v", err)
+	}
+	status, err := m.Status(t.Context(), "owner")
+	if err != nil || status.Setup != nil || status.Capabilities.Reason != "SERVICE_UPDATE_REQUIRED" {
+		t.Fatalf("protocol mismatch opened user components: %+v %v", status, err)
+	}
+}

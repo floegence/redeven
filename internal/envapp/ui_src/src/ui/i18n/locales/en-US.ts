@@ -33,6 +33,7 @@ export const enUS = defineDictionary({
     "deployAuthFailed": "Administrator authorization was not accepted. Enter the sudo password for the SSH account and retry.",
     "deploySSHRequired": "This action requires a Redeven Desktop SSH connection to a supported Linux host.",
     "serviceStopped": "Remote desktop is stopped",
+    "serviceUpdateRequired": "Update remote desktop in the Env App to use this Runtime version.",
     "displayDisconnected": "No display output is connected. Connect a monitor or display adapter and refresh.",
     "displayInactive": "The display output could not be woken. Check the host’s display power state and refresh.",
     "gpuUnsupported": "This graphics device cannot provide the desktop image required for remote control.",
