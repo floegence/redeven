@@ -87,6 +87,28 @@
     "presentation": {
       "type": "object",
       "properties": {
+        "direction": {
+          "type": "string",
+          "enum": ["RIGHT", "DOWN", "LEFT", "UP"],
+          "description": "Overall layout direction. RIGHT is the default."
+        },
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20000,
+          "description": "Optional ordered root layout layers. Objects within each layer share a rank; unassigned roots are placed near related declared layers.",
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "description": "Group, ungrouped node, unplaced service, or resource ID. Grouped nodes and placed services inherit their group's or host's layer."
+            }
+          }
+        },
         "initiallyExpanded": {
           "type": "array",
           "items": {
@@ -109,7 +131,7 @@
         },
         "positions": {
           "type": "array",
-          "description": "Optional preferred world coordinates, not fixed constraints. Omit for automatic layout. The renderer adjusts crowded positions and group bounds to keep cards and relationships visible; saved hints remain unchanged.",
+          "description": "Optional preferred world coordinates, not fixed constraints. When layers are present, coordinates influence ordering within a layer but never override layer rank. Omit for automatic layout. The renderer adjusts crowded positions and group bounds to keep cards and relationships visible; saved hints remain unchanged.",
           "maxItems": 20000,
           "items": {
             "type": "object",
@@ -117,7 +139,7 @@
               "objectRef": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
-                "description": "Node, group, or resource ID."
+                "description": "Node, group, unplaced service, or resource ID."
               },
               "x": {
                 "type": "number",

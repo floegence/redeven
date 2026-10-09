@@ -89,10 +89,14 @@ type Position struct {
 	X         float64 `json:"x"`
 	Y         float64 `json:"y"`
 }
+type LayoutDirection string
+
 type Presentation struct {
-	InitiallyExpanded []string   `json:"initiallyExpanded,omitempty"`
-	Order             []string   `json:"order,omitempty"`
-	Positions         []Position `json:"positions,omitempty"`
+	InitiallyExpanded []string        `json:"initiallyExpanded,omitempty"`
+	Order             []string        `json:"order,omitempty"`
+	Direction         LayoutDirection `json:"direction,omitempty"`
+	Layers            [][]string      `json:"layers,omitempty"`
+	Positions         []Position      `json:"positions,omitempty"`
 }
 type Document struct {
 	APIVersion   string            `json:"apiVersion"`
@@ -376,10 +380,57 @@ func Validate(source string) Validation {
 		for i, id := range p.Order {
 			check(id, fmt.Sprintf("/presentation/order/%d", i), "node", "group", "service", "instance", "resource", "relation")
 		}
+		if p.Direction != "" && p.Direction != "RIGHT" && p.Direction != "DOWN" && p.Direction != "LEFT" && p.Direction != "UP" {
+			add("/presentation/direction", "Direction must be RIGHT, DOWN, LEFT, or UP.")
+		}
+		if p.Layers != nil && len(p.Layers) == 0 {
+			add("/presentation/layers", "Layers must contain at least one layout layer.")
+		}
+		groupedNodes := map[string]bool{}
+		for _, group := range document.Groups {
+			for _, nodeID := range group.NodeRefs {
+				groupedNodes[nodeID] = true
+			}
+		}
+		placedServices := map[string]bool{}
+		for _, instance := range document.Instances {
+			placedServices[instance.ServiceRef] = true
+		}
+		seenLayerObjects := map[string]bool{}
+		for i, layer := range p.Layers {
+			if len(layer) == 0 {
+				add(fmt.Sprintf("/presentation/layers/%d", i), "A layout layer must contain at least one object.")
+			}
+			for j, id := range layer {
+				path := fmt.Sprintf("/presentation/layers/%d/%d", i, j)
+				if seenLayerObjects[id] {
+					add(path, "An object can appear in only one layout layer.")
+				}
+				seenLayerObjects[id] = true
+				switch kinds[id] {
+				case "group", "resource":
+				case "node":
+					if groupedNodes[id] {
+						add(path, "A grouped node inherits its layout layer from its group.")
+					}
+				case "service":
+					if placedServices[id] {
+						add(path, "A placed service inherits its layout layer from its host or group.")
+					}
+				case "":
+					add(path, "Layout layers must reference an existing root layout object.")
+				default:
+					add(path, "Layout layers support groups, ungrouped nodes, unplaced services, and resources only.")
+				}
+			}
+		}
 		seen := map[string]bool{}
 		for i, pos := range p.Positions {
 			path := fmt.Sprintf("/presentation/positions/%d/objectRef", i)
-			check(pos.ObjectRef, path, "node", "group", "resource")
+			check(pos.ObjectRef, path, "node", "group", "resource", "service")
+			if kinds[pos.ObjectRef] == "service" && placedServices[pos.ObjectRef] {
+				add(path, "A placed service inherits its preferred position from its host.")
+			}
 			if seen[pos.ObjectRef] {
 				add(path, "An object can have only one layout position.")
 			}

@@ -302,6 +302,17 @@ export function projectPositions(document: CanvasDocument, projection: Projectio
   });
 }
 
+export function projectLayoutLayers(
+  document: CanvasDocument,
+  projection: Projection,
+): string[][] | undefined {
+  const authored = document.presentation?.layers;
+  if (!authored) return undefined;
+  const visible = new Set(projection.graph.nodes.map(node => node.id));
+  return authored.map(layer => layer.flatMap(id => visible.has(id) ? [id] : []))
+    .filter(layer => layer.length > 0);
+}
+
 export type Difference = {
   id: string;
   kind: string;

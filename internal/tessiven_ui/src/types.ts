@@ -56,6 +56,7 @@ export type Evidence = {
   summary: string;
   observedAt?: string;
 };
+export type LayoutDirection = 'RIGHT' | 'DOWN' | 'LEFT' | 'UP';
 export type CanvasDocument = {
   apiVersion: 'redeven.io/tessiven/v1';
   kind: 'ServiceCanvas';
@@ -70,6 +71,8 @@ export type CanvasDocument = {
   presentation?: {
     initiallyExpanded?: string[];
     order?: string[];
+    direction?: LayoutDirection;
+    layers?: string[][];
     positions?: { objectRef: string; x: number; y: number }[];
   };
 };

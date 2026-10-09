@@ -832,6 +832,31 @@
     }
   ],
   "presentation": {
+    "direction": "RIGHT",
+    "layers": [
+      [
+        "r-ha-proxy"
+      ],
+      [
+        "g-access"
+      ],
+      [
+        "g-master",
+        "r-kdc"
+      ],
+      [
+        "g-coord"
+      ],
+      [
+        "g-worker"
+      ],
+      [
+        "g-eco",
+        "r-metastore-db",
+        "r-object-store",
+        "r-monitoring"
+      ]
+    ],
     "initiallyExpanded": [
       "g-access",
       "g-master",

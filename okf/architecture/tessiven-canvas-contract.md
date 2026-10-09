@@ -38,10 +38,19 @@ failed validation or version conflict leaves the last saved document intact.
   explicitly unknown.
 - The schema accepts data and presentation hints only. It does not accept
   executable scripts, credentials, arbitrary styles, or management commands.
-  Position coordinates express preferred placement, not fixed geometry. Their
-  schema describes automatic layout as the default; collision resolution belongs
-  to the published renderer under the [canvas UI contract](../ui/tessiven-canvas.md).
-  Validation and save success confirm valid persisted data, not visual acceptance.
+  Optional `presentation.direction` (`RIGHT`, `DOWN`, `LEFT`, or `UP`) and
+  ordered `presentation.layers` declare root layout ranks. Layers accept groups,
+  ungrouped nodes, unplaced services, and resources; grouped nodes and placed
+  services inherit placement from their visual group or host. Every declared
+  layer is nonempty and an object may appear only once. Unassigned objects join
+  the nearest declared layer by shortest relationship distance; ties and
+  disconnected components resolve deterministically, with disconnected
+  components after the declared layers. Layer rank takes precedence over
+  preferred coordinates; `presentation.order` is a stable tie-breaker within a
+  rank. With no declared layers, automatic layout remains the default.
+  Validation and save success confirm valid persisted data, not visual
+  acceptance. Layout and collision resolution belong to the published renderer
+  under the [canvas UI contract](../ui/tessiven-canvas.md).
 - Saves use an expected latest version and an idempotent request ID. Flower
   content changes produce complete new versions; history is immutable.
 - A fresh empty library receives one fictional example before accepting
