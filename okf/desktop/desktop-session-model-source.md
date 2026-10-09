@@ -37,6 +37,12 @@ session, instance, and settings revision. Runtime restart, connection changes,
 or settings writes fence old responses and release subscriptions, while drafts,
 thread references, and persisted history remain owned by their canvas surface.
 
+Runtime event streams belong to the renderer document that opened them. Full
+navigation, reload, renderer crash, and destruction cancel its active requests
+and release their bridge leases and stream slots. In-page navigation preserves
+the connection. Settling a request removes its ownership listeners, and a late
+response cannot revive a canceled document's stream.
+
 Desktop Welcome uses the same Flower adapter contract as Env App for thread operations and split settings writes. Sending a turn posts through the runtime Flower IPC proxy, stop posts to the thread cancel route, and `/compact` posts to `/_redeven_proxy/api/ai/threads/{thread}/context/compact` before reloading the canonical live bootstrap. Default permission writes use the exact `PUT /_redeven_proxy/api/ai/default_permission` route, provider profile writes use `PUT /_redeven_proxy/api/ai/provider_bundle`, and composer model selection writes the future new-thread default through `PUT /_redeven_proxy/api/ai/current_model`. The Desktop bridge also exposes the Flower working-directory picker through exact read-only runtime FS paths: `GET /_redeven_proxy/api/fs/path_context` and `POST /_redeven_proxy/api/fs/list`. The bridge allowlist is a single route table that admits only declared paths, methods, and query shapes, so the permission route is PUT-only and path selection data travels in the POST body instead of opening arbitrary query-path proxying. The Desktop bridge treats compaction as a thread action, not as a transcript message or a local UI-only marker, so Desktop and Env App receive the same live timeline decorations and read-state patches from the runtime.
 
 # Boundaries
@@ -55,6 +61,8 @@ The model-list catalog deadline is owned by
 Runtime-control is also not a plugin grant, plugin management, or plugin capability plane. Its token and routes are reserved for Desktop-to-Runtime coordination such as provider-link, code-workspace-engine import, and Desktop model source binding. Plugin workers and sandbox surfaces must not receive runtime-control endpoint data, use runtime-control bearer tokens, or treat runtime-control routes as plugin capabilities; plugin access to Redeven resources must go through released ReDevPlugin brokers and Redeven-registered adapters.
 
 # Evidence
+
+- `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Runtime event streams release their document ownership on full navigation, renderer crash, or destruction; in-page navigation preserves the active connection.
 
 - `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Canvas startup waits for AI publication and preserves drafts through recovery.
 - `redeven:internal/envapp/ui_src/src/styles/desktop-tessiven-model.browser.test.tsx` - Real browser placement, configured Desktop model and draft recovery in light and dark themes.

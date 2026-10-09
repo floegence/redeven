@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower model and navigation presentation
 description: Model-source controls, notifications, thread selection, and staged content ownership.
 tags: [ai, flower, models, navigation]
-timestamp: 2026-09-25T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -14,16 +14,67 @@ Flower keeps environment and Desktop model sources explicit, preserves thread-ow
 ## Mechanism
 
 Before the initial settings snapshot arrives, the composer shows a compact
-model-loading indicator with a localized accessible status. It does not claim
-that no model is selected while configuration is still being read. A failed
-load remains an explicit settings error; a successfully loaded empty profile
-retains the existing setup behavior.
+model-loading indicator with a localized accessible status. Settings, the
+Runtime baseline directory, and thread history start independently. Dynamic
+directory checks run in the background; a ready static model remains usable.
+Settings, history, and directory failures expose their own recovery actions.
+The empty directory still exposes refresh and model management without blocking
+navigation, closing the companion, or retaining a draft.
 
 Authorized platform models use a separate read-only `platform_model_source`, described in [Authorized platform model gateway](../ai/platform-model-gateway.md). They require no local Provider key or editable model profile. The model menu groups this source under `Redeven AI` when another source is present. A selected platform default is scoped to the session owner; its current authorized catalog controls readiness.
 
 The shared settings contract separates `defaults.permission_type`, nullable `model_profile`, and optional `model_source`. Provider editing, first-time setup, default-permission autosave, and the settings layout follow [Flower setup and settings](flower-setup-and-settings.md). A `remote_desktop` Env App session may expose the Desktop catalog alongside the environment profile; `local_host` and ordinary browser sessions ignore the unbound Desktop diagnostic object. Runtime status distinguishes no Desktop provider (`not_configured`), configured but unavailable keys or catalog (`missing_keys` or `empty`), and actual connection or protocol errors.
 
-Thread snapshots, list items, and thread patches carry `model_id` and `reasoning_selection` as thread defaults. Flower renders a fused model/reasoning segmented control in the composer when model options are available; the reasoning segment is shown only when the selected model exposes controllable reasoning capability. A ready Desktop model source contributes a read-only model catalog alongside editable environment provider models, preserving each opaque model id, display label, token limits, modalities, and reasoning capability. Every composer option has an explicit source: `model_profile`, `desktop_model_source`, `platform`, or `thread_snapshot`. `thread_snapshot` is a disabled, ungrouped option used only when an existing thread references a model no longer present in either catalog; Flower does not regroup or silently replace that model. When both active catalogs exist, the compact menu groups the environment models first under the environment display name and Desktop models second under the fixed `Desktop` name; a single active source remains a flat list. A new Flower mount selects the environment profile's persisted `current_model_id`, falling back to the Desktop current model only when the environment profile is absent. Selecting another environment model calls `persistDefaultModel`; selecting a Desktop model writes only the mounted surface's pending-new-thread draft. Repeated New Chat actions in that mount retain the draft, while a remount restores the environment default. Creating a new thread always sends the chosen draft model explicitly, and draft reasoning is included only when that model supports reasoning control. Switching to a model without reasoning removes any draft reasoning override before launch. An existing thread always resolves its own `model_id` first. Changing it sends `setThreadModel`; an environment-model change then persists the environment default, while a Desktop-model change stops after the thread PATCH. Returning to New Chat restores the mounted new-thread choice without copying the thread model into the environment default. Readiness is evaluated for the selected option's source: environment models require their provider and web-search keys, while Desktop models require a `ready` source containing that exact model id. If the selected model is unavailable but another source is usable, the composer and model menu remain visible, send stays disabled, the model trigger shows a compact warning, and the menu shows one compact Desktop status row without a global banner. First-time configuration follows [Flower setup and settings](flower-setup-and-settings.md). Existing conversations and configured profiles retain composer recovery controls when no model is usable. A configured remote profile does not show an unrelated Desktop setup warning; actual Desktop connection or protocol failures retain their diagnostics and connection recovery action. Refresh calls only `adapter.loadSettings()` and atomically replaces the settings snapshot, preserving thread selection, input, attachments, mounted Desktop draft, and environment default. `missing_keys` recovers through Desktop Flower settings, `unsupported` through remote Runtime settings, and `connecting`, `expired`, or `error` through Desktop Connection Center. Existing-thread launch does not add a global model override, so subsequent turns use the persisted thread default and waiting-input responses do not override the frozen Turn configuration. The model/reasoning segmented control is disabled while the selected thread is active, waiting for user input, compacting, read-only, or otherwise unable to accept a thread preference change. Thread inventory has its own `loading`, `ready`, and `error` states. A failed or timed-out inventory request leaves the sidebar usable, replaces the skeleton with a localized retry action, and never blocks the composer or the main empty state. The Flower UI quality gate explicitly runs a cross-layer Desktop model-source test that renders the shared surface over the real Env adapter and verifies catalog projection, labels, reasoning defaults, thread creation, and first-turn RPC payloads together.
+## Model identity and recovery
+
+Thread snapshots, list items, and patches carry `model_id` and
+`reasoning_selection` as thread defaults. Composer capabilities and availability
+come from the Runtime directory described in
+[model directory ownership](../ai/model-directory-and-selection.md), including
+exact Desktop identities, token limits, modalities, and reasoning defaults.
+The settings catalog supplies editing candidates only. Every composer option
+has an explicit source: `model_profile`, `desktop_model_source`, `platform`, or
+`thread_snapshot`. The last is a disabled, ungrouped display of a thread's
+missing model; Flower never silently replaces it. Multiple sources are grouped
+with environment models first and the fixed `Desktop` label for Desktop models.
+
+New Chat starts with the Runtime's current model. An explicit environment or
+platform choice persists the default; a Desktop choice stays in the mounted
+surface's draft. Repeated New Chat actions preserve that draft. Creating a
+thread sends its exact chosen model, with draft reasoning only when supported.
+Switching to a model without reasoning clears the draft reasoning override.
+Existing threads resolve their own `model_id` first. Changing it calls
+`setThreadModel`; an environment-model change also persists the environment
+default, while a Desktop-model change stops after the thread PATCH. Returning
+to New Chat restores its draft without copying the thread preference.
+
+The exact directory entry controls chat readiness independently of web search.
+A pending selected model shows a checking status; an unavailable selection
+retains its identity and exposes refresh, another model, and settings. Existing
+conversations and configured profiles retain these controls even with no
+usable models. Actual Desktop connection or protocol failures expose connection
+recovery. `missing_keys` recovers through Desktop settings, `unsupported` through
+remote Runtime settings, and `connecting`, `expired`, or `error` through
+Connection Center. First-time setup follows
+[Flower setup and settings](flower-setup-and-settings.md).
+
+Refresh uses `adapter.loadModelDirectory(true)` through the owning connection's
+shared read resource. It preserves thread selection, input, attachments, canvas
+binding, and model preferences. Existing-thread launch omits a global model
+override, and waiting-input responses retain the Turn's frozen configuration.
+Active, queued, waiting, compacting, or read-only threads retain their existing
+model-change boundaries and cancellation controls.
+
+The searchable model menu uses Floe's owner-aware `SurfaceFloatingLayer` for
+portal placement, clamping, and nested Escape ownership. Its list scrolls while
+search and recovery actions remain visible. Escape closes only the model menu
+and restores trigger focus; it does not close a Tessiven chat window or the
+composer More panel.
+
+Thread inventory has independent `loading`, `ready`, and `error` states. Failure
+leaves the sidebar usable and replaces its skeleton with a localized retry
+action. Cross-layer tests cover Runtime directory projection, labels, reasoning
+defaults, thread creation, and first-turn payloads together.
 
 See [reasoning selection ownership](flower-reasoning-selection.md) for loading, draft, and submission rules.
 

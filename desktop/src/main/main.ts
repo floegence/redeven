@@ -94,6 +94,7 @@ import {
 	finishRuntimeFlowerAttachmentOperation,
   trackRuntimeFlowerAttachmentOperation,
 } from './runtimeFlowerAttachmentOperationLifecycle';
+import { bindRuntimeFlowerStreamOwner } from './runtimeFlowerStreamOwner';
 import { buildAppMenuTemplate } from './appMenu';
 import { DesktopUpdateCoordinator, type DesktopUpdateAdapter } from './desktopUpdateCoordinator';
 import { LinuxPackageUpdateAdapter } from './linuxPackageUpdateAdapter';
@@ -1269,7 +1270,7 @@ type RuntimeFlowerStreamOperation = {
   sender: WebContents;
   request?: ClientRequest;
   settled: boolean;
-  senderDestroyedListener: () => void;
+  releaseOwner?: () => void;
 };
 
 const runtimeFlowerStreamOperations = new Map<string, RuntimeFlowerStreamOperation>();
@@ -10669,7 +10670,8 @@ function finishRuntimeFlowerStream(operation: RuntimeFlowerStreamOperation, dest
   runtimeFlowerStreamOperations.delete(operation.key);
   void operation.bridgeLease?.release();
   operation.bridgeLease = undefined;
-  operation.sender.removeListener('destroyed', operation.senderDestroyedListener);
+  operation.releaseOwner?.();
+  operation.releaseOwner = undefined;
   if (destroyRequest && operation.request && !operation.request.destroyed) operation.request.destroy();
 }
 
@@ -10732,11 +10734,9 @@ async function startRuntimeFlowerStream(
     streamID: request.stream_id,
     sender,
     settled: false,
-    senderDestroyedListener: () => undefined,
   };
-  operation.senderDestroyedListener = () => finishRuntimeFlowerStream(operation, true);
   runtimeFlowerStreamOperations.set(key, operation);
-  sender.once('destroyed', operation.senderDestroyedListener);
+  operation.releaseOwner = bindRuntimeFlowerStreamOwner(sender, () => finishRuntimeFlowerStream(operation, true));
 
   try {
     const flowerTarget = await ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path));

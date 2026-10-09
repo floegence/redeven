@@ -33,8 +33,8 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the independent Runtime client access compatibility window', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(43);
+  it('publishes the Runtime-owned model directory compatibility window', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(44);
     expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.13.0');
     expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.13.0');
   });

@@ -202,8 +202,8 @@ describe('Flower Desktop model source E2E', () => {
     expect(surface.querySelector('.flower-reasoning-segment-button')?.textContent).toContain('High');
 
     (surface.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
-    await waitFor(() => surface.querySelectorAll('.flower-model-menu-item').length === 2);
-    expect(Array.from(surface.querySelectorAll('.flower-model-menu-item')).map((item) => item.textContent)).toEqual([
+    await waitFor(() => document.querySelectorAll('.flower-model-menu-item').length === 2);
+    expect(Array.from(document.querySelectorAll('.flower-model-menu-item')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('deepseek-v4-pro'),
       expect.stringContaining('deepseek-v4-flash'),
     ]);

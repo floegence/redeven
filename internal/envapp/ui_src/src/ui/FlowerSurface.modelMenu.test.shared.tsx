@@ -15,8 +15,8 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, listThreads: async () => [] });
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('agent-q8') === true);
   surface.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!.click();
-  await waitFor(() => Boolean(surface.querySelector('.flower-model-menu input')));
-  const menu = surface.querySelector<HTMLElement>('.flower-model-menu')!;
+  await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
+  const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
   expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(8);
   expect(menu.querySelector('.flower-model-menu-item')?.textContent).toContain('agent-q8');
   expect(menu.textContent).toContain('Q8_0');
@@ -39,7 +39,7 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(32);
   [...menu.querySelectorAll('button')].find((button) => button.textContent?.includes('Manage models'))!.click();
   await waitFor(() => Boolean(surface.querySelector('.flower-settings-surface')));
-  expect(surface.querySelector('.flower-model-menu')).toBeNull();
+  expect(document.querySelector('.flower-model-menu')).toBeNull();
   expect(snapshot.model_profile.current_model_id).toBe('local/agent-q8');
 });
 

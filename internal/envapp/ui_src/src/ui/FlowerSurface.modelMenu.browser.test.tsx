@@ -20,9 +20,9 @@ it.each([390, 1280])('keeps model search and management visible at %s px', async
   surface.style.cssText = 'width:100%;height:100vh';
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('agent-0') === true);
   surface.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!.click();
-  await waitFor(() => Boolean(surface.querySelector('.flower-model-menu input')));
+  await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
   await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  const menu = surface.querySelector<HTMLElement>('.flower-model-menu')!;
+  const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
   const list = menu.querySelector<HTMLElement>('.flower-model-menu-list')!;
   const bounds = menu.getBoundingClientRect();
   expect(bounds.left).toBeGreaterThanOrEqual(0);

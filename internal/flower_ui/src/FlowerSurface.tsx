@@ -1041,7 +1041,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [modelQuery, setModelQuery] = createSignal('');
   const [modelMenuExpanded, setModelMenuExpanded] = createSignal(false);
   let modelSearchRef: HTMLInputElement | undefined;
-  const [modelMenuShiftX, setModelMenuShiftX] = createSignal(0);
+  const [modelMenuPosition, setModelMenuPosition] = createSignal({ x: 0, y: 0 });
+  const [modelMenuSize, setModelMenuSize] = createSignal({ width: 416, height: 480 });
+  const [modelMenuAvailableHeight, setModelMenuAvailableHeight] = createSignal(480);
   const [modelCapabilityRevision, setModelCapabilityRevision] = createSignal(0);
   type ModelCapabilityLoadState =
     | Readonly<{ kind: 'loading' }>
@@ -1157,7 +1159,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let composerMorePanelPositionFrame = 0;
   let composerReferenceMenuPositionFrame = 0;
   let composerSelectionFrame = 0;
-  let modelMenuPositionFrame = 0;
   let presentedSelectionFrame = 0;
   let presentedSelectionTimer: number | undefined;
 
@@ -2053,7 +2054,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const handleModelMenuKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') { event.preventDefault(); closeModelMenu(true); return; }
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     if (event.target === modelSearchRef && (event.key === 'Home' || event.key === 'End')) return;
     const items = [...(modelMenuRef?.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item:not(:disabled)') ?? [])];
@@ -2615,6 +2615,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
       closeModelMenu(true);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -2951,33 +2953,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     if (composerOverflowControlIDs().length === 0) setComposerMoreOpen(false);
   });
-  const viewportShiftXForRect = (rect: DOMRect, margin = 8): number => {
-    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-    if (viewportWidth <= 0) return 0;
-    let shiftX = 0;
-    if (rect.left < margin) {
-      shiftX += margin - rect.left;
-    }
-    if (rect.right + shiftX > viewportWidth - margin) {
-      shiftX -= rect.right + shiftX - (viewportWidth - margin);
-    }
-    return Math.round(shiftX);
-  };
-  const cancelModelMenuPosition = () => {
-    if (!modelMenuPositionFrame) return;
-    cancelTranscriptAnimationFrame(modelMenuPositionFrame);
-    modelMenuPositionFrame = 0;
-  };
-  const scheduleModelMenuPosition = () => {
-    cancelModelMenuPosition();
-    setModelMenuShiftX(0);
-    modelMenuPositionFrame = requestTranscriptAnimationFrame(() => {
-      modelMenuPositionFrame = 0;
-      const menu = modelMenuRef;
-      if (!menu) return;
-      setModelMenuShiftX(viewportShiftXForRect(menu.getBoundingClientRect()));
-    });
-  };
   const cancelComposerMorePanelPosition = () => {
     if (!composerMorePanelPositionFrame) return;
     cancelTranscriptAnimationFrame(composerMorePanelPositionFrame);
@@ -3003,17 +2978,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
   createEffect(() => {
-    if (!modelMenuOpen()) {
-      cancelModelMenuPosition();
-      setModelMenuShiftX(0);
-      return;
-    }
-    void modelSelectOptions().length;
-    scheduleModelMenuPosition();
-    window.addEventListener('resize', scheduleModelMenuPosition);
+    if (!modelMenuOpen()) return;
+    const measureMenu = () => {
+      const anchor = modelTriggerRef;
+      const menu = modelMenuRef;
+      if (!anchor || !menu) return;
+      setModelMenuAvailableHeight(Math.max(0, (surfaceRef?.clientHeight || window.innerHeight) - 16));
+      const rect = anchor.getBoundingClientRect();
+      const size = menu.getBoundingClientRect();
+      setModelMenuSize(previous => previous.width === size.width && previous.height === size.height
+        ? previous : { width: size.width, height: size.height });
+      setModelMenuPosition(previous => {
+        const next = { x: rect.left, y: rect.top - size.height - 8 };
+        return previous.x === next.x && previous.y === next.y ? previous : next;
+      });
+    };
+    const observer = new ResizeObserver(measureMenu);
+    if (surfaceRef) observer.observe(surfaceRef);
+    if (modelTriggerRef) observer.observe(modelTriggerRef);
+    if (modelMenuRef) observer.observe(modelMenuRef);
+    const frame = requestAnimationFrame(measureMenu);
+    window.addEventListener('resize', measureMenu);
+    window.visualViewport?.addEventListener('resize', measureMenu);
+    window.addEventListener('scroll', measureMenu, true);
     onCleanup(() => {
-      cancelModelMenuPosition();
-      window.removeEventListener('resize', scheduleModelMenuPosition);
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', measureMenu);
+      window.visualViewport?.removeEventListener('resize', measureMenu);
+      window.removeEventListener('scroll', measureMenu, true);
     });
   });
   createEffect(() => {
@@ -3059,7 +3052,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target)) return;
+      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target)) return;
       closeComposerMore(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -3070,7 +3063,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target as Node | null;
-      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target)) return;
+      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target)) return;
       closeComposerMore(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -10716,10 +10709,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const modelMenu = () => (
     <Show when={modelMenuOpen()}>
+      <SurfaceFloatingLayer
+        owner={modelTriggerRef}
+        position={modelMenuPosition()}
+        estimatedSize={modelMenuSize()}
+        class="flower-model-menu-layer"
+        style={{ '--flower-model-menu-available-height': `${modelMenuAvailableHeight()}px` } as JSX.CSSProperties}
+        data-flower-floating-layer="true"
+      >
       <div
         ref={modelMenuRef}
         class="flower-model-menu"
-        style={{ '--flower-model-menu-shift-x': `${modelMenuShiftX()}px` } as JSX.CSSProperties}
         role="dialog"
         aria-label={copy().settings.dialog.catalog.search}
         onKeyDown={handleModelMenuKeyDown}
@@ -10747,6 +10747,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
         {modelSourceStatusRow('menu')}
       </div>
+      </SurfaceFloatingLayer>
     </Show>
   );
 
