@@ -89,7 +89,12 @@
       "properties": {
         "direction": {
           "type": "string",
-          "enum": ["RIGHT", "DOWN", "LEFT", "UP"],
+          "enum": [
+            "RIGHT",
+            "DOWN",
+            "LEFT",
+            "UP"
+          ],
           "description": "Overall layout direction. RIGHT is the default."
         },
         "layers": {
@@ -324,9 +329,25 @@
             "storage",
             "analytics",
             "ai",
+            "cloud_controller",
+            "node_agent",
+            "container_runtime",
+            "network_plugin",
+            "service_mesh",
+            "ingress",
+            "operator",
+            "registry",
+            "metrics",
+            "tracing",
+            "alerting",
+            "identity",
+            "secrets",
+            "certificate",
+            "stream_processor",
+            "metadata",
             "service"
           ],
-          "description": "Primary service responsibility, used for its semantic icon. Choose the most specific matching type; use service only when the responsibility is unknown. scheduler assigns work; controller reconciles desired state; runtime executes containers or processes; network provides connectivity; dns resolves names; monitoring observes health and metrics; workload runs application replicas; coordination provides consensus or cluster membership; security handles identity, secrets or access; logging collects logs; storage serves files, blocks or objects; analytics processes data; ai serves machine-learning models."
+          "description": "Primary service responsibility, used for its semantic icon. Choose the most specific matching type; use service only when the responsibility is unknown. scheduler assigns work; controller reconciles desired state; runtime executes containers or processes; network provides connectivity; dns resolves names; monitoring observes health and metrics; workload runs application replicas; coordination provides consensus or cluster membership; security handles identity, secrets or access; logging collects logs; storage serves files, blocks or objects; analytics processes data; ai serves machine-learning models. More specific responsibilities: cloud_controller reconciles cloud infrastructure; node_agent manages a host; container_runtime executes containers; network_plugin provides container networking; service_mesh manages service-to-service traffic; ingress accepts external traffic; operator automates resource lifecycle; registry stores and distributes container images; metrics collects time-series measurements; tracing records distributed request spans; alerting dispatches alerts; identity authenticates users or workloads; secrets stores credentials; certificate issues and renews certificates; stream_processor processes continuous data streams; metadata manages catalog or filesystem metadata."
         },
         "description": {
           "type": "string",

@@ -23,7 +23,9 @@ failed validation or version conflict leaves the last saved document intact.
   observability, security and data services. Unknown kinds fail validation;
   generic `service` remains valid when the responsibility is unknown. Adding
   kinds expands the v1 document vocabulary without rewriting saved versions or
-  changing the SQLite schema.
+  changing the SQLite schema. The [canvas UI contract](../ui/tessiven-canvas.md)
+  owns display-only refinement of generic icons through known service names;
+  that catalog never changes the document's canonical kind.
 - Groups are visual membership only. Instance bindings and Runtime references
   are data references and do not grant permission or create a connection. A
   descriptive or unavailable Runtime remains unbound and may only carry an

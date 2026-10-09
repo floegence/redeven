@@ -1072,29 +1072,32 @@
 .tessiven :is([data-kind='web'], [data-kind='workload']) {
   --ts-glyph: var(--ts-icon-blue);
 }
-.tessiven :is([data-kind='worker'], [data-kind='queue'], [data-kind='scheduler']) {
+.tessiven :is([data-kind='worker'], [data-kind='queue'], [data-kind='scheduler'],
+  [data-kind='node_agent'], [data-kind='alerting']) {
   --ts-glyph: var(--ts-icon-amber);
 }
-.tessiven :is([data-kind='database'], [data-kind='monitoring']) {
+.tessiven :is([data-kind='database'], [data-kind='monitoring'], [data-kind='metrics'], [data-kind='metadata']) {
   --ts-glyph: var(--ts-icon-teal);
 }
 .tessiven [data-kind='cache'] {
   --ts-glyph: var(--ts-icon-coral);
 }
-.tessiven :is([data-kind='search'], [data-kind='analytics']) {
+.tessiven :is([data-kind='search'], [data-kind='analytics'], [data-kind='tracing'], [data-kind='stream_processor']) {
   --ts-glyph: var(--ts-icon-berry);
 }
 .tessiven :is([data-kind='domain'], [data-kind='cdn'], [data-kind='gateway'],
-  [data-kind='load_balancer'], [data-kind='network'], [data-kind='dns']) {
+  [data-kind='load_balancer'], [data-kind='network'], [data-kind='dns'],
+  [data-kind='network_plugin'], [data-kind='service_mesh'], [data-kind='ingress']) {
   --ts-glyph: var(--ts-icon-slate);
 }
-.tessiven :is([data-kind='nas'], [data-kind='filesystem'], [data-kind='object_store'], [data-kind='storage']) {
+.tessiven :is([data-kind='nas'], [data-kind='filesystem'], [data-kind='object_store'], [data-kind='storage'], [data-kind='registry']) {
   --ts-glyph: var(--ts-icon-bronze);
 }
-.tessiven :is([data-kind='controller'], [data-kind='runtime'], [data-kind='coordination'], [data-kind='ai']) {
+.tessiven :is([data-kind='controller'], [data-kind='runtime'], [data-kind='coordination'], [data-kind='ai'],
+  [data-kind='cloud_controller'], [data-kind='operator'], [data-kind='container_runtime']) {
   --ts-glyph: var(--ts-icon-purple);
 }
-.tessiven [data-kind='security'] {
+.tessiven :is([data-kind='security'], [data-kind='identity'], [data-kind='secrets'], [data-kind='certificate']) {
   --ts-glyph: var(--ts-icon-green);
 }
 .tessiven :is([data-kind='logging'], [data-kind='external']) {
