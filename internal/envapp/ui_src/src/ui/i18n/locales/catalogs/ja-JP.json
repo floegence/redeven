@@ -7175,6 +7175,13 @@
     "maintenanceWarning": "この操作により、使用中のターミナルやセッションが中断される場合があります。続行しますか？"
   },
   "remoteDesktop": {
+    "deploymentComplete": "リモートデスクトップの変更が完了しました。",
+    "backToConnection": "接続画面に戻る",
+    "connectionProgress": "リモートデスクトップ接続の進行状況",
+    "authorizeStep": "承認",
+    "installStep": "ホストを準備",
+    "connectStep": "接続",
+    "connectionContinuing": "サービスの準備ができました。次の手順でデスクトップを開きます…",
     "title": "リモートデスクトップ",
     "description": "このホストの画面を別のウィンドウで表示・操作します。",
     "connect": "デスクトップに接続",
@@ -7316,7 +7323,7 @@
     "deployPassword": "管理者パスワード（必要な場合）",
     "deployPasswordHint": "今回の SSH 操作にのみ使用します。Redeven は保存せず、デスクトップサービスにも渡しません。",
     "deployConfirm": "許可して続行",
-    "serviceUpdateRequired": "このランタイムのバージョンを使用するには、環境アプリでリモートデスクトップを更新してください。",
+    "serviceUpdateRequired": "このランタイムのバージョンを使用するには、Env App でリモートデスクトップを更新してください。",
     "deployChecking": "SSH ホストを確認中…",
     "deployTransferring": "コンポーネントを転送・検証中…",
     "deployAuthorizing": "今回の SSH 操作を認証中…",

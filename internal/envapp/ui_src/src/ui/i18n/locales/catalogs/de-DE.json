@@ -7179,6 +7179,13 @@
     "maintenanceWarning": "Dieser Vorgang kann aktive Terminals und Sitzungen unterbrechen. Fortfahren?"
   },
   "remoteDesktop": {
+    "deploymentComplete": "Die Änderungen am Remotedesktop sind abgeschlossen.",
+    "backToConnection": "Zurück zur Verbindung",
+    "connectionProgress": "Fortschritt der Remotedesktopverbindung",
+    "authorizeStep": "Autorisieren",
+    "installStep": "Host vorbereiten",
+    "connectStep": "Verbinden",
+    "connectionContinuing": "Der Dienst ist bereit. Der Desktop wird im nächsten Schritt geöffnet…",
     "title": "Remote-Desktop",
     "description": "Den Bildschirm dieses Hosts in einem eigenen Fenster anzeigen und steuern.",
     "connect": "Desktop verbinden",
@@ -7320,7 +7327,7 @@
     "deployPassword": "Administratorpasswort (falls erforderlich)",
     "deployPasswordHint": "Wird nur für diesen SSH-Vorgang verwendet. Redeven speichert es nicht und gibt es nicht an den Desktopdienst weiter.",
     "deployConfirm": "Autorisieren und fortfahren",
-    "serviceUpdateRequired": "Aktualisieren Sie den Remote-Desktop in der Umgebungs-App, um diese Runtime-Version zu verwenden.",
+    "serviceUpdateRequired": "Aktualisieren Sie den Remote-Desktop in Env App, um diese Laufzeitversion zu verwenden.",
     "deployChecking": "SSH-Host wird geprüft…",
     "deployTransferring": "Komponenten werden übertragen und geprüft…",
     "deployAuthorizing": "SSH-Vorgang wird autorisiert…",

@@ -3,7 +3,7 @@ type: Security Contract
 title: Administrator-authorized remote desktop deployment over SSH
 description: Install and manage the Linux physical-desktop service from Env App without target-side graphical consent.
 tags: [desktop, ssh, authorization, runtime, security]
-timestamp: 2026-10-08T08:00:00Z
+timestamp: 2026-10-09T17:00:00Z
 ---
 # Summary
 
@@ -29,14 +29,20 @@ permission and records fixed action/outcome/rollback codes. Its audit route does
 not execute installation or accept credentials. Service status is read-only.
 Runtime service mutation routes reject elevation with an SSH authorization code.
 
-An administrator password is cleared from the dialog before execution and is
-never placed in preferences, URLs, command arguments, environment variables,
+An administrator password stays masked and disabled during its pending SSH
+transaction, then is cleared when that transaction finishes or the surface is
+disposed. It is never placed in preferences, URLs, command arguments, environment variables,
 audit, diagnostics, the Runtime API or the desktop daemon. Desktop sends it to
 sudo's input stream only after sudo reports that it is needed. Root or existing
 passwordless authority receives no unused password. Credential buffers are
 cleared when the transaction finishes; cancel or navigation revokes its owner.
 
 ## Deployment and rollback
+
+The [connection launcher](remote-desktop-launcher.md) owns in-place authorization,
+progress, failure recovery and automatic continuation to the viewer. Cancellation
+keeps the operation visible until its rollback outcome arrives. Explicit service
+management ends with a completion state and never implicitly opens a viewer.
 
 Desktop extracts the published service kit from its trusted bundled Runtime.
 The renderer cannot select artifacts, commands, hashes, destinations or network
@@ -103,5 +109,5 @@ optional current-user chain has a separate Portal authorization contract.
 - `desktop/src/main/main.ts` and `desktop/src/preload/desktopShell.ts`: Env App document ownership, private bridge authorization and IPC validation.
 - `cmd/redeven/desktop_service_kit.go` and its tests: published kit extraction and artifact identity.
 - `internal/codeapp/appserver/remote_desktop.go` and its tests: full permission, audit and rejection of unknown credential fields.
-- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.tsx` and its tests: consent, clearing input, progress and failure presentation.
+- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.tsx` and its tests: explicit consent, temporary masked input, progress and observed rollback presentation.
 - Published `floe-native-apps/hostdesktop` deployment, socket, uinput and opt-in real-systemd qualification tests: upstream installation and physical-desktop authority.

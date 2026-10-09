@@ -7175,6 +7175,13 @@
     "maintenanceWarning": "此操作可能中斷使用中的終端機與工作階段，是否繼續？"
   },
   "remoteDesktop": {
+    "deploymentComplete": "遠端桌面操作已完成。",
+    "backToConnection": "返回連線",
+    "connectionProgress": "遠端桌面連線進度",
+    "authorizeStep": "授權",
+    "installStep": "準備主機",
+    "connectStep": "連線",
+    "connectionContinuing": "服務已就緒，正在繼續開啟桌面…",
     "title": "遠端桌面",
     "description": "在獨立視窗中檢視及控制這台主機的螢幕。",
     "connect": "連線至桌面",
@@ -7316,7 +7323,7 @@
     "deployPassword": "管理員密碼（如有需要）",
     "deployPasswordHint": "僅用於本次 SSH 操作。Redeven 不會儲存密碼，也不會將其傳給桌面服務。",
     "deployConfirm": "授權並繼續",
-    "serviceUpdateRequired": "請在環境應用程式中更新遠端桌面，以配合目前的執行階段版本使用。",
+    "serviceUpdateRequired": "請在 Env App 中更新遠端桌面，以配合目前的執行階段版本使用。",
     "deployChecking": "正在檢查 SSH 主機…",
     "deployTransferring": "正在傳輸並驗證元件…",
     "deployAuthorizing": "正在授權本次 SSH 操作…",
