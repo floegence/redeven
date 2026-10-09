@@ -11,6 +11,9 @@ func TestServiceResponsibilityKinds(t *testing.T) {
 	for _, kind := range []string{
 		"scheduler", "controller", "runtime", "network", "dns", "monitoring",
 		"workload", "coordination", "security", "logging", "storage", "analytics", "ai",
+		"cloud_controller", "node_agent", "container_runtime", "network_plugin", "service_mesh",
+		"ingress", "operator", "registry", "metrics", "tracing", "alerting", "identity",
+		"secrets", "certificate", "stream_processor", "metadata",
 	} {
 		t.Run(kind, func(t *testing.T) {
 			source := strings.Replace(exampleDocument, "kind: api", "kind: "+kind, 1)

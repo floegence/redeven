@@ -1,5 +1,6 @@
 import type { Component } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
+import { resolveTessivenIcon } from './iconRoles';
 
 // Semantic silhouettes stay legible at service-row size and in monochrome.
 const glyphs: Record<string, Component> = {
@@ -176,13 +177,105 @@ const glyphs: Record<string, Component> = {
     <path class="glyph-main" d="M2 6h7v3H5v11h11v-4h3v7H2Z" />
     <path class="glyph-accent" d="M13 1h10v10h-3V6l-9 9-2-2 9-9h-5Z" />
   </>,
+  cloud_controller: () => <>
+    <path class="glyph-main" d="M5 13a4 4 0 0 1-1-7.9A7 7 0 0 1 17.5 4a4.5 4.5 0 0 1 1 9Z" />
+    <path class="glyph-outline" d="M6 17a6 6 0 0 0 11 2m1-4a6 6 0 0 0-10-2" />
+    <path class="glyph-accent" d="M4 14h5l-5 5Zm11 2h5v5Z" />
+  </>,
+  node_agent: () => <>
+    <rect class="glyph-main" x="2" y="4" width="11" height="17" rx="2" />
+    <path class="glyph-cut" d="M5 8h5v1H5zm0 4h5v1H5z" />
+    <circle class="glyph-accent" cx="7.5" cy="17.5" r="1.5" />
+    <path class="glyph-outline" d="M16 7c4 3 4 7 0 10m3-13c6 5 6 11 0 16" />
+  </>,
+  container_runtime: () => <>
+    <path class="glyph-outline" d="M6 2H2v5m16-5h4v5M2 17v5h4m16-5v5h-4" />
+    <path class="glyph-main" d="m12 4 7 4v8l-7 4-7-4V8Z" />
+    <path class="glyph-accent" d="m12 4 7 4-7 4-7-4Z" />
+    <path class="glyph-cut-line" d="M12 12v8" />
+  </>,
+  network_plugin: () => <>
+    <path class="glyph-main" d="M8 2h2v5h4V2h2v5h3v4a7 7 0 0 1-6 6.9V22h-2v-4.1A7 7 0 0 1 5 11V7h3Z" />
+    <path class="glyph-accent" d="M5 7h14v3H5Z" />
+    <path class="glyph-cut" d="M8 11h2v3H8zm6 0h2v3h-2Z" />
+  </>,
+  service_mesh: () => <>
+    <path class="glyph-outline" d="m5 6 14 12M19 6 5 18M5 6h14v12H5Z" />
+    <path class="glyph-main" d="m5 1 4 2.5v5L5 11 1 8.5v-5ZM19 1l4 2.5v5L19 11l-4-2.5v-5ZM5 13l4 2.5v5L5 23l-4-2.5v-5Z" />
+    <path class="glyph-accent" d="m19 13 4 2.5v5L19 23l-4-2.5v-5Z" />
+  </>,
+  ingress: () => <>
+    <path class="glyph-main" d="M10 2h12v20H10v-5h3v2h6V5h-6v2h-3Z" />
+    <path class="glyph-accent" d="M1 10h10V6l7 6-7 6v-4H1Z" />
+  </>,
+  operator: () => <>
+    <path class="glyph-main" d="M14 2a7 7 0 0 0-7 9L1 17l6 6 6-6a7 7 0 0 0 9-8l-5 4-5-5 4-5Z" />
+    <circle class="glyph-cut" cx="6" cy="18" r="1.5" />
+    <path class="glyph-accent" d="m17 1 .8 2.2L20 4l-2.2.8L17 7l-.8-2.2L14 4l2.2-.8Z" />
+  </>,
+  registry: () => <>
+    <path class="glyph-main" d="M2 3h20v6H2zm0 9h9v10H2zm12 0h8v10h-8Z" />
+    <path class="glyph-accent" d="M5 5h14v2H5Zm11 9h4v6h-4Z" />
+    <path class="glyph-cut" d="M4 14h1v5H4zm3 0h2v5H7z" />
+  </>,
+  metrics: () => <>
+    <path class="glyph-main" d="M2 18V12a10 10 0 0 1 20 0v6l-4 4H6Z" />
+    <path class="glyph-cut" d="M5 16v-4a7 7 0 0 1 14 0v4Z" />
+    <path class="glyph-outline" d="m12 15 5-7" />
+    <circle class="glyph-accent" cx="12" cy="15" r="2.5" />
+    <path class="glyph-cut" d="M7 19h10v1H7Z" />
+  </>,
+  tracing: () => <>
+    <path class="glyph-outline" d="M2 3v18m0-18h20" />
+    <rect class="glyph-main" x="4" y="6" width="17" height="4" rx="1" />
+    <rect class="glyph-accent" x="7" y="12" width="11" height="4" rx="1" />
+    <rect class="glyph-main" x="11" y="18" width="8" height="4" rx="1" />
+  </>,
+  alerting: () => <>
+    <path class="glyph-main" d="M12 2a7 7 0 0 0-7 7v5l-3 4h20l-3-4V9a7 7 0 0 0-7-7ZM8 20a4 4 0 0 0 8 0Z" />
+    <path class="glyph-accent" d="M11 5h2v7h-2Z" />
+    <circle class="glyph-cut" cx="12" cy="15" r="1.2" />
+  </>,
+  identity: () => <>
+    <circle class="glyph-main" cx="8" cy="7" r="5" />
+    <path class="glyph-main" d="M0 22v-3a8 8 0 0 1 16 0v3Z" />
+    <circle class="glyph-accent" cx="19" cy="9" r="4" />
+    <circle class="glyph-cut" cx="19" cy="9" r="1.5" />
+    <path class="glyph-accent" d="M18 12h2v10h-2Zm2 4h3v2h-3Z" />
+  </>,
+  secrets: () => <>
+    <circle class="glyph-main" cx="7" cy="8" r="6" />
+    <circle class="glyph-cut" cx="7" cy="8" r="2.5" />
+    <path class="glyph-main" d="m10 11 3-3 10 10-3 4-3-3 1-2-3-1-1-2Z" />
+    <circle class="glyph-accent" cx="7" cy="8" r="1" />
+  </>,
+  certificate: () => <>
+    <path class="glyph-main" d="M3 2h17v15H3Z" />
+    <path class="glyph-cut" d="M6 5h11v1H6zm0 3h9v1H6Z" />
+    <path class="glyph-accent" d="m10 15-1 8 4-2 4 2-1-8Z" />
+    <circle class="glyph-cut" cx="13" cy="15" r="5" />
+    <circle class="glyph-accent" cx="13" cy="15" r="4" />
+    <path class="glyph-cut-line" d="m11 15 1.5 1.5 2.5-3" />
+  </>,
+  stream_processor: () => <>
+    <path class="glyph-outline" d="M1 5h5l4 7-4 7H1m15-7h7m-3-3 3 3-3 3" />
+    <path class="glyph-main" d="m12 4 6 4v8l-6 4-6-4V8Z" />
+    <path class="glyph-accent" d="m12 7 3 5-3 5-3-5Z" />
+  </>,
+  metadata: () => <>
+    <path class="glyph-main" d="M3 2h15l3 3v17H3Z" />
+    <path class="glyph-accent" d="M6 5h9v3H6Z" />
+    <path class="glyph-cut-line" d="M7 11v7h4m-4-5h4" />
+    <path class="glyph-cut" d="M12 12h6v2h-6zm0 5h6v2h-6Z" />
+  </>,
 };
 
-export function TessivenIcon(props: { kind: string; class?: string }) {
+export function TessivenIcon(props: { kind: string; name?: string; class?: string }) {
+  const kind = () => resolveTessivenIcon(props.kind, props.name);
   return (
-    <svg class={`tessiven-icon ${props.class ?? ''}`} data-kind={props.kind}
+    <svg class={`tessiven-icon ${props.class ?? ''}`} data-kind={kind()}
       viewBox="0 0 24 24" fill="none" width="23" height="23" aria-hidden="true">
-      <Dynamic component={glyphs[props.kind] ?? glyphs.service} />
+      <Dynamic component={glyphs[kind()] ?? glyphs.service} />
     </svg>
   );
 }

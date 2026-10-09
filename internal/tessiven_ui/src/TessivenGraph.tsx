@@ -392,7 +392,7 @@ export function TessivenGraph(props: {
                   show(rowEvent(event, ownerId ?? id), [id], true);
                 }}
               >
-                <TessivenIcon kind={service()?.kind ?? 'service'} />
+                <TessivenIcon kind={service()?.kind ?? 'service'} name={service()?.name} />
                 <span>
                   <strong>{service()?.name ?? id}</strong>
                   <small>
@@ -611,7 +611,7 @@ export function TessivenGraph(props: {
       );
     return (
       <section class="tessiven-unplaced">
-        <TessivenIcon kind={card.service.kind} />
+        <TessivenIcon kind={card.service.kind} name={card.service.name} />
         <strong>{card.service.name}</strong>
         <small>
           {card.instanceCount

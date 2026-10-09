@@ -52,7 +52,7 @@ export function TessivenThumbnail(props: {
             <For each={hosted.slice(0, 4)}>
               {(service) => (
                 <div class="tessiven-thumbnail-service">
-                  <TessivenIcon kind={service.kind} />
+                  <TessivenIcon kind={service.kind} name={service.name} />
                   <span>{service.name}</span>
                 </div>
               )}
@@ -70,7 +70,7 @@ export function TessivenThumbnail(props: {
         class="tessiven-thumbnail-resource"
         data-kind={['domain', 'cdn', 'gateway', 'load_balancer'].includes(kind) ? 'network' : 'storage'}
       >
-        <TessivenIcon kind={kind} />
+        <TessivenIcon kind={kind} name={card.kind === 'service' ? card.service.name : undefined} />
         <strong>{node.label}</strong>
         <small>{props.t(card.kind === 'resource' ? `kind.${kind}` : 'unplacedService')}</small>
       </div>

@@ -56,6 +56,16 @@ such nodes unbound; an explicitly requested observation may be recorded as
   a `worker`; an executor that runs it is a `runtime`. For requested diagram
   refinements, replace generic kinds when the available evidence establishes a
   more specific responsibility, preserving IDs, instances and relationships.
+- Refine broad responsibilities with the specific schema kinds where applicable:
+  `cloud_controller` for cloud infrastructure reconciliation, `node_agent` for
+  host management, `container_runtime` for container execution, `network_plugin`
+  for container networking, `service_mesh` for service-to-service traffic,
+  `ingress` for incoming traffic, `operator` for resource lifecycle automation,
+  and `registry` for container images. Distinguish `metrics`, `tracing`, and
+  `alerting`; distinguish `identity`, `secrets`, and `certificate`; use
+  `stream_processor` for continuous stream processing and `metadata` for catalog
+  or filesystem metadata. Prefer a truthful responsibility over visual variety;
+  never assign unrelated kinds just to make repeated services look different.
 - Keep each physical node and service instance unique. Put a shared node ID in
   every logical group's `nodeRefs` where it participates; use `instanceRefs`
   for the exact instances belonging to each project or cluster. Each host view

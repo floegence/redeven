@@ -4,6 +4,7 @@ title: Tessiven canvas
 description: Render progressively detailed service topology and exact object context.
 tags: [ui, tessiven, graph]
 timestamp: 2026-10-09T00:00:00Z
+quality_exception: Cross-surface canvas interaction contract for Activity, standalone windows, topology browsing, and exact object actions; document, Runtime, and Flower lifecycle remain separately owned.
 ---
 # Summary
 
@@ -163,8 +164,18 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   silhouette in one Tessiven icon catalog shared by the graph and thumbnails.
   Service-row icons stay unframed and use a restrained two-color palette with
   light/dark variants. High contrast preserves the silhouettes and interior
-  cutouts without depending on hue. Rendering uses only the saved kind; it
-  never guesses responsibilities from names or rewrites historical documents.
+  cutouts without depending on hue. The saved fine-grained kind is authoritative.
+  For generic `service` and compatible broad kinds, a bounded catalog of known
+  service-name aliases refines the displayed icon (for example, containerd uses
+  the container-runtime silhouette). Unrecognized names retain the saved kind;
+  IDs, descriptions, and unrelated specific kinds never drive this refinement.
+  This display mapping is shared by host inventories, collapsed groups, unplaced
+  services, and thumbnails. It never changes saved responsibilities, management
+  identity, permissions, or historical documents. Separate responsibilities
+  include cloud controllers, node agents, container runtimes, network plugins,
+  service meshes, ingress, operators, registries, observability, identity, secret
+  and certificate services, streaming, and metadata; repeated instances of the
+  same responsibility keep the same icon.
 
 # Boundaries
 
