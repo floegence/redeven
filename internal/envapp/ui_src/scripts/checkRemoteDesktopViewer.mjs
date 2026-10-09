@@ -28,6 +28,7 @@ let failDisconnect = true;
 let lockedNextConnect = false;
 let delayAudio = false, audioResponse;
 let desktopState = 'active', holdRecovery = false;
+let clientTextOnly = false;
 const configuration = { session: { id: 'qualification', host_name: 'Task desktop', locale: 'en-US', mode: 'control', display_id: '' }, base: '/_redeven_desktop/' };
 const names = { 'input.js': 'remote-input.generated.js', 'pointer.js': 'remote-pointer.generated.js' };
 const server = http.createServer((request, response) => {
@@ -105,7 +106,7 @@ server.on('upgrade', (request, socket, head) => {
         const packet = JSON.parse(data); const command = packet.command; messages.push(packet);
         if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: unsupportedReason
           ? { backend: 'linux-drm-kms', state: 'unavailable', reason: unsupportedReason, screen: false, input: false, unlock: false, locked_screen: false, audio: false, clipboard: false, displays: [] }
-          : { backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: true } }));
+          : { backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: !clientTextOnly, text_input: clientTextOnly } }));
         if (command.method === 'connect') {
           if (lockedNextConnect) {
             lockedNextConnect = false;
@@ -409,10 +410,10 @@ try {
   await compose('默认不提交');
   await page.waitForTimeout(80);
   assert(!messages.some(item => ['text', 'paste'].includes(item.command.input?.kind)), 'host input mode must not silently submit client text');
-  assert.match(await page.locator('#notice').textContent(), /Paste client text/, 'client composition needs an actionable mode hint');
+  assert.match(await page.locator('#notice').textContent(), /Use local input method/, 'client composition needs an actionable mode hint');
   await page.locator('#settings').click();
   assert.equal(await page.getByLabel('Text input', { exact: true }).inputValue(), 'host');
-  assert.match(await page.locator('#text-input-hint').textContent(), /Finish or cancel.*host.*composition/);
+  assert.match(await page.locator('#text-input-hint').textContent(), /Finish or cancel composition on the host/);
   await page.getByLabel('Text input', { exact: true }).selectOption('paste');
   await page.keyboard.press('Escape');
   await page.locator('#desktop').click();
@@ -683,6 +684,40 @@ try {
     await opener.waitForFunction(() => window.filesMessage?.type === 'redeven:remote-desktop:files' && window.filesMessage.session_id === 'qualification');
     await page.bringToFront();
   }
+  // DRM client text has its own capability; clipboard synchronization stays off.
+  clientTextOnly = true;
+  const refreshCapabilities = capabilities => new Promise(resolve => {
+    const connection = control;
+    const connected = data => {
+      if (JSON.parse(data).command.method !== 'connect') return;
+      connection.off('message', connected); paint(); resolve();
+    };
+    connection.on('message', connected);
+    connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities }));
+  });
+  await refreshCapabilities({ backend: 'linux-drm-kms', displays, unlock: true, locked_screen: true, audio: false, clipboard: false, text_input: true });
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('.floe-remote-input').disabled);
+  await page.locator('#settings').click();
+  assert(await page.getByLabel('Text input', { exact: true }).isEnabled(), 'DRM client text was coupled to clipboard synchronization');
+  assert(await page.locator('#clipboard').isDisabled(), 'client text enabled unsupported clipboard synchronization');
+  await page.getByLabel('Text input', { exact: true }).selectOption('paste');
+  await page.keyboard.press('Escape');
+  await page.locator('#desktop').click();
+  const localTextStart = messages.length;
+  await page.keyboard.type('abC$');
+  await compose('中文😀');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(100);
+  const localText = messages.slice(localTextStart).map(packet => packet.command.input).filter(Boolean);
+  assert.equal(localText.filter(input => input.kind === 'paste').map(input => input.text).join(''), 'abC$中文😀', 'local ASCII and composition must use the same ordered text path');
+  assert(!localText.some(input => /^Key[A-Z]|^Digit/.test(input.code ?? '')), 'local characters also emitted physical keys');
+  assert(localText.some(input => input.code === 'Enter'), 'local text mode lost following physical Enter');
+  await page.locator('#settings').click();
+  await page.getByLabel('Text input', { exact: true }).selectOption('host');
+  await page.keyboard.press('Escape');
+  clientTextOnly = false;
+  await refreshCapabilities({ backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: true });
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('.floe-remote-input').disabled);
   const catalogs = await page.evaluate(() => window.remoteDesktopCatalog);
   for (const [locale, catalog] of Object.entries(catalogs)) {
     await page.evaluate(locale => { document.documentElement.lang = locale; }, locale);

@@ -91,6 +91,14 @@ each input event, the service re-reads the active session, lock state and kernel
 VT and verifies the bound compositor identity. D-Bus signals wake the owner but
 do not authorize from cached state. Process inspection is limited to binding or
 rebuilding compositor identity; failed reads or identity checks revoke input.
+GNOME's verified compositor binds its actual logind locker session from its
+startup session identity or the user's Display session. This can differ from the
+physical seat after another desktop login; both hints are checked without
+replacing the physical seat or VT boundary. Unknown or foreign locker state
+fails closed. The lock command targets that bound locker.
+The first admitted interaction wakes idle DRM capture immediately; continuous
+input retains the configured frame-rate budget. Kernel connector stalls remain
+a separate host condition and never trigger a silent capture-backend switch.
 Disconnect, session/VT transition, service stop and attachment replacement also
 release held input before the next owner is admitted.
 
