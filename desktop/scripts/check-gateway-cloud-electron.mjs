@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
@@ -12,9 +12,18 @@ import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 
 // Cloud approval belongs to the private integration runner. This fixture only
 // exercises the real local consent UI and owner-authenticated Runtime bridge.
-for (const key of ['REDEVEN_GATEWAY_JOIN_CONTAINER', 'REDEVEN_GATEWAY_JOIN_STATE_ROOT', 'REDEVEN_GATEWAY_JOIN_MATERIAL']) {
+for (const key of ['REDEVEN_GATEWAY_JOIN_CONTAINER', 'REDEVEN_GATEWAY_JOIN_STATE_ROOT']) {
   assert.ok(process.env[key], `${key} is required`);
 }
+const invitation = JSON.parse(await new Promise((resolve, reject) => {
+  let raw = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => { raw += chunk; });
+  process.stdin.on('end', () => { try { resolve(raw); } catch (error) { reject(error); } });
+  process.stdin.on('error', reject);
+}));
+assert.equal(typeof invitation.share_address, 'string');
+assert.equal(typeof invitation.code, 'string');
 execFileSync('../scripts/check_desktop_electron_test_runtime.sh', [process.cwd()], { stdio: 'inherit' });
 const directory = await mkdtemp(path.join(tmpdir(), 'redeven-gateway-electron-'));
 await mkdir('dist/gateway-cloud-acceptance', { recursive: true });
@@ -58,9 +67,11 @@ try {
   const trigger = page.getByRole('button', { name: 'Gateway connection', exact: true });
   await trigger.click();
   const dialog = page.getByRole('dialog');
-  await dialog.locator('input[type=file]').setInputFiles({ name: 'join.json', mimeType: 'application/json',
-    buffer: await readFile(process.env.REDEVEN_GATEWAY_JOIN_MATERIAL) });
-  await dialog.getByRole('button', { name: 'Agree and join', exact: true }).click();
+  const inputs = dialog.locator('input');
+  await inputs.nth(0).fill(invitation.share_address);
+  await inputs.nth(1).fill(invitation.code);
+  await dialog.getByRole('button', { name: 'Verify', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Confirm and enable', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[role=status]')?.textContent?.includes('approval'), null, { timeout: 120_000 });
   await page.keyboard.press('Escape');
   assert.equal(await trigger.evaluate(element => element === document.activeElement), true);

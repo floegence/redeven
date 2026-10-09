@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/accessgate"
+	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayservice"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/pquerna/otp/totp"
@@ -79,19 +80,23 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 		runtime.log = slog.Default()
 		runtime.a = newRuntimeHealthTestAgent(t, runtime.configPath, gate)
 		runtime.appServer = runtime.a.CodeAppServer()
-		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/invitations", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
+		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/invitation-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()
 		gateway.Handler().ServeHTTP(response, request)
 		var envelope struct {
-			OK   bool                `json:"ok"`
-			Data gp.MemberInvitation `json:"data"`
+			OK   bool                      `json:"ok"`
+			Data gc.InvitationCodeDelivery `json:"data"`
 		}
 		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &envelope) != nil {
 			t.Fatal("invitation unavailable", response.Code)
 		}
-		if err := runtime.a.JoinGateway(envelope.Data, ""); err != nil {
+		preview, err := runtime.a.PreviewGateway(ctx, envelope.Data.ShareAddress, envelope.Data.Code, "join")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := runtime.a.ConfirmGatewayPreview(preview.PreviewID, "join", ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := runtime.StartGatewayOnly(ctx); err != nil {

@@ -37,18 +37,10 @@ export type GatewayMember = Readonly<{
   cloud_revocation_pending: boolean;
   metadata: Readonly<{ hostname: string; os: string; arch: string; version: string }>;
 }>;
-export type GatewayMemberInvitation = Readonly<{
-  protocol_version: typeof GATEWAY_PROTOCOL_VERSION;
-  invitation_id: string;
-  gateway_id: string;
-  gateway_name: string;
-	endpoints: readonly GatewayEndpoint[];
-  gateway_public_key: string;
-  gateway_tls_root_pem: string;
-  token: string;
-  issued_at_unix_ms: number;
-  expires_at_unix_ms: number;
-  signature: string;
+export type GatewayInvitationCodeDelivery = Readonly<{
+ protocol_version: typeof GATEWAY_PROTOCOL_VERSION; invitation_id: string; gateway_id: string; gateway_name: string;
+ gateway_public_key: string; share_address: string; share_addresses: readonly string[]; code: string;
+ issued_at_unix_ms: number; expires_at_unix_ms: number; signature: string;
 }>;
 export type GatewayMemberService = Readonly<{
   revision: number;

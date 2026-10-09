@@ -141,19 +141,19 @@ func validateGatewayEndpoints(endpoints []gp.GatewayEndpoint) error {
 	return nil
 }
 
-func SignInvitation(invitation *gp.MemberInvitation, private ed25519.PrivateKey) error {
+func SignEnrollmentDescriptor(invitation *gp.EnrollmentDescriptor, private ed25519.PrivateKey) error {
 	if invitation == nil || validateGatewayEndpoints(invitation.Endpoints) != nil {
 		return ErrInvalidProof
 	}
 	invitation.Signature = ""
-	signature, err := signValue("redeven.gateway.invitation.v5", *invitation, private)
+	signature, err := signValue("redeven.gateway.enrollment-descriptor.v1", *invitation, private)
 	if err == nil {
 		invitation.Signature = signature
 	}
 	return err
 }
 
-func VerifyInvitation(invitation gp.MemberInvitation, now time.Time) error {
+func VerifyEnrollmentDescriptor(invitation gp.EnrollmentDescriptor, now time.Time) error {
 	if invitation.ProtocolVersion != gp.Version || !validID(invitation.InvitationID) || !validID(invitation.GatewayID) || validateGatewayEndpoints(invitation.Endpoints) != nil || invitation.IssuedAtUnixMS <= 0 || invitation.IssuedAtUnixMS > now.Add(time.Minute).UnixMilli() || invitation.ExpiresAtUnixMS <= now.UnixMilli() || invitation.ExpiresAtUnixMS-invitation.IssuedAtUnixMS != int64((10*time.Minute)/time.Millisecond) {
 		return ErrInvalidProof
 	}
@@ -169,7 +169,7 @@ func VerifyInvitation(invitation gp.MemberInvitation, now time.Time) error {
 	}
 	signature := invitation.Signature
 	invitation.Signature = ""
-	return verifyValue("redeven.gateway.invitation.v5", invitation, invitation.GatewayPublicKey, signature)
+	return verifyValue("redeven.gateway.enrollment-descriptor.v1", invitation, invitation.GatewayPublicKey, signature)
 }
 
 func SignDelegation(delegation *gp.MemberDelegation, private ed25519.PrivateKey) error {

@@ -30,7 +30,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
     finally { if (current === generation) setBusy(false); }
   }
   return <Dialog open={!!props.environment} onOpenChange={value => { if (!value) props.close(); }} title={props.i18n.t('gatewayJoin.title')}
-    bodyDescription={props.i18n.t('gatewayJoin.consent')} closeLabel={props.i18n.t('common.close')} class="redeven-gateway-dialog redeven-gateway-join-dialog" contentClass="redeven-gateway-join-content">
+    bodyDescription={props.i18n.t('gatewayJoin.codeHelp')} closeLabel={props.i18n.t('common.close')} class="redeven-gateway-dialog redeven-gateway-join-dialog" contentClass="redeven-gateway-join-content">
     <Show when={target()?.id} keyed fallback={<div class="redeven-gateway-join-layout">
       <div class="redeven-gateway-join-scroll">
         <div class="redeven-gateway-empty-state redeven-gateway-setup-empty">
@@ -43,6 +43,6 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
         <Button class="cursor-pointer" variant="outline" onClick={props.close}>{props.i18n.t('gatewayJoin.notNow')}</Button>
         <Button class="cursor-pointer" loading={busy()} onClick={() => void start()}>{props.i18n.t('gatewayJoin.startAndContinue')}</Button>
       </div>
-    </div>}>{value => <RuntimeGatewayJoinPanel embedded targetID={value} i18n={props.i18n} onClose={props.close} />}</Show>
+    </div>}>{value => <RuntimeGatewayJoinPanel embedded targetID={value} targetLabel={target()?.label} i18n={props.i18n} onClose={props.close} />}</Show>
   </Dialog>;
 }

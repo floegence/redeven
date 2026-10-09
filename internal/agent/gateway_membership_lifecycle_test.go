@@ -112,7 +112,7 @@ func TestGatewaySelectionFencesExistingDirectController(t *testing.T) {
 	}
 	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{EnvironmentID: "existing", LocalEnvironmentPublicID: "runtime", BindingGeneration: 2}}
 	previous := a.remoteConfigSnapshot()
-	if err := a.JoinGateway(invitation, "preserve"); err != nil {
+	if err := a.changeGateway(invitation, "preserve", false); err != nil {
 		t.Fatal(err)
 	}
 	if sameControlBinding(previous, a.remoteConfigSnapshot()) {
@@ -139,7 +139,7 @@ func TestGatewayReplacementFencesOfflineOldPathAndRetainsOnlyRemoval(t *testing.
 	oldSession, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateway: member, GatewayPublication: route, EnvironmentID: "env", LocalEnvironmentPublicID: "runtime"}, sessions: map[string]*activeSession{"old": {cancel: cancel, gatewayBindingPublicID: "binding", gatewayBindingGeneration: 1}}}
-	if err := a.ReplaceGateway(invitation, "preserve"); err != nil {
+	if err := a.changeGateway(invitation, "preserve", true); err != nil {
 		t.Fatal(err)
 	}
 	saved, err := config.Load(a.configPath)

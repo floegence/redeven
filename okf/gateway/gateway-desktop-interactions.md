@@ -13,11 +13,11 @@ Desktop presents Gateway members, invitations, permissions, policy and optional 
 
 ## Runtime joining
 
-Creating a managed Runtime offers Not now or After setup, add Gateway access. Joining starts only through the explicit trusted Runtime start action. A user who manages a Gateway can select it and issue an invitation; otherwise they import an invitation file. Both feed the same Runtime join call. Issuing an invitation does not silently consent or join.
+Creating a managed Runtime offers Not now or After setup, add Gateway access. Joining starts only through the explicit trusted Runtime start action. A user who manages a Gateway can select it and issue a signed address-and-code delivery; the Runtime owner enters those two values and verifies them. Issuing a delivery does not silently consent or join.
 
 Add Gateway access describes an approved network path, not Runtime administration; Cloud remains optional. Existing Cloud environments require an explicit preserve/new choice. Replace explains possible interruption and fences the old path. Update connection endpoints accepts a fresh signed descriptor from the same Gateway while preserving membership. Normal Runtime startup reconnects without showing this dialog. Background status polling never owns or resets Cloud credential recovery, continues after transient failures, and displays Runtime publication diagnostics. It updates observations only: imported invitations, ownership choices and leave confirmations survive until an explicit operation succeeds or the user closes the panel.
 
-The panel exposes current membership, retry, leave and replace. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending are distinct states. Local Runtime management remains available only through its trusted owner, never through a Gateway member card.
+The panel exposes current membership, retry, leave and replace. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending are distinct states. Address, code and target changes invalidate a preview; refresh preserves drafts. Local Runtime management remains available only through its trusted owner, never through a Gateway member card.
 
 ## Members and policy
 
@@ -29,7 +29,7 @@ Host management and URL client access have fixed, separate authority sources. A 
 
 Gateway settings has no editable roles or permission combinations. Verified host connections show a read-only host-management explanation and three tabs: Connection settings, Runtimes and Client access. URL connections show environment-consumer status and no service, endpoint, member or Cloud administration. A saved URL client's key reconnects without repeatedly asking for a code; changing connection coordinates must prove the pinned identity through the new actual connection.
 
-Runtime invitations and client access codes are separate materials. The Runtimes tab creates invitations for a Runtime administrator's local approval. Client access creates a ten-minute one-use code for another Desktop, with countdown and copy. Additional explanation is folded. The enrolled-client list shows a device label, enrollment and last access; labels never establish identity. Revocation requires explicit confirmation and affects only that client's Gateway sessions. Remove connection removes this Desktop's saved registration, not the Gateway service or Runtime. Cloud access keeps its independent Connect to Cloud flow.
+Runtime invitation codes and Desktop client access codes are separate materials. The Runtimes tab creates a ten-minute code plus administrator-confirmed share addresses for a Runtime administrator's local approval, with countdown, copy and regeneration. Additional explanation is folded. The enrolled-client list shows a device label, enrollment and last access; labels never establish identity. Revocation requires explicit confirmation and affects only that client's Gateway sessions. Remove connection removes this Desktop's saved registration, not the Gateway service or Runtime. Cloud access keeps its independent Connect to Cloud flow.
 
 The single settings entry owns all three management tabs. Keyboard arrows, Home and End select tabs with roving focus. Tab changes retain endpoint drafts, invitations and unexpired access codes; closing the window discards UI-only drafts and restores its originating card control. Runtime permissions and Cloud Namespace approval are never implied by opening settings or importing a client access code.
 

@@ -14,7 +14,7 @@ import {
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
 import {
   GATEWAY_PROTOCOL_VERSION, type GatewayPermissions, type GatewayMember, type GatewayEndpoint,
-  type GatewayPolicy, type GatewayMemberInvitation, type GatewayMemberOffer,
+  type GatewayPolicy, type GatewayInvitationCodeDelivery, type GatewayMemberOffer,
   type GatewayMemberOperationResult, type GatewayCloudPermission, type GatewayHookStatuses, type GatewayHookStatus, type GatewayClientAccessCode, type GatewayAuthorizedClient,
 } from '../shared/gatewayMembership';
 
@@ -63,6 +63,11 @@ function integer(value: unknown, minimum = 0): number {
   return value;
 }
 function boolean(value: unknown): boolean { if (typeof value !== 'boolean') return invalid(); return value; }
+function gatewayShareOrigin(value: unknown): string {
+ const address = text(value,512);
+ try { const url = new URL(address); if (url.protocol !== 'https:' || url.origin !== address || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return invalid(); } catch { return invalid(); }
+ return address;
+}
 function endpoint(value: unknown): GatewayEndpoint {
   const item = object(value);
   const scope = item.scope;
@@ -240,13 +245,15 @@ export class GatewayClient {
       paired_at_unix_ms: integer(value.paired_at_unix_ms, 1), permissions: permissions(value.permissions), proof: text(value.proof) };
   }
 
-  async invite(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayMemberInvitation> {
-    const item = object(await this.request(record, 'invitations', { protocol_version: GATEWAY_PROTOCOL_VERSION }, options));
+  async invite(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayInvitationCodeDelivery> {
+    const item = object(await this.request(record, 'invitation-codes', { protocol_version: GATEWAY_PROTOCOL_VERSION }, options));
     if (item.gateway_id !== gatewayProtocolID(record)) return invalid();
-    return { protocol_version: version(item.protocol_version), invitation_id: id(item.invitation_id), gateway_id: id(item.gateway_id),
-      gateway_name: text(item.gateway_name, 256),
-      endpoints: endpointList(item.endpoints), gateway_public_key: text(item.gateway_public_key), gateway_tls_root_pem: text(item.gateway_tls_root_pem, 16_384),
-      token: text(item.token), issued_at_unix_ms: integer(item.issued_at_unix_ms, 1), expires_at_unix_ms: integer(item.expires_at_unix_ms, 1), signature: text(item.signature) };
+    const addresses = Array.isArray(item.share_addresses) ? item.share_addresses.map(gatewayShareOrigin) : invalid();
+    const address = gatewayShareOrigin(item.share_address);
+    if (!addresses.length || addresses.length > 16 || !addresses.includes(address)) return invalid();
+    const code = text(item.code, 26);
+    if (!/^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$/u.test(code)) return invalid();
+    return { protocol_version: version(item.protocol_version), invitation_id: id(item.invitation_id), gateway_id: id(item.gateway_id), gateway_name: text(item.gateway_name,256), gateway_public_key: text(item.gateway_public_key), share_address: address, share_addresses: addresses, code, issued_at_unix_ms: integer(item.issued_at_unix_ms,1), expires_at_unix_ms: integer(item.expires_at_unix_ms,1), signature: text(item.signature) };
   }
 
   async updateEndpoints(record: GatewayRecord, endpoints: readonly GatewayEndpoint[], options: GatewayRequestOptions = {}): Promise<readonly GatewayEndpoint[]> {

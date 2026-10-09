@@ -1,9 +1,9 @@
-import { Button, Checkbox, Input } from '@floegence/floe-webapp-core/ui';
-import { ChevronDown, Info, Plus, Trash, Download } from '@floegence/floe-webapp-core/icons';
+import { Button, Checkbox, Input, StableText } from '@floegence/floe-webapp-core/ui';
+import { ChevronDown, Info, Plus, Trash, Copy } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionSuccess } from '../shared/desktopLauncherIPC';
-import type { GatewayCloudPermission, GatewayEndpoint, GatewayMemberInvitation, GatewayPolicy } from '../shared/gatewayMembership';
+import type { GatewayCloudPermission, GatewayEndpoint, GatewayInvitationCodeDelivery, GatewayPolicy } from '../shared/gatewayMembership';
 import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopI18n } from '../shared/i18n';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
@@ -15,8 +15,13 @@ export function GatewayMembersPanel(props: Readonly<{
 }>) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
-  const [invitation, setInvitation] = createSignal<GatewayMemberInvitation>();
+  const [invitation, setInvitation] = createSignal<GatewayInvitationCodeDelivery>();
   const [targetID, setTargetID] = createSignal('');
+  const [shareAddress, setShareAddress] = createSignal('');
+  const [copied, setCopied] = createSignal('');
+  const [now, setNow] = createSignal(Date.now());
+  const expiryTimer = setInterval(() => setNow(Date.now()),1000);
+  onCleanup(() => clearInterval(expiryTimer));
   const [draftPolicy, setDraftPolicy] = createSignal<GatewayPolicy>();
   const [overrides, setOverrides] = createSignal<Record<string, GatewayCloudPermission>>({});
   const [results, setResults] = createSignal<DesktopLauncherActionSuccess['gateway_member_results']>();
@@ -84,13 +89,12 @@ export function GatewayMembersPanel(props: Readonly<{
   async function invite() {
     if (!props.gateway || endpointsDirty() || !savedEndpoints().length) return;
     const result = await perform({ kind: 'invite_gateway_runtime', gateway_id: props.gateway.gateway_id });
-    if (result?.gateway_invitation) setInvitation(result.gateway_invitation);
+    if (result?.gateway_invitation_code) { setInvitation(result.gateway_invitation_code); setShareAddress(result.gateway_invitation_code.share_address); setCopied(''); setNow(Date.now()); }
   }
-  function download() {
-    if (!invitation()) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(invitation(), null, 2)], { type: 'application/json' }));
-    const link = document.createElement('a'); link.href = url; link.download = 'redeven-gateway-invitation.json'; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  async function copyInvitation(value: string, kind: 'address' | 'code') {
+    setCopied('');
+    try { await navigator.clipboard.writeText(value); setCopied(kind); }
+    catch { setError(props.i18n.t('gatewayJoin.copyFailed')); }
   }
   async function saveMembers() {
     if (!props.gateway) return;
@@ -184,15 +188,20 @@ export function GatewayMembersPanel(props: Readonly<{
         <Show when={invitation() && !endpointsDirty()}>
           <div class="redeven-gateway-content-enter redeven-gateway-invitation-card">
             <p role="status" class="text-sm font-medium text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
-            <dl class="redeven-gateway-join-summary"><div><span>{props.i18n.t('gatewayJoin.gateway')}</span><strong>{invitation()?.gateway_name}</strong></div><div><span>{props.i18n.t('gatewayJoin.connectionOptions')}</span><strong>{invitation()?.endpoints.length}</strong></div><div><span>{props.i18n.t('gatewayJoin.invitationType')}</span><strong>{props.i18n.t('gatewayJoin.oneTime')}</strong></div><div><span>{props.i18n.t('gatewayJoin.expiry')}</span><strong>{new Date(invitation()!.expires_at_unix_ms).toLocaleTimeString(props.i18n.locale)}</strong></div></dl>
-            <Button class="cursor-pointer" size="sm" variant="outline" icon={Download} onClick={download}>{props.i18n.t('gatewayMembers.download')}</Button>
+            <p class="font-medium">{invitation()?.gateway_name}</p>
+            <label class="block space-y-2 text-sm"><span>{props.i18n.t('gatewayJoin.address')}</span><select class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5" value={shareAddress()} onChange={event => { setShareAddress(event.currentTarget.value); setCopied(''); }}><For each={invitation()?.share_addresses}>{address => <option value={address}>{address}</option>}</For></select></label>
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(shareAddress(),'address')}><StableText reserve={[props.i18n.t('gatewayJoin.copyAddress'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='address'?'gatewayJoin.copied':'gatewayJoin.copyAddress')}</StableText></Button>
+            <div><p class="text-sm">{props.i18n.t('gatewayJoin.code')}</p><p class="select-text break-all rounded-md bg-muted p-3 font-mono tracking-wide">{invitation()?.code.match(/.{1,5}/g)?.join('-')}</p></div>
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(invitation()!.code,'code')}><StableText reserve={[props.i18n.t('gatewayJoin.copyCode'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='code'?'gatewayJoin.copied':'gatewayJoin.copyCode')}</StableText></Button>
+            <p role="timer" class="text-sm text-muted-foreground">{invitation()!.expires_at_unix_ms<=now()?props.i18n.t('gatewayJoin.expired'):props.i18n.t('gatewayJoin.expiresIn',{minutes:Math.max(0,Math.ceil((invitation()!.expires_at_unix_ms-now())/60000))})}</p>
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" disabled={busy()} onClick={() => void invite()}>{props.i18n.t('gatewayJoin.regenerate')}</Button>
             <label class="block space-y-1 text-xs"><span>{props.i18n.t('gatewayMembers.chooseRuntime')}</span>
               <select class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5 text-sm" value={targetID()} onChange={event => setTargetID(event.currentTarget.value)}>
                 <option value="">{props.i18n.t('gatewayMembers.importOnRuntime')}</option>
                 <For each={targets()}>{item => <option value={item.id}>{item.label}</option>}</For>
               </select>
             </label>
-            <Show when={target()}>{item => <RuntimeGatewayJoinPanel targetID={item().id} invitation={invitation()} i18n={props.i18n} />}</Show>
+            <Show when={target()}>{item => <RuntimeGatewayJoinPanel targetID={item().id} address={shareAddress()} code={invitation()?.code} targetLabel={item().label} i18n={props.i18n} />}</Show>
           </div>
         </Show>
       </section>

@@ -43,20 +43,20 @@ func TestEndpointProofCoversEveryConnectionOption(t *testing.T) {
 	tampered := invit
 	tampered.Endpoints = append([]gp.GatewayEndpoint(nil), invit.Endpoints...)
 	tampered.Endpoints[0].Address = "https://attacker.invalid"
-	if VerifyInvitation(tampered, time.Now()) == nil {
+	if VerifyEnrollmentDescriptor(tampered, time.Now()) == nil {
 		t.Fatal("endpoint address tampering was accepted")
 	}
 
 	duplicate := invit
 	duplicate.Endpoints = append([]gp.GatewayEndpoint(nil), invit.Endpoints[0], invit.Endpoints[0])
-	if err := SignInvitation(&duplicate, identity.PrivateKey); !errors.Is(err, ErrInvalidProof) {
+	if err := SignEnrollmentDescriptor(&duplicate, identity.PrivateKey); !errors.Is(err, ErrInvalidProof) {
 		t.Fatalf("duplicate endpoint was accepted: %v", err)
 	}
 
 	invalidScope := invit
 	invalidScope.Endpoints = append([]gp.GatewayEndpoint(nil), invit.Endpoints...)
 	invalidScope.Endpoints[0].Scope = gp.GatewayEndpointScope("internet")
-	if err := SignInvitation(&invalidScope, identity.PrivateKey); !errors.Is(err, ErrInvalidProof) {
+	if err := SignEnrollmentDescriptor(&invalidScope, identity.PrivateKey); !errors.Is(err, ErrInvalidProof) {
 		t.Fatalf("invalid endpoint scope was accepted: %v", err)
 	}
 }
@@ -173,6 +173,65 @@ func TestRuntimeEnrollmentFailsOverToSecondAdvertisedEndpoint(t *testing.T) {
 	}
 	if _, err := store.Authenticate(mustClientLeaf(t, saved)); err != nil {
 		t.Fatalf("enrollment did not reach the second endpoint: %v", err)
+	}
+}
+
+func TestEndpointRedemptionReplaysExactReceiptAfterResponseLoss(t *testing.T) {
+	store, _ := membershipStore(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	address := "https://" + listener.Addr().String()
+	if err := store.Readdress(address, listener.Addr().String()); err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.Invite("admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := PrepareRuntime(first, "runtime_endpoint_receipt", gp.MemberMetadata{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The direct member handler is sufficient for the initial mTLS enrollment.
+	mux := http.NewServeMux()
+	store.RegisterMemberHandlers(mux)
+	tlsConfig, err := store.TLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: mux, ReadHeaderTimeout: time.Second}
+	done := make(chan struct{})
+	go func() { defer close(done); _ = server.Serve(tls.NewListener(listener, tlsConfig)) }()
+	defer func() { _ = server.Close(); <-done }()
+	var saved *RuntimeConfig
+	if err := runtime.Enroll(t.Context(), func(next *RuntimeConfig) error { saved = next.Clone(); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.Invite("admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := saved.PrepareConnectionEndpoints(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.PendingEndpointUpdate == nil {
+		t.Fatal("endpoint update was not staged")
+	}
+	leaf := mustClientLeaf(t, saved)
+	firstReceipt, err := store.RedeemEndpointUpdate(leaf, *updated.PendingEndpointUpdate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := store.RedeemEndpointUpdate(leaf, *updated.PendingEndpointUpdate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(firstReceipt, replayed) {
+		t.Fatalf("replayed endpoint receipt changed: %#v vs %#v", firstReceipt, replayed)
 	}
 }
 

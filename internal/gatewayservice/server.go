@@ -234,7 +234,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /gateway/v5/cloud/configure", s.handleConfigureCloud)
 	mux.HandleFunc("POST /gateway/v5/cloud/status", s.handleCloudStatus)
 	mux.HandleFunc("POST /gateway/v5/members/reevaluate", s.handleReevaluate)
-	mux.HandleFunc("POST /gateway/v5/invitations", s.handleInvitation)
+	mux.HandleFunc("POST /gateway/v5/invitation-codes", s.handleInvitation)
 	mux.HandleFunc("POST /gateway/v5/endpoints", s.handleEndpoints)
 	mux.HandleFunc("POST /gateway/v5/members/remove", s.handleRemove)
 	mux.HandleFunc("POST /gateway/v5/members/policy", s.handleMemberPolicy)
@@ -511,7 +511,7 @@ func (s *Server) handleInvitation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
 		return
 	}
-	invitation, err := s.members.Invite(client.ClientKeyID)
+	invitation, err := s.members.IssueInvitationCode(client.ClientKeyID)
 	writeResult(w, invitation, err)
 }
 func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {

@@ -9,7 +9,7 @@ require (
 	github.com/floegence/floe-native-apps v0.22.32
 	github.com/floegence/floeterm/terminal-go v0.19.2
 	github.com/floegence/floret/v7 v7.26.0
-	github.com/floegence/flowersec/flowersec-go/v5 v5.10.5
+	github.com/floegence/flowersec/flowersec-go/v5 v5.11.0
 	github.com/floegence/redeven-service-templates v0.6.0
 	github.com/floegence/redevplugin/v3 v3.0.35
 	github.com/godbus/dbus/v5 v5.2.2
@@ -49,6 +49,7 @@ require (
 	github.com/dunglas/httpsfv v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
+	github.com/flynn/noise v1.1.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect

@@ -423,11 +423,10 @@ func (g *Gateway) executeCommand(ctx context.Context, command gc.GatewayCommand)
 	var err error
 	switch command.Kind {
 	case "invite":
-		invitation, inviteErr := g.members.InviteForCommand(command.ActorPublicID, command.PublicID, time.UnixMilli(command.ExpiresAtUnixMS))
+		invitation, inviteErr := g.members.IssueInvitationCodeForCommand(command.ActorPublicID, command.PublicID, time.UnixMilli(command.ExpiresAtUnixMS))
 		err = inviteErr
 		if err == nil {
-			converted := gc.MemberInvitation(invitation)
-			result.Invitation = &converted
+			result.InvitationCode = &invitation
 		}
 	case "remove_member", "reevaluate":
 		result.ErrorCode, err = g.members.ApplyCloudCommand(ctx, gatewaymembership.CloudCommand{ID: command.PublicID, Kind: command.Kind, MemberID: command.MemberID, MemberVersion: command.MemberVersion, ExpiresAtUnixMS: command.ExpiresAtUnixMS})

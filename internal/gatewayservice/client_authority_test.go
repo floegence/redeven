@@ -60,7 +60,7 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 		}
 		return req
 	}
-	for _, route := range []string{"/gateway/v5/clients/access-codes", "/gateway/v5/clients/list", "/gateway/v5/clients/revoke", "/gateway/v5/invitations", "/gateway/v5/endpoints", "/gateway/v5/members/remove", "/gateway/v5/policy", "/gateway/v5/cloud/configure", "/gateway/v5/cloud/status"} {
+	for _, route := range []string{"/gateway/v5/clients/access-codes", "/gateway/v5/clients/list", "/gateway/v5/clients/revoke", "/gateway/v5/invitation-codes", "/gateway/v5/endpoints", "/gateway/v5/members/remove", "/gateway/v5/policy", "/gateway/v5/cloud/configure", "/gateway/v5/cloud/status"} {
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, request(route, map[string]any{"protocol_version": gp.Version}, false, "127.0.0.1:1234"))
 		if response.Code != http.StatusForbidden {

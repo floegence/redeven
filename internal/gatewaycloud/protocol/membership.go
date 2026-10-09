@@ -3,13 +3,13 @@ package gatewaycloud
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
 
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
@@ -34,50 +34,58 @@ type MemberDelegation struct {
 	Signature              string `json:"signature"`
 }
 
-type MemberInvitation struct {
-	ProtocolVersion   string            `json:"protocol_version"`
-	InvitationID      string            `json:"invitation_id"`
-	GatewayID         string            `json:"gateway_id"`
-	GatewayName       string            `json:"gateway_name"`
-	Endpoints         []GatewayEndpoint `json:"endpoints"`
-	GatewayPublicKey  string            `json:"gateway_public_key"`
-	GatewayTLSRootPEM string            `json:"gateway_tls_root_pem"`
-	Token             string            `json:"token"`
-	IssuedAtUnixMS    int64             `json:"issued_at_unix_ms"`
-	ExpiresAtUnixMS   int64             `json:"expires_at_unix_ms"`
-	Signature         string            `json:"signature"`
+type InvitationCodeDelivery struct {
+	ProtocolVersion  string   `json:"protocol_version"`
+	InvitationID     string   `json:"invitation_id"`
+	GatewayID        string   `json:"gateway_id"`
+	GatewayName      string   `json:"gateway_name"`
+	GatewayPublicKey string   `json:"gateway_public_key"`
+	ShareAddress     string   `json:"share_address"`
+	ShareAddresses   []string `json:"share_addresses"`
+	Code             string   `json:"code"`
+	IssuedAtUnixMS   int64    `json:"issued_at_unix_ms"`
+	ExpiresAtUnixMS  int64    `json:"expires_at_unix_ms"`
+	Signature        string   `json:"signature"`
 }
 
-func (MemberInvitation) String() string   { return "Gateway.MemberInvitation" }
-func (MemberInvitation) GoString() string { return "Gateway.MemberInvitation" }
+func (InvitationCodeDelivery) String() string   { return "Gateway.InvitationCodeDelivery" }
+func (InvitationCodeDelivery) GoString() string { return "Gateway.InvitationCodeDelivery" }
 
-func (i MemberInvitation) Verify(gatewayID, publicKey string, now time.Time) error {
-	if strings.TrimSpace(i.GatewayName) == "" || len(i.GatewayName) > 256 {
+func SignInvitationCodeDelivery(delivery *InvitationCodeDelivery, key ed25519.PrivateKey) error {
+	if delivery == nil {
 		return ErrInvalidProof
 	}
-	if i.ProtocolVersion != MemberProtocolVersion || i.GatewayID != gatewayID || i.GatewayPublicKey != publicKey || !ValidMemberID(i.InvitationID) || len(i.Endpoints) == 0 || len(i.Endpoints) > 16 || i.IssuedAtUnixMS <= 0 || i.IssuedAtUnixMS > now.Add(time.Minute).UnixMilli() || i.ExpiresAtUnixMS <= now.UnixMilli() || i.ExpiresAtUnixMS-i.IssuedAtUnixMS != int64(10*time.Minute/time.Millisecond) {
+	delivery.Signature = ""
+	signature, err := signValue("redeven.gateway.invitation-code-delivery.v1", *delivery, key)
+	if err == nil {
+		delivery.Signature = signature
+	}
+	return err
+}
+
+func (i InvitationCodeDelivery) Verify(gatewayID, publicKey string, now time.Time) error {
+	if strings.TrimSpace(i.GatewayName) == "" || len(i.GatewayName) > 256 || i.ProtocolVersion != MemberProtocolVersion || i.GatewayID != gatewayID || i.GatewayPublicKey != publicKey || !ValidMemberID(i.InvitationID) || len(i.ShareAddresses) == 0 || len(i.ShareAddresses) > 16 || i.IssuedAtUnixMS <= 0 || i.IssuedAtUnixMS > now.Add(time.Minute).UnixMilli() || i.ExpiresAtUnixMS <= now.UnixMilli() || i.ExpiresAtUnixMS-i.IssuedAtUnixMS != int64(10*time.Minute/time.Millisecond) {
 		return ErrInvalidProof
 	}
-	seenIDs, seenAddresses := map[string]struct{}{}, map[string]struct{}{}
-	for _, endpoint := range i.Endpoints {
-		if !ValidMemberID(endpoint.EndpointID) || !ValidOrigin(endpoint.Address) || endpoint.Priority < 0 || endpoint.Priority > 1000 || (endpoint.Scope != gp.GatewayEndpointLAN && endpoint.Scope != gp.GatewayEndpointOverlay && endpoint.Scope != gp.GatewayEndpointPublic) {
-			return ErrInvalidProof
-		}
-		if _, ok := seenIDs[endpoint.EndpointID]; ok {
-			return ErrInvalidProof
-		}
-		if _, ok := seenAddresses[endpoint.Address]; ok {
-			return ErrInvalidProof
-		}
-		seenIDs[endpoint.EndpointID], seenAddresses[endpoint.Address] = struct{}{}, struct{}{}
+	code, err := flowersec.ParseInvitationCode(i.Code)
+	if err != nil || code.Text() != i.Code {
+		return ErrInvalidProof
 	}
-	token, err := DecodeKey(i.Token)
-	if err != nil || len(token) != 32 || len(i.GatewayTLSRootPEM) > 16<<10 || !x509.NewCertPool().AppendCertsFromPEM([]byte(i.GatewayTLSRootPEM)) {
+	selected := false
+	seen := map[string]bool{}
+	for _, address := range i.ShareAddresses {
+		if !ValidOrigin(address) || seen[address] {
+			return ErrInvalidProof
+		}
+		seen[address] = true
+		selected = selected || address == i.ShareAddress
+	}
+	if !selected {
 		return ErrInvalidProof
 	}
 	signature := i.Signature
 	i.Signature = ""
-	return verifyValue("redeven.gateway.invitation.v5", i, publicKey, signature)
+	return verifyValue("redeven.gateway.invitation-code-delivery.v1", i, publicKey, signature)
 }
 
 type GatewayPolicy struct {
@@ -125,9 +133,9 @@ type GatewayCommandRequest struct {
 }
 
 type GatewayCommandResult struct {
-	CommandPublicID string            `json:"command_public_id"`
-	Invitation      *MemberInvitation `json:"invitation,omitempty"`
-	ErrorCode       string            `json:"error_code,omitempty"`
+	CommandPublicID string                  `json:"command_public_id"`
+	InvitationCode  *InvitationCodeDelivery `json:"invitation_code,omitempty"`
+	ErrorCode       string                  `json:"error_code,omitempty"`
 }
 
 type GatewayCommandStatus struct {

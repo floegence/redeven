@@ -105,7 +105,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     const invitation = await session.client.invite(record);
     assert.equal(invitation.protocol_version, 'redeven-gateway-v5');
     assert.equal(invitation.gateway_id, catalog.gateway.gateway_id);
-    assert.deepEqual(invitation.endpoints, endpoints);
+    assert.deepEqual(invitation.share_addresses, endpoints.map(endpoint => endpoint.address));
+    assert.match(invitation.code, /^[0-9A-HJKMNP-TV-Z]{26}$/u);
     assert.equal(invitation.expires_at_unix_ms - invitation.issued_at_unix_ms, 600_000);
     assert.equal(catalog.members.length, 0, 'Only a Runtime can complete membership');
     await session.client.updatePolicy(record, { ...catalog.policy, default_cloud_allowed: true });

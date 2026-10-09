@@ -44,7 +44,7 @@ try {
         window.settingsFixture.actionResult = request => {
           if (request.kind === 'invite_gateway_runtime') return ++inviteAttempts === 1
             ? { ok: false, scope: 'gateway', code: 'gateway_catalog_failed', message: 'Unavailable' }
-            : { ok: true, outcome: 'gateway_invitation_created', gateway_invitation: invitation };
+            : { ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: invitation };
           if (request.kind === 'update_gateway_members') return { ok: true, outcome: 'gateway_members_updated', gateway_member_results: request.items.map((item, index) => ({ member_id: item.member_id, ...(index ? { error_code: 'MEMBER_CONFLICT' } : {}) })) };
           return { ok: true, outcome: 'gateway_members_updated' };
         };
@@ -60,7 +60,9 @@ try {
       await dialog.getByText(i18n.t('gatewayMembers.failed'), { exact: true }).waitFor();
       assert.equal(await dialog.getByText('Inherited', { exact: true }).isVisible(), true);
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
-      await dialog.getByRole('button', { name: i18n.t('gatewayMembers.download'), exact: true }).waitFor();
+      await dialog.getByText(i18n.t('gatewayMembers.invitationReady'), { exact: true }).waitFor();
+      assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyAddress'), exact: true }).count(), 1);
+      assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyCode'), exact: true }).count(), 1);
       // A policy preview only includes inherited members; saving requires a second explicit action.
       await dialog.locator('summary').filter({ hasText: i18n.t('gatewayMembers.policy') }).click();
       await dialog.getByRole('checkbox', { name: i18n.t('gatewayMembers.defaultAllow'), exact: true }).focus();

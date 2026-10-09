@@ -38,6 +38,18 @@ func (s *Store) RegisterMemberHandlers(mux *http.ServeMux) {
 		response, err := s.Join(r.Context(), request)
 		writeMemberResponse(w, response, err)
 	})
+	mux.HandleFunc("POST /v5/member/update-endpoints", func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.PeerCertificates) == 0 {
+			writeMemberResponse(w, nil, ErrDenied)
+			return
+		}
+		var request gp.MemberEndpointUpdateRequest
+		if !decodeMemberRequest(w, r, &request) {
+			return
+		}
+		response, err := s.RedeemEndpointUpdate(r.TLS.PeerCertificates[0], request)
+		writeMemberResponse(w, response, err)
+	})
 	mux.HandleFunc("POST /v5/member/rotate", func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.PeerCertificates) == 0 {
 			writeMemberResponse(w, nil, ErrDenied)

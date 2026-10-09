@@ -12,6 +12,7 @@ import (
 )
 
 type gatewayMemberOwner struct {
+	previews    map[string]gatewayPreview
 	mu          sync.Mutex
 	ctx         context.Context
 	application func(string) gatewaymembership.RuntimeApplication
@@ -108,21 +109,20 @@ func (a *Agent) startGatewayMemberLocked() error {
 	return nil
 }
 
-func (a *Agent) JoinGateway(invitation gp.MemberInvitation, choice string) error {
-	return a.changeGateway(invitation, choice, false)
-}
-func (a *Agent) ReplaceGateway(invitation gp.MemberInvitation, choice string) error {
-	return a.changeGateway(invitation, choice, true)
-}
-
-func (a *Agent) UpdateGatewayEndpoints(invitation gp.MemberInvitation) error {
-	a.gatewayMember.mu.Lock()
-	defer a.gatewayMember.mu.Unlock()
+func (a *Agent) updateGatewayEndpoints(invitation gp.EnrollmentDescriptor) error {
 	// Join the credential writer before taking its current revision.
 	a.stopGatewayMemberLocked()
-	member, err := a.GatewayMembership().PrepareConnectionEndpoints(invitation)
-	if err == nil {
-		err = a.persistGatewayMember(member)
+	member := a.GatewayMembership()
+	var err error
+	if member != nil && member.PendingEndpointUpdate != nil && member.PendingEndpointUpdate.InvitationID == invitation.InvitationID {
+		err = member.DeliverPendingEndpointUpdate(a.gatewayMember.ctx, a.persistGatewayMember)
+	} else if member == nil {
+		err = gatewaymembership.ErrState
+	} else {
+		member, err = member.PrepareConnectionEndpoints(invitation)
+		if err == nil {
+			err = a.persistGatewayMember(member)
+		}
 	}
 	restartErr := a.startGatewayMemberLocked()
 	if err != nil {
@@ -130,11 +130,7 @@ func (a *Agent) UpdateGatewayEndpoints(invitation gp.MemberInvitation) error {
 	}
 	return restartErr
 }
-func (a *Agent) changeGateway(invitation gp.MemberInvitation, choice string, replace bool) error {
-	a.cloudLinkMu.Lock()
-	defer a.cloudLinkMu.Unlock()
-	a.gatewayMember.mu.Lock()
-	defer a.gatewayMember.mu.Unlock()
+func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string, replace bool) error {
 	a.mu.Lock()
 	if a.cfg == nil {
 		a.mu.Unlock()

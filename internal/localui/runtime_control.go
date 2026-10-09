@@ -169,6 +169,7 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v2/tessiven/host", s.handleTessivenHost)
 	mux.HandleFunc("/v2/tessiven/resources", s.handleTessivenTarget)
 	mux.HandleFunc("/v2/cloud-link", s.handleCloudLink)
+	mux.HandleFunc("/v2/gateway/preview", s.handleGatewayPreview)
 	mux.HandleFunc("/v2/gateway/join", s.handleGatewayJoin)
 	mux.HandleFunc("/v2/gateway/replace", s.handleGatewayJoin)
 	mux.HandleFunc("/v2/gateway/update-endpoints", s.handleGatewayJoin)

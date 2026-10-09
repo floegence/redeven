@@ -100,7 +100,8 @@ try {
   assert.deepEqual(restored.gateway.member_endpoints, endpoints);
   const invitation = await (await lifecycle.client(record)).invite(record);
   assert.equal(invitation.gateway_id, catalog.gateway.gateway_id);
-  assert.deepEqual(invitation.endpoints, endpoints);
+    assert.deepEqual(invitation.share_addresses, endpoints.map(endpoint => endpoint.address));
+    assert.match(invitation.code, /^[0-9A-HJKMNP-TV-Z]{26}$/u);
   report.cases.push({ restartPassed: true, invitationPassed: true, noCloudRequired: true, phases: restartPhases });
   report.status = 'passed';
   console.log('PASS real local Gateway update, restart, identity preservation and failed-package service retention');
