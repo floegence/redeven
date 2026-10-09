@@ -416,7 +416,12 @@ export type FlowerSurfaceCopy = Readonly<{
     commandMenuLabel: string;
     commandCompactContext: string;
     compactContext: string;
-    compactContextBlocked: string;
+    compactContextEmpty: string;
+    compactContextBusy: string;
+    compactContextUnavailable: string;
+    compactionContextTooSmall: string;
+    compactionNoCompleteHistory: string;
+    compactionNoSavings: string;
     commandArgumentsInvalid: string;
     commandUnknown: (command: string) => string;
     composerMoreLabel: string;
@@ -757,7 +762,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact this conversation context',
     compactContext: 'Compact context',
-    compactContextBlocked: 'Remove attachments and file references before compacting context.',
+    compactContextEmpty: "Create or select a conversation before compacting context.",
+    compactContextBusy: "Finish or stop the current work and resolve pending requests before compacting context.",
+    compactContextUnavailable: "Context compaction is unavailable in this environment.",
+    compactionContextTooSmall: "The context is below the compaction target.",
+    compactionNoCompleteHistory: "There is no complete history segment to summarize.",
+    compactionNoSavings: "Summarizing would not reduce the context.",
     commandArgumentsInvalid: 'The /compact command does not take arguments.',
     commandUnknown: (command) => `Unknown Flower command: ${command}`,
     composerMoreLabel: 'More input options',

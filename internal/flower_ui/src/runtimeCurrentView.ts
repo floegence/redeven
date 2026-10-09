@@ -454,7 +454,7 @@ export function applyFlowerRuntimeCurrentView(
     status,
     active_run_id: activeRunID || undefined,
     current_execution: trim(current.turn_id) && trim(current.run_id)
-      ? { turn_id: trim(current.turn_id), run_id: trim(current.run_id), status }
+      ? { turn_id: trim(current.turn_id), run_id: trim(current.run_id), status, ...(current.turn_kind ? { turn_kind: current.turn_kind } : {}) }
       : undefined,
     run_progress: runtimeRunProgress(current),
     cancellation: mapFlowerCancellation(current.cancellation, threadID, trim(current.run_id), trim(current.turn_id)),

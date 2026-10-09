@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.25\.2$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.25.2"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.26\.0$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.26.0"
 if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v7\s*=>' go.mod; then
   fail "Floret must not use a Go module replacement"
 fi
@@ -60,6 +60,11 @@ echo "[INFO] checking typed ThreadService production path"
 require_source internal/ai/floret_bootstrap.go 'host.ThreadService(effects)'
 require_source internal/ai/floret_bootstrap.go 'threadRuntime  flruntime.ThreadService'
 require_source internal/ai/send_user_turn.go 's.threadRuntime.Send'
+require_source internal/ai/compact_thread_context.go 'flruntime.ThreadContextCompactor'
+require_source internal/ai/compact_thread_context.go 'compactor.CompactContext'
+if rg -n --glob '*.go' --glob '!**/*_test.go' 'WithAgentManualCompactions|ManualCompactionSource|flowerManualCompactionSource' internal/ai; then
+  fail "Redeven must use independent compaction instead of ordinary-turn manual sources"
+fi
 require_source internal/ai/stop_thread.go 'typed.Cancel'
 require_source internal/ai/queue.go 'flruntime.ThreadQueueController'
 require_source internal/ai/queue.go 'controller.SendQueuedNow'

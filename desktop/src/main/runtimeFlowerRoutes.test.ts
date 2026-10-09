@@ -87,3 +87,13 @@ describe('Flower extensions management routes', () => {
     expect(() => runtimeFlowerPath('/_redeven_proxy/api/ai/' + suffix)).toThrow();
   });
 });
+
+describe('Independent context compaction route', () => {
+  it('allows only the exact POST path', () => {
+    const path = '/_redeven_proxy/api/ai/threads/thread-1/context/compact';
+    expect(runtimeFlowerPath(path)).toBe(path);
+    expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(false);
+    for (const suffix of ['/extra', '?force=true', '/']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+  });
+});

@@ -1402,3 +1402,15 @@ it('reads the restored data generation through the Desktop runtime bridge', asyn
   await expect(adapter.resolveStorageGeneration?.()).resolves.toBe('b'.repeat(32));
   expect(requestRuntimeFlower).toHaveBeenCalledWith(expect.objectContaining({ method: 'GET', path: '/_redeven_proxy/api/ai/storage-generation' }));
 });
+
+it('admits compaction through the dedicated runtime route without a conversation input', async () => {
+  const current = { thread_id: 'thread-compact', view_version: 2, activity: 'active', turn_kind: 'context_compaction' };
+  const bridge = bridgeFor(request => {
+    expect(request.path).toBe('/_redeven_proxy/api/ai/threads/thread-compact/context/compact');
+    expect(request.method).toBe('POST');
+    expect(request.body).toEqual({ storage_generation: 'generation', client_request_id: 'compact-key' });
+    return { current };
+  });
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+  expect(await adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).toEqual(current);
+});

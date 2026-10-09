@@ -185,9 +185,6 @@ type run struct {
 	currentModelID     string
 	currentReasoning   config.AIReasoningSelection
 
-	muManualCompaction       sync.Mutex
-	contextCompactionAnchors map[string]FlowerTimelineAnchor
-
 	webSearch                 config.AIWebSearchResolution
 	attachmentToolReadEnabled bool
 
@@ -355,7 +352,6 @@ func newRun(opts runOptions) *run {
 		subagentRuntime:             opts.SubagentRuntime,
 		currentThinkingBlockIndex:   -1,
 		activityFileActions:         make(map[string]FlowerActivityFileAction),
-		contextCompactionAnchors:    make(map[string]FlowerTimelineAnchor),
 		subagentDepth:               opts.SubagentDepth,
 		toolTargetPolicy:            normalizeToolTargetPolicy(opts.ToolTargetPolicy),
 		canonicalReferenceAuthority: cloneFlowerCanonicalReferenceTargetAuthority(opts.CanonicalReferenceAuthority),

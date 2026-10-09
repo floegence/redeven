@@ -573,7 +573,7 @@ export type FlowerThreadSnapshot = Readonly<{
   status: FlowerThreadStatus;
   active_run_id?: string;
   // Detail-only projection of the accepted canonical current, including terminal identity.
-  current_execution?: Readonly<{ turn_id: string; run_id: string; status: FlowerThreadStatus }>;
+  current_execution?: Readonly<{ turn_id: string; run_id: string; status: FlowerThreadStatus; turn_kind?: 'context_compaction' }>;
   run_progress?: FlowerRunProgress | null;
   approval_pending?: boolean;
   approval_pending_count?: number;
@@ -769,6 +769,7 @@ export type FlowerThreadCancellation = Readonly<{
 }>;
 
 export type FlowerRuntimeCurrentView = Readonly<{
+  turn_kind?: 'context_compaction';
   cancellation?: FlowerThreadCancellation;
   restored_inputs?: readonly FlowerRestoredInput[];
   thread_id: string;
@@ -978,6 +979,11 @@ export type FlowerTurnLaunchInput = Readonly<{
   /** Explicit permission override for a new Thread; omitted uses the environment default. */
   permission_type?: FlowerPermissionType;
   reasoning_selection?: FlowerReasoningSelection;
+}>;
+
+export type FlowerCompactContextInput = Readonly<{
+  storage_generation: string;
+  client_request_id: string;
 }>;
 
 export type FlowerTurnLaunchReceipt = Readonly<{
@@ -1361,6 +1367,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   computerManagement?: FlowerComputerManagement;
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
+  compactThreadContext?: (threadID: string, input: FlowerCompactContextInput) => Promise<FlowerRuntimeCurrentView>;
   retryThread: (threadID: string) => Promise<FlowerThreadView>;
   stopThread: (threadID: string) => Promise<void>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;

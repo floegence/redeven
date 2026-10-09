@@ -105,6 +105,9 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 	if err != nil {
 		return nil, err
 	}
+	if effect != nil {
+		effect.turnKind = request.TurnKind
+	}
 	if effect != nil && effect.builder != nil {
 		effect.builder.threadID = request.ThreadID.String()
 		effect.builder.turnID = request.TurnID.String()
@@ -158,9 +161,12 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 		UserEmail: strings.TrimSpace(authority.UserEmail), CanRead: true,
 		CanWrite: true, CanExecute: true,
 	}
-	canonicalInput, err := canonicalRunInputFromFloret(request)
-	if err != nil {
-		return floretEffectRequest{}, err
+	var canonicalInput RunInput
+	if request.TurnKind != flruntime.TurnKindContextCompaction {
+		canonicalInput, err = canonicalRunInputFromFloret(request)
+		if err != nil {
+			return floretEffectRequest{}, err
+		}
 	}
 	return floretEffectRequest{meta: meta, req: SendUserTurnRequest{
 		ClientRequestID: request.RequestKey, ThreadID: request.ThreadID.String(), Model: settings.ModelID,

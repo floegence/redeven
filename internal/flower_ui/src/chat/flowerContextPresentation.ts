@@ -81,9 +81,10 @@ export function buildFlowerComposerContextIndicatorView(
   copy: FlowerSurfaceCopy,
 ): FlowerComposerContextIndicatorView {
   const labels = copy.chat.contextIndicator ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
-  // An estimate can exceed the next native measurement. Show only confirmed
-  // input so switching measurement sources never makes usage jump backwards.
-  const ratio = usage.confirmed ? contextUsageRatio(usage.confirmed) : null;
+  // Native usage remains preferred. Compaction invalidates that sample, so its
+  // installed estimate is the current measurement until the next normal request.
+  const sample = usage.confirmed ?? usage.estimate;
+  const ratio = sample ? contextUsageRatio(sample) : null;
   const progressValue = ratio === null ? null : Math.round(ratio * 100);
   const ratioValue = progressValue === null ? labels.unknownPercent : labels.percent(progressValue);
   const pressure = usage.estimate ?? usage.confirmed;
@@ -102,7 +103,7 @@ export function buildFlowerComposerContextIndicatorView(
     ariaLabel: labels.label,
     ariaValueText: `${labels.label}: ${accessibleUsage}, ${labels.cacheHitLabel}: ${accessibleCache}${warning ? `, ${warning}` : ''}`,
     ratioValue,
-    tone: contextPressureTone(pressure?.pressure_status ?? 'estimated'),
+    tone: usage.confirmed ? contextPressureTone(pressure?.pressure_status ?? 'estimated') : 'estimated',
     ratio,
     progressValue,
     cacheHitLabel: labels.cacheHitLabel,
@@ -131,6 +132,13 @@ export function compactionDividerLabel(compaction: FlowerContextCompaction, copy
 }
 
 export function compactionDividerDetail(compaction: FlowerContextCompaction, copy: FlowerSurfaceCopy): string {
+  if (compaction.status === 'noop') {
+    switch (compaction.reason) {
+      case 'context_too_small': return copy.chat.compactionContextTooSmall;
+      case 'no_compactable_context': return copy.chat.compactionNoCompleteHistory;
+      case 'insufficient_savings': return copy.chat.compactionNoSavings;
+    }
+  }
   const before = formatContextTokenCount(compaction.tokens_before);
   const after = formatContextTokenCount(compaction.tokens_after_estimate);
   const labels = copy.chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;

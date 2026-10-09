@@ -1000,6 +1000,7 @@ const mountFlowerSurface = (
   surfaceAdapter: TestFlowerSurfaceAdapter,
   props: Readonly<{
     copy?: FlowerSurfaceProps['copy'];
+    embeddedConversation?: FlowerSurfaceProps['embeddedConversation'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
     mobileThreadsOpen?: boolean;
@@ -1025,6 +1026,7 @@ const mountFlowerSurface = (
     <FlowerSurface
       adapter={surfaceAdapter}
       copy={props.copy}
+      embeddedConversation={props.embeddedConversation}
       notify={(notification) => {
         notifications.push(notification);
       }}
@@ -1092,6 +1094,7 @@ export function renderSurfaceWithAdapterProps(
   surfaceAdapter: TestFlowerSurfaceAdapter,
   props: Readonly<{
     copy?: FlowerSurfaceProps['copy'];
+    embeddedConversation?: FlowerSurfaceProps['embeddedConversation'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
     mobileThreadsOpen?: boolean;

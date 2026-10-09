@@ -1,4 +1,5 @@
 import { Clock } from '@floegence/floe-webapp-core/icons';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { Show, createMemo, createSignal, createUniqueId } from 'solid-js';
 
 import type { FlowerTimelineDecoration } from '../contracts/flowerSurfaceContracts';
@@ -14,6 +15,7 @@ function FlowerContextCompactionRunningIcon() {
 export function FlowerContextCompactionDivider(props: {
   decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
   copy: FlowerSurfaceCopy;
+  onRetry?: () => void;
 }) {
   const compaction = createMemo(() => props.decoration.compaction);
   const detail = createMemo(() => compactionDividerDetail(compaction(), props.copy));
@@ -75,6 +77,9 @@ export function FlowerContextCompactionDivider(props: {
         </Show>
       </div>
       <div class="flower-compaction-divider-rule" aria-hidden="true" />
+      <Show when={props.onRetry}>
+        <Button size="sm" variant="ghost" onClick={() => props.onRetry?.()}>{props.copy.chat.compactContext}</Button>
+      </Show>
     </div>
   );
 }

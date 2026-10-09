@@ -66,6 +66,7 @@ import {
   flowerTurnAdmissionFailureKind,
 } from './flowerTurnAdmission';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
+import { compactionDividerDetail } from './chat/flowerContextPresentation';
 import { FlowerThinkingOrb } from './FlowerThinkingOrb';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
@@ -1618,7 +1619,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		return draftSnapshot();
 	};
 	const visibleTransportOutbox = createMemo(() => (
-	    transportOutbox().forThread(currentComposerSessionKey())
+	    transportOutbox().forThread(currentComposerSessionKey()).filter((entry) => !entry.operation)
 	  ));
 	const [outboxRetryTick, setOutboxRetryTick] = createSignal(0);
 	const outboxRetryAttempts = new Map<string, number>();
@@ -4375,8 +4376,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         thread: projected,
         version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
       }, source, current, false);
+      if (received.runtimeState === 'accepted' && threadID === selectedThreadID()) {
+        for (const operation of contextCompactions ?? []) {
+          const prior = base.context_compactions?.find((item) => item.operation_id === operation.operation_id);
+          const anchored = timelineDecorations?.some((item) => item.kind === 'context_compaction' && item.compaction.operation_id === operation.operation_id);
+          if (operation.status === 'noop' && prior?.status !== 'noop' && !anchored) {
+            notifySuccess(compactionDividerDetail(operation, copy()));
+          }
+        }
+      }
       if (
         received.runtimeState === 'accepted'
+        && current.turn_kind !== 'context_compaction'
         && current.last_outcome === 'completed'
         && projected.status === 'success'
         && !projected.error
@@ -4478,6 +4489,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		for (const entry of transportOutbox().entries.values()) {
 			if (outboxResendInFlight.has(entry.requestId)) continue;
 			if (entry.terminalError) continue;
+      if (entry.operation === 'context_compaction' && !props.adapter.compactThreadContext) continue;
 			if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
 			if (isPendingDraftKey(entry.threadId) && !pendingAdmissionHandoffs.has(entry.requestId)) {
 				pendingAdmissionHandoffs.set(entry.requestId, {
@@ -4488,12 +4500,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 			}
 			outboxResendInFlight.add(entry.requestId);
 			const requestEpoch = liveTransport.connectionEpoch();
-			void props.adapter.launchTurn(entry.input).then((receipt) => {
+			const request = entry.operation === 'context_compaction'
+        ? props.adapter.compactThreadContext!(entry.threadId, { storage_generation: entry.input.storage_generation ?? '', client_request_id: entry.requestId }).then((current) => ({ client_request_id: entry.requestId, thread_id: entry.threadId, current }))
+        : props.adapter.launchTurn(entry.input);
+      void request.then((receipt) => {
 				outboxRetryAttempts.delete(entry.requestId);
 				const retryTimer = outboxRetryTimers.get(entry.requestId);
 				if (retryTimer !== undefined) clearTimeout(retryTimer);
 				outboxRetryTimers.delete(entry.requestId);
-				applyAcceptedTurnLaunchReceipt(receipt, requestEpoch);
+        if (entry.operation === 'context_compaction') {
+          if (receipt.current && requestEpoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(receipt.current);
+          setTransportOutbox((outbox) => outbox.drop(entry.requestId));
+        } else applyAcceptedTurnLaunchReceipt(receipt, requestEpoch);
 			}).catch((error) => {
                 if (error && typeof error === 'object' && error.code === 'AI_STORAGE_RESTORED') {
                     pendingAdmissionHandoffs.delete(entry.requestId);
@@ -6044,20 +6062,45 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const executeCompactContextCommand = async () => {
-    // Context compaction is a thread operation; never create a new thread for
-    // a slash command entered while the composer is in its empty state.
-    if (!trimString(selectedThreadID())) return;
-    if (threadLoadError()) return;
-    if (composerHasAttachments() || composerHasReferences()) {
-      notifyComposerError(copy().chat.compactContextBlocked);
+    const threadID = trimString(selectedThreadID());
+    if (!threadID) { notifyComposerError(copy().chat.compactContextEmpty); return; }
+    if (threadLoadError() || selectedThreadReadOnly()) return;
+    if (!props.adapter.compactThreadContext) { notifyComposerError(copy().chat.compactContextUnavailable); return; }
+    const thread = selectedThread();
+    if (thread?.active_run_id || thread?.queued_turn_count || thread?.input_request || thread?.approval_pending) {
+      notifyComposerError(copy().chat.compactContextBusy);
       return;
     }
     const sessionKey = currentComposerSessionKey();
     if (launchChatTurnInFlight.has(sessionKey)) return;
     launchChatTurnInFlight.add(sessionKey);
+    const session = draftSessionFor(sessionKey);
+    const frozen = session.snapshot();
+    const pendingOperation = transportOutbox().forThread(threadID).find((entry) => entry.operation === 'context_compaction');
+    const requestID = pendingOperation?.requestId ?? createFlowerClientRequestID();
+    const requestEpoch = liveTransport.connectionEpoch();
+    if (outboxResendInFlight.has(requestID)) { launchChatTurnInFlight.delete(sessionKey); return; }
+    outboxResendInFlight.add(requestID);
     try {
-      await launchChatTurn(FLOWER_COMPACT_CONTEXT_COMMAND);
+      const storageGeneration = pendingOperation?.input.storage_generation ?? await props.adapter.resolveStorageGeneration?.() ?? '';
+      setTransportOutbox((outbox) => outbox.put({
+        operation: 'context_compaction', requestId: requestID, threadId: threadID,
+        input: { client_request_id: requestID, thread_id: threadID, storage_generation: storageGeneration, prompt: '' },
+        attachmentLabels: [], createdAtMs: Date.now(),
+      }));
+      await transportOutbox().flushPersistence();
+      const current = await props.adapter.compactThreadContext(threadID, { storage_generation: storageGeneration, client_request_id: requestID });
+      setTransportOutbox((outbox) => outbox.drop(requestID));
+      if (requestEpoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(current);
+      if (session.snapshot().revision === frozen.revision && frozen.value.text.trim() === FLOWER_COMPACT_CONTEXT_COMMAND) {
+        updateComposerSessionText(sessionKey, '');
+      }
+    } catch (error) {
+      if (flowerTurnAdmissionFailureKind(error) !== 'unknown') setTransportOutbox((outbox) => outbox.drop(requestID));
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : '';
+      notifyComposerError(code === 'context_compaction_busy' ? copy().chat.compactContextBusy : getErrorMessage(error));
     } finally {
+      outboxResendInFlight.delete(requestID);
       launchChatTurnInFlight.delete(sessionKey);
     }
   };
@@ -6131,6 +6174,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const command = composerSlashCommand();
+    if (command.kind === 'intent' && shouldSubmitOnEnterKeydown(event)) {
+      event.preventDefault();
+      void executeCompactContextCommand();
+      return;
+    }
     if (command.kind === 'suggest') {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
@@ -6409,6 +6457,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setRetryPending(true);
       try {
         const requestEpoch = liveTransport.connectionEpoch();
+        if (selectedThread()?.current_execution?.turn_kind === 'context_compaction') {
+          await executeCompactContextCommand();
+          return;
+        }
         const live = await props.adapter.retryThread(threadID);
         receiveThreadView(live, 'user_action', requestEpoch);
       } catch (error) {
@@ -7644,7 +7696,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (threadLoadError() && selectedThreadID() && !composerPrimaryActionIsStop()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (composerPrimaryActionIsCommand()) {
-      return composerHasAttachments() || composerHasReferences() || !readyForChat() || !selectedThreadID();
+      return !readyForChat();
     }
     if (composerHasSubmissionBlockingAttachments()) return true;
     if (composerTextOverLimit() && !currentAttachmentSnapshot().capability?.supports_long_text) return true;
@@ -10156,7 +10208,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>) => {
     const decoration = createMemo(() => entry().decoration);
-    return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()} />;
+    return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()}
+      onRetry={selectedThread()?.current_execution?.turn_kind === 'context_compaction' && !selectedThread()?.active_run_id
+        && (decoration().compaction.status === 'failed' || decoration().compaction.status === 'cancelled')
+        && decoration().compaction.run_id === selectedThread()?.current_execution?.run_id ? () => void executeCompactContextCommand() : undefined} />;
   };
 
   const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>) => {

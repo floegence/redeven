@@ -156,7 +156,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		gatewayIdentity.StateCompatibilityKey += ":reasoning_history=" + string(policy)
 	}
 	var frozenAttachments map[string]frozenFloretAttachment
-	if req.Retry == nil {
+	if req.Retry == nil && req.TurnKind != flruntime.TurnKindContextCompaction {
 		contextProjection, err := floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority, tessivenContextResolver(ctx, r.host.tessiven))
 		if err != nil {
 			return nil, r.failRun("Failed to prepare linked context", err)
@@ -197,7 +197,6 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens, req.ModelCapability.MaxOutputTokens),
 		req.Options,
 		flProvider,
-		flowerManualCompactionSource(req.Input, r.executionKey),
 	)
 	if err != nil {
 		return nil, r.failRun("Failed to initialize Floret host", err)
@@ -217,7 +216,6 @@ func buildFloretThreadAgent(
 	contextPolicy flconfig.ContextPolicy,
 	options RunOptions,
 	provider *floretProviderAdapter,
-	manualCompactions flruntime.ManualCompactionSource,
 ) (*flruntime.Agent, error) {
 	if r == nil || provider == nil {
 		return nil, errors.New("floret effect adapter requires a run and provider")
@@ -229,9 +227,6 @@ func buildFloretThreadAgent(
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
-	}
-	if manualCompactions != nil {
-		agentOptions = append(agentOptions, flruntime.WithAgentManualCompactions(manualCompactions))
 	}
 	return flruntime.NewAgent(
 		redevenFloretAgentConfig(surface.SystemPrompt, contextPolicy, options.ReasoningSelection),

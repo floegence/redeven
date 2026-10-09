@@ -62,7 +62,7 @@ successfully. Tool completion must not imply that the requested navigation ran.
 
 ## Canonical pause and return
 
-Published Floret v7.25.2 `tools.Result.InputRequired` pauses the provider after the
+Published Floret v7.26.0 `tools.Result.InputRequired` pauses the provider after the
 completed tool batch. Redeven maps a takeover decision into a non-secret select
 question. It preserves whether navigation already happened; a post-navigation
 pause must not claim the action was unexecuted. Floret persists the result and

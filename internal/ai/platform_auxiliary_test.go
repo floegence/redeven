@@ -92,7 +92,11 @@ func TestPlatformAutomaticTitleAndManualCompaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, text := range []string{strings.Repeat("context to preserve and summarize. ", 1400), strings.Repeat("More prior context to retain. ", 1400), strings.Repeat("another block of context. ", 1900), strings.Repeat("last context to retain. ", 1900), "/compact"} {
-		_, err = runTypedTurnForTest(t, t.Context(), svc, meta, []string{"first", "second", "third", "fourth", "compact"}[i], RunStartRequest{ThreadID: thread.ThreadID, Model: "platform/test-model", Input: RunInput{Text: text}})
+		if text == "/compact" {
+			compactQualificationThread(t, t.Context(), svc, meta, thread.ThreadID, "compact")
+		} else {
+			_, err = runTypedTurnForTest(t, t.Context(), svc, meta, []string{"first", "second", "third", "fourth", "compact"}[i], RunStartRequest{ThreadID: thread.ThreadID, Model: "platform/test-model", Input: RunInput{Text: text}})
+		}
 		if err != nil {
 			t.Fatal(err)
 		}

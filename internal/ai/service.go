@@ -1411,6 +1411,7 @@ func newToolID() (string, error) {
 // threadEffect contains only provider/tool preparation inputs for a
 // ThreadRuntime-owned command. It cannot register or settle Redeven lifecycle.
 type threadEffect struct {
+	turnKind                     flruntime.TurnKind
 	req                          RunStartRequest
 	threadModelID                string
 	threadReasoningSelectionJSON string
@@ -1572,7 +1573,7 @@ func (s *Service) buildThreadEffectAgent(ctx context.Context, effect *threadEffe
 	effect.req.Model = model
 	agent, err := r.prepareFloretHostedAgent(ctx, RunRequest{
 		Model: model, Input: effect.req.Input, Options: effect.req.Options,
-		ModelCapability: modelCapability, Retry: effect.req.Retry,
+		ModelCapability: modelCapability, Retry: effect.req.Retry, TurnKind: effect.turnKind,
 	}, gateway.provider, gateway.apiKey, gateway.adapterOverride)
 	if err != nil {
 		return nil, err

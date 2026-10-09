@@ -1321,3 +1321,5 @@ Document published Floret v7.15.1 canonical calibration, tokenizer estimates, an
   environment-session transfer survives panel dismissal without retaining chat
   continuation. Shared archive acquisition consumes released Floe Native Apps
   v0.2.0 and exact catalog identities.
+
+- 2026-10-09: Adopted published Floret v7.26.0 independent context compaction, removed ordinary-turn manual sources, and documented canonical anchors, usage invalidation, and real DeepSeek qualification.

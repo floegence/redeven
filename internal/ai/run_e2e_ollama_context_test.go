@@ -122,7 +122,7 @@ func TestE2E_FlowerOllamaContextCompaction(t *testing.T) {
 			report["before"] = detail.Thread.ContextUsage
 			before := recorder.lastMain(t)
 			if !automatic {
-				detail = sendOllamaContextTurn(t, ctx, svc, &meta, created.ThreadID, "manual-compact", "/compact")
+				detail = compactQualificationThread(t, ctx, svc, &meta, created.ThreadID, "manual-compact")
 			} else {
 				pressureTokens, maxTurns := 6_000, 8
 				if scenario == "automatic_configured_window" {
@@ -140,7 +140,7 @@ func TestE2E_FlowerOllamaContextCompaction(t *testing.T) {
 			}
 			compact := detail.Thread.ContextCompactions[0]
 			if scenario == "small_history" {
-				if compact.Phase != "noop" || compact.Status != "noop" || compact.Reason != "context_too_small" || compact.Source != flowerManualCompactionSourceName {
+				if compact.Phase != "noop" || compact.Status != "noop" || compact.Reason != "context_too_small" || compact.Source != "thread_runtime" {
 					t.Fatalf("small history should report no work: %+v", compact)
 				}
 				for _, request := range recorder.snapshot() {
@@ -160,7 +160,7 @@ func TestE2E_FlowerOllamaContextCompaction(t *testing.T) {
 			if compact.Phase != "complete" || compact.Status != "compacted" || compact.OperationID == "" || compact.RequestID == "" {
 				t.Fatalf("compaction did not complete: %+v", compact)
 			}
-			trigger, reason, source := "manual", "manual", flowerManualCompactionSourceName
+			trigger, reason, source := "manual", "manual", "thread_runtime"
 			if automatic {
 				trigger, reason, source = "pre_request", "threshold", "engine"
 			}

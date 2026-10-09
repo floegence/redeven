@@ -25,8 +25,8 @@ const (
 	flowersecGoVersion   = "v5.10.5"
 	flowersecCorePackage = "@floegence/flowersec-core"
 	flowersecCoreVersion = "5.10.5"
-	floeWebappVersion    = "0.86.5"
-	floeEnvCoreVersion   = "0.86.5"
+	floeWebappVersion    = "0.86.7"
+	floeEnvCoreVersion   = "0.86.10"
 )
 
 var flowersecNPMPackages = []string{
@@ -401,34 +401,34 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
 			"\"@floegence/floe-webapp-boot\": \"" + floeWebappVersion + "\"",
-			"\"@floegence/floe-webapp-core\": \"" + floeWebappVersion + "\"",
+			"\"@floegence/floe-webapp-core\": \"" + floeEnvCoreVersion + "\"",
 		},
 		"desktop/package-lock.json": {
 			"floe-webapp-boot-" + floeWebappVersion + ".tgz",
-			"floe-webapp-core-" + floeWebappVersion + ".tgz",
+			"floe-webapp-core-" + floeEnvCoreVersion + ".tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@" + floeWebappVersion,
-			"@floegence/floe-webapp-core@" + floeWebappVersion,
+			"@floegence/floe-webapp-core@" + floeEnvCoreVersion,
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"" + floeWebappVersion + "\"",
+			"\"@floegence/floe-webapp-boot\": \"" + floeEnvCoreVersion + "\"",
 			"\"@floegence/floe-webapp-core\": \"" + floeEnvCoreVersion + "\"",
-			"\"@floegence/floe-webapp-protocol\": \"" + floeWebappVersion + "\"",
+			"\"@floegence/floe-webapp-protocol\": \"" + floeEnvCoreVersion + "\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.19.2\"",
 			"\"@floegence/flowersec-core\": \"5.10.5\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-" + floeWebappVersion + ".tgz",
+			"floe-webapp-boot-" + floeEnvCoreVersion + ".tgz",
 			"floe-webapp-core-" + floeEnvCoreVersion + ".tgz",
-			"floe-webapp-protocol-" + floeWebappVersion + ".tgz",
+			"floe-webapp-protocol-" + floeEnvCoreVersion + ".tgz",
 			"floeterm-terminal-web-0.19.2.tgz",
 			"flowersec-core-5.10.5.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@" + floeWebappVersion,
+			"@floegence/floe-webapp-boot@" + floeEnvCoreVersion,
 			"@floegence/floe-webapp-core@" + floeEnvCoreVersion,
-			"@floegence/floe-webapp-protocol@" + floeWebappVersion,
+			"@floegence/floe-webapp-protocol@" + floeEnvCoreVersion,
 			"@floegence/floeterm-terminal-web@0.19.2",
 			"@floegence/flowersec-core@5.10.5",
 		},
@@ -440,9 +440,8 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		},
 		"THIRD_PARTY_NOTICES.md": {
 			"@floegence/floe-webapp-boot | " + floeWebappVersion,
-			"@floegence/floe-webapp-core | " + floeWebappVersion,
 			"@floegence/floe-webapp-core | " + floeEnvCoreVersion,
-			"@floegence/floe-webapp-protocol | " + floeWebappVersion,
+			"@floegence/floe-webapp-protocol | " + floeEnvCoreVersion,
 			"@floegence/floeterm-terminal-web | 0.19.2",
 			"@floegence/flowersec-core | 5.10.5",
 		},
@@ -454,7 +453,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.19.2",
 			"semantic Presentation",
-			"Floe Webapp Boot, Core, and Protocol v" + floeWebappVersion,
+			"Floe Webapp Boot, Core, and Protocol v" + floeEnvCoreVersion,
 			"Env App Core v" + floeEnvCoreVersion,
 			"Flowersec Core v5.10.5",
 		},
@@ -491,7 +490,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	} {
 		for _, packageName := range packages {
 			version := floeWebappVersion
-			if strings.HasPrefix(file, "internal/envapp/") && packageName == "@floegence/floe-webapp-core" {
+			if strings.HasPrefix(file, "internal/envapp/") || packageName == "@floegence/floe-webapp-core" {
 				version = floeEnvCoreVersion
 			}
 			assertOnlyCurrentNPMDependency(t, root, file, packageName, version)
@@ -575,7 +574,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v7"
-		floretVersion = "v7.25.2"
+		floretVersion = "v7.26.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")

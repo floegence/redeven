@@ -15,6 +15,7 @@ export type TransportOutboxProvisionalThreadSettings = Readonly<{
 }>;
 
 export type TransportOutboxEntry = Readonly<{
+  operation?: 'context_compaction';
   requestId: string;
   threadId: string;
   input: TransportOutboxInput;

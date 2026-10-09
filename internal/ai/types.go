@@ -309,6 +309,7 @@ type RunStartRequest struct {
 
 // RunRequest is the internal run request for Go runtime execution.
 type RunRequest struct {
+	TurnKind        flruntime.TurnKind           `json:"-"`
 	Model           string                       `json:"model"`
 	Objective       string                       `json:"objective,omitempty"`
 	Input           RunInput                     `json:"input"`

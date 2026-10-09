@@ -30,6 +30,7 @@ import type {
   FlowerPermissionType,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
+  FlowerRuntimeCurrentView,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerModelDirectory,
@@ -759,6 +760,20 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         throw flowerTurnAdmissionError('unknown', error, 'Flower response was not received.');
       }
       return normalizeFlowerTurnLaunchReceipt(response, { clientRequestID, existingThreadID });
+    },
+    compactThreadContext: async (threadID, input) => {
+      try {
+        const response = await fetchLocalApiJSON<{ current: FlowerRuntimeCurrentView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/context/compact`, {
+          method: 'POST', body: JSON.stringify(input),
+        });
+        return response.current;
+      } catch (error) {
+        if (error instanceof LocalApiError) {
+          const unusableSuccess = error.code === 'INVALID_JSON_RESPONSE' && error.status >= 200 && error.status < 300;
+          throw flowerTurnAdmissionError(unusableSuccess ? 'unknown' : 'rejected', error);
+        }
+        throw flowerTurnAdmissionError('unknown', error, 'Flower response was not received.');
+      }
     },
     retryThread: async (threadID) => {
       const tid = trim(threadID);

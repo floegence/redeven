@@ -562,16 +562,14 @@ func ollamaInterleaveCompaction(f *ollamaTaskFixture) {
 	f.fault.arm("hold")
 	f.send("compact-active", "Without tools, explain transaction logs in twenty paragraphs.")
 	f.fault.waitHit(f.t)
-	compact := f.send("compact-queued", "/compact")
-	recall := f.send("compact-recall", "Return only the exact fictional fixture marker from the earlier conversation. Do not call tools.")
-	if compact.Kind != "queued" || recall.Kind != "queued" {
-		f.t.Fatal("compaction and recall must queue while active")
+	if _, err := f.svc.CompactThreadContext(f.ctx, f.meta, f.threadID, CompactThreadContextRequest{ClientRequestID: "compact-busy"}); !errors.Is(err, flruntime.ErrThreadBusy) {
+		f.t.Fatalf("busy compact error=%v", err)
 	}
 	f.stop()
-	f.stoppedQueue(2)
+	f.stoppedQueue(0)
 	f.restart()
-	_, err := f.svc.SendQueuedInputNow(f.ctx, f.meta, f.threadID, compact.QueueID)
-	f.check(err)
+	compactQualificationThread(f.t, f.ctx, f.svc, f.meta, f.threadID, "compact-idle")
+	f.send("compact-recall", "Return only the exact fictional fixture marker from the earlier conversation. Do not call tools.")
 	d := f.terminal(flruntime.TurnOutcomeCompleted)
 	if ollamaTaskText(d.Current) != marker {
 		f.t.Fatalf("post-compaction recall=%q", ollamaTaskText(d.Current))

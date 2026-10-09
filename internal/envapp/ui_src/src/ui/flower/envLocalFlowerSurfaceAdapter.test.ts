@@ -2102,3 +2102,19 @@ beforeEach(async () => {
   releaseTestTransport = await bindTestSessionHTTP(fetchMock);
 });
 afterEach(() => releaseTestTransport?.());
+
+it('uses the dedicated compact route with only operation identity and preserves unknown admission errors', async () => {
+  const current = { thread_id: 'thread-compact', view_version: 3, activity: 'active', turn_kind: 'context_compaction' };
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    expect(url).toBe('/_redeven_proxy/api/ai/threads/thread-compact/context/compact');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({ storage_generation: 'generation', client_request_id: 'compact-key' });
+    return jsonResponse({ ok: true, data: { current } });
+  });
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
+  expect(await adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).toEqual(current);
+  fetchMock.mockRejectedValueOnce(new TypeError('Network disconnected'));
+  await expect(adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).rejects.toMatchObject({ admission_kind: 'unknown' });
+  fetchMock.mockResolvedValueOnce(errorResponse('context_compaction_busy', null));
+  await expect(adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).rejects.toMatchObject({ admission_kind: 'rejected', code: 'context_compaction_busy' });
+});
