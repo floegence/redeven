@@ -7,6 +7,21 @@ timestamp: 2026-10-04T13:20:00Z
 ---
 # Summary
 
+The controlled physical-seat and X11 comparisons qualify their tested local
+configurations. The v0.22.29 physical-seat candidate reduced host-local input
+receipt latency and CPU use; the v0.22.10 X11 candidate reduced client-window
+response latency with working NVIDIA encoding and one local host-shaped cursor.
+
+Session authority remains owned by the
+[desktop contract](../architecture/remote-desktop.md). These measurements establish
+the tested configuration, not physical input-to-photon latency, universal GPU
+performance, zero-copy capture or WAN behavior. Capture/encoder failures still
+revoke media authority and require fresh current-generation paint.
+
+# Contract
+
+## Physical-seat measurements
+
 The v0.22.29 physical-seat candidate was measured on the task-owned `udesk26`
 DRM output (i915, DP-3, 1920x1280) and `orange` (1920x1080). Three host-local
 rounds on udesk26 reduced input receipt P95 from 66.063--95.319 ms to
@@ -15,16 +30,6 @@ service CPU ticks fell from 416--419 to 49--103, a 75--88% reduction; static
 frames produced no repeated encoded bytes after settling. These are host-local
 Unix/DRM observations, not physical input-to-photon measurements or Desktop
 SSH/browser end-to-end latency.
-
-The 2026-10-04 controlled X11 comparison observes lower client-window response
-latency with `floe-native-apps` v0.22.10, a working NVIDIA encoding path and one
-local host-shaped cursor. Session authority remains owned by the
-[desktop contract](../architecture/remote-desktop.md). These measurements establish
-the tested configuration, not physical input-to-photon latency, universal GPU
-performance, zero-copy capture or WAN behavior. Capture/encoder failures still
-revoke media authority and require fresh current-generation paint.
-
-# Contract
 
 ## Configuration and measurement
 
