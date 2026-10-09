@@ -1616,11 +1616,8 @@ SOFTWARE.
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/floe-webapp-boot | 0.81.5 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.81.5 |  |
-| @floegence/floe-webapp-boot | 0.86.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.86.5 |  |
 | @floegence/floe-webapp-boot | 0.86.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.86.7 |  |
-| @floegence/floe-webapp-core | 0.86.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.5 |  |
 | @floegence/floe-webapp-core | 0.86.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.7 |  |
-| @floegence/floe-webapp-protocol | 0.86.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.86.5 |  |
 | @floegence/floe-webapp-protocol | 0.86.7 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.86.7 |  |
 | @floegence/floebrowser | 0.1.27 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.27 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
