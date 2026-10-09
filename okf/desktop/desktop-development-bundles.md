@@ -12,7 +12,9 @@ timestamp: 2026-10-08T00:00:00Z
 - Invariants: preserve service identity and data; keep recent, selected, and live bundles; never stop unrelated services or remove user data.
 - Failure boundary: service preparation failures prevent Desktop launch and trigger cleanup; incomplete process inventory prevents bundle deletion.
 
-# Development service lifecycle
+# Contract
+
+## Development service lifecycle
 
 `scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current
 checkout, including uncommitted source. Before Electron starts, it rebuilds and
@@ -52,7 +54,7 @@ automatic Runtime startup. Production Desktop exit continues to leave services
 running under the [managed lifecycle contract](desktop-runtime-process-lifecycle.md).
 Development coordination belongs to the launcher, not to product shutdown.
 
-# Bundle retention
+## Bundle retention
 
 `scripts/dev_desktop.sh` publishes each complete bundle below
 `<development-state-root>/desktop/bundles/<manifest-sha256>` and then runs

@@ -27,11 +27,20 @@ export function refreshSignedRuntimeManifests(root, signedPaths) {
   function refresh(directory, files, permitted) {
     return files.map(file => {
       const absolute = path.resolve(directory, file.path);
-      const stat = fs.lstatSync(absolute);
-      if (!stat.isFile() || stat.isSymbolicLink() || Boolean(stat.mode & 0o111) !== file.executable) {
-        throw new Error(`Signing changed the bundled file structure: ${file.path}`);
+      let descriptor;
+      try { descriptor = fs.openSync(absolute, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW); }
+      catch (error) {
+        if (error.code === 'ELOOP') throw new Error(`Signing changed the bundled file structure: ${file.path}`, { cause: error });
+        throw error;
       }
-      const sha256 = digest(fs.readFileSync(absolute));
+      let stat, sha256;
+      try {
+        stat = fs.fstatSync(descriptor);
+        if (!stat.isFile() || Boolean(stat.mode & 0o111) !== file.executable) {
+          throw new Error(`Signing changed the bundled file structure: ${file.path}`);
+        }
+        sha256 = digest(fs.readFileSync(descriptor));
+      } finally { fs.closeSync(descriptor); }
       if (sha256 === file.sha256 && stat.size === file.size_bytes) return file;
       if (!permitted(file.path) || !signedPaths.has(absolute)) {
         throw new Error(`Signing changed an unapproved bundled file: ${file.path}`);

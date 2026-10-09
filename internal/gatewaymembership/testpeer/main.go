@@ -107,6 +107,8 @@ func run() error {
 	go func() {
 		runtimeDone <- runtime.Run(ctx, func(origin string) gm.RuntimeApplication {
 			return gm.RuntimeApplication{WebSocketHandler: applicationAcceptor.Handler(), Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.Header().Set("X-Content-Type-Options", "nosniff")
 				if r.TLS == nil || "https://"+r.Host != origin {
 					http.Error(w, "wrong authority", http.StatusForbidden)
 					return

@@ -49,6 +49,13 @@ scheduled CodeQL run. An unchanged SHA skips the language matrix; an API lookup
 failure fails safe by scanning. This preserves daily detection for changed code
 without making hosted analysis part of the normal development gate.
 
+Resolve each dependency and code-scanning finding against the current main
+source. Upgrade fixed dependencies in every maintained npm and pnpm lockfile.
+Dismiss a finding only with its specific authorization or input-boundary
+evidence; unavailable scanning is not evidence of a clean result. Signed bundle
+manifest refresh reads and validates each native file through one no-follow
+descriptor, retaining rejection of symlink replacement during signing.
+
 Every external GitHub Action is pinned to a reviewed commit, including the
 certificate-import action that receives signing secrets. Node-based Actions
 use supported Node 24 runtimes independently of the product Node 26 toolchain.
