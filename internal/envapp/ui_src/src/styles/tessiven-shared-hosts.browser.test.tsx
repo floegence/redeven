@@ -34,6 +34,43 @@ function applyTheme(preset: (typeof builtInShellThemePresets)[number]) {
 }
 
 describe('shared host canvas interactions', () => {
+  it('shows a co-located call inside its host with exact relation details and Flower context', async () => {
+    await page.viewport(1300, 800);
+    const version = sharedHostsVersion();
+    version.document.nodes = version.document.nodes!.slice(0, 1);
+    version.document.instances = version.document.instances!.filter(instance => instance.nodeRef === 'node-1');
+    version.document.groups = [{ id: 'hdfs', name: 'Core services', nodeRefs: ['node-1'], instanceRefs: ['nn-1', 'zk-1'] }];
+    version.document.presentation = { initiallyExpanded: ['hdfs'] };
+    const { ask } = mount(false, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-local-relation').length).toBe(1);
+    expect(host.querySelectorAll('.floe-graph__edge')).toHaveLength(0);
+    const row = host.querySelector<HTMLElement>('.tessiven-local-relation')!;
+    expect(row.closest('.tessiven-node')).not.toBeNull();
+    expect(row.textContent).toContain('NameNode');
+    expect(row.textContent).toContain('ZooKeeper');
+    for (const theme of builtInShellThemePresets) {
+      applyTheme(theme);
+      await frames();
+      const bounds = row.closest('.tessiven-node')!.getBoundingClientRect();
+      expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom - 5);
+      await userEvent.click(row);
+      await expect.element(page.getByRole('dialog', { name: 'Details' })).toBeVisible();
+      expect(document.querySelector('.tessiven-detail-object > code')?.textContent).toBe('nn-zk');
+      expect(document.querySelector('.tessiven-ask-flower-mark svg')).not.toBeNull();
+      await page.screenshot({ path: `../../.vitest-attachments/local-call-${theme.name}.png` });
+      await page.getByRole('button', { name: 'Close', exact: true }).click();
+    }
+    await userEvent.click(row);
+    await page.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+    expect(ask).toHaveBeenCalledWith({ canvas_id: 'hadoop', version_id: 3, object_refs: ['nn-zk'] });
+    await page.getByRole('button', { name: 'Collapse group', exact: true }).click();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(0);
+    await expect.poll(() => host.querySelectorAll('.tessiven-local-relation').length).toBe(1);
+    const collapsed = host.querySelector<HTMLElement>('.tessiven-local-relation')!;
+    expect(collapsed.getBoundingClientRect().bottom)
+      .toBeLessThanOrEqual(collapsed.closest('.tessiven-group')!.getBoundingClientRect().bottom - 5);
+  });
+
   it('shows full inventories and highlights every appearance without a hover popup', async () => {
     await page.viewport(1300,800);
     mount();
@@ -69,6 +106,17 @@ describe('shared host canvas interactions', () => {
     expect(popup.querySelector('.tessiven-detail-object > code')?.textContent).toBe('node-1');
     expect(popup.querySelectorAll('.tessiven-memberships button')).toHaveLength(2);
     expect(popup.textContent).toContain('conceptual:demo/node-1');
+    expect(document.querySelector('.tessiven-ask-flower-mark svg')).not.toBeNull();
+    const askButton = popup.querySelector<HTMLElement>('.tessiven-ask-flower')!;
+    const flowerMark = popup.querySelector<HTMLElement>('.tessiven-ask-flower-mark')!;
+    for (const theme of builtInShellThemePresets) {
+      applyTheme(theme);
+      expect(getComputedStyle(askButton).borderTopWidth, theme.name).toBe('0px');
+      expect(getComputedStyle(askButton).backgroundColor, theme.name).not.toBe(getComputedStyle(popup).backgroundColor);
+      expect(getComputedStyle(flowerMark).borderTopWidth, theme.name).toBe('0px');
+      expect(getComputedStyle(flowerMark).borderRadius, theme.name).toBe('0px');
+      expect(getComputedStyle(flowerMark).backgroundColor, theme.name).toBe('rgba(0, 0, 0, 0)');
+    }
     await page.getByRole('button', {name:'Ask Flower',exact:true}).click();
     expect(ask).toHaveBeenCalledWith({canvas_id:'hadoop',version_id:3,object_refs:['node-1']});
   });
@@ -101,6 +149,7 @@ describe('shared host canvas interactions', () => {
     expect(document.activeElement?.getAttribute('data-graph-object')).toBe('zk::node-1');
     await userEvent.keyboard('{Shift>}{F10}{/Shift}');
     await expect.element(page.getByRole('menu')).toBeVisible();
+    expect(document.querySelector('[role="menu"] .tessiven-ask-flower-mark svg')).not.toBeNull();
     await page.getByRole('menuitem',{name:'Ask Flower'}).click();
     expect(ask).toHaveBeenCalledWith({canvas_id:'hadoop',version_id:3,object_refs:['node-1']});
   });

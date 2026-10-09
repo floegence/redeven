@@ -688,6 +688,51 @@
   flex-direction: column;
   gap: 5px;
 }
+.tessiven-group-services .tessiven-service { margin-bottom: 0; }
+.tessiven-local-relations {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 3px;
+}
+.tessiven-local-relation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 13px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  height: 27px;
+  box-sizing: border-box;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--ts-glyph));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ts-glyph) 7%, var(--card));
+  color: var(--ts-ink);
+  text-align: left;
+}
+.tessiven-local-relation > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.tessiven-local-relation > svg {
+  width: 13px;
+  height: 13px;
+  color: var(--ts-muted);
+}
+.tessiven-local-relation > small {
+  max-width: 62px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ts-muted);
+  font-size: 9px;
+}
+.tessiven-local-relation:hover {
+  background: color-mix(in srgb, var(--ts-glyph) 13%, var(--card));
+}
 .tessiven-node-selector {
   display: flex;
   align-items: center;
@@ -702,6 +747,7 @@
 .tessiven-node {
   color: var(--ts-ink);
   height: 100%;
+  box-sizing: border-box;
   border: 1px solid color-mix(in oklab, var(--ts-node) 70%, var(--foreground));
   border-radius: 8px;
   background: var(--ts-node);
@@ -794,6 +840,7 @@
 }
 .tessiven-service {
   height: 44px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -1044,6 +1091,9 @@
 .tessiven-detail-object > strong {
   font-size: 14px;
 }
+.tessiven-detail-content > .tessiven-detail-object:last-child {
+  border-bottom: 0;
+}
 .tessiven-detail-object code {
   display: block;
   font: 10px/1.6 var(--font-mono, monospace);
@@ -1089,6 +1139,47 @@
 .tessiven-memberships button:hover,
 .tessiven-memberships button[aria-current='location'] {
   background: color-mix(in oklab, var(--ring) 10%, var(--card));
+}
+.tessiven-popup .tessiven-ask-flower {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, #e7b94d 15%, var(--card));
+  color: var(--foreground);
+  font-weight: 600;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+.tessiven-popup[role='menu'] .tessiven-ask-flower { margin-top: 0; }
+.tessiven-popup .tessiven-ask-flower:hover {
+  background: color-mix(in srgb, #e7b94d 23%, var(--card));
+}
+.tessiven-ask-flower:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, #e7b94d 34%, var(--card));
+}
+.tessiven-ask-flower-mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, #a87916 60%, var(--foreground));
+}
+.tessiven-ask-flower-mark svg { width: 20px; height: 20px; }
+.tessiven-ask-flower-mark svg path { filter: drop-shadow(0 0 0.25px currentColor); }
+@media (prefers-reduced-motion: reduce) {
+  .tessiven-popup .tessiven-ask-flower { transition: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tessiven-node,
@@ -1448,8 +1539,8 @@
 }
 .tessiven-flower-conversation .flower-model-status-lane--conversation {
   margin: 0 18px;
-  padding: 10px 0 12px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 65%, var(--tessiven-flower-surface));
+  padding: 4px 0 8px;
+  border: 0;
 }
 .tessiven-flower-welcome { display: flex; flex-direction: column; align-items: flex-start; padding: 20px 4px; gap: 14px; }
 .tessiven-flower-welcome > svg { width: 28px; height: 28px; }

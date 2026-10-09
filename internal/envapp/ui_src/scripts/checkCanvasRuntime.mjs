@@ -100,8 +100,59 @@ function observe(page) {
 async function verifyReplies(page, name) {
   const surface = page.locator('.tessiven');
   const replies = page.locator('.tessiven-flower-output');
+  const assertAskFlowerStyle = async (button, label, checkSeparator = false) => {
+    const style = await button.evaluate(element => {
+      const view = element.ownerDocument.defaultView;
+      const computed = node => view.getComputedStyle(node);
+      const icon = element.querySelector('.tessiven-ask-flower-mark');
+      const panel = element.closest('.tessiven-popup');
+      const lastObject = panel?.querySelector('.tessiven-detail-content > .tessiven-detail-object:last-child');
+      return {
+        actionBorder: computed(element).borderWidth,
+        actionTinted: computed(element).backgroundColor !== computed(panel).backgroundColor,
+        iconBackground: computed(icon).backgroundColor,
+        iconBorder: computed(icon).borderWidth,
+        iconRadius: computed(icon).borderRadius,
+        separatorBorder: lastObject ? computed(lastObject).borderBottomWidth : '0px',
+      };
+    });
+    assert.equal(style.actionBorder, '0px', `${label} has no action border`);
+    assert.equal(style.actionTinted, true, `${label} is distinguished by color`);
+    assert.equal(style.iconBackground, 'rgba(0, 0, 0, 0)', `${label} has no icon tile`);
+    assert.equal(style.iconBorder, '0px', `${label} icon has no border`);
+    assert.equal(style.iconRadius, '0px', `${label} icon has no rounded wrapper`);
+    if (checkSeparator) assert.equal(style.separatorBorder, '0px', `${label} has no divider above it`);
+  };
   await surface.getByRole('button', { name: 'Commerce / Example', exact: true }).click();
   await surface.locator('.tessiven-node').waitFor();
+  const localCall = surface.locator('.tessiven-local-relation');
+  assert.equal(await localCall.count(), 1, 'The example keeps its Storefront-to-Orders call inside the host');
+  assert.ok((await localCall.innerText()).includes('Storefront') && (await localCall.innerText()).includes('Orders API'));
+  assert.equal(await surface.locator('[data-graph-object="demo-application/demo-application"]').count(), 0, 'A local service call never becomes a group self-loop');
+  for (const card of await surface.locator('.tessiven-node').all()) {
+    const contained = await card.evaluate(node => {
+      const bounds = node.getBoundingClientRect();
+      return [...node.querySelectorAll('.tessiven-service, .tessiven-local-relation')]
+        .every(row => row.getBoundingClientRect().bottom <= bounds.bottom);
+    });
+    assert.ok(contained, 'Every service and relation row stays inside the host');
+  }
+  await replies.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  await localCall.click();
+  const detail = page.getByRole('dialog', { name: 'Details', exact: true });
+  assert.equal(await detail.locator('.tessiven-detail-object > code').innerText(), 'demo-api-call');
+  const detailAsk = detail.getByRole('button', { name: 'Ask Flower', exact: true });
+  assert.equal(await detailAsk.locator('svg').count(), 1, 'Object details use the canonical Flower icon');
+  await assertAskFlowerStyle(detailAsk, 'Object details Ask Flower action', true);
+  await page.screenshot({ path: path.join(output, `${name}-local-call.png`), animations: 'disabled' });
+  await detail.getByRole('button', { name: 'Close', exact: true }).click();
+  await surface.locator('.tessiven-canvas-tools').getByRole('button', { name: 'Canvas actions', exact: true }).click();
+  const canvasMenu = page.getByRole('menu');
+  const menuAsk = canvasMenu.getByRole('menuitem', { name: 'Ask Flower', exact: true });
+  assert.equal(await menuAsk.locator('svg').count(), 1, 'Canvas menus use the canonical Flower icon');
+  await assertAskFlowerStyle(menuAsk, 'Canvas menu Ask Flower action');
+  await canvasMenu.getByRole('menuitem', { name: 'Ask Flower', exact: true }).press('Escape');
+  await surface.getByRole('button', { name: 'Show replies', exact: true }).click();
   const composer = replies.locator('.flower-composer textarea');
   await composer.waitFor();
   assert.equal(await replies.locator('.tessiven-flower-composer').count(), 1, 'Existing canvases put the composer inside the conversation window');
@@ -110,6 +161,11 @@ async function verifyReplies(page, name) {
   const replyCount = (await replies.innerText()).split(reply).length;
   await composer.fill('Explain the storefront and database relationship.');
   await replies.getByRole('button', { name: 'Send', exact: true }).click();
+  const feedbackStyle = await replies.locator('.flower-model-status-lane--conversation').evaluate(lane => {
+    const style = lane.ownerDocument.defaultView.getComputedStyle(lane);
+    return { border: style.borderTopWidth, top: style.paddingTop, bottom: style.paddingBottom };
+  });
+  assert.deepEqual(feedbackStyle, { border: '0px', top: '4px', bottom: '8px' }, 'Live feedback uses compact spacing without a divider');
   await until(async () => (await replies.innerText()).split(reply).length > replyCount, 'new visible streamed Flower reply');
   await until(() => surface.locator('[data-flower-selected-thread-status="success"]').count(), 'canonical Flower completion');
   const title = replies.locator('[data-floe-floating-window-titlebar]');

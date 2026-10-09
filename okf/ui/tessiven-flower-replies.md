@@ -21,6 +21,8 @@ The window uses the theme's main reading surface continuously across its
 titlebar, transcript and composer surroundings. Only the rounded input has a
 distinct fill. A subtle border and shadow frame compact readable message
 spacing; canvas nodes must not bleed through reply text.
+Live response feedback has no divider above it and uses compact spacing to
+leave the height budget to transcript content and the rounded input.
 The default size is 356 by 440 pixels, clamped to the available safe boundary.
 The composer belongs to the same window as the transcript, questions, approvals
 and retry controls. Dragging, resizing, hiding and restoring move or affect that

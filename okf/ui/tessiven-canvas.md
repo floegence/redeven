@@ -132,6 +132,17 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
 - Clicking opens object details. Hover tracks related edges without opening
   explanatory UI; right-click, keyboard context menu, and touch context entry
   open Ask Flower with the exact immutable canvas/version selection.
+- Every graph Ask Flower entry uses the canonical Flower bloom in a compact
+  accented action, including object details, context menus and the canvas menu.
+- Relations between co-located service or instance endpoints appear as compact
+  source-to-target rows within the host card, rather than a group self-loop.
+  Explicit instance endpoints remain exact; service-level routing stays at the
+  logical aggregate without expanding every host pair. Collapsed groups retain
+  internal relations as inspectable rows. Each row opens the original relation
+  and evidence and references that relation when asking Flower. A repeated host
+  appearance retains the same complete inventory and local relation rows.
+  Card and group bounds budget every service and relation row, including the
+  expansion action, so content never spills outside its node or dashed frame.
 - Layout hints are read from the saved document and applied only to visible
   graph objects; hidden members retain their hints for later expansion.
   Both the canvas and library thumbnail use published Floe's preferred-position

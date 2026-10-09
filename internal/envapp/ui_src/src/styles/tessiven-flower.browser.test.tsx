@@ -85,6 +85,43 @@ it('paints the canonical rounded input outline in the conversation window', asyn
   expect(composer.getBoundingClientRect().height).toBeGreaterThanOrEqual(84);
 });
 
+it('keeps the response status lane visually continuous and compact', async () => {
+  await page.viewport(1200, 800);
+  mount();
+  const lane = document.querySelector<HTMLElement>('.flower-model-status-lane--conversation')!;
+  expect(getComputedStyle(lane).borderTopWidth).toBe('0px');
+  expect(getComputedStyle(lane).paddingTop).toBe('4px');
+  expect(getComputedStyle(lane).paddingBottom).toBe('8px');
+});
+
+it('distinguishes Ask Flower by color without framing its icon or action row', async () => {
+  await page.viewport(1200, 800);
+  mount(false, {}, true);
+  await expect.poll(() => document.querySelectorAll('.tessiven-service').length).toBeGreaterThan(0);
+  document.querySelector<HTMLElement>('.tessiven-service')!.click();
+  await expect.element(page.getByRole('dialog', { name: 'Details', exact: true })).toBeVisible();
+  const ask = document.querySelector<HTMLButtonElement>('.tessiven-popup .tessiven-ask-flower')!;
+  await userEvent.keyboard('{Tab}{Tab}');
+  expect(document.activeElement).toBe(ask);
+  expect(ask.matches(':focus-visible')).toBe(true);
+  const icon = ask.querySelector<HTMLElement>('.tessiven-ask-flower-mark')!;
+  const lastObject = document.querySelector<HTMLElement>('.tessiven-detail-content > .tessiven-detail-object:last-child');
+  for (const preset of builtInShellThemePresets) {
+    document.documentElement.classList.toggle('dark', preset.mode === 'dark');
+    for (const [token, value] of Object.entries(preset.semanticTokens ?? {}))
+      if (value) document.documentElement.style.setProperty(token, value);
+    const actionStyle = getComputedStyle(ask);
+    const iconStyle = getComputedStyle(icon);
+    expect(actionStyle.borderWidth).toBe('0px');
+    expect(actionStyle.outlineStyle).toBe('none');
+    expect(actionStyle.backgroundColor).not.toBe(getComputedStyle(ask.closest('.tessiven-popup')!).backgroundColor);
+    expect(iconStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(iconStyle.borderWidth).toBe('0px');
+    expect(iconStyle.borderRadius).toBe('0px');
+    expect(lastObject ? getComputedStyle(lastObject).borderBottomWidth : '0px').toBe('0px');
+  }
+});
+
 it('keeps long questions scrollable with all reply controls inside a short canvas window', async () => {
   await page.viewport(800, 320);
   const runtime = mount(false, {}, true);
