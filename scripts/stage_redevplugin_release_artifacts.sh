@@ -27,7 +27,10 @@ Downloads and verifies the released ReDevPlugin platform manifest, builds the
 runtime from the exact published Rust source crate with Rust 1.88.0, and emits
 Redeven-owned SBOM, provenance, notices, signature, and verification evidence.
 The closed runtime target set is linux/amd64, linux/arm64, darwin/amd64, and
-darwin/arm64. Rustup reuses installed components and recovers transient network
+darwin/arm64. Manifest downloads retry TLS/network failures up to three times,
+with a 15-second connection timeout, 60-second transfer timeout, and 120-second
+retry window. HTTPS and certificate verification remain required.
+Rustup reuses installed components and recovers transient network
 failures with bounded retries. Set REDEVEN_RUSTUP_OFFLINE=1 for explicit
 Rustup cache-only preparation; set REDEVEN_RUSTUP_MAX_ATTEMPTS or
 REDEVEN_RUSTUP_RETRY_DELAY_SECONDS to tune the bounded retry policy.
@@ -69,6 +72,7 @@ if [[ "$self_test" -eq 1 ]]; then
     die "--self-test cannot be combined with staging arguments"
   exec node --test \
     "$SCRIPT_DIR/redevplugin_release_contract.test.mjs" \
+    "$SCRIPT_DIR/redevplugin_manifest_download.test.mjs" \
     "$SCRIPT_DIR/redevplugin_rust_toolchain.test.mjs"
 fi
 
@@ -149,9 +153,17 @@ if [[ -n "$manifest_file" ]]; then
       --tag "$tag"
   fi
 else
-  curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
+  # curl's ordinary retry policy excludes TLS handshake errors (exit 35).
+  # This is a replayable GET into staging; retry all transfer errors with limits.
+  if ! curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
+    --fail --silent --show-error --location \
+    --retry 3 --retry-all-errors --retry-max-time 120 \
+    --connect-timeout 15 --max-time 60 \
     "https://github.com/$REPOSITORY/releases/download/$tag/$RELEASE_MANIFEST_ASSET" \
     --output "$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
+  then
+    die "failed to download ReDevPlugin $tag release manifest after bounded retries; check GitHub connectivity and HTTPS_PROXY, then retry"
+  fi
   manifest="$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
   version=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; process.stdout.write(JSON.parse(readFileSync(process.argv[1], 'utf8')).platform_version);" "$manifest")
   [[ "v$version" == "$tag" ]] || die "release manifest version does not match Go module version"

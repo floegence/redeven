@@ -3,7 +3,7 @@ type: Release Contract
 title: ReDevPlugin release artifact gate
 description: Verify the released ReDevPlugin publication, native runtime evidence, packaging inventory, and exact collector inputs.
 tags: [release, redevplugin, artifacts, signing]
-timestamp: 2026-10-07T00:00:00Z
+timestamp: 2026-10-09T00:00:00Z
 ---
 # Summary
 
@@ -41,6 +41,18 @@ reads back:
 Partial publication, an extra GitHub Release asset, an unrecognized workflow,
 local package source, mutable source identity, or any registry mismatch fails
 before runtime construction.
+
+Staging retrieves that exact manifest with curl's bounded transfer recovery:
+one initial attempt and up to three retries, including TLS handshake failures
+that ordinary `--retry` excludes. Connections time out after 15 seconds and
+each transfer after 60 seconds; new retries stop after a 120-second window.
+The final transfer may finish after that retry window. Both the original URL
+and redirects require HTTPS with certificate verification. Exhausted transfers
+report the release tag and GitHub/proxy troubleshooting guidance, remove partial
+staging files, and stop before Rust preparation. A successful transfer still
+passes the strict manifest/version and crate-digest checks; malformed or
+mismatched documents are rejected without retrying validation. An explicitly
+supplied `--manifest-file` follows the same manifest checks without downloading.
 
 For every native Linux and Darwin target, staging prepares Rust 1.88.0 and the
 exact published `redevplugin-runtime` version with its packaged lockfile. The
@@ -161,6 +173,7 @@ This concept owns ReDevPlugin release provenance and package assembly. The main 
 
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact upstream publication and registry readbacks.
 - `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs each native Linux or Darwin runtime from the exact published crate graph.
+- `redeven:scripts/redevplugin_manifest_download.test.mjs` - Exercises real curl against controlled TLS disconnects, retry exhaustion, certificate and redirect rejection, and strict manifest admission.
 - `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Verifies runtime markers, evidence, target identity, and signatures.
 - `redeven:scripts/check_desktop_redevplugin_package.sh:1` - Verifies native installer contents and writes target-bound receipts.
 - `redeven:scripts/collect_release_artifacts.mjs:1` - Enforces the exact downstream release artifact inventory.
