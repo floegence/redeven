@@ -10,15 +10,15 @@ export function nativeCodeSpaceIdentity(
 ): string {
   if (
     target.kind === 'local_environment' &&
-    target.provider_origin &&
+    target.cloud_origin &&
     !accountID
   )
     throw new Error('codespace_account_required');
   const owner =
-    target.kind === 'local_environment' && target.provider_origin
+    target.kind === 'local_environment' && target.cloud_origin
       ? [
-          target.provider_origin,
-          target.provider_id,
+          target.cloud_origin,
+          target.cloud_id,
           accountID,
           target.env_public_id,
         ]

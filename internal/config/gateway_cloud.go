@@ -49,9 +49,9 @@ func (c *Config) ApplyGatewayDelivery(delivery *gatewaycloud.CredentialDelivery)
 			return errors.New("gateway credential delivery did not advance sequence")
 		}
 	}
-	c.ProviderOrigin = delivery.CloudOrigin
-	c.ControlplaneBaseURL = delivery.RegionOrigin
-	c.ControlplaneProviderID = "redeven"
+	c.CloudOrigin = delivery.CloudOrigin
+	c.AccessPointOrigin = delivery.RegionOrigin
+	c.CloudID = "redeven"
 	c.EnvironmentID = delivery.Binding.EnvPublicID
 	c.LocalEnvironmentPublicID = delivery.Binding.RuntimePublicID
 	c.BindingGeneration = delivery.Binding.Generation
@@ -116,7 +116,7 @@ func (c *Config) validateGatewayPath(allowRevoked bool) error {
 		return err
 	}
 	b := r.Binding
-	if (r.Revoked && !allowRevoked) || b == nil || c.ProviderOrigin != r.CloudOrigin || c.ControlplaneBaseURL != r.RegionOrigin || c.ControlplaneProviderID != "redeven" || c.EnvironmentID != b.EnvPublicID || c.LocalEnvironmentPublicID != b.RuntimePublicID || c.BindingGeneration != b.Generation || c.Direct != nil {
+	if (r.Revoked && !allowRevoked) || b == nil || c.CloudOrigin != r.CloudOrigin || c.AccessPointOrigin != r.RegionOrigin || c.CloudID != "redeven" || c.EnvironmentID != b.EnvPublicID || c.LocalEnvironmentPublicID != b.RuntimePublicID || c.BindingGeneration != b.Generation || c.Direct != nil {
 		return errors.New("gateway path and runtime binding do not match")
 	}
 	if c.ControlArtifactPool != nil && (c.ControlArtifactPool.LogicalBindingID != "gateway-cloud-v2:"+b.PublicID || c.ControlArtifactPool.BindingGeneration != b.Generation) {

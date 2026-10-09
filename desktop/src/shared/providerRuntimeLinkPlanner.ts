@@ -1,19 +1,19 @@
 import {
   runtimeServiceHasActiveWork,
-  runtimeServiceProviderLinkMatches,
-  runtimeServiceSupportsProviderLink,
+  runtimeServiceCloudLinkMatches,
+  runtimeServiceSupportsCloudLink,
 } from './runtimeService';
 import type {
-  DesktopProviderEnvironmentCandidate,
-  DesktopProviderRuntimeLinkTarget,
-  DesktopProviderRuntimeLinkTargetID,
+  DesktopCloudEnvironmentCandidate,
+  DesktopCloudRuntimeLinkTarget,
+  DesktopCloudRuntimeLinkTargetID,
 } from './providerRuntimeLinkTarget';
 
-export type DesktopProviderRuntimeLinkPlanState =
+export type DesktopCloudRuntimeLinkPlanState =
   | 'target_ready'
   | 'target_not_running'
   | 'runtime_control_missing'
-  | 'provider_link_unsupported'
+  | 'cloud_link_unsupported'
   | 'already_linked'
   | 'renewal_required'
   | 'provider_environment_occupied'
@@ -21,33 +21,33 @@ export type DesktopProviderRuntimeLinkPlanState =
   | 'blocked_active_work'
   | 'blocked_runtime';
 
-export type DesktopProviderRuntimeLinkPlan = Readonly<{
-  state: DesktopProviderRuntimeLinkPlanState;
-  runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+export type DesktopCloudRuntimeLinkPlan = Readonly<{
+  state: DesktopCloudRuntimeLinkPlanState;
+  runtime_target_id: DesktopCloudRuntimeLinkTargetID;
   provider_environment_id: string;
   runtime_running: boolean;
   runtime_matches_provider: boolean;
   requires_confirmation: boolean;
   can_connect: boolean;
   can_disconnect: boolean;
-  current_binding?: DesktopProviderRuntimeLinkTarget['provider_link_binding'];
+  current_binding?: DesktopCloudRuntimeLinkTarget['cloud_link_binding'];
   target_binding: Readonly<{
-    provider_origin: string;
-    provider_id: string;
+    cloud_origin: string;
+    cloud_id: string;
     env_public_id: string;
     access_point_origin: string;
   }>;
   message: string;
 }>;
 
-function runtimeTargetLabel(target: DesktopProviderRuntimeLinkTarget): string {
+function runtimeTargetLabel(target: DesktopCloudRuntimeLinkTarget): string {
   return target.kind === 'ssh_environment' ? 'SSH runtime' : 'Local Runtime';
 }
 
 function planMessage(
-  state: DesktopProviderRuntimeLinkPlanState,
-  target: DesktopProviderRuntimeLinkTarget,
-  providerEnvironment: DesktopProviderEnvironmentCandidate,
+  state: DesktopCloudRuntimeLinkPlanState,
+  target: DesktopCloudRuntimeLinkTarget,
+  providerEnvironment: DesktopCloudEnvironmentCandidate,
 ): string {
   const runtimeLabel = runtimeTargetLabel(target);
   switch (state) {
@@ -57,7 +57,7 @@ function planMessage(
       return `${runtimeLabel} is not running. Start it from this Runtime card before connecting it to Redeven Cloud.`;
     case 'runtime_control_missing':
       return `${runtimeLabel} does not expose Desktop runtime-control. Restart it from Desktop, then connect again.`;
-    case 'provider_link_unsupported':
+    case 'cloud_link_unsupported':
       return `${runtimeLabel} does not support Redeven Cloud linking. Restart it with the current Desktop Runtime, then connect again.`;
     case 'renewal_required':
       return `Restore the saved Redeven Cloud connection for ${runtimeLabel}. Local work remains available.`;
@@ -76,26 +76,26 @@ function planMessage(
   }
 }
 
-export function buildDesktopProviderRuntimeLinkPlan(
-  runtimeTarget: DesktopProviderRuntimeLinkTarget,
-  providerEnvironment: DesktopProviderEnvironmentCandidate,
-): DesktopProviderRuntimeLinkPlan {
-  const runtimeMatchesProvider = runtimeServiceProviderLinkMatches(runtimeTarget.runtime_service, {
-    provider_origin: providerEnvironment.provider_origin,
-    provider_id: providerEnvironment.provider_id,
+export function buildDesktopCloudRuntimeLinkPlan(
+  runtimeTarget: DesktopCloudRuntimeLinkTarget,
+  providerEnvironment: DesktopCloudEnvironmentCandidate,
+): DesktopCloudRuntimeLinkPlan {
+  const runtimeMatchesProvider = runtimeServiceCloudLinkMatches(runtimeTarget.runtime_service, {
+    cloud_origin: providerEnvironment.cloud_origin,
+    cloud_id: providerEnvironment.cloud_id,
     env_public_id: providerEnvironment.env_public_id,
     access_point_origin: providerEnvironment.access_point_origin,
   });
-  const binding = runtimeTarget.provider_link_binding;
-  const state: DesktopProviderRuntimeLinkPlanState = (() => {
+  const binding = runtimeTarget.cloud_link_binding;
+  const state: DesktopCloudRuntimeLinkPlanState = (() => {
     if (!runtimeTarget.runtime_running) {
       return 'target_not_running';
     }
     if (runtimeTarget.runtime_control_status.state === 'missing') {
       return 'runtime_control_missing';
     }
-    if (!runtimeServiceSupportsProviderLink(runtimeTarget.runtime_service)) {
-      return 'provider_link_unsupported';
+    if (!runtimeServiceSupportsCloudLink(runtimeTarget.runtime_service)) {
+      return 'cloud_link_unsupported';
     }
     if (
       providerEnvironment.occupancy.state === 'occupied_by_known_runtime'
@@ -132,8 +132,8 @@ export function buildDesktopProviderRuntimeLinkPlan(
     can_disconnect: state === 'already_linked' || state === 'renewal_required',
     ...(binding ? { current_binding: binding } : {}),
     target_binding: {
-      provider_origin: providerEnvironment.provider_origin,
-      provider_id: providerEnvironment.provider_id,
+      cloud_origin: providerEnvironment.cloud_origin,
+      cloud_id: providerEnvironment.cloud_id,
       env_public_id: providerEnvironment.env_public_id,
       access_point_origin: providerEnvironment.access_point_origin,
     },

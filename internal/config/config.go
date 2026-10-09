@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	ControlArtifactPoolContractVersion = "control_artifact_pool_v1"
-	ControlArtifactPoolSchemaVersion   = 1
+	ControlArtifactPoolContractVersion = "control_artifact_pool_v2"
+	ControlArtifactPoolSchemaVersion   = 2
 	ControlArtifactTargetWaterline     = 2
 	ControlArtifactMaxPoolEntries      = 8
 	ControlArtifactMaxOutstanding      = 4
@@ -80,7 +80,7 @@ type ControlArtifactTerminalTopUp struct {
 
 type ControlArtifactPool struct {
 	SchemaVersion         int                           `json:"schema_version"`
-	LogicalBindingID      string                        `json:"logical_provider_binding_id"`
+	LogicalBindingID      string                        `json:"logical_cloud_binding_id"`
 	TargetWaterline       int                           `json:"target_waterline"`
 	RefreshHorizonSeconds int64                         `json:"refresh_horizon_seconds"`
 	BindingGeneration     int64                         `json:"binding_generation"`
@@ -119,7 +119,7 @@ func (pool *ControlArtifactPool) Validate(nowUnixS int64) error {
 		return fmt.Errorf("unsupported control_artifact_pool schema_version %d", pool.SchemaVersion)
 	}
 	if strings.TrimSpace(pool.LogicalBindingID) == "" || strings.TrimSpace(pool.LogicalBindingID) == "legacy-untrusted" || strings.TrimSpace(pool.LogicalBindingID) == "legacy-test-migration" {
-		return errors.New("missing control_artifact_pool logical_provider_binding_id")
+		return errors.New("missing control_artifact_pool logical_cloud_binding_id")
 	}
 	if pool.TargetWaterline != ControlArtifactTargetWaterline {
 		return errors.New("invalid control_artifact_pool target_waterline")
@@ -281,9 +281,9 @@ type Config struct {
 	GatewayRejoinRequired    bool                                `json:"gateway_rejoin_required,omitempty"`
 	GatewayPublication       *gatewaycloud.RuntimeConfig         `json:"gateway_publication,omitempty"`
 	RemoteDesktop            *RemoteDesktopConfig                `json:"remote_desktop,omitempty"`
-	ProviderOrigin           string                              `json:"provider_origin"`
-	ControlplaneBaseURL      string                              `json:"controlplane_base_url"`
-	ControlplaneProviderID   string                              `json:"controlplane_provider_id,omitempty"`
+	CloudOrigin              string                              `json:"cloud_origin"`
+	AccessPointOrigin        string                              `json:"access_point_origin"`
+	CloudID                  string                              `json:"cloud_id,omitempty"`
 	EnvironmentID            string                              `json:"environment_id"`
 	LocalEnvironmentPublicID string                              `json:"local_environment_public_id"`
 	BindingGeneration        int64                               `json:"binding_generation,omitempty"`
@@ -324,6 +324,7 @@ type Config struct {
 
 	extra                          map[string]json.RawMessage
 	gatewayConfigMigrated          bool
+	cloudConfigMigrated            bool
 	bootstrapDeliveryAttemptPath   string
 	bootstrapDeliveryRequestIDB64u string
 }
@@ -380,17 +381,17 @@ func (c *Config) ValidateRemoteStrict() error {
 	if err := c.validateGatewayBinding(); err != nil {
 		return err
 	}
-	if strings.TrimSpace(c.ControlplaneBaseURL) == "" {
-		return errors.New("missing controlplane_base_url")
+	if strings.TrimSpace(c.AccessPointOrigin) == "" {
+		return errors.New("missing access_point_origin")
 	}
-	if strings.TrimSpace(c.ProviderOrigin) == "" {
-		return errors.New("missing provider_origin")
+	if strings.TrimSpace(c.CloudOrigin) == "" {
+		return errors.New("missing cloud_origin")
 	}
-	if _, err := normalizeControlplaneBaseURL(c.ProviderOrigin); err != nil {
-		return fmt.Errorf("invalid provider_origin: %w", err)
+	if _, err := normalizeAccessPointOrigin(c.CloudOrigin); err != nil {
+		return fmt.Errorf("invalid cloud_origin: %w", err)
 	}
-	if _, err := normalizeControlplaneBaseURL(c.ControlplaneBaseURL); err != nil {
-		return fmt.Errorf("invalid controlplane_base_url: %w", err)
+	if _, err := normalizeAccessPointOrigin(c.AccessPointOrigin); err != nil {
+		return fmt.Errorf("invalid access_point_origin: %w", err)
 	}
 	if strings.TrimSpace(c.EnvironmentID) == "" {
 		return errors.New("missing environment_id")

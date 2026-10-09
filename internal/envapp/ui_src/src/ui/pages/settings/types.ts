@@ -82,7 +82,7 @@ export type AIRuntimeStatus = Readonly<{
 export type AgentSettingsResponse = Readonly<{
   config_path: string;
   connection: Readonly<{
-    controlplane_base_url: string;
+    access_point_origin: string;
     environment_id: string;
     agent_instance_id: string;
     direct: Readonly<{

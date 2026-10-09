@@ -1,5 +1,6 @@
 import { normalizeEnvironmentAccessPreferences, type EnvironmentAccessPreferences } from './environmentAccess';
 import { parseLocalUIProtocol } from '../shared/settingsIPC';
+import { migrateDesktopCloudState } from './cloudStateMigration';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,13 +18,13 @@ import {
   normalizeControlPlaneDisplayLabel,
   normalizeControlPlaneOrigin,
   normalizeDesktopControlPlaneAccount,
-  normalizeDesktopControlPlaneProvider,
-  normalizeDesktopProviderEnvironmentAccess,
+  normalizeDesktopCloud,
+  normalizeDesktopCloudEnvironmentAccess,
   type DesktopControlPlaneAccount,
-  type DesktopControlPlaneProvider,
-  type DesktopProviderAccessPoint,
-  type DesktopProviderEnvironment,
-} from '../shared/controlPlaneProvider';
+  type DesktopCloud,
+  type DesktopCloudAccessPoint,
+  type DesktopCloudEnvironment,
+} from '../shared/cloud';
 import {
   normalizeDesktopLocalUIPasswordMode,
   type DesktopLocalUIPasswordMode,
@@ -49,18 +50,18 @@ import {
   defaultDesktopLocalEnvironmentLabel,
   LOCAL_ENVIRONMENT_ID,
   localEnvironmentAccess,
-  normalizeDesktopProviderEnvironmentID,
+  normalizeDesktopCloudEnvironmentID,
   type DesktopLocalEnvironmentState,
   type DesktopLocalEnvironmentAccess,
   type DesktopLocalEnvironmentPreferredOpenRoute,
 } from '../shared/desktopLocalEnvironmentState';
 import {
-  createDesktopProviderEnvironmentRecord,
-  defaultDesktopProviderEnvironmentLabel,
-  desktopProviderEnvironmentRemoteCatalogEntryFromPublished,
+  createDesktopCloudEnvironmentRecord,
+  defaultDesktopCloudEnvironmentLabel,
+  desktopCloudEnvironmentRemoteCatalogEntryFromPublished,
   providerEnvironmentStableSortKey,
-  type DesktopProviderEnvironmentRecord,
-} from '../shared/desktopProviderEnvironment';
+  type DesktopCloudEnvironmentRecord,
+} from '../shared/desktopCloudEnvironment';
 import {
   decodeLegacySSHEnvironmentRegistrations,
   legacySSHEnvironmentMigrationJournalSource,
@@ -95,7 +96,7 @@ export type DesktopSavedRuntimeTarget = Readonly<{
 }>;
 
 export type DesktopSavedControlPlane = Readonly<{
-  provider: DesktopControlPlaneProvider;
+  cloud: DesktopCloud;
   account: DesktopControlPlaneAccount;
   display_label: string;
   last_synced_at_ms: number;
@@ -104,7 +105,7 @@ export type DesktopSavedControlPlane = Readonly<{
 export type DesktopPreferences = Readonly<{
   environment_access?: EnvironmentAccessPreferences;
   local_environment: DesktopLocalEnvironmentState;
-  provider_environments: readonly DesktopProviderEnvironmentRecord[];
+  cloud_environments: readonly DesktopCloudEnvironmentRecord[];
   saved_environments: readonly DesktopSavedEnvironment[];
   saved_runtime_targets: readonly DesktopSavedRuntimeTarget[];
   default_flower_runtime_target_id: DesktopRuntimeTargetID | null;
@@ -145,8 +146,8 @@ type LocalEnvironmentCatalogResult = Readonly<{
   didCanonicalizeProviderIdentity: boolean;
 }>;
 
-type ProviderEnvironmentNormalizationResult = Readonly<{
-  environments: readonly DesktopProviderEnvironmentRecord[];
+type CloudEnvironmentNormalizationResult = Readonly<{
+  environments: readonly DesktopCloudEnvironmentRecord[];
   didCanonicalizeProviderIdentity: boolean;
 }>;
 
@@ -189,9 +190,9 @@ type DesktopLocalEnvironmentStateCatalogFile = Readonly<{
 			local_ui_password_configured?: unknown;
 		}>;
   }>;
-  current_provider_binding?: Readonly<{
-    provider_origin?: unknown;
-    provider_id?: unknown;
+  current_cloud_binding?: Readonly<{
+    cloud_origin?: unknown;
+    cloud_id?: unknown;
     env_public_id?: unknown;
     access_point_origin?: unknown;
     remote_web_supported?: unknown;
@@ -225,18 +226,18 @@ type DesktopConnectionCatalogFile = Readonly<{
 type DesktopProviderCatalogFile = Readonly<{
   schema_version?: unknown;
   record_kind?: unknown;
-  provider?: unknown;
+  cloud?: unknown;
   account?: DesktopControlPlaneAccountFile;
   display_label?: unknown;
   last_synced_at_ms?: unknown;
 }>;
 
-type DesktopProviderEnvironmentCatalogFile = Readonly<{
+type DesktopCloudEnvironmentCatalogFile = Readonly<{
   schema_version?: unknown;
   record_kind?: unknown;
   id?: unknown;
-  provider_origin?: unknown;
-  provider_id?: unknown;
+  cloud_origin?: unknown;
+  cloud_id?: unknown;
   env_public_id?: unknown;
   region?: unknown;
   access_point_id?: unknown;
@@ -271,7 +272,7 @@ type DesktopControlPlaneAccountFile = Readonly<{
 }>;
 
 type DesktopControlPlaneFile = Readonly<{
-  provider?: unknown;
+  cloud?: unknown;
   account?: DesktopControlPlaneAccountFile;
   display_label?: unknown;
   last_synced_at_ms?: unknown;
@@ -284,8 +285,8 @@ type DesktopPreferencesFile = Readonly<{
 }>;
 
 type DesktopControlPlaneSecretFile = Readonly<{
-  provider_origin?: unknown;
-  provider_id?: unknown;
+  cloud_origin?: unknown;
+  cloud_id?: unknown;
   refresh_token?: StoredSecret;
 }>;
 
@@ -342,10 +343,10 @@ export type UpsertDesktopSavedRuntimeTargetInput = Readonly<{
 }>;
 
 export type UpsertDesktopSavedControlPlaneInput = Readonly<{
-  provider: DesktopControlPlaneProvider;
+  cloud: DesktopCloud;
   account: DesktopControlPlaneAccount;
-  environments?: readonly DesktopProviderEnvironment[];
-  synced_access_points?: readonly Pick<DesktopProviderAccessPoint, 'access_point_id' | 'access_point_origin'>[];
+  environments?: readonly DesktopCloudEnvironment[];
+  synced_access_points?: readonly Pick<DesktopCloudAccessPoint, 'access_point_id' | 'access_point_origin'>[];
   display_label?: string;
   last_synced_at_ms?: number;
   refresh_token?: string;
@@ -391,7 +392,7 @@ export function createSafeStorageSecretCodec(safeStorage: SafeStorageLike | null
 export function defaultDesktopPreferences(): DesktopPreferences {
   return {
     local_environment: createDesktopLocalEnvironmentState(),
-    provider_environments: [],
+    cloud_environments: [],
     saved_environments: [],
     saved_runtime_targets: [],
     default_flower_runtime_target_id: null,
@@ -486,14 +487,14 @@ function sortSavedControlPlanes(
 ): readonly DesktopSavedControlPlane[] {
   return [...controlPlanes].sort((left, right) => (
     right.last_synced_at_ms - left.last_synced_at_ms
-    || left.provider.display_name.localeCompare(right.provider.display_name)
-    || left.provider.provider_origin.localeCompare(right.provider.provider_origin)
+    || left.cloud.display_name.localeCompare(right.cloud.display_name)
+    || left.cloud.cloud_origin.localeCompare(right.cloud.cloud_origin)
   ));
 }
 
-function sortProviderEnvironmentsByStableOrder(
-  environments: readonly DesktopProviderEnvironmentRecord[],
-): readonly DesktopProviderEnvironmentRecord[] {
+function sortCloudEnvironmentsByStableOrder(
+  environments: readonly DesktopCloudEnvironmentRecord[],
+): readonly DesktopCloudEnvironmentRecord[] {
   return [...environments].sort((left, right) => {
     const [leftPinned, leftCreatedAtMS, leftLabel, leftID] = providerEnvironmentStableSortKey(left);
     const [rightPinned, rightCreatedAtMS, rightLabel, rightID] = providerEnvironmentStableSortKey(right);
@@ -529,7 +530,7 @@ function normalizePreferredOpenRoute(
 
 function resolveLocalEnvironmentStateDir(input: Readonly<{
   name?: string;
-  providerOrigin?: string;
+  cloudOrigin?: string;
   envPublicID?: string;
 }>, stateRootOverride?: string): string {
   void input;
@@ -562,7 +563,7 @@ function normalizeLocalEnvironmentState(
     access: source?.local_hosting.access,
     autoRuntimeProbeEnabled: true,
     preferredOpenRoute: source?.preferred_open_route,
-    currentProviderBinding: source?.current_provider_binding,
+    currentProviderBinding: source?.current_cloud_binding,
     stateDir: compact(source?.local_hosting.state_dir)
       || resolveLocalEnvironmentStateDir({ name: 'local' }, stateRootOverride),
     currentRuntime: source?.local_hosting.current_runtime,
@@ -583,15 +584,15 @@ export function findLocalEnvironmentByID(
   return preferences.local_environment;
 }
 
-export function findProviderEnvironmentByID(
+export function findCloudEnvironmentByID(
   preferences: DesktopPreferences,
   environmentID: string,
-): DesktopProviderEnvironmentRecord | null {
+): DesktopCloudEnvironmentRecord | null {
   const cleanEnvironmentID = compact(environmentID);
   if (cleanEnvironmentID === '') {
     return null;
   }
-  return preferences.provider_environments.find((environment) => environment.id === cleanEnvironmentID) ?? null;
+  return preferences.cloud_environments.find((environment) => environment.id === cleanEnvironmentID) ?? null;
 }
 
 function normalizeSavedEnvironmentCandidate(
@@ -707,14 +708,14 @@ function normalizeSavedControlPlaneCandidate(
   }
 
   const candidate = value as DesktopControlPlaneFile;
-  const provider = normalizeDesktopControlPlaneProvider(candidate.provider);
+  const provider = normalizeDesktopCloud(candidate.cloud);
   if (!provider) {
     return null;
   }
 
   let refreshToken = '';
   try {
-    refreshToken = String(refreshTokensByKey.get(desktopControlPlaneKey(provider.provider_origin, provider.provider_id)) ?? '');
+    refreshToken = String(refreshTokensByKey.get(desktopControlPlaneKey(provider.cloud_origin, provider.cloud_id)) ?? '');
   } catch {
     return null;
   }
@@ -723,16 +724,16 @@ function normalizeSavedControlPlaneCandidate(
   }
 
   const account = normalizeDesktopControlPlaneAccount(candidate.account, {
-    provider,
+    cloud: provider,
   });
   if (!account) {
     return null;
   }
 
   return {
-    provider,
+    cloud: provider,
     account,
-    display_label: normalizeControlPlaneDisplayLabel(candidate.display_label, provider.provider_origin),
+    display_label: normalizeControlPlaneDisplayLabel(candidate.display_label, provider.cloud_origin),
     last_synced_at_ms: normalizeLastUsedAtMS(candidate.last_synced_at_ms, fallbackLastSyncedAtMS),
   };
 }
@@ -808,14 +809,14 @@ function decodeDesktopControlPlaneRefreshTokens(
   }
 
   for (const value of values) {
-    const providerOrigin = compact(value?.provider_origin);
-    const providerID = compact(value?.provider_id);
+    const cloudOrigin = compact(value?.cloud_origin);
+    const cloudID = compact(value?.cloud_id);
     const refreshToken = decodeOptionalSecret(codec, value?.refresh_token);
-    if (providerOrigin === '' || providerID === '' || compact(refreshToken) === '') {
+    if (cloudOrigin === '' || cloudID === '' || compact(refreshToken) === '') {
       continue;
     }
     try {
-      out.set(desktopControlPlaneKey(providerOrigin, providerID), compact(refreshToken));
+      out.set(desktopControlPlaneKey(cloudOrigin, cloudID), compact(refreshToken));
     } catch {
       // Ignore malformed secret entries during recovery.
     }
@@ -880,7 +881,7 @@ export function normalizeSavedControlPlanes(
     if (!controlPlane) {
       continue;
     }
-    const key = desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id);
+    const key = desktopControlPlaneKey(controlPlane.cloud.cloud_origin, controlPlane.cloud.cloud_id);
     if (seenKeys.has(key)) {
       continue;
     }
@@ -891,13 +892,13 @@ export function normalizeSavedControlPlanes(
   return sortSavedControlPlanes(normalized);
 }
 
-function normalizeProviderEnvironmentRemoteCatalogEntry(
+function normalizeCloudEnvironmentRemoteCatalogEntry(
   value: unknown,
-): DesktopProviderEnvironmentRecord['remote_catalog_entry'] | undefined {
+): DesktopCloudEnvironmentRecord['remote_catalog_entry'] | undefined {
   if (!value || typeof value !== 'object') {
     return undefined;
   }
-  const candidate = value as NonNullable<DesktopProviderEnvironmentCatalogFile['remote_catalog_entry']>;
+  const candidate = value as NonNullable<DesktopCloudEnvironmentCatalogFile['remote_catalog_entry']>;
   const accessPointOrigin = (() => {
     const raw = compact(candidate.access_point_origin);
     if (raw === '') {
@@ -920,7 +921,7 @@ function normalizeProviderEnvironmentRemoteCatalogEntry(
     status: compact(candidate.status),
     lifecycle_status: compact(candidate.lifecycle_status),
     last_seen_at_unix_ms: normalizeLastUsedAtMS(candidate.last_seen_at_unix_ms, 0),
-    access: normalizeDesktopProviderEnvironmentAccess(candidate.access) ?? undefined,
+    access: normalizeDesktopCloudEnvironmentAccess(candidate.access) ?? undefined,
   };
   return (
     entry.region !== ''
@@ -939,11 +940,11 @@ function normalizeProviderEnvironmentRemoteCatalogEntry(
     : undefined;
 }
 
-function normalizeProviderEnvironmentCatalogCandidate(
+function normalizeCloudEnvironmentCatalogCandidate(
   value: unknown,
   canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
 ): Readonly<{
-  environment: DesktopProviderEnvironmentRecord | null;
+  environment: DesktopCloudEnvironmentRecord | null;
   didCanonicalizeProviderIdentity: boolean;
 }> {
   if (!value || typeof value !== 'object') {
@@ -952,7 +953,7 @@ function normalizeProviderEnvironmentCatalogCandidate(
       didCanonicalizeProviderIdentity: false,
     };
   }
-  const candidate = value as DesktopProviderEnvironmentCatalogFile;
+  const candidate = value as DesktopCloudEnvironmentCatalogFile;
   const recordKind = compact(candidate.record_kind);
   if (recordKind !== '' && recordKind !== 'provider_environment') {
     return {
@@ -960,20 +961,20 @@ function normalizeProviderEnvironmentCatalogCandidate(
       didCanonicalizeProviderIdentity: false,
     };
   }
-  const providerOrigin = compact(candidate.provider_origin);
+  const cloudOrigin = compact(candidate.cloud_origin);
   const envPublicID = compact(candidate.env_public_id);
   const region = compact(candidate.region);
   const accessPointID = compact(candidate.access_point_id);
   const accessPointOrigin = compact(candidate.access_point_origin);
   const normalizedProviderIdentity = normalizeProviderIdentityForOrigin(
-    providerOrigin,
-    candidate.provider_id,
+    cloudOrigin,
+    candidate.cloud_id,
     canonicalProviderIDsByOrigin,
   );
   if (
-    providerOrigin === ''
+    cloudOrigin === ''
     || envPublicID === ''
-    || normalizedProviderIdentity.providerID === ''
+    || normalizedProviderIdentity.cloudID === ''
     || region === ''
     || accessPointID === ''
     || accessPointOrigin === ''
@@ -985,8 +986,8 @@ function normalizeProviderEnvironmentCatalogCandidate(
   }
   try {
     return {
-      environment: createDesktopProviderEnvironmentRecord(providerOrigin, envPublicID, {
-        providerID: normalizedProviderIdentity.providerID,
+      environment: createDesktopCloudEnvironmentRecord(cloudOrigin, envPublicID, {
+        cloudID: normalizedProviderIdentity.cloudID,
         region,
         accessPointID,
         accessPointOrigin,
@@ -995,7 +996,7 @@ function normalizeProviderEnvironmentCatalogCandidate(
         preferredOpenRoute: normalizePreferredOpenRoute(candidate.preferred_open_route),
         remoteWebSupported: candidate.remote_web_supported !== false,
         remoteDesktopSupported: candidate.remote_desktop_supported !== false,
-        remoteCatalogEntry: normalizeProviderEnvironmentRemoteCatalogEntry(candidate.remote_catalog_entry),
+        remoteCatalogEntry: normalizeCloudEnvironmentRemoteCatalogEntry(candidate.remote_catalog_entry),
         createdAtMS: normalizeLastUsedAtMS(candidate.created_at_ms, Date.now()),
         updatedAtMS: normalizeLastUsedAtMS(candidate.updated_at_ms, Date.now()),
         lastUsedAtMS: normalizeLastUsedAtMS(candidate.last_used_at_ms, 0),
@@ -1010,11 +1011,11 @@ function normalizeProviderEnvironmentCatalogCandidate(
   }
 }
 
-function normalizeProviderEnvironmentCollection(
-  environments: readonly DesktopProviderEnvironmentRecord[],
-): readonly DesktopProviderEnvironmentRecord[] {
+function normalizeCloudEnvironmentCollection(
+  environments: readonly DesktopCloudEnvironmentRecord[],
+): readonly DesktopCloudEnvironmentRecord[] {
   const seenIDs = new Set<string>();
-  const normalized: DesktopProviderEnvironmentRecord[] = [];
+  const normalized: DesktopCloudEnvironmentRecord[] = [];
   for (const environment of environments) {
     if (seenIDs.has(environment.id)) {
       continue;
@@ -1022,17 +1023,17 @@ function normalizeProviderEnvironmentCollection(
     seenIDs.add(environment.id);
     normalized.push(environment);
   }
-  return sortProviderEnvironmentsByStableOrder(normalized);
+  return sortCloudEnvironmentsByStableOrder(normalized);
 }
 
-function normalizeProviderEnvironmentsFromCatalog(
+function normalizeCloudEnvironmentsFromCatalog(
   values: readonly unknown[],
   canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
-): ProviderEnvironmentNormalizationResult {
-  const normalized: DesktopProviderEnvironmentRecord[] = [];
+): CloudEnvironmentNormalizationResult {
+  const normalized: DesktopCloudEnvironmentRecord[] = [];
   let didCanonicalizeProviderIdentity = false;
   for (const value of values) {
-    const result = normalizeProviderEnvironmentCatalogCandidate(
+    const result = normalizeCloudEnvironmentCatalogCandidate(
       value,
       canonicalProviderIDsByOrigin,
     );
@@ -1043,16 +1044,16 @@ function normalizeProviderEnvironmentsFromCatalog(
     normalized.push(result.environment);
   }
   return {
-    environments: normalizeProviderEnvironmentCollection(normalized),
+    environments: normalizeCloudEnvironmentCollection(normalized),
     didCanonicalizeProviderIdentity,
   };
 }
 
-function mergeProviderEnvironmentRecord(
-  existing: DesktopProviderEnvironmentRecord | null,
+function mergeCloudEnvironmentRecord(
+  existing: DesktopCloudEnvironmentRecord | null,
   input: Readonly<{
-    provider_origin: string;
-    provider_id: string;
+    cloud_origin: string;
+    cloud_id: string;
     env_public_id: string;
     region: string;
     access_point_id: string;
@@ -1062,20 +1063,20 @@ function mergeProviderEnvironmentRecord(
     preferred_open_route?: DesktopLocalEnvironmentPreferredOpenRoute;
     remote_web_supported?: boolean;
     remote_desktop_supported?: boolean;
-    remote_catalog_entry?: DesktopProviderEnvironmentRecord['remote_catalog_entry'] | null;
+    remote_catalog_entry?: DesktopCloudEnvironmentRecord['remote_catalog_entry'] | null;
     created_at_ms?: number;
     updated_at_ms?: number;
     last_used_at_ms?: number;
   }>,
-): DesktopProviderEnvironmentRecord {
-  const label = compact(input.label) || existing?.label || defaultDesktopProviderEnvironmentLabel(input.env_public_id);
+): DesktopCloudEnvironmentRecord {
+  const label = compact(input.label) || existing?.label || defaultDesktopCloudEnvironmentLabel(input.env_public_id);
   const pinned = input.pinned ?? existing?.pinned ?? false;
   const preferredOpenRoute = input.preferred_open_route ?? existing?.preferred_open_route ?? 'auto';
   const remoteCatalogEntry = input.remote_catalog_entry === undefined
     ? existing?.remote_catalog_entry
     : input.remote_catalog_entry ?? undefined;
-  return createDesktopProviderEnvironmentRecord(input.provider_origin, input.env_public_id, {
-    providerID: input.provider_id || existing?.provider_id || '',
+  return createDesktopCloudEnvironmentRecord(input.cloud_origin, input.env_public_id, {
+    cloudID: input.cloud_id || existing?.cloud_id || '',
     region: input.region || existing?.region || '',
     accessPointID: input.access_point_id || existing?.access_point_id || '',
     accessPointOrigin: input.access_point_origin || existing?.access_point_origin || '',
@@ -1097,38 +1098,38 @@ function mergeProviderEnvironmentRecord(
   });
 }
 
-function reconcileProviderEnvironments(
+function reconcileCloudEnvironments(
   input: Readonly<{
-    stored: readonly DesktopProviderEnvironmentRecord[];
+    stored: readonly DesktopCloudEnvironmentRecord[];
     controlPlanes: readonly DesktopSavedControlPlane[];
   }>,
-): readonly DesktopProviderEnvironmentRecord[] {
+): readonly DesktopCloudEnvironmentRecord[] {
   const canonicalProviderIDsByOrigin = buildCanonicalProviderIDByOrigin(input.controlPlanes);
-  return normalizeProviderEnvironmentCollection(
+  return normalizeCloudEnvironmentCollection(
     input.stored
-      .map((environment) => canonicalizeProviderEnvironmentIdentity(environment, canonicalProviderIDsByOrigin))
+      .map((environment) => canonicalizeCloudEnvironmentIdentity(environment, canonicalProviderIDsByOrigin))
       .filter((environment) => input.controlPlanes.some((controlPlane) => (
         providerEnvironmentBelongsToControlPlane(
           environment,
-          controlPlane.provider.provider_origin,
-          controlPlane.provider.provider_id,
+          controlPlane.cloud.cloud_origin,
+          controlPlane.cloud.cloud_id,
         )
       ))),
   );
 }
 
 function providerEnvironmentBelongsToControlPlane(
-  environment: DesktopProviderEnvironmentRecord,
-  providerOrigin: string,
-  providerID: string,
+  environment: DesktopCloudEnvironmentRecord,
+  cloudOrigin: string,
+  cloudID: string,
 ): boolean {
-  const normalizedProviderOrigin = normalizeControlPlaneOrigin(providerOrigin);
-  return environment.provider_origin === normalizedProviderOrigin
-    && providerIDMatchesCanonicalIdentity(normalizedProviderOrigin, environment.provider_id, providerID);
+  const normalizedCloudOrigin = normalizeControlPlaneOrigin(cloudOrigin);
+  return environment.cloud_origin === normalizedCloudOrigin
+    && providerIDMatchesCanonicalIdentity(normalizedCloudOrigin, environment.cloud_id, cloudID);
 }
 
 function providerIDMatchesCanonicalIdentity(
-  providerOrigin: string,
+  cloudOrigin: string,
   actualProviderID: string,
   canonicalProviderID: string,
 ): boolean {
@@ -1137,7 +1138,7 @@ function providerIDMatchesCanonicalIdentity(
   if (cleanActualProviderID === '' || cleanCanonicalProviderID === '') {
     return false;
   }
-  void providerOrigin;
+  void cloudOrigin;
   return cleanActualProviderID === cleanCanonicalProviderID;
 }
 
@@ -1147,74 +1148,74 @@ function buildCanonicalProviderIDByOrigin(
   const canonicalProviderIDsByOrigin = new Map<string, string>();
   const conflictedOrigins = new Set<string>();
   for (const controlPlane of controlPlanes) {
-    const providerOrigin = controlPlane.provider.provider_origin;
-    const providerID = controlPlane.provider.provider_id;
-    if (conflictedOrigins.has(providerOrigin)) {
+    const cloudOrigin = controlPlane.cloud.cloud_origin;
+    const cloudID = controlPlane.cloud.cloud_id;
+    if (conflictedOrigins.has(cloudOrigin)) {
       continue;
     }
-    const existingProviderID = canonicalProviderIDsByOrigin.get(providerOrigin);
+    const existingProviderID = canonicalProviderIDsByOrigin.get(cloudOrigin);
     if (!existingProviderID) {
-      canonicalProviderIDsByOrigin.set(providerOrigin, providerID);
+      canonicalProviderIDsByOrigin.set(cloudOrigin, cloudID);
       continue;
     }
-    if (existingProviderID !== providerID) {
-      canonicalProviderIDsByOrigin.delete(providerOrigin);
-      conflictedOrigins.add(providerOrigin);
+    if (existingProviderID !== cloudID) {
+      canonicalProviderIDsByOrigin.delete(cloudOrigin);
+      conflictedOrigins.add(cloudOrigin);
     }
   }
   return canonicalProviderIDsByOrigin;
 }
 
 function canonicalProviderIDForOrigin(
-  providerOrigin: string,
+  cloudOrigin: string,
   canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
 ): string {
   try {
-    return compact(canonicalProviderIDsByOrigin.get(normalizeControlPlaneOrigin(providerOrigin)) ?? '');
+    return compact(canonicalProviderIDsByOrigin.get(normalizeControlPlaneOrigin(cloudOrigin)) ?? '');
   } catch {
     return '';
   }
 }
 
 function normalizeProviderIdentityForOrigin(
-  providerOrigin: string,
-  providerID: unknown,
+  cloudOrigin: string,
+  cloudID: unknown,
   canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
 ): Readonly<{
-  providerID: string;
+  cloudID: string;
   didCanonicalize: boolean;
 }> {
-  const cleanProviderID = compact(providerID);
+  const cleanProviderID = compact(cloudID);
   if (cleanProviderID === '') {
     return {
-      providerID: '',
+      cloudID: '',
       didCanonicalize: false,
     };
   }
 
-  const canonicalProviderID = canonicalProviderIDForOrigin(providerOrigin, canonicalProviderIDsByOrigin);
+  const canonicalProviderID = canonicalProviderIDForOrigin(cloudOrigin, canonicalProviderIDsByOrigin);
   if (
     canonicalProviderID === ''
     || cleanProviderID === canonicalProviderID
   ) {
     return {
-      providerID: cleanProviderID,
+      cloudID: cleanProviderID,
       didCanonicalize: false,
     };
   }
 
   return {
-    providerID: canonicalProviderID,
+    cloudID: canonicalProviderID,
     didCanonicalize: true,
   };
 }
 
 function providerEnvironmentRecordKey(
-  providerOrigin: string,
-  providerID: string,
+  cloudOrigin: string,
+  cloudID: string,
   envPublicID: string,
 ): string {
-  return `${desktopControlPlaneKey(providerOrigin, providerID)}|${normalizeDesktopProviderEnvironmentID(envPublicID)}`;
+  return `${desktopControlPlaneKey(cloudOrigin, cloudID)}|${normalizeDesktopCloudEnvironmentID(envPublicID)}`;
 }
 
 function providerAccessPointRouteKey(accessPointID: string, accessPointOrigin: string): string {
@@ -1229,25 +1230,25 @@ function providerAccessPointRouteKey(accessPointID: string, accessPointOrigin: s
   }
 }
 
-function providerEnvironmentAccessPointRouteKey(environment: DesktopProviderEnvironmentRecord): string {
+function providerEnvironmentAccessPointRouteKey(environment: DesktopCloudEnvironmentRecord): string {
   return providerAccessPointRouteKey(environment.access_point_id, environment.access_point_origin);
 }
 
-function canonicalizeProviderEnvironmentIdentity(
-  environment: DesktopProviderEnvironmentRecord,
+function canonicalizeCloudEnvironmentIdentity(
+  environment: DesktopCloudEnvironmentRecord,
   canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
-): DesktopProviderEnvironmentRecord {
+): DesktopCloudEnvironmentRecord {
   const normalizedProviderIdentity = normalizeProviderIdentityForOrigin(
-    environment.provider_origin,
-    environment.provider_id,
+    environment.cloud_origin,
+    environment.cloud_id,
     canonicalProviderIDsByOrigin,
   );
   if (!normalizedProviderIdentity.didCanonicalize) {
     return environment;
   }
-  return mergeProviderEnvironmentRecord(environment, {
-    provider_origin: environment.provider_origin,
-    provider_id: normalizedProviderIdentity.providerID,
+  return mergeCloudEnvironmentRecord(environment, {
+    cloud_origin: environment.cloud_origin,
+    cloud_id: normalizedProviderIdentity.cloudID,
     env_public_id: environment.env_public_id,
     region: environment.region,
     access_point_id: environment.access_point_id,
@@ -1348,7 +1349,7 @@ export function setLocalEnvironmentPinned(
   };
 }
 
-function updateProviderEnvironmentRecordByID(
+function updateCloudEnvironmentRecordByID(
   preferences: DesktopPreferences,
   input: Readonly<{
     environment_id: string;
@@ -1356,13 +1357,13 @@ function updateProviderEnvironmentRecordByID(
     last_used_at_ms?: number;
   }>,
 ): DesktopPreferences {
-  const existing = findProviderEnvironmentByID(preferences, input.environment_id);
+  const existing = findCloudEnvironmentByID(preferences, input.environment_id);
   if (!existing) {
     return preferences;
   }
-  const nextEnvironment = mergeProviderEnvironmentRecord(existing, {
-    provider_origin: existing.provider_origin,
-    provider_id: existing.provider_id,
+  const nextEnvironment = mergeCloudEnvironmentRecord(existing, {
+    cloud_origin: existing.cloud_origin,
+    cloud_id: existing.cloud_id,
     env_public_id: existing.env_public_id,
     region: existing.region,
     access_point_id: existing.access_point_id,
@@ -1379,29 +1380,29 @@ function updateProviderEnvironmentRecordByID(
   });
   return {
     ...preferences,
-    provider_environments: normalizeProviderEnvironmentCollection([
+    cloud_environments: normalizeCloudEnvironmentCollection([
       nextEnvironment,
-      ...preferences.provider_environments.filter((environment) => environment.id !== nextEnvironment.id),
+      ...preferences.cloud_environments.filter((environment) => environment.id !== nextEnvironment.id),
     ]),
   };
 }
 
-export function rememberProviderEnvironmentUse(
+export function rememberCloudEnvironmentUse(
   preferences: DesktopPreferences,
   environmentID: string,
 ): DesktopPreferences {
-  return updateProviderEnvironmentRecordByID(preferences, {
+  return updateCloudEnvironmentRecordByID(preferences, {
     environment_id: environmentID,
     last_used_at_ms: Date.now(),
   });
 }
 
-export function setProviderEnvironmentPinned(
+export function setCloudEnvironmentPinned(
   preferences: DesktopPreferences,
   environmentID: string,
   pinned: boolean,
 ): DesktopPreferences {
-  return updateProviderEnvironmentRecordByID(preferences, {
+  return updateCloudEnvironmentRecordByID(preferences, {
     environment_id: environmentID,
     pinned,
   });
@@ -1506,16 +1507,16 @@ export function upsertSavedControlPlane(
   preferences: DesktopPreferences,
   input: UpsertDesktopSavedControlPlaneInput,
 ): DesktopPreferences {
-  const key = desktopControlPlaneKey(input.provider.provider_origin, input.provider.provider_id);
+  const key = desktopControlPlaneKey(input.cloud.cloud_origin, input.cloud.cloud_id);
   const existing = preferences.control_planes.find((controlPlane) => (
-    desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) === key
+    desktopControlPlaneKey(controlPlane.cloud.cloud_origin, controlPlane.cloud.cloud_id) === key
   )) ?? null;
   const nextControlPlane: DesktopSavedControlPlane = {
-    provider: input.provider,
+    cloud: input.cloud,
     account: input.account,
     display_label: normalizeControlPlaneDisplayLabel(
       input.display_label ?? existing?.display_label,
-      input.provider.provider_origin,
+      input.cloud.cloud_origin,
     ),
     last_synced_at_ms: normalizeLastUsedAtMS(input.last_synced_at_ms, Date.now()),
   };
@@ -1529,7 +1530,7 @@ export function upsertSavedControlPlane(
   const controlPlanes = sortSavedControlPlanes([
     nextControlPlane,
     ...preferences.control_planes.filter((controlPlane) => (
-      desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) !== key
+      desktopControlPlaneKey(controlPlane.cloud.cloud_origin, controlPlane.cloud.cloud_id) !== key
     )),
   ]);
 
@@ -1541,8 +1542,8 @@ export function upsertSavedControlPlane(
   if (!input.environments) {
     return {
       ...nextPreferences,
-      provider_environments: reconcileProviderEnvironments({
-        stored: nextPreferences.provider_environments,
+      cloud_environments: reconcileCloudEnvironments({
+        stored: nextPreferences.cloud_environments,
         controlPlanes,
       }),
     };
@@ -1551,17 +1552,17 @@ export function upsertSavedControlPlane(
   const incomingKeys = new Set<string>();
   const incomingRecords = input.environments.map((environment) => {
     const recordKey = providerEnvironmentRecordKey(
-      input.provider.provider_origin,
-      input.provider.provider_id,
+      input.cloud.cloud_origin,
+      input.cloud.cloud_id,
       environment.env_public_id,
     );
     incomingKeys.add(recordKey);
-    const existingRecord = nextPreferences.provider_environments.find((stored) => (
-      providerEnvironmentRecordKey(stored.provider_origin, stored.provider_id, stored.env_public_id) === recordKey
+    const existingRecord = nextPreferences.cloud_environments.find((stored) => (
+      providerEnvironmentRecordKey(stored.cloud_origin, stored.cloud_id, stored.env_public_id) === recordKey
     )) ?? null;
-    return mergeProviderEnvironmentRecord(existingRecord, {
-      provider_origin: input.provider.provider_origin,
-      provider_id: input.provider.provider_id,
+    return mergeCloudEnvironmentRecord(existingRecord, {
+      cloud_origin: input.cloud.cloud_origin,
+      cloud_id: input.cloud.cloud_id,
       env_public_id: environment.env_public_id,
       region: environment.region,
       access_point_id: environment.access_point_id,
@@ -1569,7 +1570,7 @@ export function upsertSavedControlPlane(
       label: environment.label,
       remote_web_supported: true,
       remote_desktop_supported: true,
-      remote_catalog_entry: desktopProviderEnvironmentRemoteCatalogEntryFromPublished(environment),
+      remote_catalog_entry: desktopCloudEnvironmentRemoteCatalogEntryFromPublished(environment),
       created_at_ms: input.last_synced_at_ms || Date.now(),
       updated_at_ms: input.last_synced_at_ms || Date.now(),
     });
@@ -1580,14 +1581,14 @@ export function upsertSavedControlPlane(
       .map((accessPoint) => providerAccessPointRouteKey(accessPoint.access_point_id, accessPoint.access_point_origin))
       .filter((key) => key !== ''))
     : null;
-  const activeAccessPointKeys = new Set(input.provider.access_points
+  const activeAccessPointKeys = new Set(input.cloud.access_points
     .map((accessPoint) => providerAccessPointRouteKey(accessPoint.access_point_id, accessPoint.access_point_origin))
     .filter((key) => key !== ''));
-  const retainedRecords = nextPreferences.provider_environments.filter((environment) => {
+  const retainedRecords = nextPreferences.cloud_environments.filter((environment) => {
     if (!providerEnvironmentBelongsToControlPlane(
       environment,
-      input.provider.provider_origin,
-      input.provider.provider_id,
+      input.cloud.cloud_origin,
+      input.cloud.cloud_id,
     )) {
       return true;
     }
@@ -1599,14 +1600,14 @@ export function upsertSavedControlPlane(
       return true;
     }
     return incomingKeys.has(providerEnvironmentRecordKey(
-      environment.provider_origin,
-      environment.provider_id,
+      environment.cloud_origin,
+      environment.cloud_id,
       environment.env_public_id,
     ));
   });
   return {
     ...nextPreferences,
-    provider_environments: normalizeProviderEnvironmentCollection([
+    cloud_environments: normalizeCloudEnvironmentCollection([
       ...incomingRecords,
       ...retainedRecords,
     ]),
@@ -1773,24 +1774,24 @@ export function markSavedRuntimeTargetUsed(
 
 export function signOutSavedControlPlane(
   preferences: DesktopPreferences,
-  providerOrigin: string,
-  providerID: string,
+  cloudOrigin: string,
+  cloudID: string,
 ): DesktopPreferences {
-  const key = desktopControlPlaneKey(providerOrigin, providerID);
+  const key = desktopControlPlaneKey(cloudOrigin, cloudID);
   const nextRefreshTokens = {
     ...preferences.control_plane_refresh_tokens,
   };
   delete nextRefreshTokens[key];
-  const normalizedProviderOrigin = normalizeControlPlaneOrigin(providerOrigin);
+  const normalizedCloudOrigin = normalizeControlPlaneOrigin(cloudOrigin);
   return {
     ...preferences,
     control_plane_refresh_tokens: nextRefreshTokens,
     control_planes: preferences.control_planes.filter((controlPlane) => (
-      desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) !== key
+      desktopControlPlaneKey(controlPlane.cloud.cloud_origin, controlPlane.cloud.cloud_id) !== key
     )),
-    provider_environments: normalizeProviderEnvironmentCollection(
-      preferences.provider_environments.filter((environment) => (
-        !providerEnvironmentBelongsToControlPlane(environment, normalizedProviderOrigin, providerID)
+    cloud_environments: normalizeCloudEnvironmentCollection(
+      preferences.cloud_environments.filter((environment) => (
+        !providerEnvironmentBelongsToControlPlane(environment, normalizedCloudOrigin, cloudID)
       )),
     ),
   };
@@ -1801,26 +1802,26 @@ export function restrictDesktopPreferencesToRedevenCloud(
   policy: RedevenCloudOriginPolicy,
 ): DesktopRedevenCloudRestrictionResult {
   const controlPlanes = preferences.control_planes.filter((controlPlane) => (
-    isRedevenCloudOrigin(controlPlane.provider.provider_origin, policy)
+    isRedevenCloudOrigin(controlPlane.cloud.cloud_origin, policy)
   ));
-  const providerEnvironments = preferences.provider_environments.filter((environment) => (
-    isRedevenCloudOrigin(environment.provider_origin, policy)
+  const providerEnvironments = preferences.cloud_environments.filter((environment) => (
+    isRedevenCloudOrigin(environment.cloud_origin, policy)
   ));
   const retainedControlPlaneKeys = new Set(controlPlanes.map((controlPlane) => desktopControlPlaneKey(
-    controlPlane.provider.provider_origin,
-    controlPlane.provider.provider_id,
+    controlPlane.cloud.cloud_origin,
+    controlPlane.cloud.cloud_id,
   )));
   const controlPlaneRefreshTokens = Object.fromEntries(
     Object.entries(preferences.control_plane_refresh_tokens).filter(([key]) => retainedControlPlaneKeys.has(key)),
   );
-  const currentProviderBinding = preferences.local_environment.current_provider_binding;
+  const currentProviderBinding = preferences.local_environment.current_cloud_binding;
   const clearLocalProviderBinding = Boolean(
     currentProviderBinding
-    && !isRedevenCloudOrigin(currentProviderBinding.provider_origin, policy),
+    && !isRedevenCloudOrigin(currentProviderBinding.cloud_origin, policy),
   );
   const changed = (
     controlPlanes.length !== preferences.control_planes.length
-    || providerEnvironments.length !== preferences.provider_environments.length
+    || providerEnvironments.length !== preferences.cloud_environments.length
     || Object.keys(controlPlaneRefreshTokens).length !== Object.keys(preferences.control_plane_refresh_tokens).length
     || clearLocalProviderBinding
   );
@@ -1839,16 +1840,16 @@ export function restrictDesktopPreferencesToRedevenCloud(
       local_environment: clearLocalProviderBinding
         ? {
             ...preferences.local_environment,
-            current_provider_binding: undefined,
+            current_cloud_binding: undefined,
           }
         : preferences.local_environment,
       control_plane_refresh_tokens: controlPlaneRefreshTokens,
       control_planes: controlPlanes,
-      provider_environments: providerEnvironments,
+      cloud_environments: providerEnvironments,
     },
     changed: true,
     removed_control_plane_count: preferences.control_planes.length - controlPlanes.length,
-    removed_provider_environment_count: preferences.provider_environments.length - providerEnvironments.length,
+    removed_provider_environment_count: preferences.cloud_environments.length - providerEnvironments.length,
     cleared_local_provider_binding: clearLocalProviderBinding,
   };
 }
@@ -2010,24 +2011,24 @@ function normalizeLocalEnvironmentCatalogCandidate(
 
   let didCanonicalizeProviderIdentity = false;
   const currentProviderBinding = (() => {
-    const bindingSource = candidate.current_provider_binding && typeof candidate.current_provider_binding === 'object'
-      ? candidate.current_provider_binding
+    const bindingSource = candidate.current_cloud_binding && typeof candidate.current_cloud_binding === 'object'
+      ? candidate.current_cloud_binding
       : null;
     if (!bindingSource) {
       return null;
     }
     const normalizedProviderIdentity = normalizeProviderIdentityForOrigin(
-      compact(bindingSource.provider_origin),
-      bindingSource.provider_id,
+      compact(bindingSource.cloud_origin),
+      bindingSource.cloud_id,
       canonicalProviderIDsByOrigin,
     );
     didCanonicalizeProviderIdentity ||= normalizedProviderIdentity.didCanonicalize;
     try {
       return createDesktopLocalProviderBinding(
-        compact(bindingSource.provider_origin),
+        compact(bindingSource.cloud_origin),
         compact(bindingSource.env_public_id),
         {
-          providerID: normalizedProviderIdentity.providerID,
+          cloudID: normalizedProviderIdentity.cloudID,
           accessPointOrigin: compact(bindingSource.access_point_origin),
           remoteWebSupported: bindingSource.remote_web_supported !== false,
           remoteDesktopSupported: bindingSource.remote_desktop_supported !== false,
@@ -2143,15 +2144,15 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
 			local_ui_password_configured: access.local_ui_password_configured,
       },
     },
-    ...(environment.current_provider_binding
+    ...(environment.current_cloud_binding
       ? {
-          current_provider_binding: {
-            provider_origin: environment.current_provider_binding.provider_origin,
-            provider_id: environment.current_provider_binding.provider_id,
-            env_public_id: environment.current_provider_binding.env_public_id,
-            access_point_origin: environment.current_provider_binding.access_point_origin,
-            remote_web_supported: environment.current_provider_binding.remote_web_supported,
-            remote_desktop_supported: environment.current_provider_binding.remote_desktop_supported,
+          current_cloud_binding: {
+            cloud_origin: environment.current_cloud_binding.cloud_origin,
+            cloud_id: environment.current_cloud_binding.cloud_id,
+            env_public_id: environment.current_cloud_binding.env_public_id,
+            access_point_origin: environment.current_cloud_binding.access_point_origin,
+            remote_web_supported: environment.current_cloud_binding.remote_web_supported,
+            remote_desktop_supported: environment.current_cloud_binding.remote_desktop_supported,
           },
         }
       : {}),
@@ -2194,13 +2195,13 @@ function serializeSavedControlPlaneCatalog(controlPlane: DesktopSavedControlPlan
   return {
     schema_version: 1,
     record_kind: 'provider',
-    provider: {
-      protocol_version: controlPlane.provider.protocol_version,
-      provider_id: controlPlane.provider.provider_id,
-      display_name: controlPlane.provider.display_name,
-      provider_origin: controlPlane.provider.provider_origin,
-      documentation_url: controlPlane.provider.documentation_url,
-      access_points: controlPlane.provider.access_points,
+    cloud: {
+      protocol_version: controlPlane.cloud.protocol_version,
+      cloud_id: controlPlane.cloud.cloud_id,
+      display_name: controlPlane.cloud.display_name,
+      cloud_origin: controlPlane.cloud.cloud_origin,
+      documentation_url: controlPlane.cloud.documentation_url,
+      access_points: controlPlane.cloud.access_points,
     },
     account: {
       user_public_id: controlPlane.account.user_public_id,
@@ -2212,15 +2213,15 @@ function serializeSavedControlPlaneCatalog(controlPlane: DesktopSavedControlPlan
   };
 }
 
-function serializeProviderEnvironmentCatalog(
-  environment: DesktopProviderEnvironmentRecord,
-): DesktopProviderEnvironmentCatalogFile {
+function serializeCloudEnvironmentCatalog(
+  environment: DesktopCloudEnvironmentRecord,
+): DesktopCloudEnvironmentCatalogFile {
   return {
     schema_version: 1,
     record_kind: 'provider_environment',
     id: environment.id,
-    provider_origin: environment.provider_origin,
-    provider_id: environment.provider_id,
+    cloud_origin: environment.cloud_origin,
+    cloud_id: environment.cloud_id,
     env_public_id: environment.env_public_id,
     region: environment.region,
     access_point_id: environment.access_point_id,
@@ -2242,6 +2243,12 @@ function serializeProviderEnvironmentCatalog(
 }
 
 export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, codec: DesktopSecretCodec): Promise<DesktopPreferences> {
+  const cloudCatalogPaths = defaultDesktopCatalogPaths(paths.stateRoot);
+  await migrateDesktopCloudState({
+    ...paths,
+    localEnvironmentFile: cloudCatalogPaths.localEnvironmentFile,
+    cloudDirectories: [cloudCatalogPaths.providersDir, cloudCatalogPaths.providerEnvironmentsDir],
+  });
   const preferencesFile = await readJSONFile<DesktopPreferencesFile>(paths.preferencesFile);
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
   const catalogPaths = defaultDesktopCatalogPaths(paths.stateRoot);
@@ -2250,7 +2257,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const catalogLocalEnvironment = await readJSONFile(catalogPaths.localEnvironmentFile);
   const catalogConnections = await readJSONDirectory(catalogPaths.connectionsDir);
   const catalogProviders = await readJSONDirectory(catalogPaths.providersDir);
-  const catalogProviderEnvironments = await readJSONDirectory(catalogPaths.providerEnvironmentsDir);
+  const catalogCloudEnvironments = await readJSONDirectory(catalogPaths.providerEnvironmentsDir);
   const controlPlaneRefreshTokensByKey = decodeDesktopControlPlaneRefreshTokens(codec, secretsFile?.control_planes);
   const runtimeTargetPasswordsByID = decodeRuntimeTargetPasswords(codec, secretsFile?.saved_runtime_targets);
 
@@ -2258,7 +2265,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     catalogLocalEnvironment != null
     || catalogConnections.length > 0
     || catalogProviders.length > 0
-    || catalogProviderEnvironments.length > 0
+    || catalogCloudEnvironments.length > 0
   );
   const savedEnvironments = normalizeSavedEnvironments(
     catalogConnections.filter((value) => (
@@ -2289,11 +2296,11 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     canonicalProviderIDsByOrigin,
     paths.stateRoot,
   );
-  const providerEnvironmentCatalogResult = normalizeProviderEnvironmentsFromCatalog(
-    catalogProviderEnvironments,
+  const providerEnvironmentCatalogResult = normalizeCloudEnvironmentsFromCatalog(
+    catalogCloudEnvironments,
     canonicalProviderIDsByOrigin,
   );
-  const providerEnvironments = reconcileProviderEnvironments({
+  const providerEnvironments = reconcileCloudEnvironments({
     stored: providerEnvironmentCatalogResult.environments,
     controlPlanes,
   });
@@ -2306,7 +2313,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const nextPreferences: DesktopPreferences = {
     environment_access: normalizeEnvironmentAccessPreferences(preferencesFile?.environment_access),
     local_environment: registrationMigration.local_environment,
-    provider_environments: providerEnvironments,
+    cloud_environments: providerEnvironments,
     saved_environments: savedEnvironments,
     saved_runtime_targets: normalizeSavedRuntimeTargets(registrationMigration.saved_runtime_targets),
     default_flower_runtime_target_id: null,
@@ -2363,7 +2370,7 @@ export async function saveDesktopPreferences(
   const catalogPaths = defaultDesktopCatalogPaths(paths.stateRoot);
   const existingSecretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
   const localEnvironment = normalizeLocalEnvironmentState(preferences.local_environment, paths.stateRoot);
-  const providerEnvironments = normalizeProviderEnvironmentCollection(preferences.provider_environments);
+  const providerEnvironments = normalizeCloudEnvironmentCollection(preferences.cloud_environments);
   const savedEnvironments = normalizeSavedEnvironments(preferences.saved_environments);
   const savedRuntimeTargets = normalizeSavedRuntimeTargets(preferences.saved_runtime_targets);
   const controlPlanes = sortSavedControlPlanes(preferences.control_planes);
@@ -2373,7 +2380,7 @@ export async function saveDesktopPreferences(
       .filter(([targetID, secret]) => targetID !== '' && secret),
   );
   const preferencesFile: DesktopPreferencesFile = {
-    version: 15,
+    version: 16,
     ...(preferences.environment_access ? { environment_access: normalizeEnvironmentAccessPreferences(preferences.environment_access) } : {}),
     default_flower_runtime_target_id: savedRuntimeTargets.some((target) => (
       target.id === preferences.default_flower_runtime_target_id
@@ -2382,7 +2389,7 @@ export async function saveDesktopPreferences(
       : null,
   };
   const secretsFile: DesktopSecretsFile = {
-    version: 4,
+    version: 5,
     local_environment: (() => {
       const access = localEnvironmentAccess(localEnvironment);
       if (!access.local_ui_password_configured) {
@@ -2412,14 +2419,14 @@ export async function saveDesktopPreferences(
     }),
     control_planes: controlPlanes.flatMap((controlPlane) => {
       const refreshToken = compact(preferences.control_plane_refresh_tokens[
-        desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id)
+        desktopControlPlaneKey(controlPlane.cloud.cloud_origin, controlPlane.cloud.cloud_id)
       ]);
       if (refreshToken === '') {
         return [];
       }
       return [{
-        provider_origin: controlPlane.provider.provider_origin,
-        provider_id: controlPlane.provider.provider_id,
+        cloud_origin: controlPlane.cloud.cloud_origin,
+        cloud_id: controlPlane.cloud.cloud_id,
         refresh_token: codec.encodeSecret(refreshToken),
       }];
     }),
@@ -2441,7 +2448,7 @@ export async function saveDesktopPreferences(
   await writeCatalogRecords(
     catalogPaths.providersDir,
     Object.fromEntries(controlPlanes.map((controlPlane) => [
-      desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id),
+      desktopControlPlaneKey(controlPlane.cloud.cloud_origin, controlPlane.cloud.cloud_id),
       serializeSavedControlPlaneCatalog(controlPlane),
     ])),
   );
@@ -2449,7 +2456,7 @@ export async function saveDesktopPreferences(
     catalogPaths.providerEnvironmentsDir,
     Object.fromEntries(providerEnvironments.map((environment) => [
       environment.id,
-      serializeProviderEnvironmentCatalog(environment),
+      serializeCloudEnvironmentCatalog(environment),
     ])),
   );
   await fs.mkdir(path.dirname(paths.preferencesFile), { recursive: true });

@@ -9,7 +9,7 @@ import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import {
   testDesktopPreferences,
   testLocalEnvironment,
-  testProviderEnvironment,
+  testCloudEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
   buildEnvironmentFlowerContextAction,
@@ -27,10 +27,10 @@ function snapshotEnvironment(
           local_ui_bind: '127.0.0.1:5173',
         },
       }),
-      provider_environments: [
-        testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+      cloud_environments: [
+        testCloudEnvironment('https://provider.example.invalid', 'env_demo', {
           label: 'Demo Environment',
-          providerID: 'example_control_plane',
+          cloudID: 'example_control_plane',
           accessPointOrigin: 'https://dev.provider.example.invalid',
         }),
       ],
@@ -53,8 +53,8 @@ describe('environment Flower context envelope', () => {
       label: 'udesk26',
       local_ui_url: '',
       env_public_id: undefined,
-      provider_origin: undefined,
-      provider_id: undefined,
+      cloud_origin: undefined,
+      cloud_id: undefined,
       managed_runtime_target_id: 'ssh:host:udesk26:7afba939',
       provider_runtime_link_target: undefined,
       managed_runtime_placement_target_id: undefined,

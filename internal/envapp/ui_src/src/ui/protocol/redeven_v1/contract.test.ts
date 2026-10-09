@@ -123,12 +123,12 @@ describe('Redeven v1 terminal notifications', () => {
         },
         capabilities: {
           desktop_model_source: { supported: true, bind_method: 'runtime_control_v2' },
-          provider_link: { supported: false },
+          cloud_link: { supported: false },
           runtime_gateway: { supported: true, bind_method: 'runtime_control_v2' },
         },
         bindings: {
           desktop_model_source: { state: 'bound' },
-          provider_link: { state: 'unsupported', remote_enabled: false },
+          cloud_link: { state: 'unsupported', remote_enabled: false },
         },
       },
     }));

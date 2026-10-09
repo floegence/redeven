@@ -19,23 +19,23 @@ import (
 )
 
 const (
-	ProviderLinkErrorActiveWork         = "PROVIDER_LINK_ACTIVE_WORK"
-	ProviderLinkErrorExchangeFailed     = "PROVIDER_LINK_EXCHANGE_FAILED"
-	ProviderLinkErrorAlreadyLinked      = "PROVIDER_LINK_ALREADY_CONNECTED"
-	ProviderLinkErrorDisconnectFailed   = "PROVIDER_LINK_DISCONNECT_FAILED"
-	ProviderLinkErrorDisconnectRejected = "PROVIDER_LINK_DISCONNECT_REJECTED"
-	ProviderLinkErrorBindingNotCurrent  = "PROVIDER_LINK_NOT_CURRENT"
-	ProviderLinkErrorAuthorization      = "PROVIDER_LINK_AUTHORIZATION_REQUIRED"
-	ProviderLinkErrorPermissionRevoked  = "PROVIDER_LINK_PERMISSION_REVOKED"
-	ProviderLinkErrorUnavailable        = "PROVIDER_LINK_UNAVAILABLE"
-	ProviderLinkErrorBindingChanged     = "PROVIDER_LINK_BINDING_CHANGED"
+	CloudLinkErrorActiveWork         = "CLOUD_LINK_ACTIVE_WORK"
+	CloudLinkErrorExchangeFailed     = "CLOUD_LINK_EXCHANGE_FAILED"
+	CloudLinkErrorAlreadyLinked      = "CLOUD_LINK_ALREADY_CONNECTED"
+	CloudLinkErrorDisconnectFailed   = "CLOUD_LINK_DISCONNECT_FAILED"
+	CloudLinkErrorDisconnectRejected = "CLOUD_LINK_DISCONNECT_REJECTED"
+	CloudLinkErrorBindingNotCurrent  = "CLOUD_LINK_NOT_CURRENT"
+	CloudLinkErrorAuthorization      = "CLOUD_LINK_AUTHORIZATION_REQUIRED"
+	CloudLinkErrorPermissionRevoked  = "CLOUD_LINK_PERMISSION_REVOKED"
+	CloudLinkErrorUnavailable        = "CLOUD_LINK_UNAVAILABLE"
+	CloudLinkErrorBindingChanged     = "CLOUD_LINK_BINDING_CHANGED"
 )
 
 const providerDisconnectReasonUser = "user_disconnect"
 
 var errProviderControlChannelNotConnected = errors.New("provider control channel is not connected")
 
-func normalizeProviderOrigin(raw string) (string, error) {
+func normalizeCloudOrigin(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return "", errors.New("provider origin is required")
@@ -68,23 +68,23 @@ func normalizeProviderOrigin(raw string) (string, error) {
 }
 
 func normalizeAccessPointOrigin(raw string) (string, error) {
-	origin, err := normalizeProviderOrigin(raw)
+	origin, err := normalizeCloudOrigin(raw)
 	if err != nil {
 		return "", err
 	}
-	if err := codeapp.ValidateControlplaneBaseURL(origin); err != nil {
+	if err := codeapp.ValidateAccessPointOrigin(origin); err != nil {
 		return "", err
 	}
 	return origin, nil
 }
 
-type ProviderLinkError struct {
+type CloudLinkError struct {
 	Code    string
 	Message string
 	Err     error
 }
 
-func (e *ProviderLinkError) Error() string {
+func (e *CloudLinkError) Error() string {
 	if e == nil {
 		return ""
 	}
@@ -97,21 +97,20 @@ func (e *ProviderLinkError) Error() string {
 	return strings.TrimSpace(e.Code)
 }
 
-func (e *ProviderLinkError) Unwrap() error {
+func (e *CloudLinkError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
 	return e.Err
 }
 
-type ProviderLinkRequest struct {
-	ProviderOrigin            string
-	ProviderID                string
+type CloudLinkRequest struct {
+	CloudOrigin               string
+	CloudID                   string
 	EnvPublicID               string
-	AccessPointOrigin         string
 	RuntimeLinkTicket         string
-	ExpectedProviderOrigin    string
-	ExpectedProviderID        string
+	ExpectedCloudOrigin       string
+	ExpectedCloudID           string
 	ExpectedEnvPublicID       string
 	ExpectedAccessPointOrigin string
 	ExpectedGeneration        int64
@@ -120,13 +119,13 @@ type ProviderLinkRequest struct {
 	runtimeLinkHTTPClient     *http.Client
 }
 
-type ProviderLinkResponse struct {
-	Binding runtimeservice.ProviderLinkBinding
+type CloudLinkResponse struct {
+	Binding runtimeservice.CloudLinkBinding
 }
 
 type providerDisconnectSnapshot struct {
-	ProviderOrigin           string
-	ProviderID               string
+	CloudOrigin              string
+	CloudID                  string
 	EnvPublicID              string
 	AccessPointOrigin        string
 	LocalEnvironmentPublicID string
@@ -134,47 +133,50 @@ type providerDisconnectSnapshot struct {
 	AgentInstanceID          string
 }
 
-func (a *Agent) enableProviderControlChannelLocked() runtimeservice.ProviderLinkBinding {
+func (a *Agent) enableProviderControlChannelLocked() runtimeservice.CloudLinkBinding {
 	a.controlChannelEnabled = true
 	a.remoteEnabled = true
 	a.effectiveRunMode = "hybrid"
-	return a.providerLinkBindingLocked("")
+	if !a.localUIEnabled {
+		a.effectiveRunMode = "remote"
+	}
+	return a.cloudLinkBindingLocked("")
 }
 
 func (a *Agent) providerControlChannelActiveLocked() bool {
-	return a.controlChannelEnabled && a.remoteEnabled && strings.TrimSpace(a.effectiveRunMode) == "hybrid"
+	return a.controlChannelEnabled && a.remoteEnabled
 }
 
-func (a *Agent) ProviderLinkBinding() runtimeservice.ProviderLinkBinding {
+func (a *Agent) CloudLinkBinding() runtimeservice.CloudLinkBinding {
 	if a == nil {
-		return runtimeservice.ProviderLinkBinding{State: runtimeservice.ProviderLinkStateUnbound}
+		return runtimeservice.CloudLinkBinding{State: runtimeservice.CloudLinkStateUnbound}
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.providerLinkBindingLocked("")
+	return a.cloudLinkBindingLocked("")
 }
 
-func (a *Agent) providerLinkBindingLocked(errorCode string) runtimeservice.ProviderLinkBinding {
+func (a *Agent) cloudLinkBindingLocked(errorCode string) runtimeservice.CloudLinkBinding {
 	if a == nil || a.cfg == nil {
-		return runtimeservice.ProviderLinkBinding{State: runtimeservice.ProviderLinkStateUnbound}
+		return runtimeservice.CloudLinkBinding{State: runtimeservice.CloudLinkStateUnbound}
 	}
 	if err := a.cfg.ValidateRemoteStrict(); err != nil {
-		return runtimeservice.ProviderLinkBinding{
-			State:                    runtimeservice.ProviderLinkStateUnbound,
+		return runtimeservice.CloudLinkBinding{
+			State:                    runtimeservice.CloudLinkStateUnbound,
 			LastErrorCode:            strings.TrimSpace(errorCode),
 			LastDisconnectedAtUnixMS: time.Now().UnixMilli(),
 		}
 	}
 	connectionState, connectionCode, connectionMessage := a.providerConnectionLocked()
-	return runtimeservice.NormalizeProviderLinkBinding(runtimeservice.ProviderLinkBinding{
-		State:                    runtimeservice.ProviderLinkStateLinked,
+	return runtimeservice.NormalizeCloudLinkBinding(runtimeservice.CloudLinkBinding{
+		State:                    runtimeservice.CloudLinkStateLinked,
 		ConnectionState:          connectionState,
 		LastErrorCode:            connectionCode,
 		LastErrorMessage:         connectionMessage,
-		ProviderOrigin:           a.cfg.ProviderOrigin,
-		ProviderID:               a.cfg.ControlplaneProviderID,
+		CloudOrigin:              a.cfg.CloudOrigin,
+		CloudID:                  a.cfg.CloudID,
 		EnvPublicID:              a.cfg.EnvironmentID,
-		AccessPointOrigin:        a.cfg.ControlplaneBaseURL,
+		AccessPointOrigin:        a.cfg.AccessPointOrigin,
 		LocalEnvironmentPublicID: a.cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        a.cfg.BindingGeneration,
 		RemoteEnabled:            a.remoteEnabled,
@@ -201,24 +203,23 @@ func LocalEnvPublicIDForAgent() string {
 	return "env_local"
 }
 
-func providerLinkMatches(binding runtimeservice.ProviderLinkBinding, req ProviderLinkRequest) bool {
-	return strings.TrimSpace(binding.ProviderOrigin) == strings.TrimSpace(req.ProviderOrigin) &&
-		strings.TrimSpace(binding.ProviderID) == strings.TrimSpace(req.ProviderID) &&
-		strings.TrimSpace(binding.EnvPublicID) == strings.TrimSpace(req.EnvPublicID) &&
-		strings.TrimSpace(binding.AccessPointOrigin) == strings.TrimSpace(req.AccessPointOrigin)
+func cloudLinkMatches(binding runtimeservice.CloudLinkBinding, req CloudLinkRequest) bool {
+	return strings.TrimSpace(binding.CloudOrigin) == strings.TrimSpace(req.CloudOrigin) &&
+		(strings.TrimSpace(req.CloudID) == "" || strings.TrimSpace(binding.CloudID) == strings.TrimSpace(req.CloudID)) &&
+		strings.TrimSpace(binding.EnvPublicID) == strings.TrimSpace(req.EnvPublicID)
 }
 
-func requestedExpectedProviderLinkMatches(binding runtimeservice.ProviderLinkBinding, req ProviderLinkRequest) bool {
-	expectedOrigin := strings.TrimSpace(req.ExpectedProviderOrigin)
-	expectedProviderID := strings.TrimSpace(req.ExpectedProviderID)
+func requestedExpectedCloudLinkMatches(binding runtimeservice.CloudLinkBinding, req CloudLinkRequest) bool {
+	expectedOrigin := strings.TrimSpace(req.ExpectedCloudOrigin)
+	expectedProviderID := strings.TrimSpace(req.ExpectedCloudID)
 	expectedEnvID := strings.TrimSpace(req.ExpectedEnvPublicID)
 	expectedAccessPointOrigin := strings.TrimSpace(req.ExpectedAccessPointOrigin)
 	expectedGeneration := req.ExpectedGeneration
 	if expectedOrigin == "" && expectedProviderID == "" && expectedEnvID == "" && expectedAccessPointOrigin == "" && expectedGeneration <= 0 {
 		return true
 	}
-	return strings.TrimSpace(binding.ProviderOrigin) == expectedOrigin &&
-		strings.TrimSpace(binding.ProviderID) == expectedProviderID &&
+	return strings.TrimSpace(binding.CloudOrigin) == expectedOrigin &&
+		strings.TrimSpace(binding.CloudID) == expectedProviderID &&
 		strings.TrimSpace(binding.EnvPublicID) == expectedEnvID &&
 		strings.TrimSpace(binding.AccessPointOrigin) == expectedAccessPointOrigin &&
 		(expectedGeneration <= 0 || binding.BindingGeneration == expectedGeneration)
@@ -232,97 +233,86 @@ func providerDisconnectSnapshotFromConfig(cfg *config.Config) (providerDisconnec
 		return providerDisconnectSnapshot{}, err
 	}
 	snapshot := providerDisconnectSnapshot{
-		ProviderOrigin:           strings.TrimSpace(cfg.ProviderOrigin),
-		ProviderID:               strings.TrimSpace(cfg.ControlplaneProviderID),
+		CloudOrigin:              strings.TrimSpace(cfg.CloudOrigin),
+		CloudID:                  strings.TrimSpace(cfg.CloudID),
 		EnvPublicID:              strings.TrimSpace(cfg.EnvironmentID),
-		AccessPointOrigin:        strings.TrimSpace(cfg.ControlplaneBaseURL),
+		AccessPointOrigin:        strings.TrimSpace(cfg.AccessPointOrigin),
 		LocalEnvironmentPublicID: strings.TrimSpace(cfg.LocalEnvironmentPublicID),
 		BindingGeneration:        cfg.BindingGeneration,
 		AgentInstanceID:          strings.TrimSpace(cfg.AgentInstanceID),
 	}
-	if snapshot.ProviderID == "" {
-		return providerDisconnectSnapshot{}, errors.New("missing controlplane_provider_id")
+	if snapshot.CloudID == "" {
+		return providerDisconnectSnapshot{}, errors.New("missing cloud_id")
 	}
 	return snapshot, nil
 }
 
-func (a *Agent) providerLinkCanReplaceCurrentLocked(req ProviderLinkRequest) *ProviderLinkError {
+func (a *Agent) cloudLinkCanReplaceCurrentLocked(req CloudLinkRequest) *CloudLinkError {
 	if a.cfg != nil && (a.cfg.Gateway != nil || a.cfg.GatewayPublication != nil || a.cfg.GatewayMigrationEvidence != nil || a.cfg.GatewayRejoinRequired) {
-		return &ProviderLinkError{Code: ProviderLinkErrorAlreadyLinked, Message: "Gateway Cloud access requires explicit migration before changing the provider binding."}
+		return &CloudLinkError{Code: CloudLinkErrorAlreadyLinked, Message: "Gateway Cloud access requires explicit migration before changing the provider binding."}
 	}
-	current := a.providerLinkBindingLocked("")
-	if !requestedExpectedProviderLinkMatches(current, req) {
-		return &ProviderLinkError{
-			Code:    ProviderLinkErrorAlreadyLinked,
+	current := a.cloudLinkBindingLocked("")
+	if !requestedExpectedCloudLinkMatches(current, req) {
+		return &CloudLinkError{
+			Code:    CloudLinkErrorAlreadyLinked,
 			Message: "Local Runtime is already connected to another provider Environment.",
 		}
 	}
-	if current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req) {
+	if current.State == runtimeservice.CloudLinkStateLinked && cloudLinkMatches(current, req) {
 		return nil
 	}
-	if current.State == runtimeservice.ProviderLinkStateLinked && !req.AllowRelinkWhenIdle {
-		return &ProviderLinkError{
-			Code:    ProviderLinkErrorAlreadyLinked,
+	if current.State == runtimeservice.CloudLinkStateLinked && !req.AllowRelinkWhenIdle {
+		return &CloudLinkError{
+			Code:    CloudLinkErrorAlreadyLinked,
 			Message: "Local Runtime is already connected to a provider Environment.",
 		}
 	}
-	if current.State == runtimeservice.ProviderLinkStateLinked && a.hasActiveProviderWorkLocked() {
-		return &ProviderLinkError{
-			Code:    ProviderLinkErrorActiveWork,
+	if current.State == runtimeservice.CloudLinkStateLinked && a.hasActiveProviderWorkLocked() {
+		return &CloudLinkError{
+			Code:    CloudLinkErrorActiveWork,
 			Message: "Local Runtime has active provider-originated work. Disconnect that work before relinking.",
 		}
 	}
 	return nil
 }
 
-func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*ProviderLinkResponse, error) {
+func (a *Agent) ConnectCloud(ctx context.Context, req CloudLinkRequest) (*CloudLinkResponse, error) {
 	if a == nil {
 		return nil, errors.New("nil agent")
 	}
-	a.providerLinkMu.Lock()
-	defer a.providerLinkMu.Unlock()
+	a.cloudLinkMu.Lock()
+	defer a.cloudLinkMu.Unlock()
 
-	providerOrigin := strings.TrimSpace(req.ProviderOrigin)
-	accessPointOrigin := strings.TrimSpace(req.AccessPointOrigin)
+	cloudOrigin := strings.TrimSpace(req.CloudOrigin)
 	envPublicID := strings.TrimSpace(req.EnvPublicID)
 	runtimeLinkTicket := strings.TrimSpace(req.RuntimeLinkTicket)
-	if providerOrigin == "" || accessPointOrigin == "" || envPublicID == "" || runtimeLinkTicket == "" {
-		return nil, &ProviderLinkError{
-			Code:    "PROVIDER_LINK_INVALID_REQUEST",
-			Message: "Provider origin, access point origin, environment id, and Runtime link ticket are required.",
+	if cloudOrigin == "" || envPublicID == "" || runtimeLinkTicket == "" {
+		return nil, &CloudLinkError{
+			Code:    "CLOUD_LINK_INVALID_REQUEST",
+			Message: "Cloud origin, environment id, and Runtime link ticket are required.",
 		}
 	}
-	normalizedProviderOrigin, err := normalizeProviderOrigin(providerOrigin)
+	normalizedCloudOrigin, err := normalizeCloudOrigin(cloudOrigin)
 	if err != nil {
-		return nil, &ProviderLinkError{
-			Code:    "PROVIDER_LINK_INVALID_REQUEST",
-			Message: fmt.Sprintf("Provider origin is invalid: %v", err),
+		return nil, &CloudLinkError{
+			Code:    "CLOUD_LINK_INVALID_REQUEST",
+			Message: fmt.Sprintf("Cloud origin is invalid: %v", err),
 			Err:     err,
 		}
 	}
-	normalizedAccessPointOrigin, err := normalizeAccessPointOrigin(accessPointOrigin)
-	if err != nil {
-		return nil, &ProviderLinkError{
-			Code:    "PROVIDER_LINK_INVALID_REQUEST",
-			Message: fmt.Sprintf("Access point origin is invalid: %v", err),
-			Err:     err,
-		}
-	}
-	req.ProviderOrigin = normalizedProviderOrigin
-	req.ProviderID = strings.TrimSpace(req.ProviderID)
+	req.CloudOrigin = normalizedCloudOrigin
+	req.CloudID = strings.TrimSpace(req.CloudID)
 	req.EnvPublicID = envPublicID
-	req.AccessPointOrigin = normalizedAccessPointOrigin
-	providerOrigin = normalizedProviderOrigin
-	accessPointOrigin = normalizedAccessPointOrigin
+	cloudOrigin = normalizedCloudOrigin
 
 	a.mu.Lock()
-	current := a.providerLinkBindingLocked("")
-	matchingCurrent := current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req)
-	if req.RenewCurrentBinding && (!matchingCurrent || req.ExpectedGeneration <= 0 || !requestedExpectedProviderLinkMatches(current, req)) {
+	current := a.cloudLinkBindingLocked("")
+	matchingCurrent := current.State == runtimeservice.CloudLinkStateLinked && cloudLinkMatches(current, req)
+	if req.RenewCurrentBinding && (!matchingCurrent || req.ExpectedGeneration <= 0 || !requestedExpectedCloudLinkMatches(current, req)) {
 		a.mu.Unlock()
-		return nil, &ProviderLinkError{Code: "PROVIDER_LINK_BINDING_CHANGED", Message: "The saved Redeven Cloud connection has changed. Review the current connection before reconnecting."}
+		return nil, &CloudLinkError{Code: "CLOUD_LINK_BINDING_CHANGED", Message: "The saved Redeven Cloud connection has changed. Review the current connection before reconnecting."}
 	}
-	if linkErr := a.providerLinkCanReplaceCurrentLocked(req); linkErr != nil {
+	if linkErr := a.cloudLinkCanReplaceCurrentLocked(req); linkErr != nil {
 		a.mu.Unlock()
 		return nil, linkErr
 	}
@@ -331,7 +321,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	// idempotent path exists for explicit refreshes, not as normal UI repair.
 	if matchingCurrent && a.providerControlChannelActiveLocked() && a.controlRegistered {
 		a.mu.Unlock()
-		return &ProviderLinkResponse{Binding: current}, nil
+		return &CloudLinkResponse{Binding: current}, nil
 	}
 	a.mu.Unlock()
 
@@ -342,12 +332,11 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	if req.RenewCurrentBinding {
 		expectedGeneration = req.ExpectedGeneration
 	}
-	cfg, err := config.ResolveProviderRuntimeLinkConfig(ctx, config.ProviderRuntimeLinkArgs{
+	cfg, err := config.ResolveCloudLinkConfig(ctx, config.CloudLinkBootstrapArgs{
 		ExpectedBindingGeneration: expectedGeneration,
 		ConfigPath:                a.configPath,
-		ProviderOrigin:            providerOrigin,
-		ControlplaneBaseURL:       accessPointOrigin,
-		ControlplaneProviderID:    strings.TrimSpace(req.ProviderID),
+		CloudOrigin:               cloudOrigin,
+		CloudID:                   strings.TrimSpace(req.CloudID),
 		EnvironmentID:             envPublicID,
 		RuntimeLinkTicket:         runtimeLinkTicket,
 		RuntimeVersion:            strings.TrimSpace(a.version),
@@ -358,24 +347,24 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 		HTTPClient:                req.runtimeLinkHTTPClient,
 	})
 	if err != nil {
-		code := ProviderLinkErrorExchangeFailed
+		code := CloudLinkErrorExchangeFailed
 		var exchangeErr *config.RuntimeLinkExchangeError
 		var networkErr net.Error
 		var dnsErr *net.DNSError
 		if errors.As(err, &exchangeErr) {
 			switch {
 			case exchangeErr.Code == "RUNTIME_LINK_BINDING_STALE":
-				code = ProviderLinkErrorBindingChanged
+				code = CloudLinkErrorBindingChanged
 			case exchangeErr.Code == "NOT_AUTHORIZED" || exchangeErr.StatusCode == http.StatusForbidden:
 				// A valid Cloud account can lose namespace administration without
 				// losing its sign-in session. Keep this distinct from expired
 				// credentials so recovery asks for permission review instead of
 				// sending the user through a needless sign-in loop.
-				code = ProviderLinkErrorPermissionRevoked
+				code = CloudLinkErrorPermissionRevoked
 			case exchangeErr.StatusCode == http.StatusUnauthorized:
-				code = ProviderLinkErrorAuthorization
+				code = CloudLinkErrorAuthorization
 			case exchangeErr.StatusCode == 429 || exchangeErr.StatusCode >= 500:
-				code = ProviderLinkErrorUnavailable
+				code = CloudLinkErrorUnavailable
 			}
 		} else if errors.As(err, &networkErr) && networkErr.Timeout() ||
 			errors.As(err, &dnsErr) && (dnsErr.IsTimeout || dnsErr.IsTemporary) ||
@@ -383,21 +372,21 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 			errors.Is(err, syscall.ENETUNREACH) || errors.Is(err, syscall.EHOSTUNREACH) {
 			// A Region that is not listening yet must not permanently stop Desktop recovery.
 			// Certificate and protocol failures remain terminal.
-			code = ProviderLinkErrorUnavailable
+			code = CloudLinkErrorUnavailable
 		}
-		return nil, &ProviderLinkError{Code: code, Message: fmt.Sprintf("Provider link exchange failed: %v", err), Err: err}
+		return nil, &CloudLinkError{Code: code, Message: fmt.Sprintf("Cloud link exchange failed: %v", err), Err: err}
 	}
 
 	a.mu.Lock()
-	if linkErr := a.providerLinkCanReplaceCurrentLocked(req); linkErr != nil {
+	if linkErr := a.cloudLinkCanReplaceCurrentLocked(req); linkErr != nil {
 		a.mu.Unlock()
 		return nil, linkErr
 	}
-	if err := config.SaveProviderLinkConfig(a.configPath, cfg); err != nil {
+	if err := config.SaveCloudLinkConfig(a.configPath, cfg); err != nil {
 		a.mu.Unlock()
-		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorExchangeFailed,
-			Message: fmt.Sprintf("Persist provider link config failed: %v", err),
+		return nil, &CloudLinkError{
+			Code:    CloudLinkErrorExchangeFailed,
+			Message: fmt.Sprintf("Persist Cloud link config failed: %v", err),
 			Err:     err,
 		}
 	}
@@ -405,27 +394,27 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	binding := a.enableProviderControlChannelLocked()
 	a.mu.Unlock()
 	if a.code != nil {
-		_ = a.code.SetControlplaneBaseURL(accessPointOrigin)
+		_ = a.code.SetAccessPointOrigin(cfg.AccessPointOrigin)
 	}
 	a.startOrRestartControlChannel()
 
-	return &ProviderLinkResponse{Binding: binding}, nil
+	return &CloudLinkResponse{Binding: binding}, nil
 }
 
-func providerLinkDisconnectError(err error) *ProviderLinkError {
+func cloudLinkDisconnectError(err error) *CloudLinkError {
 	if err == nil {
 		return nil
 	}
 	var rpcErr *flowersec.RPCError
 	if errors.As(err, &rpcErr) && rpcErr.Code == 409 {
-		return &ProviderLinkError{
-			Code:    ProviderLinkErrorBindingNotCurrent,
+		return &CloudLinkError{
+			Code:    CloudLinkErrorBindingNotCurrent,
 			Message: "Provider binding is no longer current. Refresh Desktop, then connect or disconnect again.",
 			Err:     err,
 		}
 	}
-	return &ProviderLinkError{
-		Code:    ProviderLinkErrorDisconnectFailed,
+	return &CloudLinkError{
+		Code:    CloudLinkErrorDisconnectFailed,
 		Message: fmt.Sprintf("Provider disconnect failed: %v", err),
 		Err:     err,
 	}
@@ -435,23 +424,23 @@ func (a *Agent) providerDisconnectShouldNotifyLocked() bool {
 	return a.providerControlChannelActiveLocked() && a.controlRPC != nil
 }
 
-func (a *Agent) clearProviderLinkBindingLocked(snapshot providerDisconnectSnapshot) (runtimeservice.ProviderLinkBinding, error) {
+func (a *Agent) clearCloudLinkBindingLocked(snapshot providerDisconnectSnapshot) (runtimeservice.CloudLinkBinding, error) {
 	if a.cfg == nil ||
-		strings.TrimSpace(a.cfg.ProviderOrigin) != snapshot.ProviderOrigin ||
-		strings.TrimSpace(a.cfg.ControlplaneBaseURL) != snapshot.AccessPointOrigin ||
-		strings.TrimSpace(a.cfg.ControlplaneProviderID) != snapshot.ProviderID ||
+		strings.TrimSpace(a.cfg.CloudOrigin) != snapshot.CloudOrigin ||
+		strings.TrimSpace(a.cfg.AccessPointOrigin) != snapshot.AccessPointOrigin ||
+		strings.TrimSpace(a.cfg.CloudID) != snapshot.CloudID ||
 		strings.TrimSpace(a.cfg.EnvironmentID) != snapshot.EnvPublicID ||
 		strings.TrimSpace(a.cfg.LocalEnvironmentPublicID) != snapshot.LocalEnvironmentPublicID ||
 		a.cfg.BindingGeneration != snapshot.BindingGeneration {
-		return runtimeservice.ProviderLinkBinding{}, &ProviderLinkError{
-			Code:    ProviderLinkErrorBindingNotCurrent,
+		return runtimeservice.CloudLinkBinding{}, &CloudLinkError{
+			Code:    CloudLinkErrorBindingNotCurrent,
 			Message: "Provider binding changed while disconnecting. Refresh Desktop, then connect or disconnect again.",
 		}
 	}
 	next := *a.cfg
-	next.ProviderOrigin = ""
-	next.ControlplaneBaseURL = ""
-	next.ControlplaneProviderID = ""
+	next.CloudOrigin = ""
+	next.AccessPointOrigin = ""
+	next.CloudID = ""
 	next.EnvironmentID = ""
 	next.LocalEnvironmentPublicID = ""
 	next.BindingGeneration = 0
@@ -461,8 +450,8 @@ func (a *Agent) clearProviderLinkBindingLocked(snapshot providerDisconnectSnapsh
 		next.AgentInstanceID = a.cfg.AgentInstanceID
 	}
 	if err := config.Save(a.configPath, &next); err != nil {
-		return runtimeservice.ProviderLinkBinding{}, &ProviderLinkError{
-			Code:    ProviderLinkErrorDisconnectFailed,
+		return runtimeservice.CloudLinkBinding{}, &CloudLinkError{
+			Code:    CloudLinkErrorDisconnectFailed,
 			Message: fmt.Sprintf("Persist provider disconnect failed: %v", err),
 			Err:     err,
 		}
@@ -471,37 +460,37 @@ func (a *Agent) clearProviderLinkBindingLocked(snapshot providerDisconnectSnapsh
 	a.controlChannelEnabled = false
 	a.remoteEnabled = false
 	a.effectiveRunMode = "local"
-	return runtimeservice.ProviderLinkBinding{
-		State:                    runtimeservice.ProviderLinkStateUnbound,
+	return runtimeservice.CloudLinkBinding{
+		State:                    runtimeservice.CloudLinkStateUnbound,
 		LastDisconnectedAtUnixMS: time.Now().UnixMilli(),
 	}, nil
 }
 
-func (a *Agent) DisconnectProvider(ctx context.Context) (*ProviderLinkResponse, error) {
+func (a *Agent) DisconnectCloud(ctx context.Context) (*CloudLinkResponse, error) {
 	if a == nil {
 		return nil, errors.New("nil agent")
 	}
-	a.providerLinkMu.Lock()
-	defer a.providerLinkMu.Unlock()
+	a.cloudLinkMu.Lock()
+	defer a.cloudLinkMu.Unlock()
 
 	a.mu.Lock()
 	cfg := a.cfg
 	if cfg == nil {
 		a.mu.Unlock()
-		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorDisconnectRejected,
+		return nil, &CloudLinkError{
+			Code:    CloudLinkErrorDisconnectRejected,
 			Message: "Provider disconnect requires a runtime config.",
 		}
 	}
 	if cfg.GatewayPublication != nil {
 		a.mu.Unlock()
-		return nil, &ProviderLinkError{Code: ProviderLinkErrorDisconnectRejected, Message: "Manage this Namespace access from the Gateway page in Redeven Cloud."}
+		return nil, &CloudLinkError{Code: CloudLinkErrorDisconnectRejected, Message: "Manage this Namespace access from the Gateway page in Redeven Cloud."}
 	}
 	snapshot, snapshotErr := providerDisconnectSnapshotFromConfig(cfg)
 	if snapshotErr != nil {
 		a.mu.Unlock()
-		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorDisconnectRejected,
+		return nil, &CloudLinkError{
+			Code:    CloudLinkErrorDisconnectRejected,
 			Message: fmt.Sprintf("Provider disconnect requires a valid linked provider binding: %v", snapshotErr),
 			Err:     snapshotErr,
 		}
@@ -514,26 +503,26 @@ func (a *Agent) DisconnectProvider(ctx context.Context) (*ProviderLinkResponse, 
 	}
 	if notifyProvider {
 		if err := a.sendRuntimeDisconnect(ctx, snapshot, providerDisconnectReasonUser); err != nil && !errors.Is(err, errProviderControlChannelNotConnected) {
-			return nil, providerLinkDisconnectError(err)
+			return nil, cloudLinkDisconnectError(err)
 		}
 	}
 
 	a.mu.Lock()
-	binding, clearErr := a.clearProviderLinkBindingLocked(snapshot)
+	binding, clearErr := a.clearCloudLinkBindingLocked(snapshot)
 	a.mu.Unlock()
 	if clearErr != nil {
 		return nil, clearErr
 	}
 
 	if a.code != nil {
-		if err := a.code.SetControlplaneBaseURL(""); err != nil {
-			return nil, &ProviderLinkError{
-				Code:    ProviderLinkErrorDisconnectFailed,
+		if err := a.code.SetAccessPointOrigin(""); err != nil {
+			return nil, &CloudLinkError{
+				Code:    CloudLinkErrorDisconnectFailed,
 				Message: fmt.Sprintf("Clear provider origin failed: %v", err),
 				Err:     err,
 			}
 		}
 	}
 	a.stopControlChannel()
-	return &ProviderLinkResponse{Binding: binding}, nil
+	return &CloudLinkResponse{Binding: binding}, nil
 }

@@ -34,7 +34,7 @@ describe('actionToastModel', () => {
           action: {
             kind: 'reconnect_control_plane',
             label: 'Request access',
-            provider_origin: 'https://provider.example.invalid',
+            cloud_origin: 'https://provider.example.invalid',
           },
           auto_dismiss: false,
         },
@@ -48,7 +48,7 @@ describe('actionToastModel', () => {
         action: {
           kind: 'reconnect_control_plane',
           label: 'Request access',
-          provider_origin: 'https://provider.example.invalid',
+          cloud_origin: 'https://provider.example.invalid',
         },
         auto_dismiss: false,
       },
@@ -63,7 +63,7 @@ describe('actionToastModel', () => {
           action: {
             kind: 'reconnect_control_plane',
             label: 'Request access',
-            provider_origin: 'https://provider.example.invalid',
+            cloud_origin: 'https://provider.example.invalid',
           },
           auto_dismiss: false,
         },
@@ -76,7 +76,7 @@ describe('actionToastModel', () => {
         action: {
           kind: 'reconnect_control_plane',
           label: 'Request access',
-          provider_origin: 'https://provider.example.invalid',
+          cloud_origin: 'https://provider.example.invalid',
         },
         auto_dismiss: false,
       },

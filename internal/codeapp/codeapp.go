@@ -54,7 +54,7 @@ type Options struct {
 	// ConfigPath is the absolute path to the runtime config file (used to persist settings updates from the Env App UI).
 	ConfigPath             string
 	PermissionPolicy       *config.PermissionPolicy
-	ControlplaneBaseURL    string
+	AccessPointOrigin      string
 	ReDevPluginRuntimePath string
 	RedevenVersion         string
 
@@ -162,7 +162,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 	agentHomeDir := scope.HomePathAbs()
 
-	cpOrigin, err := parseControlplaneBase(strings.TrimSpace(opts.ControlplaneBaseURL))
+	cpOrigin, err := parseControlplaneBase(strings.TrimSpace(opts.AccessPointOrigin))
 	if err != nil {
 		return nil, err
 	}
@@ -590,12 +590,12 @@ func (s *Service) AIReadiness() appserver.AIReadinessSnapshot {
 	return s.aiReady.AIReadiness()
 }
 
-func ValidateControlplaneBaseURL(raw string) error {
+func ValidateAccessPointOrigin(raw string) error {
 	_, err := parseControlplaneBase(strings.TrimSpace(raw))
 	return err
 }
 
-func (s *Service) SetControlplaneBaseURL(raw string) error {
+func (s *Service) SetAccessPointOrigin(raw string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}

@@ -7,7 +7,7 @@ import type {
   DesktopRuntimePlacement,
   DesktopRuntimeTargetID,
 } from './desktopRuntimePlacement';
-import type { DesktopProviderRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
 import type { RuntimeServiceSnapshot } from './runtimeService';
 
 export type DesktopRuntimeControlStatus =
@@ -29,7 +29,7 @@ export type DesktopRuntimeControlStatus =
     }>;
 
 export type DesktopRuntimePresence = Readonly<{
-  target_id: DesktopProviderRuntimeLinkTargetID;
+  target_id: DesktopCloudRuntimeLinkTargetID;
   placement_target_id: DesktopRuntimeTargetID;
   kind: 'local_environment' | 'wsl_environment' | 'ssh_environment';
   environment_id: string;

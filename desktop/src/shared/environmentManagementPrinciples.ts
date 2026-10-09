@@ -1,6 +1,6 @@
 import type { DesktopEnvironmentEntryKind, DesktopLauncherActionKind, DesktopLocalEnvironmentStateRoute } from './desktopLauncherIPC';
-import type { DesktopProviderRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
-import { normalizeDesktopProviderRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
+import { normalizeDesktopCloudRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
 
 export type DesktopEnvironmentManagementSurface = 'provider_card' | 'managed_runtime_card' | 'unmanaged_environment_card';
 
@@ -15,8 +15,8 @@ export const DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS = [
   'update_environment_runtime',
   'manage_desktop_update',
   'stop_environment_runtime',
-  'connect_provider_runtime',
-  'disconnect_provider_runtime',
+  'connect_cloud_runtime',
+  'disconnect_cloud_runtime',
 ] as const satisfies readonly DesktopLauncherActionKind[];
 
 export const DESKTOP_DIRECT_RUNTIME_OPERATION_ENTRY_KINDS = [
@@ -24,14 +24,14 @@ export const DESKTOP_DIRECT_RUNTIME_OPERATION_ENTRY_KINDS = [
   'ssh_environment',
 ] as const satisfies readonly DesktopEnvironmentEntryKind[];
 
-export type DesktopProviderRuntimeLinkRequestFields = Readonly<{
+export type DesktopCloudRuntimeLinkRequestFields = Readonly<{
   provider_environment_id?: unknown;
   runtime_target_id?: unknown;
 }>;
 
-export type DesktopProviderRuntimeLinkRequestTarget = Readonly<{
+export type DesktopCloudRuntimeLinkRequestTarget = Readonly<{
   provider_environment_id?: string;
-  runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+  runtime_target_id: DesktopCloudRuntimeLinkTargetID;
 }>;
 
 function compact(value: unknown): string {
@@ -50,7 +50,7 @@ export function desktopEnvironmentManagementSurface(
   return 'unmanaged_environment_card';
 }
 
-export function desktopProviderEnvironmentOpenRoute(): Extract<DesktopLocalEnvironmentStateRoute, 'remote_desktop'> {
+export function desktopCloudEnvironmentOpenRoute(): Extract<DesktopLocalEnvironmentStateRoute, 'remote_desktop'> {
   return DESKTOP_PROVIDER_ENVIRONMENT_OPEN_ROUTE;
 }
 
@@ -67,11 +67,11 @@ export function desktopEntryKindSupportsDirectRuntimeOperations(kind: DesktopEnv
 // IMPORTANT: Provider-link requests are runtime-target-first and must name the
 // exact Local/SSH runtime target selected by the user. Do not add automatic
 // target selection, implicit fallback targets, or provider-card initiated links.
-export function normalizeDesktopProviderRuntimeLinkRequestTarget(
-  fields: DesktopProviderRuntimeLinkRequestFields,
-): DesktopProviderRuntimeLinkRequestTarget | null {
+export function normalizeDesktopCloudRuntimeLinkRequestTarget(
+  fields: DesktopCloudRuntimeLinkRequestFields,
+): DesktopCloudRuntimeLinkRequestTarget | null {
   const providerEnvironmentID = compact(fields.provider_environment_id);
-  const runtimeTargetID = normalizeDesktopProviderRuntimeLinkTargetID(fields.runtime_target_id);
+  const runtimeTargetID = normalizeDesktopCloudRuntimeLinkTargetID(fields.runtime_target_id);
   if (!runtimeTargetID) {
     return null;
   }

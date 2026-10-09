@@ -23,12 +23,11 @@ import (
 )
 
 type BootstrapArgs struct {
-	ProviderOrigin         string
-	ControlplaneBaseURL    string
-	ControlplaneProviderID string
-	EnvironmentID          string
-	BootstrapTicket        string
-	RuntimeVersion         string
+	CloudOrigin       string
+	CloudID           string
+	EnvironmentID     string
+	RuntimeLinkTicket string
+	RuntimeVersion    string
 
 	StateRoot string
 
@@ -44,14 +43,14 @@ type BootstrapArgs struct {
 	PermissionPolicyPreset string
 }
 
-type ProviderLinkBootstrapArgs struct {
-	ConfigPath string
+type CloudLinkBootstrapArgs struct {
+	ConfigPath                string
+	ExpectedBindingGeneration int64
 
-	ProviderOrigin         string
-	ControlplaneBaseURL    string
-	ControlplaneProviderID string
+	CloudOrigin            string
+	CloudID                string
 	EnvironmentID          string
-	BootstrapTicket        string
+	RuntimeLinkTicket      string
 	RuntimeVersion         string
 	PermissionPolicyPreset string
 	AgentHomeDir           string
@@ -68,40 +67,12 @@ type ProviderLinkBootstrapArgs struct {
 	PreservePermissionPolicy bool
 }
 
-// ProviderRuntimeLinkArgs is the explicit RCPP v3 Runtime-link input used by
-// Desktop-managed linking. It is intentionally separate from the frozen v2
-// bootstrap contract.
-type ProviderRuntimeLinkArgs struct {
+type cloudLinkResolveArgs struct {
 	ExpectedBindingGeneration int64
 	ConfigPath                string
 
-	ProviderOrigin         string
-	ControlplaneBaseURL    string
-	ControlplaneProviderID string
-	EnvironmentID          string
-	RuntimeLinkTicket      string
-	RuntimeVersion         string
-	PermissionPolicyPreset string
-	AgentHomeDir           string
-	Shell                  string
-	LogFormat              string
-	LogLevel               string
-	HTTPClient             *http.Client
-
-	RuntimeHostname string
-	RuntimeGOOS     string
-	RuntimeGOARCH   string
-
-	PreservePermissionPolicy bool
-}
-
-type providerLinkResolveArgs struct {
-	ExpectedBindingGeneration int64
-	ConfigPath                string
-
-	ProviderOrigin         string
-	ControlplaneBaseURL    string
-	ControlplaneProviderID string
+	CloudOrigin            string
+	CloudID                string
 	EnvironmentID          string
 	Credential             string
 	RuntimeVersion         string
@@ -119,16 +90,6 @@ type providerLinkResolveArgs struct {
 	PreservePermissionPolicy bool
 }
 
-type bootstrapResponse struct {
-	ProviderID              string                        `json:"provider_id"`
-	ProviderOrigin          string                        `json:"provider_origin"`
-	AccessPointID           string                        `json:"access_point_id"`
-	AccessPointOrigin       string                        `json:"access_point_origin"`
-	EnvPublicID             string                        `json:"env_public_id"`
-	ControlArtifactPool     *bootstrapControlArtifactPool `json:"control_artifact_pool"`
-	LocalEnvironmentBinding *LocalEnvironmentBinding      `json:"local_environment_binding"`
-}
-
 type bootstrapControlArtifactPoolEntry struct {
 	ArtifactJSON      json.RawMessage `json:"artifact_json"`
 	ArtifactChannelID string          `json:"artifact_channel_id"`
@@ -139,7 +100,7 @@ type bootstrapControlArtifactPoolEntry struct {
 
 type bootstrapControlArtifactPool struct {
 	Version                       string                              `json:"version"`
-	LogicalProviderBindingID      string                              `json:"logical_provider_binding_id"`
+	LogicalCloudBindingID         string                              `json:"logical_cloud_binding_id"`
 	BindingGeneration             int64                               `json:"binding_generation"`
 	TargetWaterline               int                                 `json:"target_waterline"`
 	RefreshHorizonSeconds         int64                               `json:"refresh_horizon_seconds"`
@@ -160,23 +121,11 @@ type LocalEnvironmentBinding struct {
 	LastSeenAtUnixMS         int64  `json:"last_seen_at_unix_ms,omitempty"`
 }
 
-type bootstrapTicketExchangeRequest struct {
-	EnvPublicID                    string `json:"env_public_id"`
-	ProviderOrigin                 string `json:"provider_origin"`
-	LocalEnvironmentPublicID       string `json:"local_environment_public_id"`
-	AgentInstanceID                string `json:"agent_instance_id"`
-	BootstrapDeliveryRequestIDB64u string `json:"bootstrap_delivery_request_id_b64u"`
-	Hostname                       string `json:"hostname,omitempty"`
-	OS                             string `json:"os,omitempty"`
-	Arch                           string `json:"arch,omitempty"`
-	RuntimeVersion                 string `json:"runtime_version,omitempty"`
-}
-
 type runtimeLinkExchangeRequest struct {
 	ExpectedBindingGeneration int64  `json:"expected_binding_generation,omitempty"`
 	ProtocolVersion           string `json:"protocol_version"`
 	EnvPublicID               string `json:"env_public_id"`
-	ProviderOrigin            string `json:"provider_origin"`
+	CloudOrigin               string `json:"cloud_origin"`
 	LocalEnvironmentPublicID  string `json:"local_environment_public_id"`
 	AgentInstanceID           string `json:"agent_instance_id"`
 	DeliveryRequestIDB64u     string `json:"delivery_request_id_b64u"`
@@ -188,8 +137,8 @@ type runtimeLinkExchangeRequest struct {
 
 type runtimeLinkExchangeResponse struct {
 	ProtocolVersion         string                        `json:"protocol_version"`
-	ProviderID              string                        `json:"provider_id"`
-	ProviderOrigin          string                        `json:"provider_origin"`
+	CloudID                 string                        `json:"cloud_id"`
+	CloudOrigin             string                        `json:"cloud_origin"`
 	AccessPointID           string                        `json:"access_point_id"`
 	AccessPointOrigin       string                        `json:"access_point_origin"`
 	EnvPublicID             string                        `json:"env_public_id"`
@@ -197,18 +146,18 @@ type runtimeLinkExchangeResponse struct {
 	LocalEnvironmentBinding *LocalEnvironmentBinding      `json:"local_environment_binding"`
 }
 
-const bootstrapDeliveryAttemptVersion = 1
+const bootstrapDeliveryAttemptVersion = 2
 
 var errBootstrapDeliveryExpired = errors.New("bootstrap delivery expired")
 
 type bootstrapDeliveryAttempt struct {
 	Version                        int    `json:"version"`
-	ProviderOrigin                 string `json:"provider_origin"`
+	CloudOrigin                    string `json:"cloud_origin"`
 	AccessPointOrigin              string `json:"access_point_origin"`
 	EnvPublicID                    string `json:"env_public_id"`
 	LocalEnvironmentPublicID       string `json:"local_environment_public_id"`
 	AgentInstanceID                string `json:"agent_instance_id"`
-	BootstrapDeliveryRequestIDB64u string `json:"bootstrap_delivery_request_id_b64u"`
+	BootstrapDeliveryRequestIDB64u string `json:"delivery_request_id_b64u"`
 }
 
 type bootstrapExchangeErrorResponse struct {
@@ -226,25 +175,24 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	if err != nil {
 		return "", err
 	}
-	linkArgs := providerLinkArgsFromBootstrapArgs(args)
+	linkArgs := cloudLinkArgsFromBootstrapArgs(args)
 	linkArgs.ConfigPath = layout.ConfigPath
-	cfg, err := ResolveProviderLinkConfig(ctx, linkArgs)
+	cfg, err := ResolveCloudLinkConfig(ctx, linkArgs)
 	if err != nil {
 		return "", err
 	}
-	if err := SaveProviderLinkConfig(layout.ConfigPath, cfg); err != nil {
+	if err := SaveCloudLinkConfig(layout.ConfigPath, cfg); err != nil {
 		return "", err
 	}
 	return filepath.Clean(layout.ConfigPath), nil
 }
 
-func providerLinkArgsFromBootstrapArgs(args BootstrapArgs) ProviderLinkBootstrapArgs {
-	return ProviderLinkBootstrapArgs{
-		ProviderOrigin:           args.ProviderOrigin,
-		ControlplaneBaseURL:      args.ControlplaneBaseURL,
-		ControlplaneProviderID:   args.ControlplaneProviderID,
+func cloudLinkArgsFromBootstrapArgs(args BootstrapArgs) CloudLinkBootstrapArgs {
+	return CloudLinkBootstrapArgs{
+		CloudOrigin:              args.CloudOrigin,
+		CloudID:                  args.CloudID,
 		EnvironmentID:            args.EnvironmentID,
-		BootstrapTicket:          args.BootstrapTicket,
+		RuntimeLinkTicket:        args.RuntimeLinkTicket,
 		RuntimeVersion:           args.RuntimeVersion,
 		PermissionPolicyPreset:   args.PermissionPolicyPreset,
 		AgentHomeDir:             args.AgentHomeDir,
@@ -259,75 +207,137 @@ func providerLinkArgsFromBootstrapArgs(args BootstrapArgs) ProviderLinkBootstrap
 	}
 }
 
-func BootstrapProviderLink(ctx context.Context, args ProviderLinkBootstrapArgs) (*Config, error) {
+func BootstrapCloudLink(ctx context.Context, args CloudLinkBootstrapArgs) (*Config, error) {
 	cfgPath := strings.TrimSpace(args.ConfigPath)
 	if cfgPath == "" {
 		return nil, errors.New("missing config path")
 	}
-	cfg, err := ResolveProviderLinkConfig(ctx, args)
+	cfg, err := ResolveCloudLinkConfig(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	if err := SaveProviderLinkConfig(cfgPath, cfg); err != nil {
+	if err := SaveCloudLinkConfig(cfgPath, cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
-func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapArgs) (*Config, error) {
-	if normalizeBearerToken(args.BootstrapTicket) == "" {
+func ResolveCloudLinkConfig(ctx context.Context, args CloudLinkBootstrapArgs) (*Config, error) {
+	if normalizeBearerToken(args.RuntimeLinkTicket) == "" {
 		return nil, errors.New("missing bootstrap ticket")
 	}
-	return resolveProviderLinkConfig(ctx, providerLinkResolveArgs{
-		ConfigPath: args.ConfigPath, ProviderOrigin: args.ProviderOrigin, ControlplaneBaseURL: args.ControlplaneBaseURL,
-		ControlplaneProviderID: args.ControlplaneProviderID, EnvironmentID: args.EnvironmentID,
-		Credential: args.BootstrapTicket, RuntimeVersion: args.RuntimeVersion, PermissionPolicyPreset: args.PermissionPolicyPreset,
-		AgentHomeDir: args.AgentHomeDir, Shell: args.Shell, LogFormat: args.LogFormat, LogLevel: args.LogLevel,
-		HTTPClient: args.HTTPClient, RuntimeHostname: args.RuntimeHostname, RuntimeGOOS: args.RuntimeGOOS, RuntimeGOARCH: args.RuntimeGOARCH,
-		PreservePermissionPolicy: args.PreservePermissionPolicy,
-	}, exchangeProviderBootstrapCredential)
-}
-
-func ResolveProviderRuntimeLinkConfig(ctx context.Context, args ProviderRuntimeLinkArgs) (*Config, error) {
-	if normalizeBearerToken(args.RuntimeLinkTicket) == "" {
-		return nil, errors.New("missing Runtime link ticket")
-	}
-	return resolveProviderLinkConfig(ctx, providerLinkResolveArgs{
+	return resolveCloudLinkConfig(ctx, cloudLinkResolveArgs{
 		ExpectedBindingGeneration: args.ExpectedBindingGeneration,
-		ConfigPath:                args.ConfigPath, ProviderOrigin: args.ProviderOrigin, ControlplaneBaseURL: args.ControlplaneBaseURL,
-		ControlplaneProviderID: args.ControlplaneProviderID, EnvironmentID: args.EnvironmentID,
+		ConfigPath:                args.ConfigPath, CloudOrigin: args.CloudOrigin,
+		CloudID: args.CloudID, EnvironmentID: args.EnvironmentID,
 		Credential: args.RuntimeLinkTicket, RuntimeVersion: args.RuntimeVersion, PermissionPolicyPreset: args.PermissionPolicyPreset,
 		AgentHomeDir: args.AgentHomeDir, Shell: args.Shell, LogFormat: args.LogFormat, LogLevel: args.LogLevel,
 		HTTPClient: args.HTTPClient, RuntimeHostname: args.RuntimeHostname, RuntimeGOOS: args.RuntimeGOOS, RuntimeGOARCH: args.RuntimeGOARCH,
 		PreservePermissionPolicy: args.PreservePermissionPolicy,
-	}, exchangeRuntimeLinkTicket)
+	})
 }
 
-type providerLinkExchangeFunc func(context.Context, providerLinkResolveArgs, string, string, string, bootstrapDeliveryAttempt) (*bootstrapResponse, error)
+type runtimeLinkAssignment struct {
+	ProtocolVersion   string `json:"protocol_version"`
+	CloudID           string `json:"cloud_id"`
+	CloudOrigin       string `json:"cloud_origin"`
+	EnvPublicID       string `json:"env_public_id"`
+	AccessPointID     string `json:"access_point_id"`
+	AccessPointOrigin string `json:"access_point_origin"`
+	ExpiresAtUnixMS   int64  `json:"expires_at_unix_ms"`
+}
 
-func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs, exchangeProviderLink providerLinkExchangeFunc) (*Config, error) {
-	baseURL := strings.TrimSpace(args.ControlplaneBaseURL)
-	providerOrigin := strings.TrimSpace(args.ProviderOrigin)
+func resolveCloudAccessPoint(ctx context.Context, client *http.Client, cloudOrigin, envID, ticket string) (*runtimeLinkAssignment, error) {
+	origin, err := url.Parse(cloudOrigin)
+	if err != nil {
+		return nil, err
+	}
+	endpoint := *origin
+	endpoint.Path = "/api/rcpp/v4/runtime-link/resolve"
+	payload, err := json.Marshal(struct {
+		ProtocolVersion string `json:"protocol_version"`
+		EnvPublicID     string `json:"env_public_id"`
+	}{"rcpp-v4", envID})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+ticket)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := secureBootstrapHTTPClient(client, origin).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	const maxAssignmentBytes = 16 * 1024
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAssignmentBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxAssignmentBytes {
+		return nil, errors.New("Cloud assignment exceeds exact byte bound")
+	}
+	if resp.StatusCode != http.StatusOK {
+		failure := &RuntimeLinkExchangeError{StatusCode: resp.StatusCode}
+		var response bootstrapExchangeErrorResponse
+		if decodeExactBootstrapExchangeError(body, &response) == nil {
+			failure.Code = response.Error.Code
+		}
+		return nil, failure
+	}
+	var assignment runtimeLinkAssignment
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&assignment); err != nil {
+		return nil, fmt.Errorf("invalid Cloud assignment: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return nil, errors.New("Cloud assignment contains multiple JSON values")
+	}
+	accessOrigin, err := normalizeAccessPointOrigin(assignment.AccessPointOrigin)
+	if err != nil || accessOrigin != assignment.AccessPointOrigin || assignment.ProtocolVersion != "rcpp-v4" ||
+		assignment.CloudOrigin != cloudOrigin || assignment.EnvPublicID != envID ||
+		strings.TrimSpace(assignment.CloudID) == "" || assignment.CloudID != strings.TrimSpace(assignment.CloudID) ||
+		strings.TrimSpace(assignment.AccessPointID) == "" || assignment.AccessPointID != strings.TrimSpace(assignment.AccessPointID) ||
+		assignment.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+		return nil, errors.New("Cloud assignment identity, origin, expiry or protocol mismatch")
+	}
+	return &assignment, nil
+}
+
+func resolveCloudLinkConfig(ctx context.Context, args cloudLinkResolveArgs) (*Config, error) {
+	baseURL := ""
+	cloudOrigin := strings.TrimSpace(args.CloudOrigin)
 	envID := strings.TrimSpace(args.EnvironmentID)
 	credential := normalizeBearerToken(args.Credential)
 	cfgPath := strings.TrimSpace(args.ConfigPath)
 	if cfgPath == "" {
 		return nil, errors.New("missing config path")
 	}
-	if providerOrigin == "" || baseURL == "" || envID == "" {
-		return nil, errors.New("missing provider/controlplane/env-id")
+	if cloudOrigin == "" || envID == "" {
+		return nil, errors.New("missing cloud/env-id")
 	}
 	if credential == "" {
-		return nil, errors.New("missing provider link credential")
+		return nil, errors.New("missing Runtime link ticket")
 	}
-	providerOrigin, err := normalizeControlplaneBaseURL(providerOrigin)
+	cloudOrigin, err := normalizeAccessPointOrigin(cloudOrigin)
 	if err != nil {
-		return nil, fmt.Errorf("invalid provider origin: %w", err)
+		return nil, fmt.Errorf("invalid Cloud origin: %w", err)
 	}
-	baseURL, err = normalizeControlplaneBaseURL(baseURL)
+	assignment, err := resolveCloudAccessPoint(ctx, args.HTTPClient, cloudOrigin, envID, credential)
 	if err != nil {
-		return nil, fmt.Errorf("invalid controlplane url: %w", err)
+		return nil, err
 	}
+	baseURL = assignment.AccessPointOrigin
+	if args.CloudID != "" && args.CloudID != assignment.CloudID {
+		return nil, errors.New("Cloud identity mismatch")
+	}
+	args.CloudID = assignment.CloudID
 
 	var prev *Config
 	if c, loadErr := Load(cfgPath); loadErr == nil {
@@ -338,17 +348,23 @@ func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs
 	if prev != nil && (prev.Gateway != nil || prev.GatewayPublication != nil || prev.GatewayMigrationEvidence != nil || prev.GatewayRejoinRequired) {
 		return nil, errors.New("gateway Cloud access requires explicit migration before changing the provider binding")
 	}
-	attempt, attemptPath, err := prepareBootstrapDeliveryAttempt(cfgPath, providerOrigin, baseURL, envID, prev)
+	if args.ExpectedBindingGeneration > 0 && (prev == nil ||
+		prev.CloudOrigin != cloudOrigin || prev.CloudID != assignment.CloudID ||
+		prev.EnvironmentID != envID || prev.AccessPointOrigin != assignment.AccessPointOrigin ||
+		prev.BindingGeneration != args.ExpectedBindingGeneration) {
+		return nil, &RuntimeLinkExchangeError{StatusCode: http.StatusConflict, Code: "RUNTIME_LINK_BINDING_STALE"}
+	}
+	attempt, attemptPath, err := prepareBootstrapDeliveryAttempt(cfgPath, cloudOrigin, baseURL, envID, prev)
 	if err != nil {
 		return nil, err
 	}
-	bootstrap, err := exchangeProviderLink(ctx, args, baseURL, envID, credential, attempt)
+	bootstrap, err := exchangeRuntimeLinkTicket(ctx, args, baseURL, envID, credential, attempt)
 	if errors.Is(err, errBootstrapDeliveryExpired) {
 		attempt, err = rotateExpiredBootstrapDeliveryAttempt(attemptPath, attempt)
 		if err != nil {
 			return nil, fmt.Errorf("retire expired bootstrap delivery attempt: %w", err)
 		}
-		bootstrap, err = exchangeProviderLink(ctx, args, baseURL, envID, credential, attempt)
+		bootstrap, err = exchangeRuntimeLinkTicket(ctx, args, baseURL, envID, credential, attempt)
 	}
 	if err != nil {
 		return nil, err
@@ -381,23 +397,16 @@ func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs
 	if err != nil {
 		return nil, fmt.Errorf("invalid bootstrap control artifact pool: %w", err)
 	}
-	if strings.TrimSpace(bootstrap.ProviderOrigin) != providerOrigin {
-		return nil, errors.New("invalid bootstrap exchange response: provider_origin mismatch")
+	if bootstrap.CloudOrigin != cloudOrigin {
+		return nil, errors.New("invalid bootstrap exchange response: cloud_origin mismatch")
 	}
-	if strings.TrimSpace(bootstrap.AccessPointOrigin) != baseURL {
+	if bootstrap.AccessPointOrigin != baseURL || bootstrap.AccessPointID != assignment.AccessPointID {
 		return nil, errors.New("invalid bootstrap exchange response: access_point_origin mismatch")
 	}
 
-	providerID := strings.TrimSpace(args.ControlplaneProviderID)
-	responseProviderID := strings.TrimSpace(bootstrap.ProviderID)
-	if providerID == "" {
-		providerID = responseProviderID
-	}
-	if providerID == "" {
-		return nil, errors.New("invalid bootstrap exchange response: missing provider_id")
-	}
-	if responseProviderID != "" && responseProviderID != providerID {
-		return nil, errors.New("invalid bootstrap exchange response: provider_id mismatch")
+	cloudID := assignment.CloudID
+	if bootstrap.CloudID != cloudID {
+		return nil, errors.New("invalid bootstrap exchange response: cloud_id mismatch")
 	}
 
 	agentHomeDir := strings.TrimSpace(args.AgentHomeDir)
@@ -421,9 +430,9 @@ func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs
 	}
 
 	cfg := &Config{
-		ProviderOrigin:                 providerOrigin,
-		ControlplaneBaseURL:            baseURL,
-		ControlplaneProviderID:         providerID,
+		CloudOrigin:                    cloudOrigin,
+		AccessPointOrigin:              baseURL,
+		CloudID:                        cloudID,
 		EnvironmentID:                  envID,
 		LocalEnvironmentPublicID:       localEnvironmentPublicID,
 		BindingGeneration:              binding.Generation,
@@ -467,17 +476,6 @@ func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs
 	return cfg, nil
 }
 
-func exchangeProviderBootstrapCredential(ctx context.Context, args providerLinkResolveArgs, baseURL string, envID string, bootstrapTicket string, delivery bootstrapDeliveryAttempt) (*bootstrapResponse, error) {
-	return exchangeBootstrapTicket(ctx, args.HTTPClient, baseURL, envID, bootstrapTicket, bootstrapTicketExchangeRequest{
-		EnvPublicID: envID, ProviderOrigin: delivery.ProviderOrigin,
-		LocalEnvironmentPublicID: delivery.LocalEnvironmentPublicID, AgentInstanceID: delivery.AgentInstanceID,
-		BootstrapDeliveryRequestIDB64u: delivery.BootstrapDeliveryRequestIDB64u,
-		Hostname:                       firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()), OS: firstNonEmpty(args.RuntimeGOOS, runtime.GOOS),
-		Arch: firstNonEmpty(args.RuntimeGOARCH, runtime.GOARCH), RuntimeVersion: strings.TrimSpace(args.RuntimeVersion),
-	})
-}
-
-// RuntimeLinkExchangeError preserves HTTP policy without parsing display text.
 type RuntimeLinkExchangeError struct {
 	StatusCode int
 	Code       string
@@ -487,22 +485,22 @@ func (e *RuntimeLinkExchangeError) Error() string {
 	return fmt.Sprintf("runtime link exchange failed with HTTP %d/%s", e.StatusCode, e.Code)
 }
 
-func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs, baseURL string, envID string, runtimeLinkTicket string, delivery bootstrapDeliveryAttempt) (*bootstrapResponse, error) {
+func exchangeRuntimeLinkTicket(ctx context.Context, args cloudLinkResolveArgs, baseURL string, envID string, runtimeLinkTicket string, delivery bootstrapDeliveryAttempt) (*runtimeLinkExchangeResponse, error) {
 	u, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
-		return nil, fmt.Errorf("invalid controlplane url: %w", err)
+		return nil, fmt.Errorf("invalid access point origin: %w", err)
 	}
 	if !strings.EqualFold(u.Scheme, "https") || strings.TrimSpace(u.Hostname()) == "" {
 		return nil, errors.New("runtime link exchange requires an HTTPS origin")
 	}
-	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v3/runtime-link/exchange"
+	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v4/runtime-link/exchange"
 	u.RawQuery = ""
 	if !validCanonicalBase64URL32(delivery.BootstrapDeliveryRequestIDB64u) {
 		return nil, errors.New("invalid Runtime link delivery request id")
 	}
 	payload, err := json.Marshal(runtimeLinkExchangeRequest{
 		ExpectedBindingGeneration: args.ExpectedBindingGeneration,
-		ProtocolVersion:           "rcpp-v3", EnvPublicID: strings.TrimSpace(envID), ProviderOrigin: delivery.ProviderOrigin,
+		ProtocolVersion:           "rcpp-v4", EnvPublicID: strings.TrimSpace(envID), CloudOrigin: delivery.CloudOrigin,
 		LocalEnvironmentPublicID: delivery.LocalEnvironmentPublicID, AgentInstanceID: delivery.AgentInstanceID,
 		DeliveryRequestIDB64u: delivery.BootstrapDeliveryRequestIDB64u,
 		Hostname:              firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()), OS: firstNonEmpty(args.RuntimeGOOS, runtime.GOOS),
@@ -545,14 +543,10 @@ func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs
 	if err := decodeExactRuntimeLinkResponse(body, &out); err != nil {
 		return nil, fmt.Errorf("invalid Runtime link exchange json: %w", err)
 	}
-	if out.ProtocolVersion != "rcpp-v3" || out.ControlArtifactPool == nil {
+	if out.ProtocolVersion != "rcpp-v4" || out.ControlArtifactPool == nil {
 		return nil, errors.New("invalid Runtime link exchange response contract")
 	}
-	return &bootstrapResponse{
-		ProviderID: out.ProviderID, ProviderOrigin: out.ProviderOrigin, AccessPointID: out.AccessPointID,
-		AccessPointOrigin: out.AccessPointOrigin, EnvPublicID: out.EnvPublicID,
-		ControlArtifactPool: out.ControlArtifactPool, LocalEnvironmentBinding: out.LocalEnvironmentBinding,
-	}, nil
+	return &out, nil
 }
 
 func decodeExactRuntimeLinkResponse(raw []byte, response *runtimeLinkExchangeResponse) error {
@@ -585,88 +579,6 @@ func resolveBootstrapStateLayout(args BootstrapArgs) (StateLayout, error) {
 	return LocalEnvironmentStateLayout(args.StateRoot)
 }
 
-func exchangeBootstrapTicket(ctx context.Context, baseClient *http.Client, baseURL string, envID string, bootstrapTicket string, exchange bootstrapTicketExchangeRequest) (*bootstrapResponse, error) {
-	u, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return nil, fmt.Errorf("invalid controlplane url: %w", err)
-	}
-	if !strings.EqualFold(u.Scheme, "https") || strings.TrimSpace(u.Hostname()) == "" {
-		return nil, errors.New("controlplane bootstrap requires an HTTPS origin")
-	}
-	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v2/runtime/bootstrap/exchange"
-	u.RawQuery = ""
-	if !validCanonicalBase64URL32(exchange.BootstrapDeliveryRequestIDB64u) {
-		return nil, errors.New("invalid bootstrap delivery request id")
-	}
-
-	exchange.EnvPublicID = strings.TrimSpace(envID)
-	payload, err := json.Marshal(exchange)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+bootstrapTicket)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	client := secureBootstrapHTTPClient(baseClient, u)
-	// codeql[go/request-forgery]: the provider origin is an explicit product
-	// configuration value and is restricted to an HTTPS origin above; redirects
-	// are pinned to the same HTTPS origin by secureBootstrapHTTPClient.
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, ControlArtifactMaxResponseBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read bootstrap exchange response: %w", err)
-	}
-	if len(body) > ControlArtifactMaxResponseBytes {
-		return nil, errors.New("bootstrap exchange response exceeds exact byte bound")
-	}
-	if resp.StatusCode != http.StatusOK {
-		var failure bootstrapExchangeErrorResponse
-		if decodeErr := decodeExactBootstrapExchangeError(body, &failure); decodeErr == nil {
-			if resp.StatusCode == http.StatusConflict && failure.Error.Code == "BOOTSTRAP_DELIVERY_EXPIRED" {
-				return nil, errBootstrapDeliveryExpired
-			}
-			return nil, fmt.Errorf("bootstrap exchange failed with HTTP %d/%s", resp.StatusCode, failure.Error.Code)
-		}
-		return nil, fmt.Errorf("bootstrap exchange failed with HTTP %d", resp.StatusCode)
-	}
-
-	var out bootstrapResponse
-	if err := decodeExactBootstrapResponse(body, &out); err != nil {
-		return nil, fmt.Errorf("invalid bootstrap exchange json: %w", err)
-	}
-	if out.ControlArtifactPool == nil {
-		return nil, errors.New("invalid bootstrap exchange response: missing control artifact pool")
-	}
-	return &out, nil
-}
-
-func decodeExactBootstrapResponse(raw []byte, response *bootstrapResponse) error {
-	if response == nil {
-		return errors.New("nil bootstrap response")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(response); err != nil {
-		return err
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return errors.New("bootstrap response contains multiple JSON values")
-	}
-	return nil
-}
-
 func decodeExactBootstrapExchangeError(raw []byte, response *bootstrapExchangeErrorResponse) error {
 	if response == nil {
 		return errors.New("nil bootstrap error response")
@@ -686,22 +598,22 @@ func decodeExactBootstrapExchangeError(raw []byte, response *bootstrapExchangeEr
 	return nil
 }
 
-// SaveProviderLinkConfig commits the resolved configuration before retiring the
+// SaveCloudLinkConfig commits the resolved configuration before retiring the
 // persisted bootstrap delivery attempt. A failed unlink preserves the attempt;
 // an unlink directory-sync failure is completion-safe because a crash can only
 // restore the same idempotent request ID after the configuration is committed.
-func SaveProviderLinkConfig(path string, cfg *Config) error {
+func SaveCloudLinkConfig(path string, cfg *Config) error {
 	if err := Save(path, cfg); err != nil {
 		return err
 	}
 	return completeBootstrapDeliveryAttempt(cfg)
 }
 
-func prepareBootstrapDeliveryAttempt(configPath, providerOrigin, accessPointOrigin, envPublicID string, prev *Config) (bootstrapDeliveryAttempt, string, error) {
-	path := filepath.Clean(configPath) + ".bootstrap-delivery-v1.json"
+func prepareBootstrapDeliveryAttempt(configPath, cloudOrigin, accessPointOrigin, envPublicID string, prev *Config) (bootstrapDeliveryAttempt, string, error) {
+	path := filepath.Clean(configPath) + ".cloud-link-delivery-v2.json"
 	wanted := bootstrapDeliveryAttempt{
 		Version:           bootstrapDeliveryAttemptVersion,
-		ProviderOrigin:    strings.TrimSpace(providerOrigin),
+		CloudOrigin:       strings.TrimSpace(cloudOrigin),
 		AccessPointOrigin: strings.TrimSpace(accessPointOrigin),
 		EnvPublicID:       strings.TrimSpace(envPublicID),
 	}
@@ -709,12 +621,15 @@ func prepareBootstrapDeliveryAttempt(configPath, providerOrigin, accessPointOrig
 		wanted.AgentInstanceID = strings.TrimSpace(prev.AgentInstanceID)
 		wanted.LocalEnvironmentPublicID = strings.TrimSpace(prev.LocalEnvironmentPublicID)
 	}
+	if err := migrateBootstrapDeliveryAttempt(configPath, path, wanted); err != nil {
+		return bootstrapDeliveryAttempt{}, "", err
+	}
 	if raw, err := os.ReadFile(path); err == nil {
 		var persisted bootstrapDeliveryAttempt
 		if decodeErr := decodeExactBootstrapDeliveryAttempt(raw, &persisted); decodeErr != nil {
 			return bootstrapDeliveryAttempt{}, "", fmt.Errorf("invalid pending bootstrap delivery attempt: %w", decodeErr)
 		}
-		if persisted.ProviderOrigin == wanted.ProviderOrigin && persisted.AccessPointOrigin == wanted.AccessPointOrigin && persisted.EnvPublicID == wanted.EnvPublicID &&
+		if persisted.CloudOrigin == wanted.CloudOrigin && persisted.AccessPointOrigin == wanted.AccessPointOrigin && persisted.EnvPublicID == wanted.EnvPublicID &&
 			(wanted.AgentInstanceID == "" || persisted.AgentInstanceID == wanted.AgentInstanceID) &&
 			(wanted.LocalEnvironmentPublicID == "" || persisted.LocalEnvironmentPublicID == wanted.LocalEnvironmentPublicID) {
 			return persisted, path, nil
@@ -744,6 +659,79 @@ func prepareBootstrapDeliveryAttempt(configPath, providerOrigin, accessPointOrig
 		return bootstrapDeliveryAttempt{}, "", err
 	}
 	return wanted, path, nil
+}
+
+// Only local identity crosses the protocol boundary. A v3 delivery ID must
+// never request replay of a response under the v4 contract.
+func migrateBootstrapDeliveryAttempt(configPath, path string, wanted bootstrapDeliveryAttempt) error {
+	legacyPath := filepath.Clean(configPath) + ".bootstrap-delivery-v1.json"
+	raw, err := os.ReadFile(legacyPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("invalid legacy delivery journal: %w", err)
+	}
+	var version int
+	if err := json.Unmarshal(fields["version"], &version); err != nil || version != 1 {
+		return errors.New("unsupported legacy delivery journal version")
+	}
+	for oldName, newName := range map[string]string{
+		"provider_origin": "cloud_origin", "bootstrap_delivery_request_id_b64u": "delivery_request_id_b64u",
+	} {
+		if _, exists := fields[newName]; exists {
+			return errors.New("conflicting legacy delivery journal fields")
+		}
+		fields[newName] = fields[oldName]
+		delete(fields, oldName)
+	}
+	fields["version"] = json.RawMessage("2")
+	converted, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	var legacy bootstrapDeliveryAttempt
+	if err := decodeExactBootstrapDeliveryAttempt(converted, &legacy); err != nil {
+		return fmt.Errorf("invalid legacy delivery journal: %w", err)
+	}
+	if legacy.CloudOrigin != wanted.CloudOrigin || legacy.EnvPublicID != wanted.EnvPublicID ||
+		(wanted.AgentInstanceID != "" && wanted.AgentInstanceID != legacy.AgentInstanceID) ||
+		(wanted.LocalEnvironmentPublicID != "" && wanted.LocalEnvironmentPublicID != legacy.LocalEnvironmentPublicID) {
+		return errors.New("legacy delivery journal belongs to a different Cloud or environment")
+	}
+	if current, readErr := os.ReadFile(path); readErr == nil {
+		var next bootstrapDeliveryAttempt
+		if err := decodeExactBootstrapDeliveryAttempt(current, &next); err != nil {
+			return err
+		}
+		if next.CloudOrigin != legacy.CloudOrigin || next.EnvPublicID != legacy.EnvPublicID ||
+			next.AgentInstanceID != legacy.AgentInstanceID || next.LocalEnvironmentPublicID != legacy.LocalEnvironmentPublicID ||
+			next.BootstrapDeliveryRequestIDB64u == legacy.BootstrapDeliveryRequestIDB64u {
+			return errors.New("conflicting Cloud delivery journals")
+		}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return readErr
+	} else {
+		legacy.AccessPointOrigin = wanted.AccessPointOrigin
+		legacy.BootstrapDeliveryRequestIDB64u, err = newBootstrapDeliveryRequestID()
+		if err != nil {
+			return err
+		}
+		if err := writeBootstrapDeliveryAttemptAtomic(path, legacy); err != nil {
+			return err
+		}
+	}
+	if err := os.Remove(legacyPath); err != nil {
+		return err
+	}
+	// The new journal is durable. An unlink sync failure can only restore the
+	// validated legacy journal, which the next read retires idempotently.
+	_ = syncDirectory(filepath.Dir(legacyPath))
+	return nil
 }
 
 func rotateExpiredBootstrapDeliveryAttempt(path string, expected bootstrapDeliveryAttempt) (bootstrapDeliveryAttempt, error) {
@@ -785,7 +773,7 @@ func decodeExactBootstrapDeliveryAttempt(raw []byte, attempt *bootstrapDeliveryA
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return errors.New("bootstrap delivery attempt contains multiple JSON values")
 	}
-	if attempt.Version != bootstrapDeliveryAttemptVersion || strings.TrimSpace(attempt.ProviderOrigin) == "" ||
+	if attempt.Version != bootstrapDeliveryAttemptVersion || strings.TrimSpace(attempt.CloudOrigin) == "" ||
 		strings.TrimSpace(attempt.AccessPointOrigin) == "" || strings.TrimSpace(attempt.EnvPublicID) == "" ||
 		strings.TrimSpace(attempt.LocalEnvironmentPublicID) == "" || strings.TrimSpace(attempt.AgentInstanceID) == "" ||
 		!validCanonicalBase64URL32(attempt.BootstrapDeliveryRequestIDB64u) {
@@ -890,7 +878,7 @@ func controlArtifactPoolFromBootstrap(delivery bootstrapControlArtifactPool, gen
 
 func controlArtifactPoolFromDelivery(delivery bootstrapControlArtifactPool, generation int64, now time.Time, initial bool) (*ControlArtifactPool, error) {
 	if delivery.Version != ControlArtifactPoolContractVersion || delivery.BindingGeneration != generation ||
-		strings.TrimSpace(delivery.LogicalProviderBindingID) == "" ||
+		strings.TrimSpace(delivery.LogicalCloudBindingID) == "" ||
 		delivery.TargetWaterline != ControlArtifactTargetWaterline ||
 		delivery.RefreshHorizonSeconds != ControlArtifactRefreshHorizonS ||
 		delivery.ServerHighestArtifactSequence == 0 || delivery.ServerHighestArtifactSequence > math.MaxInt64 ||
@@ -912,7 +900,7 @@ func controlArtifactPoolFromDelivery(delivery bootstrapControlArtifactPool, gene
 		return nil, errors.New("control artifact pool response digest mismatch")
 	}
 	pool := NewControlArtifactPool(generation)
-	pool.LogicalBindingID = strings.TrimSpace(delivery.LogicalProviderBindingID)
+	pool.LogicalBindingID = strings.TrimSpace(delivery.LogicalCloudBindingID)
 	pool.TargetWaterline = delivery.TargetWaterline
 	pool.RefreshHorizonSeconds = delivery.RefreshHorizonSeconds
 	pool.RecoveryState = ControlArtifactRecoveryReady

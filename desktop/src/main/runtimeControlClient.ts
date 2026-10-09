@@ -8,7 +8,7 @@ import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { parseLocalUIProtocol, type DesktopSettingsDraft } from '../shared/settingsIPC';
 import {
   normalizeRuntimeServiceSnapshot,
-  type RuntimeServiceProviderLinkBinding,
+  type RuntimeServiceCloudLinkBinding,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 
@@ -41,9 +41,9 @@ type RuntimeControlServiceRoute =
   | 'v2/gateway/leave'
   | 'v2/tessiven/host'
   | 'v2/tessiven/resources'
-	| 'v2/provider-link'
-	| 'v2/provider-link/connect'
-	| 'v2/provider-link/disconnect'
+	| 'v2/cloud-link'
+	| 'v2/cloud-link/connect'
+	| 'v2/cloud-link/disconnect'
 	| 'v2/code-workspace-engine/status'
   | 'v2/runtime/access'
   | 'v2/runtime/security';
@@ -86,23 +86,22 @@ export async function saveRuntimeAccessSettings(endpoint: DesktopRuntimeControlE
   })).data);
 }
 
-export type RuntimeControlProviderLinkStatus = Readonly<{
+export type RuntimeControlCloudLinkStatus = Readonly<{
   linked?: boolean;
-  binding: RuntimeServiceProviderLinkBinding;
+  binding: RuntimeServiceCloudLinkBinding;
   runtime_service: RuntimeServiceSnapshot;
 }>;
 
-export type RuntimeControlProviderLinkRequest = Readonly<{
-  provider_origin: string;
-  provider_id: string;
+export type RuntimeControlCloudLinkRequest = Readonly<{
+  cloud_origin: string;
+  cloud_id: string;
   env_public_id: string;
-  access_point_origin: string;
 	runtime_link_ticket: string;
   allow_relink_when_idle?: boolean;
   renew_current_binding?: boolean;
   expected_current_binding?: Readonly<{
-    provider_origin?: string;
-    provider_id?: string;
+    cloud_origin?: string;
+    cloud_id?: string;
     env_public_id?: string;
     access_point_origin?: string;
     binding_generation?: number;
@@ -253,12 +252,12 @@ function requestRuntimeControl(
   });
 }
 
-function parseProviderLinkStatus(data: unknown): RuntimeControlProviderLinkStatus {
+function parseCloudLinkStatus(data: unknown): RuntimeControlCloudLinkStatus {
   const record = data && typeof data === 'object' ? data as Record<string, unknown> : {};
   const runtimeService = normalizeRuntimeServiceSnapshot(record.runtime_service ?? {});
-  const binding = runtimeService.bindings?.provider_link;
+  const binding = runtimeService.bindings?.cloud_link;
   if (!binding) {
-    throw new RuntimeControlError('PROVIDER_LINK_INVALID_RESPONSE', 'Runtime control did not return provider-link binding status.');
+    throw new RuntimeControlError('CLOUD_LINK_INVALID_RESPONSE', 'Runtime control did not return cloud-link binding status.');
   }
   return {
     ...(typeof record.linked === 'boolean' ? { linked: record.linked } : {}),
@@ -267,31 +266,31 @@ function parseProviderLinkStatus(data: unknown): RuntimeControlProviderLinkStatu
   };
 }
 
-export async function getProviderLinkStatus(
+export async function getCloudLinkStatus(
   endpoint: DesktopRuntimeControlEndpoint,
-): Promise<RuntimeControlProviderLinkStatus> {
-	const envelope = await requestRuntimeControl(endpoint, 'v2/provider-link', { method: 'GET' });
-  return parseProviderLinkStatus(envelope.data);
+): Promise<RuntimeControlCloudLinkStatus> {
+	const envelope = await requestRuntimeControl(endpoint, 'v2/cloud-link', { method: 'GET' });
+  return parseCloudLinkStatus(envelope.data);
 }
 
-export async function connectProviderLink(
+export async function connectCloudLink(
   endpoint: DesktopRuntimeControlEndpoint,
-  request: RuntimeControlProviderLinkRequest,
-): Promise<RuntimeControlProviderLinkStatus> {
-	const envelope = await requestRuntimeControl(endpoint, 'v2/provider-link/connect', {
+  request: RuntimeControlCloudLinkRequest,
+): Promise<RuntimeControlCloudLinkStatus> {
+	const envelope = await requestRuntimeControl(endpoint, 'v2/cloud-link/connect', {
     method: 'POST',
     body: request,
   });
-  return parseProviderLinkStatus(envelope.data);
+  return parseCloudLinkStatus(envelope.data);
 }
 
-export async function disconnectProviderLink(
+export async function disconnectCloudLink(
   endpoint: DesktopRuntimeControlEndpoint,
-): Promise<RuntimeControlProviderLinkStatus> {
-	const envelope = await requestRuntimeControl(endpoint, 'v2/provider-link/disconnect', {
+): Promise<RuntimeControlCloudLinkStatus> {
+	const envelope = await requestRuntimeControl(endpoint, 'v2/cloud-link/disconnect', {
     method: 'POST',
   });
-  return parseProviderLinkStatus(envelope.data);
+  return parseCloudLinkStatus(envelope.data);
 }
 
 export async function getCodeWorkspaceEngineStatus(

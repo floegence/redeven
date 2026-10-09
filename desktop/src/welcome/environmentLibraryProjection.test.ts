@@ -5,7 +5,7 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   testDesktopPreferences,
   testProviderBoundLocalEnvironment,
-  testProviderEnvironment,
+  testCloudEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
   buildEnvironmentLibraryDisplayGroups,
@@ -37,13 +37,13 @@ describe('environmentLibraryProjection', () => {
     const local = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Local Environment',
     });
-    const provider = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+    const provider = testCloudEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Dev Local',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
-        provider_environments: [provider],
+        cloud_environments: [provider],
       }),
     });
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment')!;
@@ -51,16 +51,16 @@ describe('environmentLibraryProjection', () => {
     const runtimeTarget = {
       ...localEntry.provider_runtime_link_target!,
       id: 'local:local' as const,
-      provider_link_state: 'linked' as const,
+      cloud_link_state: 'linked' as const,
       provider_connection_state: 'connected' as const,
-      provider_origin: provider.provider_origin,
-      provider_id: provider.provider_id,
+      cloud_origin: provider.cloud_origin,
+      cloud_id: provider.cloud_id,
       env_public_id: provider.env_public_id,
     };
     const linkedLocal = { ...localEntry, provider_runtime_link_target: runtimeTarget };
     const linkedProvider = {
       ...providerEntry,
-      provider_linked_runtime_summary: {
+      cloud_linked_runtime_summary: {
         runtime_target_id: runtimeTarget.id,
         runtime_kind: 'local_environment' as const,
         label: linkedLocal.label,
@@ -83,14 +83,14 @@ describe('environmentLibraryProjection', () => {
     const local = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Local Environment',
     });
-    const provider = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+    const provider = testCloudEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Dev Local',
       pinned: true,
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
-        provider_environments: [provider],
+        cloud_environments: [provider],
       }),
     });
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment')!;
@@ -100,16 +100,16 @@ describe('environmentLibraryProjection', () => {
       provider_runtime_link_target: {
         ...localEntry.provider_runtime_link_target!,
         id: 'local:local' as const,
-        provider_link_state: 'linked' as const,
+        cloud_link_state: 'linked' as const,
         provider_connection_state: 'connected' as const,
-        provider_origin: 'https://other.example.invalid',
-        provider_id: 'other_control_plane',
+        cloud_origin: 'https://other.example.invalid',
+        cloud_id: 'other_control_plane',
         env_public_id: 'env_other',
       },
     };
     const staleProvider = {
       ...providerEntry,
-      provider_linked_runtime_summary: {
+      cloud_linked_runtime_summary: {
         runtime_target_id: 'local:local' as const,
         runtime_kind: 'local_environment' as const,
         label: unpairedLocal.label,
@@ -128,13 +128,13 @@ describe('environmentLibraryProjection', () => {
     const local = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Local Environment',
     });
-    const provider = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+    const provider = testCloudEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Dev Local',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
-        provider_environments: [provider],
+        cloud_environments: [provider],
       }),
     });
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment')!;
@@ -142,16 +142,16 @@ describe('environmentLibraryProjection', () => {
     const runtimeTarget = {
       ...localEntry.provider_runtime_link_target!,
       id: 'local:local' as const,
-      provider_link_state: 'linked' as const,
+      cloud_link_state: 'linked' as const,
       provider_connection_state: 'connected' as const,
-      provider_origin: provider.provider_origin,
-      provider_id: provider.provider_id,
+      cloud_origin: provider.cloud_origin,
+      cloud_id: provider.cloud_id,
       env_public_id: provider.env_public_id,
     };
     const linkedLocal = { ...localEntry, provider_runtime_link_target: runtimeTarget };
     const linkedProvider = {
       ...providerEntry,
-      provider_linked_runtime_summary: {
+      cloud_linked_runtime_summary: {
         runtime_target_id: runtimeTarget.id,
         runtime_kind: 'local_environment' as const,
         label: linkedLocal.label,

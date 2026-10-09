@@ -10,7 +10,7 @@ import type {
   RuntimePlacementBridgeTermination,
 } from './runtimePlacementBridgeSession';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopSessionKey } from './desktopTarget';
 
 function deferred<T>() {
@@ -40,7 +40,7 @@ function bridgeFixture(targetIDValue: string) {
     runtime_key: targetID,
     environment_id: targetID,
     label: targetID,
-    target_id: `ssh_environment:${targetID}` as DesktopProviderRuntimeLinkTargetID,
+    target_id: `ssh_environment:${targetID}` as DesktopCloudRuntimeLinkTargetID,
     runtime_binary_path: 'redeven',
     session,
     startup: { local_ui_url: 'http://127.0.0.1:3000/', local_ui_urls: ['http://127.0.0.1:3000/'] },

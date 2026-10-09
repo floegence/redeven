@@ -80,7 +80,7 @@ describe('desktopLaunch', () => {
     });
     const plan = buildDesktopRuntimeLaunchPlan(environment, { HOME: '/Users/tester' });
     expect(plan.args).not.toContain('--password-clear');
-    expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 1 });
+    expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 2 });
   });
 
   it('adds one-shot bootstrap metadata and a private stdin envelope to the spawn plan', () => {
@@ -103,11 +103,10 @@ describe('desktopLaunch', () => {
       { HOME: '/Users/tester' },
       {
         bootstrap: {
-          kind: 'bootstrap_ticket',
-          provider_origin: 'https://redeven.test',
-          controlplane_url: 'https://dev.redeven.test',
+          kind: 'runtime_link_ticket',
+          cloud_origin: 'https://redeven.test',
           env_id: 'env_123',
-          bootstrap_ticket: 'ticket-123',
+          runtime_link_ticket: 'ticket-123',
         },
       },
     );
@@ -124,19 +123,17 @@ describe('desktopLaunch', () => {
       '--state-root',
       '/Users/tester/.redeven',
       '--startup-secrets-stdin',
-      '--provider-origin',
+      '--cloud',
       'https://redeven.test',
-      '--controlplane',
-      'https://dev.redeven.test',
       '--env-id',
       'env_123',
       '--startup-report-file',
       '/tmp/startup.json',
     ]);
     expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({
-      version: 1,
+      version: 2,
       local_ui_password: 'secret',
-      bootstrap_ticket: 'ticket-123',
+      runtime_link_ticket: 'ticket-123',
     });
     for (const name of RUNTIME_SECRET_ENV_NAMES) {
       expect(plan.env[name]).toBeUndefined();
@@ -234,7 +231,7 @@ describe('desktopLaunch', () => {
       '/Users/tester/.redeven',
       '--startup-secrets-stdin',
     ]);
-    expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 1 });
+    expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 2 });
     expect(plan.state_layout).toEqual(expect.objectContaining({
       stateRoot: '/Users/tester/.redeven',
       configPath: '/Users/tester/.redeven/local-environment/config.json',
@@ -275,6 +272,6 @@ describe('desktopLaunch', () => {
 
     const plan = buildDesktopRuntimeLaunchPlan(environment, { HOME: '/Users/tester' });
 
-    expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 1 });
+    expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 2 });
   });
 });

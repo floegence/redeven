@@ -4,7 +4,7 @@ import type { StartupReport } from './startup';
 import type { DesktopSessionTransportKind } from './desktopSessionTransport';
 import type { DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import {
-  desktopProviderEnvironmentStateID,
+  desktopCloudEnvironmentStateID,
   localEnvironmentDefaultOpenRoute,
   localEnvironmentStateKind,
   type DesktopLocalEnvironmentState,
@@ -15,7 +15,7 @@ import {
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
-import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
+import type { DesktopCloudEnvironmentRecord } from '../shared/desktopCloudEnvironment';
 import type { DesktopRuntimeHostAccess, DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 export type DesktopTargetKind = 'local_environment' | 'wsl_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
@@ -30,8 +30,8 @@ export type LocalEnvironmentDesktopTarget = Readonly<{
   label: string;
   route: DesktopLocalEnvironmentStateSessionRoute;
   local_environment_kind: 'local' | 'controlplane';
-  provider_origin?: string;
-  provider_id?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   env_public_id?: string;
   has_local_hosting: boolean;
   has_remote_desktop: boolean;
@@ -107,8 +107,8 @@ export function desktopSessionTargetsReferToSameEnvironment(
   }
   if (left.kind === 'local_environment' && right.kind === 'local_environment') {
     return compact(left.environment_id) === compact(right.environment_id) || (
-      matchingOptionalIdentity(left.provider_origin, right.provider_origin)
-      && matchingOptionalIdentity(left.provider_id, right.provider_id)
+      matchingOptionalIdentity(left.cloud_origin, right.cloud_origin)
+      && matchingOptionalIdentity(left.cloud_id, right.cloud_id)
       && matchingOptionalIdentity(left.env_public_id, right.env_public_id)
     );
   }
@@ -145,35 +145,35 @@ export function localEnvironmentDesktopSessionKey(
 }
 
 function linkedLocalEnvironmentSessionIdentityFromParts(
-  providerOrigin: string,
-  providerID: string,
+  cloudOrigin: string,
+  cloudID: string,
   envPublicID: string,
 ): string {
   return [
     'linked-local',
-    providerOrigin,
-    providerID,
+    cloudOrigin,
+    cloudID,
     envPublicID,
   ].map(encodeURIComponent).join(':');
 }
 
 function linkedLocalEnvironmentSessionIdentity(environment: DesktopLocalEnvironmentState): string {
-  const binding = environment.current_provider_binding;
+  const binding = environment.current_cloud_binding;
   if (!binding) {
     return compact(environment.id);
   }
   return linkedLocalEnvironmentSessionIdentityFromParts(
-    binding.provider_origin,
-    binding.provider_id,
+    binding.cloud_origin,
+    binding.cloud_id,
     binding.env_public_id,
   );
 }
 
 export function controlPlaneDesktopSessionKey(
-  rawProviderOrigin: string,
+  rawCloudOrigin: string,
   rawEnvPublicID: string,
 ): `env:${string}:remote_desktop` {
-  return `env:${encodeURIComponent(desktopProviderEnvironmentStateID(rawProviderOrigin, rawEnvPublicID))}:remote_desktop`;
+  return `env:${encodeURIComponent(desktopCloudEnvironmentStateID(rawCloudOrigin, rawEnvPublicID))}:remote_desktop`;
 }
 
 export function externalLocalUIDesktopSessionKey(rawURL: string): DesktopSessionKey {
@@ -234,23 +234,23 @@ export function buildLocalEnvironmentDesktopTarget(
     label: environment.label,
     route,
     local_environment_kind: localEnvironmentStateKind(environment),
-    provider_origin: environment.current_provider_binding?.provider_origin,
-    provider_id: environment.current_provider_binding?.provider_id,
-    env_public_id: environment.current_provider_binding?.env_public_id,
+    cloud_origin: environment.current_cloud_binding?.cloud_origin,
+    cloud_id: environment.current_cloud_binding?.cloud_id,
+    env_public_id: environment.current_cloud_binding?.env_public_id,
     has_local_hosting: true,
-    has_remote_desktop: environment.current_provider_binding?.remote_desktop_supported === true,
+    has_remote_desktop: environment.current_cloud_binding?.remote_desktop_supported === true,
   };
 }
 
-export function buildProviderEnvironmentDesktopTarget(
-  environment: DesktopProviderEnvironmentRecord,
+export function buildCloudEnvironmentDesktopTarget(
+  environment: DesktopCloudEnvironmentRecord,
   options: BuildLocalEnvironmentDesktopTargetOptions = {},
 ): LocalEnvironmentDesktopTarget {
   const route = options.route ?? 'remote_desktop';
   const sessionIdentity = route === 'local_host'
     ? linkedLocalEnvironmentSessionIdentityFromParts(
-        environment.provider_origin,
-        environment.provider_id,
+        environment.cloud_origin,
+        environment.cloud_id,
         environment.env_public_id,
       )
     : environment.id;
@@ -261,8 +261,8 @@ export function buildProviderEnvironmentDesktopTarget(
     label: environment.label,
     route,
     local_environment_kind: 'controlplane',
-    provider_origin: environment.provider_origin,
-    provider_id: environment.provider_id,
+    cloud_origin: environment.cloud_origin,
+    cloud_id: environment.cloud_id,
     env_public_id: environment.env_public_id,
     has_local_hosting: route === 'local_host',
     has_remote_desktop: environment.remote_desktop_supported === true,

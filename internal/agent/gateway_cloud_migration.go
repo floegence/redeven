@@ -14,11 +14,11 @@ import (
 
 var errGatewayBindingProofRequired = errors.New("current Cloud binding requires reauthorization before migration")
 
-// consentGatewayUserMigration runs under providerLinkMu and gatewayRecoveryMu.
+// consentGatewayUserMigration runs under cloudLinkMu and gatewayRecoveryMu.
 // The live Agent owns durable credential spending; there is no parallel writer.
 func (a *Agent) consentGatewayUserMigration(ctx context.Context, target *gatewaycloud.RuntimeConfig) error {
 	cfg := a.remoteConfigSnapshot()
-	if cfg == nil || target == nil || cfg.GatewayEnvironmentChoice != "preserve" || cfg.EnvironmentID == "" || cfg.ProviderOrigin != target.CloudOrigin || cfg.ControlplaneBaseURL != target.RegionOrigin || cfg.LocalEnvironmentPublicID != target.RuntimePublicID {
+	if cfg == nil || target == nil || cfg.GatewayEnvironmentChoice != "preserve" || cfg.EnvironmentID == "" || cfg.CloudOrigin != target.CloudOrigin || cfg.AccessPointOrigin != target.RegionOrigin || cfg.LocalEnvironmentPublicID != target.RuntimePublicID {
 		return gatewaycloud.ErrState
 	}
 	original := *cfg
@@ -57,7 +57,7 @@ func (a *Agent) consentGatewayUserMigration(ctx context.Context, target *gateway
 	if err != nil {
 		return err
 	}
-	session, err := flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{HTTPSProxy: proxy, Origin: strings.TrimRight(cfg.ControlplaneBaseURL, "/"), ConnectTimeout: 15 * time.Second, RPCHandlers: flowersec.NewRPCHandlers()})
+	session, err := flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{HTTPSProxy: proxy, Origin: strings.TrimRight(cfg.AccessPointOrigin, "/"), ConnectTimeout: 15 * time.Second, RPCHandlers: flowersec.NewRPCHandlers()})
 	if err != nil {
 		return err
 	}

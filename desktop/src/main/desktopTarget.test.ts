@@ -4,7 +4,7 @@ import {
   buildExternalLocalUIDesktopTarget,
   buildGatewayDesktopTarget,
   buildLocalEnvironmentDesktopTarget,
-  buildProviderEnvironmentDesktopTarget,
+  buildCloudEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
   controlPlaneDesktopSessionKey,
   desktopSessionTargetsReferToSameEnvironment,
@@ -17,7 +17,7 @@ import {
 import {
   testLocalEnvironment,
   testProviderBoundLocalEnvironment,
-  testProviderEnvironment,
+  testCloudEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import { desktopSSHEnvironmentID } from '../shared/desktopSSH';
 
@@ -30,8 +30,8 @@ describe('desktopTarget', () => {
       label: 'Local Environment',
       route: 'local_host',
       local_environment_kind: 'local',
-      provider_origin: undefined,
-      provider_id: undefined,
+      cloud_origin: undefined,
+      cloud_id: undefined,
       env_public_id: undefined,
       has_local_hosting: true,
       has_remote_desktop: false,
@@ -68,11 +68,11 @@ describe('desktopTarget', () => {
     expect(controlPlaneDesktopSessionKey('https://redeven.test/path', ' env_demo ')).toBe(
       'env:provider%3Ahttps%253A%252F%252Fredeven.test%3Aenv%3Aenv_demo:remote_desktop',
     );
-    expect(buildProviderEnvironmentDesktopTarget(testProviderEnvironment(
+    expect(buildCloudEnvironmentDesktopTarget(testCloudEnvironment(
       'https://redeven.test/path',
       ' env_demo ',
       {
-        providerID: ' example_control_plane ',
+        cloudID: ' example_control_plane ',
         label: ' Demo Environment ',
       },
     ), { route: 'remote_desktop' })).toEqual({
@@ -81,8 +81,8 @@ describe('desktopTarget', () => {
       environment_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
       route: 'remote_desktop',
       local_environment_kind: 'controlplane',
-      provider_id: 'example_control_plane',
-      provider_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
       has_local_hosting: false,
@@ -160,8 +160,8 @@ describe('desktopTarget', () => {
   });
 
   it('matches every Desktop session that represents the same Environment', () => {
-    const providerEnvironment = testProviderEnvironment('https://redeven.test', 'env_demo');
-    const providerTarget = buildProviderEnvironmentDesktopTarget(providerEnvironment);
+    const providerEnvironment = testCloudEnvironment('https://redeven.test', 'env_demo');
+    const providerTarget = buildCloudEnvironmentDesktopTarget(providerEnvironment);
     const linkedLocalTarget = buildLocalEnvironmentDesktopTarget(testProviderBoundLocalEnvironment(
       'https://redeven.test',
       'env_demo',

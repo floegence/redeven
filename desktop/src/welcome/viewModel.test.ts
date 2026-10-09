@@ -8,7 +8,7 @@ import { buildDesktopWelcomeSnapshot as buildSnapshot } from '../main/desktopWel
 import { resolveDesktopPlatformCapabilities } from '../shared/desktopPlatformCapabilities';
 import {
   DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS,
-  desktopProviderEnvironmentOpenRoute,
+  desktopCloudEnvironmentOpenRoute,
 } from '../shared/environmentManagementPrinciples';
 import {
   buildExternalLocalUIDesktopTarget,
@@ -18,13 +18,13 @@ import {
 import {
   desktopControlPlaneKey,
   type DesktopControlPlaneSummary,
-  type DesktopProviderEnvironmentRuntimeHealth,
-} from '../shared/controlPlaneProvider';
+  type DesktopCloudEnvironmentRuntimeHealth,
+} from '../shared/cloud';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import type {
   RuntimeServiceOpenReadiness,
-  RuntimeServiceProviderLinkBinding,
+  RuntimeServiceCloudLinkBinding,
   RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
@@ -33,7 +33,7 @@ import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import {
   testDesktopPreferences,
-  testProviderEnvironment,
+  testCloudEnvironment,
   testProviderBoundLocalEnvironment,
   testLocalEnvironment,
   testLocalEnvironmentSession,
@@ -85,12 +85,12 @@ describe('environment card Cloud affiliation', () => {
 
 describe('provider credential recovery actions', () => {
   it('keeps restore and explicit disconnect available after credentials expire', () => {
-    const controlPlane = buildControlPlaneSummary({ providerOrigin: 'https://redeven.test' });
+    const controlPlane = buildControlPlaneSummary({ cloudOrigin: 'https://redeven.test' });
     const runtimeService = providerRuntimeService({ state: 'openable' }, {
       state: 'linked',
       connection_state: 'authorization_required',
-      provider_origin: 'https://redeven.test',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
       local_environment_public_id: 'le_demo',
       binding_generation: 4,
@@ -102,8 +102,8 @@ describe('provider credential recovery actions', () => {
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24001/',
             effective_run_mode: 'desktop',
-            controlplane_base_url: 'https://dev.redeven.test',
-            controlplane_provider_id: 'example_control_plane',
+            access_point_origin: 'https://dev.redeven.test',
+            cloud_id: 'example_control_plane',
             env_public_id: 'env_demo',
             runtime_control: {
               protocol_version: 'redeven-runtime-control-v2',
@@ -113,7 +113,7 @@ describe('provider credential recovery actions', () => {
             runtime_service: runtimeService,
           },
         }),
-        provider_environments: [testProviderEnvironment('https://redeven.test', 'env_demo')],
+        cloud_environments: [testCloudEnvironment('https://redeven.test', 'env_demo')],
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -126,11 +126,11 @@ describe('provider credential recovery actions', () => {
     expect(local).toBeTruthy();
     const actions = buildProviderBackedEnvironmentActionModel(local!).action_presentation.menu_actions;
     expect(actions.map((item) => item.id)).toEqual(expect.arrayContaining([
-      'connect_provider_runtime',
-      'disconnect_provider_runtime',
+      'connect_cloud_runtime',
+      'disconnect_cloud_runtime',
     ]));
-    expect(actions.find((item) => item.id === 'connect_provider_runtime')?.action.enabled).toBe(true);
-    expect(actions.find((item) => item.id === 'disconnect_provider_runtime')?.action.enabled).toBe(true);
+    expect(actions.find((item) => item.id === 'connect_cloud_runtime')?.action.enabled).toBe(true);
+    expect(actions.find((item) => item.id === 'disconnect_cloud_runtime')?.action.enabled).toBe(true);
     expect(buildEnvironmentCardFactsModel(local!).find(fact => fact.id === 'cloud-connection')?.value_key).toBe('providerRecovery.expired');
     for (const [state, key] of [
       ['sign_in_required', 'environmentCenter.cloudSignInRequired'],
@@ -142,7 +142,7 @@ describe('provider credential recovery actions', () => {
       } };
       expect(buildEnvironmentCardFactsModel(recovering).find(fact => fact.id === 'cloud-connection')?.value_key).toBe(key);
       expect(buildProviderBackedEnvironmentActionModel(recovering).action_presentation.menu_actions
-        .find(item => item.id === 'disconnect_provider_runtime')?.action.enabled).toBe(true);
+        .find(item => item.id === 'disconnect_cloud_runtime')?.action.enabled).toBe(true);
     }
   });
 });
@@ -403,19 +403,19 @@ describe('environment open flow decisions', () => {
   });
 });
 
-function buildProvider(providerOrigin = 'https://redeven.test') {
+function buildProvider(cloudOrigin = 'https://redeven.test') {
   return {
-    protocol_version: 'rcpp-v3' as const,
-    provider_id: 'example_control_plane',
+    protocol_version: 'rcpp-v4' as const,
+    cloud_id: 'example_control_plane',
     display_name: 'Example Control Plane',
-    provider_origin: providerOrigin,
-    documentation_url: `${providerOrigin}/help/control-plane-providers`,
+    cloud_origin: cloudOrigin,
+    documentation_url: `${cloudOrigin}/help/control-plane-providers`,
     access_points: [{
       access_point_id: 'dev',
       region: 'dev',
       display_name: 'Development',
       description: 'Development access point',
-      access_point_origin: providerOrigin === 'https://other.example.invalid'
+      access_point_origin: cloudOrigin === 'https://other.example.invalid'
         ? 'https://other-dev.example.invalid'
         : 'https://dev.redeven.test',
       country_code: 'SG',
@@ -428,9 +428,9 @@ function buildProvider(providerOrigin = 'https://redeven.test') {
 
 function buildProviderRuntimeHealth(options: Readonly<{
   envPublicID: string;
-  runtimeStatus: DesktopProviderEnvironmentRuntimeHealth['runtime_status'];
+  runtimeStatus: DesktopCloudEnvironmentRuntimeHealth['runtime_status'];
   observedAtUnixMS: number;
-}>): DesktopProviderEnvironmentRuntimeHealth {
+}>): DesktopCloudEnvironmentRuntimeHealth {
   return {
     env_public_id: options.envPublicID,
     runtime_status: options.runtimeStatus,
@@ -442,7 +442,7 @@ function buildProviderRuntimeHealth(options: Readonly<{
 }
 
 function buildControlPlaneSummary(options: Readonly<{
-  providerOrigin?: string;
+  cloudOrigin?: string;
   displayLabel?: string;
   status?: string;
   lifecycleStatus?: string;
@@ -451,21 +451,21 @@ function buildControlPlaneSummary(options: Readonly<{
   syncState?: 'idle' | 'syncing' | 'ready' | 'auth_required' | 'provider_unreachable' | 'provider_invalid' | 'sync_error';
   catalogFreshness?: 'unknown' | 'fresh' | 'stale';
 }>): DesktopControlPlaneSummary {
-  const provider = buildProvider(options.providerOrigin);
+  const provider = buildProvider(options.cloudOrigin);
   const now = Date.now();
   const envPublicID = options.envPublicID ?? 'env_demo';
   const status = options.status ?? 'online';
   const lifecycleStatus = options.lifecycleStatus ?? 'active';
-  const runtimeStatus: DesktopProviderEnvironmentRuntimeHealth['runtime_status'] = (
+  const runtimeStatus: DesktopCloudEnvironmentRuntimeHealth['runtime_status'] = (
     status === 'offline' || lifecycleStatus === 'suspended'
   )
     ? 'offline'
     : 'online';
   return {
-    provider,
+    cloud: provider,
     account: {
-      provider_id: provider.provider_id,
-      provider_origin: provider.provider_origin,
+      cloud_id: provider.cloud_id,
+      cloud_origin: provider.cloud_origin,
       display_name: provider.display_name,
       user_public_id: 'user_demo',
       user_display_name: 'Demo User',
@@ -473,14 +473,14 @@ function buildControlPlaneSummary(options: Readonly<{
     },
     display_label: options.displayLabel ?? 'Demo Control Plane',
     environments: [{
-      provider_id: provider.provider_id,
-      provider_origin: provider.provider_origin,
+      cloud_id: provider.cloud_id,
+      cloud_origin: provider.cloud_origin,
       env_public_id: envPublicID,
       region: 'dev',
       access_point_id: 'dev',
       access_point_origin: provider.access_points[0]?.access_point_origin ?? 'https://dev.redeven.test',
       label: 'Demo Environment',
-      environment_url: options.environmentURL ?? `${provider.access_points[0]?.access_point_origin ?? provider.provider_origin}/env/${envPublicID}`,
+      environment_url: options.environmentURL ?? `${provider.access_points[0]?.access_point_origin ?? provider.cloud_origin}/env/${envPublicID}`,
       description: 'team sandbox',
       namespace_public_id: 'ns_demo',
       namespace_name: 'Demo Team',
@@ -504,40 +504,40 @@ function buildControlPlaneSummary(options: Readonly<{
 
 function providerRuntimeState(envPublicID = 'env_demo') {
   return {
-    controlplane_base_url: 'https://dev.redeven.test',
-    controlplane_provider_id: 'example_control_plane',
+    access_point_origin: 'https://dev.redeven.test',
+    cloud_id: 'example_control_plane',
     env_public_id: envPublicID,
   };
 }
 
 function providerRuntimeService(
   openReadiness: RuntimeServiceOpenReadiness = { state: 'openable' },
-  providerLink?: Partial<RuntimeServiceProviderLinkBinding>,
+  cloudLink?: Partial<RuntimeServiceCloudLinkBinding>,
 ): RuntimeServiceSnapshot {
-  const providerLinkBinding: RuntimeServiceProviderLinkBinding = {
-    state: providerLink?.state ?? 'unbound',
-    connection_state: providerLink?.connection_state,
-    provider_origin: providerLink?.provider_origin,
-    provider_id: providerLink?.provider_id,
-    env_public_id: providerLink?.env_public_id,
-    access_point_origin: providerLink?.access_point_origin ?? (
-      providerLink?.state === 'linked'
+  const cloudLinkBinding: RuntimeServiceCloudLinkBinding = {
+    state: cloudLink?.state ?? 'unbound',
+    connection_state: cloudLink?.connection_state,
+    cloud_origin: cloudLink?.cloud_origin,
+    cloud_id: cloudLink?.cloud_id,
+    env_public_id: cloudLink?.env_public_id,
+    access_point_origin: cloudLink?.access_point_origin ?? (
+      cloudLink?.state === 'linked'
         ? 'https://dev.redeven.test'
         : undefined
     ),
-    local_environment_public_id: providerLink?.local_environment_public_id,
-    binding_generation: providerLink?.binding_generation,
-    remote_enabled: providerLink?.remote_enabled ?? providerLink?.state === 'linked',
-    last_connected_at_unix_ms: providerLink?.last_connected_at_unix_ms,
-    last_disconnected_at_unix_ms: providerLink?.last_disconnected_at_unix_ms,
-    last_error_code: providerLink?.last_error_code,
-    last_error_message: providerLink?.last_error_message,
+    local_environment_public_id: cloudLink?.local_environment_public_id,
+    binding_generation: cloudLink?.binding_generation,
+    remote_enabled: cloudLink?.remote_enabled ?? cloudLink?.state === 'linked',
+    last_connected_at_unix_ms: cloudLink?.last_connected_at_unix_ms,
+    last_disconnected_at_unix_ms: cloudLink?.last_disconnected_at_unix_ms,
+    last_error_code: cloudLink?.last_error_code,
+    last_error_message: cloudLink?.last_error_message,
   };
   return {
     protocol_version: 'redeven-runtime-v2',
     compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
     effective_run_mode: 'desktop',
-    remote_enabled: providerLinkBinding.remote_enabled,
+    remote_enabled: cloudLinkBinding.remote_enabled,
     compatibility: 'compatible',
     open_readiness: openReadiness,
     active_workload: {
@@ -548,14 +548,14 @@ function providerRuntimeService(
     },
     capabilities: {
       desktop_model_source: { supported: false },
-      provider_link: {
+      cloud_link: {
         supported: true,
         bind_method: 'runtime_control_v2',
       },
     },
     bindings: {
       desktop_model_source: { state: 'unsupported' },
-      provider_link: providerLinkBinding,
+      cloud_link: cloudLinkBinding,
     },
   };
 }
@@ -1145,18 +1145,18 @@ describe('buildEnvironmentCardModel', () => {
             },
             capabilities: {
               desktop_model_source: { supported: false },
-              provider_link: {
+              cloud_link: {
                 supported: true,
                 bind_method: 'runtime_control_v1',
               },
             },
             bindings: {
               desktop_model_source: { state: 'unsupported' },
-              provider_link: {
+              cloud_link: {
                 state: 'linked',
                 connection_state: 'connected',
-                provider_origin: 'https://redeven.test',
-                provider_id: 'example_control_plane',
+                cloud_origin: 'https://redeven.test',
+                cloud_id: 'example_control_plane',
                 env_public_id: 'env_demo',
                 remote_enabled: true,
               },
@@ -1571,7 +1571,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel({
       ...providerEntry!,
       control_plane_label: '',
-      provider_origin: '',
+      cloud_origin: '',
     }).map((fact) => fact.label)).not.toContain('PROVIDER');
   });
 
@@ -1769,7 +1769,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action_overlay: undefined,
       },
     });
-    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('provider_link_unavailable');
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('cloud_link_unavailable');
     expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).toEqual(expect.arrayContaining([
       'stop_runtime',
       'restart_runtime',
@@ -2488,8 +2488,8 @@ describe('buildEnvironmentCardModel', () => {
     const staleProviderSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
-        provider_environments: [
-          testProviderEnvironment('https://redeven.test', 'env_demo', {
+        cloud_environments: [
+          testCloudEnvironment('https://redeven.test', 'env_demo', {
             preferredOpenRoute: 'remote_desktop',
           }),
         ],
@@ -2512,7 +2512,7 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Open',
           enabled: true,
           variant: 'default',
-          route: desktopProviderEnvironmentOpenRoute(),
+          route: desktopCloudEnvironmentOpenRoute(),
         },
       },
     });
@@ -2528,8 +2528,8 @@ describe('buildEnvironmentCardModel', () => {
     const unknownProviderSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
-        provider_environments: [
-          testProviderEnvironment('https://redeven.test', 'env_demo', {
+        cloud_environments: [
+          testCloudEnvironment('https://redeven.test', 'env_demo', {
             preferredOpenRoute: 'remote_desktop',
           }),
         ],
@@ -2580,7 +2580,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const unboundRuntimeProviderEntry = unboundRuntimeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const unboundRuntimeLocalEntry = unboundRuntimeSnapshot.environments.find((environment) => environment.kind === 'local_environment');
-    expect(unboundRuntimeProviderEntry?.provider_linked_runtime_summary).toBeUndefined();
+    expect(unboundRuntimeProviderEntry?.cloud_linked_runtime_summary).toBeUndefined();
     expect(buildProviderBackedEnvironmentActionModel(unboundRuntimeProviderEntry!)).toMatchObject({
       status_label: 'REMOTE OFFLINE',
       status_tone: 'warning',
@@ -2603,11 +2603,11 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildProviderBackedEnvironmentActionModel(unboundRuntimeLocalEntry!)).toMatchObject({
       action_presentation: {
         menu_actions: expect.arrayContaining([{
-          id: 'connect_provider_runtime',
+          id: 'connect_cloud_runtime',
           label: 'Connect...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           action: {
-            intent: 'connect_provider_runtime',
+            intent: 'connect_cloud_runtime',
             label: 'Connect...',
             label_key: 'environmentAction.connectToProviderEllipsis',
             enabled: true,
@@ -2653,8 +2653,8 @@ describe('buildEnvironmentCardModel', () => {
             runtime_service: providerRuntimeService({ state: 'openable' }, {
               state: 'linked',
               connection_state: 'connected',
-              provider_origin: 'https://redeven.test',
-              provider_id: 'example_control_plane',
+              cloud_origin: 'https://redeven.test',
+              cloud_id: 'example_control_plane',
               env_public_id: 'env_demo',
             }),
           },
@@ -2666,7 +2666,7 @@ describe('buildEnvironmentCardModel', () => {
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const openLocalServeLocalEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'local_environment');
     expect(openLocalServeProviderEntry).toMatchObject({
-      provider_linked_runtime_summary: {
+      cloud_linked_runtime_summary: {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         label: 'Local Environment',
@@ -2688,19 +2688,19 @@ describe('buildEnvironmentCardModel', () => {
         ],
       },
     });
-    const linkedProviderMenuActionIDs = buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)
+    const linkedCloudMenuActionIDs = buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)
       .action_presentation.menu_actions.map((item) => item.id);
     for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {
-      expect(linkedProviderMenuActionIDs).not.toContain(action);
+      expect(linkedCloudMenuActionIDs).not.toContain(action);
     }
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeLocalEntry!)).toMatchObject({
       action_presentation: {
         menu_actions: expect.arrayContaining([{
-          id: 'disconnect_provider_runtime',
+          id: 'disconnect_cloud_runtime',
           label: 'Disconnect legacy control-plane link',
           label_key: 'environmentAction.disconnectLegacyControlPlane',
           action: {
-            intent: 'disconnect_provider_runtime',
+            intent: 'disconnect_cloud_runtime',
             label: 'Disconnect legacy control-plane link',
             label_key: 'environmentAction.disconnectLegacyControlPlane',
             enabled: true,
@@ -2713,8 +2713,8 @@ describe('buildEnvironmentCardModel', () => {
     const localOnlyRuntimeService = providerRuntimeService({ state: 'openable' }, {
       state: 'linked',
       connection_state: 'connected',
-      provider_origin: 'https://redeven.test',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
       remote_enabled: false,
     });
@@ -2770,19 +2770,19 @@ describe('buildEnvironmentCardModel', () => {
         provider_runtime_link_target: expect.objectContaining({ id: 'local:local' }),
       }),
     ]);
-    const localOnlyProviderMenuActionIDs = buildProviderBackedEnvironmentActionModel(localOnlyProviderEntry!)
+    const localOnlyCloudMenuActionIDs = buildProviderBackedEnvironmentActionModel(localOnlyProviderEntry!)
       .action_presentation.menu_actions.map((item) => item.id);
     for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {
-      expect(localOnlyProviderMenuActionIDs).not.toContain(action);
+      expect(localOnlyCloudMenuActionIDs).not.toContain(action);
     }
     expect(buildProviderBackedEnvironmentActionModel(localOnlyEntry!)).toMatchObject({
       action_presentation: {
         menu_actions: expect.arrayContaining([{
-          id: 'disconnect_provider_runtime',
+          id: 'disconnect_cloud_runtime',
           label: 'Disconnect legacy control-plane link',
           label_key: 'environmentAction.disconnectLegacyControlPlane',
           action: {
-            intent: 'disconnect_provider_runtime',
+            intent: 'disconnect_cloud_runtime',
             label: 'Disconnect legacy control-plane link',
             label_key: 'environmentAction.disconnectLegacyControlPlane',
             enabled: true,
@@ -2814,7 +2814,7 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Open',
           enabled: true,
           variant: 'default',
-          route: desktopProviderEnvironmentOpenRoute(),
+          route: desktopCloudEnvironmentOpenRoute(),
         },
         primary_action_overlay: undefined,
         menu_button_label: 'Actions',
@@ -2832,14 +2832,14 @@ describe('buildEnvironmentCardModel', () => {
         ],
       },
     });
-    const readyProviderMenuActionIDs = buildProviderBackedEnvironmentActionModel(readyEntry!)
+    const readyCloudMenuActionIDs = buildProviderBackedEnvironmentActionModel(readyEntry!)
       .action_presentation.menu_actions.map((item) => item.id);
     for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {
-      expect(readyProviderMenuActionIDs).not.toContain(action);
+      expect(readyCloudMenuActionIDs).not.toContain(action);
     }
   });
 
-  it('keeps provider Open isolated from busy runtime provider-link state', () => {
+  it('keeps provider Open isolated from busy runtime cloud-link state', () => {
     const controlPlane = buildControlPlaneSummary({
       status: 'offline',
       lifecycleStatus: 'suspended',
@@ -2874,8 +2874,8 @@ describe('buildEnvironmentCardModel', () => {
       ...providerRuntimeService({ state: 'openable' }, {
         state: 'linked',
         connection_state: 'connected',
-        provider_origin: 'https://other.example.invalid',
-        provider_id: 'other_control_plane',
+        cloud_origin: 'https://other.example.invalid',
+        cloud_id: 'other_control_plane',
         env_public_id: 'other_env',
       }),
       active_workload: {
@@ -2909,17 +2909,17 @@ describe('buildEnvironmentCardModel', () => {
     const busyEntry = busySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const busyLocalEntry = busySnapshot.environments.find((environment) => environment.kind === 'local_environment');
 
-    expect(entry?.provider_linked_runtime_summary).toBeUndefined();
+    expect(entry?.cloud_linked_runtime_summary).toBeUndefined();
     expect(localEntry?.provider_runtime_link_target).toMatchObject({
-      can_connect_provider: true,
+      can_connect_cloud: true,
       runtime_running: true,
     });
-    expect(busyEntry?.provider_linked_runtime_summary).toBeUndefined();
+    expect(busyEntry?.cloud_linked_runtime_summary).toBeUndefined();
     expect(busyLocalEntry?.provider_runtime_link_target).toMatchObject({
-      provider_link_state: 'linked',
-      provider_origin: 'https://other.example.invalid',
-      can_connect_provider: false,
-      can_disconnect_provider: true,
+      cloud_link_state: 'linked',
+      cloud_origin: 'https://other.example.invalid',
+      can_connect_cloud: false,
+      can_disconnect_cloud: true,
     });
     expect(buildProviderBackedEnvironmentActionModel(busyEntry!)).toMatchObject({
       status_label: 'REMOTE OFFLINE',
@@ -2944,14 +2944,14 @@ describe('buildEnvironmentCardModel', () => {
       status: 'online',
       lifecycleStatus: 'active',
     });
-    const remotePreferred = testProviderEnvironment('https://redeven.test', 'env_demo', {
+    const remotePreferred = testCloudEnvironment('https://redeven.test', 'env_demo', {
       preferredOpenRoute: 'remote_desktop',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
         control_planes: [readyControlPlane],
-        provider_environments: [remotePreferred],
+        cloud_environments: [remotePreferred],
       }),
       controlPlanes: [readyControlPlane],
     });
@@ -3023,8 +3023,8 @@ describe('buildEnvironmentCardModel', () => {
             label: 'Request access',
             enabled: true,
             variant: 'outline',
-            provider_origin: 'https://redeven.test',
-            provider_id: 'example_control_plane',
+            cloud_origin: 'https://redeven.test',
+            cloud_id: 'example_control_plane',
           },
         }],
       },
@@ -3038,8 +3038,8 @@ describe('buildEnvironmentCardModel', () => {
       runtime_service: providerRuntimeService({ state: 'openable' }, {
         state: 'linked',
         connection_state: 'connected',
-        provider_origin: 'https://redeven.test',
-        provider_id: 'example_control_plane',
+        cloud_origin: 'https://redeven.test',
+        cloud_id: 'example_control_plane',
         env_public_id: 'env_demo',
       }),
     };
@@ -3109,8 +3109,8 @@ describe('buildEnvironmentCardModel', () => {
         runtime_service: providerRuntimeService({ state: 'openable' }, {
           state: 'linked',
           connection_state: 'connected',
-          provider_origin: 'https://redeven.test',
-          provider_id: 'example_control_plane',
+          cloud_origin: 'https://redeven.test',
+          cloud_id: 'example_control_plane',
           env_public_id: 'env_demo',
         }),
       },

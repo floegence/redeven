@@ -133,8 +133,8 @@
       "english_name": "Simplified Chinese",
       "file": "README.zh-CN.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "a9389aea1852ca7efb9b6e0b7999616434fd9e48cb78104a104a173d1e972481"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "e4e23c35008003cf2dc790116eec473b9073cd2fa0bc72a002216efbfa37e289"
       }
     },
     {
@@ -143,8 +143,8 @@
       "english_name": "Traditional Chinese",
       "file": "README.zh-TW.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "e65a6517c72a1ea88249051bc229c694f66f5581385064426b1a99d6a7c6908f"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "8a8ea84ab680bbe15dc134ccb31149c128debdb63591cc303aa1bc8bacc1efec"
       }
     },
     {
@@ -153,8 +153,8 @@
       "english_name": "Japanese",
       "file": "README.ja-JP.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "55f10c21788d0a5526efdfb659edfc7e7ac6657c9ccda7c203c4bb7919a62ab5"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "13372e4d4b2d119f56e7dc32678aa3368bd0bd87c3330964319c473857b0d3f7"
       }
     },
     {
@@ -163,8 +163,8 @@
       "english_name": "Korean",
       "file": "README.ko-KR.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "1c853b2d31c720f22b43e3e7c203d1f72cfb694bb3eef0b9454296b370621b29"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "67bf5bc581771ebd2cb0cad1bdce7e9087f88e25dfa8e5d36d5e2f2c5ce51821"
       }
     },
     {
@@ -173,8 +173,8 @@
       "english_name": "German",
       "file": "README.de-DE.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "7b37d050a5c4dda6262df4d366e4783b497c6581d489de4a5a7bf752cda30449"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "cb3383b29afb6d6c8244715f4cc20f7017bdbdb185b2bbd567e7116266db9bcb"
       }
     },
     {
@@ -183,8 +183,8 @@
       "english_name": "French",
       "file": "README.fr-FR.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "c30ad469c1cbd5a94048e34a87bfa79e87f03840da694575bbc6496dc1596349"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "9a94ce4df98d8931ac2c79517e7a877cc0faf0ecfa162ef53bb44867779f0a2e"
       }
     },
     {
@@ -193,8 +193,8 @@
       "english_name": "Spanish",
       "file": "README.es-ES.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "604c20fc6ce28f7cad5c2273e91128403a3be018e4b5ed2c7924881b241bbbb8"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "f998d17bfa4d3d52b1afe5a76dd3430e0e2af75262e555f6f6cb42ce6e783302"
       }
     },
     {
@@ -203,8 +203,8 @@
       "english_name": "Brazilian Portuguese",
       "file": "README.pt-BR.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "6c7568a12cc68ccefcc11d7137c148898436bc3e221596f54b627fa9105185c4"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "f4c3abc76fa9ff0209f4173c3af44a8434b44a5443435ff2d84da0d28495f9fd"
       }
     },
     {
@@ -213,8 +213,8 @@
       "english_name": "Russian",
       "file": "README.ru-RU.md",
       "synchronization": {
-        "source_sha256": "7886ce0567586b81236e84c3f761d7ba29b2b3c3c1089fe4469062900fbd2d2a",
-        "content_sha256": "9ca31e2d15511d9bfc23eb68ed68315635206a217f32cd592c03b6653b4acfb3"
+        "source_sha256": "22f358a4d0e2951f7333f70d16fa1aa22ce50c9b1e10847097713d737c78f5ac",
+        "content_sha256": "426e5b2d81ae414a0d17cdababfd7eaff7d7649c1e75e23aaedaa91fd8b1308f"
       }
     }
   ]

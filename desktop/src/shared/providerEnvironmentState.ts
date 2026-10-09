@@ -1,4 +1,4 @@
-export type DesktopProviderEnvironmentAvailability = 'online' | 'offline' | 'unknown';
+export type DesktopCloudEnvironmentAvailability = 'online' | 'offline' | 'unknown';
 export type DesktopProviderCatalogFreshness = 'fresh' | 'stale' | 'unknown';
 export type DesktopLocalRouteState = 'ready' | 'opening' | 'open' | 'unavailable';
 export type DesktopControlPlaneSyncState =
@@ -37,7 +37,7 @@ export type DesktopProviderRemoteRouteStateOptions = Readonly<{
   staleAfterMS?: number;
 }>;
 
-type DesktopProviderEnvironmentRuntimeLike = Readonly<{
+type DesktopCloudEnvironmentRuntimeLike = Readonly<{
   runtime_health?: Readonly<{
     runtime_status?: string | null;
   }> | null;
@@ -58,11 +58,11 @@ function normalizeUnixMS(value: unknown): number {
   return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : 0;
 }
 
-export function desktopProviderEnvironmentAvailability(
+export function desktopCloudEnvironmentAvailability(
   runtimeStatus: string | null | undefined,
   status: string | null | undefined,
   lifecycleStatus: string | null | undefined,
-): DesktopProviderEnvironmentAvailability {
+): DesktopCloudEnvironmentAvailability {
   const cleanRuntimeStatus = normalizedRuntimeState(runtimeStatus);
   const cleanStatus = normalizedRuntimeState(status);
   const cleanLifecycleStatus = normalizedRuntimeState(lifecycleStatus);
@@ -97,10 +97,10 @@ export function desktopProviderEnvironmentAvailability(
 }
 
 export function desktopProviderOnlineEnvironmentCount(
-  environments: readonly DesktopProviderEnvironmentRuntimeLike[],
+  environments: readonly DesktopCloudEnvironmentRuntimeLike[],
 ): number {
   return environments.filter((environment) => (
-    desktopProviderEnvironmentAvailability(
+    desktopCloudEnvironmentAvailability(
       environment.runtime_health?.runtime_status,
       environment.status,
       environment.lifecycle_status,
@@ -146,7 +146,7 @@ export function desktopProviderRemoteRouteState(
     return freshness === 'stale' ? 'stale' : 'removed';
   }
 
-  const availability = desktopProviderEnvironmentAvailability(
+  const availability = desktopCloudEnvironmentAvailability(
     options.providerRuntimeStatus,
     options.providerStatus,
     options.providerLifecycleStatus,
@@ -163,7 +163,7 @@ export function desktopProviderRemoteRouteState(
   return 'unknown';
 }
 
-export function desktopProviderEnvironmentRuntimeLabel(
+export function desktopCloudEnvironmentRuntimeLabel(
   status: string | null | undefined,
   lifecycleStatus: string | null | undefined,
 ): string {

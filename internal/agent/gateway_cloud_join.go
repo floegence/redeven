@@ -13,15 +13,15 @@ import (
 // advanceGatewayPublication follows the sole locally approved membership. It
 // has no separate invitation or local consent entry point for Cloud access.
 func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
-	a.providerLinkMu.Lock()
-	defer a.providerLinkMu.Unlock()
+	a.cloudLinkMu.Lock()
+	defer a.cloudLinkMu.Unlock()
 	a.gatewayRecoveryMu.Lock()
 	restart := false
 	defer func() {
 		a.gatewayRecoveryMu.Unlock()
 		if restart {
 			if a.code != nil {
-				_ = a.code.SetControlplaneBaseURL(a.remoteConfigSnapshot().ControlplaneBaseURL)
+				_ = a.code.SetAccessPointOrigin(a.remoteConfigSnapshot().AccessPointOrigin)
 			}
 			a.startOrRestartControlChannel()
 		}

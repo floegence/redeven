@@ -10,8 +10,8 @@ import (
 )
 
 type environmentCatalogProviderBinding struct {
-	ProviderOrigin         string `json:"provider_origin"`
-	ProviderID             string `json:"provider_id"`
+	CloudOrigin            string `json:"cloud_origin"`
+	CloudID                string `json:"cloud_id"`
 	EnvPublicID            string `json:"env_public_id"`
 	AccessPointOrigin      string `json:"access_point_origin"`
 	RemoteWebSupported     bool   `json:"remote_web_supported"`
@@ -59,8 +59,8 @@ type environmentCatalogFile struct {
 }
 
 type catalogEnvironmentBinding struct {
-	ProviderOrigin    string
-	ProviderID        string
+	CloudOrigin       string
+	CloudID           string
 	EnvPublicID       string
 	AccessPointOrigin string
 }
@@ -133,27 +133,27 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	providerOrigin := strings.TrimSpace(cfg.ProviderOrigin)
-	accessPointOrigin := strings.TrimSpace(cfg.ControlplaneBaseURL)
+	cloudOrigin := strings.TrimSpace(cfg.CloudOrigin)
+	accessPointOrigin := strings.TrimSpace(cfg.AccessPointOrigin)
 	envID := strings.TrimSpace(cfg.EnvironmentID)
-	if providerOrigin == "" || accessPointOrigin == "" || envID == "" {
+	if cloudOrigin == "" || accessPointOrigin == "" || envID == "" {
 		return nil, nil
 	}
-	normalizedProviderOrigin, err := normalizeControlplaneBaseURL(providerOrigin)
+	normalizedCloudOrigin, err := normalizeAccessPointOrigin(cloudOrigin)
 	if err != nil {
 		return nil, err
 	}
-	normalizedAccessPointOrigin, err := normalizeControlplaneBaseURL(accessPointOrigin)
+	normalizedAccessPointOrigin, err := normalizeAccessPointOrigin(accessPointOrigin)
 	if err != nil {
 		return nil, err
 	}
-	providerID := strings.TrimSpace(cfg.ControlplaneProviderID)
-	if providerID == "" {
+	cloudID := strings.TrimSpace(cfg.CloudID)
+	if cloudID == "" {
 		return nil, nil
 	}
 	return &catalogEnvironmentBinding{
-		ProviderOrigin:    normalizedProviderOrigin,
-		ProviderID:        providerID,
+		CloudOrigin:       normalizedCloudOrigin,
+		CloudID:           cloudID,
 		EnvPublicID:       envID,
 		AccessPointOrigin: normalizedAccessPointOrigin,
 	}, nil
@@ -210,8 +210,8 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, access *Envi
 
 	if binding != nil {
 		record.CurrentProviderBinding = &environmentCatalogProviderBinding{
-			ProviderOrigin:         binding.ProviderOrigin,
-			ProviderID:             binding.ProviderID,
+			CloudOrigin:            binding.CloudOrigin,
+			CloudID:                binding.CloudID,
 			EnvPublicID:            binding.EnvPublicID,
 			AccessPointOrigin:      binding.AccessPointOrigin,
 			RemoteWebSupported:     true,

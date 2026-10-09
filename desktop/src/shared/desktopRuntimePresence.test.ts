@@ -71,7 +71,7 @@ describe('desktopRuntimePresence', () => {
       method: 'ssh_host',
     });
     expectLifecyclePlansProjected(plans);
-    expect(plans.connect_provider).toMatchObject({
+    expect(plans.connect_cloud).toMatchObject({
       availability: 'blocked',
       reason_code: 'runtime_control_missing',
     });
@@ -465,7 +465,7 @@ describe('desktopRuntimePresence', () => {
       method: 'local_container_exec',
       reason_code: 'runtime_already_running',
     });
-    expect(plans.connect_provider).toMatchObject({
+    expect(plans.connect_cloud).toMatchObject({
       availability: 'blocked',
       reason_code: 'runtime_control_missing',
       message: 'Open this runtime to prepare the Desktop bridge and provider connection.',

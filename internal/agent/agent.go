@@ -233,7 +233,7 @@ type Options struct {
 	// redacted Flowersec diagnostic and the retry delay.
 	OnControlRetry func(flowersec.ConnectionDiagnostic, time.Duration)
 	// OnControlFailed reports terminal recovery guidance without changing local availability.
-	OnControlFailed func(runtimeservice.ProviderLinkBinding)
+	OnControlFailed func(runtimeservice.CloudLinkBinding)
 	// OnControlDisabled is called when the runtime starts without a control channel.
 	OnControlDisabled func()
 
@@ -282,7 +282,7 @@ type Agent struct {
 	maintenanceState       maintenanceSnapshotStore
 	maintenanceMarkerStore *runtimeMaintenanceMarkerStore
 
-	providerLinkMu  sync.Mutex
+	cloudLinkMu     sync.Mutex
 	mu              sync.Mutex
 	spendLedgerMu   sync.Mutex
 	sessions        map[string]*activeSession // channel_id -> session
@@ -302,7 +302,7 @@ type Agent struct {
 	onControlConnected            func()
 	onControlConnecting           func()
 	onControlRetry                func(flowersec.ConnectionDiagnostic, time.Duration)
-	onControlFailed               func(runtimeservice.ProviderLinkBinding)
+	onControlFailed               func(runtimeservice.CloudLinkBinding)
 	onControlDisabled             func()
 	runCtx                        context.Context
 	controlCancel                 context.CancelFunc
@@ -506,7 +506,7 @@ func New(opts Options) (*Agent, error) {
 		PermissionPolicy:       opts.Config.PermissionPolicy,
 		ReDevPluginRuntimePath: redevpluginRuntimePath,
 		RedevenVersion:         opts.Version,
-		ControlplaneBaseURL:    strings.TrimSpace(opts.Config.ControlplaneBaseURL),
+		AccessPointOrigin:      strings.TrimSpace(opts.Config.AccessPointOrigin),
 		CodeServerPortMin:      opts.Config.CodeServerPortMin,
 		CodeServerPortMax:      opts.Config.CodeServerPortMax,
 		AgentHomeDir:           agentHomeAbs,
@@ -603,7 +603,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		"commit", a.commit,
 		"build_time", a.buildTime,
 		"environment_id", a.cfg.EnvironmentID,
-		"controlplane", a.cfg.ControlplaneBaseURL,
+		"controlplane", a.cfg.AccessPointOrigin,
 		"agent_home_abs", a.agentHomeAbs,
 		"filesystem_roots", summarizeFilesystemRoots(a.filesystemScope),
 		"goos", runtime.GOOS,
@@ -755,7 +755,7 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		Connector: flowersec.ConnectorOptions{
 			HTTPSProxy: proxy,
 			// Nil selects platform trust, including macOS Keychain roots.
-			Origin:         strings.TrimSuffix(cfg.ControlplaneBaseURL, "/"),
+			Origin:         strings.TrimSuffix(cfg.AccessPointOrigin, "/"),
 			ConnectTimeout: 15 * time.Second,
 			RPCHandlers:    handlers,
 		},
@@ -798,7 +798,7 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 				a.mu.Unlock()
 				a.log.Error("control channel failed", "diagnostic", controllerErr.Diagnostic())
 				if a.onControlFailed != nil {
-					a.onControlFailed(a.ProviderLinkBinding())
+					a.onControlFailed(a.CloudLinkBinding())
 				}
 			}
 			break
@@ -1066,8 +1066,8 @@ func sendRuntimeDisconnectWithCaller(ctx context.Context, caller rpcutil.Caller,
 	}
 	resp, err := rpcutil.CallJSON[runtimeDisconnectReq, runtimeDisconnectResp](ctx, caller, controlRPCTypeRuntimeDisconnect, &runtimeDisconnectReq{
 		EnvPublicID:              snapshot.EnvPublicID,
-		ProviderOrigin:           snapshot.ProviderOrigin,
-		ProviderID:               snapshot.ProviderID,
+		CloudOrigin:              snapshot.CloudOrigin,
+		CloudID:                  snapshot.CloudID,
 		AccessPointOrigin:        snapshot.AccessPointOrigin,
 		LocalEnvironmentPublicID: snapshot.LocalEnvironmentPublicID,
 		BindingGeneration:        snapshot.BindingGeneration,
@@ -1411,7 +1411,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 	connectorOptions := flowersec.ConnectorOptions{
 		HTTPSProxy: proxy,
 		// Do not enumerate platform roots: macOS verifies them natively.
-		Origin:         strings.TrimSuffix(cfg.ControlplaneBaseURL, "/"),
+		Origin:         strings.TrimSuffix(cfg.AccessPointOrigin, "/"),
 		ConnectTimeout: 15 * time.Second,
 		RPCHandlers:    flowersec.NewRPCHandlers(),
 	}
@@ -2023,8 +2023,8 @@ type heartbeatResp struct {
 
 type runtimeDisconnectReq struct {
 	EnvPublicID              string `json:"env_public_id,omitempty"`
-	ProviderOrigin           string `json:"provider_origin"`
-	ProviderID               string `json:"provider_id"`
+	CloudOrigin              string `json:"cloud_origin"`
+	CloudID                  string `json:"cloud_id"`
 	AccessPointOrigin        string `json:"access_point_origin"`
 	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
 	BindingGeneration        int64  `json:"binding_generation"`

@@ -3,7 +3,7 @@ import {
   type DesktopEnvironmentSource,
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
-import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/cloud';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -24,12 +24,12 @@ export function providerEnvironmentSource(
     return {
       kind: 'provider',
       source_id: desktopControlPlaneKey(
-        controlPlane.provider.provider_origin,
-        controlPlane.provider.provider_id,
+        controlPlane.cloud.cloud_origin,
+        controlPlane.cloud.cloud_id,
       ),
       label: compact(controlPlane.display_label)
-        || compact(controlPlane.provider.display_name)
-        || controlPlane.provider.provider_origin,
+        || compact(controlPlane.cloud.display_name)
+        || controlPlane.cloud.cloud_origin,
     };
   } catch {
     return null;

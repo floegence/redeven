@@ -15,8 +15,8 @@ function fixture() {
   const recovery = { settled: vi.fn(async () => undefined), forget: vi.fn() };
   const release = vi.fn(async () => undefined);
   const manage = vi.fn(async () => ({ joined: false, phase: 'not_joined' }));
-  const context = { explicitProviderLinkTargets: targets, providerLinkIntentVersions: versions, providerCredentialRecovery: recovery,
-    resolveProviderRuntimeLinkTarget: vi.fn(async () => ({ record: { startup: { runtime_control: { token: 'private' } } }, bridge_lease: { release } })),
+  const context = { explicitCloudLinkTargets: targets, cloudLinkIntentVersions: versions, cloudCredentialRecovery: recovery,
+    resolveCloudRuntimeLinkTarget: vi.fn(async () => ({ record: { startup: { runtime_control: { token: 'private' } } }, bridge_lease: { release } })),
     loadDesktopPreferencesCached: vi.fn(async () => ({})), manageRuntimeGateway: manage, providerRuntimeTargetIsCurrent: () => true,
     launcherActionSuccess: (outcome: string) => ({ ok: true, outcome }), launcherActionFailure: () => ({ ok: false }) };
   const script = ts.transpileModule(declaration.getText(source), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;

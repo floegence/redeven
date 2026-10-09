@@ -37,11 +37,12 @@ func loadConfig(path string, persistence configPersistence) (*Config, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	if cfg.gatewayConfigMigrated {
+	if cfg.gatewayConfigMigrated || cfg.cloudConfigMigrated {
 		if err := persistence.writeConfig(path, &cfg); err != nil {
-			return nil, fmt.Errorf("persist Gateway configuration migration: %w", err)
+			return nil, fmt.Errorf("persist configuration migration: %w", err)
 		}
 		cfg.gatewayConfigMigrated = false
+		cfg.cloudConfigMigrated = false
 	}
 	return &cfg, nil
 }

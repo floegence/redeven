@@ -1,7 +1,7 @@
 import type { LocalUIProtocol } from './settingsIPC';
 import { DEFAULT_DESKTOP_LOCAL_UI_BIND } from './desktopAccessModel';
-import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
-import type { DesktopProviderEnvironmentRecord } from './desktopProviderEnvironment';
+import { normalizeControlPlaneOrigin } from './cloud';
+import type { DesktopCloudEnvironmentRecord } from './desktopCloudEnvironment';
 import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopRuntimeControlEndpoint } from './runtimeControl';
 import type { LocalUIExposure } from './localUIExposure';
@@ -20,9 +20,9 @@ export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   local_ui_urls?: readonly string[];
   effective_run_mode: string;
   remote_enabled: boolean;
-  controlplane_base_url?: string;
-  provider_origin?: string;
-  controlplane_provider_id?: string;
+  access_point_origin?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   env_public_id?: string;
   password_required: boolean;
   exposure?: LocalUIExposure;
@@ -40,8 +40,8 @@ export type DesktopLocalEnvironmentHosting = Readonly<{
 }>;
 
 export type DesktopLocalEnvironmentProviderBinding = Readonly<{
-  provider_origin: string;
-  provider_id: string;
+  cloud_origin: string;
+  cloud_id: string;
   env_public_id: string;
   access_point_origin: string;
   remote_web_supported: boolean;
@@ -58,7 +58,7 @@ export type DesktopLocalEnvironmentState = Readonly<{
   last_used_at_ms: number;
   preferred_open_route: DesktopLocalEnvironmentPreferredOpenRoute;
   local_hosting: DesktopLocalEnvironmentHosting;
-  current_provider_binding?: DesktopLocalEnvironmentProviderBinding;
+  current_cloud_binding?: DesktopLocalEnvironmentProviderBinding;
 }>;
 
 export const LOCAL_ENVIRONMENT_ID = 'local';
@@ -74,7 +74,7 @@ function sanitizeIDFragment(value: string): string {
     .replace(/^[-.]+|[-.]+$/g, '');
 }
 
-export function normalizeDesktopProviderEnvironmentID(value: unknown): string {
+export function normalizeDesktopCloudEnvironmentID(value: unknown): string {
   const normalized = sanitizeIDFragment(compact(value));
   if (normalized === '') {
     throw new Error('Environment ID is required.');
@@ -90,9 +90,9 @@ export function normalizeDesktopProviderKey(value: unknown): string {
   return normalized;
 }
 
-export function desktopProviderEnvironmentStateID(providerOrigin: string, envPublicID: string): string {
-  const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
-  const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
+export function desktopCloudEnvironmentStateID(cloudOrigin: string, envPublicID: string): string {
+  const normalizedOrigin = normalizeControlPlaneOrigin(cloudOrigin);
+  const normalizedEnvPublicID = normalizeDesktopCloudEnvironmentID(envPublicID);
   return `provider:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
 }
 
@@ -123,9 +123,9 @@ function normalizeRuntimeState(
     local_ui_urls: value.local_ui_urls?.map(compact).filter(Boolean),
     effective_run_mode: compact(value.effective_run_mode),
     remote_enabled: value.remote_enabled === true,
-    controlplane_base_url: compact(value.controlplane_base_url) || undefined,
-    provider_origin: compact(value.provider_origin) || undefined,
-    controlplane_provider_id: compact(value.controlplane_provider_id) || undefined,
+    access_point_origin: compact(value.access_point_origin) || undefined,
+    cloud_origin: compact(value.cloud_origin) || undefined,
+    cloud_id: compact(value.cloud_id) || undefined,
     env_public_id: compact(value.env_public_id) || undefined,
     password_required: value.password_required === true,
     exposure: value.exposure,
@@ -157,27 +157,27 @@ export function createDesktopLocalEnvironmentHosting(
 }
 
 type CreateDesktopLocalProviderBindingOptions = Readonly<{
-  providerID: string;
+  cloudID: string;
   accessPointOrigin: string;
   remoteWebSupported?: boolean;
   remoteDesktopSupported?: boolean;
 }>;
 
 export function createDesktopLocalProviderBinding(
-  providerOrigin: string,
+  cloudOrigin: string,
   envPublicID: string,
   options: CreateDesktopLocalProviderBindingOptions,
 ): DesktopLocalEnvironmentProviderBinding {
-  const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
+  const normalizedOrigin = normalizeControlPlaneOrigin(cloudOrigin);
   const accessPointOrigin = normalizeControlPlaneOrigin(options.accessPointOrigin);
-  const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
-  const providerID = compact(options.providerID);
-  if (providerID === '') {
+  const normalizedEnvPublicID = normalizeDesktopCloudEnvironmentID(envPublicID);
+  const cloudID = compact(options.cloudID);
+  if (cloudID === '') {
     throw new Error('Provider ID is required.');
   }
   return {
-    provider_origin: normalizedOrigin,
-    provider_id: providerID,
+    cloud_origin: normalizedOrigin,
+    cloud_id: cloudID,
     env_public_id: normalizedEnvPublicID,
     access_point_origin: accessPointOrigin,
     remote_web_supported: options.remoteWebSupported !== false,
@@ -222,19 +222,19 @@ export function createDesktopLocalEnvironmentState(
       stateDir: options.stateDir,
       currentRuntime: options.currentRuntime,
     }),
-    ...(options.currentProviderBinding ? { current_provider_binding: options.currentProviderBinding } : {}),
+    ...(options.currentProviderBinding ? { current_cloud_binding: options.currentProviderBinding } : {}),
   };
 }
 
-export function projectProviderEnvironmentToLocalRuntimeTarget(
-  providerEnvironment: DesktopProviderEnvironmentRecord,
+export function projectCloudEnvironmentToLocalRuntimeTarget(
+  providerEnvironment: DesktopCloudEnvironmentRecord,
   localEnvironment: DesktopLocalEnvironmentState,
 ): DesktopLocalEnvironmentState {
   const currentProviderBinding = createDesktopLocalProviderBinding(
-    providerEnvironment.provider_origin,
+    providerEnvironment.cloud_origin,
     providerEnvironment.env_public_id,
     {
-      providerID: providerEnvironment.provider_id,
+      cloudID: providerEnvironment.cloud_id,
       accessPointOrigin: providerEnvironment.access_point_origin,
       remoteWebSupported: providerEnvironment.remote_web_supported,
       remoteDesktopSupported: providerEnvironment.remote_desktop_supported,
@@ -260,15 +260,15 @@ export function localEnvironmentSupportsLocalHosting(_environment: DesktopLocalE
 }
 
 export function localEnvironmentSupportsRemoteDesktop(environment: DesktopLocalEnvironmentState): boolean {
-  return environment.current_provider_binding?.remote_desktop_supported === true;
+  return environment.current_cloud_binding?.remote_desktop_supported === true;
 }
 
 export function localEnvironmentSupportsRemoteWeb(environment: DesktopLocalEnvironmentState): boolean {
-  return environment.current_provider_binding?.remote_web_supported === true;
+  return environment.current_cloud_binding?.remote_web_supported === true;
 }
 
 export function localEnvironmentStateKind(environment: DesktopLocalEnvironmentState): 'local' | 'controlplane' {
-  return environment.current_provider_binding ? 'controlplane' : 'local';
+  return environment.current_cloud_binding ? 'controlplane' : 'local';
 }
 
 export function isDefaultDesktopLocalEnvironmentState(environment: DesktopLocalEnvironmentState | null | undefined): boolean {
@@ -283,16 +283,16 @@ export function localEnvironmentStateDir(environment: DesktopLocalEnvironmentSta
   return environment.local_hosting.state_dir;
 }
 
-export function localEnvironmentProviderOrigin(environment: DesktopLocalEnvironmentState): string {
-  return environment.current_provider_binding?.provider_origin ?? '';
+export function localEnvironmentCloudOrigin(environment: DesktopLocalEnvironmentState): string {
+  return environment.current_cloud_binding?.cloud_origin ?? '';
 }
 
-export function localEnvironmentProviderID(environment: DesktopLocalEnvironmentState): string {
-  return environment.current_provider_binding?.provider_id ?? '';
+export function localEnvironmentCloudID(environment: DesktopLocalEnvironmentState): string {
+  return environment.current_cloud_binding?.cloud_id ?? '';
 }
 
 export function localEnvironmentPublicID(environment: DesktopLocalEnvironmentState): string {
-  return environment.current_provider_binding?.env_public_id ?? '';
+  return environment.current_cloud_binding?.env_public_id ?? '';
 }
 
 export function localEnvironmentDefaultOpenRoute(

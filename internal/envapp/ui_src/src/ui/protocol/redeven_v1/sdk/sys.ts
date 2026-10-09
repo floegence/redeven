@@ -79,7 +79,7 @@ export type RuntimeServiceBinding = {
   lastError?: string;
 };
 
-export type RuntimeServiceProviderLinkState =
+export type RuntimeServiceCloudLinkState =
   | 'unbound'
   | 'linking'
   | 'linked'
@@ -87,9 +87,9 @@ export type RuntimeServiceProviderLinkState =
   | 'unsupported'
   | 'error';
 
-export type RuntimeServiceProviderLinkBinding = {
-  state: RuntimeServiceProviderLinkState;
-  providerOrigin?: string;
+export type RuntimeServiceCloudLinkBinding = {
+  state: RuntimeServiceCloudLinkState;
+  cloudOrigin?: string;
   providerId?: string;
   envPublicId?: string;
   accessPointOrigin?: string;
@@ -120,12 +120,12 @@ export type RuntimeServiceSnapshot = {
   activeWorkload: RuntimeServiceWorkload;
   capabilities?: {
     desktopModelSource: RuntimeServiceCapability;
-    providerLink: RuntimeServiceCapability;
+    cloudLink: RuntimeServiceCapability;
     runtimeGateway?: RuntimeServiceCapability;
   };
   bindings?: {
     desktopModelSource: RuntimeServiceBinding;
-    providerLink: RuntimeServiceProviderLinkBinding;
+    cloudLink: RuntimeServiceCloudLinkBinding;
   };
 };
 

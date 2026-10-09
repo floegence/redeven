@@ -28,23 +28,23 @@ func parseControlplaneBase(raw string) (controlplaneOrigin, error) {
 	}
 	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
 	if scheme != "http" && scheme != "https" {
-		return controlplaneOrigin{}, fmt.Errorf("unsupported ControlplaneBaseURL scheme: %q", u.Scheme)
+		return controlplaneOrigin{}, fmt.Errorf("unsupported AccessPointOrigin scheme: %q", u.Scheme)
 	}
 
 	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
 	if host == "" {
-		return controlplaneOrigin{}, errors.New("invalid ControlplaneBaseURL host")
+		return controlplaneOrigin{}, errors.New("invalid AccessPointOrigin host")
 	}
 
 	labels := strings.Split(host, ".")
 	if len(labels) < 3 {
-		return controlplaneOrigin{}, errors.New("invalid ControlplaneBaseURL host: expected <region>.<base-domain>")
+		return controlplaneOrigin{}, errors.New("invalid AccessPointOrigin host: expected <region>.<base-domain>")
 	}
 
 	region := strings.TrimSpace(labels[0])
 	baseDomain := strings.Join(labels[1:], ".")
 	if region == "" || baseDomain == "" {
-		return controlplaneOrigin{}, errors.New("invalid ControlplaneBaseURL host")
+		return controlplaneOrigin{}, errors.New("invalid AccessPointOrigin host")
 	}
 
 	return controlplaneOrigin{

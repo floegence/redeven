@@ -157,10 +157,10 @@ func TestRichRuntimeOverviewAndSessionsPanel(t *testing.T) {
 				ActiveTasks:         3,
 				PortForwardSessions: 1,
 			},
-			ProviderLink: RuntimeProviderLink{
-				State:          "linked",
-				ProviderID:     "provider_demo",
-				ProviderOrigin: "https://redeven.test",
+			CloudLink: RuntimeCloudLink{
+				State:       "linked",
+				CloudID:     "provider_demo",
+				CloudOrigin: "https://redeven.test",
 			},
 		},
 		sessions: []RuntimeSession{

@@ -2,7 +2,7 @@ import { Show, createMemo, createSignal, createUniqueId } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { Activity, AlertTriangle, CheckCircle, Clock, Cloud, Grid, Link, Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import type { DesktopControlPlaneSummary } from '../shared/cloud';
 import type { DesktopI18n } from '../shared/i18n';
 import { DesktopActionPopover } from './DesktopActionPopover';
 import type { EnvironmentCloudSection } from './environmentLibraryProjection';
@@ -28,9 +28,9 @@ export function CloudAccountOverview(props: Readonly<{
   const onlineCount = createMemo(() => props.section.groups.filter(group => (
     (group.provider_entry ?? group.primary_entry).runtime_health.status === 'online'
   )).length);
-  const reconnectBusy = () => busyStateMatchesControlPlane(props.busyState, source().provider.provider_origin, source().provider.provider_id, ['start_control_plane_connect']);
-  const refreshBusy = () => busyStateMatchesControlPlane(props.busyState, source().provider.provider_origin, source().provider.provider_id, ['refresh_control_plane']);
-  const signOutBusy = () => busyStateMatchesControlPlane(props.busyState, source().provider.provider_origin, source().provider.provider_id, ['sign_out_control_plane']);
+  const reconnectBusy = () => busyStateMatchesControlPlane(props.busyState, source().cloud.cloud_origin, source().cloud.cloud_id, ['start_control_plane_connect']);
+  const refreshBusy = () => busyStateMatchesControlPlane(props.busyState, source().cloud.cloud_origin, source().cloud.cloud_id, ['refresh_control_plane']);
+  const signOutBusy = () => busyStateMatchesControlPlane(props.busyState, source().cloud.cloud_origin, source().cloud.cloud_id, ['sign_out_control_plane']);
   const syncTime = () => props.i18n.t('environmentCenter.providerSynced', { time: props.lastSyncedLabel });
 
   return (
@@ -40,11 +40,11 @@ export function CloudAccountOverview(props: Readonly<{
           <span class="redeven-cloud-account-mark" aria-hidden="true"><Cloud /></span>
           <div class="min-w-0">
             <h2 id={headingID} class="redeven-cloud-account-name" title={accountName()}>{accountName()}</h2>
-            <div class="redeven-cloud-account-address" title={`${sourceName()} · ${source().provider.provider_origin}`}>
+            <div class="redeven-cloud-account-address" title={`${sourceName()} · ${source().cloud.cloud_origin}`}>
               <Show when={sourceName() !== 'Redeven Cloud' && sourceName() !== accountName()}>
                 <span>{sourceName()}</span><span aria-hidden="true">·</span>
               </Show>
-              <span>{new URL(source().provider.provider_origin).host}</span>
+              <span>{new URL(source().cloud.cloud_origin).host}</span>
             </div>
           </div>
         </div>
@@ -103,7 +103,7 @@ export function CloudAccountOverview(props: Readonly<{
               <div class="space-y-3 p-4">
                 <h3 class="text-sm font-semibold">{props.i18n.t('environmentCenter.cloudSyncDetails')}</h3>
                 <p class="text-xs text-muted-foreground">{props.i18n.t(status().detail_key)}</p>
-                <p class="break-all font-mono text-xs">{source().provider.provider_origin}</p>
+                <p class="break-all font-mono text-xs">{source().cloud.cloud_origin}</p>
                 <Show when={source().last_sync_error_message && status().tone === 'warning'}>
                   <div class="rounded-md border border-border bg-muted/30 p-3">
                     <p class="mb-1 text-xs font-medium">{props.i18n.t('environmentCenter.cloudTechnicalDetails')}</p>

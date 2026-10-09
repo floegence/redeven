@@ -5,14 +5,14 @@ import {
   desktopEntryKindSupportsDirectRuntimeOperations,
   desktopEnvironmentManagementSurface,
   desktopProviderCardAllowsAction,
-  desktopProviderEnvironmentOpenRoute,
-  normalizeDesktopProviderRuntimeLinkRequestTarget,
+  desktopCloudEnvironmentOpenRoute,
+  normalizeDesktopCloudRuntimeLinkRequestTarget,
 } from './environmentManagementPrinciples';
 
 describe('environmentManagementPrinciples', () => {
   it('keeps Provider cards access-only and outside direct Runtime operations', () => {
     expect(desktopEnvironmentManagementSurface('provider_environment')).toBe('provider_card');
-    expect(desktopProviderEnvironmentOpenRoute()).toBe('remote_desktop');
+    expect(desktopCloudEnvironmentOpenRoute()).toBe('remote_desktop');
     expect(desktopEntryKindSupportsDirectRuntimeOperations('provider_environment')).toBe(false);
 
     for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {
@@ -34,30 +34,30 @@ describe('environmentManagementPrinciples', () => {
   });
 
   it('requires an exact selected Local or SSH runtime target for provider links', () => {
-    expect(normalizeDesktopProviderRuntimeLinkRequestTarget({
+    expect(normalizeDesktopCloudRuntimeLinkRequestTarget({
       provider_environment_id: ' provider-env ',
       runtime_target_id: ' ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default ',
     })).toEqual({
       provider_environment_id: 'provider-env',
       runtime_target_id: 'ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default',
     });
-    expect(normalizeDesktopProviderRuntimeLinkRequestTarget({
+    expect(normalizeDesktopCloudRuntimeLinkRequestTarget({
       provider_environment_id: 'provider-env',
       runtime_target_id: 'local:local',
     })).toEqual({
       provider_environment_id: 'provider-env',
       runtime_target_id: 'local:local',
     });
-    expect(normalizeDesktopProviderRuntimeLinkRequestTarget({
+    expect(normalizeDesktopCloudRuntimeLinkRequestTarget({
       runtime_target_id: 'local:local',
     })).toEqual({
       runtime_target_id: 'local:local',
     });
-    expect(normalizeDesktopProviderRuntimeLinkRequestTarget({
+    expect(normalizeDesktopCloudRuntimeLinkRequestTarget({
       provider_environment_id: 'provider-env',
       runtime_target_id: 'provider-env',
     })).toBeNull();
-    expect(normalizeDesktopProviderRuntimeLinkRequestTarget({
+    expect(normalizeDesktopCloudRuntimeLinkRequestTarget({
       provider_environment_id: 'provider-env',
     })).toBeNull();
   });

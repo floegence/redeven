@@ -112,13 +112,13 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 
 	if cfg != nil {
 		target.Status = TargetStatusConfigured
-		target.ControlplaneBaseURL = strings.TrimSpace(cfg.ControlplaneBaseURL)
-		target.ControlplaneProvider = strings.TrimSpace(cfg.ControlplaneProviderID)
+		target.AccessPointOrigin = strings.TrimSpace(cfg.AccessPointOrigin)
+		target.ControlplaneProvider = strings.TrimSpace(cfg.CloudID)
 		target.EnvPublicID = strings.TrimSpace(cfg.EnvironmentID)
 		target.LocalEnvironmentID = strings.TrimSpace(cfg.LocalEnvironmentPublicID)
 		target.AgentHomeDir = strings.TrimSpace(cfg.AgentHomeDir)
 		target.Shell = strings.TrimSpace(cfg.Shell)
-		if target.EnvPublicID != "" && target.ControlplaneBaseURL != "" {
+		if target.EnvPublicID != "" && target.AccessPointOrigin != "" {
 			target.Capabilities = append(target.Capabilities, CapabilityRemoteControl)
 		}
 	} else {
@@ -132,14 +132,14 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 		target.PasswordRequired = runtimeStatus.Endpoint.PasswordRequired
 		target.EffectiveRunMode = strings.TrimSpace(runtimeStatus.RuntimeService.EffectiveRunMode)
 		target.RemoteEnabled = runtimeStatus.RuntimeService.RemoteEnabled
-		if target.ControlplaneBaseURL == "" {
-			target.ControlplaneBaseURL = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.AccessPointOrigin)
+		if target.AccessPointOrigin == "" {
+			target.AccessPointOrigin = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.CloudLink.AccessPointOrigin)
 		}
 		if target.ControlplaneProvider == "" {
-			target.ControlplaneProvider = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.ProviderID)
+			target.ControlplaneProvider = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.CloudLink.CloudID)
 		}
 		if target.EnvPublicID == "" {
-			target.EnvPublicID = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.EnvPublicID)
+			target.EnvPublicID = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.CloudLink.EnvPublicID)
 		}
 		target.Capabilities = append(target.Capabilities,
 			CapabilityLocalUI,

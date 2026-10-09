@@ -48,8 +48,8 @@ export type DesktopSessionContextSnapshot = Readonly<{
   target_kind?: 'local_environment' | 'wsl_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
   target_route: 'local_host' | 'remote_desktop';
   session_source?: 'local_runtime' | 'provider_environment' | 'wsl_environment' | 'ssh_environment' | 'external_local_ui' | 'runtime_gateway';
-  provider_origin?: string;
-  provider_id?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   env_public_id?: string;
   label?: string;
   local_ui_exposure?: LocalUIExposure;

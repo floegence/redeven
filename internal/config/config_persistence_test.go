@@ -137,8 +137,8 @@ func TestSaveArtifactWriteFailurePreservesPreviousRestartArtifact(t *testing.T) 
 
 func configWithDirectArtifact(artifact json.RawMessage, spent bool) *Config {
 	return &Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
 		EnvironmentID:            "env-1",
 		LocalEnvironmentPublicID: "local-1",
 		BindingGeneration:        1,

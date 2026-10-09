@@ -41,7 +41,7 @@ func TestRemoteEnvSessionProxyUsesBrowserOriginAndTrustedChannel(t *testing.T) {
 	svc, err := codeapp.New(t.Context(), codeapp.Options{
 		Logger: logger, StateDir: filepath.Join(root, "state"), StateRoot: root, AgentHomeDir: root,
 		ConfigPath: filepath.Join(root, "config.json"), Shell: "/bin/sh",
-		ControlplaneBaseURL:    "https://dev.redeven.test:45443",
+		AccessPointOrigin:      "https://dev.redeven.test:45443",
 		PermissionPolicy:       defaultPermissionPolicyForAgentTest(t),
 		ReDevPluginRuntimePath: filepath.Join(root, "redevplugin-runtime"),
 		ResolveSessionMeta:     resolve, ResolvePluginSessionMeta: resolve,

@@ -315,10 +315,10 @@ describe('main routing', () => {
       mainSrc.indexOf('async function handleDesktopDeepLink('),
     );
 
-    expect(start).toContain('requireRedevenCloudOrigin(args.providerOrigin, policy)');
-    expect(start).toContain('requireRedevenCloudOrigin(provider.provider_origin, policy)');
-    expect(save).toContain('requireRedevenCloudOrigin(providerOrigin, policy)');
-    expect(save).toContain('requireRedevenCloudOrigin(provider.provider_origin, policy)');
+    expect(start).toContain('requireRedevenCloudOrigin(args.cloudOrigin, policy)');
+    expect(start).toContain('requireRedevenCloudOrigin(provider.cloud_origin, policy)');
+    expect(save).toContain('requireRedevenCloudOrigin(cloudOrigin, policy)');
+    expect(save).toContain('requireRedevenCloudOrigin(provider.cloud_origin, policy)');
     expect(deepLink).toContain('completeControlPlaneAuthorizationFromDeepLink(request)');
     expect(completeDeepLink).toContain('saveAuthorizedControlPlane(');
   });
@@ -739,8 +739,8 @@ describe('main routing', () => {
     expect(snapshotSrc).not.toContain('probeManagedSSHRuntimeStatus');
     expect(snapshotSrc).not.toContain('loadExternalLocalUIStartup');
     expect(snapshotSrc).not.toContain('inspectSavedRuntimeTargetState');
-    expect(snapshotSrc).not.toContain('queryProviderEnvironmentRuntimeHealth');
-    expect(snapshotSrc).not.toContain('refreshAllProviderEnvironmentRuntimeHealth');
+    expect(snapshotSrc).not.toContain('queryCloudEnvironmentRuntimeHealth');
+    expect(snapshotSrc).not.toContain('refreshAllCloudEnvironmentRuntimeHealth');
   });
 
   it('prefers an existing bridge before reconciling saved runtime target maintenance', () => {
@@ -912,7 +912,7 @@ describe('main routing', () => {
   it('observes runtime liveness without taking bridge lifecycle ownership', () => {
     const mainSrc = readMainSource();
 
-    const providerStart = mainSrc.indexOf('async function resolveProviderRuntimeLinkTarget(');
+    const providerStart = mainSrc.indexOf('async function resolveCloudRuntimeLinkTarget(');
     const providerEnd = mainSrc.indexOf('function updateProviderRuntimeTargetStartup(', providerStart);
     expect(providerStart).toBeGreaterThanOrEqual(0);
     expect(providerEnd).toBeGreaterThan(providerStart);
@@ -1027,7 +1027,7 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('async function ensureRuntimePlacementReadyRecordFromLauncherUncoordinated(');
 
     const bridgeHelperStart = mainSrc.indexOf('async function acquireRuntimePlacementBridgeForReadyRecord(');
-    const bridgeHelperEnd = mainSrc.indexOf('type ProviderRuntimeLinkTargetRecord', bridgeHelperStart);
+    const bridgeHelperEnd = mainSrc.indexOf('type CloudRuntimeLinkTargetRecord', bridgeHelperStart);
     expect(bridgeHelperStart).toBeGreaterThanOrEqual(0);
     expect(bridgeHelperEnd).toBeGreaterThan(bridgeHelperStart);
     const bridgeHelperSrc = mainSrc.slice(bridgeHelperStart, bridgeHelperEnd);
@@ -1149,7 +1149,7 @@ describe('main routing', () => {
     expect(shellActionSrc).toContain("performRuntimeMaintenanceFromShell(event.sender.id, 'restart')");
     expect(shellActionSrc).not.toContain('restartManagedRuntimeFromShell(');
 
-    expect(mainSrc).not.toContain('runProviderEnvironmentLifecycleFromLauncher(');
+    expect(mainSrc).not.toContain('runCloudEnvironmentLifecycleFromLauncher(');
     expect(mainSrc).not.toContain('authorizeProviderRuntimeOperation(');
     expect(mainSrc).not.toContain('upsertDirectRuntimeGateway(');
   });
@@ -1194,7 +1194,7 @@ describe('main routing', () => {
     expect(routeSnapshotEnd).toBeGreaterThan(routeSnapshotStart);
     const routeSnapshotSrc = mainSrc.slice(routeSnapshotStart, routeSnapshotEnd);
     expect(routeSnapshotSrc).toContain(
-      'const summary = controlPlaneSummary(controlPlane, preferences.provider_environments);',
+      'const summary = controlPlaneSummary(controlPlane, preferences.cloud_environments);',
     );
     expect(routeSnapshotSrc).toContain('summary.environments.find');
     expect(routeSnapshotSrc).not.toContain('controlPlane.environments.find');
@@ -1473,7 +1473,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('placement: localHostRuntimeLifecyclePlacement(localEnvironment),');
   });
 
-  it('keeps provider-link tickets separate from remote open route readiness', () => {
+  it('keeps cloud-link tickets separate from remote open route readiness', () => {
     const mainSrc = readMainSource();
 
     const remoteOpenStart = mainSrc.indexOf('async function prepareProviderRemoteOpenSession(');
@@ -1488,14 +1488,14 @@ describe('main routing', () => {
     expect(connectStart).toBeGreaterThanOrEqual(0);
     expect(connectEnd).toBeGreaterThan(connectStart);
     const connectSrc = mainSrc.slice(connectStart, connectEnd);
-    expect(connectSrc).toContain('requestProviderRuntimeLinkAuthorization(');
-    expect(connectSrc).toContain('connectProviderLink(runtimeControl, {');
+    expect(connectSrc).toContain('requestCloudRuntimeLinkAuthorization(');
+    expect(connectSrc).toContain('connectCloudLink(runtimeControl, {');
     expect(connectSrc).toContain('runtime_link_ticket: runtimeLink.runtime_link_ticket');
     expect(connectSrc).not.toContain('requestDesktopOpenSession(');
     expect(connectSrc).not.toContain('bootstrap_ticket');
     expect(connectSrc).not.toContain('prepareProviderRemoteOpenSession');
     expect(connectSrc).not.toContain('launcherActionFailureForRemoteRouteState');
-    expect(connectSrc).not.toContain('openProviderEnvironmentFromLauncher');
+    expect(connectSrc).not.toContain('openCloudEnvironmentFromLauncher');
 
     expect(mainSrc).not.toContain('targetURL: latest.environment.environment_url || material.remoteSessionURL');
 
@@ -1505,21 +1505,21 @@ describe('main routing', () => {
     expect(disconnectEnd).toBeGreaterThan(disconnectStart);
     const disconnectSrc = mainSrc.slice(disconnectStart, disconnectEnd);
     expect(disconnectSrc).toContain(
-      'const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);',
+      'const unlinked = await disconnectCloudLink(runtimeRecord.startup.runtime_control);',
     );
     expect(
-      disconnectSrc.indexOf('const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);'),
+      disconnectSrc.indexOf('const unlinked = await disconnectCloudLink(runtimeRecord.startup.runtime_control);'),
     ).toBeLessThan(disconnectSrc.lastIndexOf('updateProviderRuntimeTargetStartup(runtimeTarget, {'));
     expect(disconnectSrc).toContain(
-      'const currentBinding = runtimeServiceProviderLinkBinding(runtimeRecord?.startup.runtime_service);',
+      'const currentBinding = runtimeServiceCloudLinkBinding(runtimeRecord?.startup.runtime_service);',
     );
     expect(disconnectSrc).toContain("if (currentBinding.state !== 'linked')");
-    expect(disconnectSrc).toContain('await refreshProviderEnvironmentRuntimeHealth(');
-    expect(disconnectSrc.indexOf('await refreshProviderEnvironmentRuntimeHealth(')).toBeLessThan(
+    expect(disconnectSrc).toContain('await refreshCloudEnvironmentRuntimeHealth(');
+    expect(disconnectSrc.indexOf('await refreshCloudEnvironmentRuntimeHealth(')).toBeLessThan(
       disconnectSrc.indexOf("return launcherActionSuccess('disconnected_provider_runtime');"),
     );
 
-    const openStart = mainSrc.indexOf('async function openProviderEnvironmentFromLauncher(');
+    const openStart = mainSrc.indexOf('async function openCloudEnvironmentFromLauncher(');
     const openEnd = mainSrc.indexOf('async function focusEnvironmentWindow(', openStart);
     expect(openStart).toBeGreaterThanOrEqual(0);
     expect(openEnd).toBeGreaterThan(openStart);
@@ -1530,7 +1530,7 @@ describe('main routing', () => {
   it('keeps provider environment open remote-only when Flower is first-class', () => {
     const mainSrc = readMainSource();
 
-    const openStart = mainSrc.indexOf('async function openProviderEnvironmentFromLauncher(');
+    const openStart = mainSrc.indexOf('async function openCloudEnvironmentFromLauncher(');
     const openEnd = mainSrc.indexOf('async function focusEnvironmentWindow(', openStart);
     expect(openStart).toBeGreaterThanOrEqual(0);
     expect(openEnd).toBeGreaterThan(openStart);
@@ -1540,7 +1540,7 @@ describe('main routing', () => {
     expect(openSrc).not.toContain('startDesktopModelSourceForStartup');
     expect(openSrc).not.toContain('runEnvironmentRuntimeLifecycleFromLauncher');
     expect(openSrc).not.toContain('startRuntimePlacementBridgeSession');
-    expect(openSrc).not.toContain('resolveProviderRuntimeLinkTarget');
+    expect(openSrc).not.toContain('resolveCloudRuntimeLinkTarget');
   });
 
   it('routes Welcome Flower through one selected Runtime API without provider-session shortcuts', () => {
@@ -1764,13 +1764,13 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     const helperStart = mainSrc.indexOf('async function syncLinkedProviderRuntimeHealthFromService(');
-    const helperEnd = mainSrc.indexOf('async function refreshAllProviderEnvironmentRuntimeHealth(', helperStart);
+    const helperEnd = mainSrc.indexOf('async function refreshAllCloudEnvironmentRuntimeHealth(', helperStart);
     expect(helperStart).toBeGreaterThanOrEqual(0);
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
     expect(helperSrc).toContain("if (binding.state !== 'linked')");
     expect(helperSrc).toContain(
-      'await refreshProviderEnvironmentRuntimeHealth(providerOrigin, providerID, [envPublicID]);',
+      'await refreshCloudEnvironmentRuntimeHealth(cloudOrigin, cloudID, [envPublicID]);',
     );
 
     const startRuntimeStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
@@ -1827,7 +1827,7 @@ describe('main routing', () => {
     expect(providerBranchSrc).toContain('await syncSavedControlPlaneAccountWithState(');
     expect(providerBranchSrc).toMatch(/\{\s*force: true,?\s*\}/u);
     expect(providerBranchSrc.indexOf('await syncSavedControlPlaneAccountWithState(')).toBeLessThan(
-      providerBranchSrc.indexOf('await refreshProviderEnvironmentRuntimeHealth('),
+      providerBranchSrc.indexOf('await refreshCloudEnvironmentRuntimeHealth('),
     );
   });
 
@@ -1835,7 +1835,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).toContain('IMPORTANT: Provider-link operations must resolve the exact Local/WSL/SSH runtime');
     expect(mainSrc).toContain('IMPORTANT: Provider Environment Open is remote-only provider tunnel access.');
-    expect(mainSrc).toContain('desktopProviderEnvironmentOpenRoute()');
+    expect(mainSrc).toContain('desktopCloudEnvironmentOpenRoute()');
   });
 
   it('settles deleted runtime lifecycle tasks while preventing stale SSH and provider tasks from resurrecting entries', () => {
@@ -1866,10 +1866,10 @@ describe('main routing', () => {
     const providerDeleteSrc = mainSrc.slice(providerDeleteStart, providerCleanupStart);
     expect(providerDeleteSrc).toContain("launcherOperations.markSubjectDeleted(\n    'control_plane'");
     expect(providerDeleteSrc).toContain(
-      'await mutateDesktopPreferences((current) => signOutSavedControlPlane(current, request.provider_origin, request.provider_id));',
+      'await mutateDesktopPreferences((current) => signOutSavedControlPlane(current, request.cloud_origin, request.cloud_id));',
     );
     expect(providerDeleteSrc).toContain(
-      'void cleanupSignedOutControlPlane(controlPlane, refreshToken, providerSessionKeys);',
+      'void cleanupSignedOutControlPlane(controlPlane, refreshToken, cloudSessionKeys);',
     );
     expect(providerDeleteSrc).not.toContain('await revokeProviderDesktopAuthorization');
     expect(providerDeleteSrc).not.toContain('await finalizeSessionClosure(sessionKey)');
@@ -1915,7 +1915,7 @@ describe('main routing', () => {
     expect(mainSrc.slice(prepareStart, prepareEnd)).not.toContain('credentialRecoveryTimer');
     const readySource = mainSrc.slice(readyStart, readyStart + 1_500);
     expect(readySource).toContain('const credentialRecoveryTimer = setInterval(');
-    expect(readySource).toContain('recoverAttachedProviderCredentials()');
+    expect(readySource).toContain('recoverAttachedCloudCredentials()');
     expect(readySource).toContain("app.once('before-quit', () => clearInterval(credentialRecoveryTimer));");
   });
 

@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import {
-  connectProviderLink,
+  connectCloudLink,
   manageRuntimeGateway,
-  getProviderLinkStatus,
+  getCloudLinkStatus,
   RuntimeControlError,
   runtimeControlServiceURL,
   getRuntimeAccessSettings,
@@ -79,7 +79,7 @@ async function startServer(
   return fixture;
 }
 
-function providerLinkResponse(): unknown {
+function cloudLinkResponse(): unknown {
   return {
     ok: true,
     data: {
@@ -88,16 +88,16 @@ function providerLinkResponse(): unknown {
         effective_run_mode: 'local',
         remote_enabled: true,
         capabilities: {
-          provider_link: {
+          cloud_link: {
             supported: true,
             bind_method: 'runtime_control_v1',
           },
         },
         bindings: {
-          provider_link: {
+          cloud_link: {
             state: 'linked',
-            provider_origin: 'https://provider.example.invalid',
-            provider_id: 'provider-1',
+            cloud_origin: 'https://provider.example.invalid',
+            cloud_id: 'provider-1',
             env_public_id: 'env-1',
             binding_generation: 1,
             remote_enabled: true,
@@ -196,53 +196,51 @@ describe('runtimeControlClient', () => {
   it('resolves runtime-control API routes relative to a service root with a path prefix', async () => {
     const server = await startServer((_request, _body, response) => {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify(providerLinkResponse()));
+      response.end(JSON.stringify(cloudLinkResponse()));
     });
 
-    const result = await connectProviderLink(endpoint(`${server.origin}/__redeven_runtime_control/`), {
-      provider_origin: 'https://provider.example.invalid',
-      provider_id: 'provider-1',
+    const result = await connectCloudLink(endpoint(`${server.origin}/__redeven_runtime_control/`), {
+      cloud_origin: 'https://provider.example.invalid',
+      cloud_id: 'provider-1',
       env_public_id: 'env-1',
-      access_point_origin: 'https://dev.provider.example.invalid',
       runtime_link_ticket: 'ticket-1',
     });
 
     expect(result.binding.state).toBe('linked');
-    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v2/provider-link/connect');
+    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v2/cloud-link/connect');
     expect(server.requests[0]?.headers.authorization).toBe('Bearer runtime-control-token');
     expect(JSON.parse(server.bodies[0] ?? '{}')).toMatchObject({
-      provider_id: 'provider-1',
+      cloud_id: 'provider-1',
       env_public_id: 'env-1',
-      access_point_origin: 'https://dev.provider.example.invalid',
     });
   });
 
   it('treats a base URL without trailing slash as the runtime-control service root', async () => {
     const server = await startServer((_request, _body, response) => {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify(providerLinkResponse()));
+      response.end(JSON.stringify(cloudLinkResponse()));
     });
 
-    await getProviderLinkStatus(endpoint(`${server.origin}/__redeven_runtime_control`));
+    await getCloudLinkStatus(endpoint(`${server.origin}/__redeven_runtime_control`));
 
-    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v2/provider-link');
+    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v2/cloud-link');
   });
 
   it('resolves ordinary loopback runtime-control roots without adding a bridge prefix', () => {
     expect(runtimeControlServiceURL(
       endpoint('http://127.0.0.1:43124/'),
-      'v2/provider-link/disconnect',
-    ).toString()).toBe('http://127.0.0.1:43124/v2/provider-link/disconnect');
+      'v2/cloud-link/disconnect',
+    ).toString()).toBe('http://127.0.0.1:43124/v2/cloud-link/disconnect');
   });
 
   it('rejects routes that would escape the runtime-control service root', () => {
     expect(() => runtimeControlServiceURL(
       endpoint('http://127.0.0.1:43124/__redeven_runtime_control/'),
-      '/v2/provider-link' as never,
+      '/v2/cloud-link' as never,
     )).toThrow(RuntimeControlError);
     expect(() => runtimeControlServiceURL(
       endpoint('http://127.0.0.1:43124/__redeven_runtime_control/'),
-      'https://example.invalid/v2/provider-link' as never,
+      'https://example.invalid/v2/cloud-link' as never,
     )).toThrow(RuntimeControlError);
   });
 
@@ -265,7 +263,7 @@ describe('runtimeControlClient', () => {
       response.end('404 page not found\n');
     });
 
-    await expect(getProviderLinkStatus(endpoint(`${server.origin}/__redeven_runtime_control/`)))
+    await expect(getCloudLinkStatus(endpoint(`${server.origin}/__redeven_runtime_control/`)))
       .rejects.toMatchObject({
         code: 'RUNTIME_CONTROL_HTTP_ERROR',
         statusCode: 404,
@@ -279,15 +277,15 @@ describe('runtimeControlClient', () => {
       response.end(JSON.stringify({
         ok: false,
         error: {
-          code: 'PROVIDER_LINK_BUSY',
+          code: 'CLOUD_LINK_BUSY',
           message: 'Runtime has active work.',
         },
       }));
     });
 
-    await expect(getProviderLinkStatus(endpoint(server.origin)))
+    await expect(getCloudLinkStatus(endpoint(server.origin)))
       .rejects.toMatchObject({
-        code: 'PROVIDER_LINK_BUSY',
+        code: 'CLOUD_LINK_BUSY',
         statusCode: 409,
         message: 'Runtime has active work.',
       });
@@ -299,7 +297,7 @@ describe('runtimeControlClient', () => {
       response.end('ok');
     });
 
-    await expect(getProviderLinkStatus(endpoint(server.origin)))
+    await expect(getCloudLinkStatus(endpoint(server.origin)))
       .rejects.toMatchObject({
         code: 'RUNTIME_CONTROL_INVALID_RESPONSE',
         statusCode: 200,

@@ -83,7 +83,7 @@ describe('runtimePlacementBridgeSession', () => {
     expect(events[1]).toMatch(/^data:GET \//u);
   });
 
-  it('routes provider-link runtime-control paths to the runtime-control bridge surface', async () => {
+  it('routes cloud-link runtime-control paths to the runtime-control bridge surface', async () => {
     const events: string[] = [];
     const bridge: RuntimePlacementBridgeSessionHandle = {
       openStream: (surface) => {
@@ -105,7 +105,7 @@ describe('runtimePlacementBridgeSession', () => {
     socket.on('error', () => undefined);
     try {
       await new Promise<void>((resolve) => socket.once('connect', resolve));
-      socket.write('POST /__redeven_runtime_control/v1/provider-link/connect HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n');
+      socket.write('POST /__redeven_runtime_control/v1/cloud-link/connect HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n');
       await waitForEventCount(events, 2);
     } finally {
       socket.destroy();
@@ -113,7 +113,7 @@ describe('runtimePlacementBridgeSession', () => {
     }
 
     expect(events[0]).toBe('open:runtime_control');
-    expect(events[1]).toBe('data:POST /v1/provider-link/connect HTTP/1.1');
+    expect(events[1]).toBe('data:POST /v1/cloud-link/connect HTTP/1.1');
   });
 
   it('rejects Gateway protocol routes on the public Runtime loopback listener', async () => {
@@ -259,7 +259,7 @@ describe('runtimePlacementBridgeSession', () => {
       socket.write('GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n');
       await waitForValue(() => writes.length, (count) => count === 1);
 
-      socket.write('GET /__redeven_runtime_control/v1/provider-link/connect HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n');
+      socket.write('GET /__redeven_runtime_control/v1/cloud-link/connect HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n');
       await waitForValue(() => writes.length, (count) => count === 2);
     } finally {
       socket.destroy();
@@ -269,7 +269,7 @@ describe('runtimePlacementBridgeSession', () => {
     expect(surfaces).toEqual(['local_ui']);
     expect(writes).toEqual([
       'GET / HTTP/1.1',
-      'GET /__redeven_runtime_control/v1/provider-link/connect HTTP/1.1',
+      'GET /__redeven_runtime_control/v1/cloud-link/connect HTTP/1.1',
     ]);
   });
 
@@ -319,7 +319,7 @@ describe('runtimePlacementBridgeSession', () => {
     expect(writes[1]).toEqual(payload);
   });
 
-  it('does not treat unprefixed provider-link paths as runtime-control fallbacks', async () => {
+  it('does not treat unprefixed cloud-link paths as runtime-control fallbacks', async () => {
     const events: string[] = [];
     const bridge: RuntimePlacementBridgeSessionHandle = {
       openStream: (surface) => {
@@ -341,7 +341,7 @@ describe('runtimePlacementBridgeSession', () => {
     socket.on('error', () => undefined);
     try {
       await new Promise<void>((resolve) => socket.once('connect', resolve));
-      socket.write('POST /v1/provider-link/connect HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n');
+      socket.write('POST /v1/cloud-link/connect HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n');
       await waitForEventCount(events, 2);
     } finally {
       socket.destroy();
@@ -349,7 +349,7 @@ describe('runtimePlacementBridgeSession', () => {
     }
 
     expect(events[0]).toBe('open:local_ui');
-    expect(events[1]).toBe('data:POST /v1/provider-link/connect HTTP/1.1');
+    expect(events[1]).toBe('data:POST /v1/cloud-link/connect HTTP/1.1');
   });
 
   it('forwards a fragmented Env App response through the loopback bridge', async () => {

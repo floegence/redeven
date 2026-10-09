@@ -647,7 +647,7 @@ describe('EnvSettingsPage', () => {
     settingsResponse = {
       config_path: '/tmp/config.json',
       connection: {
-        controlplane_base_url: 'https://console.example.com',
+        access_point_origin: 'https://console.example.com',
         environment_id: 'env_current',
         agent_instance_id: 'ai_runtime_123',
         direct: {
@@ -919,7 +919,7 @@ describe('EnvSettingsPage', () => {
     protocolMocks.status.mockReturnValue('connected');
     settingsResponse = {
       config_path: '/tmp/config.json',
-      connection: { controlplane_base_url: '', environment_id: '', agent_instance_id: '', direct: { artifact_provisioned: false, expires_at_unix_s: 0 } },
+      connection: { access_point_origin: '', environment_id: '', agent_instance_id: '', direct: { artifact_provisioned: false, expires_at_unix_s: 0 } },
       runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' },
       logging: { log_format: 'plain', log_level: 'info' },
       codespaces: { code_server_port_min: 0, code_server_port_max: 0 },

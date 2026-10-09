@@ -30,7 +30,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			ReasonCode: "ai_service_unavailable",
 			Message:    "Desktop model source is not available in this runtime service.",
 		},
-		ProviderLink: runtimeservice.Capability{
+		CloudLink: runtimeservice.Capability{
 			Supported:  true,
 			BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 		},
@@ -42,11 +42,11 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	gatewayCloud := a.gatewayPublicationSnapshot()
 	cfg := a.remoteConfigSnapshot()
 	if gatewayCloud != nil || (cfg != nil && (cfg.Gateway != nil || cfg.GatewayRejoinRequired)) {
-		capabilities.ProviderLink = runtimeservice.Capability{ReasonCode: "gateway_managed", Message: "Manage the Gateway connection in Runtime settings and its publication in Redeven Cloud."}
+		capabilities.CloudLink = runtimeservice.Capability{ReasonCode: "gateway_managed", Message: "Manage the Gateway connection in Runtime settings and its publication in Redeven Cloud."}
 	}
 	bindings := runtimeservice.Bindings{
 		DesktopModelSource: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
-		ProviderLink:       a.ProviderLinkBinding(),
+		CloudLink:          a.CloudLinkBinding(),
 	}
 	var aiTaskCount int
 	aiReadiness := runtimeservice.AIReadiness{State: "unavailable"}

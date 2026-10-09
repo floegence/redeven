@@ -5,8 +5,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  normalizeDesktopControlPlaneProvider,
-} from '../shared/controlPlaneProvider';
+  normalizeDesktopCloud,
+} from '../shared/cloud';
 import { REDEVEN_CLOUD_ORIGIN } from '../shared/redevenCloud';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import { buildDesktopRuntimeArgs } from './desktopLaunch';
@@ -17,7 +17,7 @@ import {
   testLocalAccess,
   testLocalEnvironment,
   testProviderBoundLocalEnvironment,
-  testProviderEnvironment,
+  testCloudEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
   createPlaintextSecretCodec,
@@ -35,12 +35,12 @@ import {
   markSavedEnvironmentUsed,
   markSavedRuntimeTargetUsed,
   normalizeSavedRuntimeTargets,
-  rememberProviderEnvironmentUse,
+  rememberCloudEnvironmentUse,
   restrictDesktopPreferencesToRedevenCloud,
   saveDesktopPreferences,
   setLocalEnvironmentPinned,
   setDefaultFlowerRuntimeTarget,
-  setProviderEnvironmentPinned,
+  setCloudEnvironmentPinned,
   setSavedEnvironmentPinned,
   setSavedRuntimeTargetPinned,
   updateLocalEnvironmentAccess,
@@ -62,8 +62,8 @@ function draft(overrides: Partial<DesktopSettingsDraft> = {}): DesktopSettingsDr
   };
 }
 
-function testAccessPoint(providerOrigin = 'https://redeven.test') {
-  const origin = providerOrigin === 'https://other.example.invalid'
+function testAccessPoint(cloudOrigin = 'https://redeven.test') {
+  const origin = cloudOrigin === 'https://other.example.invalid'
     ? 'https://other-dev.example.invalid'
     : 'https://dev.redeven.test';
   return {
@@ -79,14 +79,14 @@ function testAccessPoint(providerOrigin = 'https://redeven.test') {
   };
 }
 
-function buildTestControlPlaneProvider(providerOrigin = 'https://redeven.test') {
-  const provider = normalizeDesktopControlPlaneProvider({
-    protocol_version: 'rcpp-v3',
-    provider_id: 'example_control_plane',
+function buildTestCloud(cloudOrigin = 'https://redeven.test') {
+  const provider = normalizeDesktopCloud({
+    protocol_version: 'rcpp-v4',
+    cloud_id: 'example_control_plane',
     display_name: 'Example Control Plane',
-    provider_origin: providerOrigin,
-    documentation_url: `${providerOrigin}/help/control-plane-providers`,
-    access_points: [testAccessPoint(providerOrigin)],
+    cloud_origin: cloudOrigin,
+    documentation_url: `${cloudOrigin}/help/control-plane-providers`,
+    access_points: [testAccessPoint(cloudOrigin)],
   });
   if (!provider) {
     throw new Error('Expected test provider to normalize.');
@@ -94,10 +94,10 @@ function buildTestControlPlaneProvider(providerOrigin = 'https://redeven.test') 
   return provider;
 }
 
-function buildTestControlPlaneAccount(provider = buildTestControlPlaneProvider()) {
+function buildTestControlPlaneAccount(provider = buildTestCloud()) {
   return {
-    provider_id: provider.provider_id,
-    provider_origin: provider.provider_origin,
+    cloud_id: provider.cloud_id,
+    cloud_origin: provider.cloud_origin,
     display_name: provider.display_name,
     user_public_id: 'user_demo',
     user_display_name: 'Demo User',
@@ -105,8 +105,8 @@ function buildTestControlPlaneAccount(provider = buildTestControlPlaneProvider()
   };
 }
 
-function buildTestProviderEnvironment(
-  provider = buildTestControlPlaneProvider(),
+function buildTestCloudEnvironment(
+  provider = buildTestCloud(),
   envPublicID = 'env_demo',
   overrides: Partial<{
     label: string;
@@ -122,8 +122,8 @@ function buildTestProviderEnvironment(
   }> = {},
 ) {
   return {
-    provider_id: provider.provider_id,
-    provider_origin: provider.provider_origin,
+    cloud_id: provider.cloud_id,
+    cloud_origin: provider.cloud_origin,
     env_public_id: envPublicID,
     region: overrides.region ?? 'dev',
     access_point_id: overrides.access_point_id ?? 'dev',
@@ -586,22 +586,22 @@ describe('desktopPreferences', () => {
   });
 
   it('stores control plane refresh tokens only in secrets while keeping account summaries in preferences', async () => {
-    const provider = buildTestControlPlaneProvider();
+    const provider = buildTestCloud();
 
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
       const preferences = upsertSavedControlPlane(defaultDesktopPreferences(), {
-        provider,
+        cloud: provider,
         account: {
-          provider_id: provider.provider_id,
-          provider_origin: provider.provider_origin,
+          cloud_id: provider.cloud_id,
+          cloud_origin: provider.cloud_origin,
           display_name: provider.display_name,
           user_public_id: 'user_demo',
           user_display_name: 'Demo User',
           authorization_expires_at_unix_ms: 1_770_000_000_000,
         },
-        environments: [buildTestProviderEnvironment(provider)],
+        environments: [buildTestCloudEnvironment(provider)],
         refresh_token: 'refresh-demo-token',
         display_label: 'Demo Control Plane',
         last_synced_at_ms: 456,
@@ -641,11 +641,11 @@ describe('desktopPreferences', () => {
         label: 'Local Environment',
         local_hosting: expect.objectContaining({}),
       }));
-      expect(loaded.provider_environments).toEqual([
+      expect(loaded.cloud_environments).toEqual([
         expect.objectContaining({
           id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
-          provider_origin: 'https://redeven.test',
-          provider_id: 'example_control_plane',
+          cloud_origin: 'https://redeven.test',
+          cloud_id: 'example_control_plane',
           env_public_id: 'env_demo',
           region: 'dev',
           access_point_id: 'dev',
@@ -665,13 +665,13 @@ describe('desktopPreferences', () => {
   });
 
   it('canonicalizes provider environment catalog ids from provider origin and environment id', async () => {
-    const provider = buildTestControlPlaneProvider();
+    const provider = buildTestCloud();
 
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
       const preferences = upsertSavedControlPlane(defaultDesktopPreferences(), {
-        provider,
+        cloud: provider,
         account: buildTestControlPlaneAccount(provider),
         refresh_token: 'refresh-demo-token',
         display_label: 'Demo Control Plane',
@@ -688,8 +688,8 @@ describe('desktopPreferences', () => {
           schema_version: 1,
           record_kind: 'provider_environment',
           id: 'cp:env_demo',
-          provider_origin: provider.provider_origin,
-          provider_id: provider.provider_id,
+          cloud_origin: provider.cloud_origin,
+          cloud_id: provider.cloud_id,
           env_public_id: 'env_demo',
           region: 'dev',
           access_point_id: 'dev',
@@ -706,11 +706,11 @@ describe('desktopPreferences', () => {
       );
 
       const loaded = await loadDesktopPreferences(paths, codec);
-      expect(loaded.provider_environments).toEqual([
+      expect(loaded.cloud_environments).toEqual([
         expect.objectContaining({
           id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
-          provider_origin: 'https://redeven.test',
-          provider_id: provider.provider_id,
+          cloud_origin: 'https://redeven.test',
+          cloud_id: provider.cloud_id,
           env_public_id: 'env_demo',
           pinned: true,
           preferred_open_route: 'remote_desktop',
@@ -725,7 +725,7 @@ describe('desktopPreferences', () => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
       const providerEnvironmentsDir = path.join(paths.stateRoot, 'catalog', 'provider-environments');
-      const orphan = testProviderEnvironment('https://redeven.test', 'env_orphan', {
+      const orphan = testCloudEnvironment('https://redeven.test', 'env_orphan', {
         label: 'Orphaned Env',
         pinned: true,
         lastUsedAtMS: 111,
@@ -738,8 +738,8 @@ describe('desktopPreferences', () => {
           schema_version: 1,
           record_kind: 'provider_environment',
           id: orphan.id,
-          provider_origin: orphan.provider_origin,
-          provider_id: orphan.provider_id,
+          cloud_origin: orphan.cloud_origin,
+          cloud_id: orphan.cloud_id,
           env_public_id: orphan.env_public_id,
           region: orphan.region,
           access_point_id: orphan.access_point_id,
@@ -757,7 +757,7 @@ describe('desktopPreferences', () => {
 
       const loaded = await loadDesktopPreferences(paths, codec);
       expect(loaded.control_planes).toEqual([]);
-      expect(loaded.provider_environments).toEqual([]);
+      expect(loaded.cloud_environments).toEqual([]);
 
       await saveDesktopPreferences(paths, loaded, codec);
       expect(await fs.readdir(providerEnvironmentsDir)).toEqual([]);
@@ -904,59 +904,16 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('falls back to defaults when the preferences json is malformed', async () => {
+  it('preserves malformed saved preferences and secrets', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       await fs.writeFile(paths.preferencesFile, '{not valid json', 'utf8');
-
-      const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
-      expect(loaded).toEqual(expect.objectContaining({
-        saved_environments: [],
-        control_plane_refresh_tokens: {},
-        control_planes: [],
-      }));
-      expect(loaded.local_environment).toEqual(expect.objectContaining({
-        id: 'local',
-        label: 'Local Environment',
-        local_hosting: expect.objectContaining({
-          access: {
-            local_ui_protocol: 'http',
-            local_ui_bind: 'localhost:23998',
-            local_ui_password: '',
-            local_ui_password_configured: false,
-          },
-        }),
-      }));
-    });
-  });
-
-  it('ignores root-level preference fields when secrets are malformed', async () => {
-    await withTempPreferencesDir(async (root) => {
-      const paths = defaultDesktopPreferencesPaths(root);
-      await fs.writeFile(paths.preferencesFile, JSON.stringify({
-        version: 8,
-        local_ui_bind: '127.0.0.1:0',
-      }), 'utf8');
+      await expect(loadDesktopPreferences(paths, createPlaintextSecretCodec())).rejects.toThrow();
+      expect(await fs.readFile(paths.preferencesFile, 'utf8')).toBe('{not valid json');
+      await fs.writeFile(paths.preferencesFile, JSON.stringify({ version: 8 }), 'utf8');
       await fs.writeFile(paths.secretsFile, '{"broken"', 'utf8');
-
-      const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
-      expect(loaded).toEqual(expect.objectContaining({
-        saved_environments: [],
-        control_plane_refresh_tokens: {},
-        control_planes: [],
-      }));
-      expect(loaded.local_environment).toEqual(expect.objectContaining({
-        id: 'local',
-        label: 'Local Environment',
-        local_hosting: expect.objectContaining({
-          access: {
-            local_ui_protocol: 'http',
-            local_ui_bind: 'localhost:23998',
-            local_ui_password: '',
-            local_ui_password_configured: false,
-          },
-        }),
-      }));
+      await expect(loadDesktopPreferences(paths, createPlaintextSecretCodec())).rejects.toThrow();
+      expect(await fs.readFile(paths.secretsFile, 'utf8')).toBe('{"broken"');
     });
   });
 
@@ -1429,14 +1386,14 @@ describe('desktopPreferences', () => {
   });
 
   it('remembers provider-card usage without rewriting the preferred route', () => {
-    const dualRoute = testProviderEnvironment('https://redeven.test', 'env_demo', {
+    const dualRoute = testCloudEnvironment('https://redeven.test', 'env_demo', {
       preferredOpenRoute: 'local_host',
     });
-    const remembered = rememberProviderEnvironmentUse(testDesktopPreferences({
-      provider_environments: [dualRoute],
+    const remembered = rememberCloudEnvironmentUse(testDesktopPreferences({
+      cloud_environments: [dualRoute],
     }), dualRoute.id);
 
-    expect(remembered.provider_environments.find((environment) => environment.id === dualRoute.id)).toEqual(
+    expect(remembered.cloud_environments.find((environment) => environment.id === dualRoute.id)).toEqual(
       expect.objectContaining({
         preferred_open_route: 'local_host',
         last_used_at_ms: expect.any(Number),
@@ -1445,11 +1402,11 @@ describe('desktopPreferences', () => {
   });
 
   it('keeps provider environments in the control-plane catalog instead of materializing managed records', () => {
-    const provider = buildTestControlPlaneProvider();
+    const provider = buildTestCloud();
     const next = upsertSavedControlPlane(testDesktopPreferences(), {
-      provider,
+      cloud: provider,
       account: buildTestControlPlaneAccount(provider),
-      environments: [buildTestProviderEnvironment(provider)],
+      environments: [buildTestCloudEnvironment(provider)],
       refresh_token: 'refresh-demo-token',
       display_label: 'Demo Control Plane',
       last_synced_at_ms: 456,
@@ -1458,11 +1415,11 @@ describe('desktopPreferences', () => {
     expect(next.local_environment).toEqual(expect.objectContaining({
       id: 'local',
     }));
-    expect(next.provider_environments).toEqual([
+    expect(next.cloud_environments).toEqual([
       expect.objectContaining({
         id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
-        provider_origin: 'https://redeven.test',
-        provider_id: 'example_control_plane',
+        cloud_origin: 'https://redeven.test',
+        cloud_id: 'example_control_plane',
         env_public_id: 'env_demo',
         region: 'dev',
         access_point_id: 'dev',
@@ -1482,18 +1439,18 @@ describe('desktopPreferences', () => {
   });
 
   it('merges provider refresh data into an existing provider preference without writing local runtime state', () => {
-    const provider = buildTestControlPlaneProvider();
-    const existing = testProviderEnvironment('https://redeven.test', 'env_demo', {
+    const provider = buildTestCloud();
+    const existing = testCloudEnvironment('https://redeven.test', 'env_demo', {
       label: 'Desktop Label',
       preferredOpenRoute: 'local_host',
     });
 
     const next = upsertSavedControlPlane(testDesktopPreferences({
-      provider_environments: [existing],
+      cloud_environments: [existing],
     }), {
-      provider,
+      cloud: provider,
       account: buildTestControlPlaneAccount(provider),
-      environments: [buildTestProviderEnvironment(provider, 'env_demo', {
+      environments: [buildTestCloudEnvironment(provider, 'env_demo', {
         label: 'Provider Label',
         status: 'offline',
         lifecycle_status: 'suspended',
@@ -1503,7 +1460,7 @@ describe('desktopPreferences', () => {
       last_synced_at_ms: 456,
     });
 
-    const merged = next.provider_environments.find((environment) => environment.id === existing.id);
+    const merged = next.cloud_environments.find((environment) => environment.id === existing.id);
 
     expect(merged).toEqual(expect.objectContaining({
       id: existing.id,
@@ -1516,8 +1473,8 @@ describe('desktopPreferences', () => {
         status: 'offline',
         lifecycle_status: 'suspended',
       }),
-      provider_origin: 'https://redeven.test',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
     }));
     expect(merged).not.toHaveProperty('local_runtime');
@@ -1531,24 +1488,24 @@ describe('desktopPreferences', () => {
         local_ui_password_configured: true,
       }),
     });
-    const providerEnvironment = testProviderEnvironment('https://redeven.test', 'env_demo', {
+    const providerEnvironment = testCloudEnvironment('https://redeven.test', 'env_demo', {
       label: 'Desktop Demo',
       preferredOpenRoute: 'local_host',
     });
     const preferences = testDesktopPreferences({
       local_environment: local,
-      provider_environments: [providerEnvironment],
+      cloud_environments: [providerEnvironment],
     });
 
-    expect(preferences.provider_environments[0]).toEqual(expect.objectContaining({
+    expect(preferences.cloud_environments[0]).toEqual(expect.objectContaining({
       id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
       label: 'Desktop Demo',
-      provider_origin: 'https://redeven.test',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
       preferred_open_route: 'local_host',
     }));
-    expect(preferences.provider_environments[0]).not.toHaveProperty('local_runtime');
+    expect(preferences.cloud_environments[0]).not.toHaveProperty('local_runtime');
     expect(preferences.local_environment).toEqual(expect.objectContaining({
       id: 'local',
       local_hosting: expect.objectContaining({
@@ -1570,16 +1527,16 @@ describe('desktopPreferences', () => {
         local_ui_password_configured: true,
       },
     });
-    const existingRemoteOnly = testProviderEnvironment('https://redeven.test', 'env_lab', {
+    const existingRemoteOnly = testCloudEnvironment('https://redeven.test', 'env_lab', {
       label: 'Remote Lab',
     });
 
     const next = testDesktopPreferences({
       local_environment: existingLocal,
-      provider_environments: [existingRemoteOnly],
+      cloud_environments: [existingRemoteOnly],
     });
 
-    const providerEntries = next.provider_environments.filter((environment) => environment.id === existingRemoteOnly.id);
+    const providerEntries = next.cloud_environments.filter((environment) => environment.id === existingRemoteOnly.id);
 
     expect(providerEntries).toHaveLength(1);
     expect(providerEntries[0]).toEqual(expect.objectContaining({
@@ -1621,17 +1578,17 @@ describe('desktopPreferences', () => {
   });
 
   it('drops provider entries that are absent from the latest provider catalog', () => {
-    const provider = buildTestControlPlaneProvider();
-    const remoteOnly = testProviderEnvironment('https://redeven.test', 'env_removed');
-    const preferredRoute = testProviderEnvironment('https://redeven.test', 'env_kept', {
+    const provider = buildTestCloud();
+    const remoteOnly = testCloudEnvironment('https://redeven.test', 'env_removed');
+    const preferredRoute = testCloudEnvironment('https://redeven.test', 'env_kept', {
       preferredOpenRoute: 'local_host',
       lastUsedAtMS: 111,
     });
 
     const next = upsertSavedControlPlane(testDesktopPreferences({
-      provider_environments: [remoteOnly, preferredRoute],
+      cloud_environments: [remoteOnly, preferredRoute],
     }), {
-      provider,
+      cloud: provider,
       account: buildTestControlPlaneAccount(provider),
       environments: [],
       refresh_token: 'refresh-demo-token',
@@ -1639,18 +1596,18 @@ describe('desktopPreferences', () => {
       last_synced_at_ms: 456,
     });
 
-    expect(next.provider_environments.some((environment) => environment.id === remoteOnly.id)).toBe(false);
-    expect(next.provider_environments.some((environment) => environment.id === preferredRoute.id)).toBe(false);
+    expect(next.cloud_environments.some((environment) => environment.id === remoteOnly.id)).toBe(false);
+    expect(next.cloud_environments.some((environment) => environment.id === preferredRoute.id)).toBe(false);
   });
 
   it('keeps environments from access points that did not finish the latest provider sync', () => {
     const devAccessPoint = testAccessPoint();
     const uswAccessPoint = testAccessPoint('https://redeven.test');
-    const provider = normalizeDesktopControlPlaneProvider({
-      protocol_version: 'rcpp-v3',
-      provider_id: 'example_control_plane',
+    const provider = normalizeDesktopCloud({
+      protocol_version: 'rcpp-v4',
+      cloud_id: 'example_control_plane',
       display_name: 'Example Control Plane',
-      provider_origin: 'https://redeven.test',
+      cloud_origin: 'https://redeven.test',
       documentation_url: 'https://redeven.test/help/control-plane-providers',
       access_points: [
         devAccessPoint,
@@ -1666,49 +1623,49 @@ describe('desktopPreferences', () => {
     if (!provider) {
       throw new Error('Expected provider fixture to normalize.');
     }
-    const removedDev = testProviderEnvironment('https://redeven.test', 'env_removed_dev');
-    const retainedUsw = testProviderEnvironment('https://redeven.test', 'env_usw', {
+    const removedDev = testCloudEnvironment('https://redeven.test', 'env_removed_dev');
+    const retainedUsw = testCloudEnvironment('https://redeven.test', 'env_usw', {
       region: 'usw',
       accessPointID: 'usw',
       accessPointOrigin: 'https://usw.redeven.test',
     });
 
     const next = upsertSavedControlPlane(testDesktopPreferences({
-      provider_environments: [removedDev, retainedUsw],
+      cloud_environments: [removedDev, retainedUsw],
     }), {
-      provider,
+      cloud: provider,
       account: buildTestControlPlaneAccount(provider),
-      environments: [buildTestProviderEnvironment(provider, 'env_dev')],
+      environments: [buildTestCloudEnvironment(provider, 'env_dev')],
       synced_access_points: [devAccessPoint],
       refresh_token: 'refresh-demo-token',
       display_label: 'Demo Control Plane',
       last_synced_at_ms: 456,
     });
 
-    expect(next.provider_environments.some((environment) => environment.env_public_id === 'env_removed_dev')).toBe(false);
-    expect(next.provider_environments.find((environment) => environment.env_public_id === 'env_usw')).toEqual(expect.objectContaining({
+    expect(next.cloud_environments.some((environment) => environment.env_public_id === 'env_removed_dev')).toBe(false);
+    expect(next.cloud_environments.find((environment) => environment.env_public_id === 'env_usw')).toEqual(expect.objectContaining({
       access_point_id: 'usw',
       access_point_origin: 'https://usw.redeven.test',
     }));
-    expect(next.provider_environments.find((environment) => environment.env_public_id === 'env_dev')).toEqual(expect.objectContaining({
+    expect(next.cloud_environments.find((environment) => environment.env_public_id === 'env_dev')).toEqual(expect.objectContaining({
       access_point_id: 'dev',
       access_point_origin: 'https://dev.redeven.test',
     }));
   });
 
   it('preserves provider card preferences only while the environment remains in the provider catalog', () => {
-    const provider = buildTestControlPlaneProvider();
-    const preferredRoute = testProviderEnvironment('https://redeven.test', 'env_kept', {
+    const provider = buildTestCloud();
+    const preferredRoute = testCloudEnvironment('https://redeven.test', 'env_kept', {
       preferredOpenRoute: 'local_host',
       lastUsedAtMS: 111,
     });
 
     const next = upsertSavedControlPlane(testDesktopPreferences({
-      provider_environments: [preferredRoute],
+      cloud_environments: [preferredRoute],
     }), {
-      provider,
+      cloud: provider,
       account: buildTestControlPlaneAccount(provider),
-      environments: [buildTestProviderEnvironment(provider, 'env_kept', {
+      environments: [buildTestCloudEnvironment(provider, 'env_kept', {
         label: 'Env Kept',
       })],
       refresh_token: 'refresh-demo-token',
@@ -1716,29 +1673,29 @@ describe('desktopPreferences', () => {
       last_synced_at_ms: 456,
     });
 
-    expect(next.provider_environments.find((environment) => environment.id === preferredRoute.id)).toEqual(expect.objectContaining({
+    expect(next.cloud_environments.find((environment) => environment.id === preferredRoute.id)).toEqual(expect.objectContaining({
       id: preferredRoute.id,
       preferred_open_route: 'local_host',
       last_used_at_ms: 111,
-      provider_origin: 'https://redeven.test',
+      cloud_origin: 'https://redeven.test',
       env_public_id: 'env_kept',
     }));
   });
 
   it('signs out only the selected Cloud account while retaining runtime registrations and binding identity', () => {
-    const provider = buildTestControlPlaneProvider();
-    const otherProvider = buildTestControlPlaneProvider('https://other.example.invalid');
-    const providerEnvironment = testProviderEnvironment('https://redeven.test', 'env_kept', {
+    const provider = buildTestCloud();
+    const otherProvider = buildTestCloud('https://other.example.invalid');
+    const providerEnvironment = testCloudEnvironment('https://redeven.test', 'env_kept', {
       label: 'Env Kept',
     });
-    const otherProviderEnvironment = testProviderEnvironment(otherProvider.provider_origin, 'env_other', {
-      providerID: otherProvider.provider_id,
+    const otherCloudEnvironment = testCloudEnvironment(otherProvider.cloud_origin, 'env_other', {
+      cloudID: otherProvider.cloud_id,
       label: 'Other Env',
       pinned: true,
       lastUsedAtMS: 222,
     });
-    const preferencesWithProviderState = setProviderEnvironmentPinned(
-      rememberProviderEnvironmentUse(testDesktopPreferences({
+    const preferencesWithProviderState = setCloudEnvironmentPinned(
+      rememberCloudEnvironmentUse(testDesktopPreferences({
         local_environment: testProviderBoundLocalEnvironment('https://redeven.test', 'env_kept'),
         saved_runtime_targets: [{
           schema_version: 1, id: 'ssh:host:devbox:cloud-sign-out', label: 'SSH devbox',
@@ -1746,22 +1703,22 @@ describe('desktopPreferences', () => {
           placement: { kind: 'host_process', runtime_root: 'remote_default', bootstrap_strategy: 'desktop_upload', release_base_url: '' },
           pinned: true, auto_runtime_probe_enabled: true, created_at_ms: 10, updated_at_ms: 20, last_used_at_ms: 20,
         }],
-        provider_environments: [
-          testProviderEnvironment('https://redeven.test', 'env_removed'),
+        cloud_environments: [
+          testCloudEnvironment('https://redeven.test', 'env_removed'),
           providerEnvironment,
-          otherProviderEnvironment,
+          otherCloudEnvironment,
         ],
         control_plane_refresh_tokens: {
           'https://redeven.test|example_control_plane': 'refresh-demo-token',
           'https://other.example.invalid|example_control_plane': 'refresh-other-token',
         },
         control_planes: [{
-          provider,
+          cloud: provider,
           account: buildTestControlPlaneAccount(provider),
           display_label: 'Demo Control Plane',
           last_synced_at_ms: 456,
         }, {
-          provider: otherProvider,
+          cloud: otherProvider,
           account: buildTestControlPlaneAccount(otherProvider),
           display_label: 'Other Control Plane',
           last_synced_at_ms: 789,
@@ -1774,35 +1731,35 @@ describe('desktopPreferences', () => {
 
     expect(next.control_planes).toEqual([
       expect.objectContaining({
-        provider: expect.objectContaining({
-          provider_origin: 'https://other.example.invalid',
-          provider_id: 'example_control_plane',
+        cloud: expect.objectContaining({
+          cloud_origin: 'https://other.example.invalid',
+          cloud_id: 'example_control_plane',
         }),
       }),
     ]);
     expect(next.control_plane_refresh_tokens).toEqual({
       'https://other.example.invalid|example_control_plane': 'refresh-other-token',
     });
-    expect(next.provider_environments).toEqual([
+    expect(next.cloud_environments).toEqual([
       expect.objectContaining({
-        id: otherProviderEnvironment.id,
-        provider_origin: 'https://other.example.invalid',
-        provider_id: 'example_control_plane',
+        id: otherCloudEnvironment.id,
+        cloud_origin: 'https://other.example.invalid',
+        cloud_id: 'example_control_plane',
         env_public_id: 'env_other',
         pinned: true,
       }),
     ]);
     expect(next.local_environment).toEqual(preferencesWithProviderState.local_environment);
-    expect(next.local_environment.current_provider_binding?.env_public_id).toBe('env_kept');
+    expect(next.local_environment.current_cloud_binding?.env_public_id).toBe('env_kept');
     expect(next.saved_runtime_targets).toEqual(preferencesWithProviderState.saved_runtime_targets);
     expect(next.saved_environments).toEqual(preferencesWithProviderState.saved_environments);
   });
 
   it('removes only unsupported local control-plane state for packaged Redeven Cloud', () => {
-    const officialProvider = buildTestControlPlaneProvider(REDEVEN_CLOUD_ORIGIN);
-    const customProvider = buildTestControlPlaneProvider('https://other.example.invalid');
-    const officialEnvironment = testProviderEnvironment(REDEVEN_CLOUD_ORIGIN, 'env_cloud');
-    const customEnvironment = testProviderEnvironment('https://other.example.invalid', 'env_custom');
+    const officialProvider = buildTestCloud(REDEVEN_CLOUD_ORIGIN);
+    const customProvider = buildTestCloud('https://other.example.invalid');
+    const officialEnvironment = testCloudEnvironment(REDEVEN_CLOUD_ORIGIN, 'env_cloud');
+    const customEnvironment = testCloudEnvironment('https://other.example.invalid', 'env_custom');
     const preferences = testDesktopPreferences({
       local_environment: testProviderBoundLocalEnvironment('https://other.example.invalid', 'env_custom'),
       saved_environments: [{
@@ -1839,19 +1796,19 @@ describe('desktopPreferences', () => {
         updated_at_ms: 20,
         last_used_at_ms: 20,
       }],
-      provider_environments: [officialEnvironment, customEnvironment],
+      cloud_environments: [officialEnvironment, customEnvironment],
       control_plane_refresh_tokens: {
         [`${REDEVEN_CLOUD_ORIGIN}|example_control_plane`]: 'cloud-token',
         'https://other.example.invalid|example_control_plane': 'custom-token',
         'https://orphan.example.invalid|example_control_plane': 'orphan-token',
       },
       control_planes: [{
-        provider: officialProvider,
+        cloud: officialProvider,
         account: buildTestControlPlaneAccount(officialProvider),
         display_label: 'Redeven Cloud',
         last_synced_at_ms: 100,
       }, {
-        provider: customProvider,
+        cloud: customProvider,
         account: buildTestControlPlaneAccount(customProvider),
         display_label: 'Custom Control Plane',
         last_synced_at_ms: 200,
@@ -1867,15 +1824,15 @@ describe('desktopPreferences', () => {
       cleared_local_provider_binding: true,
     });
     expect(result.preferences.control_planes).toEqual([
-      expect.objectContaining({ provider: expect.objectContaining({ provider_origin: REDEVEN_CLOUD_ORIGIN }) }),
+      expect.objectContaining({ cloud: expect.objectContaining({ cloud_origin: REDEVEN_CLOUD_ORIGIN }) }),
     ]);
-    expect(result.preferences.provider_environments).toEqual([
+    expect(result.preferences.cloud_environments).toEqual([
       expect.objectContaining({ id: officialEnvironment.id }),
     ]);
     expect(result.preferences.control_plane_refresh_tokens).toEqual({
       [`${REDEVEN_CLOUD_ORIGIN}|example_control_plane`]: 'cloud-token',
     });
-    expect(result.preferences.local_environment.current_provider_binding).toBeUndefined();
+    expect(result.preferences.local_environment.current_cloud_binding).toBeUndefined();
     expect(result.preferences.saved_environments).toEqual(preferences.saved_environments);
     expect(result.preferences.saved_runtime_targets).toEqual(preferences.saved_runtime_targets);
     expect(restrictDesktopPreferencesToRedevenCloud(result.preferences, { allow_development: false })).toEqual({
@@ -1888,10 +1845,10 @@ describe('desktopPreferences', () => {
   });
 
   it('retains the fixed test control plane only in development policy', () => {
-    const provider = buildTestControlPlaneProvider('https://redeven.test');
+    const provider = buildTestCloud('https://redeven.test');
     const preferences = testDesktopPreferences({
       control_planes: [{
-        provider,
+        cloud: provider,
         account: buildTestControlPlaneAccount(provider),
         display_label: 'Redeven Cloud Test',
         last_synced_at_ms: 100,
@@ -1899,7 +1856,7 @@ describe('desktopPreferences', () => {
       control_plane_refresh_tokens: {
         'https://redeven.test|example_control_plane': 'test-token',
       },
-      provider_environments: [testProviderEnvironment('https://redeven.test', 'env_test')],
+      cloud_environments: [testCloudEnvironment('https://redeven.test', 'env_test')],
     });
 
     expect(restrictDesktopPreferencesToRedevenCloud(preferences, { allow_development: true })).toEqual({
@@ -1912,15 +1869,15 @@ describe('desktopPreferences', () => {
   });
 
   it('tracks provider-card pin and last-used metadata separately from the Local Environment', () => {
-    const provider = buildTestControlPlaneProvider();
+    const provider = buildTestCloud();
     const initial = testDesktopPreferences({
-      provider_environments: [
-        testProviderEnvironment(provider.provider_origin, 'env_demo'),
+      cloud_environments: [
+        testCloudEnvironment(provider.cloud_origin, 'env_demo'),
       ],
     });
-    const environmentID = initial.provider_environments[0]!.id;
-    const used = rememberProviderEnvironmentUse(initial, environmentID);
-    const pinned = setProviderEnvironmentPinned(
+    const environmentID = initial.cloud_environments[0]!.id;
+    const used = rememberCloudEnvironmentUse(initial, environmentID);
+    const pinned = setCloudEnvironmentPinned(
       used,
       environmentID,
       true,
@@ -1929,11 +1886,11 @@ describe('desktopPreferences', () => {
     expect(pinned.local_environment).toEqual(expect.objectContaining({
       id: 'local',
     }));
-    expect(pinned.provider_environments).toEqual([
+    expect(pinned.cloud_environments).toEqual([
       expect.objectContaining({
         id: environmentID,
-        provider_origin: provider.provider_origin,
-        provider_id: provider.provider_id,
+        cloud_origin: provider.cloud_origin,
+        cloud_id: provider.cloud_id,
         env_public_id: 'env_demo',
         pinned: true,
         last_used_at_ms: expect.any(Number),
@@ -1942,21 +1899,21 @@ describe('desktopPreferences', () => {
   });
 
   it('keeps provider environment order stable by creation time instead of last use', () => {
-    const older = testProviderEnvironment('https://redeven.test', 'env_older', {
+    const older = testCloudEnvironment('https://redeven.test', 'env_older', {
       label: 'Older',
       createdAtMS: 10,
       lastUsedAtMS: 100,
     });
-    const newer = testProviderEnvironment('https://redeven.test', 'env_newer', {
+    const newer = testCloudEnvironment('https://redeven.test', 'env_newer', {
       label: 'Newer',
       createdAtMS: 20,
       lastUsedAtMS: 50,
     });
-    const remembered = rememberProviderEnvironmentUse(testDesktopPreferences({
-      provider_environments: [older, newer],
+    const remembered = rememberCloudEnvironmentUse(testDesktopPreferences({
+      cloud_environments: [older, newer],
     }), newer.id);
 
-    expect(remembered.provider_environments.map((environment) => environment.env_public_id)).toEqual([
+    expect(remembered.cloud_environments.map((environment) => environment.env_public_id)).toEqual([
       'env_older',
       'env_newer',
     ]);

@@ -3,10 +3,9 @@ package runtimepresentation
 import "context"
 
 type ControlPlaneSetup struct {
-	ProviderOrigin    string
-	AccessPointOrigin string
+	CloudOrigin       string
 	EnvironmentID     string
-	BootstrapTicket   string
+	RuntimeLinkTicket string
 }
 
 type ControlPlaneStatus struct {
@@ -27,10 +26,10 @@ type RuntimeWorkload struct {
 	ActiveTasks         int
 }
 
-type RuntimeProviderLink struct {
+type RuntimeCloudLink struct {
 	State                    string
-	ProviderOrigin           string
-	ProviderID               string
+	CloudOrigin              string
+	CloudID                  string
 	EnvPublicID              string
 	AccessPointOrigin        string
 	LocalEnvironmentPublicID string
@@ -54,7 +53,7 @@ type RuntimeOverview struct {
 	OpenReadinessReasonCode string
 	OpenReadinessMessage    string
 	Workload                RuntimeWorkload
-	ProviderLink            RuntimeProviderLink
+	CloudLink               RuntimeCloudLink
 }
 
 type RuntimeSession struct {

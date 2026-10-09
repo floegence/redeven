@@ -5,7 +5,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
-import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
+import { desktopControlPlaneKey } from '../shared/cloud';
 import { createDesktopI18n } from '../shared/i18n';
 import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
@@ -100,14 +100,14 @@ function cssRuleBlock(styles: string, selector: string): string {
   return styles.slice(ruleStart, bodyEnd + 2);
 }
 
-function testProviderAccessPoint(providerOrigin: string) {
+function testCloudAccessPoint(cloudOrigin: string) {
   return {
     access_point_id: 'dev',
     region: 'dev',
     display_name: 'Development',
     description: 'Development access point',
     access_point_origin:
-      providerOrigin === 'https://cp.other.invalid'
+      cloudOrigin === 'https://cp.other.invalid'
         ? 'https://dev.cp.other.invalid'
         : 'https://dev.provider.example.invalid',
     country_code: 'SG',
@@ -119,7 +119,7 @@ function testProviderAccessPoint(providerOrigin: string) {
 
 function testControlPlaneSummary(
   input: Readonly<{
-    providerOrigin?: string;
+    cloudOrigin?: string;
     envPublicID?: string;
     label?: string;
     namespacePublicID?: string;
@@ -129,21 +129,21 @@ function testControlPlaneSummary(
     displayLabel?: string;
   }> = {},
 ) {
-  const providerOrigin = input.providerOrigin ?? 'https://provider.example.invalid';
+  const cloudOrigin = input.cloudOrigin ?? 'https://provider.example.invalid';
   const envPublicID = input.envPublicID ?? 'env_demo';
-  const accessPoint = testProviderAccessPoint(providerOrigin);
+  const accessPoint = testCloudAccessPoint(cloudOrigin);
   return {
-    provider: {
-      protocol_version: 'rcpp-v3' as const,
-      provider_id: 'example_control_plane',
+    cloud: {
+      protocol_version: 'rcpp-v4' as const,
+      cloud_id: 'example_control_plane',
       display_name: 'Example Control Plane',
-      provider_origin: providerOrigin,
-      documentation_url: `${providerOrigin}/help/control-plane-providers`,
+      cloud_origin: cloudOrigin,
+      documentation_url: `${cloudOrigin}/help/control-plane-providers`,
       access_points: [accessPoint],
     },
     account: {
-      provider_id: 'example_control_plane',
-      provider_origin: providerOrigin,
+      cloud_id: 'example_control_plane',
+      cloud_origin: cloudOrigin,
       display_name: 'Example Control Plane',
       user_public_id: input.userPublicID ?? 'user_demo',
       user_display_name: input.userDisplayName ?? 'Demo User',
@@ -152,8 +152,8 @@ function testControlPlaneSummary(
     display_label: input.displayLabel ?? 'Demo Control Plane',
     environments: [
       {
-        provider_id: 'example_control_plane',
-        provider_origin: providerOrigin,
+        cloud_id: 'example_control_plane',
+        cloud_origin: cloudOrigin,
         env_public_id: envPublicID,
         region: accessPoint.region,
         access_point_id: accessPoint.access_point_id,
@@ -227,7 +227,7 @@ describe('DesktopWelcomeShell', () => {
     expect(local).toBeDefined();
     const legacy = {
       ...local!,
-      provider_origin: 'https://legacy.example.invalid',
+      cloud_origin: 'https://legacy.example.invalid',
       control_plane_label: 'Legacy Control Plane',
       provider_runtime_link_target: {
         id: 'local:local' as const,
@@ -240,13 +240,13 @@ describe('DesktopWelcomeShell', () => {
         runtime_openable: true,
         runtime_control_status: { state: 'available' as const },
         provider_connection_state: 'connected' as const,
-        provider_link_state: 'linked' as const,
-        provider_origin: 'https://legacy.example.invalid',
-        provider_origin_supported: false,
-        provider_id: 'legacy',
+        cloud_link_state: 'linked' as const,
+        cloud_origin: 'https://legacy.example.invalid',
+        cloud_origin_supported: false,
+        cloud_id: 'legacy',
         env_public_id: 'env_legacy',
-        can_connect_provider: false,
-        can_disconnect_provider: true,
+        can_connect_cloud: false,
+        can_disconnect_cloud: true,
       },
     };
 
@@ -260,15 +260,15 @@ describe('DesktopWelcomeShell', () => {
     const actions = buildProviderBackedEnvironmentActionModel(legacy).action_presentation.menu_actions;
     expect(actions).toContainEqual(
       expect.objectContaining({
-        id: 'disconnect_provider_runtime',
+        id: 'disconnect_cloud_runtime',
         label_key: 'environmentAction.disconnectLegacyControlPlane',
         action: expect.objectContaining({
-          intent: 'disconnect_provider_runtime',
+          intent: 'disconnect_cloud_runtime',
           enabled: true,
         }),
       }),
     );
-    expect(actions.some((item) => item.action.intent === 'connect_provider_runtime')).toBe(false);
+    expect(actions.some((item) => item.action.intent === 'connect_cloud_runtime')).toBe(false);
   });
 
   it('keeps the outer Flower entry icon-only while chat creation lives inside the shared surface', () => {
@@ -723,7 +723,7 @@ describe('DesktopWelcomeShell', () => {
       controlPlanes: [
         testControlPlaneSummary(),
         testControlPlaneSummary({
-          providerOrigin: 'https://cp.other.invalid',
+          cloudOrigin: 'https://cp.other.invalid',
           envPublicID: 'env_other',
           label: 'Other Environment',
           namespacePublicID: 'ns_other',
@@ -1728,8 +1728,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('providerRuntimeLinkActiveWorkLabel');
     expect(appSrc).toContain("i18n.tn('plural.terminalCount'");
     expect(appSrc).toContain("case 'start_runtime':");
-    expect(appSrc).toContain("case 'connect_provider_runtime':");
-    expect(appSrc).toContain("case 'disconnect_provider_runtime':");
+    expect(appSrc).toContain("case 'connect_cloud_runtime':");
+    expect(appSrc).toContain("case 'disconnect_cloud_runtime':");
     expect(appSrc).toContain("case 'stop_runtime':");
     expect(appSrc).toContain("case 'restart_runtime':");
     expect(appSrc).toContain("case 'update_runtime':");
@@ -2160,18 +2160,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('snapshot().redeven_cloud_origins');
     expect(appSrc).not.toContain('CONTROL_PLANE_PROVIDER_PRESET_OPTIONS');
     expect(appSrc).not.toContain('DESKTOP_WELCOME_IMPORT_META');
-    expect(appSrc).toContain('controlPlaneProviderPresetOptions(snapshot().redeven_cloud_origins)');
+    expect(appSrc).toContain('cloudPresetOptions(snapshot().redeven_cloud_origins)');
     expect(appSrc).toContain("url.protocol !== 'https:'");
     expect(appSrc).not.toContain('ControlPlaneOriginMode');
-    expect(appSrc).not.toContain('preset_provider_origin');
-    expect(appSrc).not.toContain('custom_provider_origin');
+    expect(appSrc).not.toContain('preset_cloud_origin');
+    expect(appSrc).not.toContain('custom_cloud_origin');
     expect(appSrc).toContain('control-plane-provider-picker');
     expect(appSrc).toContain('control-plane-provider-options');
     expect(appSrc).not.toContain('control-plane-custom-origin');
     expect(appSrc).toContain('<OfficialProviderPicker');
-    expect(appSrc).not.toContain('suggestControlPlaneProviderName');
+    expect(appSrc).not.toContain('suggestCloudName');
     expect(appSrc).not.toContain("props.i18n.t('connectionDialog.providerName')");
-    expect(appSrc).not.toContain("props.i18n.t('connectionDialog.providerOriginCustom')");
+    expect(appSrc).not.toContain("props.i18n.t('connectionDialog.cloudOriginCustom')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.continueInBrowser')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.providerAuthorizationHelp')");
     expect(appSrc).not.toContain('id="control-plane-origin"');
@@ -2261,11 +2261,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("i18n().t('environmentCenter.connectProviderRuntimeNote')");
     expect(appSrc).toContain("i18n().t('environmentCenter.disconnectProviderRuntimeNote')");
     expect(appSrc).not.toContain('matching provider link. Confirming');
-    expect(appSrc).toContain("busyStateMatchesAction(busyState(), 'disconnect_provider_runtime')");
+    expect(appSrc).toContain("busyStateMatchesAction(busyState(), 'disconnect_cloud_runtime')");
     expect(appSrc).toContain("showActionToast(i18n().t('environmentCenter.disconnectedFromProviderToast'), 'info');");
     expect(appSrc).toContain('if (presentation.refresh_snapshot) {');
     expect(appSrc).toContain(
-      "const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');",
+      "const [providerRuntimeLinkCloudEnvironmentID, setCloudRuntimeLinkCloudEnvironmentID] = createSignal('');",
     );
   });
 
@@ -2621,7 +2621,7 @@ describe('DesktopWelcomeShell', () => {
     );
     expect(appSrc).toContain('open={providerRuntimeLinkDialogOpen()}');
     expect(appSrc).not.toMatch(/<ConfirmDialog\b[^>]*open=\{providerRuntimeLinkConfirmation\(\) !== null\}/);
-    expect(appSrc).not.toContain('setProviderRuntimeLinkConfirmation((current) => current ? {');
+    expect(appSrc).not.toContain('setCloudRuntimeLinkConfirmation((current) => current ? {');
     expect(appSrc).toContain('const providerRuntimeLinkCandidatePlans = createMemo(() => {');
     expect(appSrc).toContain('const providerRuntimeLinkSelectedPlan = createMemo(() => (');
     expect(appSrc).toContain('const providerRuntimeLinkConfirmDisabled = createMemo(() => (');

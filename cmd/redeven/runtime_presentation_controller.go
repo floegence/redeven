@@ -35,10 +35,9 @@ func (c *runtimePresentationController) ConfigureControlPlane(ctx context.Contex
 		}, nil
 	}
 	status, err := c.agent.ConfigureControlPlane(ctx, agent.ControlPlaneSetup{
-		ProviderOrigin:    setup.ProviderOrigin,
-		AccessPointOrigin: setup.AccessPointOrigin,
+		CloudOrigin:       setup.CloudOrigin,
 		EnvironmentID:     setup.EnvironmentID,
-		BootstrapTicket:   setup.BootstrapTicket,
+		RuntimeLinkTicket: setup.RuntimeLinkTicket,
 	})
 	if err != nil {
 		return runtimepresentation.ControlPlaneStatus{}, err
@@ -103,16 +102,16 @@ func (c *runtimePresentationController) RuntimeOverview() runtimepresentation.Ru
 			ActiveTasks:         snapshot.ActiveWorkload.TaskCount,
 			PortForwardSessions: snapshot.ActiveWorkload.PortForwardCount,
 		},
-		ProviderLink: runtimepresentation.RuntimeProviderLink{
-			State:                    string(snapshot.Bindings.ProviderLink.State),
-			ProviderOrigin:           snapshot.Bindings.ProviderLink.ProviderOrigin,
-			ProviderID:               snapshot.Bindings.ProviderLink.ProviderID,
-			EnvPublicID:              snapshot.Bindings.ProviderLink.EnvPublicID,
-			AccessPointOrigin:        snapshot.Bindings.ProviderLink.AccessPointOrigin,
-			LocalEnvironmentPublicID: snapshot.Bindings.ProviderLink.LocalEnvironmentPublicID,
-			RemoteEnabled:            snapshot.Bindings.ProviderLink.RemoteEnabled,
-			LastErrorCode:            snapshot.Bindings.ProviderLink.LastErrorCode,
-			LastErrorMessage:         snapshot.Bindings.ProviderLink.LastErrorMessage,
+		CloudLink: runtimepresentation.RuntimeCloudLink{
+			State:                    string(snapshot.Bindings.CloudLink.State),
+			CloudOrigin:              snapshot.Bindings.CloudLink.CloudOrigin,
+			CloudID:                  snapshot.Bindings.CloudLink.CloudID,
+			EnvPublicID:              snapshot.Bindings.CloudLink.EnvPublicID,
+			AccessPointOrigin:        snapshot.Bindings.CloudLink.AccessPointOrigin,
+			LocalEnvironmentPublicID: snapshot.Bindings.CloudLink.LocalEnvironmentPublicID,
+			RemoteEnabled:            snapshot.Bindings.CloudLink.RemoteEnabled,
+			LastErrorCode:            snapshot.Bindings.CloudLink.LastErrorCode,
+			LastErrorMessage:         snapshot.Bindings.CloudLink.LastErrorMessage,
 		},
 	}
 	if overview.Workload.ActiveSessions == 0 && len(sessions) > 0 {

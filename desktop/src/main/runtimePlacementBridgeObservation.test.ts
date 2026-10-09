@@ -10,7 +10,7 @@ import type {
   RuntimePlacementBridgeTermination,
 } from './runtimePlacementBridgeSession';
 import type { DesktopSessionTransportRecoverySnapshot } from '../shared/desktopSessionContextIPC';
-import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 function deferred<T>() {
@@ -48,7 +48,7 @@ function observationFixture(targetIDValue: string) {
     runtime_key: targetID,
     environment_id: targetID,
     label: targetID,
-    target_id: `ssh_environment:${targetID}` as DesktopProviderRuntimeLinkTargetID,
+    target_id: `ssh_environment:${targetID}` as DesktopCloudRuntimeLinkTargetID,
     runtime_binary_path: 'redeven',
     session,
     startup: {

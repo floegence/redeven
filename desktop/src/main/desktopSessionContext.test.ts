@@ -4,11 +4,11 @@ import {
   buildExternalLocalUIDesktopTarget,
   buildGatewayDesktopTarget,
   buildLocalEnvironmentDesktopTarget,
-  buildProviderEnvironmentDesktopTarget,
+  buildCloudEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
 } from './desktopTarget';
 import { desktopSessionContextSnapshotFromTarget } from './desktopSessionContext';
-import { testLocalEnvironment, testProviderEnvironment } from '../testSupport/desktopTestHelpers';
+import { testLocalEnvironment, testCloudEnvironment } from '../testSupport/desktopTestHelpers';
 
 describe('desktopSessionContext', () => {
   it('publishes local runtime identity without provider fields', () => {
@@ -34,11 +34,11 @@ describe('desktopSessionContext', () => {
   });
 
   it('publishes provider identity from the provider target instead of the remote desktop route alone', () => {
-    expect(desktopSessionContextSnapshotFromTarget(buildProviderEnvironmentDesktopTarget(testProviderEnvironment(
+    expect(desktopSessionContextSnapshotFromTarget(buildCloudEnvironmentDesktopTarget(testCloudEnvironment(
       'https://provider.example.invalid/path',
       'env_demo',
       {
-        providerID: 'example_control_plane',
+        cloudID: 'example_control_plane',
         label: 'Demo Environment',
       },
     ), { route: 'remote_desktop' }))).toEqual({
@@ -48,8 +48,8 @@ describe('desktopSessionContext', () => {
       target_route: 'remote_desktop',
       session_source: 'provider_environment',
       label: 'Demo Environment',
-      provider_origin: 'https://provider.example.invalid',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://provider.example.invalid',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
     });
   });

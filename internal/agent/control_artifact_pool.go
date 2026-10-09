@@ -34,7 +34,7 @@ type controlArtifactPoolWireEntry struct {
 
 type controlArtifactPoolWire struct {
 	Version                       string                         `json:"version"`
-	LogicalProviderBindingID      string                         `json:"logical_provider_binding_id"`
+	LogicalCloudBindingID         string                         `json:"logical_cloud_binding_id"`
 	BindingGeneration             int64                          `json:"binding_generation"`
 	TargetWaterline               int                            `json:"target_waterline"`
 	RefreshHorizonSeconds         int64                          `json:"refresh_horizon_seconds"`
@@ -230,8 +230,8 @@ func validateControlArtifactPoolTopUpResponse(raw json.RawMessage, current *conf
 	if current == nil || pool.Version != config.ControlArtifactPoolContractVersion ||
 		pool.BindingGeneration != current.BindingGeneration || pool.BindingGeneration != pending.BindingGeneration ||
 		pool.TargetWaterline != current.TargetWaterline || pool.RefreshHorizonSeconds != current.RefreshHorizonSeconds ||
-		strings.TrimSpace(pool.LogicalProviderBindingID) == "" ||
-		(strings.TrimSpace(current.LogicalBindingID) != "" && pool.LogicalProviderBindingID != current.LogicalBindingID) {
+		strings.TrimSpace(pool.LogicalCloudBindingID) == "" ||
+		(strings.TrimSpace(current.LogicalBindingID) != "" && pool.LogicalCloudBindingID != current.LogicalBindingID) {
 		return response, errors.New("control artifact pool response binding mismatch")
 	}
 	if pool.ServerHighestArtifactSequence == 0 || pool.ServerHighestArtifactSequence > math.MaxInt64 {
@@ -321,7 +321,7 @@ func (a *Agent) applyControlArtifactTopUp(pending *config.ControlArtifactPending
 	if !samePendingControlArtifactTopUp(pool.PendingTopUp, pending, config.ControlArtifactTopUpPending) {
 		return errors.New("control artifact top-up changed before response commit")
 	}
-	pool.LogicalBindingID = strings.TrimSpace(response.Pool.LogicalProviderBindingID)
+	pool.LogicalBindingID = strings.TrimSpace(response.Pool.LogicalCloudBindingID)
 	for _, delivered := range response.Pool.Entries {
 		normalizedArtifact, err := config.NormalizeControlArtifactJSON(delivered.ArtifactJSON)
 		if err != nil {

@@ -56,7 +56,7 @@ export type RuntimeServiceCapability = Readonly<{
 
 export type RuntimeServiceCapabilities = Readonly<{
   desktop_model_source: RuntimeServiceCapability;
-  provider_link: RuntimeServiceCapability;
+  cloud_link: RuntimeServiceCapability;
   runtime_gateway?: RuntimeServiceCapability;
 }>;
 
@@ -69,16 +69,16 @@ export type RuntimeServiceBinding = Readonly<{
   connected_at_unix_ms?: number;
   model_source?: string;
   model_count?: number;
-  missing_key_provider_ids?: string[];
+  missing_key_cloud_ids?: string[];
   last_error?: string;
 }>;
 
 export type RuntimeServiceBindings = Readonly<{
   desktop_model_source: RuntimeServiceBinding;
-  provider_link: RuntimeServiceProviderLinkBinding;
+  cloud_link: RuntimeServiceCloudLinkBinding;
 }>;
 
-export type RuntimeServiceProviderLinkState =
+export type RuntimeServiceCloudLinkState =
   | 'unbound'
   | 'linking'
   | 'linked'
@@ -98,11 +98,11 @@ export type RuntimeServiceProviderConnectionState =
   | 'unsupported'
   | 'error';
 
-export type RuntimeServiceProviderLinkBinding = Readonly<{
-  state: RuntimeServiceProviderLinkState;
+export type RuntimeServiceCloudLinkBinding = Readonly<{
+  state: RuntimeServiceCloudLinkState;
   connection_state?: RuntimeServiceProviderConnectionState;
-  provider_origin?: string;
-  provider_id?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   env_public_id?: string;
   access_point_origin?: string;
   local_environment_public_id?: string;
@@ -142,7 +142,7 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 44;
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 45;
 export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
@@ -280,8 +280,8 @@ function normalizeCapability(value: unknown): RuntimeServiceCapability {
 function normalizeBinding(value: unknown, capability: RuntimeServiceCapability): RuntimeServiceBinding {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const state = compact(record.state) as RuntimeServiceBindingState;
-  const missingKeyProviderIDs = Array.isArray(record.missing_key_provider_ids)
-    ? Array.from(new Set(record.missing_key_provider_ids.map((item) => compact(item)).filter(Boolean))).sort()
+  const missingKeyProviderIDs = Array.isArray(record.missing_key_cloud_ids)
+    ? Array.from(new Set(record.missing_key_cloud_ids.map((item) => compact(item)).filter(Boolean))).sort()
     : [];
   const normalizedState: RuntimeServiceBindingState = capability.supported
     ? (
@@ -301,7 +301,7 @@ function normalizeBinding(value: unknown, capability: RuntimeServiceCapability):
     connected_at_unix_ms: normalizeCount(record.connected_at_unix_ms),
     model_source: compact(record.model_source) || undefined,
     model_count: normalizeCount(record.model_count),
-    missing_key_provider_ids: missingKeyProviderIDs.length > 0 ? missingKeyProviderIDs : undefined,
+    missing_key_cloud_ids: missingKeyProviderIDs.length > 0 ? missingKeyProviderIDs : undefined,
     last_error: compact(record.last_error) || undefined,
   };
 }
@@ -316,13 +316,13 @@ function normalizeProviderConnectionState(value: unknown): RuntimeServiceProvide
   }
 }
 
-function normalizeProviderLinkBinding(
+function normalizeCloudLinkBinding(
   value: unknown,
   capability: RuntimeServiceCapability,
-): RuntimeServiceProviderLinkBinding {
+): RuntimeServiceCloudLinkBinding {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const rawState = compact(record.state);
-  const state: RuntimeServiceProviderLinkState = capability.supported
+  const state: RuntimeServiceCloudLinkState = capability.supported
     ? (
         rawState === 'linked'
         || rawState === 'linking'
@@ -336,8 +336,8 @@ function normalizeProviderLinkBinding(
   return {
     state,
     connection_state: normalizeProviderConnectionState(record.connection_state),
-    provider_origin: compact(record.provider_origin) || undefined,
-    provider_id: compact(record.provider_id) || undefined,
+    cloud_origin: compact(record.cloud_origin) || undefined,
+    cloud_id: compact(record.cloud_id) || undefined,
     env_public_id: compact(record.env_public_id) || undefined,
     access_point_origin: compact(record.access_point_origin) || undefined,
     local_environment_public_id: compact(record.local_environment_public_id) || undefined,
@@ -365,7 +365,7 @@ export function normalizeRuntimeServiceSnapshot(
     ? record.capabilities as Record<string, unknown>
     : {};
   const desktopModelSourceCapability = normalizeCapability(capabilitiesRecord.desktop_model_source);
-  const providerLinkCapability = normalizeCapability(capabilitiesRecord.provider_link);
+  const cloudLinkCapability = normalizeCapability(capabilitiesRecord.cloud_link);
   const runtimeGatewayCapability = normalizeCapability(capabilitiesRecord.runtime_gateway);
   const bindingsRecord = record.bindings && typeof record.bindings === 'object'
     ? record.bindings as Record<string, unknown>
@@ -411,12 +411,12 @@ export function normalizeRuntimeServiceSnapshot(
     },
     capabilities: {
       desktop_model_source: desktopModelSourceCapability,
-      provider_link: providerLinkCapability,
+      cloud_link: cloudLinkCapability,
       runtime_gateway: runtimeGatewayCapability,
     },
     bindings: {
       desktop_model_source: normalizeBinding(bindingsRecord.desktop_model_source, desktopModelSourceCapability),
-      provider_link: normalizeProviderLinkBinding(bindingsRecord.provider_link, providerLinkCapability),
+      cloud_link: normalizeCloudLinkBinding(bindingsRecord.cloud_link, cloudLinkCapability),
     },
   };
 }
@@ -525,16 +525,16 @@ export function runtimeServiceSupportsDesktopModelSource(snapshot: RuntimeServic
     && (snapshot.capabilities.desktop_model_source.bind_method || 'runtime_control_v2') === 'runtime_control_v2';
 }
 
-export function runtimeServiceProviderLinkBinding(
+export function runtimeServiceCloudLinkBinding(
   snapshot: RuntimeServiceSnapshot | null | undefined,
-): RuntimeServiceProviderLinkBinding {
-  const capability = snapshot?.capabilities?.provider_link;
-  return normalizeProviderLinkBinding(snapshot?.bindings?.provider_link, capability ?? { supported: false });
+): RuntimeServiceCloudLinkBinding {
+  const capability = snapshot?.capabilities?.cloud_link;
+  return normalizeCloudLinkBinding(snapshot?.bindings?.cloud_link, capability ?? { supported: false });
 }
 
-export function runtimeServiceSupportsProviderLink(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
-  return snapshot?.capabilities?.provider_link?.supported === true
-    && (snapshot.capabilities.provider_link.bind_method || 'runtime_control_v2') === 'runtime_control_v2';
+export function runtimeServiceSupportsCloudLink(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  return snapshot?.capabilities?.cloud_link?.supported === true
+    && (snapshot.capabilities.cloud_link.bind_method || 'runtime_control_v2') === 'runtime_control_v2';
 }
 
 export function runtimeServiceSupportsRuntimeGateway(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
@@ -545,10 +545,10 @@ export function runtimeServiceSupportsRuntimeGateway(snapshot: RuntimeServiceSna
 export function runtimeServiceProviderConnectionState(
   snapshot: RuntimeServiceSnapshot | null | undefined,
 ): RuntimeServiceProviderConnectionState {
-  if (!runtimeServiceSupportsProviderLink(snapshot)) {
+  if (!runtimeServiceSupportsCloudLink(snapshot)) {
     return 'unsupported';
   }
-  const binding = runtimeServiceProviderLinkBinding(snapshot);
+  const binding = runtimeServiceCloudLinkBinding(snapshot);
   switch (binding.state) {
     case 'unbound':
       return 'unlinked';
@@ -567,19 +567,19 @@ export function runtimeServiceProviderConnectionState(
   }
 }
 
-export function runtimeServiceProviderLinkMatches(
+export function runtimeServiceCloudLinkMatches(
   snapshot: RuntimeServiceSnapshot | null | undefined,
   expected: Readonly<{
-    provider_origin?: string;
-    provider_id?: string;
+    cloud_origin?: string;
+    cloud_id?: string;
     env_public_id?: string;
     access_point_origin?: string;
   }> | null | undefined,
 ): boolean {
-  const binding = runtimeServiceProviderLinkBinding(snapshot);
+  const binding = runtimeServiceCloudLinkBinding(snapshot);
   return binding.state === 'linked'
-    && compact(binding.provider_origin) === compact(expected?.provider_origin)
-    && compact(binding.provider_id) === compact(expected?.provider_id)
+    && compact(binding.cloud_origin) === compact(expected?.cloud_origin)
+    && compact(binding.cloud_id) === compact(expected?.cloud_id)
     && compact(binding.env_public_id) === compact(expected?.env_public_id)
     && compact(binding.access_point_origin) === compact(expected?.access_point_origin);
 }

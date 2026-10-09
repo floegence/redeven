@@ -5,7 +5,7 @@ import {
   testDesktopPreferences,
   testProviderBoundLocalEnvironment,
   testLocalEnvironment,
-  testProviderEnvironment,
+  testCloudEnvironment,
   testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
 import {
@@ -152,7 +152,7 @@ describe('environmentLibraryOverlayState', () => {
   it('closes an endpoints popover when the environment no longer exposes endpoints', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        provider_environments: [testProviderEnvironment('https://provider.example.invalid', 'env_demo')],
+        cloud_environments: [testCloudEnvironment('https://provider.example.invalid', 'env_demo')],
       }),
     });
     const environment = {
@@ -189,8 +189,8 @@ describe('environmentLibraryOverlayState', () => {
             },
           },
         }),
-        provider_environments: [
-          testProviderEnvironment('https://provider.example.invalid', 'env_demo'),
+        cloud_environments: [
+          testCloudEnvironment('https://provider.example.invalid', 'env_demo'),
         ],
       }),
     });

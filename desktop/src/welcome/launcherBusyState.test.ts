@@ -11,7 +11,7 @@ import {
   type DesktopRuntimeLifecyclePhase,
 } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import {
   busyStateForLauncherRequest,
   busyStateBlocksEnvironmentAction,
@@ -48,7 +48,7 @@ function runtimeID(value: `local:${string}` | `ssh:${string}`): DesktopRuntimeTa
 function providerRuntimeTarget(
   runtimeKey: string,
   id: `local:${string}` | `ssh:${string}` = 'ssh:target',
-): DesktopProviderRuntimeLinkTarget {
+): DesktopCloudRuntimeLinkTarget {
   return {
     id,
     kind: id.startsWith('ssh:') ? 'ssh_environment' : 'local_environment',
@@ -62,10 +62,10 @@ function providerRuntimeTarget(
       state: 'available',
     },
     provider_connection_state: 'connected',
-    provider_link_state: 'linked',
-    provider_origin_supported: true,
-    can_connect_provider: false,
-    can_disconnect_provider: true,
+    cloud_link_state: 'linked',
+    cloud_origin_supported: true,
+    can_connect_cloud: false,
+    can_disconnect_cloud: true,
   };
 }
 
@@ -303,8 +303,8 @@ describe('launcherBusyState', () => {
     expect(state).toMatchObject({
       action: 'refresh_environment_runtime',
       environment_id: 'env_demo',
-      provider_origin: '',
-      provider_id: '',
+      cloud_origin: '',
+      cloud_id: '',
       progress: null,
     });
     expect(state.request_started_at_unix_ms).toBeGreaterThan(0);
@@ -319,8 +319,8 @@ describe('launcherBusyState', () => {
     })).toMatchObject({
       action: 'delete_environment',
       environment_id: 'saved_demo',
-      provider_origin: '',
-      provider_id: '',
+      cloud_origin: '',
+      cloud_id: '',
       progress: null,
     });
   });
@@ -328,12 +328,12 @@ describe('launcherBusyState', () => {
   it('scopes control-plane requests by provider identity', () => {
     const refreshState = busyStateForLauncherRequest({
       kind: 'refresh_control_plane',
-      provider_origin: 'https://provider.example.invalid',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://provider.example.invalid',
+      cloud_id: 'example_control_plane',
     });
     const connectState = busyStateForLauncherRequest({
       kind: 'start_control_plane_connect',
-      provider_origin: 'https://provider.example.invalid',
+      cloud_origin: 'https://provider.example.invalid',
       display_label: 'Demo Control Plane',
     });
 
@@ -1724,7 +1724,7 @@ describe('launcherBusyState', () => {
 
 describe('Cloud sign-out ownership', () => {
   it('limits the pending sign-out to its exact Cloud account', () => {
-    const busy = busyStateForLauncherRequest({ kind: 'sign_out_control_plane', provider_origin: 'https://redeven.test', provider_id: 'redeven' });
+    const busy = busyStateForLauncherRequest({ kind: 'sign_out_control_plane', cloud_origin: 'https://redeven.test', cloud_id: 'redeven' });
     expect(busyStateMatchesControlPlane(busy, 'https://redeven.test', 'redeven', ['sign_out_control_plane'])).toBe(true);
     expect(busyStateMatchesControlPlane(busy, 'https://other.example.invalid', 'redeven', ['sign_out_control_plane'])).toBe(false);
     expect(busyStateMatchesControlPlane(busy, 'https://redeven.test', 'other', ['sign_out_control_plane'])).toBe(false);

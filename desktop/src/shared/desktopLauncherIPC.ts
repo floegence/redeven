@@ -2,8 +2,8 @@ import type { GatewayEndpoint, GatewayMember, GatewayClientAccessCode, GatewayAu
 import { normalizeGatewayInvitation, type GatewayMembershipStatus, type GatewayMembershipOperation } from './gatewayJoin';
 import { normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from './gatewayCloud';
 import type { EnvironmentAccessRoute } from './environmentAccess';
-import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
-import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
+import type { DesktopControlPlaneSummary } from './cloud';
+import { normalizeControlPlaneOrigin } from './cloud';
 import {
   normalizeDesktopSSHConnectTimeoutSeconds,
   type DesktopSSHEnvironmentDetails,
@@ -47,11 +47,11 @@ import {
   type DesktopRuntimeTargetID,
 } from './desktopRuntimePlacement';
 import type {
-  DesktopProviderEnvironmentCandidate,
-  DesktopProviderRuntimeLinkTarget,
-  DesktopProviderRuntimeLinkTargetID,
+  DesktopCloudEnvironmentCandidate,
+  DesktopCloudRuntimeLinkTarget,
+  DesktopCloudRuntimeLinkTargetID,
 } from './providerRuntimeLinkTarget';
-import { normalizeDesktopProviderRuntimeLinkRequestTarget } from './environmentManagementPrinciples';
+import { normalizeDesktopCloudRuntimeLinkRequestTarget } from './environmentManagementPrinciples';
 
 export type { DesktopComponentTaskProgress } from './desktopComponentTaskProgress';
 
@@ -177,7 +177,7 @@ export type DesktopLauncherActionFailureCode =
   | 'provider_sync_required'
   | 'provider_unreachable'
   | 'provider_invalid_response'
-  | 'provider_link_failed'
+  | 'cloud_link_failed'
   | 'runtime_start_failed'
   | 'gateway_start_required'
   | 'gateway_not_manageable'
@@ -214,8 +214,8 @@ export type DesktopLauncherActionKind =
   | 'restart_environment_runtime'
   | 'update_environment_runtime'
   | 'manage_desktop_update'
-  | 'connect_provider_runtime'
-  | 'disconnect_provider_runtime'
+  | 'connect_cloud_runtime'
+  | 'disconnect_cloud_runtime'
   | 'stop_environment_runtime'
   | 'refresh_environment_runtime'
   | 'refresh_all_environment_runtimes'
@@ -289,8 +289,8 @@ export type DesktopLauncherRuntimeTarget = Readonly<
     host_access: DesktopRuntimeHostAccess;
     placement: DesktopRuntimePlacement;
     environment_id: string;
-    provider_origin: string;
-    provider_id: string;
+    cloud_origin: string;
+    cloud_id: string;
     env_public_id: string;
     external_local_ui_url: string;
     label: string;
@@ -395,21 +395,21 @@ export type DesktopEnvironmentEntry = Readonly<{
   open_local_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_remote_session_key?: string;
   open_remote_session_lifecycle?: DesktopLauncherSessionLifecycle;
-  provider_runtime_link_target?: DesktopProviderRuntimeLinkTarget;
-  provider_environment_candidates?: readonly DesktopProviderEnvironmentCandidate[];
+  provider_runtime_link_target?: DesktopCloudRuntimeLinkTarget;
+  provider_environment_candidates?: readonly DesktopCloudEnvironmentCandidate[];
   managed_runtime_target_id?: DesktopRuntimeTargetID;
   managed_runtime_placement_target_id?: DesktopRuntimeTargetID;
   managed_runtime_host_access?: DesktopRuntimeHostAccess;
   managed_runtime_placement?: DesktopRuntimePlacement;
   managed_runtime_open_connection_required?: boolean;
-  provider_linked_runtime_summary?: Readonly<{
-    runtime_target_id: DesktopProviderRuntimeLinkTargetID;
-    runtime_kind: DesktopProviderRuntimeLinkTarget['kind'];
+  cloud_linked_runtime_summary?: Readonly<{
+    runtime_target_id: DesktopCloudRuntimeLinkTargetID;
+    runtime_kind: DesktopCloudRuntimeLinkTarget['kind'];
     label: string;
     provider_connection_state: RuntimeServiceProviderConnectionState;
   }>;
-  provider_origin?: string;
-  provider_id?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   env_public_id?: string;
   provider_source_id?: string;
   remote_environment_url?: string;
@@ -544,8 +544,8 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   environment_label?: string;
   gateway_id?: string;
   gateway_environment_id?: string;
-  provider_origin?: string;
-  provider_id?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   started_at_unix_ms: number;
   updated_at_unix_ms: number;
   status: DesktopLauncherOperationStatus;
@@ -681,7 +681,7 @@ export type DesktopLauncherOperationNextAction = Readonly<
 >;
 
 export type DesktopLauncherActionRequest = Readonly<
-  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopProviderRuntimeLinkTargetID; operation: GatewayMembershipOperation; invitation?: GatewayMemberInvitation; environment_choice?: 'preserve' | 'new' }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: GatewayMembershipOperation; invitation?: GatewayMemberInvitation; environment_choice?: 'preserve' | 'new' }
   | { kind: 'configure_gateway_cloud'; gateway_id: string; configuration: GatewayCloudConfiguration }
   | { kind: 'inspect_gateway_cloud'; gateway_id: string }
   | {
@@ -731,14 +731,14 @@ export type DesktopLauncherActionRequest = Readonly<
       label?: string;
     }
   | {
-      kind: 'connect_provider_runtime';
+      kind: 'connect_cloud_runtime';
       provider_environment_id: string;
-      runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+      runtime_target_id: DesktopCloudRuntimeLinkTargetID;
   }
   | {
-      kind: 'disconnect_provider_runtime';
+      kind: 'disconnect_cloud_runtime';
       provider_environment_id?: string;
-      runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+      runtime_target_id: DesktopCloudRuntimeLinkTargetID;
   }
   | ({
       kind: 'stop_environment_runtime';
@@ -751,7 +751,7 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | {
       kind: 'start_control_plane_connect';
-      provider_origin: string;
+      cloud_origin: string;
       display_label?: string;
     }
   | {
@@ -780,13 +780,13 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | {
       kind: 'refresh_control_plane';
-      provider_origin: string;
-      provider_id: string;
+      cloud_origin: string;
+      cloud_id: string;
     }
   | {
       kind: 'sign_out_control_plane';
-      provider_origin: string;
-      provider_id: string;
+      cloud_origin: string;
+      cloud_id: string;
     }
   | {
       kind: 'upsert_gateway';
@@ -968,8 +968,8 @@ export type DesktopLauncherActionFailure = Readonly<{
   gateway_label?: string;
   gateway_environment_id?: string;
   operation_key?: string;
-  provider_origin?: string;
-  provider_id?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   env_public_id?: string;
   should_refresh_snapshot?: boolean;
   failure?: DesktopOperationFailurePresentation;
@@ -1072,7 +1072,7 @@ function normalizeDesktopLauncherRuntimeTarget(
 ): DesktopLauncherRuntimeTarget | null {
   const allowedFields = new Set([
     'kind', 'runtime_target_id', 'placement_target_id', 'host_access', 'placement',
-    'environment_id', 'provider_origin', 'provider_id', 'env_public_id', 'external_local_ui_url',
+    'environment_id', 'cloud_origin', 'cloud_id', 'env_public_id', 'external_local_ui_url',
     'route',
     'label', 'force_runtime_update', 'auto_runtime_probe_enabled', 'ssh_password', 'ssh_password_mode',
     'operation_key', 'operation_started_at_unix_ms',
@@ -1101,8 +1101,8 @@ function normalizeDesktopLauncherRuntimeTarget(
     }
   }
   const environmentID = compact(candidate.environment_id);
-  const providerOriginRaw = compact(candidate.provider_origin);
-  const providerID = compact(candidate.provider_id);
+  const cloudOriginRaw = compact(candidate.cloud_origin);
+  const cloudID = compact(candidate.cloud_id);
   const envPublicID = compact(candidate.env_public_id);
   const externalLocalUIURL = compact(candidate.external_local_ui_url);
   const label = compact(candidate.label);
@@ -1114,10 +1114,10 @@ function normalizeDesktopLauncherRuntimeTarget(
   const remoteInstallDir = compact(candidate.runtime_root);
   const bootstrapStrategy = compact(candidate.bootstrap_strategy);
   const releaseBaseURL = compact(candidate.release_base_url);
-  let providerOrigin = '';
-  if (providerOriginRaw !== '') {
+  let cloudOrigin = '';
+  if (cloudOriginRaw !== '') {
     try {
-      providerOrigin = normalizeControlPlaneOrigin(providerOriginRaw);
+      cloudOrigin = normalizeControlPlaneOrigin(cloudOriginRaw);
     } catch {
       return null;
     }
@@ -1133,8 +1133,8 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(hostAccess ? { host_access: hostAccess } : {}),
     ...(placement ? { placement } : {}),
     ...(environmentID !== '' ? { environment_id: environmentID } : {}),
-    ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
-    ...(providerID !== '' ? { provider_id: providerID } : {}),
+    ...(cloudOrigin !== '' ? { cloud_origin: cloudOrigin } : {}),
+    ...(cloudID !== '' ? { cloud_id: cloudID } : {}),
     ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
     ...(externalLocalUIURL !== '' ? { external_local_ui_url: externalLocalUIURL } : {}),
     ...(label !== '' ? { label } : {}),
@@ -1162,7 +1162,7 @@ function normalizeDesktopLauncherRuntimeTarget(
   if (
     !target.environment_id
     && !target.runtime_target_id
-    && !target.provider_origin
+    && !target.cloud_origin
     && !target.external_local_ui_url
     && !target.ssh_destination
   ) {
@@ -1315,19 +1315,19 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
       };
     }
-    case 'connect_provider_runtime':
-    case 'disconnect_provider_runtime': {
+    case 'connect_cloud_runtime':
+    case 'disconnect_cloud_runtime': {
       // IMPORTANT: Provider-link IPC must preserve the exact runtime target the
       // user selected from a Local/SSH card. Do not infer or fallback to another
       // runtime from the provider environment alone.
-      const target = normalizeDesktopProviderRuntimeLinkRequestTarget({
+      const target = normalizeDesktopCloudRuntimeLinkRequestTarget({
         provider_environment_id: (candidate as { provider_environment_id?: unknown }).provider_environment_id,
         runtime_target_id: (candidate as { runtime_target_id?: unknown }).runtime_target_id,
       });
       if (!target) {
         return null;
       }
-      if (kind === 'connect_provider_runtime' && !target.provider_environment_id) {
+      if (kind === 'connect_cloud_runtime' && !target.provider_environment_id) {
         return null;
       }
       return {
@@ -1410,14 +1410,14 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       }
     case 'start_control_plane_connect':
       {
-        const providerOrigin = compact((candidate as { provider_origin?: unknown }).provider_origin);
-        if (providerOrigin === '') {
+        const cloudOrigin = compact((candidate as { cloud_origin?: unknown }).cloud_origin);
+        if (cloudOrigin === '') {
           return null;
         }
         try {
           return {
             kind,
-            provider_origin: normalizeControlPlaneOrigin(providerOrigin),
+            cloud_origin: normalizeControlPlaneOrigin(cloudOrigin),
             display_label: compact((candidate as { display_label?: unknown }).display_label) || undefined,
           };
         } catch {
@@ -1458,15 +1458,15 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     }
     case 'refresh_control_plane':
     case 'sign_out_control_plane': {
-      const providerOrigin = compact((candidate as { provider_origin?: unknown }).provider_origin);
-      const providerID = compact((candidate as { provider_id?: unknown }).provider_id);
-      if (providerOrigin === '' || providerID === '') {
+      const cloudOrigin = compact((candidate as { cloud_origin?: unknown }).cloud_origin);
+      const cloudID = compact((candidate as { cloud_id?: unknown }).cloud_id);
+      if (cloudOrigin === '' || cloudID === '') {
         return null;
       }
       return {
         kind,
-        provider_origin: providerOrigin,
-        provider_id: providerID,
+        cloud_origin: cloudOrigin,
+        cloud_id: cloudID,
       };
     }
     case 'upsert_gateway': {
@@ -1584,7 +1584,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       if (choice !== undefined && ((operation !== 'join' && operation !== 'replace') || (choice !== 'preserve' && choice !== 'new'))) return null;
       if (!/^(local|ssh|wsl):.+$/u.test(runtimeTargetID) || !['join', 'replace', 'update-endpoints', 'status', 'retry', 'leave'].includes(operation)
         || ((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') ? !invitation : invitation !== undefined)) return null;
-      return { kind, runtime_target_id: runtimeTargetID as DesktopProviderRuntimeLinkTargetID,
+      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID,
         operation: operation as GatewayMembershipOperation, ...(invitation ? { invitation } : {}), ...(choice ? { environment_choice: choice } : {}) };
     }
     case 'configure_gateway_cloud': {

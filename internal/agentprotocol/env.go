@@ -12,7 +12,7 @@ const (
 	TargetKindLocalContainerRuntime = "local_container_runtime"
 	TargetKindSSHEnvironment        = "ssh_environment"
 	TargetKindSSHContainerRuntime   = "ssh_container_runtime"
-	TargetKindProviderEnvironment   = "provider_environment"
+	TargetKindCloudEnvironment      = "provider_environment"
 	TargetKindGatewayEnvironment    = "gateway_environment"
 	TargetKindExternalLocalUI       = "external_local_ui"
 
@@ -443,7 +443,7 @@ func recognizedUnsupportedEnvironmentKind(target string) string {
 	case strings.HasPrefix(lower, "ssh:"):
 		return TargetKindSSHEnvironment
 	case strings.HasPrefix(lower, "provider:") && strings.Contains(lower, ":env:"):
-		return TargetKindProviderEnvironment
+		return TargetKindCloudEnvironment
 	case strings.HasPrefix(lower, "gateway:"):
 		return TargetKindGatewayEnvironment
 	case strings.HasPrefix(lower, "external_local_ui:"), strings.HasPrefix(lower, "external:local-ui:"):
@@ -471,7 +471,7 @@ func unsupportedTargetMessage(kind string) string {
 		return "Redeven recognized this local host target, but only the default Local Environment is executable through `redeven env` in phase one."
 	case TargetKindSSHEnvironment, TargetKindSSHContainerRuntime:
 		return "Redeven recognized this SSH target, but SSH lifecycle execution is not available through `redeven env` in phase one. Use Redeven Desktop for lifecycle actions."
-	case TargetKindProviderEnvironment:
+	case TargetKindCloudEnvironment:
 		return "Redeven recognized this provider environment target, but provider lifecycle execution is not available through `redeven env` in phase one. Use Redeven Desktop or the provider surface."
 	case TargetKindGatewayEnvironment:
 		return "Redeven recognized this Gateway target, but Gateway lifecycle execution is not available through `redeven env` in phase one. Use the Gateway surface in Redeven Desktop."

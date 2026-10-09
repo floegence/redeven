@@ -153,7 +153,7 @@ func RuntimeMaintenancePathFromConfigPath(configPath string) string {
 	return filepath.Join(filepath.Dir(configPath), "runtime", "maintenance", "current.json")
 }
 
-func normalizeControlplaneBaseURL(raw string) (string, error) {
+func normalizeAccessPointOrigin(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return "", errors.New("missing controlplane url")

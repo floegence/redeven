@@ -51,17 +51,17 @@ function environmentMetadataContent(environment: DesktopEnvironmentEntry, label:
     `Target ID: ${environmentFlowerPrimaryTargetID(environment)}`,
     'This selection identifies the device requested by the user; it does not change where terminal.exec runs.',
     trimString(environment.local_ui_url) ? `Local UI URL: ${trimString(environment.local_ui_url)}` : '',
-    trimString(environment.provider_origin) ? `Provider origin: ${trimString(environment.provider_origin)}` : '',
-    trimString(environment.provider_id) ? `Provider ID: ${trimString(environment.provider_id)}` : '',
+    trimString(environment.cloud_origin) ? `Provider origin: ${trimString(environment.cloud_origin)}` : '',
+    trimString(environment.cloud_id) ? `Provider ID: ${trimString(environment.cloud_id)}` : '',
     trimString(environment.env_public_id) ? `Env public ID: ${trimString(environment.env_public_id)}` : '',
   ].filter(Boolean).join('\n');
 }
 
 export function environmentFlowerPrimaryTargetID(environment: DesktopEnvironmentEntry): string {
-  const providerOrigin = trimString(environment.provider_origin);
+  const cloudOrigin = trimString(environment.cloud_origin);
   const envPublicID = trimString(environment.env_public_id);
-  if (environment.kind === 'provider_environment' && providerOrigin && envPublicID) {
-    return `provider:${encodeURIComponent(providerOrigin)}:env:${encodeURIComponent(envPublicID)}`;
+  if (environment.kind === 'provider_environment' && cloudOrigin && envPublicID) {
+    return `provider:${encodeURIComponent(cloudOrigin)}:env:${encodeURIComponent(envPublicID)}`;
   }
   return envPublicID
     || trimString(environment.provider_runtime_link_target?.id)

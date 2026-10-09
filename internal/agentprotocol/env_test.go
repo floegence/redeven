@@ -37,7 +37,7 @@ func TestResolveEnvironmentTargetRecognizesUnsupportedRedevenTargetShapes(t *tes
 		{name: "welcome prefixed local container", raw: "local:local:container:docker:redeven-dev:abcd1234", kind: TargetKindLocalContainerRuntime},
 		{name: "welcome prefixed local host", raw: "local:local:host:redeven-dev", kind: TargetKindLocalHostRuntime},
 		{name: "ssh container", raw: "ssh:container:devbox:docker:redeven-dev:abcd1234", kind: TargetKindSSHContainerRuntime},
-		{name: "provider environment", raw: "provider:https%3A%2F%2Fredeven.test:env:env_999", kind: TargetKindProviderEnvironment},
+		{name: "provider environment", raw: "provider:https%3A%2F%2Fredeven.test:env:env_999", kind: TargetKindCloudEnvironment},
 		{name: "gateway environment", raw: "gateway:gw_123:env:env_999", kind: TargetKindGatewayEnvironment},
 	}
 	for _, tt := range tests {

@@ -26,7 +26,7 @@ type controlArtifactSource struct {
 }
 
 func sameControlBinding(expected, current *config.Config) bool {
-	if expected == nil || current == nil || expected.EnvironmentID != current.EnvironmentID || expected.BindingGeneration != current.BindingGeneration || expected.ControlplaneBaseURL != current.ControlplaneBaseURL {
+	if expected == nil || current == nil || expected.EnvironmentID != current.EnvironmentID || expected.BindingGeneration != current.BindingGeneration || expected.AccessPointOrigin != current.AccessPointOrigin {
 		return false
 	}
 	if expected.GatewayRejoinRequired != current.GatewayRejoinRequired {

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestNormalizeControlplaneBaseURLRequiresHTTPSOrigin(t *testing.T) {
+func TestNormalizeAccessPointOriginRequiresHTTPSOrigin(t *testing.T) {
 	t.Parallel()
 
 	for _, raw := range []string{
@@ -20,14 +20,14 @@ func TestNormalizeControlplaneBaseURLRequiresHTTPSOrigin(t *testing.T) {
 		"https://provider.example?token=value",
 		"https://provider.example/#fragment",
 	} {
-		if got, err := normalizeControlplaneBaseURL(raw); err == nil {
-			t.Fatalf("normalizeControlplaneBaseURL(%q) = %q, want rejection", raw, got)
+		if got, err := normalizeAccessPointOrigin(raw); err == nil {
+			t.Fatalf("normalizeAccessPointOrigin(%q) = %q, want rejection", raw, got)
 		}
 	}
 
-	got, err := normalizeControlplaneBaseURL(" HTTPS://Provider.Example:443/ ")
+	got, err := normalizeAccessPointOrigin(" HTTPS://Provider.Example:443/ ")
 	if err != nil {
-		t.Fatalf("normalizeControlplaneBaseURL() error = %v", err)
+		t.Fatalf("normalizeAccessPointOrigin() error = %v", err)
 	}
 	if got != "https://provider.example:443" {
 		t.Fatalf("normalized URL = %q", got)
@@ -52,19 +52,18 @@ func TestBootstrapRedirectCannotChangeOriginOrForwardTicket(t *testing.T) {
 	}))
 	defer source.Close()
 
-	_, err := ResolveProviderLinkConfig(context.Background(), ProviderLinkBootstrapArgs{
-		ConfigPath:          t.TempDir() + "/config.json",
-		ProviderOrigin:      "https://provider.example",
-		ControlplaneBaseURL: source.URL,
-		EnvironmentID:       "env_test",
-		BootstrapTicket:     "ticket-secret",
-		HTTPClient:          source.Client(),
-		RuntimeHostname:     "test-host",
-		RuntimeGOOS:         "test-os",
-		RuntimeGOARCH:       "test-arch",
+	_, err := ResolveCloudLinkConfig(context.Background(), CloudLinkBootstrapArgs{
+		ConfigPath:        t.TempDir() + "/config.json",
+		CloudOrigin:       source.URL,
+		EnvironmentID:     "env_test",
+		RuntimeLinkTicket: "ticket-secret",
+		HTTPClient:        source.Client(),
+		RuntimeHostname:   "test-host",
+		RuntimeGOOS:       "test-os",
+		RuntimeGOARCH:     "test-arch",
 	})
 	if err == nil || !strings.Contains(err.Error(), "bootstrap redirect changed origin") {
-		t.Fatalf("ResolveProviderLinkConfig() error = %v", err)
+		t.Fatalf("ResolveCloudLinkConfig() error = %v", err)
 	}
 	if got := redirectedRequests.Load(); got != 0 {
 		t.Fatalf("cross-origin redirect requests = %d, want 0", got)

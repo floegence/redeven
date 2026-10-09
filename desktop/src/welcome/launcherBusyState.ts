@@ -13,8 +13,8 @@ export type BusyAction = DesktopLauncherActionRequest['kind'] | '' | 'save_setti
 export type DesktopLauncherBusyState = Readonly<{
   action: BusyAction;
   environment_id: string;
-  provider_origin: string;
-  provider_id: string;
+  cloud_origin: string;
+  cloud_id: string;
   gateway_id: string;
   request_started_at_unix_ms: number;
   progress: DesktopLauncherActionProgress | null;
@@ -23,8 +23,8 @@ export type DesktopLauncherBusyState = Readonly<{
 export const IDLE_LAUNCHER_BUSY_STATE: DesktopLauncherBusyState = {
   action: '',
   environment_id: '',
-  provider_origin: '',
-  provider_id: '',
+  cloud_origin: '',
+  cloud_id: '',
   gateway_id: '',
   request_started_at_unix_ms: 0,
   progress: null,
@@ -74,8 +74,8 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
         action: 'save_environment',
         environment_id:
           request.registration.registration_ref.id,
-        provider_origin: '',
-        provider_id: '',
+        cloud_origin: '',
+        cloud_id: '',
         gateway_id:
           '',
         progress: null,
@@ -87,8 +87,8 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
           request.registration_ref.kind === 'gateway_environment'
             ? request.registration_ref.gateway_env_id
             : request.registration_ref.id,
-        provider_origin: '',
-        provider_id: '',
+        cloud_origin: '',
+        cloud_id: '',
         gateway_id: request.registration_ref.kind === 'gateway_environment' ? request.registration_ref.gateway_id : '',
         progress: null,
       });
@@ -97,8 +97,8 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
       return withRequestTimestamp({
         action: request.kind,
         environment_id: '',
-        provider_origin: request.provider_origin,
-        provider_id: request.provider_id,
+        cloud_origin: request.cloud_origin,
+        cloud_id: request.cloud_id,
         gateway_id: '',
         progress: null,
       });
@@ -107,8 +107,8 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
       return withRequestTimestamp({
         action: request.kind,
         environment_id: '',
-        provider_origin: '',
-        provider_id: '',
+        cloud_origin: '',
+        cloud_id: '',
         gateway_id: '',
         progress: null,
       });
@@ -116,8 +116,8 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
       return withRequestTimestamp({
         action: request.kind,
         environment_id: '',
-        provider_origin: request.provider_origin,
-        provider_id: '',
+        cloud_origin: request.cloud_origin,
+        cloud_id: '',
         gateway_id: '',
         progress: null,
       });
@@ -125,8 +125,8 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
       return withRequestTimestamp({
         action: request.kind,
         environment_id: 'environment_id' in request ? (request.environment_id ?? '') : '',
-        provider_origin: '',
-        provider_id: '',
+        cloud_origin: '',
+        cloud_id: '',
         gateway_id: 'gateway_id' in request ? (request.gateway_id ?? '') : '',
         progress: null,
       });
@@ -660,14 +660,14 @@ export function busyStateMatchesEnvironment(
 
 export function busyStateMatchesControlPlane(
   state: DesktopLauncherBusyState,
-  providerOrigin: string,
-  providerID: string,
+  cloudOrigin: string,
+  cloudID: string,
   actions?: readonly BusyAction[],
 ): boolean {
-  if (state.provider_origin === '' || state.provider_origin !== providerOrigin) {
+  if (state.cloud_origin === '' || state.cloud_origin !== cloudOrigin) {
     return false;
   }
-  if (providerID !== '' && state.provider_id !== '' && state.provider_id !== providerID) {
+  if (cloudID !== '' && state.cloud_id !== '' && state.cloud_id !== cloudID) {
     return false;
   }
   return actions === undefined ? true : busyStateMatchesAnyAction(state, actions);

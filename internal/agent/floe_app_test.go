@@ -71,9 +71,9 @@ func TestGrantNotifyAcceptsValidRemoteSessionAndRegistersAccessGate(t *testing.T
 	t.Cleanup(cancel)
 	a := &Agent{
 		cfg: &config.Config{
-			EnvironmentID:       "env_test",
-			ControlplaneBaseURL: "https://control.example.test",
-			PermissionPolicy:    defaultPermissionPolicyForAgentTest(t),
+			EnvironmentID:     "env_test",
+			AccessPointOrigin: "https://control.example.test",
+			PermissionPolicy:  defaultPermissionPolicyForAgentTest(t),
 		},
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		sessions:   map[string]*activeSession{},

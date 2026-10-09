@@ -22,7 +22,7 @@ const openableRuntimeService: RuntimeServiceSnapshot = {
   },
   capabilities: {
     desktop_model_source: { supported: false },
-    provider_link: { supported: true, bind_method: 'runtime_control_v1' },
+    cloud_link: { supported: true, bind_method: 'runtime_control_v1' },
   },
 };
 

@@ -4,8 +4,8 @@ import type {
   RuntimeServiceCapability,
   RuntimeServiceCompatibility,
   RuntimeServiceOpenReadiness,
-  RuntimeServiceProviderLinkBinding,
-  RuntimeServiceProviderLinkState,
+  RuntimeServiceCloudLinkBinding,
+  RuntimeServiceCloudLinkState,
   RuntimeServiceSnapshot,
   SysMaintenanceSnapshot,
   SysPingResponse,
@@ -73,7 +73,7 @@ function normalizeRuntimeServiceBindingState(value: unknown, supported: boolean)
   }
 }
 
-function normalizeRuntimeServiceProviderLinkState(value: unknown, supported: boolean): RuntimeServiceProviderLinkState {
+function normalizeRuntimeServiceCloudLinkState(value: unknown, supported: boolean): RuntimeServiceCloudLinkState {
   if (!supported) return 'unsupported';
   const state = String(value ?? '').trim();
   switch (state) {
@@ -145,21 +145,21 @@ function fromWireRuntimeServiceCapability(value: unknown): RuntimeServiceCapabil
   };
 }
 
-function fromWireRuntimeServiceProviderLinkBinding(
+function fromWireRuntimeServiceCloudLinkBinding(
   value: wire_sys_ping_resp['runtime_service'] extends infer RuntimeService
     ? RuntimeService extends { bindings?: infer Bindings }
-      ? Bindings extends { provider_link?: infer ProviderLink }
-        ? ProviderLink
+      ? Bindings extends { cloud_link?: infer CloudLink }
+        ? CloudLink
         : unknown
       : unknown
     : unknown,
   supported: boolean,
-): RuntimeServiceProviderLinkBinding {
+): RuntimeServiceCloudLinkBinding {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
-  const state = normalizeRuntimeServiceProviderLinkState(record.state, supported);
+  const state = normalizeRuntimeServiceCloudLinkState(record.state, supported);
   return {
     state,
-    providerOrigin: String(record.provider_origin ?? '').trim() || undefined,
+    cloudOrigin: String(record.cloud_origin ?? '').trim() || undefined,
     providerId: String(record.provider_id ?? '').trim() || undefined,
     envPublicId: String(record.env_public_id ?? '').trim() || undefined,
     accessPointOrigin: String(record.access_point_origin ?? '').trim() || undefined,
@@ -179,12 +179,12 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
   const capabilities = resp.capabilities ?? {};
   const desktopModelSourceCapability = fromWireRuntimeServiceCapability(capabilities.desktop_model_source);
   const desktopModelSourceSupported = desktopModelSourceCapability.supported === true;
-  const providerLinkCapability = fromWireRuntimeServiceCapability(capabilities.provider_link);
-  const providerLinkSupported = providerLinkCapability.supported === true;
+  const cloudLinkCapability = fromWireRuntimeServiceCapability(capabilities.cloud_link);
+  const cloudLinkSupported = cloudLinkCapability.supported === true;
   const runtimeGatewayCapability = fromWireRuntimeServiceCapability(capabilities.runtime_gateway);
   const bindings = resp.bindings ?? {};
   const desktopModelSourceBinding = bindings.desktop_model_source ?? {};
-  const providerLinkBinding = bindings.provider_link ?? {};
+  const cloudLinkBinding = bindings.cloud_link ?? {};
   return {
     runtimeVersion: resp.runtime_version ? String(resp.runtime_version) : undefined,
     runtimeCommit: resp.runtime_commit ? String(resp.runtime_commit) : undefined,
@@ -208,7 +208,7 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
     },
     capabilities: {
       desktopModelSource: desktopModelSourceCapability,
-      providerLink: providerLinkCapability,
+      cloudLink: cloudLinkCapability,
       runtimeGateway: runtimeGatewayCapability,
     },
     bindings: {
@@ -222,7 +222,7 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
         missingKeyProviderIds: compactStringArray(desktopModelSourceBinding.missing_key_provider_ids),
         lastError: String(desktopModelSourceBinding.last_error ?? '').trim() || undefined,
       },
-      providerLink: fromWireRuntimeServiceProviderLinkBinding(providerLinkBinding, providerLinkSupported),
+      cloudLink: fromWireRuntimeServiceCloudLinkBinding(cloudLinkBinding, cloudLinkSupported),
     },
   };
 }

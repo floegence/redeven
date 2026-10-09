@@ -1,6 +1,6 @@
 import { desktopRuntimeMaintenanceForRuntimeService, type DesktopRuntimeHealth, type DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
 import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
-import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import { normalizeRuntimeServiceSnapshot, runtimeServiceAIIsPreparing } from '../shared/runtimeService';
 import type { StartupReport } from './startup';
 
@@ -51,7 +51,7 @@ export type DesktopWelcomeRuntimeHealthTarget = Readonly<{
   probe_coordinator_key?: string;
   environment_id: string;
   slot: DesktopWelcomeRuntimeHealthSlot;
-  presence_target_id?: DesktopProviderRuntimeLinkTargetID;
+  presence_target_id?: DesktopCloudRuntimeLinkTargetID;
   auto_refresh_enabled: boolean;
   checking_health: DesktopRuntimeHealth;
   probe: () => Promise<DesktopWelcomeRuntimeHealthProbeResult>;

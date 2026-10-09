@@ -13,8 +13,8 @@ func recordStartupSecretSources(stateDir string, secrets resolvedStartupSecrets)
 	if secrets.localUIPassword.source != startupSecretSourceNone {
 		detail["local_ui_access_source"] = string(secrets.localUIPassword.source)
 	}
-	if secrets.bootstrapTicket.source != startupSecretSourceNone {
-		detail["provider_bootstrap_source"] = string(secrets.bootstrapTicket.source)
+	if secrets.linkTicket.source != startupSecretSourceNone {
+		detail["cloud_link_source"] = string(secrets.linkTicket.source)
 	}
 	if len(detail) == 0 || strings.TrimSpace(stateDir) == "" {
 		return

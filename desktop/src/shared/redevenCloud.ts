@@ -1,4 +1,4 @@
-import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
+import { normalizeControlPlaneOrigin } from './cloud';
 
 const REDEVEN_CLOUD_PUBLIC_DOMAIN_PARTS = ['redeven', 'com'] as const;
 const REDEVEN_CLOUD_PUBLIC_DOMAIN = REDEVEN_CLOUD_PUBLIC_DOMAIN_PARTS.join('.');

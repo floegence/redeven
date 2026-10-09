@@ -20,26 +20,26 @@ import (
 )
 
 func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
+		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-cloud.json":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"provider_id":"example_control_plane"}`))
+			_, _ = w.Write([]byte(`{"cloud_id":"example_control_plane"}`))
 			return
 		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
+		if r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
 			t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
 		}
-		var payload bootstrapTicketExchangeRequest
+		var payload runtimeLinkExchangeRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("Decode(request) error = %v", err)
 		}
-		assertBootstrapDeliveryRequestID(t, payload.BootstrapDeliveryRequestIDB64u)
+		assertBootstrapDeliveryRequestID(t, payload.DeliveryRequestIDB64u)
 		writeBootstrapTestResponse(t, w, r.Host, payload.LocalEnvironmentPublicID, 7)
 	}))
 	defer server.Close()
@@ -50,8 +50,8 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 	if err := Save(layout.ConfigPath, &Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://old.example.invalid",
+		CloudOrigin:              server.URL,
+		AccessPointOrigin:        "https://old.example.invalid",
 		EnvironmentID:            "env_old",
 		LocalEnvironmentPublicID: "le_existing",
 		AgentInstanceID:          "ai_existing",
@@ -65,13 +65,12 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	defer cancel()
 
 	writtenPath, err := BootstrapConfig(ctx, BootstrapArgs{
-		ProviderOrigin:      "https://redeven.test",
-		ControlplaneBaseURL: server.URL,
-		EnvironmentID:       "env_123",
-		BootstrapTicket:     "ticket-123",
-		StateRoot:           stateRoot,
-		LogLevel:            "info",
-		HTTPClient:          server.Client(),
+		CloudOrigin:       server.URL,
+		EnvironmentID:     "env_123",
+		RuntimeLinkTicket: "ticket-123",
+		StateRoot:         stateRoot,
+		LogLevel:          "info",
+		HTTPClient:        server.Client(),
 	})
 	if err != nil {
 		t.Fatalf("BootstrapConfig() error = %v", err)
@@ -87,8 +86,8 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	if cfg.LogLevel != "info" {
 		t.Fatalf("LogLevel = %q, want %q", cfg.LogLevel, "info")
 	}
-	if cfg.ProviderOrigin != "https://redeven.test" {
-		t.Fatalf("ProviderOrigin = %q, want %q", cfg.ProviderOrigin, "https://redeven.test")
+	if cfg.CloudOrigin != server.URL {
+		t.Fatalf("CloudOrigin = %q, want %q", cfg.CloudOrigin, "https://redeven.test")
 	}
 	if cfg.AgentInstanceID != "ai_existing" {
 		t.Fatalf("AgentInstanceID = %q, want %q", cfg.AgentInstanceID, "ai_existing")
@@ -102,8 +101,8 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	if cfg.EnvironmentID != "env_123" {
 		t.Fatalf("EnvironmentID = %q, want %q", cfg.EnvironmentID, "env_123")
 	}
-	if cfg.ControlplaneProviderID != "example_control_plane" {
-		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "example_control_plane")
+	if cfg.CloudID != "example_control_plane" {
+		t.Fatalf("CloudID = %q, want %q", cfg.CloudID, "example_control_plane")
 	}
 	if cfg.Direct != nil {
 		t.Fatalf("Direct = %#v, want nil", cfg.Direct)
@@ -162,31 +161,31 @@ func TestSavePreservesUnknownConfigFields(t *testing.T) {
 	}
 }
 
-func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestBootstrapConfigSupportsRuntimeLinkTicketExchange(t *testing.T) {
+	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
+		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-cloud.json":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"provider_id":"example_control_plane"}`))
+			_, _ = w.Write([]byte(`{"cloud_id":"example_control_plane"}`))
 			return
 		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
+		if r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
 			t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
 		}
-		var payload bootstrapTicketExchangeRequest
+		var payload runtimeLinkExchangeRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("Decode(request) error = %v", err)
 		}
 		if payload.EnvPublicID != "env_123" {
 			t.Fatalf("EnvPublicID = %q", payload.EnvPublicID)
 		}
-		if payload.ProviderOrigin != "https://redeven.test" {
-			t.Fatalf("ProviderOrigin = %q", payload.ProviderOrigin)
+		if payload.CloudOrigin != "https://"+r.Host {
+			t.Fatalf("CloudOrigin = %q", payload.CloudOrigin)
 		}
 		if payload.LocalEnvironmentPublicID == "" {
 			t.Fatalf("LocalEnvironmentPublicID is empty")
@@ -194,7 +193,7 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		if payload.AgentInstanceID == "" {
 			t.Fatalf("AgentInstanceID is empty")
 		}
-		assertBootstrapDeliveryRequestID(t, payload.BootstrapDeliveryRequestIDB64u)
+		assertBootstrapDeliveryRequestID(t, payload.DeliveryRequestIDB64u)
 		writeBootstrapTestResponse(t, w, r.Host, payload.LocalEnvironmentPublicID, 3)
 	}))
 	defer server.Close()
@@ -208,12 +207,11 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	defer cancel()
 
 	writtenPath, err := BootstrapConfig(ctx, BootstrapArgs{
-		ProviderOrigin:      "https://redeven.test",
-		ControlplaneBaseURL: server.URL,
-		EnvironmentID:       "env_123",
-		BootstrapTicket:     "ticket-123",
-		StateRoot:           stateRoot,
-		HTTPClient:          server.Client(),
+		CloudOrigin:       server.URL,
+		EnvironmentID:     "env_123",
+		RuntimeLinkTicket: "ticket-123",
+		StateRoot:         stateRoot,
+		HTTPClient:        server.Client(),
 	})
 	if err != nil {
 		t.Fatalf("BootstrapConfig() error = %v", err)
@@ -226,8 +224,8 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.ControlplaneProviderID != "example_control_plane" {
-		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "example_control_plane")
+	if cfg.CloudID != "example_control_plane" {
+		t.Fatalf("CloudID = %q, want %q", cfg.CloudID, "example_control_plane")
 	}
 	if cfg.Direct != nil {
 		t.Fatalf("Direct = %#v, want nil", cfg.Direct)
@@ -245,13 +243,13 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 }
 
 func TestBootstrapConfigRejectsMismatchedBootstrapResponseEnvironment(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
+		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-cloud.json":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"provider_id":"example_control_plane"}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v2/runtime/bootstrap/exchange":
-			var payload bootstrapTicketExchangeRequest
+			_, _ = w.Write([]byte(`{"cloud_id":"example_control_plane"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v4/runtime-link/exchange":
+			var payload runtimeLinkExchangeRequest
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatal(err)
 			}
@@ -263,30 +261,67 @@ func TestBootstrapConfigRejectsMismatchedBootstrapResponseEnvironment(t *testing
 	defer server.Close()
 
 	_, err := BootstrapConfig(context.Background(), BootstrapArgs{
-		ProviderOrigin:      "https://redeven.test",
-		ControlplaneBaseURL: server.URL,
-		EnvironmentID:       "env_123",
-		BootstrapTicket:     "ticket-123",
-		StateRoot:           t.TempDir(),
-		HTTPClient:          server.Client(),
+		CloudOrigin:       server.URL,
+		EnvironmentID:     "env_123",
+		RuntimeLinkTicket: "ticket-123",
+		StateRoot:         t.TempDir(),
+		HTTPClient:        server.Client(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "env_public_id mismatch") {
 		t.Fatalf("BootstrapConfig() error = %v, want env_public_id mismatch", err)
 	}
 }
 
+func TestBootstrapConfigRejectsExchangeAssignmentDrift(t *testing.T) {
+	for _, field := range []string{"cloud_id", "cloud_origin", "access_point_id", "access_point_origin", "protocol_version"} {
+		t.Run(field, func(t *testing.T) {
+			server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request runtimeLinkExchangeRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Error(err)
+					return
+				}
+				recorder := httptest.NewRecorder()
+				writeBootstrapTestResponse(t, recorder, r.Host, request.LocalEnvironmentPublicID, 3)
+				var response map[string]json.RawMessage
+				if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+					t.Error(err)
+					return
+				}
+				response[field] = json.RawMessage(`""`)
+				_ = json.NewEncoder(w).Encode(response)
+			}))
+			defer server.Close()
+			stateRoot := t.TempDir()
+			if _, err := BootstrapConfig(context.Background(), BootstrapArgs{
+				CloudOrigin: server.URL, EnvironmentID: "env_123", RuntimeLinkTicket: "ticket",
+				StateRoot: stateRoot, HTTPClient: server.Client(),
+			}); err == nil {
+				t.Fatal("exchange must match every assigned identity and protocol field")
+			}
+			layout, err := LocalEnvironmentStateLayout(stateRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(layout.ConfigPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("invalid exchange wrote configuration: %v", err)
+			}
+		})
+	}
+}
+
 func TestBootstrapConfigReusesPendingDeliveryAttemptAfterUncertainResponse(t *testing.T) {
 	var mu sync.Mutex
-	requests := make([]bootstrapTicketExchangeRequest, 0, 2)
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
+	requests := make([]runtimeLinkExchangeRequest, 0, 2)
+	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
 			t.Fatalf("request = %s %s, want bootstrap exchange", r.Method, r.URL.Path)
 		}
-		var payload bootstrapTicketExchangeRequest
+		var payload runtimeLinkExchangeRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("Decode(request) error = %v", err)
 		}
-		assertBootstrapDeliveryRequestID(t, payload.BootstrapDeliveryRequestIDB64u)
+		assertBootstrapDeliveryRequestID(t, payload.DeliveryRequestIDB64u)
 		mu.Lock()
 		requests = append(requests, payload)
 		attemptNumber := len(requests)
@@ -305,17 +340,16 @@ func TestBootstrapConfigReusesPendingDeliveryAttemptAfterUncertainResponse(t *te
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 	args := BootstrapArgs{
-		ProviderOrigin:      "https://redeven.test",
-		ControlplaneBaseURL: server.URL,
-		EnvironmentID:       "env_123",
-		BootstrapTicket:     "ticket-123",
-		StateRoot:           stateRoot,
-		HTTPClient:          server.Client(),
+		CloudOrigin:       server.URL,
+		EnvironmentID:     "env_123",
+		RuntimeLinkTicket: "ticket-123",
+		StateRoot:         stateRoot,
+		HTTPClient:        server.Client(),
 	}
 	if _, err := BootstrapConfig(context.Background(), args); err == nil {
 		t.Fatal("first BootstrapConfig() error = nil, want uncertain response failure")
 	}
-	attemptPath := layout.ConfigPath + ".bootstrap-delivery-v1.json"
+	attemptPath := layout.ConfigPath + ".cloud-link-delivery-v2.json"
 	if _, err := os.Stat(attemptPath); err != nil {
 		t.Fatalf("Stat(pending attempt) error = %v", err)
 	}
@@ -324,13 +358,13 @@ func TestBootstrapConfigReusesPendingDeliveryAttemptAfterUncertainResponse(t *te
 	}
 
 	mu.Lock()
-	gotRequests := append([]bootstrapTicketExchangeRequest(nil), requests...)
+	gotRequests := append([]runtimeLinkExchangeRequest(nil), requests...)
 	mu.Unlock()
 	if len(gotRequests) != 2 {
 		t.Fatalf("request count = %d, want 2", len(gotRequests))
 	}
 	first, second := gotRequests[0], gotRequests[1]
-	if first.BootstrapDeliveryRequestIDB64u != second.BootstrapDeliveryRequestIDB64u ||
+	if first.DeliveryRequestIDB64u != second.DeliveryRequestIDB64u ||
 		first.AgentInstanceID != second.AgentInstanceID ||
 		first.LocalEnvironmentPublicID != second.LocalEnvironmentPublicID {
 		t.Fatalf("bootstrap identity changed across retry: first=%#v second=%#v", first, second)
@@ -340,16 +374,16 @@ func TestBootstrapConfigReusesPendingDeliveryAttemptAfterUncertainResponse(t *te
 
 func TestBootstrapConfigRotatesAuthenticatedExpiredDeliveryAttempt(t *testing.T) {
 	var mu sync.Mutex
-	requests := make([]bootstrapTicketExchangeRequest, 0, 2)
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
+	requests := make([]runtimeLinkExchangeRequest, 0, 2)
+	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
 			t.Fatalf("request = %s %s, want bootstrap exchange", r.Method, r.URL.Path)
 		}
-		var payload bootstrapTicketExchangeRequest
+		var payload runtimeLinkExchangeRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("Decode(request) error = %v", err)
 		}
-		assertBootstrapDeliveryRequestID(t, payload.BootstrapDeliveryRequestIDB64u)
+		assertBootstrapDeliveryRequestID(t, payload.DeliveryRequestIDB64u)
 		mu.Lock()
 		requests = append(requests, payload)
 		attemptNumber := len(requests)
@@ -360,7 +394,7 @@ func TestBootstrapConfigRotatesAuthenticatedExpiredDeliveryAttempt(t *testing.T)
 			_ = json.NewEncoder(w).Encode(bootstrapExchangeErrorResponse{
 				Success: false,
 				Error: &bootstrapExchangeError{
-					Code:    "BOOTSTRAP_DELIVERY_EXPIRED",
+					Code:    "RUNTIME_LINK_DELIVERY_EXPIRED",
 					Message: "Bootstrap delivery is no longer available",
 				},
 			})
@@ -376,25 +410,24 @@ func TestBootstrapConfigRotatesAuthenticatedExpiredDeliveryAttempt(t *testing.T)
 		t.Fatal(err)
 	}
 	if _, err := BootstrapConfig(context.Background(), BootstrapArgs{
-		ProviderOrigin:      "https://redeven.test",
-		ControlplaneBaseURL: server.URL,
-		EnvironmentID:       "env_123",
-		BootstrapTicket:     "fresh-ticket",
-		StateRoot:           stateRoot,
-		HTTPClient:          server.Client(),
+		CloudOrigin:       server.URL,
+		EnvironmentID:     "env_123",
+		RuntimeLinkTicket: "fresh-ticket",
+		StateRoot:         stateRoot,
+		HTTPClient:        server.Client(),
 	}); err != nil {
 		t.Fatalf("BootstrapConfig() error = %v", err)
 	}
 
 	mu.Lock()
-	gotRequests := append([]bootstrapTicketExchangeRequest(nil), requests...)
+	gotRequests := append([]runtimeLinkExchangeRequest(nil), requests...)
 	mu.Unlock()
 	if len(gotRequests) != 2 {
 		t.Fatalf("request count = %d, want expired attempt plus one fresh attempt", len(gotRequests))
 	}
 	first, second := gotRequests[0], gotRequests[1]
-	if first.BootstrapDeliveryRequestIDB64u == second.BootstrapDeliveryRequestIDB64u {
-		t.Fatalf("expired bootstrap request id was reused: %q", first.BootstrapDeliveryRequestIDB64u)
+	if first.DeliveryRequestIDB64u == second.DeliveryRequestIDB64u {
+		t.Fatalf("expired bootstrap request id was reused: %q", first.DeliveryRequestIDB64u)
 	}
 	if first.AgentInstanceID != second.AgentInstanceID || first.LocalEnvironmentPublicID != second.LocalEnvironmentPublicID {
 		t.Fatalf("bootstrap identity changed while retiring delivery attempt: first=%#v second=%#v", first, second)
@@ -402,53 +435,52 @@ func TestBootstrapConfigRotatesAuthenticatedExpiredDeliveryAttempt(t *testing.T)
 	assertBootstrapAttemptRemoved(t, layout.ConfigPath)
 }
 
-func TestBootstrapConfigRejectsMissingBootstrapTicket(t *testing.T) {
+func TestBootstrapConfigRejectsMissingRuntimeLinkTicket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	_, err := BootstrapConfig(ctx, BootstrapArgs{
-		ProviderOrigin:      "https://redeven.test",
-		ControlplaneBaseURL: "https://dev.redeven.test",
-		EnvironmentID:       "env_123",
-		StateRoot:           t.TempDir(),
+		CloudOrigin:   "https://redeven.test",
+		EnvironmentID: "env_123",
+		StateRoot:     t.TempDir(),
 	})
 	if err == nil || err.Error() != "missing bootstrap ticket" {
 		t.Fatalf("BootstrapConfig() error = %v", err)
 	}
 }
 
-func TestExchangeBootstrapTicketRejectsPlaintextControlplane(t *testing.T) {
-	_, err := exchangeBootstrapTicket(context.Background(), nil, "http://127.0.0.1:8080", "env", "ticket", bootstrapTicketExchangeRequest{})
+func TestExchangeRuntimeLinkTicketRejectsPlaintextControlplane(t *testing.T) {
+	_, err := exchangeRuntimeLinkTicket(context.Background(), cloudLinkResolveArgs{}, "http://127.0.0.1:8080", "env", "ticket", bootstrapDeliveryAttempt{})
 	if err == nil || !strings.Contains(err.Error(), "requires an HTTPS origin") {
-		t.Fatalf("exchangeBootstrapTicket() error = %v, want HTTPS rejection", err)
+		t.Fatalf("exchangeRuntimeLinkTicket() error = %v, want HTTPS rejection", err)
 	}
 }
 
 func TestBootstrapResponseDecodeRejectsRetiredAndUnknownFields(t *testing.T) {
 	for _, raw := range []string{
-		`{"provider_id":"provider","direct":null}`,
-		`{"provider_id":"provider","control_artifact_pool":{"version":"control_artifact_pool_v1","unexpected":true}}`,
-		`{"provider_id":"provider"}{"provider_id":"second"}`,
+		`{"cloud_id":"provider","direct":null}`,
+		`{"cloud_id":"provider","control_artifact_pool":{"version":"control_artifact_pool_v2","unexpected":true}}`,
+		`{"cloud_id":"provider"}{"cloud_id":"second"}`,
 	} {
-		var response bootstrapResponse
-		if err := decodeExactBootstrapResponse([]byte(raw), &response); err == nil {
-			t.Fatalf("decodeExactBootstrapResponse(%s) error = nil", raw)
+		var response runtimeLinkExchangeResponse
+		if err := decodeExactRuntimeLinkResponse([]byte(raw), &response); err == nil {
+			t.Fatalf("decodeExactRuntimeLinkResponse(%s) error = nil", raw)
 		}
 	}
 }
 
-func TestExchangeBootstrapTicketEnforcesPoolResponseByteBound(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func TestExchangeRuntimeLinkTicketEnforcesPoolResponseByteBound(t *testing.T) {
+	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(strings.Repeat("x", ControlArtifactMaxResponseBytes+1)))
 	}))
 	defer server.Close()
 	requestID := base64.RawURLEncoding.EncodeToString(make([]byte, sha256.Size))
-	_, err := exchangeBootstrapTicket(context.Background(), server.Client(), server.URL, "env", "ticket", bootstrapTicketExchangeRequest{
+	_, err := exchangeRuntimeLinkTicket(context.Background(), cloudLinkResolveArgs{HTTPClient: server.Client()}, server.URL, "env", "ticket", bootstrapDeliveryAttempt{
 		BootstrapDeliveryRequestIDB64u: requestID,
 	})
 	if err == nil || !strings.Contains(err.Error(), "exceeds exact byte bound") {
-		t.Fatalf("exchangeBootstrapTicket() error = %v, want exact byte bound", err)
+		t.Fatalf("exchangeRuntimeLinkTicket() error = %v, want exact byte bound", err)
 	}
 }
 
@@ -469,7 +501,7 @@ func TestPrepareBootstrapDeliveryAttemptRejectsDifferentPendingTarget(t *testing
 	if err := decodeExactBootstrapDeliveryAttempt(raw, &persisted); err != nil {
 		t.Fatal(err)
 	}
-	if persisted.BootstrapDeliveryRequestIDB64u != first.BootstrapDeliveryRequestIDB64u || persisted.ProviderOrigin != first.ProviderOrigin {
+	if persisted.BootstrapDeliveryRequestIDB64u != first.BootstrapDeliveryRequestIDB64u || persisted.CloudOrigin != first.CloudOrigin {
 		t.Fatalf("pending attempt changed: got %#v want %#v", persisted, first)
 	}
 }
@@ -550,9 +582,10 @@ func writeBootstrapTestResponse(t *testing.T, w http.ResponseWriter, host, local
 func writeBootstrapTestResponseForEnvironment(t *testing.T, w http.ResponseWriter, host, localEnvironmentPublicID string, generation int64, envPublicID string) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
-	response := bootstrapResponse{
-		ProviderID:          "example_control_plane",
-		ProviderOrigin:      "https://redeven.test",
+	response := runtimeLinkExchangeResponse{
+		ProtocolVersion:     "rcpp-v4",
+		CloudID:             "example_control_plane",
+		CloudOrigin:         "https://" + host,
 		AccessPointID:       "dev",
 		AccessPointOrigin:   "https://" + host,
 		EnvPublicID:         envPublicID,
@@ -568,6 +601,33 @@ func writeBootstrapTestResponseForEnvironment(t *testing.T, w http.ResponseWrite
 	}
 }
 
+func newCloudLinkTestServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/rcpp/v4/runtime-link/resolve" {
+			var request struct {
+				ProtocolVersion string `json:"protocol_version"`
+				EnvPublicID     string `json:"env_public_id"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Error(err)
+				w.WriteHeader(400)
+				return
+			}
+			if request.ProtocolVersion != "rcpp-v4" || request.EnvPublicID == "" {
+				t.Error("invalid resolve request")
+			}
+			_ = json.NewEncoder(w).Encode(runtimeLinkAssignment{
+				ProtocolVersion: "rcpp-v4", CloudID: "example_control_plane", CloudOrigin: "https://" + r.Host,
+				AccessPointID: "dev", AccessPointOrigin: "https://" + r.Host, EnvPublicID: request.EnvPublicID,
+				ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli(),
+			})
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
+}
+
 func bootstrapTestControlArtifactPool(t *testing.T, generation int64) *bootstrapControlArtifactPool {
 	t.Helper()
 	endpoints, err := flowercontrol.NewEndpointSet(flowercontrol.EndpointConfig{
@@ -579,7 +639,7 @@ func bootstrapTestControlArtifactPool(t *testing.T, generation int64) *bootstrap
 	expires := time.Now().Add(4 * time.Minute).Truncate(time.Second)
 	pool := &bootstrapControlArtifactPool{
 		Version:                       ControlArtifactPoolContractVersion,
-		LogicalProviderBindingID:      fmt.Sprintf("binding-%d", generation),
+		LogicalCloudBindingID:         fmt.Sprintf("binding-%d", generation),
 		BindingGeneration:             generation,
 		TargetWaterline:               ControlArtifactTargetWaterline,
 		RefreshHorizonSeconds:         ControlArtifactRefreshHorizonS,
@@ -634,7 +694,7 @@ func assertBootstrapDeliveryRequestID(t *testing.T, value string) {
 
 func assertBootstrapAttemptRemoved(t *testing.T, configPath string) {
 	t.Helper()
-	_, err := os.Stat(configPath + ".bootstrap-delivery-v1.json")
+	_, err := os.Stat(configPath + ".cloud-link-delivery-v2.json")
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("pending bootstrap delivery attempt still exists: %v", err)
 	}

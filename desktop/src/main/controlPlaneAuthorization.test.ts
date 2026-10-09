@@ -12,16 +12,16 @@ import {
 describe('controlPlaneAuthorization', () => {
   it('creates a pending authorization with a local PKCE verifier and challenge', () => {
     const pending = createPendingControlPlaneAuthorization({
-      providerOrigin: 'https://dev.redeven.test/provider/path?q=1',
-      providerID: 'example_control_plane',
+      cloudOrigin: 'https://dev.redeven.test/provider/path?q=1',
+      cloudID: 'example_control_plane',
       requestedEnvPublicID: ' env_demo ',
       label: ' Demo Environment ',
       displayLabel: ' Demo Control Plane ',
       now: 1_710_000_000_000,
     });
 
-    expect(pending.provider_origin).toBe('https://dev.redeven.test');
-    expect(pending.provider_id).toBe('example_control_plane');
+    expect(pending.cloud_origin).toBe('https://dev.redeven.test');
+    expect(pending.cloud_id).toBe('example_control_plane');
     expect(pending.requested_env_public_id).toBe('env_demo');
     expect(pending.label).toBe('Demo Environment');
     expect(pending.display_label).toBe('Demo Control Plane');
@@ -33,7 +33,7 @@ describe('controlPlaneAuthorization', () => {
 
   it('builds the browser authorization URL for the desktop PKCE flow', () => {
     const pending = createPendingControlPlaneAuthorization({
-      providerOrigin: 'https://dev.redeven.test',
+      cloudOrigin: 'https://dev.redeven.test',
       now: 1_710_000_000_000,
     });
 
@@ -44,7 +44,7 @@ describe('controlPlaneAuthorization', () => {
 
   it('detects expired pending authorizations', () => {
     const pending = createPendingControlPlaneAuthorization({
-      providerOrigin: 'https://dev.redeven.test',
+      cloudOrigin: 'https://dev.redeven.test',
       now: 1_710_000_000_000,
     });
 

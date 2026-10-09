@@ -73,9 +73,9 @@ type desktopLaunchReport struct {
 	Exposure                 runtimemanagement.LocalUIExposure       `json:"exposure"`
 	EffectiveRunMode         string                                  `json:"effective_run_mode,omitempty"`
 	RemoteEnabled            bool                                    `json:"remote_enabled"`
-	ProviderOrigin           string                                  `json:"provider_origin,omitempty"`
-	ControlplaneBaseURL      string                                  `json:"controlplane_base_url,omitempty"`
-	ControlplaneProviderID   string                                  `json:"controlplane_provider_id,omitempty"`
+	CloudOrigin              string                                  `json:"cloud_origin,omitempty"`
+	AccessPointOrigin        string                                  `json:"access_point_origin,omitempty"`
+	CloudID                  string                                  `json:"cloud_id,omitempty"`
 	EnvPublicID              string                                  `json:"env_public_id,omitempty"`
 	StateDir                 string                                  `json:"state_dir,omitempty"`
 	RuntimeControlSocketPath string                                  `json:"runtime_control_socket_path,omitempty"`
@@ -139,9 +139,9 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 			report.LocalUIURL = report.LocalUIURLs[0]
 		}
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
-		report.ProviderOrigin = strings.TrimSpace(report.ProviderOrigin)
-		report.ControlplaneBaseURL = strings.TrimSpace(report.ControlplaneBaseURL)
-		report.ControlplaneProviderID = strings.TrimSpace(report.ControlplaneProviderID)
+		report.CloudOrigin = strings.TrimSpace(report.CloudOrigin)
+		report.AccessPointOrigin = strings.TrimSpace(report.AccessPointOrigin)
+		report.CloudID = strings.TrimSpace(report.CloudID)
 		report.EnvPublicID = strings.TrimSpace(report.EnvPublicID)
 		report.RuntimeService = normalizeLaunchRuntimeServiceSnapshot(
 			report.RuntimeService,

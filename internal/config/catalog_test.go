@@ -76,9 +76,9 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 	}
 
 	cfg := &Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
-		ControlplaneProviderID:   "example_control_plane",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
+		CloudID:                  "example_control_plane",
 		EnvironmentID:            "env_demo",
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
@@ -111,14 +111,14 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 	if record.CurrentProviderBinding == nil {
 		t.Fatalf("CurrentProviderBinding = nil")
 	}
-	if record.CurrentProviderBinding.ProviderOrigin != "https://redeven.test" {
-		t.Fatalf("CurrentProviderBinding.ProviderOrigin = %q", record.CurrentProviderBinding.ProviderOrigin)
+	if record.CurrentProviderBinding.CloudOrigin != "https://redeven.test" {
+		t.Fatalf("CurrentProviderBinding.CloudOrigin = %q", record.CurrentProviderBinding.CloudOrigin)
 	}
 	if record.CurrentProviderBinding.AccessPointOrigin != "https://dev.redeven.test" {
 		t.Fatalf("CurrentProviderBinding.AccessPointOrigin = %q", record.CurrentProviderBinding.AccessPointOrigin)
 	}
-	if record.CurrentProviderBinding.ProviderID != "example_control_plane" {
-		t.Fatalf("CurrentProviderBinding.ProviderID = %q", record.CurrentProviderBinding.ProviderID)
+	if record.CurrentProviderBinding.CloudID != "example_control_plane" {
+		t.Fatalf("CurrentProviderBinding.CloudID = %q", record.CurrentProviderBinding.CloudID)
 	}
 	if record.CurrentProviderBinding.EnvPublicID != "env_demo" {
 		t.Fatalf("CurrentProviderBinding.EnvPublicID = %q", record.CurrentProviderBinding.EnvPublicID)
@@ -136,8 +136,8 @@ func TestWriteEnvironmentCatalogRecordKeepsLocalIdentityWithoutProviderID(t *tes
 	}
 
 	cfg := &Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
 		EnvironmentID:            "env_demo",
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
@@ -232,8 +232,8 @@ func TestWriteEnvironmentCatalogRecordReusesExistingLocalEnvironmentRecordProper
 		LastUsedAtMS:  789,
 		PreferredOpen: "remote_desktop",
 		CurrentProviderBinding: &environmentCatalogProviderBinding{
-			ProviderOrigin:         "https://redeven.test",
-			ProviderID:             "redeven",
+			CloudOrigin:            "https://redeven.test",
+			CloudID:                "redeven",
 			EnvPublicID:            "env_demo",
 			AccessPointOrigin:      "https://dev.redeven.test",
 			RemoteWebSupported:     true,
@@ -250,7 +250,7 @@ func TestWriteEnvironmentCatalogRecordReusesExistingLocalEnvironmentRecordProper
 	}
 
 	cfg := &Config{
-		ControlplaneBaseURL:      "https://dev.redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
 		EnvironmentID:            "env_demo",
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,

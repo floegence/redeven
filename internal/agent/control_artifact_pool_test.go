@@ -162,7 +162,7 @@ func TestControlArtifactPoolRejectsInvalidResponseAndRequiresRelink(t *testing.T
 			encoded, _ := json.Marshal(controlArtifactPoolTopUpResponse{
 				TopUpRequestIDB64u: requestID,
 				Pool: controlArtifactPoolWire{
-					Version: config.ControlArtifactPoolContractVersion, LogicalProviderBindingID: "binding-1",
+					Version: config.ControlArtifactPoolContractVersion, LogicalCloudBindingID: "binding-1",
 					BindingGeneration: 7, TargetWaterline: config.ControlArtifactTargetWaterline,
 					RefreshHorizonSeconds: config.ControlArtifactRefreshHorizonS, ServerHighestArtifactSequence: 2,
 					Entries:            []controlArtifactPoolWireEntry{},
@@ -379,7 +379,7 @@ func TestControlArtifactPoolTopUpResponseBindsPendingRequestBeforeApply(t *testi
 }
 
 func TestControlArtifactPoolTopUpGoldenFixture(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "spec", "fixtures", "rcpp-v3", "control_artifact_pool_top_up_v1.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "spec", "fixtures", "rcpp-v4", "control_artifact_pool_top_up_v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func TestControlArtifactPoolTopUpGoldenFixture(t *testing.T) {
 		RequestIDB64u: fixture.TopUpRequestIDB64u, BindingGeneration: fixture.Pool.BindingGeneration, State: config.ControlArtifactTopUpPending,
 	}
 	current := &config.ControlArtifactPool{
-		SchemaVersion: config.ControlArtifactPoolSchemaVersion, LogicalBindingID: fixture.Pool.LogicalProviderBindingID,
+		SchemaVersion: config.ControlArtifactPoolSchemaVersion, LogicalBindingID: fixture.Pool.LogicalCloudBindingID,
 		TargetWaterline: fixture.Pool.TargetWaterline, RefreshHorizonSeconds: fixture.Pool.RefreshHorizonSeconds,
 		BindingGeneration: fixture.Pool.BindingGeneration, RecoveryState: config.ControlArtifactRecoveryDegraded, PendingTopUp: pending,
 	}
@@ -431,7 +431,7 @@ func makeControlPoolResponse(t *testing.T, generation int64, bindingID string, e
 		response := controlArtifactPoolTopUpResponse{
 			TopUpRequestIDB64u: requestID,
 			Pool: controlArtifactPoolWire{
-				Version: config.ControlArtifactPoolContractVersion, LogicalProviderBindingID: bindingID,
+				Version: config.ControlArtifactPoolContractVersion, LogicalCloudBindingID: bindingID,
 				BindingGeneration: generation, TargetWaterline: config.ControlArtifactTargetWaterline,
 				RefreshHorizonSeconds:         config.ControlArtifactRefreshHorizonS,
 				ServerHighestArtifactSequence: serverHighest, Entries: wireEntries,
@@ -471,7 +471,7 @@ func issuePoolTestArtifact(t *testing.T, suffix string) (json.RawMessage, string
 
 func poolTestConfig(path string, entries []config.ControlArtifactEntry) *config.Config {
 	return &config.Config{
-		ProviderOrigin: "https://redeven.test", ControlplaneBaseURL: "https://control.test", EnvironmentID: "env-1", LocalEnvironmentPublicID: "local-1", BindingGeneration: 7, AgentInstanceID: "agent-1",
+		CloudOrigin: "https://redeven.test", AccessPointOrigin: "https://control.test", EnvironmentID: "env-1", LocalEnvironmentPublicID: "local-1", BindingGeneration: 7, AgentInstanceID: "agent-1",
 		ControlArtifactPool: &config.ControlArtifactPool{SchemaVersion: config.ControlArtifactPoolSchemaVersion, LogicalBindingID: "binding-1", TargetWaterline: config.ControlArtifactTargetWaterline, RefreshHorizonSeconds: config.ControlArtifactRefreshHorizonS, BindingGeneration: 7, RecoveryState: config.ControlArtifactRecoveryDegraded, Entries: entries},
 	}
 }

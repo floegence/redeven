@@ -84,16 +84,16 @@ func TestReporterRecordsEventsAndClosesOnce(t *testing.T) {
 
 func TestRichRendererShowsBrandReadyWarningAndError(t *testing.T) {
 	snapshot := Snapshot{
-		Version:                "v1.2.3",
-		EffectiveRunMode:       "hybrid",
-		ControlplaneProviderID: "example_provider",
-		ControlChannelEnabled:  true,
-		LocalUIEnabled:         true,
-		ControlplaneBaseURL:    "https://dev.redeven.test",
-		EnvPublicID:            "env_123",
-		StateDir:               "/tmp/redeven/local-environment",
-		LocalUIURLs:            []string{"http://127.0.0.1:23998"},
-		EnvironmentURL:         "https://dev.redeven.test/env/env_123",
+		Version:               "v1.2.3",
+		EffectiveRunMode:      "hybrid",
+		CloudID:               "example_provider",
+		ControlChannelEnabled: true,
+		LocalUIEnabled:        true,
+		AccessPointOrigin:     "https://dev.redeven.test",
+		EnvPublicID:           "env_123",
+		StateDir:              "/tmp/redeven/local-environment",
+		LocalUIURLs:           []string{"http://127.0.0.1:23998"},
+		EnvironmentURL:        "https://dev.redeven.test/env/env_123",
 	}
 	var out bytes.Buffer
 	renderer := NewRenderer(&out, Config{Effective: ModeRich})
@@ -160,10 +160,10 @@ func TestCompactBrandMarkAnimationSwapsInteriorBars(t *testing.T) {
 
 func TestDynamicRichRendererAdvancesBrandFrames(t *testing.T) {
 	snapshot := Snapshot{
-		Version:                "v1.2.3",
-		EffectiveRunMode:       "hybrid",
-		ControlplaneProviderID: "example_provider",
-		StateDir:               "/tmp/redeven/local-environment",
+		Version:          "v1.2.3",
+		EffectiveRunMode: "hybrid",
+		CloudID:          "example_provider",
+		StateDir:         "/tmp/redeven/local-environment",
 	}
 	var out bytes.Buffer
 	renderer := NewRenderer(&out, Config{Effective: ModeRich, Dynamic: true})
@@ -182,16 +182,16 @@ func TestDynamicRichRendererAdvancesBrandFrames(t *testing.T) {
 
 func TestRichRendererFitsNarrowTerminal(t *testing.T) {
 	snapshot := Snapshot{
-		Version:                "v1.2.3",
-		EffectiveRunMode:       "hybrid",
-		ControlplaneProviderID: "example_provider_with_a_long_name",
-		ControlChannelEnabled:  true,
-		LocalUIEnabled:         true,
-		ControlplaneBaseURL:    "https://very-long-control-plane.example.redeven.test",
-		EnvPublicID:            "env_1234567890",
-		StateDir:               "/tmp/redeven/local-environment/with/a/very/long/path",
-		LocalUIURLs:            []string{"http://127.0.0.1:23998/some/long/path"},
-		EnvironmentURL:         "https://very-long-control-plane.example.redeven.test/env/env_1234567890",
+		Version:               "v1.2.3",
+		EffectiveRunMode:      "hybrid",
+		CloudID:               "example_provider_with_a_long_name",
+		ControlChannelEnabled: true,
+		LocalUIEnabled:        true,
+		AccessPointOrigin:     "https://very-long-control-plane.example.redeven.test",
+		EnvPublicID:           "env_1234567890",
+		StateDir:              "/tmp/redeven/local-environment/with/a/very/long/path",
+		LocalUIURLs:           []string{"http://127.0.0.1:23998/some/long/path"},
+		EnvironmentURL:        "https://very-long-control-plane.example.redeven.test/env/env_1234567890",
 	}
 	var out bytes.Buffer
 	renderer := NewRendererWithOptions(&out, Config{Effective: ModeRich}, RendererOptions{
@@ -212,16 +212,16 @@ func TestRichRendererFitsNarrowTerminal(t *testing.T) {
 
 func TestRichRendererFitsWideTwoColumnTerminal(t *testing.T) {
 	snapshot := Snapshot{
-		Version:                "v1.2.3",
-		EffectiveRunMode:       "hybrid",
-		ControlplaneProviderID: "example_provider_with_a_long_name",
-		ControlChannelEnabled:  true,
-		LocalUIEnabled:         true,
-		ControlplaneBaseURL:    "https://very-long-control-plane.example.redeven.test",
-		EnvPublicID:            "env_1234567890",
-		StateDir:               "/tmp/redeven/local-environment/with/a/very/long/path",
-		LocalUIURLs:            []string{"http://127.0.0.1:23998/some/long/path"},
-		EnvironmentURL:         "https://very-long-control-plane.example.redeven.test/env/env_1234567890",
+		Version:               "v1.2.3",
+		EffectiveRunMode:      "hybrid",
+		CloudID:               "example_provider_with_a_long_name",
+		ControlChannelEnabled: true,
+		LocalUIEnabled:        true,
+		AccessPointOrigin:     "https://very-long-control-plane.example.redeven.test",
+		EnvPublicID:           "env_1234567890",
+		StateDir:              "/tmp/redeven/local-environment/with/a/very/long/path",
+		LocalUIURLs:           []string{"http://127.0.0.1:23998/some/long/path"},
+		EnvironmentURL:        "https://very-long-control-plane.example.redeven.test/env/env_1234567890",
 	}
 	var out bytes.Buffer
 	renderer := NewRendererWithOptions(&out, Config{Effective: ModeRich}, RendererOptions{

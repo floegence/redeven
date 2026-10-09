@@ -10,7 +10,7 @@ type UserMigrationConsent struct {
 // UserMigrationWitness is built by Region from a real control connection, never a public caller.
 type UserMigrationWitness struct {
 	Proof             SignedRequest `json:"proof"`
-	ProviderID        string        `json:"provider_id"`
+	CloudID           string        `json:"cloud_id"`
 	UserPublicID      string        `json:"user_public_id"`
 	RuntimePublicID   string        `json:"runtime_public_id"`
 	NamespacePublicID string        `json:"namespace_public_id"`

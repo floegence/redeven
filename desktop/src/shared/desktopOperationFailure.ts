@@ -36,7 +36,7 @@ export type DesktopFailureCode =
   | 'reinstall_required'
   | 'desktop_update_required'
   | 'environment_open_failed'
-  | 'provider_link_failed'
+  | 'cloud_link_failed'
   | 'workspace_engine_prepare_failed'
   | 'operation_canceled'
   | 'manual_recovery_required'
@@ -104,7 +104,7 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'reinstall_required':
     case 'desktop_update_required':
     case 'environment_open_failed':
-    case 'provider_link_failed':
+    case 'cloud_link_failed':
     case 'workspace_engine_prepare_failed':
     case 'operation_canceled':
     case 'manual_recovery_required':

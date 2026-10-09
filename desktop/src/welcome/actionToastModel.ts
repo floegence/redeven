@@ -3,8 +3,8 @@ export type DesktopActionToastTone = 'info' | 'success' | 'warning' | 'error';
 export type DesktopActionToastAction = Readonly<{
   kind: 'reconnect_control_plane';
   label: string;
-  provider_origin: string;
-  provider_id?: string;
+  cloud_origin: string;
+  cloud_id?: string;
 }>;
 
 export type DesktopActionToast = Readonly<{
@@ -41,8 +41,8 @@ function actionKey(action: DesktopActionToastAction | undefined): string {
   return [
     action.kind,
     compact(action.label),
-    compact(action.provider_origin),
-    compact(action.provider_id),
+    compact(action.cloud_origin),
+    compact(action.cloud_id),
   ].join(':');
 }
 

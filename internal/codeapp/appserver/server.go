@@ -1473,10 +1473,10 @@ type settingsAISecretsView struct {
 }
 
 type settingsConnectionView struct {
-	ControlplaneBaseURL string             `json:"controlplane_base_url"`
-	EnvironmentID       string             `json:"environment_id"`
-	AgentInstanceID     string             `json:"agent_instance_id"`
-	Direct              settingsDirectView `json:"direct"`
+	AccessPointOrigin string             `json:"access_point_origin"`
+	EnvironmentID     string             `json:"environment_id"`
+	AgentInstanceID   string             `json:"agent_instance_id"`
+	Direct            settingsDirectView `json:"direct"`
 }
 
 type settingsDirectView struct {
@@ -1986,10 +1986,10 @@ func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsV
 	out.AIReadiness = g.aiReadinessSnapshot()
 	if cfg != nil {
 		out.Connection = settingsConnectionView{
-			ControlplaneBaseURL: strings.TrimSpace(cfg.ControlplaneBaseURL),
-			EnvironmentID:       strings.TrimSpace(cfg.EnvironmentID),
-			AgentInstanceID:     strings.TrimSpace(cfg.AgentInstanceID),
-			Direct:              direct,
+			AccessPointOrigin: strings.TrimSpace(cfg.AccessPointOrigin),
+			EnvironmentID:     strings.TrimSpace(cfg.EnvironmentID),
+			AgentInstanceID:   strings.TrimSpace(cfg.AgentInstanceID),
+			Direct:            direct,
 		}
 		out.Runtime = settingsRuntimeView{
 			AgentHomeDir:    strings.TrimSpace(cfg.AgentHomeDir),

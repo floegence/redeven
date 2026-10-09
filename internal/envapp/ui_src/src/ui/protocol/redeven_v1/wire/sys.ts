@@ -61,7 +61,7 @@ export type wire_sys_ping_resp = {
         reason_code?: string;
         message?: string;
       };
-      provider_link?: {
+      cloud_link?: {
         supported?: boolean;
         bind_method?: string;
         reason_code?: string;
@@ -85,10 +85,10 @@ export type wire_sys_ping_resp = {
         missing_key_provider_ids?: string[];
         last_error?: string;
       };
-      provider_link?: {
+      cloud_link?: {
         state?: string;
         connection_state?: string;
-        provider_origin?: string;
+        cloud_origin?: string;
         provider_id?: string;
         env_public_id?: string;
         access_point_origin?: string;

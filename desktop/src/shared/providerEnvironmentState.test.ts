@@ -3,16 +3,16 @@ import { describe, expect, it } from 'vitest';
 import {
   DESKTOP_PROVIDER_CATALOG_STALE_AFTER_MS,
   desktopProviderCatalogFreshness,
-  desktopProviderEnvironmentAvailability,
+  desktopCloudEnvironmentAvailability,
   desktopProviderOnlineEnvironmentCount,
   desktopProviderRemoteRouteState,
 } from './providerEnvironmentState';
 
 describe('providerEnvironmentState', () => {
   it('derives online, offline, and unknown availability from provider runtime fields', () => {
-    expect(desktopProviderEnvironmentAvailability('online', 'ready', 'active')).toBe('online');
-    expect(desktopProviderEnvironmentAvailability('offline', 'offline', 'suspended')).toBe('offline');
-    expect(desktopProviderEnvironmentAvailability('', '', '')).toBe('unknown');
+    expect(desktopCloudEnvironmentAvailability('online', 'ready', 'active')).toBe('online');
+    expect(desktopCloudEnvironmentAvailability('offline', 'offline', 'suspended')).toBe('offline');
+    expect(desktopCloudEnvironmentAvailability('', '', '')).toBe('unknown');
   });
 
   it('counts provider environments that are currently online', () => {

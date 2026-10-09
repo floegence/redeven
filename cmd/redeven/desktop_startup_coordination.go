@@ -56,9 +56,9 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		Exposure:                 startup.Exposure,
 		EffectiveRunMode:         startup.EffectiveRunMode,
 		RemoteEnabled:            startup.RemoteEnabled,
-		ProviderOrigin:           startup.ProviderOrigin,
-		ControlplaneBaseURL:      startup.ControlplaneBaseURL,
-		ControlplaneProviderID:   startup.ControlplaneProviderID,
+		CloudOrigin:              startup.CloudOrigin,
+		AccessPointOrigin:        startup.AccessPointOrigin,
+		CloudID:                  startup.CloudID,
 		EnvPublicID:              startup.EnvPublicID,
 		StateDir:                 startup.StateDir,
 		RuntimeControlSocketPath: startup.RuntimeControlSocketPath,
@@ -80,9 +80,9 @@ type runtimeStartupReport struct {
 	Exposure                 runtimemanagement.LocalUIExposure
 	EffectiveRunMode         string
 	RemoteEnabled            bool
-	ProviderOrigin           string
-	ControlplaneBaseURL      string
-	ControlplaneProviderID   string
+	CloudOrigin              string
+	AccessPointOrigin        string
+	CloudID                  string
 	EnvPublicID              string
 	StateDir                 string
 	RuntimeControlSocketPath string
@@ -118,10 +118,10 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 		Exposure:                 endpoint.Exposure,
 		EffectiveRunMode:         status.RuntimeService.EffectiveRunMode,
 		RemoteEnabled:            status.RuntimeService.RemoteEnabled,
-		ProviderOrigin:           status.RuntimeService.Bindings.ProviderLink.ProviderOrigin,
-		ControlplaneBaseURL:      status.RuntimeService.Bindings.ProviderLink.AccessPointOrigin,
-		ControlplaneProviderID:   status.RuntimeService.Bindings.ProviderLink.ProviderID,
-		EnvPublicID:              status.RuntimeService.Bindings.ProviderLink.EnvPublicID,
+		CloudOrigin:              status.RuntimeService.Bindings.CloudLink.CloudOrigin,
+		AccessPointOrigin:        status.RuntimeService.Bindings.CloudLink.AccessPointOrigin,
+		CloudID:                  status.RuntimeService.Bindings.CloudLink.CloudID,
+		EnvPublicID:              status.RuntimeService.Bindings.CloudLink.EnvPublicID,
 		StateDir:                 status.Identity.StateDir,
 		RuntimeControlSocketPath: status.Diagnostics.ControlSocketPath,
 		PID:                      status.Identity.PID,

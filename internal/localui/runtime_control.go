@@ -168,15 +168,15 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/tessiven/host", s.handleTessivenHost)
 	mux.HandleFunc("/v2/tessiven/resources", s.handleTessivenTarget)
-	mux.HandleFunc("/v2/provider-link", s.handleProviderLink)
+	mux.HandleFunc("/v2/cloud-link", s.handleCloudLink)
 	mux.HandleFunc("/v2/gateway/join", s.handleGatewayJoin)
 	mux.HandleFunc("/v2/gateway/replace", s.handleGatewayJoin)
 	mux.HandleFunc("/v2/gateway/update-endpoints", s.handleGatewayJoin)
 	mux.HandleFunc("/v2/gateway/status", s.handleGatewayStatus)
 	mux.HandleFunc("/v2/gateway/retry", s.handleGatewayRetry)
 	mux.HandleFunc("/v2/gateway/leave", s.handleGatewayLeave)
-	mux.HandleFunc("/v2/provider-link/connect", s.handleProviderLinkConnect)
-	mux.HandleFunc("/v2/provider-link/disconnect", s.handleProviderLinkDisconnect)
+	mux.HandleFunc("/v2/cloud-link/connect", s.handleCloudLinkConnect)
+	mux.HandleFunc("/v2/cloud-link/disconnect", s.handleCloudLinkDisconnect)
 	mux.HandleFunc("/v2/code-workspace-engine/status", s.handleCodeWorkspaceEngineStatus)
 	mux.HandleFunc("/v2/desktop-model-source", s.handleDesktopModelSource)
 	mux.HandleFunc("/v2/desktop-model-source/connect", s.handleDesktopModelSourceConnect)
@@ -281,7 +281,7 @@ func (s *runtimeControlServer) handleRuntimeHealth(w http.ResponseWriter, r *htt
 	}})
 }
 
-func (s *runtimeControlServer) handleProviderLink(w http.ResponseWriter, r *http.Request) {
+func (s *runtimeControlServer) handleCloudLink(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r) {
 		return
 	}
@@ -292,30 +292,29 @@ func (s *runtimeControlServer) handleProviderLink(w http.ResponseWriter, r *http
 	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{
 		OK: true,
 		Data: map[string]any{
-			"binding":         s.agent.ProviderLinkBinding(),
+			"binding":         s.agent.CloudLinkBinding(),
 			"runtime_service": s.agent.RuntimeServiceSnapshot(),
 		},
 	})
 }
 
-type runtimeControlProviderLinkRequest struct {
+type runtimeControlCloudLinkRequest struct {
 	RenewCurrentBinding    bool   `json:"renew_current_binding"`
-	ProviderOrigin         string `json:"provider_origin"`
-	ProviderID             string `json:"provider_id"`
+	CloudOrigin            string `json:"cloud_origin"`
+	CloudID                string `json:"cloud_id"`
 	EnvPublicID            string `json:"env_public_id"`
-	AccessPointOrigin      string `json:"access_point_origin"`
 	RuntimeLinkTicket      string `json:"runtime_link_ticket"`
 	AllowRelinkWhenIdle    bool   `json:"allow_relink_when_idle"`
 	ExpectedCurrentBinding *struct {
-		ProviderOrigin    string `json:"provider_origin"`
-		ProviderID        string `json:"provider_id"`
+		CloudOrigin       string `json:"cloud_origin"`
+		CloudID           string `json:"cloud_id"`
 		EnvPublicID       string `json:"env_public_id"`
 		AccessPointOrigin string `json:"access_point_origin"`
 		BindingGeneration int64  `json:"binding_generation"`
 	} `json:"expected_current_binding,omitempty"`
 }
 
-func (s *runtimeControlServer) handleProviderLinkConnect(w http.ResponseWriter, r *http.Request) {
+func (s *runtimeControlServer) handleCloudLinkConnect(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r) {
 		return
 	}
@@ -323,35 +322,34 @@ func (s *runtimeControlServer) handleProviderLinkConnect(w http.ResponseWriter, 
 		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
 		return
 	}
-	var body runtimeControlProviderLinkRequest
+	var body runtimeControlCloudLinkRequest
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&body); err != nil {
-		writeRuntimeControlError(w, http.StatusBadRequest, "PROVIDER_LINK_INVALID_REQUEST", "Invalid provider-link request JSON.")
+		writeRuntimeControlError(w, http.StatusBadRequest, "CLOUD_LINK_INVALID_REQUEST", "Invalid cloud-link request JSON.")
 		return
 	}
-	req := agent.ProviderLinkRequest{
+	req := agent.CloudLinkRequest{
 		RenewCurrentBinding: body.RenewCurrentBinding,
-		ProviderOrigin:      body.ProviderOrigin,
-		ProviderID:          body.ProviderID,
+		CloudOrigin:         body.CloudOrigin,
+		CloudID:             body.CloudID,
 		EnvPublicID:         body.EnvPublicID,
-		AccessPointOrigin:   body.AccessPointOrigin,
 		RuntimeLinkTicket:   body.RuntimeLinkTicket,
 		AllowRelinkWhenIdle: body.AllowRelinkWhenIdle,
 	}
 	if body.ExpectedCurrentBinding != nil {
-		req.ExpectedProviderOrigin = body.ExpectedCurrentBinding.ProviderOrigin
-		req.ExpectedProviderID = body.ExpectedCurrentBinding.ProviderID
+		req.ExpectedCloudOrigin = body.ExpectedCurrentBinding.CloudOrigin
+		req.ExpectedCloudID = body.ExpectedCurrentBinding.CloudID
 		req.ExpectedEnvPublicID = body.ExpectedCurrentBinding.EnvPublicID
 		req.ExpectedAccessPointOrigin = body.ExpectedCurrentBinding.AccessPointOrigin
 		req.ExpectedGeneration = body.ExpectedCurrentBinding.BindingGeneration
 	}
-	resp, err := s.agent.ConnectProvider(r.Context(), req)
+	resp, err := s.agent.ConnectCloud(r.Context(), req)
 	if err != nil {
 		writeRuntimeControlAgentError(w, err)
 		return
 	}
-	s.notifyProviderLinkChanged()
+	s.notifyCloudLinkChanged()
 	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{
 		OK: true,
 		Data: map[string]any{
@@ -362,7 +360,7 @@ func (s *runtimeControlServer) handleProviderLinkConnect(w http.ResponseWriter, 
 	})
 }
 
-func (s *runtimeControlServer) handleProviderLinkDisconnect(w http.ResponseWriter, r *http.Request) {
+func (s *runtimeControlServer) handleCloudLinkDisconnect(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r) {
 		return
 	}
@@ -370,12 +368,12 @@ func (s *runtimeControlServer) handleProviderLinkDisconnect(w http.ResponseWrite
 		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
 		return
 	}
-	resp, err := s.agent.DisconnectProvider(r.Context())
+	resp, err := s.agent.DisconnectCloud(r.Context())
 	if err != nil {
 		writeRuntimeControlAgentError(w, err)
 		return
 	}
-	s.notifyProviderLinkChanged()
+	s.notifyCloudLinkChanged()
 	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{
 		OK: true,
 		Data: map[string]any{
@@ -531,7 +529,7 @@ func (s *runtimeControlServer) handleDesktopModelSourceRPC(w http.ResponseWriter
 	}
 }
 
-func (s *runtimeControlServer) notifyProviderLinkChanged() {
+func (s *runtimeControlServer) notifyCloudLinkChanged() {
 	s.notifyRuntimeServiceChanged()
 }
 
@@ -543,19 +541,19 @@ func (s *runtimeControlServer) notifyRuntimeServiceChanged() {
 }
 
 func writeRuntimeControlAgentError(w http.ResponseWriter, err error) {
-	var linkErr *agent.ProviderLinkError
+	var linkErr *agent.CloudLinkError
 	if errors.As(err, &linkErr) {
 		status := http.StatusBadRequest
-		if linkErr.Code == "PROVIDER_LINK_ACTIVE_WORK" || linkErr.Code == "PROVIDER_LINK_ALREADY_CONNECTED" {
+		if linkErr.Code == "CLOUD_LINK_ACTIVE_WORK" || linkErr.Code == "CLOUD_LINK_ALREADY_CONNECTED" {
 			status = http.StatusConflict
 		}
-		if linkErr.Code == "PROVIDER_LINK_NOT_CURRENT" || linkErr.Code == "PROVIDER_LINK_DISCONNECT_REJECTED" {
+		if linkErr.Code == "CLOUD_LINK_NOT_CURRENT" || linkErr.Code == "CLOUD_LINK_DISCONNECT_REJECTED" {
 			status = http.StatusConflict
 		}
 		writeRuntimeControlError(w, status, linkErr.Code, linkErr.Error())
 		return
 	}
-	writeRuntimeControlError(w, http.StatusInternalServerError, "PROVIDER_LINK_FAILED", err.Error())
+	writeRuntimeControlError(w, http.StatusInternalServerError, "CLOUD_LINK_FAILED", err.Error())
 }
 
 func writeRuntimeControlError(w http.ResponseWriter, status int, code string, message string) {

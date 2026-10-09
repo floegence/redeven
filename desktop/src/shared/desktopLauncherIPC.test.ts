@@ -32,10 +32,10 @@ const operationSnapshotHasNoLegacyInterruptionFields: [
 
 describe('desktopLauncherIPC', () => {
   it('requires an exact Cloud account identity for sign-out and rejects the retired delete action', () => {
-    const identity = { provider_origin: 'https://redeven.test', provider_id: 'redeven' };
+    const identity = { cloud_origin: 'https://redeven.test', cloud_id: 'redeven' };
     expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', ...identity })).toEqual({ kind: 'sign_out_control_plane', ...identity });
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', provider_origin: identity.provider_origin })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', provider_id: identity.provider_id })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', cloud_origin: identity.cloud_origin })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', cloud_id: identity.cloud_id })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_control_plane', ...identity })).toBeNull();
   });
 
@@ -214,28 +214,28 @@ describe('desktopLauncherIPC', () => {
       runtime_target_id: 'ssh:container:devbox%3A2222:docker:container-stable-id:e832df85',
     }));
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'connect_provider_runtime',
+      kind: 'connect_cloud_runtime',
       provider_environment_id: ' provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo ',
       runtime_target_id: ' ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default ',
     })).toEqual({
-      kind: 'connect_provider_runtime',
+      kind: 'connect_cloud_runtime',
       provider_environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       runtime_target_id: 'ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'disconnect_provider_runtime',
+      kind: 'disconnect_cloud_runtime',
       provider_environment_id: ' provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo ',
       runtime_target_id: ' local:local ',
     })).toEqual({
-      kind: 'disconnect_provider_runtime',
+      kind: 'disconnect_cloud_runtime',
       provider_environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       runtime_target_id: 'local:local',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'disconnect_provider_runtime',
+      kind: 'disconnect_cloud_runtime',
       runtime_target_id: ' local:local ',
     })).toEqual({
-      kind: 'disconnect_provider_runtime',
+      kind: 'disconnect_cloud_runtime',
       runtime_target_id: 'local:local',
     });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
@@ -372,11 +372,11 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_control_plane_connect',
-      provider_origin: ' https://provider.example.invalid/root ',
+      cloud_origin: ' https://provider.example.invalid/root ',
       display_label: ' Example Control Plane ',
     })).toEqual({
       kind: 'start_control_plane_connect',
-      provider_origin: 'https://provider.example.invalid',
+      cloud_origin: 'https://provider.example.invalid',
       display_label: 'Example Control Plane',
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -554,20 +554,20 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_local_environment' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'stop_environment_runtime', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'manage_desktop_update', environment_id: '   ' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: '   ', runtime_target_id: 'local:local' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: 'provider-env' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: 'provider-env' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_runtime', runtime_target_id: ' local:local ' })).toEqual({
-      kind: 'disconnect_provider_runtime',
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_cloud_runtime', provider_environment_id: '   ', runtime_target_id: 'local:local' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_cloud_runtime', provider_environment_id: 'provider-env', runtime_target_id: 'provider-env' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_cloud_runtime', provider_environment_id: 'provider-env' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_cloud_runtime', runtime_target_id: ' local:local ' })).toEqual({
+      kind: 'disconnect_cloud_runtime',
       runtime_target_id: 'local:local',
     });
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: ' local:local ' })).toEqual({
-      kind: 'disconnect_provider_runtime',
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_cloud_runtime', provider_environment_id: 'provider-env', runtime_target_id: ' local:local ' })).toEqual({
+      kind: 'disconnect_cloud_runtime',
       provider_environment_id: 'provider-env',
       runtime_target_id: 'local:local',
     });
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: '   ' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: 'local:' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_cloud_runtime', provider_environment_id: 'provider-env', runtime_target_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_cloud_runtime', provider_environment_id: 'provider-env', runtime_target_id: 'local:' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_environment_runtime',
       runtime_target_id: 'local:container:docker:container-stable-id:abc12345',

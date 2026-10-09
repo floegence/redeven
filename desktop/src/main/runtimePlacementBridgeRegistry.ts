@@ -4,7 +4,7 @@ import type { RuntimePlacementBridgeSession, RuntimePlacementBridgeTermination }
 import type { StartupReport } from './startup';
 import type { DesktopSessionRuntimeHandle } from './sessionRuntime';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 
 export type RuntimePlacementBridgeAttachment = Readonly<
   | { kind: 'opening'; operation_key: string }
@@ -14,7 +14,7 @@ export type RuntimePlacementBridgeRecord = Readonly<{
   runtime_key: string;
   environment_id: string;
   label: string;
-  target_id: DesktopProviderRuntimeLinkTargetID;
+  target_id: DesktopCloudRuntimeLinkTargetID;
   runtime_binary_path: string;
   session: RuntimePlacementBridgeSession;
   startup: StartupReport;

@@ -38,15 +38,15 @@ function reconnectControlPlaneAction(
   i18n: DesktopI18n,
   failure: DesktopLauncherActionFailure,
 ): DesktopActionToastAction | undefined {
-  const providerOrigin = compact(failure.provider_origin);
-  if (providerOrigin === '') {
+  const cloudOrigin = compact(failure.cloud_origin);
+  if (cloudOrigin === '') {
     return undefined;
   }
   return {
     kind: 'reconnect_control_plane',
     label: i18n.t('environmentAction.requestAccess'),
-    provider_origin: providerOrigin,
-    provider_id: compact(failure.provider_id) || undefined,
+    cloud_origin: cloudOrigin,
+    cloud_id: compact(failure.cloud_id) || undefined,
   };
 }
 
@@ -173,15 +173,15 @@ export function launcherActionFailurePresentation(
     case 'provider_invalid_response':
       return {
         message: i18n.locale === 'en-US'
-          ? compact(failure.message) || i18n.t('runtimeMessage.providerLinkFailedDetail')
-          : i18n.t('runtimeMessage.providerLinkFailedDetail'),
+          ? compact(failure.message) || i18n.t('runtimeMessage.cloudLinkFailedDetail')
+          : i18n.t('runtimeMessage.cloudLinkFailedDetail'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
-    case 'provider_link_failed':
+    case 'cloud_link_failed':
       return {
-        message: i18n.t('runtimeMessage.providerLinkFailedDetail'),
+        message: i18n.t('runtimeMessage.cloudLinkFailedDetail'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,

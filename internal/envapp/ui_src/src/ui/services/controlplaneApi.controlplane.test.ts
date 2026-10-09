@@ -26,7 +26,7 @@ describe('controlplaneApi controlplane helper usage', () => {
     const renew = vi.fn(async () => false);
     window.redevenDesktopSessionContext = {
       getSnapshot: () => ({ local_environment_id: 'cloud', renderer_storage_scope_id: 'cloud', target_route: 'remote_desktop', session_source: 'provider_environment', env_public_id: 'env_demo' }),
-      renewProviderSession: renew,
+      renewCloudSession: renew,
     };
     const fetchMock = vi.fn(async () => Response.json({ error: { code: 'INVALID_ENV_SESSION' } }, { status: 401 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -40,7 +40,7 @@ describe('controlplaneApi controlplane helper usage', () => {
     const renew = vi.fn(async () => true);
     window.redevenDesktopSessionContext = {
       getSnapshot: () => ({ local_environment_id: 'cloud', renderer_storage_scope_id: 'cloud', target_route: 'remote_desktop', session_source: 'provider_environment', env_public_id: 'env_demo' }),
-      renewProviderSession: renew,
+      renewCloudSession: renew,
     };
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'INVALID_ENV_SESSION' } }), { status: 401 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { entry_ticket: 'fresh-ticket' } })));
@@ -55,7 +55,7 @@ describe('controlplaneApi controlplane helper usage', () => {
     const renew = vi.fn(async () => renewed);
     window.redevenDesktopSessionContext = {
       getSnapshot: () => ({ local_environment_id: 'cloud', renderer_storage_scope_id: 'cloud', target_route: 'remote_desktop', session_source: 'provider_environment', env_public_id: 'env_demo' }),
-      renewProviderSession: renew,
+      renewCloudSession: renew,
     };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: { code: 'INVALID_ENV_SESSION' } }), { status: 401 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -68,7 +68,7 @@ describe('controlplaneApi controlplane helper usage', () => {
   it.each([401, 403, 429, 502, 503])('preserves ticket HTTP failure status for the artifact source (%s)', async (status) => {
     window.redevenDesktopSessionContext = {
       getSnapshot: () => ({ local_environment_id: 'cloud', renderer_storage_scope_id: 'cloud', target_route: 'remote_desktop', session_source: 'provider_environment', env_public_id: 'env_demo' }),
-      renewProviderSession: async () => false,
+      renewCloudSession: async () => false,
     };
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: status === 401 ? 'INVALID_ENV_SESSION' : 'REQUEST_FAILED' } }), { status })));
     const mod = await import('./controlplaneApi');

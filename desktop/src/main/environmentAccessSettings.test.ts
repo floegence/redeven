@@ -3,7 +3,7 @@ import type { StartupReport } from './startup';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { describe, expect, it, vi } from 'vitest';
-import { testDesktopPreferences, testProviderEnvironment } from '../testSupport/desktopTestHelpers';
+import { testDesktopPreferences, testCloudEnvironment } from '../testSupport/desktopTestHelpers';
 import { RuntimeControlError } from './runtimeControlClient';
 import { environmentSettingsFailure, resolveEnvironmentAccessOwner, withEnvironmentAccessOwner, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, requireEnvironmentManagementAvailable, buildEnvironmentAccessSnapshot } from './environmentAccessSettings';
 import { desktopRuntimeControlStatusMissing } from '../shared/desktopRuntimePresence';
@@ -21,8 +21,8 @@ describe('environment access settings authority', () => {
     expect(environmentSettingsFailure(new Error('Unknown failure'))).toEqual({ ok: false, error: 'Unknown failure' });
   });
   it('rejects Cloud and missing targets before any local or remote write', async () => {
-    const cloud = testProviderEnvironment('https://provider.example.invalid', 'cloud');
-    const preferences = testDesktopPreferences({ provider_environments: [cloud] });
+    const cloud = testCloudEnvironment('https://provider.example.invalid', 'cloud');
+    const preferences = testDesktopPreferences({ cloud_environments: [cloud] });
     const write = vi.fn();
     for (const id of [cloud.id, '', 'removed-environment']) {
       await expect(withEnvironmentAccessOwner(preferences, id, true, write)).rejects.toThrow();

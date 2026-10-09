@@ -14,7 +14,7 @@ import {
   localEnvironmentSource,
   providerEnvironmentSource,
 } from './environmentSourceRegistry';
-import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import type { DesktopControlPlaneSummary } from '../shared/cloud';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -193,8 +193,8 @@ function gatewayRuntimeOperations(input: Readonly<{
     stop: hiddenDesktopRuntimeOperationPlan('stop'),
     restart: hiddenDesktopRuntimeOperationPlan('restart'),
     update: hiddenDesktopRuntimeOperationPlan('update'),
-    connect_provider: hiddenDesktopRuntimeOperationPlan('connect_provider'),
-    disconnect_provider: hiddenDesktopRuntimeOperationPlan('disconnect_provider'),
+    connect_cloud: hiddenDesktopRuntimeOperationPlan('connect_cloud'),
+    disconnect_cloud: hiddenDesktopRuntimeOperationPlan('disconnect_cloud'),
   };
   return {
     ...hidden,

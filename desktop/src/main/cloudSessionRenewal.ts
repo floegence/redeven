@@ -6,7 +6,7 @@ type RenewalOptions = Readonly<{
   fetch: (url: string, init: RequestInit) => Promise<Response>;
 }>;
 
-export function isProviderSessionRenewalDocument(rawURL: string, origin: string): boolean {
+export function isCloudSessionRenewalDocument(rawURL: string, origin: string): boolean {
   try {
     const url = new URL(rawURL);
     return url.origin === origin && !url.username && !url.password && url.pathname === '/_redeven_boot/';
@@ -15,7 +15,7 @@ export function isProviderSessionRenewalDocument(rawURL: string, origin: string)
 
 // The native owner selects the saved Cloud account and environment. Renderers
 // receive only completion, never the account token or one-shot boot ticket.
-export function createProviderSessionRenewal(options: RenewalOptions): () => Promise<boolean> {
+export function createCloudSessionRenewal(options: RenewalOptions): () => Promise<boolean> {
   let pending: Promise<boolean> | undefined;
   const renew = async (): Promise<boolean> => {
     if (!options.isCurrent()) return false;

@@ -16,15 +16,15 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 44 {
-		t.Fatalf("CompatibilityEpoch = %d, want model directory contract epoch 44", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 45 {
+		t.Fatalf("CompatibilityEpoch = %d, want Cloud v4 and model directory contract epoch 45", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 35 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 43", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 36 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 44", contract.UpgradeFromRuntimeEpochs)
 	}
 	for index, epoch := range contract.UpgradeFromRuntimeEpochs {
 		if epoch != index+9 {
-			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 43", contract.UpgradeFromRuntimeEpochs)
+			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 44", contract.UpgradeFromRuntimeEpochs)
 		}
 	}
 	if contract.MinimumDesktopVersion != "v0.13.0" || contract.MinimumRuntimeVersion != "v0.13.0" {
@@ -169,18 +169,18 @@ func TestNormalizeSnapshotMarksDesktopModelSourceBindingUnsupportedWithoutCapabi
 	}
 }
 
-func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.T) {
+func TestNormalizeSnapshotNormalizesCloudLinkCapabilityAndBinding(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
 		Compatibility:   CompatibilityCompatible,
 		Capabilities: Capabilities{
-			ProviderLink: Capability{Supported: true},
+			CloudLink: Capability{Supported: true},
 		},
 		Bindings: Bindings{
-			ProviderLink: ProviderLinkBinding{
-				State:                    ProviderLinkState(" linked "),
-				ProviderOrigin:           " https://provider.example.invalid ",
-				ProviderID:               " example_control_plane ",
+			CloudLink: CloudLinkBinding{
+				State:                    CloudLinkState(" linked "),
+				CloudOrigin:              " https://provider.example.invalid ",
+				CloudID:                  " example_control_plane ",
 				EnvPublicID:              " env_demo ",
 				LocalEnvironmentPublicID: " lenv_demo ",
 				BindingGeneration:        3,
@@ -189,18 +189,18 @@ func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.
 		},
 	})
 
-	if !snapshot.Capabilities.ProviderLink.Supported {
-		t.Fatalf("ProviderLink.Supported = false, want true")
+	if !snapshot.Capabilities.CloudLink.Supported {
+		t.Fatalf("CloudLink.Supported = false, want true")
 	}
-	if snapshot.Capabilities.ProviderLink.BindMethod != RuntimeControlBindMethodV2 {
-		t.Fatalf("BindMethod = %q", snapshot.Capabilities.ProviderLink.BindMethod)
+	if snapshot.Capabilities.CloudLink.BindMethod != RuntimeControlBindMethodV2 {
+		t.Fatalf("BindMethod = %q", snapshot.Capabilities.CloudLink.BindMethod)
 	}
-	binding := snapshot.Bindings.ProviderLink
-	if binding.State != ProviderLinkStateLinked || binding.RemoteEnabled {
+	binding := snapshot.Bindings.CloudLink
+	if binding.State != CloudLinkStateLinked || binding.RemoteEnabled {
 		t.Fatalf("unexpected provider-link state: %#v", binding)
 	}
-	if binding.ProviderOrigin != "https://provider.example.invalid" ||
-		binding.ProviderID != "example_control_plane" ||
+	if binding.CloudOrigin != "https://provider.example.invalid" ||
+		binding.CloudID != "example_control_plane" ||
 		binding.EnvPublicID != "env_demo" ||
 		binding.LocalEnvironmentPublicID != "lenv_demo" {
 		t.Fatalf("provider-link identity was not normalized: %#v", binding)
@@ -238,51 +238,51 @@ func TestNormalizeSnapshotKeepsMissingRuntimeGatewayCapabilityUnsupported(t *tes
 	}
 }
 
-func TestNormalizeSnapshotPreservesProviderLinkRemoteEnabledFact(t *testing.T) {
+func TestNormalizeSnapshotPreservesCloudLinkRemoteEnabledFact(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
 		Compatibility:   CompatibilityCompatible,
 		RemoteEnabled:   false,
 		Capabilities: Capabilities{
-			ProviderLink: Capability{Supported: true},
+			CloudLink: Capability{Supported: true},
 		},
 		Bindings: Bindings{
-			ProviderLink: ProviderLinkBinding{
-				State:          ProviderLinkStateLinked,
-				ProviderOrigin: "https://provider.example.invalid",
-				ProviderID:     "example_control_plane",
-				EnvPublicID:    "env_demo",
-				RemoteEnabled:  false,
+			CloudLink: CloudLinkBinding{
+				State:         CloudLinkStateLinked,
+				CloudOrigin:   "https://provider.example.invalid",
+				CloudID:       "example_control_plane",
+				EnvPublicID:   "env_demo",
+				RemoteEnabled: false,
 			},
 		},
 	})
 
-	if snapshot.Bindings.ProviderLink.State != ProviderLinkStateLinked {
-		t.Fatalf("State = %q, want %q", snapshot.Bindings.ProviderLink.State, ProviderLinkStateLinked)
+	if snapshot.Bindings.CloudLink.State != CloudLinkStateLinked {
+		t.Fatalf("State = %q, want %q", snapshot.Bindings.CloudLink.State, CloudLinkStateLinked)
 	}
-	if snapshot.Bindings.ProviderLink.RemoteEnabled {
-		t.Fatalf("ProviderLink.RemoteEnabled = true, want false")
+	if snapshot.Bindings.CloudLink.RemoteEnabled {
+		t.Fatalf("CloudLink.RemoteEnabled = true, want false")
 	}
 }
 
-func TestNormalizeSnapshotMarksProviderLinkUnsupportedWithoutCapability(t *testing.T) {
+func TestNormalizeSnapshotMarksCloudLinkUnsupportedWithoutCapability(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
 		Compatibility:   CompatibilityCompatible,
 		Bindings: Bindings{
-			ProviderLink: ProviderLinkBinding{
-				State:          ProviderLinkStateLinked,
-				ProviderOrigin: "https://provider.example.invalid",
-				ProviderID:     "example_control_plane",
-				EnvPublicID:    "env_demo",
-				RemoteEnabled:  true,
+			CloudLink: CloudLinkBinding{
+				State:         CloudLinkStateLinked,
+				CloudOrigin:   "https://provider.example.invalid",
+				CloudID:       "example_control_plane",
+				EnvPublicID:   "env_demo",
+				RemoteEnabled: true,
 			},
 		},
 	})
-	if snapshot.Bindings.ProviderLink.State != ProviderLinkStateUnsupported {
-		t.Fatalf("State = %q, want %q", snapshot.Bindings.ProviderLink.State, ProviderLinkStateUnsupported)
+	if snapshot.Bindings.CloudLink.State != CloudLinkStateUnsupported {
+		t.Fatalf("State = %q, want %q", snapshot.Bindings.CloudLink.State, CloudLinkStateUnsupported)
 	}
-	if snapshot.Bindings.ProviderLink.RemoteEnabled {
+	if snapshot.Bindings.CloudLink.RemoteEnabled {
 		t.Fatalf("RemoteEnabled = true, want false")
 	}
 }

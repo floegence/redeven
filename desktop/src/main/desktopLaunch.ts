@@ -24,11 +24,10 @@ export function desktopAutoStartRuntimeEnabled(
 
 export type DesktopRuntimeBootstrap = Readonly<
   {
-    kind: 'bootstrap_ticket';
-    provider_origin: string;
-    controlplane_url: string;
+    kind: 'runtime_link_ticket';
+    cloud_origin: string;
     env_id: string;
-    bootstrap_ticket: string;
+    runtime_link_ticket: string;
   }
 >;
 
@@ -90,16 +89,13 @@ export function buildDesktopRuntimeArgs(
 
   const bootstrap = resolvedRuntimeBootstrap(options.bootstrap);
   if (bootstrap) {
-    const providerOrigin = String(bootstrap.provider_origin ?? '').trim();
-    const controlPlaneURL = String(bootstrap.controlplane_url ?? '').trim();
+    const cloudOrigin = String(bootstrap.cloud_origin ?? '').trim();
     const envID = String(bootstrap.env_id ?? '').trim();
-    const bootstrapTicket = String(bootstrap.bootstrap_ticket ?? '').trim();
-    if (providerOrigin !== '' && controlPlaneURL !== '' && envID !== '' && bootstrapTicket !== '') {
+    const bootstrapTicket = String(bootstrap.runtime_link_ticket ?? '').trim();
+    if (cloudOrigin !== '' && envID !== '' && bootstrapTicket !== '') {
       args.push(
-        '--provider-origin',
-        providerOrigin,
-        '--controlplane',
-        controlPlaneURL,
+        '--cloud',
+        cloudOrigin,
         '--env-id',
         envID,
       );
@@ -137,16 +133,16 @@ function buildDesktopRuntimePlan(
   const access = localEnvironmentAccess(environment);
   const bootstrap = resolvedRuntimeBootstrap(options?.bootstrap);
   const envelope: {
-    version: 1;
+    version: 2;
     local_ui_password?: string;
-    bootstrap_ticket?: string;
-  } = { version: 1 };
+    runtime_link_ticket?: string;
+  } = { version: 2 };
   const localUIPassword = String(access.local_ui_password ?? '');
   if (access.local_ui_password_configured && localUIPassword !== '') {
     envelope.local_ui_password = localUIPassword;
   }
-  if (bootstrap && String(bootstrap.bootstrap_ticket ?? '').trim() !== '') {
-    envelope.bootstrap_ticket = String(bootstrap.bootstrap_ticket);
+  if (bootstrap && String(bootstrap.runtime_link_ticket ?? '').trim() !== '') {
+    envelope.runtime_link_ticket = String(bootstrap.runtime_link_ticket);
   }
   const startupSecretsStdin = JSON.stringify(envelope);
   if (Buffer.byteLength(startupSecretsStdin, 'utf8') > STARTUP_SECRETS_MAX_BYTES) {

@@ -28,7 +28,7 @@ try {
     }));
     await store.refresh(targets);
     const fresh = buildDesktopWelcomeSnapshot({ ...inputs, ...store.snapshot() });
-    const owner = fresh.environments.find(entry => entry.provider_runtime_link_target?.provider_link_state === 'linked');
+    const owner = fresh.environments.find(entry => entry.provider_runtime_link_target?.cloud_link_state === 'linked');
     const target = targets.find(target => target.environment_id === owner.id);
     let resolve;
     const refresh = store.refresh([{ ...target, probe: () => new Promise(done => { resolve = done; }) }], { force: true });
