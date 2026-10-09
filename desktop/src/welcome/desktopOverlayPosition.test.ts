@@ -141,6 +141,53 @@ describe('desktopOverlayPosition', () => {
     expect(position.arrowOffset).toBe(12);
   });
 
+  it.each([1024, 1440])('keeps a locked Welcome popup inside the left edge at %i pixels wide', (viewportWidth) => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(4, 520, 282, 28),
+      overlayWidth: 304,
+      overlayHeight: 480,
+      viewportWidth,
+      viewportHeight: 960,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.left).toBe(8);
+    expect(position.left + 304).toBeLessThanOrEqual(viewportWidth - 8);
+  });
+
+  it('keeps a locked popup inside the right viewport edge', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(990, 520, 30, 28),
+      overlayWidth: 304,
+      overlayHeight: 80,
+      viewportWidth: 1024,
+      viewportHeight: 720,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+    });
+
+    expect(position.left).toBe(712);
+    expect(position.left + 304).toBe(1016);
+  });
+
+  it('shrinks a locked popup to the visible viewport before positioning it', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(4, 180, 24, 24),
+      overlayWidth: 400,
+      overlayHeight: 80,
+      viewportWidth: 320,
+      viewportHeight: 400,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+    });
+
+    expect(position.maxWidth).toBe(304);
+    expect(position.left).toBe(8);
+    expect(position.left + position.maxWidth!).toBe(312);
+  });
+
   it('keeps a top overlay above the anchor while shifting it inside the right viewport edge', () => {
     const position = resolveDesktopAnchoredOverlayPosition({
       anchorRect: rect(186, 18, 24, 24),
@@ -213,6 +260,36 @@ describe('desktopOverlayPosition', () => {
     expect(position.left).toBe(38);
     expect(position.maxHeight).toBe(372);
     expect(position.arrowOffset).toBeCloseTo(152, 0);
+  });
+
+  it('caps a tall locked popup at 25rem and keeps it attached to the trigger', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(200, 600, 48, 28),
+      overlayWidth: 304,
+      overlayHeight: 700,
+      viewportWidth: 1024,
+      viewportHeight: 720,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+    });
+
+    expect(position.maxHeight).toBe(400);
+    expect(position.top).toBe(192);
+  });
+
+  it('uses less than 25rem when there is not enough space above the trigger', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(200, 320, 48, 28),
+      overlayWidth: 304,
+      overlayHeight: 700,
+      viewportWidth: 1024,
+      viewportHeight: 720,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+    });
+
+    expect(position.maxHeight).toBe(304);
+    expect(position.top).toBe(8);
   });
 
   it('keeps the same viewport height lock after a tall Gateway popover has been clipped', () => {

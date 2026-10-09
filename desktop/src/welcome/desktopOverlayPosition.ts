@@ -3,11 +3,14 @@ import type { JSX } from 'solid-js';
 export type DesktopOverlayPlacement = 'top' | 'bottom' | 'left' | 'right';
 export type DesktopOverlayPlacementLock = 'top-inline-shift';
 
+const MAX_LOCKED_OVERLAY_HEIGHT = 25 * 16;
+
 export type DesktopAnchoredOverlayPosition = Readonly<{
   placement: DesktopOverlayPlacement;
   left: number;
   top: number;
   arrowOffset: number;
+  maxWidth?: number;
   maxHeight?: number;
 }>;
 
@@ -49,6 +52,12 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
   const margin = 8;
   const gap = 8;
   const arrowInset = 12;
+  const maxWidth = constrainToViewport ? Math.max(0, options.viewportWidth - (margin * 2)) : undefined;
+  const overlayWidth = maxWidth === undefined ? options.overlayWidth : Math.min(options.overlayWidth, maxWidth);
+  const horizontalMargin = maxWidth === undefined
+    ? margin
+    : Math.min(margin, Math.max(0, (options.viewportWidth - overlayWidth) / 2));
+  const effectiveArrowInset = Math.min(arrowInset, overlayWidth / 2);
   const anchorCenterX = options.anchorRect.left + (options.anchorRect.width / 2);
   const anchorCenterY = options.anchorRect.top + (options.anchorRect.height / 2);
 
@@ -72,7 +81,7 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
     ? orderedPlacements.find((candidate) => {
       const requiredSpace = candidate === 'top' || candidate === 'bottom'
         ? options.overlayHeight
-        : options.overlayWidth;
+        : overlayWidth;
       return availableSpace[candidate] >= requiredSpace;
     }) ?? orderedPlacements.slice().sort((left, right) => availableSpace[right] - availableSpace[left])[0]
     : preferredPlacement;
@@ -83,15 +92,15 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
 
   switch (placement) {
     case 'top':
-      left = anchorCenterX - (options.overlayWidth / 2);
+      left = anchorCenterX - (overlayWidth / 2);
       top = options.anchorRect.top - gap - options.overlayHeight;
       break;
     case 'bottom':
-      left = anchorCenterX - (options.overlayWidth / 2);
+      left = anchorCenterX - (overlayWidth / 2);
       top = options.anchorRect.bottom + gap;
       break;
     case 'left':
-      left = options.anchorRect.left - gap - options.overlayWidth;
+      left = options.anchorRect.left - gap - overlayWidth;
       top = anchorCenterY - (options.overlayHeight / 2);
       break;
     case 'right':
@@ -102,22 +111,21 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
 
   if (constrainToViewport) {
     if (options.placementLock === 'top-inline-shift') {
-      left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
+      left = clamp(left, horizontalMargin, options.viewportWidth - overlayWidth - horizontalMargin);
       const availableHeight = Math.max(0, options.anchorRect.top - margin - gap);
       if (placement === 'top') {
-        maxHeight = availableHeight;
-        if (options.overlayHeight >= availableHeight) {
-          top = margin;
-        }
+        maxHeight = Math.min(MAX_LOCKED_OVERLAY_HEIGHT, availableHeight);
+        const positionedHeight = Math.min(options.overlayHeight, maxHeight);
+        top = Math.max(margin, options.anchorRect.top - gap - positionedHeight);
       }
     } else if (allowMainAxisOverflow) {
       if (placement === 'top' || placement === 'bottom') {
-        left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
+        left = clamp(left, horizontalMargin, options.viewportWidth - overlayWidth - horizontalMargin);
       } else {
         top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
       }
     } else {
-      left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
+      left = clamp(left, horizontalMargin, options.viewportWidth - overlayWidth - horizontalMargin);
       top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
     }
   }
@@ -127,8 +135,9 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
     left,
     top,
     arrowOffset: placement === 'top' || placement === 'bottom'
-      ? clamp(anchorCenterX - left, arrowInset, options.overlayWidth - arrowInset)
+      ? clamp(anchorCenterX - left, effectiveArrowInset, overlayWidth - effectiveArrowInset)
       : clamp(anchorCenterY - top, arrowInset, options.overlayHeight - arrowInset),
+    ...(maxWidth !== undefined ? { maxWidth } : {}),
     ...(maxHeight !== undefined ? { maxHeight } : {}),
   };
 }

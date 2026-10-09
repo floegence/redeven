@@ -35,7 +35,7 @@ Every Launcher Operation declares one `active_progress_surface`: `open`, `runtim
 
 The main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.
 
-Each action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. A non-scrolling parent must not reserve a scrollbar gutter, so the body scrollbar stays against the popup's inner edge instead of being inset. Parent and body scrollbars must never overlap.
+Each action popup remains within the visible viewport while staying anchored to its trigger. Top-anchored progress popups stay above the trigger, shift horizontally to retain viewport margins, and use no more than 25rem of height or the available space above the trigger, whichever is smaller. Each action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. A non-scrolling parent must not reserve a scrollbar gutter, so the body scrollbar stays against the popup's inner edge instead of being inset. Parent and body scrollbars must never overlap.
 
 SSH Runtime package-delivery choices name the user-visible data path rather than an internal strategy relationship. `desktop_upload` is presented as Desktop upload, while `remote_install` is presented as remote download and install; neither an explicit selector nor an Environment fact calls the latter a fallback. Automatic describes its ordered choice in plain language without changing the persisted strategy contract.
 
@@ -52,3 +52,5 @@ Settings sections, explicit target binding, and committed identity rebinding fol
 - `redeven:desktop/src/welcome/environmentLifecycleDisclosure.ts:1` - Exact attempt binding.
 - `redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:1` - Active-surface-only progress and recovery actions.
 - `redeven:desktop/src/welcome/environmentProgressMeter.ts:1` - Snapshot-based progress percentage and elapsed-time projection.
+- `redeven:desktop/src/welcome/desktopOverlayPosition.ts:1` - Viewport-constrained anchored popup placement and available-height calculation.
+- `redeven:desktop/src/welcome/DesktopAnchoredOverlaySurface.tsx:1` - Applies measured viewport bounds to the popup surface.
