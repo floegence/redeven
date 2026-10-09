@@ -20,10 +20,11 @@ import {
   type GraphObjectRef,
 } from '@floegence/floe-webapp-core/graph';
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
-import { ArrowRight, ChevronDown, Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
+import { ChevronDown, Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
 import '@floegence/floe-webapp-core/graph.css';
 import { projectCanvas, projectLayoutOptions } from './projection';
 import { TessivenIcon } from './TessivenIcon';
+import { TessivenServiceRelations, type ServiceRelationEndpoint } from './TessivenServiceRelations';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import type {
   Instance,
@@ -355,7 +356,7 @@ export function TessivenGraph(props: {
       show(rowEvent(event, id), refs, true);
     }
   };
-  const serviceRows = (instances: Instance[], limit = Infinity, ownerId?: string): JSX.Element => {
+  const serviceRows = (instances: Instance[], limit = Infinity, ownerId?: string, endpoint?: (id: string) => ServiceRelationEndpoint | undefined): JSX.Element => {
     const owner = ownerId ? projection().cards.get(ownerId) : undefined;
     const grouped = owner?.kind === 'node' && owner.group?.instanceRefs ? new Set(owner.groupInstances.map(instance => instance.id)) : undefined;
     const serviceIDs = [
@@ -376,6 +377,8 @@ export function TessivenGraph(props: {
             return (
               <button
                 class="tessiven-service"
+                data-service-id={id}
+                data-relation-endpoint={endpoint?.(id)}
                 data-kind={service()?.kind}
                 data-member={grouped ? members.some(instance => grouped.has(instance.id)) : undefined}
                 onKeyDown={(event) => keyboardMenu(event, ownerId ?? id, [id])}
@@ -420,41 +423,14 @@ export function TessivenGraph(props: {
       </>
     );
   };
-  const internalRelationRows = (ownerId: string): JSX.Element => {
-    const relations = projection().internalRelations.get(ownerId) ?? [];
-    return (
-      <Show when={relations.length}>
-        <div class="tessiven-local-relations">
-          <For each={relations}>
-            {(item) => {
-              const kind = () => item.relation.protocol ?? props.t(`relation.${item.relation.kind}`);
-              return (
-                <button
-                  class="tessiven-local-relation"
-                  aria-label={`${item.fromLabel} ${kind()} ${item.toLabel}`}
-                  onKeyDown={(event) => keyboardMenu(event, item.relation.id, [item.relation.id])}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    show(rowEvent(event, item.relation.id), [item.relation.id]);
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    show(rowEvent(event, item.relation.id), [item.relation.id], true);
-                  }}
-                >
-                  <span>{item.fromLabel}</span>
-                  <ArrowRight aria-hidden="true" />
-                  <span>{item.toLabel}</span>
-                  <small>{kind()}</small>
-                </button>
-              );
-            }}
-          </For>
-        </div>
-      </Show>
-    );
-  };
+  const serviceInventory = (ownerId: string, instances: Instance[], limit = Infinity, group = false): JSX.Element => (
+    <TessivenServiceRelations relations={projection().internalRelations.get(ownerId) ?? []} engine={engine} t={props.t} group={group}
+      renderServices={endpoint => serviceRows(instances, limit, ownerId, endpoint)}
+      onKeyDown={(event, id) => keyboardMenu(event, id, [id])}
+      onActivate={(event, id) => { event.stopPropagation(); show(rowEvent(event, id), [id]); }}
+      onContextMenu={(event, id) => { event.preventDefault(); event.stopPropagation(); show(rowEvent(event, id), [id], true); }}
+      onError={cause => setError(cause instanceof Error ? cause.message : String(cause))} />
+  );
   const renderCard = (
     node: GraphLayoutNode,
     context: GraphNodeRenderContext,
@@ -519,11 +495,11 @@ export function TessivenGraph(props: {
             </label>
           </Show>
           <Show when={!card.expanded}>
-            <div class="tessiven-group-services">
-              {serviceRows(card.instances, 8)}
-            </div>
+            {serviceInventory(node.id, card.instances, 8, true)}
           </Show>
-          {internalRelationRows(node.id)}
+          <Show when={card.expanded && (projection().internalRelations.get(node.id)?.length ?? 0) > 0}>
+            {serviceInventory(node.id, [])}
+          </Show>
         </section>
       );
     if (card.kind === 'node')
@@ -572,8 +548,7 @@ export function TessivenGraph(props: {
               {props.t('hostedServices')}
               <span>{card.instances.length}</span>
             </div>
-            {serviceRows(card.instances, Infinity, node.id)}
-            {internalRelationRows(node.id)}
+            {serviceInventory(node.id, card.instances)}
           </div>
         </section>
       );

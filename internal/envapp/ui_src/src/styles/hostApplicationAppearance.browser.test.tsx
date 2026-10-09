@@ -21,6 +21,7 @@ import viewerJS from '../../../../codeapp/appserver/host_application_viewer/maco
 
 const catalog = JSON.parse(catalogJS.slice(catalogJS.indexOf(' = ') + 3).trim().slice(0, -1)) as {
   defaults: Record<string, string>; locales: Record<string, Record<string, string>>;
+  consoleControl: Record<string, Record<string, string>>;
 };
 const media = commands as unknown as {emulateMediaPreferences: (preferences: {forcedColors:'active' | 'none'}) => Promise<void>};
 afterEach(async () => { document.body.replaceChildren(); await media.emulateMediaPreferences({forcedColors:'none'}); });
@@ -45,9 +46,10 @@ async function viewer(theme: string, locale = 'zh-CN', width = 420) {
       send(value){window.sent.push(JSON.parse(value))}close(){}
     };`;
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', locale).replaceAll('{{.Theme}}', theme).replaceAll('{{.Name}}', 'Text Editor')
+    .replace('<script src="{{.TransportScript}}"></script>', () => `<script>${fixture};window.RedevenWindowTransport={create:()=>({fetch:window.fetch,WebSocket:window.WebSocket,dispose(){}})};</script>`)
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', appearanceCSS + '\n' + inputCSS + '\n' + pointerCSS + '\n' + viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',backend:'macos',copy}))
-    .replace('{{.Script}}', [fixture, inputJS, pointerJS, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, canvasJS, viewerJS].join('\n'));
+    .replace('{{.Script}}', () => [inputJS, pointerJS, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, canvasJS, viewerJS].join('\n'));
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe('active');
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -99,11 +101,13 @@ it.each(Object.keys(catalog.locales))('updates visible copy and accessibility in
   const sent = runtime.sent.length;
   doc.documentElement.lang = locale;
   await expect.poll(() => toggle.title).toBe(catalog.locales[locale].picture);
+  const messages = {...catalog.locales[locale], ...catalog.consoleControl[locale]};
   for (const attribute of [null, 'title', 'aria-label']) {
     const binding = 'data-app-copy' + (attribute ? '-' + attribute : '');
     for (const element of doc.querySelectorAll(`[${binding}]`)) {
       const key = element.getAttribute(binding)!;
-      const expected = catalog.locales[locale][key].replaceAll('{name}', 'Text Editor');
+      expect(messages[key], `${locale}:${key}`).toBeDefined();
+      const expected = messages[key].replaceAll('{name}', 'Text Editor');
       expect(attribute ? element.getAttribute(attribute) : element.textContent, `${locale}:${key}`).toBe(expected);
     }
   }

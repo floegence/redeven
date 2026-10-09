@@ -78,6 +78,7 @@
   "moreServices": "추가 서비스: {count}",
   "moreObjects": "객체가 {count}개 더 있습니다. 객체 검색으로 확인하세요.",
   "hostedServices": "호스팅된 서비스",
+  "serviceRelations": "서비스 호출 / 접근",
   "redevenRuntime": "Redeven 런타임",
   "runtimeNode": "런타임 노드",
   "externalResource": "외부 종속 항목",

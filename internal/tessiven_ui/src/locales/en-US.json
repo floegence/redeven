@@ -78,6 +78,7 @@
   "moreServices": "More services: {count}",
   "moreObjects": "More objects: {count}. Use object search to inspect them.",
   "hostedServices": "Hosted services",
+  "serviceRelations": "Service calls / access",
   "redevenRuntime": "Redeven runtime",
   "runtimeNode": "Runtime node",
   "externalResource": "External dependency",

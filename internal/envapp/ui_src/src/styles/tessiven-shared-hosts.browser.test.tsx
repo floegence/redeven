@@ -48,6 +48,15 @@ describe('shared host canvas interactions', () => {
     expect(row.closest('.tessiven-node')).not.toBeNull();
     expect(row.textContent).toContain('NameNode');
     expect(row.textContent).toContain('ZooKeeper');
+    expect(row.closest('.tessiven-local-relations')?.querySelector('h3')?.textContent).toBe('Service calls / access');
+    expect(parseFloat(getComputedStyle(row.closest('.tessiven-local-relations')!).borderTopWidth)).toBeGreaterThan(0);
+    expect(host.querySelector('.tessiven-service-link-preview')).toBeNull();
+    await userEvent.hover(row);
+    await expect.poll(() => host.querySelectorAll('.tessiven-service-link-preview path[data-relation-id="nn-zk"]').length).toBe(1);
+    expect(host.querySelector('.tessiven-popup')).toBeNull();
+    expect([...host.querySelectorAll('.tessiven-service[data-relation-endpoint]')].map(service => service.getAttribute('data-service-id'))).toEqual(['nn', 'zookeeper']);
+    await userEvent.hover(page.getByRole('button', { name: 'Fit canvas', exact: true }));
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).toBeNull();
     for (const theme of builtInShellThemePresets) {
       applyTheme(theme);
       await frames();
@@ -69,6 +78,134 @@ describe('shared host canvas interactions', () => {
     const collapsed = host.querySelector<HTMLElement>('.tessiven-local-relation')!;
     expect(collapsed.getBoundingClientRect().bottom)
       .toBeLessThanOrEqual(collapsed.closest('.tessiven-group')!.getBoundingClientRect().bottom - 5);
+  });
+
+  it.each([false, true])('previews exact instance endpoints around intervening services in a projected card: %s', async transformed => {
+    await page.viewport(1300, 800);
+    const version = sharedHostsVersion();
+    version.document.nodes = version.document.nodes!.slice(0, 1);
+    version.document.groups = [{ id: 'core', name: 'Core services', nodeRefs: ['node-1'] }];
+    version.document.instances = version.document.instances!.filter(instance => instance.nodeRef === 'node-1');
+    version.document.services!.push({ id: 'worker', name: 'Background worker', kind: 'worker' });
+    version.document.instances.splice(1, 0, { id: 'worker-1', nodeRef: 'node-1', serviceRef: 'worker', role: 'standalone' });
+    version.document.relations = [
+      { id: 'nn-zk', from: 'nn-1', to: 'zk-1', kind: 'accesses', evidenceRefs: ['design'] },
+      { id: 'zk-nn', from: 'zk-1', to: 'nn-1', kind: 'calls', evidenceRefs: ['design'] },
+    ];
+    version.document.presentation = { initiallyExpanded: ['core'] };
+    mount(transformed, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-local-relation').length).toBe(2);
+    const preview = async (id: string) => {
+      await userEvent.hover(page.elementLocator(host.querySelector(`[data-relation-id="${id}"]`)!));
+      await expect.poll(() => host.querySelector(`.tessiven-service-link-preview path[data-relation-id="${id}"]`)).not.toBeNull();
+      const line = host.querySelector<SVGPathElement>(`.tessiven-service-link-preview path[data-relation-id="${id}"]`)!;
+      const from = host.querySelector<HTMLElement>('.tessiven-service[data-relation-endpoint="source"]')!;
+      const to = host.querySelector<HTMLElement>('.tessiven-service[data-relation-endpoint="target"]')!;
+      const start = line.getPointAtLength(0), end = line.getPointAtLength(line.getTotalLength());
+      expect(start.x).toBeCloseTo(from.offsetLeft); expect(start.y).toBeCloseTo(from.offsetTop + from.offsetHeight / 2);
+      expect(end.x).toBeCloseTo(to.offsetLeft); expect(end.y).toBeCloseTo(to.offsetTop + to.offsetHeight / 2);
+      expect(from.offsetLeft).toBe(0);
+      expect(from.offsetWidth).toBe(from.parentElement!.clientWidth);
+      expect(getComputedStyle(from.closest('.tessiven-node') ?? from.closest('.tessiven-group')!).overflow).toBe('visible');
+      expect(getComputedStyle(line.closest('svg')!).overflow).toBe('visible');
+      expect(line.getBBox().x).toBeLessThanOrEqual(-20);
+      let outsideInventory = false;
+      for (let distance = 0; distance <= line.getTotalLength(); distance += 2) {
+        const point = line.getPointAtLength(distance);
+        expect(point.x).toBeLessThanOrEqual(from.offsetLeft);
+        outsideInventory ||= point.x < 0;
+      }
+      expect(outsideInventory).toBe(true);
+      expect(host.querySelectorAll('.tessiven-service[data-relation-endpoint]')).toHaveLength(2);
+      expect(host.querySelector('.tessiven-popup')).toBeNull();
+      expect(host.querySelector('[role="alert"]')).toBeNull();
+    };
+    for (const theme of builtInShellThemePresets.filter(theme => ['porcelain-light', 'porcelain-dark', 'classic-light', 'classic-dark'].includes(theme.name))) {
+      applyTheme(theme);
+      await preview('nn-zk');
+      await page.screenshot({ path: `../../.vitest-attachments/local-link-${theme.name}-${transformed ? 'projected' : 'plain'}.png` });
+      await preview('zk-nn');
+    }
+    await userEvent.hover(page.getByRole('button', { name: 'Fit canvas', exact: true }));
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).toBeNull();
+    await userEvent.keyboard('{Tab}');
+    host.querySelector<HTMLElement>('.tessiven-local-relation[data-relation-id="nn-zk"]')!.focus();
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).not.toBeNull();
+    host.querySelector<HTMLButtonElement>('.tessiven-canvas-tools button')!.focus();
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).toBeNull();
+    await page.getByRole('button', { name: 'Collapse group', exact: true }).click();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(0);
+    await preview('nn-zk');
+    await page.getByRole('button', { name: 'Expand group', exact: true }).click();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(1);
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).toBeNull();
+  });
+
+  it('keeps calls between instances of one service inside the single inventory row', async () => {
+    await page.viewport(1300, 800);
+    const version = sharedHostsVersion();
+    version.document.nodes = version.document.nodes!.slice(0, 1);
+    version.document.groups = [{ id: 'core', name: 'Core services', nodeRefs: ['node-1'] }];
+    version.document.services = version.document.services!.slice(0, 1);
+    version.document.instances = [
+      { id: 'nn-1', nodeRef: 'node-1', serviceRef: 'nn', role: 'primary' },
+      { id: 'nn-2', nodeRef: 'node-1', serviceRef: 'nn', role: 'replica' },
+    ];
+    version.document.relations = [{ id: 'replication', from: 'nn-1', to: 'nn-2', kind: 'replicates', evidenceRefs: ['design'] }];
+    version.document.presentation = { initiallyExpanded: ['core'] };
+    mount(false, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-local-relation').length).toBe(1);
+    await userEvent.hover(page.elementLocator(host.querySelector('.tessiven-local-relation')!));
+    await expect.poll(() => host.querySelector('.tessiven-service-self-link')).not.toBeNull();
+    expect(host.querySelector('.tessiven-service[data-relation-endpoint="both"]')?.getAttribute('data-service-id')).toBe('nn');
+    expect(host.querySelector('.tessiven-service-link-preview')).toBeNull();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    await userEvent.hover(page.getByRole('button', { name: 'Fit canvas', exact: true }));
+    await expect.poll(() => host.querySelector('.tessiven-service-self-link')).toBeNull();
+  });
+
+  it('clears local routes while a cached canvas is hidden and restores measured endpoints on reentry', async () => {
+    await page.viewport(1300, 800);
+    mount();
+    await expect.poll(() => host.querySelectorAll('.tessiven-local-relation').length).toBeGreaterThan(0);
+    const row = host.querySelector<HTMLElement>('.tessiven-local-relation')!;
+    await userEvent.hover(row);
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).not.toBeNull();
+    host.style.display = 'none';
+    await frames();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector('.tessiven-service-link-preview')).toBeNull();
+    host.style.display = '';
+    await userEvent.hover(page.getByRole('button', { name: 'Fit canvas', exact: true }));
+    await userEvent.hover(row);
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).not.toBeNull();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    await userEvent.keyboard('{Tab}');
+    row.focus();
+    await expect.poll(() => row.dataset.active).toBe('true');
+    await userEvent.hover(row);
+    await userEvent.hover(page.getByRole('button', { name: 'Fit canvas', exact: true }));
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).toBeNull();
+  });
+
+  it('does not connect a folded service to a different visible row', async () => {
+    await page.viewport(1300, 800);
+    const version = sharedHostsVersion();
+    version.document.nodes = version.document.nodes!.slice(0, 1);
+    version.document.groups = [{ id: 'core', name: 'Core services', nodeRefs: ['node-1'] }];
+    version.document.services = Array.from({ length: 9 }, (_, i) => ({ id: `service-${i}`, name: `Service ${i}`, kind: 'worker' }));
+    version.document.instances = version.document.services.map(service => ({ id: `${service.id}-instance`, nodeRef: 'node-1', serviceRef: service.id, role: 'standalone' }));
+    version.document.relations = [{ id: 'call', from: 'service-0', to: 'service-8', kind: 'calls', evidenceRefs: ['design'] }];
+    version.document.presentation = { initiallyExpanded: [] };
+    mount(false, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-service').length).toBe(8);
+    await userEvent.hover(page.elementLocator(host.querySelector('.tessiven-local-relation')!));
+    await frames();
+    expect(host.querySelector('.tessiven-service-link-preview')).toBeNull();
+    expect(host.querySelector('.tessiven-service-self-link')).toBeNull();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    await userEvent.click(host.querySelector<HTMLElement>('.tessiven-local-relation')!);
+    expect(document.querySelector('.tessiven-detail-object > code')?.textContent).toBe('call');
   });
 
   it('shows full inventories and highlights every appearance without a hover popup', async () => {

@@ -78,6 +78,7 @@
   "moreServices": "更多服务：{count}",
   "moreObjects": "还有 {count} 个对象，请使用对象搜索查看。",
   "hostedServices": "承载的服务",
+  "serviceRelations": "服务调用 / 访问关系",
   "redevenRuntime": "Redeven 运行时",
   "runtimeNode": "运行时节点",
   "externalResource": "外部依赖",

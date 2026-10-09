@@ -163,6 +163,7 @@ async function verifyReplies(page, name, newConversation) {
   };
   await surface.getByRole('button', { name: 'Commerce / Example', exact: true }).click();
   await surface.locator('.tessiven-node').waitFor();
+  assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0, 'Example canvas opens without a layout or routing error');
   const localCall = surface.locator('.tessiven-local-relation');
   assert.equal(await localCall.count(), 1, 'The example keeps its Storefront-to-Orders call inside the host');
   assert.ok((await localCall.innerText()).includes('Storefront') && (await localCall.innerText()).includes('Orders API'));
@@ -176,6 +177,47 @@ async function verifyReplies(page, name, newConversation) {
     assert.ok(contained, 'Every service and relation row stays inside the host');
   }
   await replies.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  const relationships = surface.locator('.tessiven-local-relations');
+  assert.equal(await relationships.locator('h3').innerText(), 'Service calls / access');
+  assert.ok(await relationships.evaluate(element => parseFloat(element.ownerDocument.defaultView.getComputedStyle(element).borderTopWidth) > 0), 'Relationships are separated from the service inventory');
+  assert.equal(await surface.locator('.tessiven-service-link-preview').count(), 0, 'Local service routes stay hidden by default');
+  await localCall.hover();
+  const preview = surface.locator('.tessiven-service-link-preview');
+  await preview.waitFor();
+  assert.equal(await surface.locator('.tessiven-service[data-relation-endpoint="source"] strong').innerText(), 'Storefront');
+  assert.equal(await surface.locator('.tessiven-service[data-relation-endpoint="target"] strong').innerText(), 'Orders API');
+  assert.equal(await surface.locator('.tessiven-popup').count(), 0, 'Hover traces the call without opening details');
+  const inventoryStyle = await surface.locator('.tessiven-service[data-relation-endpoint="source"]').evaluate(row => ({
+    left: row.offsetLeft, width: row.offsetWidth, inventoryWidth: row.parentElement.clientWidth,
+    nodeOverflow: row.ownerDocument.defaultView.getComputedStyle(row.closest('.tessiven-node')).overflow,
+  }));
+  assert.equal(inventoryStyle.left, 0, 'Service rows keep their original alignment without a connector gutter');
+  assert.equal(inventoryStyle.width, inventoryStyle.inventoryWidth, 'Service rows use the complete inventory width');
+  assert.equal(inventoryStyle.nodeOverflow, 'visible', 'Preview routes can extend beyond node borders');
+  assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0, 'Hover routing has no invalid geometry');
+  const endpoints = await preview.evaluate(svg => {
+    const line = svg.querySelector('path[data-relation-id]');
+    const source = svg.parentElement.querySelector('[data-relation-endpoint="source"]');
+    const target = svg.parentElement.querySelector('[data-relation-endpoint="target"]');
+    const start = line.getPointAtLength(0), end = line.getPointAtLength(line.getTotalLength());
+    return { start: [start.x, start.y], end: [end.x, end.y],
+      routeLeft: line.getBBox().x,
+      source: [source.offsetLeft, source.offsetTop + source.offsetHeight / 2],
+      target: [target.offsetLeft, target.offsetTop + target.offsetHeight / 2] };
+  });
+  assert.deepEqual(endpoints.start, endpoints.source); assert.deepEqual(endpoints.end, endpoints.target);
+  assert.ok(endpoints.routeLeft <= -20, 'Hover routes leave room outside the full-width service rows');
+  for (const mode of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme: mode });
+    await page.locator(mode === 'dark' ? 'html.dark' : 'html:not(.dark)').waitFor();
+    await page.screenshot({ path: path.join(output, `${name}-local-link-${mode}.png`), animations: 'disabled' });
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  const canvasBounds = await surface.locator('.floe-infinite-canvas').boundingBox();
+  assert.ok(canvasBounds, 'Canvas bounds are available for clearing relation hover');
+  await page.mouse.move(canvasBounds.x + canvasBounds.width - 12, canvasBounds.y + canvasBounds.height - 12);
+  await until(async () => await preview.count() === 0, 'local service route hides on pointer leave');
+  report.scenarios.push(`${name}-local-service-hover-route`);
   await localCall.click();
   const detail = page.getByRole('dialog', { name: 'Details', exact: true });
   assert.equal(await detail.locator('.tessiven-detail-object > code').innerText(), 'demo-api-call');

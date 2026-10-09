@@ -40,7 +40,11 @@ export type InternalRelation = {
   relation: Relation;
   fromLabel: string;
   toLabel: string;
+  fromServiceRef?: string;
+  toServiceRef?: string;
 };
+
+const internalRelationHeight = (count: number) => count ? 36 + count * 30 : 0;
 
 // Rendering identities are derived from stable DSL IDs. Grouping never changes
 // the stored graph or turns a group into a service-operation target.
@@ -224,7 +228,9 @@ export function projectCanvas(
   const addInternalRelation = (target: string, relation: Relation) => {
     const values = internalRelations.get(target) ?? [];
     if (!values.some(value => value.relation.id === relation.id)) {
-      values.push({ relation, fromLabel: endpointLabel(relation.from), toLabel: endpointLabel(relation.to) });
+      const serviceRef = (id: string) => byID.get(id)?.serviceRef ?? (byService.has(id) ? id : undefined);
+      values.push({ relation, fromLabel: endpointLabel(relation.from), toLabel: endpointLabel(relation.to),
+        fromServiceRef: serviceRef(relation.from), toServiceRef: serviceRef(relation.to) });
       internalRelations.set(target, values);
     }
   };
@@ -271,7 +277,7 @@ export function projectCanvas(
         relationGroups.get(key)!.push(relation);
       }
   }
-  for (const node of nodes) node.height += (internalRelations.get(node.id)?.length ?? 0) * 30;
+  for (const node of nodes) node.height += internalRelationHeight(internalRelations.get(node.id)?.length ?? 0);
   for (const edge of edges) {
     const values = relationGroups.get(edge.id)!;
     edge.label =
@@ -331,7 +337,7 @@ export function projectLayoutOptions(
     layers: projectLayoutLayers(document, projection),
     aspectRatio: 1.6,
     spacing: 32,
-    groupPadding: { top: 108 + Math.max(0, ...relationRows) * 30, right: 20, bottom: 20, left: 20 },
+    groupPadding: { top: 108 + internalRelationHeight(Math.max(0, ...relationRows)), right: 20, bottom: 20, left: 20 },
     positions: projectPositions(document, projection),
     positionMode,
   };
