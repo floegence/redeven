@@ -3,7 +3,7 @@ type: UI Contract
 title: Tessiven Flower replies
 description: Read canonical Flower output in a quiet movable canvas window.
 tags: [ui, tessiven, flower]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-09T00:00:00Z
 ---
 # Summary
 
@@ -15,9 +15,10 @@ their canonical Flower behavior rather than a canvas-specific recovery path.
 
 # Reading surface
 
-The window uses a continuous opaque material across its titlebar and transcript,
-a subtle border and shadow, and compact readable message spacing. It derives
-colors from the selected theme; canvas nodes must not bleed through reply text.
+The window uses the theme's main reading surface continuously across its
+titlebar, transcript and composer surroundings. Only the rounded input has a
+distinct fill. A subtle border and shadow frame compact readable message
+spacing; canvas nodes must not bleed through reply text.
 The default size is 356 by 440 pixels, clamped to the available safe boundary.
 The composer belongs to the same window as the transcript, questions, approvals
 and retry controls. Dragging, resizing, hiding and restoring move or affect that

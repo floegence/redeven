@@ -1371,7 +1371,7 @@
 .tessiven-flower-output--entering { animation: tessiven-flower-window-enter 260ms cubic-bezier(.2, .75, .25, 1) both; }
 .tessiven-flower-output--entering:has([data-floe-surface-interacting="true"]) { animation: none; }
 .tessiven-flower-output {
-  --tessiven-flower-surface: color-mix(in srgb, var(--card) 94%, var(--background));
+  --tessiven-flower-surface: var(--redeven-surface-main, var(--background));
   --floe-window-background: var(--tessiven-flower-surface);
   --floe-window-titlebar-background: var(--tessiven-flower-surface);
   --floe-window-foreground: var(--foreground);

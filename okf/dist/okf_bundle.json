@@ -34277,7 +34277,7 @@
         "tessiven",
         "ui"
       ],
-      "timestamp": "2026-10-08T00:00:00Z",
+      "timestamp": "2026-10-09T00:00:00Z",
       "frontmatter": {
         "description": "Read canonical Flower output in a quiet movable canvas window.",
         "tags": [
@@ -34285,19 +34285,19 @@
           "tessiven",
           "ui"
         ],
-        "timestamp": "2026-10-08T00:00:00Z",
+        "timestamp": "2026-10-09T00:00:00Z",
         "title": "Tessiven Flower replies",
         "type": "UI Contract"
       },
-      "body_length": 5806,
+      "body_length": 5848,
       "summary": "Redeven presents canvas replies in a compact, themed floating reading window.\nFlower owns the conversation, actions and live feedback; Floe owns window\ngeometry, pointer interaction and floating-layer projection. Hiding the window\nkeeps the composer and conversation alive. Errors, approvals and retry retain\ntheir canonical Flower behavior rather than a canvas-specific recovery path.",
       "sections": [
         {
           "id": "reading-surface",
           "title": "Reading surface",
           "level": 1,
-          "body": "The window uses a continuous opaque material across its titlebar and transcript,\na subtle border and shadow, and compact readable message spacing. It derives\ncolors from the selected theme; canvas nodes must not bleed through reply text.\nThe default size is 356 by 440 pixels, clamped to the available safe boundary.\nThe composer belongs to the same window as the transcript, questions, approvals\nand retry controls. Dragging, resizing, hiding and restoring move or affect that\nsingle conversation surface.\n\nThe titlebar contains the decorative Flower identity, a More menu and native\nmaximize/restore and close controls. Its accessible title remains plain text.\nPointer controls expand for coarse input. Reply text remains selectable;\ndragging and resizing belong to Floe and keep the transcript and composer in\nthe same bounded window.\n\nThe conversation host owns a single height budget. The transcript yields space\nto the composer, while long questions, approvals, and multiline drafts scroll\ninside their own content region. The composer keeps the canonical rounded input\nsurface and its action controls remain inside the window at short heights.\nVery short hosts reduce inner spacing while retaining usable controls and a\nscrollable reading region; long drafts yield editor height to their footer.\nQuestions fade softly at the lower scroll edge instead of using a divider above\nthe action row. End padding keeps the final choice fully readable when scrolled\nto the bottom; the action controls remain outside the fade.",
-          "char_count": 1522
+          "body": "The window uses the theme's main reading surface continuously across its\ntitlebar, transcript and composer surroundings. Only the rounded input has a\ndistinct fill. A subtle border and shadow frame compact readable message\nspacing; canvas nodes must not bleed through reply text.\nThe default size is 356 by 440 pixels, clamped to the available safe boundary.\nThe composer belongs to the same window as the transcript, questions, approvals\nand retry controls. Dragging, resizing, hiding and restoring move or affect that\nsingle conversation surface.\n\nThe titlebar contains the decorative Flower identity, a More menu and native\nmaximize/restore and close controls. Its accessible title remains plain text.\nPointer controls expand for coarse input. Reply text remains selectable;\ndragging and resizing belong to Floe and keep the transcript and composer in\nthe same bounded window.\n\nThe conversation host owns a single height budget. The transcript yields space\nto the composer, while long questions, approvals, and multiline drafts scroll\ninside their own content region. The composer keeps the canonical rounded input\nsurface and its action controls remain inside the window at short heights.\nVery short hosts reduce inner spacing while retaining usable controls and a\nscrollable reading region; long drafts yield editor height to their footer.\nQuestions fade softly at the lower scroll edge instead of using a divider above\nthe action row. End padding keeps the final choice fully readable when scrolled\nto the bottom; the action controls remain outside the fade.",
+          "char_count": 1564
         },
         {
           "id": "actions-and-continuity",
@@ -35342,5 +35342,5 @@
       ]
     }
   ],
-  "source_sha256": "d2507123d65b957a9455e3760734ecfb3991e39bc8a83602a1f00eb474833c76"
+  "source_sha256": "24f0ca9fd6c87e9140803ab0fafdb6a2fe898523c8ca633490f1c365fd74e8c3"
 }
