@@ -824,6 +824,9 @@ components:
           type: string
         user_display_name:
           type: string
+        user_email:
+          type: string
+          description: Account email for user-facing identity; absent when unavailable. Never an authorization or routing identifier.
         authorization_expires_at_unix_ms:
           type: integer
           format: int64

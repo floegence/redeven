@@ -25,6 +25,8 @@ Runtime atomically migrates `provider_origin`, `controlplane_base_url` and `cont
 
 ## Authorization boundary
 
+The account returned by `/api/rcpp/v4/me` and native authorization exchange may include `user_email` for user-facing identity. Clients prefer that email over generated account names and hide opaque identity fallbacks when email is unavailable. `user_public_id` remains the authoritative account scope; email is display metadata and never changes authorization, routing, or account matching. Existing grants can fetch current account metadata through `/me` without signing in again.
+
 Provider authenticates the user and grants access to an Environment or Runtime link. It never receives Desktop SSH credentials, container credentials, a Runtime installation root, or a Runtime package. It cannot turn a Gateway access endpoint into a management channel.
 
 Desktop may show Provider Connect or Disconnect for a directly managed Runtime target. That action links access identity only. All Runtime lifecycle actions continue through the target's Local, SSH, or container channel and remain available independently of Provider health.
