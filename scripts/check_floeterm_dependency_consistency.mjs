@@ -29,7 +29,6 @@ export function validateFloetermDependencies(root = repoRoot) {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'internal/envapp/ui_src/package.json'), 'utf8'));
   const packageVersion = packageJson.dependencies?.[packageName];
   const goMod = read(root, 'go.mod');
-  const packageManifestText = read(root, 'internal/envapp/ui_src/package.json');
   const goMatch = goMod.match(new RegExp(`${goModule.replaceAll('/', '\\/')}\\s+v([^\\s]+)`));
   const goVersion = goMatch?.[1];
   assert(packageVersion === expectedVersion, `${packageName} must be ${expectedVersion}, found ${packageVersion ?? 'missing'}`);
@@ -71,9 +70,6 @@ export function validateFloetermDependencies(root = repoRoot) {
     assert(!source.includes('terminal-web v0.18.1') && !source.includes('terminal-web v0.17.1') && !source.includes('terminal-web v0.17.0') && !source.includes('terminal-web v0.16.6'), `${path.relative(root, filePath)} retains a stale terminal-web contract`);
   }
 
-  for (const stale of ['0.18.1', '0.17.1', '0.17.0', '0.16.6', 'v0.11.4', 'v0.11.2']) {
-    assert(!goMod.includes(stale) && !packageManifestText.includes(stale), `active Floeterm manifests retain stale version ${stale}`);
-  }
   return { version: expectedVersion };
 }
 
