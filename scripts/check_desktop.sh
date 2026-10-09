@@ -52,6 +52,7 @@ main() {
 
   "$SCRIPT_DIR/dev_desktop_process_inventory_test.sh"
   "$SCRIPT_DIR/dev_desktop_signal_cleanup_test.sh"
+  node --test "$SCRIPT_DIR/dev_desktop_gateways.test.mjs"
   node --test "$SCRIPT_DIR/prune_dev_desktop_bundles.test.mjs"
   node --test "$SCRIPT_DIR/smoke_desktop_plugins.test.mjs"
 
