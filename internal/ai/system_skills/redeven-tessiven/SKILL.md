@@ -63,8 +63,10 @@ such nodes unbound; an explicitly requested observation may be recorded as
   Distinguish separate clusters of the same service through stable group and
   instance IDs, not duplicate physical hosts or invented runtime connections.
 - Prefer automatic layout when the user gives no spatial intent. When the user
-  names a left-to-right or top-to-bottom structure, express it with
+  names a directional spatial structure, express it with
   `presentation.direction` and ordered root-object `presentation.layers`.
+  RIGHT and DOWN advance from left to right and top to bottom; LEFT and UP
+  reverse those directions. Without spatial intent, omit layers and positions.
   Layers may reference groups, ungrouped nodes, unplaced services, and
   resources; grouped nodes and placed services inherit placement from their
   group or host. Unassigned roots use the nearest declared layer by relation
@@ -75,7 +77,9 @@ such nodes unbound; an explicitly requested observation may be recorded as
   are not fixed constraints. Never guess compact
   coordinates or generate edge paths. The renderer adjusts spacing, routes, and
   group bounds for actual card sizes. Preserve saved layout choices on ordinary
-  updates; only reorganize them when the user asks. Schema validation and saving
+  updates; only reorganize them when the user asks. For an explicitly requested
+  reorganization, replace obsolete coordinates with declarative layers.
+  Schema validation and saving
   confirm document validity and persistence, not visual verification.
 - Every relationship needs evidence. Distinguish code, configuration, runtime
   observations, and inference. Include observation time for runtime facts;

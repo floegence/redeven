@@ -36,9 +36,12 @@ outcome, so the user must inspect the original manager before trying again.
   and use exact `instanceRefs` to distinguish projects and same-type clusters.
   They never duplicate hosts, instances, bindings, or permissions to create a
   second visual appearance.
-- Generation defaults to automatic layout. Flower preserves intentional existing
-  hints and adds coordinates only for a requested arrangement; it does not guess
-  compact card geometry. Schema validation and saving prove document validity
+- Generation defaults to automatic layout without positions or layers. For
+  explicit spatial intent, Flower expresses direction and ordered root layers
+  through the [document layout contract](../architecture/tessiven-canvas-contract.md).
+  It preserves existing choices during ordinary updates and replaces obsolete
+  coordinates only for an explicitly requested reorganization. It never guesses
+  compact card geometry or generates edge paths. Schema validation and saving prove document validity
   and persistence, while the [canvas UI contract](../ui/tessiven-canvas.md) owns
   actual rendering and preferred-coordinate collision resolution.
 - Ask Flower carries `canvas_id`, `version_id`, and bounded object references;

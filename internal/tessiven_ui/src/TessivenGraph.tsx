@@ -22,7 +22,7 @@ import {
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { ArrowRight, ChevronDown, Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
 import '@floegence/floe-webapp-core/graph.css';
-import { projectCanvas, projectLayoutLayers, projectPositions } from './projection';
+import { projectCanvas, projectLayoutOptions } from './projection';
 import { TessivenIcon } from './TessivenIcon';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import type {
@@ -86,6 +86,7 @@ export function TessivenGraph(props: {
   let generation = 0,
     initialized = !!props.browseState;
   let previousExpanded = new Set(expanded());
+  let positionMode: 'preferred' | 'compact' = 'preferred';
   let host: HTMLDivElement | undefined;
   onCleanup(() => engine.dispose());
   onCleanup(() => {
@@ -100,10 +101,6 @@ export function TessivenGraph(props: {
   const projection = createMemo(() =>
     projectCanvas(props.version.document, expanded(), selectedNodes()),
   );
-  // Presentation positions are hints attached to the saved document. Only
-  // objects that are currently rendered are sent to Floe; collapsed members
-  // keep their saved pins in the document and are applied when expanded.
-  const positions = createMemo(() => projectPositions(props.version.document, projection()));
   const linkedNode = createMemo(() => {
     const object = hovered() ?? selected();
     const card = object?.kind === 'node' ? projection().cards.get(object.id) : undefined;
@@ -163,17 +160,11 @@ export function TessivenGraph(props: {
   createEffect(() => {
     const projected = projection();
     const currentExpanded = expanded();
-    const compact =
+    if (
       currentExpanded.size !== previousExpanded.size ||
-      [...currentExpanded].some(id => !previousExpanded.has(id));
+      [...currentExpanded].some(id => !previousExpanded.has(id))
+    ) positionMode = 'compact';
     previousExpanded = new Set(currentExpanded);
-    const expandedGroupRelationRows = [...projected.internalRelations.entries()]
-      .filter(([id]) => {
-        const card = projected.cards.get(id);
-        return card?.kind === 'group' && card.expanded;
-      })
-      .map(([, relations]) => relations.length);
-    const groupRelationPadding = Math.max(0, ...expandedGroupRelationRows) * 30;
     const input = {
       ...projected.graph,
       edges: projected.graph.edges.map((edge) => {
@@ -202,13 +193,7 @@ export function TessivenGraph(props: {
     });
     void engine
       .layout(input, {
-        direction: props.version.document.presentation?.direction ?? 'RIGHT',
-        layers: projectLayoutLayers(props.version.document, projected),
-        aspectRatio: 1.6,
-        spacing: 32,
-        groupPadding: { top: 108 + groupRelationPadding, right: 20, bottom: 20, left: 20 },
-        positions: positions(),
-        positionMode: compact ? 'compact' : 'preferred',
+        ...projectLayoutOptions(props.version.document, projected, positionMode),
         anchor: anchor
           ? { nodeId: anchor.id, position: { x: anchor.x, y: anchor.y } }
           : undefined,
@@ -321,7 +306,12 @@ export function TessivenGraph(props: {
     });
   }
   function toggle(id: string) {
-    setSelected({ kind: 'node', id });
+    const current = selected();
+    const node = current?.kind === 'node'
+      ? projection().graph.nodes.find(node => node.id === current.id)
+      : undefined;
+    if (!node || (expanded().has(id) && node.parentId === id))
+      setSelected({ kind: 'node', id });
     setExpanded((previous) => {
       const next = new Set(previous);
       if (next.has(id)) next.delete(id);

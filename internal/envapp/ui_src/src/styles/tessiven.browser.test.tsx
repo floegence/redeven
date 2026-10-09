@@ -3,9 +3,11 @@ import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
-import { page } from 'vitest/browser';
+import { createGraphLayoutEngine } from '@floegence/floe-webapp-core/graph';
+import { page, userEvent } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TessivenGraph, type GraphBrowseState } from '../../../../tessiven_ui/src/TessivenGraph';
+import { TessivenThumbnail } from '../../../../tessiven_ui/src/TessivenThumbnail';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Version } from '../../../../tessiven_ui/src/types';
 import hadoopDocument from './fixtures/tessiven-hadoop.json';
@@ -184,6 +186,29 @@ afterEach(() => {
   document.documentElement.classList.remove('dark', 'light');
 });
 describe('Tessiven real graph interactions', () => {
+  it('uses identical preview and main geometry including expanded group relation rows', async () => {
+    const version = fixture();
+    version.document.presentation!.layers = [['application'], ['cdn', 'bucket']];
+    version.document.relations!.push({ id: 'group-relation', from: 'application', to: 'application', kind: 'calls', evidenceRefs: [] });
+    mount(2, version);
+    const preview = document.createElement('div');
+    host.append(preview);
+    const engine = createGraphLayoutEngine();
+    const unmount = render(() => <TessivenThumbnail document={version.document} t={tessivenText('en-US')} engine={engine} />, preview);
+    try {
+      await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(2);
+      await expect.poll(() => preview.querySelectorAll('[data-preview-object]').length).toBe(5);
+      for (const node of preview.querySelectorAll<SVGForeignObjectElement>('[data-preview-object]')) {
+        const main = host.querySelector<HTMLElement>(`[data-graph-object="${node.dataset.previewObject}"]`)!;
+        expect([node.x.baseVal.value, node.y.baseVal.value, node.width.baseVal.value, node.height.baseVal.value])
+          .toEqual([main.style.left, main.style.top, main.style.width, main.style.height].map(value => Number.parseFloat(value)));
+      }
+      expect([...preview.querySelectorAll('[data-preview-edge] path')].map(path => path.getAttribute('d')).sort())
+        .toEqual([...host.querySelectorAll('.floe-graph__edge')].map(path => path.getAttribute('d')).sort());
+    } finally {
+      unmount(); engine.dispose(); preview.remove();
+    }
+  });
   it('renders the saved Hadoop topology despite crowded coordinate hints', async () => {
     const version: Version = {
       ...fixture(), number: 2,
@@ -207,7 +232,9 @@ describe('Tessiven real graph interactions', () => {
     // The unchanged user fixture previously had 26,020px of routes, 11,043.5px
     // of shared segments, and 32 crossings at these saved positions.
     expect(metrics.sharedLength, JSON.stringify({ length: metrics.length, sharedLength: metrics.sharedLength, crossings: metrics.crossings })).toBeLessThan(1_100);
-    expect(metrics.length).toBeLessThan(14_000);
+    // Declared layers deliberately add space between the five architecture
+    // stages; compare routing quality with the saved crowded-layout baseline.
+    expect(metrics.length, JSON.stringify(metrics)).toBeLessThan(26_020);
     expect(metrics.crossings, JSON.stringify({ length: metrics.length, sharedLength: metrics.sharedLength, crossings: metrics.crossings })).toBeLessThanOrEqual(16);
     for (const segment of metrics.segments)
       expect(segment.a.x === segment.b.x || segment.a.y === segment.b.y).toBe(true);
@@ -217,7 +244,8 @@ describe('Tessiven real graph interactions', () => {
       const right = left + Number.parseFloat(card.style.width), bottom = top + Number.parseFloat(card.style.height);
       for (const { a, b } of metrics.segments)
         expect(Math.max(a.x, b.x) <= left + 0.001 || Math.min(a.x, b.x) >= right - 0.001
-          || Math.max(a.y, b.y) <= top + 0.001 || Math.min(a.y, b.y) >= bottom - 0.001).toBe(true);
+          || Math.max(a.y, b.y) <= top + 0.001 || Math.min(a.y, b.y) >= bottom - 0.001,
+          JSON.stringify({ card: card.dataset.graphObject, left, top, right, bottom, a, b })).toBe(true);
     }
     for (const [index, card] of cards.entries()) {
       const a = card.getBoundingClientRect();
@@ -303,20 +331,52 @@ describe('Tessiven real graph interactions', () => {
     expect(fullRank.every(Number.isFinite)).toBe(true);
     expect(fullRank.every((value, index) => index === 0 || fullRank[index - 1]! < value)).toBe(true);
     const fullBounds = Math.max(...fullRank) - Math.min(...fullRank);
+    const expandedWidth = Number.parseFloat(group('g-coord').style.width);
+    const anchor = [group('g-coord').style.left, group('g-coord').style.top];
     await page.getByRole('button', { name: 'Collapse group' }).nth(2).click();
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(7);
+    await expect.poll(() => Number.parseFloat(group('g-coord').style.width)).toBeLessThan(expandedWidth);
+    expect([group('g-coord').style.left, group('g-coord').style.top]).toEqual(anchor);
     const collapsedRank = rank();
     expect(collapsedRank.every((value, index) => index === 0 || collapsedRank[index - 1]! < value)).toBe(true);
     expect(Math.max(...collapsedRank) - Math.min(...collapsedRank)).toBeLessThan(fullBounds);
-    await page.getByRole('button', { name: 'Expand group' }).nth(2).click();
+    await page.getByRole('button', { name: 'Expand group' }).click();
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(10);
+    await expect.poll(() => Number.parseFloat(group('g-coord').style.width)).toBe(expandedWidth);
+    expect([group('g-coord').style.left, group('g-coord').style.top]).toEqual(anchor);
     const expandedRank = rank();
     expect(expandedRank.every((value, index) => index === 0 || expandedRank[index - 1]! < value)).toBe(true);
     expect(host.querySelector('[role="alert"]')).toBeNull();
   });
+  it('retains a visible selection while other groups compact and anchors its group when hidden', async () => {
+    const version = fixture(3);
+    version.document.groups = [
+      { id: 'first', name: 'First group', nodeRefs: ['node-0', 'node-1'] },
+      { id: 'second', name: 'Second group', nodeRefs: ['node-2'] },
+    ];
+    version.document.presentation = { layers: [['first'], ['second']], initiallyExpanded: ['first', 'second'] };
+    mount(3, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(3);
+    const object = (id: string) => host.querySelector<HTMLElement>(`[data-graph-object="${id}"]`)!;
+    const position = (id: string) => [object(id).style.left, object(id).style.top];
+    await userEvent.click(object('node-2').querySelector('.tessiven-node > header strong')!);
+    await userEvent.keyboard('{Escape}');
+    const selectedPosition = position('node-2');
+    const firstWidth = object('first').style.width;
+    await userEvent.click(object('first').querySelector('.tessiven-group-toggle')!);
+    await expect.poll(() => object('first').style.width).not.toBe(firstWidth);
+    expect(position('node-2')).toEqual(selectedPosition);
+    const groupPosition = position('second');
+    const secondHeight = object('second').style.height;
+    await userEvent.click(object('second').querySelector('.tessiven-group-toggle')!);
+    await expect.poll(() => object('second').style.height).not.toBe(secondHeight);
+    expect(position('second')).toEqual(groupPosition);
+    expect(host.querySelector('[data-graph-object="node-2"]')).toBeNull();
+  });
   it('renders the complete Hadoop topology with automatic layout', async () => {
     const document = structuredClone(hadoopDocument) as Version['document'];
     delete document.presentation!.positions;
+    delete document.presentation!.layers;
     mount(10, { ...fixture(), document });
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(10);
     expect(host.querySelector('[role="alert"]')).toBeNull();
@@ -402,6 +462,24 @@ describe('Tessiven real graph interactions', () => {
     expect(version.document.presentation.positions).toEqual([
       { objectRef: 'node-0', x: 700, y: 800 },
     ]);
+  });
+  it('keeps compact browsing when a large group changes its visible host', async () => {
+    const version = fixture(16);
+    version.document.presentation = {
+      initiallyExpanded: [],
+      positions: [{ objectRef: 'node-15', x: 5000, y: 3000 }],
+    };
+    mount(16, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-group').length).toBe(1);
+    await page.getByRole('button', { name: 'Expand group' }).click();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(1);
+    const select = host.querySelector('select')!;
+    select.value = 'node-15';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await expect.poll(() => host.querySelector('[data-graph-object="node-15"]')).not.toBeNull();
+    const node = host.querySelector<HTMLElement>('[data-graph-object="node-15"]')!;
+    expect(Number.parseFloat(node.style.left)).toBeLessThan(1000);
+    expect(Number.parseFloat(node.style.top)).toBeLessThan(1000);
   });
   it('preserves solid hierarchy across every published theme', async () => {
     mount();
