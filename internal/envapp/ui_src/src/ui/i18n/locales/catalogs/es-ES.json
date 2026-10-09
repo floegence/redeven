@@ -7179,6 +7179,13 @@
     "maintenanceWarning": "Esta operación puede interrumpir los terminales y las sesiones activos. ¿Continuar?"
   },
   "remoteDesktop": {
+    "deploymentComplete": "Los cambios en el escritorio remoto se han completado.",
+    "backToConnection": "Volver a la conexión",
+    "connectionProgress": "Progreso de la conexión al escritorio remoto",
+    "authorizeStep": "Autorizar",
+    "installStep": "Preparar el host",
+    "connectStep": "Conectar",
+    "connectionContinuing": "El servicio está listo. El escritorio se abrirá en el siguiente paso…",
     "title": "Escritorio remoto",
     "description": "Ve y controla la pantalla de este host en una ventana independiente.",
     "connect": "Conectar al escritorio",
@@ -7320,7 +7327,7 @@
     "deployPassword": "Contraseña de administrador (si se requiere)",
     "deployPasswordHint": "Se usa solo para esta operación SSH. Redeven no la guarda ni la envía al servicio de escritorio.",
     "deployConfirm": "Autorizar y continuar",
-    "serviceUpdateRequired": "Actualice el escritorio remoto en la aplicación del entorno para usar esta versión del runtime.",
+    "serviceUpdateRequired": "Actualice el escritorio remoto en Env App para usar esta versión del entorno de ejecución.",
     "deployChecking": "Comprobando el host SSH…",
     "deployTransferring": "Transfiriendo y verificando componentes…",
     "deployAuthorizing": "Autorizando esta operación SSH…",

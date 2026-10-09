@@ -3,13 +3,14 @@ type: Interaction Contract
 title: Remote desktop connection launcher
 description: Identify the target host, explain connection readiness and open its desktop through one concise, localized flow.
 tags: [desktop, applications, interaction, accessibility]
-timestamp: 2026-10-03T07:42:00Z
+timestamp: 2026-10-09T17:00:00Z
 ---
 # Summary
 
 The Env App launcher owns the remote desktop connection flow in Host Applications
 and Workbench. It names the actual target, presents current readiness and offers
-one primary action. Permission and platform limits remain enforced by the
+one primary action. Additional authorization advances inside that same surface.
+Permission and platform limits remain enforced by the
 [desktop session contract](remote-desktop.md). Failure stays visible with an
 appropriate recovery step; dismissal before session creation finishes releases
 that session. A successfully opened viewer retains its independent lifetime.
@@ -22,7 +23,8 @@ The launcher identifies the target using Desktop's connection label when present
 In a browser connected to Local UI it uses the Runtime's reported hostname, never
 the generic `Local Environment` name. Cloud environment names remain user-defined.
 The same identity is sent to the viewer. Status checks are not presented as a
-connection in progress, and unavailable or locked desktops cannot be launched.
+connection in progress. Unavailable desktops cannot be launched; locked desktops
+can be opened only when the host advertises secure login/lock-screen access.
 Wayland authorization-required is actionable but does not mean a prompt is already
 open. Connection creates the session, opens its viewer and attaches both native
 channels before the host receives a system sharing request. Window admission
@@ -38,6 +40,30 @@ replace the host application page with its error boundary. Status polling makes
 connection available after preparation succeeds. Failure retains its diagnostic
 and retry action, while cancellation stops only the selected setup operation;
 neither requires reloading the application.
+
+## Continuous connection setup
+
+When a target needs SSH service preparation, authorization and desktop opening
+remain one continuous flow in the existing Remote desktop dialog. The panel
+advances in place through authorization, host preparation and connection; it
+does not open a second dialog or return to the initial connection form between
+steps. The current step, retained authorization input state, progress, failure
+diagnostic and next action stay visible together. A completed service-management
+action shows its result until the user returns to connection options. A connect
+action continues automatically to viewer admission after successful preparation.
+Cancellation, retry and recovery use the same surface and restore focus
+to the action that started the flow.
+
+Control takeover and saved-approval removal follow the same in-place step model.
+They do not stack a confirmation dialog over the launcher. Escape cancels the
+current in-place confirmation, and closing while a connection or deployment is
+pending cancels the owner and releases any late session response.
+
+Content enters with a short fade and small vertical movement. Step indices keep
+their alignment, long localized actions remain readable at 320 CSS pixels, and
+reduced-motion preferences stop both transition and spinner animations. Host
+identity remains visible throughout. Administrator scope and credential lifetime
+follow the [SSH deployment contract](remote-desktop-ssh-deployment.md).
 
 ## Connection options
 
@@ -89,6 +115,7 @@ product adapters must not weaken either boundary to accept malformed session dat
 
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.tsx`: target identity, state-derived actions, settings and window lifecycle.
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.test.tsx`: connection failure retention, display selection, takeover and cancellation.
+- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: same-dialog stage progression, masked pending credentials, responsive actions and reduced motion.
 - `internal/envapp/ui_src/src/styles/remoteDesktopLauncher.browser.test.tsx`: shipped locales/themes, narrow layout, keyboard navigation and settings rollback.
 - `internal/envapp/ui_src/src/ui/services/graphicalSessionTransport.test.ts`: management and window admission use the active Flowersec carrier.
 - `internal/envapp/ui_src/src/ui/pages/remoteDesktopLaunchContract.test.tsx`: production API client, route opener and Desktop validator exercised together.

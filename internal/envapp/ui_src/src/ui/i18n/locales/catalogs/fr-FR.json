@@ -7179,6 +7179,13 @@
     "maintenanceWarning": "Cette opération peut interrompre les terminaux et les sessions en cours. Continuer ?"
   },
   "remoteDesktop": {
+    "deploymentComplete": "Les modifications du bureau à distance sont terminées.",
+    "backToConnection": "Retour à la connexion",
+    "connectionProgress": "Progression de la connexion au bureau à distance",
+    "authorizeStep": "Autoriser",
+    "installStep": "Préparer l’hôte",
+    "connectStep": "Connecter",
+    "connectionContinuing": "Le service est prêt. Le bureau va s’ouvrir à l’étape suivante…",
     "title": "Bureau à distance",
     "description": "Affichez et contrôlez l’écran de cet hôte dans une fenêtre distincte.",
     "connect": "Se connecter au bureau",
@@ -7320,7 +7327,7 @@
     "deployPassword": "Mot de passe administrateur (si nécessaire)",
     "deployPasswordHint": "Utilisé uniquement pour cette opération SSH. Redeven ne le conserve pas et ne le transmet pas au service de bureau.",
     "deployConfirm": "Autoriser et continuer",
-    "serviceUpdateRequired": "Mettez à jour le bureau distant dans l’application d’environnement pour utiliser cette version du runtime.",
+    "serviceUpdateRequired": "Mettez à jour le bureau distant dans Env App pour utiliser cette version de l’environnement d’exécution.",
     "deployChecking": "Vérification de l’hôte SSH…",
     "deployTransferring": "Transfert et vérification des composants…",
     "deployAuthorizing": "Autorisation de cette opération SSH…",

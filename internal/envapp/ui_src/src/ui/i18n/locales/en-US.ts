@@ -7,6 +7,13 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   remoteDesktop: {
+    "deploymentComplete": "Remote desktop changes are complete.",
+    "backToConnection": "Back to connection",
+    "connectionProgress": "Remote desktop connection progress",
+    "authorizeStep": "Authorize",
+    "installStep": "Prepare host",
+    "connectStep": "Connect",
+    "connectionContinuing": "The service is ready. Opening the desktop in the next step…",
     "deployPlatformUnsupported": "Remote desktop deployment through SSH is not supported on this operating system.",
     "deploySetupAction": "Set up",
     "deployStartAction": "Start",

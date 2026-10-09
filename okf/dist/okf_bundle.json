@@ -331,7 +331,7 @@
               "desktop",
               "interaction"
             ],
-            "summary": "The Env App launcher owns the remote desktop connection flow in Host Applications\nand Workbench. It names the actual target, presents current readiness and offers\none primary action. Permission and platform limits remain enforced by the\n[desktop session contract](remote-desktop.md). Failure stays visible with an\nappropriate recovery step; dismissal before session creation finishes releases\nthat session. A successfully opened viewer retains its independent lifetime.",
+            "summary": "The Env App launcher owns the remote desktop connection flow in Host Applications\nand Workbench. It names the actual target, presents current readiness and offers\none primary action. Additional authorization advances inside that same surface.\nPermission and platform limits remain enforced by the\n[desktop session contract](remote-desktop.md). Failure stays visible with an\nappropriate recovery step; dismissal before session creation finishes releases\nthat session. A successfully opened viewer retains its independent lifetime.",
             "section_count": 2
           },
           {
@@ -17401,7 +17401,7 @@
         "desktop",
         "interaction"
       ],
-      "timestamp": "2026-10-03T07:42:00Z",
+      "timestamp": "2026-10-09T17:00:00Z",
       "frontmatter": {
         "description": "Identify the target host, explain connection readiness and open its desktop through one concise, localized flow.",
         "tags": [
@@ -17410,19 +17410,19 @@
           "desktop",
           "interaction"
         ],
-        "timestamp": "2026-10-03T07:42:00Z",
+        "timestamp": "2026-10-09T17:00:00Z",
         "title": "Remote desktop connection launcher",
         "type": "Interaction Contract"
       },
-      "body_length": 5688,
-      "summary": "The Env App launcher owns the remote desktop connection flow in Host Applications\nand Workbench. It names the actual target, presents current readiness and offers\none primary action. Permission and platform limits remain enforced by the\n[desktop session contract](remote-desktop.md). Failure stays visible with an\nappropriate recovery step; dismissal before session creation finishes releases\nthat session. A successfully opened viewer retains its independent lifetime.",
+      "body_length": 7471,
+      "summary": "The Env App launcher owns the remote desktop connection flow in Host Applications\nand Workbench. It names the actual target, presents current readiness and offers\none primary action. Additional authorization advances inside that same surface.\nPermission and platform limits remain enforced by the\n[desktop session contract](remote-desktop.md). Failure stays visible with an\nappropriate recovery step; dismissal before session creation finishes releases\nthat session. A successfully opened viewer retains its independent lifetime.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Target and readiness\n\nThe launcher identifies the target using Desktop's connection label when present.\nIn a browser connected to Local UI it uses the Runtime's reported hostname, never\nthe generic `Local Environment` name. Cloud environment names remain user-defined.\nThe same identity is sent to the viewer. Status checks are not presented as a\nconnection in progress, and unavailable or locked desktops cannot be launched.\nWayland authorization-required is actionable but does not mean a prompt is already\nopen. Connection creates the session, opens its viewer and attaches both native\nchannels before the host receives a system sharing request. Window admission\nfailure must not continue instructing the user to confirm a nonexistent prompt.\nMissing macOS screen/input grants expose only the relevant permission actions. View-only mode\ncan omit input permission but never omits full environment authorization.\n\nComponent preparation stays inside the launcher through checking, download,\ninstallation and validation. Unknown byte totals render an indeterminate native\nprogress bar by omitting its numeric value attribute; known totals show byte\nprogress. Moving between these states must not throw a rendering exception or\nreplace the host application page with its error boundary. Status polling makes\nconnection available after preparation succeeds. Failure retains its diagnostic\nand retry action, while cancellation stops only the selected setup operation;\nneither requires reloading the application.\n\n## Connection options\n\nThe initial dialog presents host identity, readiness and one connect action. A\ndisplay selector appears only when multiple displays are known. Connection options\nare collapsed by default and contain view-only mode. Wayland hosts that support\npersistent portal grants expose **Connect automatically after first approval**.\nThe default is enabled under the [authorization policy](remote-desktop-authorization.md).\nOpening the launcher never changes system permission. A first connection still\nneeds the host user's confirmation; subsequent connections attempt the saved\ngrant. The Runtime must be running in the logged-in desktop. macOS and X11 do\nnot display this portal-specific option. Older portals explain that automatic\nrecovery is unsupported while keeping temporary sharing available.\n\nSaving disables connection until the host accepts the setting; failure restores\nthe actual value. Readiness comes from the upstream authorization state: saved,\nrestoring, needs consent, revoked or uncertain. Enabling the preference alone\nnever claims approval was saved or that a system prompt is visible. A pending\nrequest explains that any system sharing dialog must be confirmed on the host.\n\nConnection options include **Request approval again** for a saved or uncertain\nWayland grant. A confirmation explains that this clears only local recovery\ncredentials, not system permissions or active sharing. A competing authorization\nrequest reports that it must finish or be cancelled first. Focus returns to the\ntrigger after dismissal. Turning off reuse means each future connection requests\nhost confirmation; it does not revoke the system grant.",
-          "char_count": 3175
+          "body": "## Target and readiness\n\nThe launcher identifies the target using Desktop's connection label when present.\nIn a browser connected to Local UI it uses the Runtime's reported hostname, never\nthe generic `Local Environment` name. Cloud environment names remain user-defined.\nThe same identity is sent to the viewer. Status checks are not presented as a\nconnection in progress. Unavailable desktops cannot be launched; locked desktops\ncan be opened only when the host advertises secure login/lock-screen access.\nWayland authorization-required is actionable but does not mean a prompt is already\nopen. Connection creates the session, opens its viewer and attaches both native\nchannels before the host receives a system sharing request. Window admission\nfailure must not continue instructing the user to confirm a nonexistent prompt.\nMissing macOS screen/input grants expose only the relevant permission actions. View-only mode\ncan omit input permission but never omits full environment authorization.\n\nComponent preparation stays inside the launcher through checking, download,\ninstallation and validation. Unknown byte totals render an indeterminate native\nprogress bar by omitting its numeric value attribute; known totals show byte\nprogress. Moving between these states must not throw a rendering exception or\nreplace the host application page with its error boundary. Status polling makes\nconnection available after preparation succeeds. Failure retains its diagnostic\nand retry action, while cancellation stops only the selected setup operation;\nneither requires reloading the application.\n\n## Continuous connection setup\n\nWhen a target needs SSH service preparation, authorization and desktop opening\nremain one continuous flow in the existing Remote desktop dialog. The panel\nadvances in place through authorization, host preparation and connection; it\ndoes not open a second dialog or return to the initial connection form between\nsteps. The current step, retained authorization input state, progress, failure\ndiagnostic and next action stay visible together. A completed service-management\naction shows its result until the user returns to connection options. A connect\naction continues automatically to viewer admission after successful preparation.\nCancellation, retry and recovery use the same surface and restore focus\nto the action that started the flow.\n\nControl takeover and saved-approval removal follow the same in-place step model.\nThey do not stack a confirmation dialog over the launcher. Escape cancels the\ncurrent in-place confirmation, and closing while a connection or deployment is\npending cancels the owner and releases any late session response.\n\nContent enters with a short fade and small vertical movement. Step indices keep\ntheir alignment, long localized actions remain readable at 320 CSS pixels, and\nreduced-motion preferences stop both transition and spinner animations. Host\nidentity remains visible throughout. Administrator scope and credential lifetime\nfollow the [SSH deployment contract](remote-desktop-ssh-deployment.md).\n\n## Connection options\n\nThe initial dialog presents host identity, readiness and one connect action. A\ndisplay selector appears only when multiple displays are known. Connection options\nare collapsed by default and contain view-only mode. Wayland hosts that support\npersistent portal grants expose **Connect automatically after first approval**.\nThe default is enabled under the [authorization policy](remote-desktop-authorization.md).\nOpening the launcher never changes system permission. A first connection still\nneeds the host user's confirmation; subsequent connections attempt the saved\ngrant. The Runtime must be running in the logged-in desktop. macOS and X11 do\nnot display this portal-specific option. Older portals explain that automatic\nrecovery is unsupported while keeping temporary sharing available.\n\nSaving disables connection until the host accepts the setting; failure restores\nthe actual value. Readiness comes from the upstream authorization state: saved,\nrestoring, needs consent, revoked or uncertain. Enabling the preference alone\nnever claims approval was saved or that a system prompt is visible. A pending\nrequest explains that any system sharing dialog must be confirmed on the host.\n\nConnection options include **Request approval again** for a saved or uncertain\nWayland grant. A confirmation explains that this clears only local recovery\ncredentials, not system permissions or active sharing. A competing authorization\nrequest reports that it must finish or be cancelled first. Focus returns to the\ntrigger after dismissal. Turning off reuse means each future connection requests\nhost confirmation; it does not revoke the system grant.",
+          "char_count": 4723
         },
         {
           "id": "boundaries",
@@ -17432,13 +17432,19 @@
           "char_count": 1145
         }
       ],
-      "snippet": "The Env App launcher owns the remote desktop connection flow in Host Applications and Workbench. It names the actual target, presents current readiness and offers one primary action. Permission and platform limits remain enforced by the",
+      "snippet": "The Env App launcher owns the remote desktop connection flow in Host Applications and Workbench. It names the actual target, presents current readiness and offers one primary action. Additional authorization advances inside that same surfac",
       "links": [
         {
           "label": "authorization policy",
           "path": "architecture/remote-desktop-authorization.md",
           "concept_id": "architecture.remote-desktop-authorization",
           "title": "Persistent remote desktop sharing approval"
+        },
+        {
+          "label": "SSH deployment contract",
+          "path": "architecture/remote-desktop-ssh-deployment.md",
+          "concept_id": "architecture.remote-desktop-ssh-deployment",
+          "title": "Administrator-authorized remote desktop deployment over SSH"
         },
         {
           "label": "desktop session contract",
@@ -17448,6 +17454,12 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Administrator-authorized remote desktop deployment over SSH",
+          "path": "architecture/remote-desktop-ssh-deployment.md",
+          "concept_id": "architecture.remote-desktop-ssh-deployment",
+          "title": "Administrator-authorized remote desktop deployment over SSH"
+        },
         {
           "label": "Remote desktop viewer interaction",
           "path": "architecture/remote-desktop-viewer.md",
@@ -17596,7 +17608,7 @@
         "security",
         "ssh"
       ],
-      "timestamp": "2026-10-08T08:00:00Z",
+      "timestamp": "2026-10-09T17:00:00Z",
       "frontmatter": {
         "description": "Install and manage the Linux physical-desktop service from Env App without target-side graphical consent.",
         "tags": [
@@ -17606,19 +17618,19 @@
           "security",
           "ssh"
         ],
-        "timestamp": "2026-10-08T08:00:00Z",
+        "timestamp": "2026-10-09T17:00:00Z",
         "title": "Administrator-authorized remote desktop deployment over SSH",
         "type": "Security Contract"
       },
-      "body_length": 6272,
+      "body_length": 6715,
       "summary": "Redeven Desktop owns the SSH transaction; Env App owns scope confirmation and\nephemeral administrator input. Published `floe-native-apps` owns the privileged\nLinux deployment transaction, systemd service, DRM/KMS capture and uinput devices.\nSSH plus administrator authority is sufficient for qualified GNOME/GDM hosts.\nThe target never needs a Portal dialog or local interaction approval. Failed or\ncanceled deployment reports observed rollback; uncertainty is not success.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Consent, credentials and admission\n\nOnly the root Env App document of an SSH environment may invoke the typed Desktop\ndeployment bridge. Requests name a fixed operation: install, update, start, stop\nor uninstall. A management request must carry explicit confirmation. The dialog\nexplains root authority, lock-screen capture and keyboard/pointer injection, the\nprivate Unix socket, uninstall and the exclusion of disk encryption unlocking.\n\nThe Runtime authorizes each deployment using full environment read/write/execute\npermission and records fixed action/outcome/rollback codes. Its audit route does\nnot execute installation or accept credentials. Service status is read-only.\nRuntime service mutation routes reject elevation with an SSH authorization code.\n\nAn administrator password is cleared from the dialog before execution and is\nnever placed in preferences, URLs, command arguments, environment variables,\naudit, diagnostics, the Runtime API or the desktop daemon. Desktop sends it to\nsudo's input stream only after sudo reports that it is needed. Root or existing\npasswordless authority receives no unused password. Credential buffers are\ncleared when the transaction finishes; cancel or navigation revokes its owner.\n\n## Deployment and rollback\n\nDesktop extracts the published service kit from its trusted bundled Runtime.\nThe renderer cannot select artifacts, commands, hashes, destinations or network\nsources. Desktop probes the target architecture and actual Runtime process,\nbinds its UID/GID and executable SHA-256, verifies kit bytes, and transfers only\nthe fixed deployment files through a private SSH staging directory.\nThe full-permission authorization response supplies the executing Runtime's PID;\nthe bridge carrier's startup metadata is not process authority. Authorization\nreads share the operation's cancellation and a bounded deadline. Public health\nresponses do not gain process information for this deployment workflow.\n\nThe privileged manager publishes root-owned immutable executables and license,\na private installed policy, a fixed systemd unit and uinput boot configuration.\nIt enables and starts the service. Explicit directory permissions allow the\nunprivileged converter to traverse its executable path even when SSH uses umask\n0077; policy remains mode 0600. No driver library, desktop ACL or host package is\nmodified. Runtime startup remains owned by Desktop's existing SSH Runtime flow.\n\nThe management input stays open as a transaction lifeline. Cancel, document\nnavigation, shutdown or SSH loss closes it. The manager rolls back prior files,\nunit, enablement, activation and directory permissions using an independent\nbounded cleanup context. Desktop waits for the rollback result before returning;\nit does not kill SSH and guess that cancellation succeeded. Failure reports\ncomplete, failed or unknown rollback, and removes task-owned staging files.\nUninstall removes the owned unit, policy, binaries and boot configuration.\n\n## Service authority and capability\n\nThe service has no network listener. A root-owned Unix socket admits only the\nadministrator-pinned Runtime UID/image, validates peer PID/start time and image\nidentity, and consumes a one-use attachment token. Image replacement requires\ndeployment update to authorize the new bytes. Restarting the same Runtime image\nopens a fresh attachment without changing the installed policy.\n\nDRM export and EGL conversion use separate processes and an inherited private\ndescriptor. The exporter retains device authority; conversion runs as the\nRuntime user after dropping Linux capabilities. User homes stay hidden. A fixed\nunprivileged child may wake an already-qualified Mutter output without injecting\npre-frame input or unlocking the session.\n\nCurrent qualification covers GNOME/GDM on active physical outputs. Disconnected\noutputs, absent scanout, unsupported GPU layouts and unsupported compositors\nreport capability reasons even if systemd is running. Installed stopped/failed\nservices never silently fall back to Portal or an application-private desktop.\nThe panel translates these reasons and offers no target-side approval action.\n\nEach attachment owns uinput devices. Disconnect, takeover, generation changes,\nuser switching, service stop and Runtime death release held events and retire\npainted authority. Control is relinquished before a slow capture worker is reaped.\nLock-screen input additionally follows the [desktop session contract](remote-desktop.md):\nexplicit unlock mode, physical events, current generation and painted frame.\nNeither passwords nor key contents appear in service logs.",
-          "char_count": 4605
+          "body": "## Consent, credentials and admission\n\nOnly the root Env App document of an SSH environment may invoke the typed Desktop\ndeployment bridge. Requests name a fixed operation: install, update, start, stop\nor uninstall. A management request must carry explicit confirmation. The dialog\nexplains root authority, lock-screen capture and keyboard/pointer injection, the\nprivate Unix socket, uninstall and the exclusion of disk encryption unlocking.\n\nThe Runtime authorizes each deployment using full environment read/write/execute\npermission and records fixed action/outcome/rollback codes. Its audit route does\nnot execute installation or accept credentials. Service status is read-only.\nRuntime service mutation routes reject elevation with an SSH authorization code.\n\nAn administrator password stays masked and disabled during its pending SSH\ntransaction, then is cleared when that transaction finishes or the surface is\ndisposed. It is never placed in preferences, URLs, command arguments, environment variables,\naudit, diagnostics, the Runtime API or the desktop daemon. Desktop sends it to\nsudo's input stream only after sudo reports that it is needed. Root or existing\npasswordless authority receives no unused password. Credential buffers are\ncleared when the transaction finishes; cancel or navigation revokes its owner.\n\n## Deployment and rollback\n\nThe [connection launcher](remote-desktop-launcher.md) owns in-place authorization,\nprogress, failure recovery and automatic continuation to the viewer. Cancellation\nkeeps the operation visible until its rollback outcome arrives. Explicit service\nmanagement ends with a completion state and never implicitly opens a viewer.\n\nDesktop extracts the published service kit from its trusted bundled Runtime.\nThe renderer cannot select artifacts, commands, hashes, destinations or network\nsources. Desktop probes the target architecture and actual Runtime process,\nbinds its UID/GID and executable SHA-256, verifies kit bytes, and transfers only\nthe fixed deployment files through a private SSH staging directory.\nThe full-permission authorization response supplies the executing Runtime's PID;\nthe bridge carrier's startup metadata is not process authority. Authorization\nreads share the operation's cancellation and a bounded deadline. Public health\nresponses do not gain process information for this deployment workflow.\n\nThe privileged manager publishes root-owned immutable executables and license,\na private installed policy, a fixed systemd unit and uinput boot configuration.\nIt enables and starts the service. Explicit directory permissions allow the\nunprivileged converter to traverse its executable path even when SSH uses umask\n0077; policy remains mode 0600. No driver library, desktop ACL or host package is\nmodified. Runtime startup remains owned by Desktop's existing SSH Runtime flow.\n\nThe management input stays open as a transaction lifeline. Cancel, document\nnavigation, shutdown or SSH loss closes it. The manager rolls back prior files,\nunit, enablement, activation and directory permissions using an independent\nbounded cleanup context. Desktop waits for the rollback result before returning;\nit does not kill SSH and guess that cancellation succeeded. Failure reports\ncomplete, failed or unknown rollback, and removes task-owned staging files.\nUninstall removes the owned unit, policy, binaries and boot configuration.\n\n## Service authority and capability\n\nThe service has no network listener. A root-owned Unix socket admits only the\nadministrator-pinned Runtime UID/image, validates peer PID/start time and image\nidentity, and consumes a one-use attachment token. Image replacement requires\ndeployment update to authorize the new bytes. Restarting the same Runtime image\nopens a fresh attachment without changing the installed policy.\n\nDRM export and EGL conversion use separate processes and an inherited private\ndescriptor. The exporter retains device authority; conversion runs as the\nRuntime user after dropping Linux capabilities. User homes stay hidden. A fixed\nunprivileged child may wake an already-qualified Mutter output without injecting\npre-frame input or unlocking the session.\n\nCurrent qualification covers GNOME/GDM on active physical outputs. Disconnected\noutputs, absent scanout, unsupported GPU layouts and unsupported compositors\nreport capability reasons even if systemd is running. Installed stopped/failed\nservices never silently fall back to Portal or an application-private desktop.\nThe panel translates these reasons and offers no target-side approval action.\n\nEach attachment owns uinput devices. Disconnect, takeover, generation changes,\nuser switching, service stop and Runtime death release held events and retire\npainted authority. Control is relinquished before a slow capture worker is reaped.\nLock-screen input additionally follows the [desktop session contract](remote-desktop.md):\nexplicit unlock mode, physical events, current generation and painted frame.\nNeither passwords nor key contents appear in service logs.",
+          "char_count": 5021
         },
         {
           "id": "boundaries",
@@ -17630,6 +17642,12 @@
       ],
       "snippet": "Redeven Desktop owns the SSH transaction; Env App owns scope confirmation and ephemeral administrator input. Published `floe-native-apps` owns the privileged Linux deployment transaction, systemd service, DRM/KMS capture and uinput devices.",
       "links": [
+        {
+          "label": "connection launcher",
+          "path": "architecture/remote-desktop-launcher.md",
+          "concept_id": "architecture.remote-desktop-launcher",
+          "title": "Remote desktop connection launcher"
+        },
         {
           "label": "desktop session contract",
           "path": "architecture/remote-desktop.md",
@@ -17643,6 +17661,12 @@
           "path": "architecture/remote-desktop-authorization.md",
           "concept_id": "architecture.remote-desktop-authorization",
           "title": "Persistent remote desktop sharing approval"
+        },
+        {
+          "label": "Remote desktop connection launcher",
+          "path": "architecture/remote-desktop-launcher.md",
+          "concept_id": "architecture.remote-desktop-launcher",
+          "title": "Remote desktop connection launcher"
         },
         {
           "label": "Human remote desktop sessions",
@@ -35364,5 +35388,5 @@
       ]
     }
   ],
-  "source_sha256": "a937b5e385b7a0711564efb170be842817746e378b083cfb69785810048bf604"
+  "source_sha256": "28a5389f883527e69bd9c7fd1a297c538032f8afda57da333be5096ab065d0ce"
 }
