@@ -1,6 +1,8 @@
 {
   "groupMemberships": "Группы",
-  "sharedHost": "Общий хост · группы: {count}",
+  "sharedHost": "Состоит в нескольких группах: {count}",
+  "sharedHostBadge": "Общий · {count}",
+  "belongsToMultipleGroups": "Входит в несколько групп",
   "locateInGroup": "Найти в {name}",
   "subtitle": "Связи и управление сервисами",
   "libraryTitle": "Ваши схемы",

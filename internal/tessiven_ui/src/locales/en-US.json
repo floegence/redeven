@@ -1,6 +1,8 @@
 {
   "groupMemberships": "Groups",
-  "sharedHost": "Shared host · {count} groups",
+  "sharedHost": "Belongs to {count} groups",
+  "sharedHostBadge": "Shared · {count}",
+  "belongsToMultipleGroups": "Belongs to multiple groups",
   "locateInGroup": "Locate in {name}",
   "subtitle": "Service relationships and management",
   "libraryTitle": "Your canvases",

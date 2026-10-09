@@ -1,6 +1,8 @@
 {
   "groupMemberships": "Gruppen",
-  "sharedHost": "Gemeinsamer Host · {count} Gruppen",
+  "sharedHost": "Gehört zu {count} Gruppen",
+  "sharedHostBadge": "Geteilt · {count}",
+  "belongsToMultipleGroups": "Gehört zu mehreren Gruppen",
   "locateInGroup": "In {name} anzeigen",
   "subtitle": "Dienstbeziehungen und Verwaltung",
   "libraryTitle": "Ihre Arbeitsflächen",
