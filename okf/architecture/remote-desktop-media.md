@@ -77,6 +77,23 @@ not implement DMA-BUF encoder zero-copy, libei/EIS or network congestion adaptat
 The [Wayland optimization record](../operations/remote-desktop-wayland-optimization-results.md)
 separates native/browser checks from real desktop and physical latency evidence.
 
+## Physical-Seat Input
+
+The privileged service owns login-session identity, input generation, painted
+frame authority and uinput. Its DRM exporter passes capture descriptors to an
+unprivileged media worker; that worker can encode and report cursor state but
+cannot inject input or grant frame authority. A separate bounded media channel
+keeps encoding and slow consumers from blocking control or input release. Queue
+overflow or media failure retires the attachment and releases held input.
+
+One persistent system-bus connection observes logind changes. Before admitting
+each input event, the service re-reads the active session, lock state and kernel
+VT and verifies the bound compositor identity. D-Bus signals wake the owner but
+do not authorize from cached state. Process inspection is limited to binding or
+rebuilding compositor identity; failed reads or identity checks revoke input.
+Disconnect, session/VT transition, service stop and attachment replacement also
+release held input before the next owner is admitted.
+
 # Boundaries
 
 Synthetic encoder probes and browser preferences are capabilities, not hardware
@@ -88,6 +105,7 @@ belongs upstream; the host must not add a duplicate implementation.
 # Evidence
 
 - Published `floe-native-apps` `host_desktop_media.py`, `host_desktop_pipewire.py` and `host_desktop_portal.py`: capture, refinement admission, cursor metadata and bounded input.
+- Published `floe-native-apps` `host_desktop_drm.py`, `hostdesktop/login_seat_linux.go`, `hostdesktop/login_service_linux.go` and `hostdesktop/login_media_linux.go`: separate DRM cursor capture, live logind/compositor checks, uinput authority ownership and bounded media attachment.
 - Published `floe-native-apps` `host_desktop_player.mjs` and `native/host-desktop/nvenc.c`: player queues and NVIDIA worker.
 - `internal/remotedesktop/socket_test.go`: transport preserves current-frame cursor presentation and attachment authority.
 - `internal/envapp/ui_src/scripts/checkRemoteDesktopViewer.mjs`: published-player cursor and input behavior.
