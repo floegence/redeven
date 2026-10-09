@@ -13,7 +13,9 @@ geometry, pointer interaction and floating-layer projection. Hiding the window
 keeps the composer and conversation alive. Errors, approvals and retry retain
 their canonical Flower behavior rather than a canvas-specific recovery path.
 
-# Reading surface
+# Contract
+
+## Reading surface
 
 The window uses the theme's main reading surface continuously across its
 titlebar, transcript and composer surroundings. Only the rounded input has a
@@ -40,7 +42,7 @@ Questions fade softly at the lower scroll edge instead of using a divider above
 the action row. End padding keeps the final choice fully readable when scrolled
 to the bottom; the action controls remain outside the fade.
 
-# Actions and continuity
+## Actions and continuity
 
 Less frequent actions live in the More menu: new conversation, settings,
 subagents, available Computer actions and opening the full conversation. Flower
@@ -69,7 +71,9 @@ conversation surface then owns both transcript and composer. Existing canvases
 open the combined window directly. Reduced-motion settings disable the entry
 motion without changing placement or state.
 
-# Product verification
+# Boundaries
+
+## Product verification
 
 Component rendering and an HTTP 200 from a frontend development server do not
 qualify a connected Env App. Workbench requires its Runtime layout snapshot,

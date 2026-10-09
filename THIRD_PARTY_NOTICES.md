@@ -1946,9 +1946,7 @@ SOFTWARE.
 | bidi-js | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/bidi-js/v/1.0.3 |  |
 | bl | 4.1.0 | MIT | Env App UI | https://www.npmjs.com/package/bl/v/4.1.0 |  |
 | bluebird | 3.7.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/bluebird/v/3.7.2 |  |
-| boolean | 3.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/boolean/v/3.2.0 |  |
 | brace-expansion | 5.0.12 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.12 |  |
-| brace-expansion | 5.0.9 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.9 | License verified from the exact registry package manifest. |
 | browserslist | 4.29.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/browserslist/v/4.29.2 |  |
 | buffer-crc32 | 0.2.13 | MIT | Env App UI | https://www.npmjs.com/package/buffer-crc32/v/0.2.13 |  |
 | buffer-from | 1.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/buffer-from/v/1.1.2 |  |
@@ -2052,7 +2050,6 @@ SOFTWARE.
 | delayed-stream | 1.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/delayed-stream/v/1.0.0 |  |
 | dequal | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dequal/v/2.0.3 |  |
 | detect-libc | 2.1.2 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/detect-libc/v/2.1.2 |  |
-| detect-node | 2.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/detect-node/v/2.1.0 |  |
 | devlop | 1.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/devlop/v/1.1.0 |  |
 | diff | 8.0.4 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/diff/v/8.0.4 |  |
 | dmg-builder | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/dmg-builder/v/26.15.3 |  |
@@ -2069,7 +2066,7 @@ SOFTWARE.
 | electron-to-chromium | 1.5.439 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/electron-to-chromium/v/1.5.439 |  |
 | electron-updater | 6.8.9 | MIT | Desktop shell | https://www.npmjs.com/package/electron-updater/v/6.8.9 |  |
 | electron-winstaller | 5.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/electron-winstaller/v/5.4.0 |  |
-| electron | 41.10.5 | MIT | Desktop shell | https://www.npmjs.com/package/electron/v/41.10.5 |  |
+| electron | 41.10.7 | MIT | Desktop shell | https://www.npmjs.com/package/electron/v/41.10.7 |  |
 | elkjs | 0.12.0 | EPL-2.0 OR GPL-3.0-or-later | Desktop shell, Env App UI | https://www.npmjs.com/package/elkjs/v/0.12.0 | Redeven selects EPL-2.0 for the unmodified ELK layout engine; the verified license and exact source reference are reproduced below. |
 | emoji-regex | 8.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/emoji-regex/v/8.0.0 |  |
 | end-of-stream | 1.4.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/end-of-stream/v/1.4.5 |  |
@@ -2090,7 +2087,6 @@ SOFTWARE.
 | es-toolkit | 1.46.1 | MIT | Env App UI | https://www.npmjs.com/package/es-toolkit/v/1.46.1 |  |
 | es-toolkit | 1.47.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/es-toolkit/v/1.47.0 | License verified from the exact registry package manifest. |
 | es-toolkit | 1.49.0 | MIT | Desktop shell | https://www.npmjs.com/package/es-toolkit/v/1.49.0 |  |
-| es6-error | 4.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/es6-error/v/4.1.1 |  |
 | esbuild | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/esbuild/v/0.28.1 |  |
 | esbuild | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/esbuild/v/0.28.2 |  |
 | escalade | 3.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/escalade/v/3.2.0 |  |
@@ -2143,7 +2139,7 @@ SOFTWARE.
 | glob-parent | 6.0.2 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/glob-parent/v/6.0.2 |  |
 | glob | 13.0.6 | BlueOak-1.0.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/glob/v/13.0.6 |  |
 | glob | 7.2.3 | ISC | Desktop shell | https://www.npmjs.com/package/glob/v/7.2.3 |  |
-| global-agent | 3.0.0 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/global-agent/v/3.0.0 |  |
+| global-agent | 4.1.3 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/global-agent/v/4.1.3 |  |
 | globals | 14.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/globals/v/14.0.0 |  |
 | globals | 17.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/globals/v/17.4.0 |  |
 | globals | 17.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/globals/v/17.6.0 | License verified from the exact registry package manifest. |
@@ -2166,7 +2162,6 @@ SOFTWARE.
 | html-entities | 2.3.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/html-entities/v/2.3.3 |  |
 | html-tags | 3.3.1 | MIT | Env App UI | https://www.npmjs.com/package/html-tags/v/3.3.1 |  |
 | html-void-elements | 3.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/html-void-elements/v/3.0.0 |  |
-| http-cache-semantics | 4.2.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/http-cache-semantics/v/4.2.0 | License verified from the exact registry package manifest. |
 | http-cache-semantics | 4.3.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/http-cache-semantics/v/4.3.0 |  |
 | http-proxy-agent | 7.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/http-proxy-agent/v/7.0.2 |  |
 | http2-wrapper | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/http2-wrapper/v/1.0.3 |  |
@@ -2209,7 +2204,6 @@ SOFTWARE.
 | json-schema-traverse | 0.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/json-schema-traverse/v/0.4.1 |  |
 | json-schema-traverse | 1.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/json-schema-traverse/v/1.0.0 |  |
 | json-stable-stringify-without-jsonify | 1.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/json-stable-stringify-without-jsonify/v/1.0.1 |  |
-| json-stringify-safe | 5.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/json-stringify-safe/v/5.0.1 |  |
 | json5 | 2.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/json5/v/2.2.3 |  |
 | jsonfile | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/jsonfile/v/4.0.0 |  |
 | jsonfile | 6.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jsonfile/v/6.2.1 |  |
@@ -2279,7 +2273,7 @@ SOFTWARE.
 | marked | 14.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/14.0.0 |  |
 | marked | 16.4.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/16.4.2 |  |
 | marked | 17.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/17.0.6 |  |
-| matcher | 3.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/matcher/v/3.0.0 |  |
+| matcher | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/matcher/v/4.0.0 |  |
 | math-intrinsics | 1.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/math-intrinsics/v/1.1.0 |  |
 | mdast-util-to-hast | 13.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/mdast-util-to-hast/v/13.2.1 |  |
 | mdn-data | 2.27.1 | CC0-1.0 | Desktop shell | https://www.npmjs.com/package/mdn-data/v/2.27.1 |  |
@@ -2401,7 +2395,6 @@ SOFTWARE.
 | responselike | 2.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/responselike/v/2.0.1 |  |
 | retry | 0.12.0 | MIT | Desktop shell | https://www.npmjs.com/package/retry/v/0.12.0 |  |
 | rimraf | 2.6.3 | ISC | Desktop shell | https://www.npmjs.com/package/rimraf/v/2.6.3 |  |
-| roarr | 2.15.4 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/roarr/v/2.15.4 |  |
 | robust-predicates | 3.0.3 | Unlicense | Desktop shell, Env App UI | https://www.npmjs.com/package/robust-predicates/v/3.0.3 |  |
 | rolldown | 1.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/rolldown/v/1.0.3 |  |
 | rolldown | 1.2.11 | MIT | Code App UI | https://www.npmjs.com/package/rolldown/v/1.2.11 |  |
@@ -2420,15 +2413,15 @@ SOFTWARE.
 | saxes | 5.0.1 | ISC | Env App UI | https://www.npmjs.com/package/saxes/v/5.0.1 |  |
 | saxes | 6.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/saxes/v/6.0.0 |  |
 | scheduler | 0.23.2 | MIT | Env App UI | https://www.npmjs.com/package/scheduler/v/0.23.2 |  |
-| semver-compare | 1.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/semver-compare/v/1.0.0 |  |
 | semver | 5.7.2 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/5.7.2 |  |
 | semver | 6.3.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/semver/v/6.3.1 |  |
 | semver | 7.7.4 | ISC | Code App UI, Desktop shell | https://www.npmjs.com/package/semver/v/7.7.4 |  |
 | semver | 7.8.1 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/7.8.1 | License verified from the exact registry package manifest. |
 | semver | 7.8.5 | ISC | Env App UI | https://www.npmjs.com/package/semver/v/7.8.5 |  |
-| serialize-error | 7.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/serialize-error/v/7.0.1 |  |
+| serialize-error | 8.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/serialize-error/v/8.1.0 |  |
 | seroval-plugins | 1.6.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.6.8 |  |
-| seroval | 1.6.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.6.8 |  |
+| seroval | 1.6.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.6.8 | License verified from the exact registry package manifest. |
+| seroval | 1.6.9 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.6.9 |  |
 | setimmediate | 1.0.5 | MIT | Env App UI | https://www.npmjs.com/package/setimmediate/v/1.0.5 |  |
 | shebang-command | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/shebang-command/v/2.0.0 |  |
 | shebang-regex | 3.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/shebang-regex/v/3.0.0 |  |
@@ -2440,12 +2433,10 @@ SOFTWARE.
 | solid-js | 1.9.17 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.17 |  |
 | solid-motionone | 1.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-motionone/v/1.0.4 |  |
 | solid-refresh | 0.6.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-refresh/v/0.6.3 |  |
-| source-map-js | 1.2.1 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/source-map-js/v/1.2.1 | License verified from the exact registry package manifest. |
 | source-map-js | 1.2.2 | BSD-3-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/source-map-js/v/1.2.2 |  |
 | source-map-support | 0.5.21 | MIT | Desktop shell | https://www.npmjs.com/package/source-map-support/v/0.5.21 |  |
 | source-map | 0.6.1 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/source-map/v/0.6.1 |  |
 | space-separated-tokens | 2.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/space-separated-tokens/v/2.0.2 |  |
-| sprintf-js | 1.1.3 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/sprintf-js/v/1.1.3 |  |
 | stackback | 0.0.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/stackback/v/0.0.2 |  |
 | stat-mode | 1.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/stat-mode/v/1.0.0 |  |
 | std-env | 4.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/std-env/v/4.1.0 |  |
@@ -2505,12 +2496,11 @@ SOFTWARE.
 | ts-dedent | 2.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/ts-dedent/v/2.3.0 |  |
 | tslib | 2.8.1 | 0BSD | Desktop shell, Env App UI | https://www.npmjs.com/package/tslib/v/2.8.1 |  |
 | type-check | 0.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/type-check/v/0.4.0 |  |
-| type-fest | 0.13.1 | (MIT OR CC0-1.0) | Desktop shell | https://www.npmjs.com/package/type-fest/v/0.13.1 |  |
+| type-fest | 0.20.2 | (MIT OR CC0-1.0) | Desktop shell | https://www.npmjs.com/package/type-fest/v/0.20.2 |  |
 | typescript | 5.9.3 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/typescript/v/5.9.3 |  |
 | ufo | 1.6.3 | MIT | Env App UI | https://www.npmjs.com/package/ufo/v/1.6.3 |  |
 | undici-types | 7.16.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici-types/v/7.16.0 |  |
 | undici-types | 8.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/8.3.0 |  |
-| undici | 7.29.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.29.0 | License verified from the exact registry package manifest. |
 | undici | 7.30.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.30.0 |  |
 | unist-util-is | 6.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-is/v/6.0.1 |  |
 | unist-util-position | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-position/v/5.0.0 |  |

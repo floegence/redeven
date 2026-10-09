@@ -69,7 +69,9 @@
   "overrides": {
     "@floegence/flowersec-core": "5.10.5",
     "@babel/core": "^7.29.7",
-    "brace-expansion": "^5.0.9",
+    "brace-expansion": "^5.0.12",
+    "seroval": "^1.6.3",
+    "source-map-js": "^1.2.2",
     "dompurify": "^3.4.16",
     "katex": "0.18.10",
     "flatted": "^3.4.2",
@@ -94,7 +96,9 @@
     "overrides": {
       "@floegence/flowersec-core": "5.10.5",
       "@babel/core": "^7.29.7",
-      "brace-expansion": "^5.0.9",
+      "brace-expansion": "^5.0.12",
+      "seroval": "^1.6.3",
+      "source-map-js": "^1.2.2",
       "dompurify": "^3.4.16",
       "katex": "0.18.10",
       "flatted": "^3.4.2",

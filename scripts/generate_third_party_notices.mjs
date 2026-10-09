@@ -120,6 +120,7 @@ const npmCoordinateLicenseOverrides = new Map([
   ['playwright@1.60.0', { license: 'Apache-2.0', note: 'License verified from the exact registry package manifest.' }],
   ['seroval-plugins@1.5.4', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['seroval@1.5.4', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['seroval@1.6.8', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['solid-js@1.9.13', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['tailwind-merge@3.6.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['tailwindcss@4.3.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],

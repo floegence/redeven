@@ -9,7 +9,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import http from 'node:http';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const output = path.resolve(process.argv.find((arg) => arg.startsWith('--output='))?.slice(9) || '/tmp/flower-code-highlighting');
+const requestedOutput = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9);
+const output = requestedOutput ? path.resolve(requestedOutput) : await mkdtemp(path.join(tmpdir(), 'flower-code-highlighting-'));
 const temporary = await mkdtemp(path.join(tmpdir(), 'flower-highlight-build-'));
 const uiRequire = createRequire(path.join(root, 'internal/envapp/ui_src/package.json'));
 const desktopRequire = createRequire(path.join(root, 'desktop/package.json'));

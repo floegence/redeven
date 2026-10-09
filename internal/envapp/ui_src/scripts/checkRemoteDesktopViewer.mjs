@@ -145,7 +145,12 @@ try {
     opener = await browser.newPage({ viewport: { width: 1000, height: 720 } });
     await opener.goto(`http://127.0.0.1:${server.address().port}/launcher`);
     const popup = opener.waitForEvent('popup');
-    await opener.evaluate(() => { window.addEventListener('message', event => { window.filesMessage = event.data; }); window.open('about:blank', '_blank'); });
+    await opener.evaluate(() => {
+      const viewer = window.open('about:blank', '_blank');
+      window.addEventListener('message', event => {
+        if (event.origin === window.location.origin && event.source === viewer) window.filesMessage = event.data;
+      });
+    });
     page = await popup;
   }
   const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('Viewer error:', error.stack); });
