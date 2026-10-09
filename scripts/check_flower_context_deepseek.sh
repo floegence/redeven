@@ -1,40 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 umask 077
 
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
-SOURCE_STATE_ROOT=${REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT:-$HOME/.redeven/local-environment}
-CONFIG_FILE="$SOURCE_STATE_ROOT/config.json"
-SECRETS_FILE="$SOURCE_STATE_ROOT/secrets.json"
-
-[[ $# -eq 0 ]] || { echo "usage: $0" >&2; exit 2; }
-[[ -r "$CONFIG_FILE" && -r "$SECRETS_FILE" ]] || {
-  echo "Flower context qualification requires readable local AI config and secrets" >&2
-  exit 2
-}
-
-provider_count=$(jq -r '(.ai // .).providers | map(select((.type // "" | ascii_downcase) == "deepseek")) | length' "$CONFIG_FILE")
-[[ "$provider_count" == "1" ]] || {
-  echo "Flower context qualification requires exactly one configured DeepSeek provider" >&2
-  exit 2
-}
-
-provider_id=$(jq -r '(.ai // .).providers[] | select((.type // "" | ascii_downcase) == "deepseek") | .id' "$CONFIG_FILE")
-base_url=$(jq -r --arg id "$provider_id" '(.ai // .).providers[] | select(.id == $id) | .base_url // ""' "$CONFIG_FILE")
-api_key=$(jq -r --arg id "$provider_id" '(.ai // .).provider_api_keys[$id] // empty' "$SECRETS_FILE")
-if [[ -z "$api_key" ]]; then
-  api_key=$(jq -r --arg id "$provider_id" '.provider_api_keys[$id] // empty' "$SECRETS_FILE")
-fi
-[[ -n "$api_key" ]] || {
-  echo "Flower context qualification could not resolve the configured DeepSeek credential" >&2
-  exit 2
-}
-
-echo "Running Flower structured Ask User, context-prefix, Flash/Pro model-switch, compaction, and Flash/Pro/Vision web research boundary qualification"
+[[ $# -le 1 && ${1:---compaction} == --compaction ]] || { echo "usage: $0 [--compaction]" >&2; exit 2; }
+SOURCE_STATE_ROOT=${REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT:-$HOME/.redeven-dev/redeven-1854757905/local-environment}
+[[ -r "$SOURCE_STATE_ROOT/config.json" && -r "$SOURCE_STATE_ROOT/secrets.json" ]] || { echo "Readable source config and secrets are required" >&2; exit 2; }
+REPORT_DIR=${REDEVEN_FLOWER_COMPACTION_REPORT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/redeven-deepseek-compaction.XXXXXX")}
+mkdir -p "$REPORT_DIR"
+echo "Running real DeepSeek compaction with production configuration parsing. Reports: $REPORT_DIR"
 cd "$ROOT_DIR"
-REDEVEN_FLOWER_CONTEXT_E2E=1 \
-REDEVEN_FLOWER_CONTEXT_E2E_BASE_URL="$base_url" \
-REDEVEN_FLOWER_CONTEXT_E2E_API_KEY="$api_key" \
-GOWORK=off \
-  go test ./internal/ai -run '^TestE2E_FlowerDeepSeekV4(FlashContextCompaction|ContextPrefixAndModelSwitch|AskUserStructuredContinuation|WebResearchBoundary)$' -count=1 -v
+REDEVEN_FLOWER_COMPACTION_E2E=1 \
+REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT="$SOURCE_STATE_ROOT" \
+REDEVEN_FLOWER_COMPACTION_REPORT_DIR="$REPORT_DIR" \
+GOWORK=off go test ./internal/ai -run '^TestE2E_FlowerDeepSeekContextCompaction$' -count=1 -v -timeout 140m | tee "$REPORT_DIR/test.log"
+# A skipped or absent lane is never qualification evidence.
+for scenario in small_history manual automatic automatic_configured_window; do
+  jq -e '.passed == true' "$REPORT_DIR/$scenario/report.json" >/dev/null
+ done

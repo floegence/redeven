@@ -1576,6 +1576,8 @@ func aiThreadActionHTTPStatus(err error) int {
 	case errors.Is(err, sql.ErrNoRows):
 		return http.StatusNotFound
 	case errors.Is(err, flruntime.ErrRequestConflict),
+		errors.Is(err, flruntime.ErrThreadBusy),
+		errors.Is(err, ai.ErrFlowerStorageRestored),
 		errors.Is(err, ai.ErrThreadBusy),
 		errors.Is(err, ai.ErrRunChanged),
 		errors.Is(err, ai.ErrWaitingPromptChanged),
@@ -5241,6 +5243,46 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
+			return
+
+		case action == "context" && r.Method == http.MethodPost && len(parts) == 3 && parts[2] == "compact":
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			if !aiSvc.EnabledForSession(meta) {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+				return
+			}
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			var body ai.CompactThreadContextRequest
+			if err := decoder.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := decoder.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			current, err := aiSvc.CompactThreadContext(r.Context(), meta, threadID, body)
+			if err != nil {
+				code := ""
+				if errors.Is(err, ai.ErrFlowerStorageRestored) {
+					code = "AI_STORAGE_RESTORED"
+				}
+				if errors.Is(err, flruntime.ErrThreadBusy) {
+					code = "context_compaction_busy"
+				}
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error(), ErrorCode: code})
+				return
+			}
+			public, err := ai.MarshalFlowerCurrentView(current)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: map[string]any{"client_request_id": body.ClientRequestID, "thread_id": threadID, "current": public}})
 			return
 
 		case action == "turns" && r.Method == http.MethodPost && len(parts) == 2:

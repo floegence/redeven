@@ -83,7 +83,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	}
 	r.applyFloretSourceObservation(ev.Sources)
 	r.applyFloretContextStatus(ev.ContextUsage, ev.ThreadUsageTotals)
-	r.applyFloretCompaction(ev.Compaction)
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
@@ -258,102 +257,6 @@ func (r *run) applyFloretContextStatus(status *flruntime.ThreadContextUsage, tot
 	if r.host.publishContextUsage != nil {
 		r.host.publishContextUsage(usage)
 	}
-}
-
-func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
-	if r == nil || compaction == nil {
-		return
-	}
-	if !r.acceptsPresentationUpdates() {
-		return
-	}
-	projected, err := flowerContextCompactionFromFloret(compaction)
-	if err != nil {
-		r.rejectFloretContract("compaction", err)
-		return
-	}
-	r.bindContextCompactionOperationAnchor(projected.OperationID, compaction.RequestID)
-	decoration, err := r.flowerContextCompactionDecoration(projected)
-	if err != nil {
-		r.rejectFloretContract("compaction_decoration", err)
-		return
-	}
-	r.sendStreamEvent(streamEventContextCompaction{
-		Type:               "context-compaction",
-		Compaction:         projected,
-		TimelineDecoration: decoration,
-	})
-}
-
-func (r *run) flowerContextCompactionDecoration(compaction FlowerContextCompaction) (FlowerTimelineDecoration, error) {
-	operationID := strings.TrimSpace(compaction.OperationID)
-	if operationID == "" {
-		return FlowerTimelineDecoration{}, errors.New("floret compaction missing operation id")
-	}
-	anchor := r.contextCompactionAnchor(operationID)
-	return FlowerTimelineDecoration{
-		DecorationID: "context-compaction:" + operationID,
-		Kind:         "context_compaction",
-		Anchor:       anchor,
-		Ordinal:      0,
-		Compaction:   compaction,
-	}, nil
-}
-
-func (r *run) bindContextCompactionOperationAnchor(operationID string, requestID string) {
-	if r == nil {
-		return
-	}
-	operationID = strings.TrimSpace(operationID)
-	requestID = strings.TrimSpace(requestID)
-	if operationID == "" || requestID == "" || operationID == requestID {
-		return
-	}
-	r.muManualCompaction.Lock()
-	anchor := r.contextCompactionAnchors[requestID]
-	r.muManualCompaction.Unlock()
-	if validFlowerTimelineAnchor(anchor) {
-		r.setContextCompactionAnchor(operationID, anchor)
-	}
-}
-
-func (r *run) contextCompactionAnchor(operationID string) FlowerTimelineAnchor {
-	if r == nil {
-		return FlowerTimelineAnchor{}
-	}
-	operationID = strings.TrimSpace(operationID)
-	if operationID == "" {
-		return FlowerTimelineAnchor{}
-	}
-	r.muManualCompaction.Lock()
-	if anchor := r.contextCompactionAnchors[operationID]; validFlowerTimelineAnchor(anchor) {
-		r.muManualCompaction.Unlock()
-		return anchor
-	}
-	r.muManualCompaction.Unlock()
-
-	anchor := r.captureFlowerTimelineAnchor()
-	if validFlowerTimelineAnchor(anchor) {
-		r.muManualCompaction.Lock()
-		if r.contextCompactionAnchors == nil {
-			r.contextCompactionAnchors = make(map[string]FlowerTimelineAnchor)
-		}
-		r.contextCompactionAnchors[operationID] = anchor
-		r.muManualCompaction.Unlock()
-	}
-	return anchor
-}
-
-func (r *run) setContextCompactionAnchor(operationID string, anchor FlowerTimelineAnchor) {
-	if r == nil || strings.TrimSpace(operationID) == "" || !validFlowerTimelineAnchor(anchor) {
-		return
-	}
-	r.muManualCompaction.Lock()
-	defer r.muManualCompaction.Unlock()
-	if r.contextCompactionAnchors == nil {
-		r.contextCompactionAnchors = make(map[string]FlowerTimelineAnchor)
-	}
-	r.contextCompactionAnchors[strings.TrimSpace(operationID)] = anchor
 }
 
 func (r *run) captureFlowerTimelineAnchor() FlowerTimelineAnchor {

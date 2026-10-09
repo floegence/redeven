@@ -153,6 +153,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   inputComputerControl?: FlowerSurfaceAdapter['inputComputerControl'];
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
+  compactThreadContext?: FlowerSurfaceAdapter['compactThreadContext'];
   retryThread: (threadID: string) => Promise<unknown>;
   stopThread: (threadID: string) => Promise<unknown>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
@@ -465,6 +466,15 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.extensions ? { extensions: options.extensions } : {}),
     resolveStorageGeneration: options.resolveStorageGeneration,
     launchTurn: options.launchTurn,
+    ...(options.canMutate !== false && options.compactThreadContext ? {
+      compactThreadContext: async (threadID, input) => {
+        const tid = trim(threadID);
+        if (!tid) throw new Error(missingThreadIDMessage(options));
+        const current = await options.compactThreadContext!(tid, input);
+        if (trim(current.thread_id) !== tid) throw new Error('Flower context compaction returned a different thread.');
+        return current;
+      },
+    } : {}),
     retryThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));

@@ -8,13 +8,15 @@ quality_exception: Typed Floret ThreadService lifecycle and restart contract cov
 ---
 # Summary
 
-Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, and Retry return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
+Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and the optional independent CompactContext return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
 
 # Contract
 
 ## Typed runtime
 
-Redeven consumes published Floret v7.25.2, preserving graceful-stop ownership
+Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
+
+Redeven consumes published Floret v7.26.0, preserving graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their
@@ -22,7 +24,7 @@ existing classification. The dependency gate requires the released dynamic tool 
 and preservation of its initial provider surface; live permission ownership is
 defined in [Tool permission runtime](tool-permission-runtime.md).
 
-Published Floret v7.25.2 retains every ordinary/control call in a mixed model
+Published Floret v7.26.0 retains every ordinary/control call in a mixed model
 response and pairs each with its result in provider order. Valid ordinary tools
 execute once; mixed controls receive bounded correction to submit separately
 after the ordinary results. Only a later valid independent control opens an
@@ -35,7 +37,7 @@ Redeven derives continuation support from the restored request protocol, not
 from newly edited settings; a pending native-search Turn keeps its frozen
 Responses transport across restart. No second capability cache is retained.
 
-Published Floret v7.25.2 applies sanitized tool Activity inside the existing
+Published Floret v7.26.0 applies sanitized tool Activity inside the existing
 thread actor using exact thread, turn, run, and tool-call identity. Validated
 calls publish description and command while pending; dispatch alone marks
 running, and results settle without waiting for output or the full turn.
@@ -108,7 +110,7 @@ interaction, including one atomic Answers batch for Reject All. `Cancel` is
 idempotent for every known thread and atomically clears pending interactions,
 closes unfinished tool work, and writes one terminal aborted turn before
 returning. Late provider, tool, or save-point work cannot reactivate a terminal
-turn. Published Floret v7.25.2 retries a failed turn from its latest existing
+turn. Published Floret v7.26.0 retries a failed turn from its latest existing
 save point so confirmed tool results remain in provider context across repeated
 failures and restart. Thread-level queue facts may interleave a pending question
 without corrupting its canonical turn. `Retry` preserves logical request lineage without appending another user
@@ -117,7 +119,7 @@ subtree, and prevent late output from outranking a tombstone. Graceful Host
 shutdown resolves approvals owned by cancelled in-memory executions, so stale
 approvals cannot resume them after restart. Durable Ask User waits and queued
 inputs survive; dispatched effects with unknown outcomes remain failed and are
-never replayed. Floret v7.25.2 reuses an existing cancellation for the exact
+never replayed. Floret v7.26.0 reuses an existing cancellation for the exact
 Turn/Run when Stop overlaps shutdown or another settlement path, preserving
 the original stop source, mode, and timestamp without a duplicate cancel fact.
 Floret owns this atomic settlement.
@@ -166,7 +168,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v7.25.2 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v7.26.0 typed runtime without local replacement.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.

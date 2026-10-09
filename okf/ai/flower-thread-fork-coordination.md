@@ -33,9 +33,9 @@ keeps the destination available and retries only detail, never the fork command.
 Untitled persisted threads use a localized display label plus a short ThreadID;
 that label is presentation only and never replaces the canonical title. Existing
 forks are not deleted or rewritten. New forks receive canonical fallback titles
-from published Floret v7.25.2 even when a caller omits an explicit product title.
+from published Floret v7.26.0 even when a caller omits an explicit product title.
 
-Published Floret v7.25.2 also owns canonical tool-call persistence across hosted
+Published Floret v7.26.0 also owns canonical tool-call persistence across hosted
 search boundaries. Engine execution and live projection use the same complete
 call message and assistant fragment boundaries. Redeven consumes this upstream
 correction without cleaning history, synthesizing results, or weakening tool

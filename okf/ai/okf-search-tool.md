@@ -7,7 +7,7 @@ timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
-Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools. Redeven projects bounded safe results into Floret v7.25.2 structured Activity rows, and the shared Flower surface expands those rows without reading raw OKF result JSON.
+Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools. Redeven projects bounded safe results into Floret v7.26.0 structured Activity rows, and the shared Flower surface expands those rows without reading raw OKF result JSON.
 
 
 # Contract

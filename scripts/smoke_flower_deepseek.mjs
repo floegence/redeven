@@ -1124,7 +1124,11 @@ async function runScenarios(page, config, telemetry) {
     const one = marker('COMPACT_ONE'); const two = marker('COMPACT_TWO');
     const sent = await sendPrompt(page, `Reply exactly ${one}.`, { visibleMarker: one }); await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: sent.turnID });
     const second = await sendPrompt(page, `Reply exactly ${two}.`, { visibleMarker: two }); await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: second.turnID });
-    await sendPrompt(page, '/compact', { visibleMarker: '/compact' });
+    const command = surface.locator('.flower-composer textarea');
+    await command.fill('/compact');
+    await command.press('Enter');
+    await command.waitFor({ state: 'visible' });
+    await waitFor(async () => currentView(await canonicalThread(page, sent.threadID)).turn_kind === 'context_compaction', 30_000, 'independent compaction admission');
     const divider = surface.locator('[data-flower-compaction-status]');
     await divider.waitFor({ state: 'visible', timeout: 180_000 });
     await waitFor(async () => await divider.getAttribute('data-flower-compaction-status') !== 'compacting', 180_000, 'manual compaction terminal');

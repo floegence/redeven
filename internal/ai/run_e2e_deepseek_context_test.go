@@ -25,6 +25,12 @@ import (
 )
 
 type deepSeekContextObservation struct {
+	Kind                    string
+	RequestBytes            int
+	InputTokens             int64
+	OutputTokens            int64
+	CacheReadTokens         int64
+	ResponseMarkerPresence  []bool
 	Index                   int
 	Model                   string
 	MessageHashes           []string
@@ -70,10 +76,15 @@ func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservatio
 		r.mu.Unlock()
 		return nil
 	}
-	if len(envelope.Tools) == 0 {
-		return nil
+	kind := "main"
+	if bytes.Contains(body, []byte("You generate concise thread titles for an interactive AI agent.")) {
+		kind = "title"
+	}
+	if bytes.Contains(body, []byte("You are a context compaction writer.")) {
+		kind = "summary"
 	}
 	observation := deepSeekContextObservation{
+		Kind: kind, RequestBytes: len(body), ResponseMarkerPresence: make([]bool, len(r.markers)),
 		Index:                   -1,
 		HasImageInput:           bytes.Contains(body, []byte(`"type":"input_image"`)),
 		SearchUnavailablePrompt: bytes.Contains(body, []byte("URL discovery is unavailable")),
@@ -163,6 +174,45 @@ func (r *deepSeekContextRecorder) recordResponse(index int, toolNames []string, 
 	}
 	r.observations[index].ResponseToolNames = append([]string(nil), toolNames...)
 	r.observations[index].ResponseFinishReasons = append([]string(nil), finishReasons...)
+}
+
+func (r *deepSeekContextRecorder) recordUsage(index int, line []byte) {
+	payload := bytes.TrimSpace(bytes.TrimPrefix(bytes.TrimSpace(line), []byte("data:")))
+	var event struct {
+		Type     string `json:"type"`
+		Response struct {
+			Usage struct {
+				Input   int64 `json:"input_tokens"`
+				Output  int64 `json:"output_tokens"`
+				Details struct {
+					Cached int64 `json:"cached_tokens"`
+				} `json:"input_tokens_details"`
+			} `json:"usage"`
+		} `json:"response"`
+	}
+	if json.Unmarshal(payload, &event) != nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if index < 0 || index >= len(r.observations) {
+		return
+	}
+	observation := &r.observations[index]
+	if event.Response.Usage.Input > 0 {
+		observation.InputTokens, observation.OutputTokens, observation.CacheReadTokens = event.Response.Usage.Input, event.Response.Usage.Output, event.Response.Usage.Details.Cached
+	}
+	for i, marker := range r.markers {
+		if bytes.Contains(payload, []byte(marker)) {
+			observation.ResponseMarkerPresence[i] = true
+		}
+	}
+}
+
+func (r *deepSeekContextRecorder) snapshot() []deepSeekContextObservation {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]deepSeekContextObservation(nil), r.observations...)
 }
 
 func sha256Hex(value []byte) string {
@@ -464,6 +514,9 @@ func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *dee
 		for scanner.Scan() {
 			line := append([]byte(nil), scanner.Bytes()...)
 			observeDeepSeekResponseLine(line, &responseToolNames, &responseFinishReasons)
+			if observation != nil {
+				recorder.recordUsage(observation.Index, line)
+			}
 			_, _ = w.Write(append(line, '\n'))
 			if flusher != nil {
 				flusher.Flush()

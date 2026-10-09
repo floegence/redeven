@@ -157,23 +157,12 @@ func TestFlowerForkDetailPreservesCanonicalContextAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index, turn := range []struct {
-		requestID string
-		text      string
-	}{
-		{requestID: "fork-context-usage", text: "Record canonical usage."},
-		{requestID: "fork-context-compaction", text: "/compact"},
-	} {
-		if _, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-			ClientRequestID: turn.requestID, ThreadID: source.ThreadID, Input: RunInput{Text: turn.text},
-		}); err != nil {
-			t.Fatal(err)
-		}
-		waitForFloretThreadIdle(t, svc.threadRuntime, identity.ThreadID(source.ThreadID))
-		if index == 0 {
-			waitForThreadContextUsage(t, svc, source.ThreadID)
-		}
+	if _, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ClientRequestID: "fork-context-usage", ThreadID: source.ThreadID, Input: RunInput{Text: "Record canonical usage."}}); err != nil {
+		t.Fatal(err)
 	}
+	waitForFloretThreadIdle(t, svc.threadRuntime, identity.ThreadID(source.ThreadID))
+	waitForThreadContextUsage(t, svc, source.ThreadID)
+	compactQualificationThread(t, ctx, svc, meta, source.ThreadID, "fork-context-compaction")
 
 	sourceDetail, err := svc.GetFlowerThreadDetail(ctx, meta, source.ThreadID)
 	if err != nil {
@@ -299,9 +288,9 @@ func TestFlowerThreadContextProjectionRestoresOneTerminalCompactionDivider(t *te
 	projection, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{
 		Compactions: []flruntime.ThreadContextCompaction{{
 			RunID: "run-context", ThreadID: threadID, TurnID: turnID, Step: 1,
-			OperationID: "compact-operation", RequestID: "compact-request",
+			OperationID: "compact-operation", RequestID: "compact-request", AfterItemID: "message-before",
 			Phase: "noop", Status: "noop", Trigger: "manual", Reason: "manual",
-			Source: flowerManualCompactionSourceName, TokensBefore: 6354, ObservedAt: observedAt,
+			Source: "thread_runtime", TokensBefore: 6354, ObservedAt: observedAt,
 		}},
 	}, flruntime.ThreadView{ThreadID: threadID, Items: []flruntime.ThreadItem{
 		{ID: "message-before", Kind: flruntime.ThreadItemUser, TurnID: "turn-before", RunID: "run-before"},
@@ -316,7 +305,7 @@ func TestFlowerThreadContextProjectionRestoresOneTerminalCompactionDivider(t *te
 	if got := projection.Compactions[0]; got.OperationID != "compact-operation" || got.Status != "noop" || got.UpdatedAtMs != observedAt.UnixMilli() {
 		t.Fatalf("compaction=%#v", got)
 	}
-	if got := projection.Decorations[0]; got.DecorationID != "context-compaction:compact-operation" || got.Anchor.MessageID != "message-compact" || got.Anchor.Edge != "after" {
+	if got := projection.Decorations[0]; got.DecorationID != "context-compaction:compact-operation" || got.Anchor.MessageID != "message-before" || got.Anchor.Edge != "after" {
 		t.Fatalf("decoration=%#v", got)
 	}
 }
@@ -373,15 +362,15 @@ func TestFlowerThreadTokenUsageJSONKeepsZeroBuckets(t *testing.T) {
 	}
 }
 
-func TestFlowerThreadContextProjectionFailsClosedWithoutCanonicalAnchor(t *testing.T) {
-	_, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{
+func TestFlowerThreadContextProjectionKeepsEmptyHistoryNoopWithoutInventingAnchor(t *testing.T) {
+	projection, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{
 		Compactions: []flruntime.ThreadContextCompaction{{
 			RunID: "run-context", ThreadID: "thread-context", TurnID: "turn-missing",
 			OperationID: "compact-operation", RequestID: "compact-request",
-			Phase: "noop", Status: "noop", Source: flowerManualCompactionSourceName, ObservedAt: time.Now(),
+			Phase: "noop", Status: "noop", Source: "thread_runtime", ObservedAt: time.Now(),
 		}},
 	}, flruntime.ThreadView{ThreadID: "thread-context"})
-	if err == nil {
-		t.Fatal("missing canonical message anchor must fail closed")
+	if err != nil || len(projection.Compactions) != 1 || len(projection.Decorations) != 0 {
+		t.Fatalf("empty-history projection=%#v err=%v", projection, err)
 	}
 }

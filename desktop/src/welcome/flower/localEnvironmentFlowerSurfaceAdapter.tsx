@@ -40,6 +40,7 @@ import type {
   FlowerRouterDecision,
   FlowerSubmitInputReceipt,
   FlowerTurnLaunchInput,
+  FlowerRuntimeCurrentView,
   FlowerTurnLaunchReceipt,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
@@ -928,6 +929,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       return launchLocalEnvironmentFlowerTurn(bridge, input, resource);
+    },
+    compactThreadContext: async (threadID, input) => {
+      const response = await runtimeJSON<{ current: FlowerRuntimeCurrentView }>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/context/compact`, input);
+      return response.current;
     },
     retryThread: async (threadID) => {
       const tid = trim(threadID);

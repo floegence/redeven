@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
@@ -55,10 +54,11 @@ func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, cur
 		if err != nil {
 			return flowerCanonicalContextProjection{}, err
 		}
-		anchor, err := canonicalCompactionTimelineAnchor(current.Items, canonical.TurnID)
-		if err != nil {
-			return flowerCanonicalContextProjection{}, fmt.Errorf("project Floret compaction %q: %w", canonical.OperationID, err)
+		compactions = append(compactions, projected)
+		if strings.TrimSpace(canonical.AfterItemID) == "" {
+			continue
 		}
+		anchor := FlowerTimelineAnchor{TargetKind: "message", MessageID: canonical.AfterItemID, Edge: "after"}
 		decoration := FlowerTimelineDecoration{
 			DecorationID: "context-compaction:" + strings.TrimSpace(projected.OperationID),
 			Kind:         FlowerTimelineDecorationContextCompaction, Anchor: anchor,
@@ -67,7 +67,6 @@ func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, cur
 		if err := decoration.Validate(); err != nil {
 			return flowerCanonicalContextProjection{}, err
 		}
-		compactions = append(compactions, projected)
 		decorations = append(decorations, decoration)
 	}
 	projection.Compactions = compactions
@@ -86,15 +85,4 @@ func flowerThreadTokenUsageFromFloret(totals *flruntime.ThreadTokenUsageTotals) 
 		InputTokens: totals.InputTokens, OutputTokens: totals.OutputTokens,
 		CacheReadTokens: totals.CacheReadTokens, CacheWriteTokens: totals.CacheWriteTokens,
 	}, nil
-}
-
-func canonicalCompactionTimelineAnchor(items []flruntime.ThreadItem, turnID identity.TurnID) (FlowerTimelineAnchor, error) {
-	for index := len(items) - 1; index >= 0; index-- {
-		item := items[index]
-		if item.Kind != flruntime.ThreadItemUser || item.TurnID != turnID || strings.TrimSpace(item.ID) == "" {
-			continue
-		}
-		return FlowerTimelineAnchor{TargetKind: "message", MessageID: strings.TrimSpace(item.ID), Edge: "after"}, nil
-	}
-	return FlowerTimelineAnchor{}, errors.New("canonical compaction turn has no user message anchor")
 }

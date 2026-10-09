@@ -1411,7 +1411,7 @@ SOFTWARE.
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floe-native-apps | v0.22.32 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.22.32 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.25.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.25.2 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.26.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.26.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.10.5 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.10.5 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.6.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.35 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.35 | Floegence first-party dependency. |
@@ -1618,8 +1618,7 @@ SOFTWARE.
 | @floegence/floe-webapp-boot | 0.81.5 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.81.5 |  |
 | @floegence/floe-webapp-boot | 0.86.10 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.86.10 |  |
 | @floegence/floe-webapp-boot | 0.86.7 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.86.7 |  |
-| @floegence/floe-webapp-core | 0.86.10 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.10 |  |
-| @floegence/floe-webapp-core | 0.86.7 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.7 |  |
+| @floegence/floe-webapp-core | 0.86.10 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.10 |  |
 | @floegence/floe-webapp-protocol | 0.86.10 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.86.10 |  |
 | @floegence/floebrowser | 0.1.27 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.27 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |

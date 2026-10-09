@@ -85,6 +85,9 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	if req.StorageGeneration != s.storageGeneration {
 		return SendUserTurnResponse{}, ErrFlowerStorageRestored
 	}
+	if strings.TrimSpace(req.Input.Text) == "/compact" {
+		return SendUserTurnResponse{}, errors.New("use the dedicated context compaction operation")
+	}
 	if err := validateInlineTurnText(req.Input.Text); err != nil {
 		return SendUserTurnResponse{}, err
 	}

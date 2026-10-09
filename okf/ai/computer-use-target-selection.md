@@ -88,7 +88,7 @@ conversation. Environment setup and permissions follow the
 The migrated product store remains the only selection store. No schema change,
 Agent lifecycle mirror or durable candidate cache is introduced. The existing
 version 6-to-7 selection, 7-to-8 pin ranking and 8-to-9 access migrations remain
-intact. Floret storage is opaque and its published v7.25.2 authorization, results,
+intact. Floret storage is opaque and its published v7.26.0 authorization, results,
 Activity and interaction contracts require no upstream API expansion.
 
 Restart restores selection identity, not helper liveness or control. A lost task

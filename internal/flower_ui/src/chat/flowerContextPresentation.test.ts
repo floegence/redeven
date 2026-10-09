@@ -106,11 +106,11 @@ describe('flower context presentation', () => {
     }), 'Not available')).toBe('Not available');
   });
 
-  it('never substitutes inflated estimates for confirmed usage across requests and reconnect', () => {
+  it('prefers confirmed usage and shows the installed estimate after invalidation', () => {
     const confirmed: FlowerContextSample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 71872, context_window_tokens: 950000 };
     const estimate: FlowerContextSample = { ...confirmed, phase: 'projected_request', input_tokens: 291336, updated_at_ms: 2 };
     const build = (snapshot: FlowerContextUsage) => buildFlowerComposerContextIndicatorView(snapshot, DEFAULT_FLOWER_SURFACE_COPY);
-    expect(build({ estimate }).progressValue).toBeNull();
+    expect(build({ estimate }).progressValue).toBe(31);
     const running = build({ confirmed, estimate });
     expect(running.ratioValue).toBe('8%');
     expect(running.warning).toBe('');
@@ -122,7 +122,7 @@ describe('flower context presentation', () => {
     expect(risk.warning).toBe('At limit');
     // Canonical invalidation clears old measurements on compaction/model changes.
     expect(build({}).progressValue).toBeNull();
-    expect(build({ estimate: { ...estimate, input_tokens: 1000, context_window_tokens: 100000 } }).progressValue).toBeNull();
+    expect(build({ estimate: { ...estimate, input_tokens: 1000, context_window_tokens: 100000 } })).toMatchObject({ progressValue: 1, tone: 'estimated' });
     expect(build({ confirmed: { ...confirmed, input_tokens: 1000, context_window_tokens: 100000 } }).ratioValue).toBe('1%');
   });
 
@@ -172,6 +172,6 @@ describe('flower context presentation', () => {
       status: 'noop',
       reason: 'context_too_small',
       trigger: 'manual',
-    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('context_too_small');
+    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionContextTooSmall);
   });
 });
