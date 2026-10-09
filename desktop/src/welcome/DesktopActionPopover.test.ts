@@ -22,6 +22,8 @@ describe('DesktopActionPopover', () => {
     expect(source).toContain('firstFocusableElement(popoverRef)?.focus();');
     expect(source).toContain('placement="top"');
     expect(overlaySource).toContain('data-placement-lock={props.placementLock}');
+    expect(overlaySource).toContain('maxWidth: `${position()!.maxWidth}px`');
+    expect(overlaySource).toContain("'--redeven-anchored-overlay-max-height': `${position()!.maxHeight}px`");
     expect(source).toContain('allowMainAxisOverflow?: boolean;');
     expect(source).toContain('allowMainAxisOverflow={props.allowMainAxisOverflow ?? true}');
     expect(source).toContain('[data-redeven-action-popover-initial-focus]');

@@ -195,7 +195,10 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
           left: position() ? `${position()!.left}px` : '0px',
           top: position() ? `${position()!.top}px` : '0px',
           visibility: position() ? 'visible' : 'hidden',
-          ...(position()?.maxHeight !== undefined ? { '--redeven-anchored-overlay-max-height': `${position()!.maxHeight}px` } : {}),
+          ...(position()?.maxWidth !== undefined ? { maxWidth: `${position()!.maxWidth}px` } : {}),
+          ...(position()?.maxHeight !== undefined
+            ? { '--redeven-anchored-overlay-max-height': `${position()!.maxHeight}px` }
+            : {}),
         }}
         onMouseEnter={props.onMouseEnter}
         onMouseLeave={props.onMouseLeave}

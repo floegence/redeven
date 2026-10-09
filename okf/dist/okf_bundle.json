@@ -20841,7 +20841,7 @@
         "title": "Desktop Environment registration ownership",
         "type": "Desktop Contract"
       },
-      "body_length": 8146,
+      "body_length": 8707,
       "summary": "Each Environment action surface has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use the member identity held by their Gateway. A linked Runtime and Provider Environment may share one visual relationship card, but every action surface still names the exact owner entry and Renderer display grouping never selects storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
       "sections": [
         {
@@ -20869,8 +20869,8 @@
           "id": "operation-presentation",
           "title": "Operation presentation",
           "level": 1,
-          "body": "Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline. A lifecycle operation started directly owns and completes its Operation. A lifecycle recovery invoked by Open is a child stage: it updates Runtime progress without finishing or scheduling removal of the parent, then explicitly returns ownership to Open. The renderer creates and binds lifecycle disclosure to the exact `operation_key` and `started_at_unix_ms`. Lifecycle timeline selection never chooses an attempt by recency or combines retained and current operations for the same Environment.\n\nThe main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.\n\nEach action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. A non-scrolling parent must not reserve a scrollbar gutter, so the body scrollbar stays against the popup's inner edge instead of being inset. Parent and body scrollbars must never overlap.\n\nSSH Runtime package-delivery choices name the user-visible data path rather than an internal strategy relationship. `desktop_upload` is presented as Desktop upload, while `remote_install` is presented as remote download and install; neither an explicit selector nor an Environment fact calls the latter a fallback. Automatic describes its ordered choice in plain language without changing the persisted strategy contract.\n\nSettings sections, explicit target binding, and committed identity rebinding follow [Desktop environment settings](desktop-environment-settings.md). SSH fields follow [Desktop SSH environment settings](desktop-ssh-environment-settings.md).",
-          "char_count": 2226
+          "body": "Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline. A lifecycle operation started directly owns and completes its Operation. A lifecycle recovery invoked by Open is a child stage: it updates Runtime progress without finishing or scheduling removal of the parent, then explicitly returns ownership to Open. The renderer creates and binds lifecycle disclosure to the exact `operation_key` and `started_at_unix_ms`. Lifecycle timeline selection never chooses an attempt by recency or combines retained and current operations for the same Environment.\n\nThe main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.\n\nEach action popup remains within the visible viewport while staying anchored to its trigger. Top-anchored progress popups stay above the trigger, shift horizontally to retain viewport margins, and use no more than 25rem of height or the available space above the trigger, whichever is smaller. Each action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. A non-scrolling parent must not reserve a scrollbar gutter, so the body scrollbar stays against the popup's inner edge instead of being inset. Parent and body scrollbars must never overlap.\n\nSSH Runtime package-delivery choices name the user-visible data path rather than an internal strategy relationship. `desktop_upload` is presented as Desktop upload, while `remote_install` is presented as remote download and install; neither an explicit selector nor an Environment fact calls the latter a fallback. Automatic describes its ordered choice in plain language without changing the persisted strategy contract.\n\nSettings sections, explicit target binding, and committed identity rebinding follow [Desktop environment settings](desktop-environment-settings.md). SSH fields follow [Desktop SSH environment settings](desktop-ssh-environment-settings.md).",
+          "char_count": 2520
         }
       ],
       "evidence": [
@@ -20927,6 +20927,18 @@
           "source": "redeven:desktop/src/welcome/environmentProgressMeter.ts",
           "line": 1,
           "description": "Snapshot-based progress percentage and elapsed-time projection."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/desktopOverlayPosition.ts:1:viewport-constrained anchored popup placement and available-height calculation.",
+          "source": "redeven:desktop/src/welcome/desktopOverlayPosition.ts",
+          "line": 1,
+          "description": "Viewport-constrained anchored popup placement and available-height calculation."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/DesktopAnchoredOverlaySurface.tsx:1:applies measured viewport bounds to the popup surface.",
+          "source": "redeven:desktop/src/welcome/DesktopAnchoredOverlaySurface.tsx",
+          "line": 1,
+          "description": "Applies measured viewport bounds to the popup surface."
         }
       ],
       "snippet": "Each Environment action surface has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway",
@@ -35340,5 +35352,5 @@
       ]
     }
   ],
-  "source_sha256": "b6bb378b877c05a67545c12523ecca7dc0081dc4ff8927184a32b06f931e7ab6"
+  "source_sha256": "024d0f0422a34d57174cf4147af1e9340627c21df0874247b2073faea4f2cea2"
 }
