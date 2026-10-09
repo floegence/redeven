@@ -3017,7 +3017,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   const reconnectController = createRuntimeReconnectController({
-    enabled: () => runtimeConnectionEstablished() || (desktopTransportRecovery()?.generation ?? 0) > 0,
+    enabled: () => runtimeConnectionEstablished() || (standaloneTessiven && connectionAttemptSeq() > 0)
+      || (desktopTransportRecovery()?.generation ?? 0) > 0,
     desktopTransport: desktopTransportRecovery,
     retryProtocolNow: () => protocol.retryNow(),
     requestDesktopRecoveryNow: requestDesktopTransportRecoveryNow,
@@ -3586,7 +3587,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   createEffect(() => {
-    if (!runtimeConnectionEstablished() || connectionAttemptSeq() <= 0) return;
+    if ((!runtimeConnectionEstablished() && !standaloneTessiven) || connectionAttemptSeq() <= 0) return;
 
     const protocolSnapshot = protocol.snapshot();
     const protocolStatusValue = String(protocolSnapshot.state ?? '').trim();
@@ -5280,15 +5281,23 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     layout.isMobile() && viewMode() === 'activity' && activityPluginWindows().length > 0
   );
 
+  const standaloneTessivenReady = () => runtimeConnectionEstablished() && activityContentAvailable();
   const renderStandaloneTessiven = () => (
     <div
       class="h-full min-h-0"
       data-env-service-canvas-window
-      data-env-service-canvas-ready={activityContentAvailable() ? 'true' : 'false'}
+      data-env-service-canvas-ready={standaloneTessivenReady() ? 'true' : 'false'}
     >
-      <Show when={activityContentAvailable()} fallback={(
-        <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>
-          {renderActivityPageLoading(ENV_TESSIVEN_ACTIVITY_ID)}
+      <Show when={standaloneTessivenReady()} fallback={(
+        <Show when={accessGatePhase() === 'checking' || accessGatePhase() === 'ready'} fallback={accessGatePanel()}>
+          <Show when={recoveryVisible()} fallback={renderActivityPageLoading(ENV_TESSIVEN_ACTIVITY_ID)}>
+            <ConnectionRecoveryView
+              snapshot={recoverySnapshot()}
+              environmentName={envSessionIdentity().displayName}
+              onRetry={() => reconnectController.requestImmediateRetry()}
+              onStop={() => reconnectController.stopRetry()}
+            />
+          </Show>
         </Show>
       )}>
         <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
