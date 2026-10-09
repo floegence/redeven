@@ -104,6 +104,7 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         },
       };
     if (path === '/canvases/commerce') return current;
+    if (path === '/canvases/commerce/flower-thread' && method === 'POST') return current;
     if (path.startsWith('/canvases/commerce/versions/')) {
       const number = path.endsWith('/latest')
         ? current.latest_version

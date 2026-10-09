@@ -3,7 +3,7 @@ type: UI Contract
 title: Tessiven canvas
 description: Render progressively detailed service topology and exact object context.
 tags: [ui, tessiven, graph]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-09T00:00:00Z
 ---
 # Summary
 
@@ -34,6 +34,15 @@ with a landscape aspect ratio. Independent members are arranged as readable
 peers inside their dashed logical group. Relations retain their original
 endpoints and ports; grouping never invents a relationship. Saved world
 positions remain preferred hints, and expansion retains the inspected anchor.
+Published Floe jointly routes packed and positioned relationships orthogonally.
+Free anchors can use the available spans of all four node and dashed-group
+borders, favor nearby facing spans, and separate parallel paths into lanes.
+Routes avoid intervening cards and unrelated group frames. Explicit port sides,
+relationship identities, and canonical endpoints remain unchanged. Dense
+cross-layer topologies can still require crossings; hover and focus isolate
+related routes without hiding relationships from the saved document.
+Positioned objects without relationships still contribute their actual world
+bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
 
 - The library uses one toolbar with search, direct creation, and a secondary
   menu for archived canvases. It has no extra heading, archive tab, or status
