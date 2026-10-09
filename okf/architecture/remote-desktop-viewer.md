@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Remote desktop viewer interaction
 description: Operate the remote desktop toolbar, input modes and ended-session recovery consistently in browsers and Desktop.
 tags: [desktop, viewer, interaction, input]
-timestamp: 2026-10-04T18:10:00Z
+timestamp: 2026-10-09T19:00:00Z
 ---
 # Summary
 
@@ -21,20 +21,27 @@ an explicit retry. It never presents a frozen desktop as a live connection.
 ## Input and clipboard
 
 The published Floe input and pointer controllers own client composition, physical
-keys, pointer gestures and release. Mouse and drag movement coalesces within the
-current JavaScript task and flushes before local paint without another animation-
-frame wait. On browsers exposing `pointerrawupdate`, mouse and pen movement uses
-that event before the browser's frame-aligned `pointermove`; the latter still
-handles button-only chords without duplicating movement. Other browsers and
-touch gestures retain `pointermove`. One published controller owns both paths,
-including generation checks and cancellation. Scroll remains accumulated per frame. Explicit pointer flushes
-preserve ordering before keys or composed text; reset invalidates pending moves. The viewer defaults to the host input method,
-using physical keys from a direct-input client keyboard. Client-composed text is
-sent only after explicitly selecting Paste client text. That operation replaces
-the host text clipboard and uses the published native paste command on both
-platforms. The settings describe this effect and require users to finish or cancel
-host composition before switching. Changing the mode cancels the client's pending
-composition; no text is replayed and no Escape/Enter is guessed on the host.
+keys, pointer gestures and release. Mouse and drag movement retains only the
+latest pending position, bounded to 120 submissions per second. The first idle
+move flushes within its JavaScript task; clicks, keys and release flush pending
+movement immediately in order. Raw pointer and ordinary pointer events share
+that owner, so browser event cadence cannot grow an input queue. Scroll remains
+accumulated per frame. Reset invalidates pending moves.
+
+The viewer defaults to the host input method, sending physical keys from a
+direct-input keyboard. Explicitly choosing Use local input method sends both
+ordinary characters and locally confirmed composition through one ordered text
+path. Physical navigation and shortcuts retain their key semantics; pending
+modifiers never leak into a text paste. Mode changes cancel composition and
+release held keys. Lock-screen input always uses physical mode; unlocking restores
+the chosen mode only after a successor active frame is painted.
+
+Client text is available when either `text_input` or the existing clipboard
+capability is present. DRM service text does not enable clipboard synchronization.
+Its fixed unprivileged selection helper replaces the host text clipboard; the
+root attachment alone validates authority and injects the paste chord. Settings
+explain that mutation and require finishing or canceling host composition before
+switching. No text is replayed and no Escape/Enter is guessed on the host.
 Advertised accessibility insertion does not guarantee Electron text insertion,
 and simultaneous unfinished host/client composition is outside this input path.
 This does not claim arbitrary Unicode can be represented as synthetic key presses.

@@ -52,13 +52,14 @@ function command(method, values = {}, takeover = false) {
   return true;
 }
 function release(target) { if (target === generation && ['active', 'locked'].includes(state)) command('release_input'); }
+function clientTextAvailable() { return !!(capabilities.text_input || capabilities.clipboard); }
 const input = hostApplicationInput.createRemoteInput({
   surface: canvas, label: copy('input'),
   commitText(text, target) {
     pointer.flush();
     if (unlockAuthorized(target)) { notice('unlockPhysicalOnly'); return; }
     if (!active(target)) return;
-    if (textInput !== 'paste') { notice('textInputRequired'); return; }
+    if (textInput !== 'paste' || !clientTextAvailable()) { notice('textInputRequired'); return; }
     if (new TextEncoder().encode(text).length > 16000) { notice('textTooLong'); return; }
     command('input', { input: { kind: 'paste', text } });
   },
@@ -95,6 +96,7 @@ const pointer = hostApplicationPointer.createRemotePointer({
 });
 function revoke() { stats = undefined; refreshStats(); painted = false; lockedFrame = 0; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
+  input.setTextInputMode(state === 'active' && textInput === 'paste' && clientTextAvailable() ? 'text' : 'physical');
   player?.setInteraction(!panel.open && (authorized(generation) || unlockAuthorized(generation)));
   canvas.dataset.mode = session.mode;
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'sound', 'text-input', 'volume']) {
@@ -102,7 +104,7 @@ function updateTransitionControls() {
   }
   if ($('sound')) $('sound').disabled ||= capabilities.audio === false;
   if ($('volume')) $('volume').disabled ||= capabilities.audio === false;
-  if ($('text-input')) $('text-input').disabled ||= capabilities.clipboard === false;
+  if ($('text-input')) $('text-input').disabled ||= !clientTextAvailable();
   $('clipboard').disabled = stopped || state !== 'active' || !painted || capabilities.clipboard === false;
   $('shortcuts').disabled = !authorized(generation);
   $('disconnect').disabled = stopped;
@@ -439,8 +441,9 @@ $('settings').onclick = () => {
   textMode.setAttribute('aria-label', copy('textInput'));
   textMode.setAttribute('aria-describedby', 'text-input-hint');
   textMode.onchange = () => {
-    pointer.reset(); input.bindTarget(null); release(generation);
+    pointer.reset(); input.bindTarget(null);
     textInput = textMode.value; textMode.title = copy(textInput === 'host' ? 'hostInput' : 'pasteInput');
+    updateTransitionControls();
   };
   const textLabel = element('label', copy('textInput')); textLabel.append(textMode);
   const slider = element('input', '', { id: 'volume', type: 'range', min: '0', max: '1', step: '.05', value: String(volume) });

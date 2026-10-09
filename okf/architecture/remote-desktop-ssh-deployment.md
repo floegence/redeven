@@ -81,7 +81,13 @@ DRM export and EGL conversion use separate processes and an inherited private
 descriptor. The exporter retains device authority; conversion runs as the
 Runtime user after dropping Linux capabilities. User homes stay hidden. A fixed
 unprivileged child may wake an already-qualified Mutter output without injecting
-pre-frame input or unlocking the session.
+pre-frame input or unlocking the session. Qualified GNOME active sessions can
+also advertise client text through a fixed, unprivileged selection helper. That
+helper owns only ephemeral text transfer, while the root attachment remains the
+sole keyboard authority. Text support does not imply clipboard synchronization,
+and lock-screen text is always rejected. The service update installs this verified
+helper closure transactionally; older attachment versions require an explicit
+Env App update.
 
 Current qualification covers GNOME/GDM on active physical outputs. Disconnected
 outputs, absent scanout, unsupported GPU layouts and unsupported compositors
