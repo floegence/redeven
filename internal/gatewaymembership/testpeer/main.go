@@ -79,7 +79,16 @@ func run() error {
 	serverDone := make(chan struct{})
 	go func() { defer close(serverDone); _ = server.Serve(listener) }()
 	defer func() { _ = server.Close(); <-serverDone }()
-	invitation, err := store.Invite("admin")
+	delivery, err := store.IssueInvitationCode("admin")
+	if err != nil {
+		return err
+	}
+	// The first administrator-confirmed address is intentionally unavailable;
+	// exercise selecting the reachable second address from the signed delivery.
+	if len(delivery.ShareAddresses) < 2 {
+		return errors.New("membership fixture requires two confirmed addresses")
+	}
+	invitation, err := gm.PreviewInvitation(context.Background(), delivery.ShareAddresses[1], delivery.Code)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { startRuntimePlacementBridgeSession } from '../../src/main/runtimePlacementBridgeSession';
-import { manageRuntimeGateway } from '../../src/main/runtimeControlClient';
+import { manageRuntimeGateway, previewRuntimeGateway } from '../../src/main/runtimeControlClient';
 import { normalizeDesktopLauncherActionRequest } from '../../src/shared/desktopLauncherIPC';
 
 async function run() {
@@ -29,7 +29,11 @@ async function run() {
     const action = normalizeDesktopLauncherActionRequest(request);
     if (action?.kind !== 'manage_runtime_gateway') return { ok: false, code: 'INVALID_MEMBERSHIP_ACTION' };
     try {
-      const result = await manageRuntimeGateway(bridge.runtime_control!, action.operation, action.invitation, action.environment_choice);
+      if (action.operation === 'preview') {
+        const preview = await previewRuntimeGateway(bridge.runtime_control!, { address: action.address, code: action.code, purpose: action.purpose });
+        return { ok: true, gateway_preview: preview };
+      }
+      const result = await manageRuntimeGateway(bridge.runtime_control!, action.operation, action.preview_id, action.environment_choice);
       return { ok: true, gateway_membership: result };
     } catch { return { ok: false, code: 'GATEWAY_JOIN_FAILED' }; }
   });

@@ -40,7 +40,7 @@
     "@floegence/floe-webapp-protocol": "0.86.12",
     "@floegence/floebrowser": "0.1.27",
     "@floegence/floeterm-terminal-web": "0.19.2",
-    "@floegence/flowersec-core": "5.10.5",
+    "@floegence/flowersec-core": "5.11.0",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",
     "@floegence/redevplugin-contracts": "3.0.35",
     "@floegence/redevplugin-ui": "3.0.35",
@@ -67,7 +67,7 @@
     "thinking-orbs": "0.3.1"
   },
   "overrides": {
-    "@floegence/flowersec-core": "5.10.5",
+    "@floegence/flowersec-core": "5.11.0",
     "@babel/core": "^7.29.7",
     "brace-expansion": "^5.0.12",
     "seroval": "^1.6.3",
@@ -94,7 +94,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@floegence/flowersec-core": "5.10.5",
+      "@floegence/flowersec-core": "5.11.0",
       "@babel/core": "^7.29.7",
       "brace-expansion": "^5.0.12",
       "seroval": "^1.6.3",

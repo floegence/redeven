@@ -83,10 +83,10 @@ describe('Gateway member management', () => {
     expect(document.querySelector<HTMLSelectElement>('li select')!.value).toBe('allow');
   });
   it('keeps an issued invitation when the following refresh fails', async () => {
-    const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_invitation_created', gateway_invitation: invitationFixture });
+    const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: invitationFixture });
     mount(perform, vi.fn(async () => { throw new Error('unavailable'); })); await settle();
     button(i18n.t('gatewayMembers.createInvitation')).click(); await settle();
-    expect(button(i18n.t('gatewayMembers.download')).disabled).toBe(false);
+    expect(button(i18n.t('gatewayJoin.copyCode')).disabled).toBe(false);
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayMembers.refreshFailed'));
     expect(document.body.textContent).toContain(memberFixture.display_name);
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'invite_gateway_runtime', gateway_id: gateway.gateway_id });
@@ -124,8 +124,8 @@ describe('Gateway member management', () => {
     button(i18n.t('gatewayMembers.createInvitation')).click(); await settle();
     setGateway(undefined); await settle();
     setGateway(gateway); await settle();
-    complete({ ok: true, outcome: 'gateway_invitation_created', gateway_invitation: invitationFixture }); await settle();
-    expect([...document.querySelectorAll('button')].map(controlText)).not.toContain(i18n.t('gatewayMembers.download'));
+    complete({ ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: invitationFixture }); await settle();
+    expect([...document.querySelectorAll('button')].map(controlText)).not.toContain(i18n.t('gatewayJoin.copyCode'));
   });
   it('disables member and Cloud mutations for access-only pairing', async () => {
     const perform = vi.fn();

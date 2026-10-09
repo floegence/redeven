@@ -1,5 +1,5 @@
 import { prepareGatewayMemberPartition, clearGatewayMemberPartition, closeGatewayMemberTransport } from './gatewayMemberPartition';
-import { manageRuntimeGateway } from './runtimeControlClient';
+import { manageRuntimeGateway, previewRuntimeGateway } from './runtimeControlClient';
 import { connectTessivenHost, type TessivenHost } from './tessivenHost';
 import { requestTessivenTarget } from './runtimeControlClient';
 import { isTessivenRuntimePath } from './runtimeTessivenRoutes';
@@ -6051,7 +6051,7 @@ async function manageGatewayMemberFromLauncher(
       return { ...launcherActionSuccess('gateway_members_updated'), gateway_clients: await client.listClients(record) };
     }
     if (request.kind === 'invite_gateway_runtime') {
-      return { ...launcherActionSuccess('gateway_invitation_created'), gateway_invitation: await client.invite(record) };
+      return { ...launcherActionSuccess('gateway_invitation_created'), gateway_invitation_code: await client.invite(record) };
     }
     let results: DesktopLauncherActionSuccess['gateway_member_results'];
 	if (request.kind === 'update_gateway_endpoints') await client.updateEndpoints(record, request.endpoints);
@@ -19432,7 +19432,7 @@ async function runGatewayCloudActionFromLauncher(request: Extract<DesktopLaunche
 }
 
 async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'manage_runtime_gateway' }>): Promise<DesktopLauncherActionResult> {
-  const mutating = request.operation !== 'status';
+  const mutating = request.operation !== 'status' && request.operation !== 'preview';
   if (mutating && explicitCloudLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('cloud_link_failed', 'environment', 'A Cloud connection action is already in progress.');
   if (mutating) {
     explicitCloudLinkTargets.add(request.runtime_target_id);
@@ -19447,11 +19447,16 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
     target = await resolveCloudRuntimeLinkTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
     const endpoint = target?.record.startup.runtime_control;
     if (!target || !endpoint) return launcherActionFailure('runtime_not_started', 'environment', 'Start this Runtime through its trusted management connection first.');
-    const result = await manageRuntimeGateway(endpoint, request.operation, request.invitation, request.environment_choice);
+    if (request.operation === 'preview') {
+      const preview = await previewRuntimeGateway(endpoint, { address: request.address, code: request.code, purpose: request.purpose });
+      if (!providerRuntimeTargetIsCurrent(target)) return { ...launcherActionFailure('cloud_link_failed','environment','The Runtime connection changed. Verify again.'), gateway_error_code: 'GATEWAY_PREVIEW_CHANGED' };
+      return { ...launcherActionSuccess('gateway_membership_updated'), gateway_preview: preview };
+    }
+    const result = await manageRuntimeGateway(endpoint, request.operation, request.preview_id, request.environment_choice);
     if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');
     return { ...launcherActionSuccess('gateway_membership_updated'), gateway_membership: result };
-  } catch {
-    return launcherActionFailure('cloud_link_failed', 'environment', 'Gateway enrollment could not advance. Check the Gateway and retry the saved enrollment.');
+  } catch (error) {
+    return { ...launcherActionFailure('cloud_link_failed', 'environment', 'Gateway enrollment could not advance. Check the Gateway and retry.'), gateway_error_code: error instanceof RuntimeControlError ? error.code : 'GATEWAY_UNREACHABLE' };
   } finally {
     try { await target?.bridge_lease?.release(); }
     finally { if (mutating) explicitCloudLinkTargets.delete(request.runtime_target_id); }

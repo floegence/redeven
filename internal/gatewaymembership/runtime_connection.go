@@ -54,7 +54,7 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 		}
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(ErrDenied)
 	}
-	if r.PendingJoin != nil {
+	if r.PendingJoin != nil || r.PendingEndpointUpdate != nil {
 		if err := r.Enroll(ctx, s.persist); err != nil {
 			return flowersec.ArtifactLease{}, memberSourceError(err)
 		}
@@ -142,7 +142,7 @@ func (s *runtimeSource) renew(ctx context.Context) error {
 	if r == nil || r.MemberID != s.memberID {
 		return ErrDenied
 	}
-	if r.PendingJoin != nil || r.Leaving {
+	if r.PendingJoin != nil || r.PendingEndpointUpdate != nil || r.Leaving {
 		return nil
 	}
 	if r.PendingRotation != nil || time.Until(time.UnixMilli(r.ClientExpiresAtUnixMS)) < 30*24*time.Hour || time.Until(time.UnixMilli(r.Service.ExpiresAtUnixMS)) < 30*24*time.Hour {

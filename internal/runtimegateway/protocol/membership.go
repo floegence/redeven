@@ -46,9 +46,9 @@ type MemberConnectRequest struct {
 	Endpoint        GatewayEndpoint `json:"endpoint"`
 }
 
-// MemberInvitation is a Gateway-admin-authorized one-time capability. It has
-// no Runtime destination, Cloud credential, or Namespace enrollment token.
-type MemberInvitation struct {
+// EnrollmentDescriptor is exchanged only inside the authenticated invitation
+// channel. It never enters Desktop, Cloud command results, or user files.
+type EnrollmentDescriptor struct {
 	ProtocolVersion   string            `json:"protocol_version"`
 	InvitationID      string            `json:"invitation_id"`
 	GatewayID         string            `json:"gateway_id"`
@@ -62,8 +62,8 @@ type MemberInvitation struct {
 	Signature         string            `json:"signature"`
 }
 
-func (MemberInvitation) String() string   { return "Gateway.MemberInvitation" }
-func (MemberInvitation) GoString() string { return "Gateway.MemberInvitation" }
+func (EnrollmentDescriptor) String() string   { return "Gateway.EnrollmentDescriptor" }
+func (EnrollmentDescriptor) GoString() string { return "Gateway.EnrollmentDescriptor" }
 
 // MemberDelegation is signed by the Runtime at local confirmation. The signed
 // Gateway identity scopes future local access and Cloud publication. Cloud
@@ -122,6 +122,28 @@ type MemberJoinResponse struct {
 	DeliveryID            string `json:"delivery_id"`
 	ClientCertificatePEM  string `json:"client_certificate_pem"`
 	ClientExpiresAtUnixMS int64  `json:"client_expires_at_unix_ms"`
+}
+
+type MemberEndpointUpdateRequest struct {
+	ProtocolVersion string `json:"protocol_version"`
+	GatewayID       string `json:"gateway_id"`
+	InvitationID    string `json:"invitation_id"`
+	Token           string `json:"token"`
+	MemberID        string `json:"member_id"`
+	MemberVersion   int64  `json:"member_version"`
+	DeliveryID      string `json:"delivery_id"`
+	Signature       string `json:"signature"`
+}
+
+func (MemberEndpointUpdateRequest) String() string   { return "Gateway.MemberEndpointUpdateRequest" }
+func (MemberEndpointUpdateRequest) GoString() string { return "Gateway.MemberEndpointUpdateRequest" }
+
+type MemberEndpointUpdateResponse struct {
+	ProtocolVersion string `json:"protocol_version"`
+	GatewayID       string `json:"gateway_id"`
+	MemberID        string `json:"member_id"`
+	MemberVersion   int64  `json:"member_version"`
+	DeliveryID      string `json:"delivery_id"`
 }
 
 type MemberRotateRequest struct {

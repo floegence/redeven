@@ -32,22 +32,23 @@ type RuntimeConfig struct {
 	GatewayEndpoints []gp.GatewayEndpoint `json:"gateway_endpoints,omitempty"`
 	LastEndpointID   string               `json:"last_endpoint_id,omitempty"`
 	// GatewayURL is read only during one-time v4 state migration.
-	GatewayURL            string                `json:"gateway_url,omitempty"`
-	GatewayPublicKey      string                `json:"gateway_public_key"`
-	GatewayTLSRootPEM     string                `json:"gateway_tls_root_pem"`
-	MemberID              string                `json:"member_id"`
-	MemberVersion         int64                 `json:"member_version"`
-	RuntimePublicID       string                `json:"runtime_public_id"`
-	PrivateKeyB64u        string                `json:"private_key_b64u"`
-	ClientPrivateKeyPEM   string                `json:"client_private_key_pem"`
-	ClientCertificatePEM  string                `json:"client_certificate_pem"`
-	ClientExpiresAtUnixMS int64                 `json:"client_expires_at_unix_ms"`
-	Service               gp.MemberService      `json:"service"`
-	ServicePrivateKeyPEM  string                `json:"service_private_key_pem"`
-	Delegation            gp.MemberDelegation   `json:"delegation"`
-	PendingJoin           *gp.MemberJoinRequest `json:"pending_join,omitempty"`
-	PendingRotation       *RuntimeRotation      `json:"pending_rotation,omitempty"`
-	LastSpentChannelID    string                `json:"last_spent_channel_id,omitempty"`
+	GatewayURL            string                          `json:"gateway_url,omitempty"`
+	GatewayPublicKey      string                          `json:"gateway_public_key"`
+	GatewayTLSRootPEM     string                          `json:"gateway_tls_root_pem"`
+	MemberID              string                          `json:"member_id"`
+	MemberVersion         int64                           `json:"member_version"`
+	RuntimePublicID       string                          `json:"runtime_public_id"`
+	PrivateKeyB64u        string                          `json:"private_key_b64u"`
+	ClientPrivateKeyPEM   string                          `json:"client_private_key_pem"`
+	ClientCertificatePEM  string                          `json:"client_certificate_pem"`
+	ClientExpiresAtUnixMS int64                           `json:"client_expires_at_unix_ms"`
+	Service               gp.MemberService                `json:"service"`
+	ServicePrivateKeyPEM  string                          `json:"service_private_key_pem"`
+	Delegation            gp.MemberDelegation             `json:"delegation"`
+	PendingJoin           *gp.MemberJoinRequest           `json:"pending_join,omitempty"`
+	PendingEndpointUpdate *gp.MemberEndpointUpdateRequest `json:"pending_endpoint_update,omitempty"`
+	PendingRotation       *RuntimeRotation                `json:"pending_rotation,omitempty"`
+	LastSpentChannelID    string                          `json:"last_spent_channel_id,omitempty"`
 }
 
 type RuntimeRotation struct {
@@ -75,6 +76,10 @@ func (r *RuntimeConfig) Clone() *RuntimeConfig {
 		copy := *r.PendingRotation
 		next.PendingRotation = &copy
 	}
+	if r.PendingEndpointUpdate != nil {
+		copy := *r.PendingEndpointUpdate
+		next.PendingEndpointUpdate = &copy
+	}
 	return &next
 }
 
@@ -93,8 +98,8 @@ func newClientCSR() (string, string, error) {
 
 // PrepareRuntime is invoked only after trusted local confirmation. Persist the
 // returned state before Enroll so retries retain the same key and delivery ID.
-func PrepareRuntime(invitation gp.MemberInvitation, runtimeID string, metadata gp.MemberMetadata) (*RuntimeConfig, error) {
-	if err := VerifyInvitation(invitation, time.Now()); err != nil {
+func PrepareRuntime(invitation gp.EnrollmentDescriptor, runtimeID string, metadata gp.MemberMetadata) (*RuntimeConfig, error) {
+	if err := VerifyEnrollmentDescriptor(invitation, time.Now()); err != nil {
 		return nil, err
 	}
 	if !validID(runtimeID) {
@@ -340,6 +345,9 @@ func (r *RuntimeConfig) requestEndpoint(ctx context.Context, endpoint gp.Gateway
 func (r *RuntimeConfig) Enroll(ctx context.Context, persist func(*RuntimeConfig) error) error {
 	if r == nil || persist == nil {
 		return ErrState
+	}
+	if r.PendingEndpointUpdate != nil {
+		return r.DeliverPendingEndpointUpdate(ctx, persist)
 	}
 	if r.PendingJoin == nil {
 		_, err := r.TLSConfig(true)

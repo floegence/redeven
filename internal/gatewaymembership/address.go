@@ -1,8 +1,15 @@
 package gatewaymembership
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/json"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -70,10 +77,10 @@ func endpointsEqual(left, right []gp.GatewayEndpoint) bool {
 	return true
 }
 
-// PrepareConnectionEndpoints consumes only the signed endpoint descriptor from
-// a fresh invitation. It does not redeem the invitation or create a membership.
-func (r *RuntimeConfig) PrepareConnectionEndpoints(invitation gp.MemberInvitation) (*RuntimeConfig, error) {
-	if r == nil || r.Leaving || r.PendingJoin != nil || r.PendingRotation != nil || VerifyInvitation(invitation, time.Now()) != nil {
+// PrepareConnectionEndpoints preserves member identity and durably stages one
+// signed redemption. Enroll completes that same delivery after response loss.
+func (r *RuntimeConfig) PrepareConnectionEndpoints(invitation gp.EnrollmentDescriptor) (*RuntimeConfig, error) {
+	if r == nil || r.Leaving || r.PendingJoin != nil || r.PendingRotation != nil || r.PendingEndpointUpdate != nil || VerifyEnrollmentDescriptor(invitation, time.Now()) != nil {
 		return nil, ErrState
 	}
 	if invitation.GatewayID != r.GatewayID || invitation.GatewayPublicKey != r.GatewayPublicKey || invitation.GatewayTLSRootPEM != r.GatewayTLSRootPEM {
@@ -85,5 +92,82 @@ func (r *RuntimeConfig) PrepareConnectionEndpoints(invitation gp.MemberInvitatio
 	next := r.Clone()
 	next.GatewayEndpoints = append([]gp.GatewayEndpoint(nil), invitation.Endpoints...)
 	next.LastEndpointID = ""
+	// The invitation is single-use, so its endpoint redemption identity is
+	// stable across a lost response or a local persistence failure. Gateway
+	// returns the exact committed receipt for this request instead of treating
+	// a retry as a second endpoint update.
+	digest := sha256.Sum256([]byte("redeven.gateway.endpoint-delivery.v1\x00" + invitation.InvitationID + "\x00" + r.MemberID + "\x00" + strconv.FormatInt(r.MemberVersion, 10)))
+	delivery := "delivery_" + hex.EncodeToString(digest[:])[:48]
+	request := gp.MemberEndpointUpdateRequest{ProtocolVersion: gp.Version, GatewayID: r.GatewayID, InvitationID: invitation.InvitationID, Token: invitation.Token, MemberID: r.MemberID, MemberVersion: r.MemberVersion, DeliveryID: delivery}
+	key, err := decodeKey(r.PrivateKeyB64u, ed25519.PrivateKeySize)
+	if err != nil {
+		return nil, err
+	}
+	request.Signature, err = signValue("redeven.gateway.member-endpoints.v1", request, ed25519.PrivateKey(key))
+	if err != nil {
+		return nil, err
+	}
+	next.PendingEndpointUpdate = &request
 	return next, nil
+}
+
+func (s *Store) RedeemEndpointUpdate(leaf *x509.Certificate, request gp.MemberEndpointUpdateRequest) (gp.MemberEndpointUpdateResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	member, err := s.authenticateLocked(leaf)
+	if err != nil {
+		return gp.MemberEndpointUpdateResponse{}, err
+	}
+	if request.ProtocolVersion != gp.Version || request.GatewayID != s.identity.ID || request.MemberID != member.Member.MemberID || request.MemberVersion != member.Member.MemberVersion || !validID(request.DeliveryID) {
+		return gp.MemberEndpointUpdateResponse{}, ErrDenied
+	}
+	signature := request.Signature
+	request.Signature = ""
+	if err := verifyValue("redeven.gateway.member-endpoints.v1", request, member.Delegation.PublicKeyB64u, signature); err != nil {
+		return gp.MemberEndpointUpdateResponse{}, err
+	}
+	raw, _ := json.Marshal(request)
+	hash := digest(raw)
+	record, ok := s.state.Invitations[request.InvitationID]
+	if !ok || record.Canceled || record.Response != nil || record.TokenSHA256 != digest([]byte(request.Token)) {
+		return gp.MemberEndpointUpdateResponse{}, ErrDenied
+	}
+	if receipt := record.EndpointReceipt; receipt != nil {
+		if record.RequestSHA256 != hash || receipt.MemberID != request.MemberID || receipt.MemberVersion != request.MemberVersion {
+			return gp.MemberEndpointUpdateResponse{}, ErrDenied
+		}
+		return *receipt, nil
+	}
+	if record.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+		return gp.MemberEndpointUpdateResponse{}, ErrInvitationExpired
+	}
+	response := gp.MemberEndpointUpdateResponse{ProtocolVersion: gp.Version, GatewayID: s.identity.ID, MemberID: request.MemberID, MemberVersion: request.MemberVersion, DeliveryID: request.DeliveryID}
+	record.EndpointReceipt, record.RequestSHA256, record.DeliveryID = &response, hash, request.DeliveryID
+	next := s.clone()
+	next.Invitations[request.InvitationID] = record
+	if err := s.commit(next); err != nil {
+		return gp.MemberEndpointUpdateResponse{}, err
+	}
+	return response, nil
+}
+
+func (r *RuntimeConfig) DeliverPendingEndpointUpdate(ctx context.Context, persist func(*RuntimeConfig) error) error {
+	if r == nil || r.PendingEndpointUpdate == nil || persist == nil {
+		return ErrState
+	}
+	request := r.PendingEndpointUpdate
+	var response gp.MemberEndpointUpdateResponse
+	if err := r.Request(ctx, "/v5/member/update-endpoints", request, &response, true); err != nil {
+		return err
+	}
+	if response.ProtocolVersion != gp.Version || response.GatewayID != r.GatewayID || response.MemberID != r.MemberID || response.MemberVersion != r.MemberVersion || response.DeliveryID != request.DeliveryID {
+		return ErrInvalidProof
+	}
+	next := r.Clone()
+	next.PendingEndpointUpdate = nil
+	if err := persist(next); err != nil {
+		return err
+	}
+	*r = *next
+	return nil
 }

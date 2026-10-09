@@ -389,9 +389,9 @@
         }
       }
     },
-    "/gateway/v5/invitations": {
+    "/gateway/v5/invitation-codes": {
       "post": {
-        "operationId": "gateway_v5_invitations",
+        "operationId": "gateway_v5_invitation_codes",
         "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
         "security": [
           {
@@ -424,7 +424,7 @@
                       "const": true
                     },
                     "data": {
-                      "$ref": "#/components/schemas/MemberInvitation"
+                      "$ref": "#/components/schemas/InvitationCodeDelivery"
                     }
                   }
                 }
@@ -1305,6 +1305,21 @@
         },
         "summary": "Host administrator: clients/revoke"
       }
+    },
+    "/v5/member/invitation-exchange": {
+      "get": {
+        "operationId": "member_invitation_exchange",
+        "description": "Fixed WSS enrollment route. The invitation code is exchanged only over the authenticated enrollment channel.",
+        "responses": { "101": { "description": "WebSocket invitation exchange" } }
+      }
+    },
+    "/v5/member/update-endpoints": {
+      "post": {
+        "operationId": "member_update_endpoints",
+        "security": [{ "MemberTLS": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MemberEndpointUpdateRequest" } } } },
+        "responses": { "200": { "description": "Endpoint update", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MemberEndpointUpdateResponse" } } } } }
+      }
     }
   },
   "components": {
@@ -1931,7 +1946,7 @@
           "proof"
         ]
       },
-      "MemberInvitation": {
+      "InvitationCodeDelivery": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -1950,22 +1965,22 @@
             "minLength": 1,
             "maxLength": 256
           },
-          "endpoints": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 16,
-            "items": {
-              "$ref": "#/components/schemas/GatewayEndpoint"
-            }
-          },
           "gateway_public_key": {
             "type": "string"
           },
-          "gateway_tls_root_pem": {
-            "type": "string"
+          "share_address": {
+            "type": "string",
+            "format": "uri"
           },
-          "token": {
-            "type": "string"
+          "share_addresses": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": { "type": "string", "format": "uri" }
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
           },
           "issued_at_unix_ms": {
             "type": "integer",
@@ -1984,14 +1999,59 @@
           "invitation_id",
           "gateway_id",
           "gateway_name",
-          "endpoints",
           "gateway_public_key",
-          "gateway_tls_root_pem",
-          "token",
+          "share_address",
+          "share_addresses",
+          "code",
           "issued_at_unix_ms",
           "expires_at_unix_ms",
           "signature"
         ]
+      },
+      "EnrollmentDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
+          "invitation_id": { "type": "string" },
+          "gateway_id": { "type": "string" },
+          "gateway_name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "endpoints": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/components/schemas/GatewayEndpoint" } },
+          "gateway_public_key": { "type": "string" },
+          "gateway_tls_root_pem": { "type": "string" },
+          "token": { "type": "string" },
+          "issued_at_unix_ms": { "type": "integer", "format": "int64" },
+          "expires_at_unix_ms": { "type": "integer", "format": "int64" },
+          "signature": { "type": "string" }
+        },
+        "required": ["protocol_version", "invitation_id", "gateway_id", "gateway_name", "endpoints", "gateway_public_key", "gateway_tls_root_pem", "token", "issued_at_unix_ms", "expires_at_unix_ms", "signature"]
+      },
+      "MemberEndpointUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
+          "gateway_id": { "type": "string" },
+          "invitation_id": { "type": "string" },
+          "token": { "type": "string" },
+          "member_id": { "type": "string" },
+          "member_version": { "type": "integer", "format": "int64" },
+          "delivery_id": { "type": "string" },
+          "signature": { "type": "string" }
+        },
+        "required": ["protocol_version", "gateway_id", "invitation_id", "token", "member_id", "member_version", "delivery_id", "signature"]
+      },
+      "MemberEndpointUpdateResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version": { "type": "string", "const": "redeven-gateway-v5" },
+          "gateway_id": { "type": "string" },
+          "member_id": { "type": "string" },
+          "member_version": { "type": "integer", "format": "int64" },
+          "delivery_id": { "type": "string" }
+        },
+        "required": ["protocol_version", "gateway_id", "member_id", "member_version", "delivery_id"]
       },
       "MemberDelegation": {
         "type": "object",

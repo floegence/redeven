@@ -20,6 +20,7 @@ type Listener struct {
 	mu             sync.Mutex
 	admissions     map[string]Admission
 	acceptor       *flowersec.Acceptor
+	exchange       http.Handler
 	desktopAllowed func(string) bool
 	clients        map[string]map[string]context.CancelFunc
 }
@@ -43,6 +44,10 @@ func NewListener(store *Store, connections *Connections, desktopAllowed func(str
 		Release:   func(_ context.Context, channelID string) { l.mu.Lock(); delete(l.admissions, channelID); l.mu.Unlock() },
 		OnSession: l.serveSession,
 	})
+	if err != nil {
+		return nil, err
+	}
+	l.exchange, err = store.InvitationExchangeHandler()
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +81,7 @@ func (l *Listener) Server(tlsConfig *tls.Config, egress http.Handler) (*flowerse
 func (l *Listener) applicationHandler(egress http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	l.store.RegisterMemberHandlers(mux)
+	mux.Handle("GET "+InvitationExchangePath, l.exchange)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodConnect || r.URL.Path == "/v5/member/cloud" || r.URL.Path == "/v5/member/cloud-closure" {
 			if egress == nil {

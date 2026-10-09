@@ -23,9 +23,10 @@ const environment = { id: 'created', label: 'Created Runtime' } as DesktopEnviro
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-it('starts the selected Runtime, imports an administrator invitation, then requires local consent', async () => {
+it('starts the selected Runtime, verifies an administrator code, then requires local consent', async () => {
   const perform = vi.fn().mockResolvedValueOnce({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } })
-    .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: true, phase: 'joining' } });
+    .mockResolvedValueOnce({ ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'gateway', gateway_name: invitationFixture.gateway_name, target_runtime_id: 'runtime', expires_at_unix_ms: invitationFixture.expires_at_unix_ms } })
+ .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: true, phase: 'joining' } });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(environment);
   const start = vi.fn(async () => { setCurrent({ ...environment, provider_runtime_link_target: target }); return true; });
@@ -38,13 +39,14 @@ it('starts the selected Runtime, imports an administrator invitation, then requi
   expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'status' });
   expect([...document.querySelectorAll('button')].some(element => controlText(element) === i18n.t('gatewayMembers.createInvitation'))).toBe(false);
   expect(document.querySelector('select')).toBeNull();
-  const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
-  Object.defineProperty(input, 'files', { value: [{ size: 1000, text: async () => JSON.stringify(invitationFixture) }] });
-  input.dispatchEvent(new Event('change', { bubbles: true })); await settle();
-  expect(document.body.textContent).toContain(i18n.t('gatewayJoin.invitationReady'));
+  const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
+  for (const [index,value] of [invitationFixture.share_address,invitationFixture.code].entries()) { inputs[index]!.value=value; inputs[index]!.dispatchEvent(new Event('input',{bubbles:true})); }
+  button('gatewayJoin.verify').click(); await settle();
+  expect(document.body.textContent).toContain(i18n.t('gatewayJoin.verified'));
   expect(document.body.textContent).not.toContain(invitationFixture.gateway_id);
-  button('gatewayJoin.approve').click(); await settle();
-  expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'join', invitation: invitationFixture });
+  button('gatewayJoin.confirmEnable').click(); await settle();
+  expect(perform.mock.calls[2]?.[0]).toEqual({kind:'manage_runtime_gateway',runtime_target_id:target.id,operation:'join',preview_id:'a'.repeat(43)});
+
 });
 
 it('keeps the saved registration after startup failure and supports cancellation without enrollment', async () => {

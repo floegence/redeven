@@ -115,10 +115,11 @@ try {
   assert.equal((await action({ kind: 'update_gateway_endpoints', gateway_id: id, endpoints })).ok, true);
   const invited = await action({ kind: 'invite_gateway_runtime', gateway_id: id });
   assert.equal(invited.ok, true);
-  assert.equal(invited.gateway_invitation.protocol_version, 'redeven-gateway-v5');
-  assert.equal(invited.gateway_invitation.expires_at_unix_ms - invited.gateway_invitation.issued_at_unix_ms, 600_000);
-  assert.deepEqual(invited.gateway_invitation.endpoints, endpoints);
-  assert.ok(invited.gateway_invitation.gateway_name);
+  assert.equal(invited.gateway_invitation_code.protocol_version, 'redeven-gateway-v5');
+  assert.equal(invited.gateway_invitation_code.expires_at_unix_ms - invited.gateway_invitation_code.issued_at_unix_ms, 600_000);
+  assert.deepEqual(invited.gateway_invitation_code.share_addresses, endpoints.map(endpoint => endpoint.address));
+  assert.match(invited.gateway_invitation_code.code, /^[0-9A-HJKMNP-TV-Z]{26}$/u);
+  assert.ok(invited.gateway_invitation_code.gateway_name);
   assert.equal((await snapshot()).environments.some(item => item.kind === 'gateway_environment'), false, 'Invitation does not manufacture a member');
   const policy = { ...paired.policy, default_cloud_allowed: true };
   assert.equal((await action({ kind: 'update_gateway_policy', gateway_id: id, policy })).ok, true);

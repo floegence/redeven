@@ -1,4 +1,4 @@
-import { GATEWAY_PROTOCOL_VERSION, type GatewayMember, type GatewayMemberInvitation } from '../shared/gatewayMembership';
+import { GATEWAY_PROTOCOL_VERSION, type GatewayMember, type GatewayInvitationCodeDelivery } from '../shared/gatewayMembership';
 import type { GatewayCatalogResponse } from '../main/gatewayClient';
 import type { GatewayRecord } from '../main/gatewayStore';
 
@@ -21,7 +21,7 @@ export const gatewayRecordFixture: GatewayRecord = {
 
 export const invitationFixture = {
   protocol_version: GATEWAY_PROTOCOL_VERSION, gateway_id: 'gateway_fixture', gateway_name: 'Office Gateway', invitation_id: 'invitation_fixture',
-  endpoints: [{ endpoint_id: 'lan', address: 'https://gateway.internal:7443', scope: 'lan', priority: 0 }], gateway_public_key: 'a'.repeat(43),
-  gateway_tls_root_pem: '-----BEGIN CERTIFICATE-----\ntest', token: 'b'.repeat(43), signature: 'c'.repeat(86),
+  share_address: 'https://gateway.internal:7443', share_addresses: ['https://gateway.internal:7443'], gateway_public_key: 'a'.repeat(43),
+  code: '123456789ABCDEFGHJKMNPQRSTV', signature: 'c'.repeat(86),
   issued_at_unix_ms: 1900000000000, expires_at_unix_ms: 1900000600000,
-} satisfies GatewayMemberInvitation;
+} satisfies GatewayInvitationCodeDelivery;

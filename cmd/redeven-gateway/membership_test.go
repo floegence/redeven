@@ -2,17 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven/internal/gatewaymembership"
+	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayservice"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
@@ -27,35 +23,15 @@ func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 	defer server.Close()
 	client := hostAdminClient{endpoint: server.URL, token: token, transport: &http.Transport{Proxy: nil}}
 	defer client.transport.CloseIdleConnections()
-	var invitation gp.MemberInvitation
-	if err := client.request(context.Background(), "/gateway/v5/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation); err != nil {
+	var invitation gc.InvitationCodeDelivery
+	if err := client.request(context.Background(), "/gateway/v5/invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation); err != nil {
 		t.Fatal(err)
 	}
-	if err := gatewaymembership.VerifyInvitation(invitation, time.Now()); err != nil {
+	if err := invitation.Verify(invitation.GatewayID, invitation.GatewayPublicKey, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	file := filepath.Join(t.TempDir(), "invitation.json")
-	if err := writeInvitationFile(file, invitation); err != nil {
-		t.Fatal(err)
-	}
-	before, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var saved gp.MemberInvitation
-	if json.Unmarshal(before, &saved) != nil || !reflect.DeepEqual(saved, invitation) {
-		t.Fatal("invitation delivery changed")
-	}
-	info, err := os.Stat(file)
-	if err != nil || info.Mode().Perm() != 0600 {
-		t.Fatal("invitation is not private")
-	}
-	if err := writeInvitationFile(file, gp.MemberInvitation{}); err == nil {
-		t.Fatal("existing invitation overwritten")
-	}
-	after, _ := os.ReadFile(file)
-	if string(after) != string(before) {
-		t.Fatal("existing invitation changed")
+	if err := client.request(context.Background(), "/gateway/v5/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, nil); err == nil {
+		t.Fatal("retired file endpoint accepted")
 	}
 	var catalog gp.CatalogResponse
 	if err := client.request(context.Background(), "/gateway/v5/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog); err != nil {

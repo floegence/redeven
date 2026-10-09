@@ -25,7 +25,7 @@ func TestHostAdministrationRequiresSeparateCredentialAndLoopback(t *testing.T) {
 		{"IPv6 administrator", "[::1]:21000", token, "", http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/invitations", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
+			request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/invitation-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
 			request.RemoteAddr = tc.remote
 			request.Header.Set(HostAdminHeader, tc.token)
 			request.Header.Set("Origin", tc.origin)

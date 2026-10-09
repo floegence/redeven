@@ -1,18 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"golang.org/x/term"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/floegence/redeven/internal/agent"
@@ -26,7 +29,8 @@ import (
 const gatewayMembershipHelp = `Usage: redeven gateway <join|replace|update-endpoints|status|retry|leave> [flags]
 
   --state-root PATH        Runtime state root
-  --invitation-file PATH  Private invitation file (join, replace, or update-endpoints)
+  --gateway ADDRESS       Administrator-confirmed HTTPS Gateway address
+  --code-stdin --yes       Read the invitation code from stdin and confirm for automation
   --environment-choice preserve|new  Explicit choice for an existing Cloud environment
 
 Joining delegates LAN access and later Cloud publication to this Gateway.
@@ -48,7 +52,9 @@ func (c *cli) gatewayCmd(args []string) int {
 	flags := newCLIFlagSet("gateway " + action)
 	root := flags.String("state-root", "", "Runtime state root")
 	choice := flags.String("environment-choice", "", "Preserve the existing Cloud environment or create a new one")
-	file := flags.String("invitation-file", "", "Private Gateway invitation file")
+	address := flags.String("gateway", "", "Gateway HTTPS address")
+	codeStdin := flags.Bool("code-stdin", false, "Read the invitation code from stdin")
+	yes := flags.Bool("yes", false, "Confirm verified Gateway enrollment")
 	if err := parseCommandFlags(flags, args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeText(c.stdout, gatewayMembershipHelp)
@@ -56,14 +62,16 @@ func (c *cli) gatewayCmd(args []string) int {
 		}
 		return 2
 	}
-	if (action != "join" && action != "replace" && *choice != "") || flags.NArg() != 0 || (action == "join" || action == "replace" || action == "update-endpoints") != (*file != "") {
+	if (action != "join" && action != "replace" && *choice != "") || flags.NArg() != 0 || (action == "join" || action == "replace" || action == "update-endpoints") != (*address != "") || (*codeStdin && !*yes) || ((action != "join" && action != "replace" && action != "update-endpoints") && (*codeStdin || *yes)) {
 		writeText(c.stderr, gatewayMembershipHelp)
 		return 2
 	}
-	var invitation gp.MemberInvitation
-	if action == "join" || action == "replace" || action == "update-endpoints" {
-		if err := readGatewayInvitation(*file, &invitation); err != nil {
-			fmt.Fprintln(c.stderr, "Cannot read a valid, unexpired Gateway invitation.")
+	code := ""
+	if *address != "" {
+		var err error
+		code, err = c.readGatewayCode(*codeStdin)
+		if err != nil {
+			fmt.Fprintln(c.stderr, "Cannot read the invitation code. Use an owner terminal, or --code-stdin --yes for automation.")
 			return 1
 		}
 	}
@@ -71,11 +79,10 @@ func (c *cli) gatewayCmd(args []string) int {
 	if err != nil {
 		return c.printRunStateLayoutGuidance(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	_, err = runtimemanagement.LoadStatus(ctx, layout.RuntimeControlSocketPath, 2*time.Second)
 	if err == nil {
-		return c.gatewayRunningCommand(ctx, layout.RuntimeControlSocketPath, action, invitation, *choice)
+		return c.gatewayRunningCommand(ctx, layout.RuntimeControlSocketPath, action, *address, code, *choice, *yes)
 	}
 	if err := os.MkdirAll(layout.StateDir, 0700); err != nil {
 		fmt.Fprintln(c.stderr, "Cannot open Runtime state.")
@@ -108,6 +115,20 @@ func (c *cli) gatewayCmd(args []string) int {
 		}
 		*cfg = next
 		return nil
+	}
+	var invitation gp.EnrollmentDescriptor
+	if *address != "" {
+		invitation, err = gatewaymembership.PreviewInvitation(ctx, *address, code)
+		code = ""
+		if err != nil {
+			fmt.Fprintln(c.stderr, "Gateway verification failed:", err)
+			return 1
+		}
+		*choice, err = c.confirmGatewayEnrollment(invitation.GatewayName, cfg.LocalEnvironmentPublicID, invitation.ExpiresAtUnixMS, cfg.EnvironmentID, action, *choice, *yes)
+		if err != nil {
+			fmt.Fprintln(c.stderr, err)
+			return 1
+		}
 	}
 	if action == "join" || action == "replace" {
 		hostname, _ := os.Hostname()
@@ -172,61 +193,147 @@ func (c *cli) gatewayCmd(args []string) int {
 	return 0
 }
 
-func readGatewayInvitation(path string, invitation *gp.MemberInvitation) error {
-	file, err := os.Open(path)
+func (c *cli) readGatewayCode(fromStdin bool) (string, error) {
+	if fromStdin {
+		raw, err := io.ReadAll(io.LimitReader(c.stdin, 129))
+		if err != nil || len(raw) > 128 {
+			return "", gatewaymembership.ErrInvitationInvalid
+		}
+		return string(raw), nil
+	}
+	tty, err := openTTYForPasswordPrompt()
+	if err != nil {
+		return "", err
+	}
+	if tty.shouldClose {
+		defer tty.file.Close()
+	}
+	fmt.Fprint(tty.file, "One-time Gateway invitation code: ")
+	raw, err := term.ReadPassword(int(tty.file.Fd()))
+	fmt.Fprintln(tty.file)
+	return string(raw), err
+}
+
+func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, environment, action, choice string, yes bool) (string, error) {
+	fmt.Fprintf(c.stdout, "Gateway: %s\nTarget Runtime: %s\nExpires: %s\n", name, target, time.UnixMilli(expires).Format(time.RFC3339))
+	if action == "update-endpoints" {
+		fmt.Fprintln(c.stdout, "Update this Gateway's endpoints while preserving member identity.")
+	} else {
+		fmt.Fprintln(c.stdout, "Enable Gateway-managed local access and later Cloud publication. Desktop access and Cloud approval remain separate.")
+		if action == "replace" {
+			fmt.Fprintln(c.stdout, "Replace the current Gateway and interrupt its connections.")
+		}
+	}
+	if environment != "" && action != "update-endpoints" {
+		fmt.Fprintf(c.stdout, "Existing Cloud environment: %s\nPreserve keeps its identity and permissions after Cloud approval; new creates a separate environment.\n", environment)
+		if choice == "" && yes {
+			return "", errors.New("choose --environment-choice preserve or new for the existing Cloud environment")
+		}
+	}
+	if yes {
+		return choice, nil
+	}
+	tty, err := openTTYForPasswordPrompt()
+	if err != nil {
+		return "", err
+	}
+	if tty.shouldClose {
+		defer tty.file.Close()
+	}
+	reader := bufio.NewReader(tty.file)
+	if environment != "" && action != "update-endpoints" && choice == "" {
+		fmt.Fprint(tty.file, "Cloud environment [preserve/new]: ")
+		answer, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		choice = strings.TrimSpace(answer)
+		if choice != "preserve" && choice != "new" {
+			return "", errors.New("choose preserve or new explicitly")
+		}
+	}
+	fmt.Fprint(tty.file, "Confirm and enable? [y/N]: ")
+	answer, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	if !strings.EqualFold(strings.TrimSpace(answer), "y") {
+		return "", errors.New("Gateway enrollment canceled")
+	}
+	if expires <= time.Now().UnixMilli() {
+		return "", gatewaymembership.ErrInvitationExpired
+	}
+	return choice, nil
+}
+
+func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, address, code, choice string, yes bool) int {
+	var body any = struct{}{}
+	if address != "" {
+		var preview agent.GatewayPreview
+		if err := gatewayRuntimeRequest(ctx, socketPath, "preview", map[string]string{"address": address, "code": code, "purpose": action}, &preview); err != nil {
+			fmt.Fprintln(c.stderr, "Gateway verification failed:", err)
+			return 1
+		}
+		code = ""
+		var err error
+		choice, err = c.confirmGatewayEnrollment(preview.GatewayName, preview.TargetRuntimeID, preview.ExpiresAtUnixMS, preview.ExistingEnvironmentID, action, choice, yes)
+		if err != nil {
+			fmt.Fprintln(c.stderr, err)
+			return 1
+		}
+		body = struct {
+			PreviewID         string `json:"preview_id"`
+			EnvironmentChoice string `json:"environment_choice,omitempty"`
+		}{preview.PreviewID, choice}
+	}
+	var status agent.GatewayMembershipStatus
+	if err := gatewayRuntimeRequest(ctx, socketPath, action, body, &status); err != nil {
+		fmt.Fprintln(c.stderr, "Gateway operation failed:", err)
+		return 1
+	}
+	_ = json.NewEncoder(c.stdout).Encode(status)
+	return 0
+}
+
+func gatewayRuntimeRequest(ctx context.Context, socketPath, action string, body, output any) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	decoder := json.NewDecoder(io.LimitReader(file, 64<<10))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(invitation) != nil || decoder.Decode(new(any)) != io.EOF {
-		return gatewaymembership.ErrInvalidProof
-	}
-	return gatewaymembership.VerifyInvitation(*invitation, time.Now())
-}
-
-func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath string, action string, invitation gp.MemberInvitation, choice string) int {
-	method, body := http.MethodPost, []byte(`{}`)
+	method := http.MethodPost
 	if action == "status" {
 		method = http.MethodGet
 	}
-	if action == "join" || action == "replace" || action == "update-endpoints" {
-		body, _ = json.Marshal(struct {
-			Invitation        gp.MemberInvitation `json:"invitation"`
-			EnvironmentChoice string              `json:"environment_choice,omitempty"`
-		}{invitation, choice})
-	}
-	request, err := http.NewRequestWithContext(ctx, method, "http://127.0.0.1:1/v2/gateway/"+action, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, method, "http://127.0.0.1:1/v2/gateway/"+action, bytes.NewReader(raw))
 	if err != nil {
-		return 1
+		return err
 	}
 	request.Header.Set("X-Redeven-Runtime-Control-Protocol", "redeven-runtime-control-v2")
 	request.Header.Set("Content-Type", "application/json")
-	dialer := &net.Dialer{Timeout: 5 * time.Second}
 	transport := &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return dialer.DialContext(ctx, "unix", socketPath)
+		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", socketPath)
 	}}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Do(request)
 	if err != nil {
-		fmt.Fprintln(c.stderr, "Runtime management is unavailable.")
-		return 1
+		return errors.New("Runtime management is unavailable")
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		fmt.Fprintf(c.stderr, "Gateway operation failed (HTTP %d).\n", response.StatusCode)
-		return 1
-	}
 	var envelope struct {
-		OK   bool                          `json:"ok"`
-		Data agent.GatewayMembershipStatus `json:"data"`
+		OK    bool            `json:"ok"`
+		Data  json.RawMessage `json:"data"`
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
 	}
-	if json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&envelope) != nil || !envelope.OK {
-		fmt.Fprintln(c.stderr, "Invalid Runtime management response.")
-		return 1
+	if json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&envelope) != nil {
+		return errors.New("invalid Runtime management response")
 	}
-	_ = json.NewEncoder(c.stdout).Encode(envelope.Data)
-	return 0
+	if response.StatusCode != http.StatusOK || !envelope.OK {
+		return errors.New("Runtime rejected the Gateway operation: " + envelope.Error.Code)
+	}
+	return json.Unmarshal(envelope.Data, output)
 }

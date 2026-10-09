@@ -69,7 +69,7 @@ func TestMemberConnectionOffersFencePreviousAttempts(t *testing.T) {
 	}
 }
 
-func TestMemberInvitationsAndOffersRedactDiagnostics(t *testing.T) {
+func TestEnrollmentDescriptorsAndOffersRedactDiagnostics(t *testing.T) {
 	store, _ := membershipStore(t)
 	invitation, err := store.Invite("admin")
 	if err != nil {
@@ -77,7 +77,7 @@ func TestMemberInvitationsAndOffersRedactDiagnostics(t *testing.T) {
 	}
 	changed := invitation
 	changed.ExpiresAtUnixMS += 1
-	if VerifyInvitation(changed, time.Now()) == nil {
+	if VerifyEnrollmentDescriptor(changed, time.Now()) == nil {
 		t.Fatal("modified capability was accepted")
 	}
 	raw, err := json.Marshal(invitation)

@@ -15,13 +15,14 @@ import (
 	"strings"
 	"time"
 
+	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayservice"
 	"github.com/floegence/redeven/internal/gatewaystate"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
 const membershipHelp = `Usage:
-  redeven-gateway invite --output PATH [--state-root PATH]
+  redeven-gateway invite [--state-root PATH]
   redeven-gateway endpoints show [--state-root PATH]
   redeven-gateway endpoints set --file PATH [--state-root PATH]
   redeven-gateway clients access-code [--state-root PATH]
@@ -34,7 +35,7 @@ const membershipHelp = `Usage:
   redeven-gateway policy show [--state-root PATH]
   redeven-gateway policy set [--default-cloud allow|deny] [--publication-mode manual|automatic] [--apply] [--state-root PATH]
 
-Invitations expire after ten minutes and can be used by one Runtime.
+Invitation codes expire after ten minutes and can be used by one Runtime. The command prints the administrator's address and code; it never writes a join file.
 The endpoints file is a JSON array of endpoint_id, address, scope and priority.
 Policy set previews affected members; --apply saves with a version check.
 Automatic publication still requires Namespace authorization in Redeven Cloud.
@@ -50,7 +51,6 @@ func (c *cli) membershipCmd(args []string) int {
 	}
 	flags := newFlagSet(command)
 	root := flags.String("state-root", "", "Gateway state root")
-	output := flags.String("output", "", "Create a private invitation file; use - for stdout")
 	filePath := flags.String("file", "", "JSON file containing administrator-confirmed connection endpoints")
 	clientKeyID := flags.String("client", "", "Client key ID")
 	member := flags.String("member", "", "Member ID")
@@ -70,21 +70,21 @@ func (c *cli) membershipCmd(args []string) int {
 	valid := flags.NArg() == 0 && (command == "endpoints" || *filePath == "") && ((command == "clients" && action == "revoke") || *clientKeyID == "")
 	switch command + "/" + action {
 	case "clients/access-code", "clients/list":
-		valid = valid && *clientKeyID == "" && *member == "" && *output == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
+		valid = valid && *clientKeyID == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
 	case "clients/revoke":
-		valid = valid && *clientKeyID != "" && *member == "" && *output == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
+		valid = valid && *clientKeyID != "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
 	case "endpoints/show", "endpoints/set":
-		valid = valid && *output == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply && ((action == "show" && *filePath == "") || (action == "set" && *filePath != ""))
+		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply && ((action == "show" && *filePath == "") || (action == "set" && *filePath != ""))
 	case "invite/":
-		valid = valid && *output != "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
+		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
 	case "members/list", "policy/show":
-		valid = valid && *output == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
+		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
 	case "members/remove", "members/reevaluate":
-		valid = valid && *member != "" && *version > 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && *output == "" && !*apply
+		valid = valid && *member != "" && *version > 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
 	case "members/policy":
-		valid = valid && *member != "" && *version > 0 && (*cloud == "inherit" || *cloud == "allow" || *cloud == "deny") && *defaultCloud == "" && *mode == "" && *output == "" && !*apply
+		valid = valid && *member != "" && *version > 0 && (*cloud == "inherit" || *cloud == "allow" || *cloud == "deny") && *defaultCloud == "" && *mode == "" && !*apply
 	case "policy/set":
-		valid = valid && (*defaultCloud != "" || *mode != "") && (*defaultCloud == "" || *defaultCloud == "allow" || *defaultCloud == "deny") && (*mode == "" || *mode == "manual" || *mode == "automatic") && *member == "" && *version == 0 && *cloud == "" && *output == ""
+		valid = valid && (*defaultCloud != "" || *mode != "") && (*defaultCloud == "" || *defaultCloud == "allow" || *defaultCloud == "deny") && (*mode == "" || *mode == "manual" || *mode == "automatic") && *member == "" && *version == 0 && *cloud == ""
 	default:
 		valid = false
 	}
@@ -126,16 +126,9 @@ func (c *cli) membershipCmd(args []string) int {
 		err = client.request(ctx, "/gateway/v5/endpoints", gp.EndpointUpdateRequest{ProtocolVersion: gp.Version, Endpoints: endpoints}, &updated)
 		result = updated.Endpoints
 	case "invite/":
-		var invitation gp.MemberInvitation
-		err = client.request(ctx, "/gateway/v5/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation)
-		if err == nil && *output != "-" {
-			err = writeInvitationFile(*output, invitation)
-			if err == nil {
-				fmt.Fprintln(c.stdout, "Invitation saved. Confirm membership on the Runtime before it expires.")
-				return 0
-			}
-		}
-		result = invitation
+		var delivery gc.InvitationCodeDelivery
+		err = client.request(ctx, "/gateway/v5/invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &delivery)
+		result = delivery
 	case "members/remove":
 		err = client.request(ctx, "/gateway/v5/members/remove", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
 	case "members/reevaluate":
@@ -202,19 +195,6 @@ func (c *cli) membershipCmd(args []string) int {
 		}
 	}
 	return 0
-}
-
-func writeInvitationFile(path string, invitation gp.MemberInvitation) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		return errors.New("cannot create private invitation file; choose a new path")
-	}
-	defer file.Close()
-	if err := json.NewEncoder(file).Encode(invitation); err != nil {
-		_ = os.Remove(path)
-		return errors.New("cannot write invitation file")
-	}
-	return file.Sync()
 }
 
 type hostAdminClient struct {

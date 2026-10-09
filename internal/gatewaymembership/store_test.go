@@ -9,12 +9,14 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/gatewaystate"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
@@ -36,7 +38,7 @@ func membershipStore(t *testing.T) (*Store, GatewayIdentity) {
 	return store, id
 }
 
-func memberRequest(t *testing.T, invitation gp.MemberInvitation, runtimeID string) (gp.MemberJoinRequest, ed25519.PrivateKey) {
+func memberRequest(t *testing.T, invitation gp.EnrollmentDescriptor, runtimeID string) (gp.MemberJoinRequest, ed25519.PrivateKey) {
 	t.Helper()
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -75,7 +77,7 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := VerifyInvitation(invitation, time.Now()); err != nil {
+	if err := VerifyEnrollmentDescriptor(invitation, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	request, _ := memberRequest(t, invitation, "runtime_a")
@@ -145,6 +147,71 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 	}
 }
 
+func TestSchemaThreeMigrationRetiresUnconsumedInvitationsPreservingReceipts(t *testing.T) {
+	store, identity := membershipStore(t)
+	consumed, err := store.Invite("admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, _ := memberRequest(t, consumed, "runtime_migration_consumed")
+	response, err := store.Join(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unconsumed, err := store.Invite("admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.mu.Lock()
+	migrated := store.clone()
+	migrated.SchemaVersion = 2
+	if err := gatewaystate.Write(store.path, migrated); err != nil {
+		store.mu.Unlock()
+		t.Fatal(err)
+	}
+	store.mu.Unlock()
+	reopened, err := NewStore(store.path, identity, "", "", store.hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.state.SchemaVersion != 3 {
+		t.Fatalf("schema version = %d, want 3", reopened.state.SchemaVersion)
+	}
+	if got := reopened.state.Invitations[consumed.InvitationID].Response; got == nil || got.MemberID != response.MemberID {
+		t.Fatal("consumed response receipt was not preserved")
+	}
+	retired := reopened.state.Invitations[unconsumed.InvitationID]
+	if !retired.Canceled || retired.Issued != nil {
+		t.Fatalf("unconsumed legacy invitation remained usable: %#v", retired)
+	}
+}
+
+func TestFutureMembershipSchemaIsRejectedWithoutRewrite(t *testing.T) {
+	store, identity := membershipStore(t)
+	store.mu.Lock()
+	future := store.clone()
+	future.SchemaVersion = 4
+	if err := gatewaystate.Write(store.path, future); err != nil {
+		store.mu.Unlock()
+		t.Fatal(err)
+	}
+	store.mu.Unlock()
+	before, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewStore(store.path, identity, "", "", store.hooks); !errors.Is(err, ErrState) {
+		t.Fatalf("future schema accepted: %v", err)
+	}
+	after, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("future schema was rewritten while being rejected")
+	}
+}
+
 func TestCloudInvitationCommandRecoversTheSameDelivery(t *testing.T) {
 	store, identity := membershipStore(t)
 	deadline := time.Now().Add(time.Minute)
@@ -194,7 +261,7 @@ func TestMemberProofDoesNotCrossGatewayIdentityOrServiceOrigin(t *testing.T) {
 	request, key := memberRequest(t, invitation, "runtime_a")
 	changed := invitation
 	changed.Endpoints[0].Address = "https://attacker.invalid"
-	if VerifyInvitation(changed, time.Now()) == nil {
+	if VerifyEnrollmentDescriptor(changed, time.Now()) == nil {
 		t.Fatal("changed invitation endpoint accepted")
 	}
 	if VerifyJoin(request, "another_gateway", time.Now()) == nil {

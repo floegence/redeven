@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/gatewayflow"
 	"github.com/floegence/redeven/internal/gatewaystate"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
@@ -75,16 +76,18 @@ type rotationDelivery struct {
 }
 
 type invitationRecord struct {
-	IssuanceID      string                 `json:"issuance_id,omitempty"`
-	Issued          *gp.MemberInvitation   `json:"issued,omitempty"`
-	Canceled        bool                   `json:"canceled"`
-	TokenSHA256     string                 `json:"token_sha256"`
-	CreatedBy       string                 `json:"created_by"`
-	IssuedAtUnixMS  int64                  `json:"issued_at_unix_ms"`
-	ExpiresAtUnixMS int64                  `json:"expires_at_unix_ms"`
-	DeliveryID      string                 `json:"delivery_id,omitempty"`
-	RequestSHA256   string                 `json:"request_sha256,omitempty"`
-	Response        *gp.MemberJoinResponse `json:"response,omitempty"`
+	CodeLookupID    string                           `json:"code_lookup_id,omitempty"`
+	EndpointReceipt *gp.MemberEndpointUpdateResponse `json:"endpoint_receipt,omitempty"`
+	IssuanceID      string                           `json:"issuance_id,omitempty"`
+	Issued          *gp.EnrollmentDescriptor         `json:"issued,omitempty"`
+	Canceled        bool                             `json:"canceled"`
+	TokenSHA256     string                           `json:"token_sha256"`
+	CreatedBy       string                           `json:"created_by"`
+	IssuedAtUnixMS  int64                            `json:"issued_at_unix_ms"`
+	ExpiresAtUnixMS int64                            `json:"expires_at_unix_ms"`
+	DeliveryID      string                           `json:"delivery_id,omitempty"`
+	RequestSHA256   string                           `json:"request_sha256,omitempty"`
+	Response        *gp.MemberJoinResponse           `json:"response,omitempty"`
 }
 
 type memberState struct {
@@ -130,7 +133,7 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 		if err != nil {
 			return nil, err
 		}
-		s.state = memberState{SchemaVersion: 2, GatewayID: identity.ID, Revision: 1, Endpoint: endpoint, Policy: gp.GatewayPolicy{Revision: 1, PublicationMode: gp.PublicationManual}, Members: map[string]MemberRecord{}, Invitations: map[string]invitationRecord{}, CloudCommands: map[string]cloudCommandDelivery{}, Admissions: map[string]Admission{}}
+		s.state = memberState{SchemaVersion: 3, GatewayID: identity.ID, Revision: 1, Endpoint: endpoint, Policy: gp.GatewayPolicy{Revision: 1, PublicationMode: gp.PublicationManual}, Members: map[string]MemberRecord{}, Invitations: map[string]invitationRecord{}, CloudCommands: map[string]cloudCommandDelivery{}, Admissions: map[string]Admission{}}
 		if confirmedURL != "" {
 			s.state.AdvertisedEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_primary", Address: endpoint.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
 		}
@@ -148,7 +151,20 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 		s.state.SchemaVersion = 2
 		s.state.AdvertisedEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_legacy", Address: s.state.Endpoint.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
 	}
-	if s.state.SchemaVersion != 2 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
+	if s.state.SchemaVersion == 2 {
+		// Retire unconsumed file capabilities, preserving exact successful delivery
+		// receipts so a Runtime with a lost response can still finish enrollment.
+		for id, record := range s.state.Invitations {
+			if record.Response == nil {
+				record.Canceled = true
+				record.Issued = nil
+			}
+			s.state.Invitations[id] = record
+		}
+		s.state.SchemaVersion = 3
+		migrated = true
+	}
+	if s.state.SchemaVersion != 3 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
 		return nil, ErrState
 	}
 	if s.state.CloudCommands == nil {
@@ -394,89 +410,108 @@ func digest(raw []byte) string { sum := sha256.Sum256(raw); return hex.EncodeToS
 
 // Invite requires the caller's member-management authorization. Only the token
 // digest and signed public descriptor are retained in the invitation record.
-func (s *Store) Invite(createdBy string) (gp.MemberInvitation, error) {
+func (s *Store) Invite(createdBy string) (gp.EnrollmentDescriptor, error) {
 	return s.issueInvitation(createdBy, "", time.Time{})
 }
 
 // InviteForCommand recovers one authorized Cloud command's exact delivery.
 // The token is derived from the private Gateway key and never stored as plaintext.
-func (s *Store) InviteForCommand(createdBy, commandID string, expires time.Time) (gp.MemberInvitation, error) {
+func (s *Store) InviteForCommand(createdBy, commandID string, expires time.Time) (gp.EnrollmentDescriptor, error) {
 	if !validID(commandID) || expires.IsZero() {
-		return gp.MemberInvitation{}, ErrState
+		return gp.EnrollmentDescriptor{}, ErrState
 	}
 	return s.issueInvitation(createdBy, commandID, expires)
 }
 
 func (s *Store) invitationToken(id string) string {
 	mac := hmac.New(sha256.New, s.identity.PrivateKey.Seed())
-	_, _ = mac.Write([]byte("redeven.gateway.invitation-token.v5\x00" + id))
+	_, _ = mac.Write([]byte("redeven.gateway.enrollment-token.v1\x00" + id))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func (s *Store) issueInvitation(createdBy, commandID string, deadline time.Time) (gp.MemberInvitation, error) {
+func (s *Store) issueInvitation(createdBy, commandID string, deadline time.Time) (gp.EnrollmentDescriptor, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if createdBy == "" {
-		return gp.MemberInvitation{}, ErrDenied
+		return gp.EnrollmentDescriptor{}, ErrDenied
 	}
 	now := time.Now()
 	id := ""
 	if commandID != "" {
 		id = "invite_" + digest([]byte("redeven.gateway.invitation-command.v5\x00" + commandID))[:48]
 		if record, ok := s.state.Invitations[id]; ok {
-			if record.IssuanceID != commandID || record.CreatedBy != createdBy || record.Canceled || record.Issued == nil || record.ExpiresAtUnixMS <= now.UnixMilli() {
-				return gp.MemberInvitation{}, ErrDenied
+			// A record written before the code-delivery migration is retained only
+			// for historical member recovery. It must never be re-exposed as a
+			// current invitation-code result.
+			if record.CodeLookupID == "" || record.IssuanceID != commandID || record.CreatedBy != createdBy || record.Canceled || record.Issued == nil || record.ExpiresAtUnixMS <= now.UnixMilli() {
+				return gp.EnrollmentDescriptor{}, ErrDenied
 			}
 			invitation := *record.Issued
 			invitation.Token = s.invitationToken(id)
 			if digest([]byte(invitation.Token)) != record.TokenSHA256 {
-				return gp.MemberInvitation{}, ErrState
+				return gp.EnrollmentDescriptor{}, ErrState
 			}
 			return invitation, nil
 		}
 		if !now.Before(deadline) || deadline.After(now.Add(10*time.Minute)) {
-			return gp.MemberInvitation{}, ErrDenied
+			return gp.EnrollmentDescriptor{}, ErrDenied
 		}
 	} else {
 		var err error
 		id, err = randomID("invite_")
 		if err != nil {
-			return gp.MemberInvitation{}, err
+			return gp.EnrollmentDescriptor{}, err
 		}
 	}
 	if err := validateStoredEndpoints(s.state.AdvertisedEndpoints); err != nil {
-		return gp.MemberInvitation{}, ErrDenied
+		return gp.EnrollmentDescriptor{}, ErrDenied
 	}
 	if len(s.state.AdvertisedEndpoints) == 0 {
-		return gp.MemberInvitation{}, ErrDenied
+		return gp.EnrollmentDescriptor{}, ErrDenied
 	}
-	invitation := gp.MemberInvitation{ProtocolVersion: gp.Version, InvitationID: id, GatewayID: s.identity.ID, Endpoints: append([]gp.GatewayEndpoint(nil), s.state.AdvertisedEndpoints...), GatewayPublicKey: base64.RawURLEncoding.EncodeToString(s.identity.PrivateKey.Public().(ed25519.PublicKey)), GatewayTLSRootPEM: s.state.Endpoint.RootPEM, Token: s.invitationToken(id), IssuedAtUnixMS: now.UnixMilli(), ExpiresAtUnixMS: now.Add(10 * time.Minute).UnixMilli()}
+	invitation := gp.EnrollmentDescriptor{ProtocolVersion: gp.Version, InvitationID: id, GatewayID: s.identity.ID, Endpoints: append([]gp.GatewayEndpoint(nil), s.state.AdvertisedEndpoints...), GatewayPublicKey: base64.RawURLEncoding.EncodeToString(s.identity.PrivateKey.Public().(ed25519.PublicKey)), GatewayTLSRootPEM: s.state.Endpoint.RootPEM, Token: s.invitationToken(id), IssuedAtUnixMS: now.UnixMilli(), ExpiresAtUnixMS: now.Add(10 * time.Minute).UnixMilli()}
 	invitation.GatewayName = s.identity.DisplayName
 	if invitation.GatewayName == "" {
 		invitation.GatewayName = "Gateway"
 	}
-	if err := SignInvitation(&invitation, s.identity.PrivateKey); err != nil {
-		return gp.MemberInvitation{}, err
+	if err := SignEnrollmentDescriptor(&invitation, s.identity.PrivateKey); err != nil {
+		return gp.EnrollmentDescriptor{}, err
 	}
 	next := s.clone()
+	if commandID == "" {
+		// Regeneration is an explicit revocation boundary: only the newest
+		// administrator delivery remains redeemable. Consumed receipts stay
+		// durable for response recovery and audit.
+		for key, record := range next.Invitations {
+			if record.Response == nil && record.EndpointReceipt == nil && !record.Canceled {
+				record.Canceled = true
+				record.Issued = nil
+				next.Invitations[key] = record
+			}
+		}
+	}
 	for key, member := range next.Members {
 		if member.Member.State == "removed" && next.CloudNamespaceID == "" {
 			delete(next.Members, key)
 		}
 	}
 	for key, record := range next.Invitations {
-		if (record.Response == nil && record.ExpiresAtUnixMS <= now.UnixMilli()) || (record.Response != nil && (record.Response.ClientExpiresAtUnixMS <= now.UnixMilli() || (record.ExpiresAtUnixMS <= now.UnixMilli() && next.Members[record.Response.MemberID].Member.State != "active"))) {
+		if (record.Response == nil && record.EndpointReceipt == nil && record.ExpiresAtUnixMS+int64(24*time.Hour/time.Millisecond) <= now.UnixMilli()) || (record.Response != nil && (record.Response.ClientExpiresAtUnixMS <= now.UnixMilli() || (record.ExpiresAtUnixMS <= now.UnixMilli() && next.Members[record.Response.MemberID].Member.State != "active"))) {
 			delete(next.Invitations, key)
 		}
 	}
 	if len(next.Invitations) >= gp.MaxMembers*2 {
-		return gp.MemberInvitation{}, ErrCapacity
+		return gp.EnrollmentDescriptor{}, ErrCapacity
 	}
 	descriptor := invitation
 	descriptor.Token = ""
-	next.Invitations[id] = invitationRecord{IssuanceID: commandID, Issued: &descriptor, TokenSHA256: digest([]byte(invitation.Token)), CreatedBy: createdBy, IssuedAtUnixMS: invitation.IssuedAtUnixMS, ExpiresAtUnixMS: invitation.ExpiresAtUnixMS}
+	code, err := flowersec.DeriveInvitationCode(s.identity.PrivateKey.Seed(), id)
+	if err != nil {
+		return gp.EnrollmentDescriptor{}, err
+	}
+	next.Invitations[id] = invitationRecord{CodeLookupID: code.LookupID(), IssuanceID: commandID, Issued: &descriptor, TokenSHA256: digest([]byte(invitation.Token)), CreatedBy: createdBy, IssuedAtUnixMS: invitation.IssuedAtUnixMS, ExpiresAtUnixMS: invitation.ExpiresAtUnixMS}
 	if err := s.commit(next); err != nil {
-		return gp.MemberInvitation{}, err
+		return gp.EnrollmentDescriptor{}, err
 	}
 	return invitation, nil
 }
@@ -491,7 +526,7 @@ func (s *Store) Join(ctx context.Context, request gp.MemberJoinRequest) (_ gp.Me
 	policy := s.state.Policy
 	namespace := s.state.CloudNamespaceID
 	record, ok := s.state.Invitations[request.InvitationID]
-	if !ok || record.Canceled || record.TokenSHA256 != digest([]byte(request.Token)) {
+	if !ok || record.Canceled || record.EndpointReceipt != nil || record.TokenSHA256 != digest([]byte(request.Token)) {
 		s.mu.Unlock()
 		return gp.MemberJoinResponse{}, ErrDenied
 	}
@@ -523,7 +558,7 @@ func (s *Store) Join(ctx context.Context, request gp.MemberJoinRequest) (_ gp.Me
 		return gp.MemberJoinResponse{}, err
 	}
 	record, ok = s.state.Invitations[request.InvitationID]
-	if !ok || record.Canceled || record.TokenSHA256 != digest([]byte(request.Token)) {
+	if !ok || record.Canceled || record.EndpointReceipt != nil || record.TokenSHA256 != digest([]byte(request.Token)) {
 		return gp.MemberJoinResponse{}, ErrDenied
 	}
 	raw, _ := json.Marshal(request)

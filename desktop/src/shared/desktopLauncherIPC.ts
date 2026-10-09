@@ -1,5 +1,5 @@
-import type { GatewayEndpoint, GatewayMember, GatewayClientAccessCode, GatewayAuthorizedClient, GatewayPolicy, GatewayMemberInvitation, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
-import { normalizeGatewayInvitation, type GatewayMembershipStatus, type GatewayMembershipOperation } from './gatewayJoin';
+import type { GatewayEndpoint, GatewayMember, GatewayClientAccessCode, GatewayAuthorizedClient, GatewayPolicy, GatewayInvitationCodeDelivery, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
+import { type GatewayMembershipStatus, type GatewayMembershipOperation, type GatewayEnrollmentPurpose, type GatewayJoinPreview } from './gatewayJoin';
 import { normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from './gatewayCloud';
 import type { EnvironmentAccessRoute } from './environmentAccess';
 import type { DesktopControlPlaneSummary } from './cloud';
@@ -681,7 +681,8 @@ export type DesktopLauncherOperationNextAction = Readonly<
 >;
 
 export type DesktopLauncherActionRequest = Readonly<
-  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: GatewayMembershipOperation; invitation?: GatewayMemberInvitation; environment_choice?: 'preserve' | 'new' }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: 'preview'; address: string; code: string; purpose: GatewayEnrollmentPurpose }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: GatewayMembershipOperation; preview_id?: string; environment_choice?: 'preserve' | 'new' }
   | { kind: 'configure_gateway_cloud'; gateway_id: string; configuration: GatewayCloudConfiguration }
   | { kind: 'inspect_gateway_cloud'; gateway_id: string }
   | {
@@ -911,7 +912,8 @@ export type DesktopLauncherActionRequest = Readonly<
 export type DesktopLauncherActionSuccess = Readonly<{
   gateway_access_code?: GatewayClientAccessCode;
   gateway_clients?: readonly GatewayAuthorizedClient[];
-  gateway_invitation?: GatewayMemberInvitation;
+  gateway_invitation_code?: GatewayInvitationCodeDelivery;
+ gateway_preview?: GatewayJoinPreview;
   gateway_member_results?: readonly GatewayMemberOperationResult[];
   gateway_cloud?: GatewayCloudSummary;
   gateway_membership?: GatewayMembershipStatus;
@@ -959,6 +961,7 @@ export type DesktopReinstallTargetPreview = Readonly<{
 }>;
 
 export type DesktopLauncherActionFailure = Readonly<{
+ gateway_error_code?: string;
   ok: false;
   code: DesktopLauncherActionFailureCode;
   scope: DesktopLauncherActionFailureScope;
@@ -1579,13 +1582,20 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'manage_runtime_gateway': {
       const input = candidate as Record<string, unknown>;
       const runtimeTargetID = compact(input.runtime_target_id), operation = compact(input.operation);
-      const invitation = input.invitation === undefined ? undefined : normalizeGatewayInvitation(input.invitation);
+      if (!/^(local|ssh|wsl):.+$/u.test(runtimeTargetID)) return null;
+      if (operation === 'preview') {
+        if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','purpose','address','code'].includes(key))
+          || !['join','replace','update-endpoints'].includes(String(input.purpose)) || typeof input.address !== 'string' || input.address.length > 512 || typeof input.code !== 'string' || !input.code.trim() || input.code.length > 128) return null;
+        try { const url = new URL(input.address); if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null; } catch { return null; }
+        return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation, address: input.address, code: input.code, purpose: input.purpose as GatewayEnrollmentPurpose };
+      }
+      const confirming = operation === 'join' || operation === 'replace' || operation === 'update-endpoints';
+      if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','preview_id','environment_choice'].includes(key))
+        || !['join','replace','update-endpoints','status','retry','leave'].includes(operation)
+        || (confirming ? typeof input.preview_id !== 'string' || !/^[a-zA-Z0-9_-]{43}$/u.test(input.preview_id) : input.preview_id !== undefined)) return null;
       const choice = input.environment_choice;
       if (choice !== undefined && ((operation !== 'join' && operation !== 'replace') || (choice !== 'preserve' && choice !== 'new'))) return null;
-      if (!/^(local|ssh|wsl):.+$/u.test(runtimeTargetID) || !['join', 'replace', 'update-endpoints', 'status', 'retry', 'leave'].includes(operation)
-        || ((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') ? !invitation : invitation !== undefined)) return null;
-      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID,
-        operation: operation as GatewayMembershipOperation, ...(invitation ? { invitation } : {}), ...(choice ? { environment_choice: choice } : {}) };
+      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation: operation as GatewayMembershipOperation, ...(confirming ? { preview_id: input.preview_id as string } : {}), ...(choice ? { environment_choice: choice } : {}) };
     }
     case 'configure_gateway_cloud': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);

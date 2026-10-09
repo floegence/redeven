@@ -1,5 +1,4 @@
-import type { GatewayMemberInvitation } from '../shared/gatewayMembership';
-import type { GatewayMembershipStatus, GatewayMembershipOperation } from '../shared/gatewayJoin';
+import { normalizeGatewayJoinPreview, type GatewayJoinPreview, type GatewayPreviewInput, type GatewayMembershipStatus, type GatewayMembershipOperation } from '../shared/gatewayJoin';
 import { parseSecurityResult, type SecurityRequest, type SecurityResult } from '../shared/runtimeSecurity';
 import http from 'node:http';
 import https from 'node:https';
@@ -33,6 +32,7 @@ type RuntimeControlEnvelope = Readonly<{
 }>;
 
 type RuntimeControlServiceRoute =
+  | 'v2/gateway/preview'
   | 'v2/gateway/join'
   | 'v2/gateway/replace'
   | 'v2/gateway/update-endpoints'
@@ -309,10 +309,10 @@ export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpo
   return (await requestRuntimeControl(endpoint, 'v2/tessiven/resources', { method: 'POST', body: payload, signal, timeoutMs: 30000 })).data;
 }
 
-export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, invitation?: GatewayMemberInvitation, choice?: 'preserve' | 'new'): Promise<GatewayMembershipStatus> {
-  if ((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') !== Boolean(invitation)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Join requires an invitation.');
+export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, previewID?: string, choice?: 'preserve' | 'new'): Promise<GatewayMembershipStatus> {
+  if ((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') !== Boolean(previewID)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Confirmation requires a verified preview.');
   const result = (await requestRuntimeControl(endpoint, `v2/gateway/${operation}`, {
-    method: operation === 'status' ? 'GET' : 'POST', ...((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') ? { body: { invitation, ...(choice ? { environment_choice: choice } : {}) } } : {}), timeoutMs: 30_000,
+    method: operation === 'status' ? 'GET' : 'POST', ...((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') ? { body: { preview_id: previewID, ...(choice ? { environment_choice: choice } : {}) } } : {}), timeoutMs: 30_000,
   })).data as Record<string, unknown> | undefined;
   if (!result || !['not_joined', 'joining', 'gateway_offline', 'joined', 'reauthorization_required', 'removal_pending', 'cloud_denied', 'cloud_pending', 'cloud_control_offline', 'accessible', 'migration_pending'].includes(String(result.phase))
     || typeof result.joined !== 'boolean') throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE', 'The Runtime did not return Gateway membership status.');
@@ -326,4 +326,11 @@ export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoi
     ...(typeof result.publication_error_code === 'string' ? { publication_error_code: result.publication_error_code } : {}),
     ...(typeof result.rejoin_required === 'boolean' ? { rejoin_required: result.rejoin_required } : {}),
   };
+}
+
+export async function previewRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, input: GatewayPreviewInput): Promise<GatewayJoinPreview> {
+ const result = await requestRuntimeControl(endpoint, 'v2/gateway/preview', { method: 'POST', body: input, timeoutMs: 30_000 });
+ const preview = normalizeGatewayJoinPreview(result.data);
+ if (!preview || preview.purpose !== input.purpose) throw new RuntimeControlError('GATEWAY_PREVIEW_INVALID_RESPONSE', 'The Runtime did not return a valid Gateway preview.');
+ return preview;
 }

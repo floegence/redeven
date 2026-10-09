@@ -8,7 +8,7 @@ import (
 
 // PrepareGatewayJoin records local membership and any explicit ownership choice
 // in one transaction. It never spends or restores the previous Cloud authority.
-func (c *Config) PrepareGatewayJoin(invitation gp.MemberInvitation, metadata gp.MemberMetadata, choice string) (*Config, error) {
+func (c *Config) PrepareGatewayJoin(invitation gp.EnrollmentDescriptor, metadata gp.MemberMetadata, choice string) (*Config, error) {
 	if c == nil || (choice != "" && choice != "preserve" && choice != "new") {
 		return nil, gatewaymembership.ErrState
 	}
@@ -46,8 +46,11 @@ func (c *Config) PrepareGatewayJoin(invitation gp.MemberInvitation, metadata gp.
 
 // PrepareGatewayReplacement selects one new path and retains only removal work
 // for the previous member. A stopped old Gateway cannot force a direct fallback.
-func (c *Config) PrepareGatewayReplacement(invitation gp.MemberInvitation, metadata gp.MemberMetadata, choice string) (*Config, error) {
-	if c == nil || c.Gateway == nil || c.Gateway.Delegation.InvitationID == invitation.InvitationID {
+func (c *Config) PrepareGatewayReplacement(invitation gp.EnrollmentDescriptor, metadata gp.MemberMetadata, choice string) (*Config, error) {
+	if c != nil && c.Gateway != nil && c.Gateway.Delegation.InvitationID == invitation.InvitationID {
+		return c.PrepareGatewayJoin(invitation, metadata, choice)
+	}
+	if c == nil || c.Gateway == nil {
 		return nil, gatewaymembership.ErrConflict
 	}
 	if len(c.GatewayRemovalOutbox) >= 16 {

@@ -7,13 +7,13 @@ timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
-`redeven-gateway` owns one durable member directory, invitations, client access grants, policy and restricted forwarding. Runtime initiates membership and every member connection. Gateway never dials a Runtime address, scans a network, or installs, starts, stops, updates or resets a Runtime. LAN access works without Cloud. Gateway loss interrupts its network paths; independently authorized Runtime management remains separate.
+`redeven-gateway` owns one durable member directory, one-time invitation-code consumption, client access grants, policy and restricted forwarding. Runtime verifies the Gateway address and code, previews the signed enrollment descriptor, then explicitly confirms membership. Gateway never dials a Runtime address, scans a network, or installs, starts, stops, updates or resets a Runtime. LAN access works without Cloud. Gateway loss interrupts its network paths; independently authorized Runtime management remains separate.
 
 # Contract
 
 ## Membership authority
 
-An administrator verified through the Gateway host creates a ten-minute, single-use invitation. A trusted Runtime management channel or local `redeven gateway join --invitation-file <file>` records consent before delivery. The Runtime signs delegation for this exact Gateway to manage LAN access and subsequent Cloud publication. A lost response recovers the original durable delivery; it cannot create another member.
+An administrator verified through the Gateway host creates a ten-minute, single-use invitation code and shares an administrator-confirmed Gateway address. A trusted Runtime management channel or local `redeven gateway join --gateway <address>` verifies the address and code, holds a short-lived read-only preview, and records consent only after explicit confirmation. The Runtime signs delegation for this exact Gateway to manage LAN access and subsequent Cloud publication. A lost response recovers the original durable delivery; it cannot create another member. Regeneration cancels unconsumed older codes.
 
 Each Runtime has one Gateway membership. Startup reconnects the saved Gateway without prompting, switching Gateway, or falling back to a direct address. `replace` requires a fresh invitation and explicit local action. Gateway identity is a persisted machine key independent of its address. Each member has its own key, mTLS client certificate, service certificate and version. Credential rotation requires a currently valid identity; expired or revoked identity requires reauthorization.
 
@@ -37,13 +37,13 @@ Gateway updates prepare the complete package before stopping the existing servic
 
 Gateway listener bindings describe sockets on the device. Reachable connection endpoints describe the addresses a Runtime can use, including DNS names and port-forwarded addresses that differ from those sockets. Administrators explicitly publish up to sixteen addresses; the Gateway keeps any transport classification and failover ordering as internal metadata. Local interfaces are not automatically published, and deleted endpoints do not return after restart. With no confirmed endpoints, invitation creation is disabled.
 
-The invitation signs the Gateway name, stable identity and endpoint set. Runtime keeps the most recently connected endpoint first, then administrator priority; a failed session tries another approved endpoint. If all fail, the membership stays intact and reports Gateway unavailable. Endpoint usage is recorded only after a Runtime session succeeds. A listening socket or configured public address does not prove remote reachability. No Cloud origin or listener binding is embedded in the invitation.
+The signed code delivery contains the Gateway name, stable identity, selected share address and the complete administrator-confirmed address set. Runtime keeps the most recently connected endpoint first, then administrator priority; a failed session tries another approved endpoint. If all fail, the membership stays intact and reports Gateway unavailable. Endpoint usage is recorded only after a Runtime session succeeds. A listening socket or configured public address does not prove remote reachability. No Cloud origin or listener binding is embedded in the delivery.
 
 The host can update its listener and administrator-confirmed Runtime connection endpoints while retaining the Gateway identity and member CA. Runtime `update-endpoints` verifies a fresh invitation from the same pinned key and CA, using only its signed endpoint descriptor. It retains the existing member and Cloud association; a new identity requires `replace`. Desktop registration edits prove the pinned machine key with a fresh signed nonce before saving the new audience.
 
 Existing single-address member state migrates to one endpoint without replacing the Gateway key, Runtime key, member credentials or Cloud binding. Old invitations must be recreated. Legacy Cloud-only enrollment without membership remains non-executable; see [Gateway Cloud access](gateway-cloud-access.md) for environment preservation.
 
-Transport continues to use the published Flowersec implementation. The existing internal trust root covers the configured endpoint hostnames and IP addresses; administrators do not apply for a public certificate or configure TLS roots. Runtime users import an invitation and approve Gateway access. Optional Cloud publishing remains a separate flow.
+Transport continues to use the published Flowersec implementation. The fixed WSS enrollment route uses the restricted invitation-code exchange and enrollment TLS profile; ordinary member connections retain CA and pin checks. Administrators do not apply for a public certificate or configure system trust. Runtime users enter an address and code, verify, and approve Gateway access. Optional Cloud publishing remains a separate flow.
 
 # Boundaries
 

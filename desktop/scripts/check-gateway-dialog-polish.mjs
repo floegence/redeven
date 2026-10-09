@@ -75,16 +75,18 @@ try {
           window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
         }, { snapshot, locale });
         await page.goto(new URL('environment-settings.html', server.resolvedUrls.local[0]).href);
-        await page.evaluate(() => {
+        await page.evaluate(({ gateway }) => {
           window.settingsFixture.actionResult = request => request.kind === 'manage_runtime_gateway'
-            ? { ok: true, outcome: 'runtime_gateway_status', gateway_membership: { joined: false, existing_environment_id: 'env_current' } }
+            ? request.operation === 'preview'
+              ? { ok: true, outcome: 'gateway_previewed', gateway_preview: { preview_id: 'p'.repeat(43), purpose: request.purpose, gateway_id: gateway.gateway_id, gateway_name: gateway.display_name, target_runtime_id: 'local:fixture', expires_at_unix_ms: Date.now() + 300000, existing_environment_id: 'env_current' } }
+              : { ok: true, outcome: 'runtime_gateway_status', gateway_membership: { joined: false, existing_environment_id: 'env_current' } }
             : request.kind === 'inspect_gateway_cloud' ? { ok: true, outcome: 'gateway_cloud_inspected', gateway_cloud: { configured: false, state: 'unconfigured' } }
               : request.kind === 'list_gateway_clients' ? { ok: true, gateway_clients: [
                 { client_key_id: 'client-one', client_name: 'Studio Desktop', paired_at_unix_ms: 1_790_000_000_000, last_verified_at_unix_ms: 1_790_000_010_000, revoked_at_unix_ms: 0 },
               ] }
                 : request.kind === 'issue_gateway_access_code' ? { ok: true, gateway_access_code: { access_code: 'studio-access-42', expires_at_unix_ms: Date.now() + 600_000 } }
                   : undefined;
-        });
+        }, { gateway });
         await page.evaluate(() => document.fonts.ready);
         await page.getByRole('button', { name: i18n.t('environmentCenter.gatewaysSection'), exact: true }).click();
         const card = page.locator(`[data-gateway-id="${gateway.gateway_id}"]`);
@@ -190,24 +192,11 @@ try {
         dialog = page.getByRole('dialog'); await checkDialog(dialog, width);
         assert.equal(await dialog.locator('select').count(), 0, 'Runtime access does not choose a Gateway locally');
         assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).count(), 0, 'Runtime access does not create invitations');
-        await dialog.locator('input[type="file"]').setInputFiles({
-          name: 'gateway-invitation.json',
-          mimeType: 'application/json',
-          buffer: Buffer.from(JSON.stringify({
-            protocol_version: catalogFixture.protocol_version,
-            gateway_id: gateway.gateway_id,
-            gateway_name: gateway.display_name,
-            invitation_id: 'polish-invitation',
-            endpoints: gateway.member_endpoints,
-            gateway_public_key: 'a'.repeat(43),
-            gateway_tls_root_pem: '-----BEGIN CERTIFICATE-----\\ntest',
-            token: 'b'.repeat(43),
-            signature: 'c'.repeat(86),
-            issued_at_unix_ms: Date.now(),
-            expires_at_unix_ms: Date.now() + 600_000,
-          })),
-        });
-        await dialog.getByText(i18n.t('gatewayJoin.invitationReady'), { exact: true }).waitFor();
+        const inputs = dialog.locator('input');
+        await inputs.nth(0).fill('https://gateway-office.example.internal:7443');
+        await inputs.nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
+        await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).click();
+        await dialog.getByText(i18n.t('gatewayJoin.verified'), { exact: true }).waitFor();
         assert.equal(await dialog.isVisible(), true);
         const about = dialog.locator('details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayJoin.aboutConnection') }) }).first();
         await capture(page, `${locale}-${width}-${reducedMotion}-runtime-compact`);
