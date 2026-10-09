@@ -289,9 +289,22 @@
             "cache",
             "search",
             "queue",
+            "scheduler",
+            "controller",
+            "runtime",
+            "network",
+            "dns",
+            "monitoring",
+            "workload",
+            "coordination",
+            "security",
+            "logging",
+            "storage",
+            "analytics",
+            "ai",
             "service"
           ],
-          "description": "Semantic service type."
+          "description": "Primary service responsibility, used for its semantic icon. Choose the most specific matching type; use service only when the responsibility is unknown. scheduler assigns work; controller reconciles desired state; runtime executes containers or processes; network provides connectivity; dns resolves names; monitoring observes health and metrics; workload runs application replicas; coordination provides consensus or cluster membership; security handles identity, secrets or access; logging collects logs; storage serves files, blocks or objects; analytics processes data; ai serves machine-learning models."
         },
         "description": {
           "type": "string",

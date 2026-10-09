@@ -42,6 +42,20 @@ such nodes unbound; an explicitly requested observation may be recorded as
 - Separate logical services from concrete instances. Roles belong to instances;
   shard identity is separate. Groups are visual membership, not runtime entities.
   Databases and caches may be hosted instances or external resources.
+- Choose `services[].kind` by the service's primary responsibility, not its
+  deployment format or product name. Use the most specific schema type:
+  `scheduler` for work placement, `controller` for desired-state reconciliation,
+  `runtime` for container/process execution, `network` for connectivity, `dns`
+  for name resolution, `monitoring` for metrics and health, `workload` for
+  application replicas, `coordination` for consensus and cluster membership,
+  `security` for identity/secrets/access, `logging` for log collection, `storage`
+  for file/block/object serving, `analytics` for data processing, and `ai` for
+  model serving. Keep the existing specific types (`gateway`, `web`, `api`,
+  `worker`, `database`, `cache`, `search`, `queue`) where they fit. Use `service`
+  only when no specific responsibility is known. A background job processor is
+  a `worker`; an executor that runs it is a `runtime`. For requested diagram
+  refinements, replace generic kinds when the available evidence establishes a
+  more specific responsibility, preserving IDs, instances and relationships.
 - Keep each physical node and service instance unique. Put a shared node ID in
   every logical group's `nodeRefs` where it participates; use `instanceRefs`
   for the exact instances belonging to each project or cluster. Each host view
