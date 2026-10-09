@@ -56,6 +56,56 @@ func TestPresentationPositionHints(t *testing.T) {
 	if roundTrip := Validate(encoded); !roundTrip.Valid || roundTrip.Document.Presentation.Positions[1].X != 0 {
 		t.Fatalf("hints changed: %+v", roundTrip)
 	}
+	unplaced := strings.Replace(exampleDocument,
+		"services:\n  - {id: orders, name: Orders API, kind: api}",
+		"services:\n  - {id: orders, name: Orders API, kind: api}\n  - {id: catalog, name: Catalog API, kind: api}", 1)
+	unplaced += "presentation:\n  positions:\n    - {objectRef: catalog, x: 20, y: 40}\n"
+	if result := Validate(unplaced); !result.Valid {
+		t.Fatalf("unplaced services must accept preferred positions: %+v", result.Diagnostics)
+	}
+}
+
+func TestPresentationLayers(t *testing.T) {
+	valid := strings.Replace(exampleDocument, "evidence:\n", "presentation:\n  direction: RIGHT\n  layers:\n    - [application]\n    - [assets]\nevidence:\n", 1)
+	result := Validate(valid)
+	if !result.Valid || result.Document.Presentation.Direction != "RIGHT" || len(result.Document.Presentation.Layers) != 2 {
+		t.Fatalf("valid root layers rejected: %+v", result.Diagnostics)
+	}
+	encoded, err := documentYAML(result.Document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roundTrip := Validate(encoded); !roundTrip.Valid || roundTrip.Document.Presentation.Layers[1][0] != "assets" {
+		t.Fatalf("layers changed on round trip: %+v", roundTrip.Diagnostics)
+	}
+	for _, tc := range []struct {
+		name        string
+		replacement string
+		path        string
+	}{
+		{"invalid direction", "direction: sideways", "/presentation/direction"},
+		{"empty layers list", "layers: []", "/presentation/layers"},
+		{"empty layer", "layers:\n    - []", "/presentation/layers/0"},
+		{"unknown object", "layers:\n    - [missing]", "/presentation/layers/0/0"},
+		{"object repeated across layers", "layers:\n    - [application]\n    - [application]", "/presentation/layers/1/0"},
+		{"grouped node", "layers:\n    - [core-01]", "/presentation/layers/0/0"},
+		{"placed service", "layers:\n    - [orders]", "/presentation/layers/0/0"},
+		{"instance", "layers:\n    - [orders-01]", "/presentation/layers/0/0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			source := strings.Replace(exampleDocument, "evidence:\n", "presentation:\n  "+tc.replacement+"\nevidence:\n", 1)
+			invalid := Validate(source)
+			if invalid.Valid {
+				t.Fatal("invalid layout layer accepted")
+			}
+			for _, diagnostic := range invalid.Diagnostics {
+				if diagnostic.Path == tc.path {
+					return
+				}
+			}
+			t.Fatalf("missing diagnostic %s: %+v", tc.path, invalid.Diagnostics)
+		})
+	}
 }
 
 const exampleDocument = `apiVersion: redeven.io/tessiven/v1

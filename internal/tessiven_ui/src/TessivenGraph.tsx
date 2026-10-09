@@ -22,7 +22,7 @@ import {
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { ArrowRight, ChevronDown, Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
 import '@floegence/floe-webapp-core/graph.css';
-import { projectCanvas, projectPositions } from './projection';
+import { projectCanvas, projectLayoutLayers, projectPositions } from './projection';
 import { TessivenIcon } from './TessivenIcon';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import type {
@@ -85,6 +85,7 @@ export function TessivenGraph(props: {
   const engine = createGraphLayoutEngine();
   let generation = 0,
     initialized = !!props.browseState;
+  let previousExpanded = new Set(expanded());
   let host: HTMLDivElement | undefined;
   onCleanup(() => engine.dispose());
   onCleanup(() => {
@@ -161,6 +162,11 @@ export function TessivenGraph(props: {
   };
   createEffect(() => {
     const projected = projection();
+    const currentExpanded = expanded();
+    const compact =
+      currentExpanded.size !== previousExpanded.size ||
+      [...currentExpanded].some(id => !previousExpanded.has(id));
+    previousExpanded = new Set(currentExpanded);
     const expandedGroupRelationRows = [...projected.internalRelations.entries()]
       .filter(([id]) => {
         const card = projected.cards.get(id);
@@ -183,17 +189,26 @@ export function TessivenGraph(props: {
       }),
     };
     const id = ++generation;
-    const anchor = untrack(() =>
-      layout().nodes.find((node) => node.id === selected()?.id),
-    );
+    const anchor = untrack(() => {
+      const previous = layout().nodes;
+      const selectedNode = previous.find(node => node.id === selected()?.id);
+      const selectedVisible = projected.graph.nodes.some(node => node.id === selectedNode?.id);
+      const target = selectedVisible
+        ? selectedNode
+        : selectedNode?.parentId
+          ? previous.find(node => node.id === selectedNode.parentId)
+          : undefined;
+      return target && projected.graph.nodes.some(node => node.id === target.id) ? target : undefined;
+    });
     void engine
       .layout(input, {
-        direction: 'RIGHT',
+        direction: props.version.document.presentation?.direction ?? 'RIGHT',
+        layers: projectLayoutLayers(props.version.document, projected),
         aspectRatio: 1.6,
         spacing: 32,
         groupPadding: { top: 108 + groupRelationPadding, right: 20, bottom: 20, left: 20 },
         positions: positions(),
-        positionMode: 'preferred',
+        positionMode: compact ? 'compact' : 'preferred',
         anchor: anchor
           ? { nodeId: anchor.id, position: { x: anchor.x, y: anchor.y } }
           : undefined,

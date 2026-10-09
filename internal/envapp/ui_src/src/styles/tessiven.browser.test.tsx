@@ -9,7 +9,7 @@ import { TessivenGraph, type GraphBrowseState } from '../../../../tessiven_ui/sr
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Version } from '../../../../tessiven_ui/src/types';
 import hadoopDocument from './fixtures/tessiven-hadoop.json';
-import { projectCanvas } from '../../../../tessiven_ui/src/projection';
+import { projectCanvas, projectLayoutLayers } from '../../../../tessiven_ui/src/projection';
 function fixture(count = 2): Version {
   const nodes = Array.from({ length: count }, (_, i) => ({
     id: `node-${i}`,
@@ -185,8 +185,6 @@ afterEach(() => {
 });
 describe('Tessiven real graph interactions', () => {
   it('renders the saved Hadoop topology despite crowded coordinate hints', async () => {
-    // This Chinese fixture is the unchanged user-generated document that
-    // reproduced the blank canvas, including all 40 relationships and hints.
     const version: Version = {
       ...fixture(), number: 2,
       document: hadoopDocument as Version['document'],
@@ -202,6 +200,7 @@ describe('Tessiven real graph interactions', () => {
     expect(projected.graph.edges.every(edge => edge.source !== edge.target)).toBe(true);
     expect(projected.internalRelations.get('n-eco')?.map(item => item.relation.id)).toContain('rel-hiveserver2-metastore');
     await page.getByRole('button', { name: 'Fit canvas', exact: true }).hover();
+    expect(projectLayoutLayers(version.document, projected)).toEqual(version.document.presentation?.layers);
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
       .toEqual(projected.graph.edges.map(edge => edge.id).sort());
     const metrics = routeMetrics();
@@ -238,6 +237,14 @@ describe('Tessiven real graph interactions', () => {
       for (const relation of node.querySelectorAll<HTMLElement>('.tessiven-local-relation'))
         expect(relation.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom + 0.5);
     }
+    const rootPositions = ['g-access', 'g-master', 'g-coord', 'g-worker', 'g-eco']
+      .map(id => host.querySelector<HTMLElement>(`[data-graph-object="${id}"]`))
+      .map(node => Number.parseFloat(node?.style.left ?? 'NaN'));
+    expect(rootPositions.every(Number.isFinite)).toBe(true);
+    expect(rootPositions[0]).toBeLessThan(rootPositions[1]);
+    expect(rootPositions[1]).toBeLessThan(rootPositions[2]);
+    expect(rootPositions[2]).toBeLessThan(rootPositions[3]);
+    expect(rootPositions[3]).toBeLessThan(rootPositions[4]);
     for (const theme of builtInShellThemePresets.filter(theme => ['porcelain-light', 'porcelain-dark'].includes(theme.name))) {
       document.documentElement.classList.toggle('dark', theme.mode === 'dark');
       for (const [name, value] of Object.entries(theme.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
@@ -281,8 +288,31 @@ describe('Tessiven real graph interactions', () => {
       for (const row of group.querySelectorAll<HTMLElement>('.tessiven-service, .tessiven-more, .tessiven-local-relation'))
         expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom - 5);
     }
+    expect(projectLayoutLayers(document, projected)).toEqual(document.presentation?.layers);
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
       .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+  });
+  it('preserves declared root layers and compacts layout across collapse and expand', async () => {
+    const document = structuredClone(hadoopDocument) as Version['document'];
+    mount(10, { ...fixture(), document });
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(10);
+    const group = (id: string) => host.querySelector<HTMLElement>(`[data-graph-object="${id}"]`)!;
+    const rank = () => ['g-access', 'g-master', 'g-coord', 'g-worker', 'g-eco']
+      .map(id => Number.parseFloat(group(id).style.left));
+    const fullRank = rank();
+    expect(fullRank.every(Number.isFinite)).toBe(true);
+    expect(fullRank.every((value, index) => index === 0 || fullRank[index - 1]! < value)).toBe(true);
+    const fullBounds = Math.max(...fullRank) - Math.min(...fullRank);
+    await page.getByRole('button', { name: 'Collapse group' }).nth(2).click();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(7);
+    const collapsedRank = rank();
+    expect(collapsedRank.every((value, index) => index === 0 || collapsedRank[index - 1]! < value)).toBe(true);
+    expect(Math.max(...collapsedRank) - Math.min(...collapsedRank)).toBeLessThan(fullBounds);
+    await page.getByRole('button', { name: 'Expand group' }).nth(2).click();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(10);
+    const expandedRank = rank();
+    expect(expandedRank.every((value, index) => index === 0 || expandedRank[index - 1]! < value)).toBe(true);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
   });
   it('renders the complete Hadoop topology with automatic layout', async () => {
     const document = structuredClone(hadoopDocument) as Version['document'];
@@ -348,7 +378,7 @@ describe('Tessiven real graph interactions', () => {
       .poll(() => host.querySelector('.tessiven-node strong')?.textContent)
       .toBe('core-016');
   });
-  it('applies saved positions when hidden members are expanded', async () => {
+  it('uses saved positions as compact ordering hints when hidden members expand', async () => {
     const version = fixture(2);
     version.document.presentation = {
       initiallyExpanded: [],
@@ -367,8 +397,11 @@ describe('Tessiven real graph interactions', () => {
       .querySelector('.tessiven-node')!
       .closest<HTMLElement>('[data-graph-object]');
     expect(node).not.toBeNull();
-    expect(node!.style.left).toBe('700px');
-    expect(node!.style.top).toBe('800px');
+    expect(node!.style.left).not.toBe('700px');
+    expect(node!.style.top).not.toBe('800px');
+    expect(version.document.presentation.positions).toEqual([
+      { objectRef: 'node-0', x: 700, y: 800 },
+    ]);
   });
   it('preserves solid hierarchy across every published theme', async () => {
     mount();

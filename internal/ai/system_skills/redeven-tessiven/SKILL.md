@@ -62,11 +62,20 @@ such nodes unbound; an explicitly requested observation may be recorded as
   keeps the full physical inventory while emphasizing that group's services.
   Distinguish separate clusters of the same service through stable group and
   instance IDs, not duplicate physical hosts or invented runtime connections.
-- Prefer automatic layout: omit `presentation.positions` unless the user asks
-  for a particular arrangement or existing intentional hints need preservation.
-  Positions are preferred coordinates, not fixed constraints. The renderer
-  adjusts spacing and group bounds for actual card sizes; never guess compact
-  coordinates to make a diagram look finished. Schema validation and saving
+- Prefer automatic layout when the user gives no spatial intent. When the user
+  names a left-to-right or top-to-bottom structure, express it with
+  `presentation.direction` and ordered root-object `presentation.layers`.
+  Layers may reference groups, ungrouped nodes, unplaced services, and
+  resources; grouped nodes and placed services inherit placement from their
+  group or host. Unassigned roots use the nearest declared layer by relation
+  distance; disconnected components follow declared layers deterministically.
+- Omit `presentation.positions` unless the user requests a preferred ordering
+  within a layer or existing intentional hints need preservation. Positions
+  never override layer rank; `presentation.order` breaks same-layer ties. They
+  are not fixed constraints. Never guess compact
+  coordinates or generate edge paths. The renderer adjusts spacing, routes, and
+  group bounds for actual card sizes. Preserve saved layout choices on ordinary
+  updates; only reorganize them when the user asks. Schema validation and saving
   confirm document validity and persistence, not visual verification.
 - Every relationship needs evidence. Distinguish code, configuration, runtime
   observations, and inference. Include observation time for runtime facts;

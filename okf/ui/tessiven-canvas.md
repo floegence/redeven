@@ -29,11 +29,16 @@ ready, so an initial saved-version request uses the session HTTP owner. First
 connection failures show the existing session recovery actions. Once mounted,
 transient connection recovery retains the existing canvas view.
 
-Automatic layout and library thumbnails use Floe's published compound packing
-with a landscape aspect ratio. Independent members are arranged as readable
-peers inside their dashed logical group. Relations retain their original
-endpoints and ports; grouping never invents a relationship. Saved world
-positions remain preferred hints, and expansion retains the inspected anchor.
+Automatic layout and library thumbnails use the same published Floe layout
+engine, direction, layers, and visibility projection. Documents may declare
+ordered root layers for stable left-to-right, right-to-left, top-to-bottom, or
+bottom-to-top structure; unassigned roots join the nearest related layer, and
+disconnected components follow deterministically. Independent members remain
+readable peers inside their dashed logical group. Saved positions guide ordering
+within a layer and never override its rank. Folding and expanding compact only
+the visible subgraph, keep the selected object or its group anchored, and
+exclude hidden members from bounds. Relations retain their original endpoints
+and ports; grouping never invents a relationship.
 Published Floe jointly routes packed and positioned relationships orthogonally.
 Free anchors can use the available spans of all four node and dashed-group
 borders, favor nearby facing spans, and separate parallel paths into lanes.
@@ -148,15 +153,13 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   appearance retains the same complete inventory and local relation rows.
   Card and group bounds budget every service and relation row, including the
   expansion action, so content never spills outside its node or dashed frame.
-- Layout hints are read from the saved document and applied only to visible
-  graph objects; hidden members retain their hints for later expansion.
-  Both the canvas and library thumbnail use published Floe's preferred-position
-  mode. Clear coordinates stay exact; crowded sibling cards and complete group
-  subtrees move apart, and groups fit their actual content before every relation
-  is routed. Generated hints cannot turn a valid topology into a blank canvas
-  merely because card heights or expansion changed. Rendering never rewrites
-  saved hints or creates a new document version. Invalid graph data and actual
-  worker/routing failures remain visible errors.
+- Layout direction and layer membership are read from the saved document and
+  projected to the currently visible root objects. Both the canvas and library
+  thumbnail use the same published Floe constraints. Fold and expand relayout
+  the visible subgraph in compact mode, keep the selected object or containing
+  group anchored, and exclude hidden members from visible bounds. Saved hints
+  remain in the immutable document and are never rewritten by browsing. Invalid
+  graph data and actual worker/routing failures remain visible errors.
 - Theme tokens, high contrast, product locale, and accessible names are used
   for every card, edge, menu, and action.
 - Every schema service and external-resource kind has a distinct semantic
