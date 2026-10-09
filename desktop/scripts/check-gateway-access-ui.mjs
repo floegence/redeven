@@ -18,6 +18,7 @@ try {
   const source = compactEnvironmentPreviewFixture().coverage;
   const members = ['Inherited', 'Explicit'].map((display_name, i) => ({ ...memberFixture, member_id: `member_${i}`, display_name, cloud_permission: i ? 'deny' : 'inherit' }));
   const gateway = { ...source.gateway_sources[0], sync_state: 'ready', policy: catalogFixture.policy,
+    connection_kind: 'local_host', management_capability: 'managed_local_host',
     permissions: catalogFixture.gateway.permissions, member_endpoints: catalogFixture.gateway.member_endpoints,
     listener_addresses: catalogFixture.gateway.listener_addresses, listener_running: true, environments: members };
   const snapshot = { ...source, open_windows: [], environments: [], gateway_sources: [gateway] };
@@ -54,8 +55,9 @@ try {
       const moreActions = card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: gateway.display_name }), exact: true });
       await moreActions.click();
       const gatewayMenu = page.locator('.redeven-gateway-menu');
-      await gatewayMenu.getByRole('menuitem', { name: i18n.t('gatewayMembers.invite'), exact: true }).click();
+      await gatewayMenu.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
       const dialog = page.getByRole('dialog');
+      await dialog.getByRole('tab', { name: i18n.t('gatewayClients.runtimes'), exact: true }).click();
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
       await dialog.getByText(i18n.t('gatewayMembers.failed'), { exact: true }).waitFor();
       assert.equal(await dialog.getByText('Inherited', { exact: true }).isVisible(), true);
