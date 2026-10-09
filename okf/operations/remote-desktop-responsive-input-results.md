@@ -7,56 +7,43 @@ timestamp: 2026-10-09T19:42:00Z
 ---
 # Summary
 
-Published Floe Native Apps v0.22.33 and Floe Webapp v0.86.11 provide immediate
-capture wakeup after idle input, bounded pointer submission and a separate local
-text mode. The [media contract](../architecture/remote-desktop-media.md) owns
-privileged input authority; the [viewer contract](../architecture/remote-desktop-viewer.md)
-owns physical versus local text interaction. Locked sessions accept physical
-unlock input only. A mode change releases input and never grants frame authority.
-This record separates real DRM feedback, document text and client presentation;
-native receipts alone do not establish visible response or input-to-photon latency.
+Floe Native Apps v0.22.33 and Floe Webapp v0.86.11 add idle capture wakeup,
+bounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md)
+owns privileged authority; the [viewer contract](../architecture/remote-desktop-viewer.md)
+owns input modes. Locks remain physical-only, and mode changes revoke input.
+This qualification separates DRM feedback, document contents and presentation.
+Native receipts do not establish visible response or input-to-photon latency.
 
 # Contract
 
 ## Diagnosis and implementation
 
-The previous Viewer disabled local text when clipboard synchronization was
-unavailable, even though the physical desktop could accept text through its
-separate selection transfer. The explicit `text_input` capability now enables
-local composition independently. Ordinary printable keys use one ordered text
-path in local mode; shortcuts and non-text keys retain their physical contract.
-The service validates the current physical seat before both text transfer and
-the following physical paste gesture. Credentials never use this text path.
+The Viewer incorrectly coupled local text to clipboard synchronization. The
+explicit `text_input` capability separates them. Local characters use ordered
+text transfer; shortcuts remain physical. Fresh physical-seat checks gate both
+selection transfer and its paste gesture. Credentials never use this path.
 
-DRM capture previously waited for its next idle sampling interval after input.
-The first admitted interaction now wakes capture; subsequent interactions retain
-the configured frame-rate budget. Pointer motion holds one latest pending
-position and flushes before buttons, wheel, text and keys. These changes extend
-the existing upstream owners instead of adding product-side input queues.
+The first idle interaction now wakes DRM capture. Continuous input retains the
+frame-rate budget. The upstream pointer owner keeps one latest pending position
+and flushes before buttons, wheel, text and keys.
 
 The review used RustDesk `001b0e96173cea4e49f9f7a67bea95a177dd1de3`
 (`src/platform/linux.rs`) and Sunshine
-`899095522a9ed50bb511d6f1fd103b8ad716d527` (`src/input.cpp`), both dated
-2026-10-09. RustDesk offers an active-UID read that avoids spawning `loginctl` on
-the hot path. Sunshine serializes queued dispatch and batches compatible motion
-while preserving keyboard ordering. These support removing subprocess stalls
-and preserving one input owner. Redeven retains its stricter live physical-seat
-checks and its existing bounded controller; neither project's source was copied.
+`899095522a9ed50bb511d6f1fd103b8ad716d527` (`src/input.cpp`), dated 2026-10-09.
+Their active-UID reads and ordered motion batching support avoiding hot-path
+subprocesses. Redeven retains live seat checks and its existing owners; no source
+was copied.
 
-Orange also showed approximately 500 ms stalls in kernel connector/EDID queries
-for an unused HDMI-A-1 output. Disabling that output during investigation removed
-the query stall. It was already disconnected for the comparisons below. This is
-a host display condition, not a software speedup; no permanent display policy or
-automatic backend fallback was introduced.
+Disabling orange's unused HDMI-A-1 output removed approximately 500 ms kernel
+connector/EDID-query stalls. That host condition was fixed before both comparison
+versions; no software speedup or permanent display-policy change is claimed.
 
 ## Native comparison
 
-The same hosts and display configuration were used for three v0.22.32 baseline
-and three v0.22.33 candidate runs. udesk26 is Linux amd64, 1920x1280; orange is
-Linux arm64, 1920x1080. Each run uses 100 alternating physical pointer moves,
-1920 maximum dimension, 15 FPS and original pixels. A separate DRM exporter
-observes the matching cursor position. The released service uses a private Unix
-socket; no network hop, browser decoding or client drawing is in this endpoint.
+Three baseline and candidate runs each use 100 physical pointer moves, 1920
+maximum dimension, 15 FPS and original pixels. udesk26 is amd64 at 1920x1280;
+orange is arm64 at 1920x1080. A separate exporter observes matching DRM cursor
+positions. The private Unix socket endpoint excludes network and browser work.
 
 Each version uses its own compiled protocol client. The comparison helper's
 `candidate` label denotes its current-protocol path in both sets, not the version
@@ -71,15 +58,12 @@ Values are milliseconds, empirical P95 for each of three rounds.
 | orange v0.22.32 | 5.060 / 6.750 / 5.678 | 5.498 / 6.523 / 6.035 |
 | orange v0.22.33 | 11.566 / 12.063 / 14.842 | 8.907 / 7.869 / 11.809 |
 
-The matching DRM endpoint is below 100 ms in all rounds. The 10 ms input-receipt
-target is not met in every candidate round; do not claim that receipts improved.
-One udesk26 baseline observation reached 5836.531 ms despite its low P95; retain
-that outlier. These samples do not quantify client painting or physical scanout.
+DRM P95 is below 100 ms in every round; some candidate receipt P95s exceed 10 ms.
+Receipts did not improve. One udesk26 baseline observation reached 5836.531 ms.
+These samples do not quantify client painting or physical scanout.
 
-The five-second capture samples on orange contained 17–18 changed frames in each
-version. They are not a static-screen CPU experiment. udesk26 had zero baseline
-frames and two candidate frames in the corresponding sample. Neither set proves
-a 70% static CPU reduction, and such a claim must not be inferred from them.
+Five-second samples have 17–18 changed orange frames, and zero baseline/two
+candidate udesk26 frames. They do not establish a 70% static CPU reduction.
 
 ## Functional verification
 
@@ -88,11 +72,38 @@ retired-generation rejection and input teardown. Both passed rapid ASCII,
 Chinese, emoji and following Enter against a task-owned GTK document; the target
 checks document contents rather than accepting a clipboard receipt as success.
 
-The final udesk26 GNOME-locker test captured the lock screen, rejected ordinary
+The final orange and udesk26 GNOME-locker tests captured the lock screen, rejected ordinary
 input, kept an invalid physical credential locked, accepted the correct physical
 credential, retired the old generation, rejected unpainted successor input and
 restored control after a new frame receipt. Credentials arrive through a pipe
 and are absent from arguments, environment and diagnostic output.
+
+## Idle desktop response
+
+Released protocol clients run the same displays at 60 FPS and original pixels.
+A task-owned GTK window toggles black/white on Space. Three connections each
+contain twelve samples with 850 ms idle. Ordered H.264 decoding verifies center
+pixels; the endpoint is matching encoded-packet arrival, excluding network and
+browser presentation. Orange decoder components were extracted into a temporary
+directory from its configured package source, without system installation.
+
+Values are median / P95 milliseconds for each round.
+
+| Host and version | Round 1 | Round 2 | Round 3 |
+| --- | --- | --- | --- |
+| udesk26 v0.22.32 | 86.283 / 193.823 | 76.856 / 192.253 | 73.528 / 98.269 |
+| udesk26 v0.22.33 | 73.765 / 94.790 | 62.772 / 84.435 | 50.607 / 89.433 |
+| orange v0.22.32 | 241.530 / 267.476 | 255.642 / 282.653 | 246.081 / 257.422 |
+| orange v0.22.33 | 96.195 / 265.283 | 100.704 / 274.402 | 103.856 / 224.087 |
+
+Orange's median improves by 58–61%; its first input on a new connection retains
+a slow tail. Separate instrumented debugging runs identify that boundary: GTK
+receives Space within 3–16 ms and its own center pixel is white within about
+40 ms, while the captured primary DRM framebuffer remains black. The framebuffer
+ID changes about 190 ms later, then conversion sees white and encoding takes
+about 33–42 ms. Capture wakes immediately and keeps sampling. This does not yet
+distinguish compositor submission from display-plane selection, nor establish
+physical scanout timing. No GPU-cache change or driver installation was made.
 
 The isolated Desktop was built from Redeven `f6c8c1093a62` with published
 dependencies and `GOWORK=off`. Its local Runtime listens on 24236. Desktop SSH
@@ -107,6 +118,12 @@ synchronization remained disabled. No target-side Portal action was performed.
 Browser/Electron Viewer, Wayland and macOS focused qualification, localized panel
 coverage, Go package/race/vet and OKF checks cover the changed contract. They do
 not replace a real client-presentation performance sample.
+
+After rebasing onto local main, Go package/race/vet, the X11/Wayland/macOS browser
+Viewer fixtures, 96 panel/localization tests, UI lint/typecheck, Desktop typecheck,
+published dependency locks/notices and the Env App build passed. The new Electron
+fixture run timed out at native fullscreen while the Mac was locked; it must pass
+again after manual unlock. This failure was not hidden by a retry or weakened test.
 
 The upstream v0.22.33 release qualification passed source, native amd64/arm64,
 host-desktop media amd64/arm64, macOS library and private desktop arm64 jobs. Its
