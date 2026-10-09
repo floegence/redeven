@@ -162,6 +162,18 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   internal relations as inspectable rows. Each row opens the original relation
   and evidence and references that relation when asking Flower. A repeated host
   appearance retains the same complete inventory and local relation rows.
+  A titled, separated service calls/access section distinguishes relationship
+  rows from service inventory. Hover or keyboard focus previews only that row's
+  directional route beside its exact visible source and target services, with
+  matching endpoint emphasis. Leaving or opening details clears the preview;
+  it never opens a hover popup or persists layout changes. Instance endpoints
+  resolve to their canonical service row. Two instances aggregated in one row
+  use a loop glyph there; hidden endpoints never connect to substitute rows.
+  Released Floe routes fixed local inventory geometry, measured in its own
+  coordinate space so canvas zoom and projected surfaces preserve alignment.
+  Service rows retain their full inventory width without a reserved connector
+  gutter. Preview routes may extend beyond the inventory and node border;
+  neither the node nor its route SVG clips them.
   Card and group bounds budget every service and relation row, including the
   expansion action, so content never spills outside its node or dashed frame.
 - Theme tokens, high contrast, product locale, and accessible names are used
@@ -203,6 +215,7 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven_ui/src/TessivenFlowerPanel.tsx`
 - `internal/flower_ui/src/FlowerSurface.tsx`
 - `internal/tessiven_ui/src/TessivenGraph.tsx`
+- `internal/tessiven_ui/src/TessivenServiceRelations.tsx`
 - `internal/tessiven_ui/src/projection.ts`
 - `internal/tessiven_ui/src/tessiven.css`
 - `internal/tessiven_ui/src/TessivenIcon.tsx`

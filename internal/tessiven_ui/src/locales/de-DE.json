@@ -78,6 +78,7 @@
   "moreServices": "Weitere Dienste: {count}",
   "moreObjects": "Weitere Objekte: {count}. Verwenden Sie die Objektsuche, um sie zu prüfen.",
   "hostedServices": "Gehostete Dienste",
+  "serviceRelations": "Dienstaufrufe / Zugriffe",
   "redevenRuntime": "Redeven-Laufzeitumgebung",
   "runtimeNode": "Laufzeitknoten",
   "externalResource": "Externe Abhängigkeit",

@@ -736,11 +736,58 @@
   gap: 5px;
 }
 .tessiven-group-services .tessiven-service { margin-bottom: 0; }
+.tessiven-service-inventory { position: relative; }
+.tessiven-service-self-link {
+  position: absolute;
+  left: -22px;
+  width: 16px;
+  height: 16px;
+  color: var(--ts-linked);
+  pointer-events: none;
+}
+.tessiven-service-link-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  color: var(--ts-linked);
+  z-index: 1;
+  animation: tessiven-service-link-enter 140ms ease-out;
+}
+.tessiven-service-link-preview > path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tessiven-service-link-preview > circle { fill: currentColor; }
+@keyframes tessiven-service-link-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .tessiven-local-relations {
+  margin-top: 7px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in oklab, var(--ts-ink) 22%, transparent);
+}
+.tessiven-local-relations > h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 16px;
+  margin: 0 0 7px;
+  color: var(--ts-ink);
+  font-size: 10px;
+  font-weight: 620;
+}
+.tessiven-local-relations > h3 > svg { width: 12px; height: 12px; color: var(--ts-muted); }
+.tessiven-local-relation-list {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin-top: 3px;
 }
 .tessiven-local-relation {
   display: grid;
@@ -777,8 +824,10 @@
   color: var(--ts-muted);
   font-size: 9px;
 }
-.tessiven-local-relation:hover {
+.tessiven-local-relation:hover,
+.tessiven-local-relation[data-active='true'] {
   background: color-mix(in srgb, var(--ts-glyph) 13%, var(--card));
+  border-color: var(--ts-linked);
 }
 .tessiven-node-selector {
   display: flex;
@@ -798,13 +847,14 @@
   border: 1px solid color-mix(in oklab, var(--ts-node) 70%, var(--foreground));
   border-radius: 8px;
   background: var(--ts-node);
-  overflow: hidden;
+  overflow: visible;
   box-shadow:
     0 2px 3px rgb(25 30 38 / 10%),
     0 7px 14px rgb(25 30 38 / 4%);
 }
 .tessiven-node > header {
   height: 60px;
+  border-radius: 7px 7px 0 0;
   background: var(--ts-header);
   color: #f4f4f4;
   display: flex;
@@ -943,6 +993,17 @@
 }
 .tessiven-service:hover {
   background: color-mix(in oklab, var(--ts-glyph) 13%, var(--card));
+}
+.tessiven-service[data-relation-endpoint] {
+  background: color-mix(in oklab, var(--ts-linked) 16%, var(--card));
+  box-shadow: inset 0 0 0 1px var(--ts-linked);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tessiven-service-link-preview { animation: none; }
+}
+@media (forced-colors: active) {
+  .tessiven-service-link-preview, .tessiven-service-self-link { color: Highlight; }
+  .tessiven-service[data-relation-endpoint] { outline: 1px solid Highlight; outline-offset: -1px; }
 }
 .tessiven-count {
   font: 10px/1.4 var(--font-mono, monospace);

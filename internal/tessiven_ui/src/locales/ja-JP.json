@@ -78,6 +78,7 @@
   "moreServices": "その他のサービス：{count}",
   "moreObjects": "他に {count} 件あります。オブジェクト検索で確認できます。",
   "hostedServices": "稼働サービス",
+  "serviceRelations": "サービス呼び出し・アクセス",
   "redevenRuntime": "Redeven ランタイム",
   "runtimeNode": "ランタイムノード",
   "externalResource": "外部依存リソース",

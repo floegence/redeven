@@ -40,6 +40,7 @@ describe('shared physical hosts in logical groups', () => {
     expect([...projected.relations.values()].flat().map(r => r.id)).toEqual(['nn-zk']);
     expect(projected.internalRelations.get('hdfs::node-1')?.map(item => item.relation.id)).toEqual(['nn-zk']);
     expect(projected.internalRelations.get('zk::node-1')?.map(item => item.relation.id)).toEqual(['nn-zk']);
+    expect(projected.internalRelations.get('hdfs::node-1')?.[0]).toMatchObject({ fromServiceRef: 'nn', toServiceRef: 'zookeeper' });
     expect(document.nodes).toHaveLength(3);
     expect(document.instances).toHaveLength(5);
   });

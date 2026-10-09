@@ -78,6 +78,7 @@
   "moreServices": "Mais serviços: {count}",
   "moreObjects": "Mais objetos: {count}. Use a busca de objetos para inspecioná-los.",
   "hostedServices": "Serviços hospedados",
+  "serviceRelations": "Chamadas e acessos a serviços",
   "redevenRuntime": "Ambiente de execução Redeven",
   "runtimeNode": "Nó de execução",
   "externalResource": "Dependência externa",

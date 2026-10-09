@@ -78,6 +78,7 @@
   "moreServices": "更多服務：{count}",
   "moreObjects": "還有 {count} 個物件，請使用物件搜尋查看。",
   "hostedServices": "承載的服務",
+  "serviceRelations": "服務呼叫 / 存取關係",
   "redevenRuntime": "Redeven 執行階段",
   "runtimeNode": "執行階段節點",
   "externalResource": "外部相依資源",

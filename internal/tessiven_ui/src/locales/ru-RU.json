@@ -78,6 +78,7 @@
   "moreServices": "Другие сервисы: {count}",
   "moreObjects": "Другие объекты: {count}. Используйте поиск объектов для их просмотра.",
   "hostedServices": "Размещённые сервисы",
+  "serviceRelations": "Вызовы и доступ к сервисам",
   "redevenRuntime": "Среда выполнения Redeven",
   "runtimeNode": "Узел среды выполнения",
   "externalResource": "Внешняя зависимость",
