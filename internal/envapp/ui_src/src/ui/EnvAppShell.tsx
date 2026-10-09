@@ -185,10 +185,12 @@ import { TerminalSessionCatalogProvider } from './services/terminalSessionCatalo
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
+  desktopShellServiceCanvasWindowOpenAvailable,
   getRuntimeMaintenanceContextFromDesktopShell,
   notifyRuntimeMaintenanceStartedInDesktopShell,
   openConnectionCenter,
   openDashboardInDesktopShell,
+  openServiceCanvasWindowInDesktopShell,
   performRuntimeMaintenanceActionInDesktopShell,
   runtimeMaintenanceMethodUsesDesktop,
   type RuntimeMaintenanceContext,
@@ -3983,7 +3985,20 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     setEnvSidebarActiveTab(surface, { openSidebar: shouldEnvTabOpenSidebar(surface) });
   };
 
-  const openTessivenWindow = (request?: TessivenOpenRequest) => {
+  const openTessivenWindow = async (request?: TessivenOpenRequest) => {
+    if (desktopShellServiceCanvasWindowOpenAvailable()) {
+      try {
+        const result = await openServiceCanvasWindowInDesktopShell(request ? {
+          canvas_id: request.canvasID,
+          ...(request.version !== undefined ? { version: request.version } : {}),
+        } : {});
+        if (result?.ok) return;
+      } catch {
+        // Native failures retain the same localized command feedback.
+      }
+      notify.error(i18n.t('shell.notifications.failedToOpenDesktopCommandTitle', { action: tessivenCopy()('canvasLabel') }));
+      return;
+    }
     const url = new URL(window.location.href);
     url.hash = '';
     url.searchParams.set('surface', ENV_TESSIVEN_ACTIVITY_ID);

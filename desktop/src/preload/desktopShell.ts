@@ -36,6 +36,10 @@ import {
   DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL,
   normalizeDesktopShellOpenWebServiceWindowResponse,
 } from '../shared/desktopShellWebServiceWindowIPC';
+import {
+  DESKTOP_SHELL_OPEN_SERVICE_CANVAS_WINDOW_CHANNEL,
+  normalizeDesktopShellOpenServiceCanvasWindowResponse,
+} from '../shared/desktopShellServiceCanvasWindowIPC';
 
 export function bootstrapDesktopShellBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopShell', {
@@ -99,6 +103,9 @@ export function bootstrapDesktopShellBridge(): void {
     ),
     openWebServiceWindow: async (request: unknown) => normalizeDesktopShellOpenWebServiceWindowResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL, request),
+    ),
+    openServiceCanvasWindow: async (request: unknown) => normalizeDesktopShellOpenServiceCanvasWindowResponse(
+      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_SERVICE_CANVAS_WINDOW_CHANNEL, request),
     ),
     applicationComponents: async (request: HostApplicationComponentsRequest): Promise<HostApplicationComponentsResult> => ipcRenderer.invoke(HOST_APPLICATION_COMPONENTS_CHANNEL, request),
     onApplicationComponentsProgress: (listener: (value: HostApplicationComponentsProgress) => void) => {
