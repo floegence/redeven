@@ -359,7 +359,7 @@ describe('Tessiven real graph interactions', () => {
       .poll(() => host.querySelectorAll('.tessiven-group').length)
       .toBe(1);
     expect(host.querySelectorAll('.tessiven-node')).toHaveLength(0);
-    await page.getByRole('button', { name: 'Show runtime nodes' }).click();
+    await page.getByRole('button', { name: 'Expand group' }).click();
     await expect
       .poll(() => host.querySelectorAll('.tessiven-node').length)
       .toBe(2);

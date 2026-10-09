@@ -6,6 +6,33 @@ import (
 	"testing"
 )
 
+func TestServiceResponsibilityKinds(t *testing.T) {
+	for _, kind := range []string{
+		"scheduler", "controller", "runtime", "network", "dns", "monitoring",
+		"workload", "coordination", "security", "logging", "storage", "analytics", "ai",
+	} {
+		t.Run(kind, func(t *testing.T) {
+			source := strings.Replace(exampleDocument, "kind: api", "kind: "+kind, 1)
+			result := Validate(source)
+			if !result.Valid {
+				t.Fatalf("service responsibility rejected: %+v", result.Diagnostics)
+			}
+			encoded, err := documentYAML(result.Document)
+			if err != nil {
+				t.Fatal(err)
+			}
+			roundTrip := Validate(encoded)
+			if !roundTrip.Valid || roundTrip.Document.Services[0].Kind != kind {
+				t.Fatalf("service responsibility lost on round trip: %+v", roundTrip)
+			}
+		})
+	}
+	invalid := Validate(strings.Replace(exampleDocument, "kind: api", "kind: unrecognized", 1))
+	if invalid.Valid || len(invalid.Diagnostics) == 0 || invalid.Diagnostics[0].Path != "/services/0/kind" {
+		t.Fatalf("unknown service kind must fail at its schema boundary: %+v", invalid)
+	}
+}
+
 func TestPresentationPositionHints(t *testing.T) {
 	var schema map[string]any
 	if err := json.Unmarshal(Schema(), &schema); err != nil {

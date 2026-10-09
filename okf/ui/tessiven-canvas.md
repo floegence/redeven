@@ -159,6 +159,12 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   worker/routing failures remain visible errors.
 - Theme tokens, high contrast, product locale, and accessible names are used
   for every card, edge, menu, and action.
+- Every schema service and external-resource kind has a distinct semantic
+  silhouette in one Tessiven icon catalog shared by the graph and thumbnails.
+  Service-row icons stay unframed and use a restrained two-color palette with
+  light/dark variants. High contrast preserves the silhouettes and interior
+  cutouts without depending on hue. Rendering uses only the saved kind; it
+  never guesses responsibilities from names or rewrites historical documents.
 
 # Boundaries
 
@@ -182,6 +188,8 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven_ui/src/TessivenGraph.tsx`
 - `internal/tessiven_ui/src/projection.ts`
 - `internal/tessiven_ui/src/tessiven.css`
+- `internal/tessiven_ui/src/TessivenIcon.tsx`
+- `internal/envapp/ui_src/src/styles/tessiven-icons.browser.test.tsx` - Distinct silhouettes, graph/thumbnail parity, theme and high-contrast rendering.
 - `internal/tessiven_ui/src/transport.ts`
 - `internal/tessiven/store.go`
 - `internal/tessiven/store_test.go`

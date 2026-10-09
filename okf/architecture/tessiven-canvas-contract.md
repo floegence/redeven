@@ -17,6 +17,13 @@ failed validation or version conflict leaves the last saved document intact.
 
 - A canvas document contains stable IDs for Runtime nodes, visual groups,
   business services, instances, external resources, relations, and evidence.
+- A service kind describes its primary responsibility independently of its
+  product name, instance role or deployment format. The document schema owns
+  the supported semantic types, including orchestration, execution, network,
+  observability, security and data services. Unknown kinds fail validation;
+  generic `service` remains valid when the responsibility is unknown. Adding
+  kinds expands the v1 document vocabulary without rewriting saved versions or
+  changing the SQLite schema.
 - Groups are visual membership only. Instance bindings and Runtime references
   are data references and do not grant permission or create a connection. A
   descriptive or unavailable Runtime remains unbound and may only carry an
