@@ -26,7 +26,15 @@ single conversation surface.
 The titlebar contains the decorative Flower identity, a More menu and native
 maximize/restore and close controls. Its accessible title remains plain text.
 Pointer controls expand for coarse input. Reply text remains selectable;
-dragging and resizing belong to Floe and never move the composer.
+dragging and resizing belong to Floe and keep the transcript and composer in
+the same bounded window.
+
+The conversation host owns a single height budget. The transcript yields space
+to the composer, while long questions, approvals, and multiline drafts scroll
+inside their own content region. The composer keeps the canonical rounded input
+surface and its action controls remain inside the window at short heights.
+Very short hosts reduce inner spacing while retaining usable controls and a
+scrollable reading region; long drafts yield editor height to their footer.
 
 # Actions and continuity
 
@@ -72,7 +80,9 @@ standalone canvas through its Dock action, and opens the Activity canvas through
 the Activity Bar with its navigation rail visible. Both surfaces send a Flower turn,
 display the canonical streamed reply and exercise the reply menu in the compact
 window. Light and dark screenshots and a machine-readable report provide
-reviewable evidence. Only the model response is scripted; this does not qualify
+reviewable evidence. Short, narrow Activity and standalone windows also receive
+a real `ask_user` interaction, scroll to its last choice and submit it through
+the canonical Runtime boundary. Only the model response is scripted; this does not qualify
 model reasoning, generation quality, or a real provider's availability.
 
 Run it after building the Env App assets and Runtime bundle:

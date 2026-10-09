@@ -23,9 +23,19 @@ const output = options.get('--output');
 const temp = await mkdtemp(path.join(os.tmpdir(), 'redeven-canvas-acceptance-'));
 const state = path.join(temp, 'state');
 const libraryPath = path.join(state, 'local-environment/apps/tessiven/canvases.sqlite');
-const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), scenarios: [] };
-let runtime, browser, runtimeLog = '', providerCalls = 0;
+const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), scenarios: [], question_geometry: [] };
+let runtime, browser, runtimeLog = '', providerCalls = 0, questionNext = false;
 const reply = 'The storefront calls Orders API, which reads the Orders database.';
+const question = {
+  id: 'next', header: 'Next Step', question: 'What would you like me to do with the selected service canvas?',
+  response_mode: 'select_or_write', choices_exhaustive: false, is_secret: false, write_label: 'Describe your own request',
+  choices: [
+    { choice_id: 'explain', label: 'Walk me through the current architecture', description: 'Explain the layers, services, instances and key relationships of the saved canvas.', kind: 'select' },
+    { choice_id: 'change', label: 'Change the canvas', description: 'Add, remove or reorganize nodes, services, instances or relations, saved as a new version.', kind: 'select' },
+    { choice_id: 'history', label: 'Show version history', description: 'List saved versions and summarize what changed across them.', kind: 'select' },
+    { choice_id: 'runtime', label: 'Map it to a real environment', description: 'Inspect an explicitly connected Runtime and record observed services instead of the conceptual reference.', kind: 'select' },
+  ],
+};
 const provider = http.createServer(async (request, response) => {
   if (request.url === '/v1/models') {
     response.setHeader('Content-Type', 'application/json');
@@ -34,10 +44,20 @@ const provider = http.createServer(async (request, response) => {
   }
   let raw = '';
   for await (const chunk of request) raw += chunk;
-  JSON.parse(raw);
+  const input = JSON.parse(raw);
   providerCalls++;
   response.setHeader('Content-Type', 'text/event-stream');
   const send = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
+  if (questionNext && input.tools?.some(tool => tool.name === 'ask_user')) {
+    questionNext = false;
+    const item = { type: 'function_call', id: `question-${providerCalls}`, call_id: `call-${providerCalls}`, name: 'ask_user',
+      arguments: JSON.stringify({ reason_code: 'missing_external_input', required_from_user: ['Choose the next canvas action.'], evidence_refs: ['message:latest'], questions: [question] }) };
+    send({ type: 'response.output_item.added', output_index: 0, item });
+    send({ type: 'response.output_item.done', output_index: 0, item });
+    send({ type: 'response.completed', response: { id: `response-${providerCalls}`, status: 'completed', output: [item], usage: { input_tokens: 20, output_tokens: 15 } } });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
   const item = { type: 'message', id: `message-${providerCalls}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: reply, annotations: [] }] };
   send({ type: 'response.output_item.added', output_index: 0, item: { ...item, status: 'in_progress', content: [] } });
   send({ type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: reply });
@@ -109,6 +129,51 @@ async function verifyReplies(page, name) {
   await page.locator('html:not(.dark)').waitFor();
   assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0, 'Canvas and update connection have no error');
   report.scenarios.push(name);
+}
+
+async function verifyShortQuestion(page, name) {
+  const replies = page.locator('.tessiven-flower-output');
+  const viewport = page.viewportSize();
+  questionNext = true;
+  await replies.locator('.flower-composer textarea').fill('Help me choose the next canvas action.');
+  await replies.getByRole('button', { name: 'Send', exact: true }).click();
+  await replies.locator('.flower-input-request-questions').waitFor();
+  for (const [width, height] of [[800, 320], [320, 320]]) {
+    await page.setViewportSize({ width, height });
+    await until(() => replies.evaluate(window => window.getBoundingClientRect().bottom <= window.ownerDocument.defaultView.innerHeight), 'short window boundary clamped');
+    const geometry = await replies.evaluate(window => {
+      const content = window.querySelector('[data-floe-floating-window-content]').getBoundingClientRect();
+      const composer = window.querySelector('.flower-composer');
+      const scroll = window.querySelector('.flower-input-request-questions');
+      const buttons = [...window.querySelectorAll('.flower-input-request-actions button')].map(button => {
+        const rect = button.getBoundingClientRect();
+        return { bottom: rect.bottom, right: rect.right, top: rect.top };
+      });
+      scroll.scrollTop = scroll.scrollHeight;
+      return { bottom: content.bottom, right: content.right, top: content.top, buttons,
+        border: window.ownerDocument.defaultView.getComputedStyle(composer).borderTopWidth, radius: parseFloat(window.ownerDocument.defaultView.getComputedStyle(composer).borderRadius),
+        scrollHeight: scroll.scrollHeight, clientHeight: scroll.clientHeight, scrollTop: scroll.scrollTop };
+    });
+    assert.equal(geometry.border, '1px');
+    assert.ok(geometry.radius >= 8);
+    report.question_geometry.push({ name, width, height, ...geometry });
+    assert.ok(geometry.clientHeight >= 24 && geometry.scrollHeight > geometry.clientHeight && geometry.scrollTop > 0, 'All question choices remain reachable by internal scrolling');
+    for (const button of geometry.buttons) assert.ok(button.bottom <= geometry.bottom - 8 && button.right <= geometry.right - 8 && button.top >= geometry.top, 'Question controls stay inside the short window');
+    await replies.locator('.flower-input-request-questions').evaluate(scroll => { scroll.scrollTop = 0; });
+    for (const mode of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme: mode });
+      await page.locator(mode === 'dark' ? 'html.dark' : 'html:not(.dark)').waitFor();
+      await page.screenshot({ path: path.join(output, `${name}-short-question-${width}-${mode}.png`), animations: 'disabled' });
+    }
+    report.scenarios.push(`${name}-short-question-${width}`);
+  }
+  await replies.locator('.flower-input-request-questions').getByText('Map it to a real environment', { exact: true }).click();
+  await replies.getByRole('button', { name: 'Continue', exact: true }).click();
+  await until(() => replies.locator('.flower-composer textarea').count(), 'short question submitted and composer restored');
+  await until(() => page.locator('.tessiven [data-flower-selected-thread-status="success"]').count(), 'short question continuation completed');
+  await page.setViewportSize(viewport);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.locator('html:not(.dark)').waitFor();
 }
 
 async function verifyEmptyCanvas(page) {
@@ -248,6 +313,7 @@ try {
   assert.equal(new URL(popup.url()).searchParams.get('window'), 'service-canvas');
   assert.equal(await popup.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0, 'Standalone canvas has no Env App shell');
   await verifyReplies(popup, 'standalone-replies-light');
+  await verifyShortQuestion(popup, 'standalone');
   await popup.close();
 
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();
@@ -258,6 +324,7 @@ try {
   assert.ok(await activityBar.isVisible(), 'Activity keeps its navigation rail');
   assert.equal(await activityBar.getByRole('button', { name: 'Tessiven service canvas', exact: true }).getAttribute('aria-pressed'), 'true');
   await verifyReplies(page, 'activity-replies-light');
+  await verifyShortQuestion(page, 'activity');
   await verifyEmptyCanvas(page);
   if (originalRecords) {
     const surface = page.locator('.tessiven');
@@ -288,6 +355,7 @@ try {
   if (provider.listening) await new Promise(resolve => provider.close(resolve));
   await stopRuntime();
   await writeFile(path.join(output, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+  await writeFile(path.join(output, 'runtime.log'), runtimeLog);
   await rm(temp, { recursive: true, force: true });
 }
 console.log(JSON.stringify(report));
