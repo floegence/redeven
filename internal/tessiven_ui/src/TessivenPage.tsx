@@ -690,6 +690,7 @@ export function TessivenPage(props: {
         <Show when={flowerSessions().length > 0}>
           <TessivenFlowerPanel
             request={flowerRequest()!}
+            initialComposer={emptyCanvas() && !flowerRequest()!.flower_thread_id}
             onRemoveReference={removeFlowerReference}
             visible={props.visible !== false && !!canvas()}
             t={props.t}

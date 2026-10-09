@@ -1305,13 +1305,17 @@
 .tessiven-flower-canvas .flower-component-rail-resizer { display: none; }
 .tessiven-flower-output-boundary { min-height: 0; }
 .tessiven-flower-composer {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
   width: min(640px, calc(100% - 32px));
-  justify-self: center;
-  margin: 0 0 18px;
+  transform: translateX(-50%);
+  margin: 0;
   min-width: 0;
   pointer-events: auto;
   user-select: text;
 }
+.tessiven-flower-composer--initial { animation: tessiven-flower-composer-enter 220ms ease-out both; }
 .tessiven-flower-composer .flower-chat-bottom-dock {
   padding: 0;
   background: none;
@@ -1319,6 +1323,17 @@
 }
 .tessiven-flower-composer .flower-chat-bottom-dock-track { width: 100%; max-width: none; padding: 0; }
 .tessiven-flower-composer .flower-composer { background: var(--card); }
+.tessiven-flower-output .tessiven-flower-composer {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  width: 100%;
+  padding: 0 12px 12px;
+  flex: 0 0 auto;
+}
+.tessiven-flower-output--entering { animation: tessiven-flower-window-enter 260ms cubic-bezier(.2, .75, .25, 1) both; }
+.tessiven-flower-output--entering:has([data-floe-surface-interacting="true"]) { animation: none; }
 .tessiven-flower-output {
   --tessiven-flower-surface: color-mix(in srgb, var(--card) 94%, var(--background));
   --floe-window-background: var(--tessiven-flower-surface);
@@ -1360,12 +1375,20 @@
   background: color-mix(in srgb, var(--foreground) 6%, var(--tessiven-flower-surface));
   color: var(--foreground);
 }
-.tessiven-flower-output [data-floe-floating-window-content] { padding: 0; overflow: hidden; }
+.tessiven-flower-output [data-floe-floating-window-content] {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
 .tessiven-flower-output .tessiven-icon-button { width: 27px; height: 27px; border-radius: 5px; color: var(--muted-foreground); }
 .tessiven-flower-output .tessiven-icon-button svg { width: 14px; height: 14px; }
 .tessiven-flower-menu-trigger { display: grid; place-items: center; }
 .tessiven-flower-conversation,
 .tessiven-flower-conversation .flower-component-main { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.tessiven-flower-conversation { height: auto; flex: 1 1 0; }
 .tessiven-flower-conversation {
   --flower-chat-surface: var(--tessiven-flower-surface);
   --flower-chat-surface-elevated: var(--tessiven-flower-surface);
@@ -1404,6 +1427,14 @@
 }
 .tessiven-flower-restore svg { width: 18px; height: 18px; }
 .tessiven-flower-restore:hover { background: var(--muted); }
+@keyframes tessiven-flower-composer-enter {
+  from { opacity: 0; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@keyframes tessiven-flower-window-enter {
+  from { opacity: 0; translate: 0 10px; }
+  to { opacity: 1; translate: 0 0; }
+}
 @media (pointer: coarse) {
   .tessiven-flower-output [data-floe-floating-window-titlebar] { height: 52px; min-height: 52px; }
   .tessiven-flower-output :is([data-floe-floating-window-control], .tessiven-icon-button) { width: 44px; height: 44px; }
@@ -1411,4 +1442,9 @@
 @media (max-width: 850px) {
   .tessiven-canvas-tools { top: 12px; bottom: auto; left: auto; right: 12px; }
   .tessiven-flower-composer { width: calc(100% - 24px); margin-bottom: 12px; }
+  .tessiven-flower-output .tessiven-flower-composer { width: 100%; margin: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tessiven-flower-composer--initial,
+  .tessiven-flower-output--entering { animation: none; }
 }

@@ -25,15 +25,31 @@ export type CanvasFlowerSurfaceProps = {
 export function TessivenFlowerPanel(props: {
   request: CanvasFlowerRequest;
   visible: boolean;
+  initialComposer?: boolean;
   t: TessivenText;
   renderSurface: (props: CanvasFlowerSurfaceProps) => JSX.Element;
   onOpenConversation: (threadID: string) => void;
   onRemoveReference: (objectRef: string) => void;
   onThreadBound?: (threadID: string) => void;
 }) {
-  const [repliesOpen, setRepliesOpen] = createSignal(true);
   const [boundary, setBoundary] = createSignal<HTMLDivElement>();
-  createEffect(on(() => props.request.nonce, nonce => { if (nonce) setRepliesOpen(true); }));
+  const canvasID = () => props.request.selection.canvas_id;
+  const [startedCanvasIDs, setStartedCanvasIDs] = createSignal<Set<string>>(
+    new Set(props.initialComposer && !props.request.flower_thread_id ? [] : [canvasID()]),
+  );
+  const [repliesOpenByCanvas, setRepliesOpenByCanvas] = createSignal<Record<string, boolean>>({});
+  const [enteringCanvasIDs, setEnteringCanvasIDs] = createSignal<Set<string>>(new Set());
+  const repliesOpen = () => repliesOpenByCanvas()[canvasID()] ?? true;
+  const setRepliesOpen = (open: boolean) => setRepliesOpenByCanvas(previous => ({
+    ...previous,
+    [canvasID()]: open,
+  }));
+  const initialComposer = () => props.initialComposer === true
+    && !props.request.flower_thread_id
+    && !startedCanvasIDs().has(canvasID());
+  createEffect(on(() => props.request.nonce, nonce => {
+    if (nonce && !initialComposer()) setRepliesOpen(true);
+  }));
   const contextAction = createMemo(() => tessivenFlowerIntent(props.request.selection, props.t).context_action);
   const renderConversation = (parts: FlowerConversationParts) => {
     let menuAnchor: HTMLSpanElement | undefined;
@@ -48,35 +64,41 @@ export function TessivenFlowerPanel(props: {
     return (
       <>
         <div class="tessiven-flower-output-boundary" ref={setBoundary} />
-        <Show when={!repliesOpen()}>
+        <Show when={!initialComposer() && !repliesOpen()}>
           <button type="button" class="tessiven-flower-restore" onClick={() => setRepliesOpen(true)}
             aria-label={props.t('showReplies')}><FlowerIcon /><span>{props.t('showReplies')}</span></button>
         </Show>
-        <FloatingWindow open={props.visible && repliesOpen()} onOpenChange={setRepliesOpen}
-          boundary={boundary()} defaultPosition={{ x: 0, y: 0 }}
-          defaultSize={{ width: 356, height: 440 }} minSize={{ width: 300, height: 220 }}
-          viewportInsets={{ top: 16, right: 16, bottom: 12, left: 16 }} compactBelow={480}
-          title="Flower" titleIcon={<FlowerIcon />} class="tessiven-flower-output" zIndex={25}
-          labels={{ close: props.t('hideReplies'), maximize: props.t('expandReplies'), restore: props.t('restoreReplies') }}
-          headerActions={<>
-            <Dropdown align="end" class="tessiven-flower-menu" triggerClass="tessiven-icon-button"
-              triggerAriaLabel={props.t('replyActions')}
-              trigger={<span ref={menuAnchor} class="tessiven-flower-menu-trigger"><MoreHorizontal /></span>}
-              items={menuItems}
-              onSelect={id => {
-                if (id === 'canvas-new') parts.newConversation();
-                else if (id === 'canvas-open') props.onOpenConversation(parts.threadID());
-                else {
-                  const source = menuAnchor?.closest<HTMLElement>('button, [role="button"]');
-                  if (source) parts.actions().find(action => action.id === id)?.run(source);
-                }
-              }} />
-            {parts.actionOverlays}
-            {parts.trailingActions}
-          </>}>
-          <div class="tessiven-flower-conversation flower-surface flower-surface-companion">{parts.conversation}</div>
-        </FloatingWindow>
-        <div class="tessiven-flower-composer">{parts.composer}</div>
+        <Show when={!initialComposer()}>
+          <FloatingWindow open={props.visible && repliesOpen()} onOpenChange={setRepliesOpen}
+            boundary={boundary()} defaultPosition={{ x: 0, y: 0 }}
+            defaultSize={{ width: 356, height: 440 }} minSize={{ width: 300, height: 260 }}
+            viewportInsets={{ top: 16, right: 16, bottom: 12, left: 16 }} compactBelow={480}
+            title="Flower" titleIcon={<FlowerIcon />}
+            class={`tessiven-flower-output${enteringCanvasIDs().has(canvasID()) ? ' tessiven-flower-output--entering' : ''}`} zIndex={25}
+            labels={{ close: props.t('hideReplies'), maximize: props.t('expandReplies'), restore: props.t('restoreReplies') }}
+            headerActions={<>
+              <Dropdown align="end" class="tessiven-flower-menu" triggerClass="tessiven-icon-button"
+                triggerAriaLabel={props.t('replyActions')}
+                trigger={<span ref={menuAnchor} class="tessiven-flower-menu-trigger"><MoreHorizontal /></span>}
+                items={menuItems}
+                onSelect={id => {
+                  if (id === 'canvas-new') parts.newConversation();
+                  else if (id === 'canvas-open') props.onOpenConversation(parts.threadID());
+                  else {
+                    const source = menuAnchor?.closest<HTMLElement>('button, [role="button"]');
+                    if (source) parts.actions().find(action => action.id === id)?.run(source);
+                  }
+                }} />
+              {parts.actionOverlays}
+              {parts.trailingActions}
+            </>}>
+            <div class="tessiven-flower-conversation flower-surface flower-surface-companion">{parts.conversation}</div>
+            <div class="tessiven-flower-composer">{parts.composer}</div>
+          </FloatingWindow>
+        </Show>
+        <Show when={initialComposer()}>
+          <div class="tessiven-flower-composer tessiven-flower-composer--initial">{parts.composer}</div>
+        </Show>
       </>
     );
   };
@@ -99,7 +121,17 @@ export function TessivenFlowerPanel(props: {
     </Show>,
     emptyContent: <div class="tessiven-flower-welcome"><FlowerIcon />
       <strong>{props.t('flowerWelcome')}</strong><p>{props.t('flowerWelcomeHint')}</p></div>,
-    onSubmit: () => setRepliesOpen(true),
+    onSubmit: () => {
+      const id = canvasID();
+      setStartedCanvasIDs(previous => new Set(previous).add(id));
+      setRepliesOpenByCanvas(previous => ({ ...previous, [id]: true }));
+      setEnteringCanvasIDs(previous => new Set(previous).add(id));
+      window.setTimeout(() => setEnteringCanvasIDs(previous => {
+        const next = new Set(previous);
+        next.delete(id);
+        return next;
+      }), 320);
+    },
     render: renderConversation,
   };
   return <div class="tessiven-flower-canvas" hidden={!props.visible} inert={!props.visible}

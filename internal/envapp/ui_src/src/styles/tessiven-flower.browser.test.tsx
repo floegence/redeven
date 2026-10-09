@@ -19,7 +19,7 @@ beforeEach(async () => { await new Promise<void>((resolve, reject) => { const re
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.removeAttribute('style'); document.documentElement.classList.remove('dark', 'light'); });
-function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {}, graph = false) {
+function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {}, graph = false, initialComposer = false) {
   host = document.createElement('div');
   host.className = 'tessiven';
   host.style.cssText = `position:absolute;left:30px;top:30px;width:1100px;height:700px;${transformed ? 'transform:scale(.8);transform-origin:top left;' : ''}`;
@@ -56,7 +56,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
           presentation: { initiallyExpanded: ['app'] },
         } }} />}
     <TessivenFlowerPanel
-    request={request()} visible t={tessivenText('en-US')} onOpenConversation={navigate}
+    request={request()} visible initialComposer={initialComposer} t={tessivenText('en-US')} onOpenConversation={navigate}
     onRemoveReference={id => setRequest(previous => ({ ...previous, selection: {
       ...previous.selection, object_refs: previous.selection.object_refs.filter(ref => ref !== id),
     } }))}
@@ -66,6 +66,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
 }
 const editor = () => page.getByRole('textbox');
 const replyMenu = () => page.getByRole('button', { name: 'Reply actions', exact: true });
+const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
 const expectConversationAction = async (available: boolean) => {
   await replyMenu().click();
   const action = page.getByRole('menuitem', { name: 'Open conversation', exact: true });
@@ -73,6 +74,31 @@ const expectConversationAction = async (available: boolean) => {
   else await expect.element(action).not.toBeInTheDocument();
   await userEvent.keyboard('{Escape}');
 };
+it('shows only the initial composer on a fresh canvas, then moves it into the reply window after sending', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount(false, {}, false, true);
+  await expect.element(editor()).toBeVisible();
+  expect(host.querySelector('.tessiven-flower-output')).toBeNull();
+  const initial = host.querySelector<HTMLElement>('.tessiven-flower-composer')!;
+  expect(initial.classList.contains('tessiven-flower-composer--initial')).toBe(true);
+  expect(initial.getBoundingClientRect().bottom).toBeLessThanOrEqual(host.getBoundingClientRect().bottom);
+  await page.screenshot({ path: '__screenshots__/tessiven-new-canvas-initial-composer.png' });
+  await editor().fill('Create a service architecture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
+  await expect.poll(() => document.querySelector('.tessiven-flower-output .tessiven-flower-composer textarea')).not.toBeNull();
+  expect(output.classList.contains('tessiven-flower-output--entering')).toBe(true);
+  expect(getComputedStyle(output).animationDuration).toBe('0.26s');
+  await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+  expect(getComputedStyle(output).animationName).toBe('none');
+  await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+  expect(document.querySelectorAll('.flower-composer textarea')).toHaveLength(1);
+  expect(output.querySelector('.tessiven-flower-composer--initial')).toBeNull();
+  expect(output.querySelector('[data-floe-floating-window-titlebar]')).not.toBeNull();
+  expect(output.getBoundingClientRect().width).toBe(356);
+  await page.screenshot({ path: '__screenshots__/tessiven-new-canvas-chat-window.png' });
+});
 it('keeps a quiet reply titlebar with secondary actions in an accessible menu', async () => {
   await page.viewport(1200, 800);
   const runtime = mount();
@@ -111,7 +137,7 @@ it('keeps the whole canvas implicit in a clean default composer', async () => {
   const runtime = mount();
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 0 });
   await expect.element(editor()).toBeVisible();
-  expect(host.querySelector('.flower-composer-context-references')).toBeNull();
+  expect(document.querySelector('.flower-composer-context-references')).toBeNull();
   await editor().fill('Draw the architecture');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
@@ -127,7 +153,7 @@ it('places small object references side by side and removes their actual context
     labels: { orders: 'Orders API', db: 'Orders database' }, nonce: 1 });
   await expect.element(editor()).toBeVisible();
   await editor().fill('Keep this question');
-  const chips = [...host.querySelectorAll<HTMLElement>('.flower-composer-context-reference')];
+  const chips = [...document.querySelectorAll<HTMLElement>('.flower-composer-context-reference')];
   expect(chips).toHaveLength(2);
   expect(chips[0].getBoundingClientRect().top).toBe(chips[1].getBoundingClientRect().top);
   expect(chips[0].getBoundingClientRect().height).toBeLessThanOrEqual(24);
@@ -143,18 +169,18 @@ it('places small object references side by side and removes their actual context
     { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: ['db'] },
   ] });
   await page.getByRole('button', { name: 'Remove reference Orders database', exact: true }).click();
-  expect(host.querySelector('.flower-composer-context-references')).toBeNull();
-  await expect.poll(() => document.activeElement === host.querySelector('.flower-composer textarea')).toBe(true);
+  expect(document.querySelector('.flower-composer-context-references')).toBeNull();
+  await expect.poll(() => document.activeElement === document.querySelector('.flower-composer textarea')).toBe(true);
 });
 
-it('keeps the canonical composer at the bottom and displays real conversation output in the floating window', async () => {
+it('keeps the canonical composer inside the same floating window as conversation output', async () => {
   await page.viewport(1200, 800);
   const runtime = mount();
   await expect.element(editor()).toBeVisible();
-  const references = host.querySelector('.flower-composer .flower-composer-context-references');
+  const references = document.querySelector('.flower-composer-context-references');
   expect(references?.textContent).toBe('Orders API');
   expect(references?.querySelector('[title]')?.getAttribute('title')).toContain('Version 2');
-  expect(host.querySelector('.flower-composer textarea')?.getAttribute('placeholder')).toBe('');
+  expect(document.querySelector('.flower-composer textarea')?.getAttribute('placeholder')).toBe('');
   await editor().fill('Explain the database connection');
   await expect.element(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -166,17 +192,23 @@ it('keeps the canonical composer at the bottom and displays real conversation ou
   expect(runtime.navigate).not.toHaveBeenCalled();
   expect(runtime.connections).toHaveBeenCalledTimes(1);
   const output = document.querySelector('[data-floe-geometry-surface="floating-window"]')!.getBoundingClientRect();
-  const input = host.querySelector('.tessiven-flower-composer')!.getBoundingClientRect();
+  const input = document.querySelector('.tessiven-flower-composer')!.getBoundingClientRect();
   expect(output.left).toBeLessThan(60);
   expect(output.top).toBeLessThan(70);
-  expect(output.bottom).toBeLessThan(input.top);
-  expect(input.bottom).toBeLessThanOrEqual(730);
-  expect(host.querySelectorAll('.flower-composer textarea')).toHaveLength(1);
+  expect(input.top).toBeGreaterThan(output.top);
+  expect(input.bottom - output.bottom).toBeLessThanOrEqual(1);
+  expect(document.querySelector('.tessiven-flower-output .tessiven-flower-composer')).not.toBeNull();
+  expect(document.querySelectorAll('.tessiven-flower-output textarea')).toHaveLength(1);
+  expect(document.querySelectorAll('.flower-composer textarea')).toHaveLength(1);
   await page.screenshot({ element: host, path: '__screenshots__/tessiven-floating-conversation.png' });
   await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  await expect.poll(() => document.querySelector('.flower-composer textarea')?.checkVisibility() ?? false).toBe(false);
+  expect(document.querySelector('[data-flower-transcript-visible]')?.getAttribute('data-flower-transcript-visible')).toBe('false');
+  await page.getByRole('button', { name: 'Show replies', exact: true }).click();
   await expect.element(editor()).toBeVisible();
-  expect(host.querySelector('[data-flower-transcript-visible]')?.getAttribute('data-flower-transcript-visible')).toBe('false');
   await editor().fill('Keep this draft');
+  await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  await expect.poll(() => document.querySelector('.flower-composer textarea')?.checkVisibility() ?? false).toBe(false);
   await page.getByRole('button', { name: 'Show replies', exact: true }).click();
   await expect.element(editor()).toHaveValue('Keep this draft');
   await expect.element(page.getByText('Orders reads from the primary database.')).toBeVisible();
@@ -188,15 +220,15 @@ it('keeps drafts isolated by canvas and a single workspace connection while reta
   await editor().fill('Commerce draft');
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 1 });
   await expect.element(editor()).toHaveValue('');
-  expect(host.querySelector('.flower-composer-context-references')).toBeNull();
+  expect(document.querySelector('.flower-composer-context-references')).toBeNull();
   await editor().fill('Analytics draft');
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 1, object_refs: ['db'] }, labels: { db: 'Database' }, nonce: 2 });
   await expect.element(editor()).toHaveValue('Commerce draft');
-  expect(host.querySelector('.flower-composer-context-references')?.textContent).toContain('Database');
-  expect(host.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('Version 1');
+  expect(document.querySelector('.flower-composer-context-references')?.textContent).toContain('Database');
+  expect(document.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('Version 1');
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 3, object_refs: ['db'] }, labels: { db: 'Database' }, nonce: 2 });
   await expect.element(editor()).toHaveValue('Commerce draft');
-  expect(host.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('Version 3');
+  expect(document.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('Version 3');
   expect(runtime.sent).not.toHaveBeenCalled();
   expect(runtime.connections).toHaveBeenCalledTimes(1);
 });
@@ -241,22 +273,26 @@ it('opens native subagent and settings surfaces from the projected reply menu', 
   await expect.element(editor()).toBeVisible();
 });
 
-it('moves and resizes replies without moving the composer or selecting canvas text', async () => {
+it('moves and resizes the conversation and composer together without selecting canvas text', async () => {
   await page.viewport(1200, 800);
   mount();
   await expect.element(editor()).toBeVisible();
   const output = () => document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"]')!;
   await expect.poll(() => output().getBoundingClientRect().left).toBeGreaterThan(30);
   const initial = output().getBoundingClientRect();
-  const composer = host.querySelector('.tessiven-flower-composer')!.getBoundingClientRect();
+  const composer = document.querySelector('.tessiven-flower-composer')!.getBoundingClientRect();
+  expect(composer.left).toBeGreaterThanOrEqual(initial.left);
+  expect(composer.right).toBeLessThanOrEqual(initial.right);
   await (commands as unknown as { moveTessivenReplies: (resize: boolean) => Promise<void> }).moveTessivenReplies(false);
   await expect.poll(() => output().getBoundingClientRect().left).toBeGreaterThan(initial.left + 100);
   const moved = output().getBoundingClientRect();
+  const movedComposer = document.querySelector('.tessiven-flower-composer')!.getBoundingClientRect();
+  expect(movedComposer.left - composer.left).toBeGreaterThan(100);
   await (commands as unknown as { moveTessivenReplies: (resize: boolean) => Promise<void> }).moveTessivenReplies(true);
   await expect.poll(() => output().getBoundingClientRect().width).toBeGreaterThan(moved.width + 60);
   expect(output().getBoundingClientRect().height).toBeLessThan(moved.height);
   expect(window.getSelection()?.toString()).toBe('');
-  expect(host.querySelector('.tessiven-flower-composer')!.getBoundingClientRect().toJSON()).toEqual(composer.toJSON());
+  expect(document.querySelector('.tessiven-flower-composer')!.getBoundingClientRect().width).toBeGreaterThan(movedComposer.width);
 });
 
 it('preserves native tool disclosure and live progress in the refined reading surface', async () => {
@@ -366,6 +402,9 @@ it('reopens replies on send and does not reopen an older conversation after star
   const runtime = mount(false, { launchTurn: () => new Promise(resolve => { accept = resolve; }) });
   await expect.element(editor()).toBeVisible();
   await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  await expect.poll(() => document.querySelector('.flower-composer textarea')?.checkVisibility() ?? false).toBe(false);
+  await page.getByRole('button', { name: 'Show replies', exact: true }).click();
+  await expect.element(editor()).toBeVisible();
   await editor().fill('Inspect commerce');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
@@ -435,12 +474,12 @@ it('keeps reply text, context and controls legible across every theme and clamps
   }
   await page.viewport(390, 844); host.style.cssText = 'position:absolute;inset:0;width:390px;height:844px';
   await expect.poll(() => document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().right).toBeLessThanOrEqual(390);
-  await expect.poll(() => document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().bottom - host.querySelector('.tessiven-flower-composer')!.getBoundingClientRect().top).toBeLessThanOrEqual(0);
-  const input = host.querySelector('.tessiven-flower-composer')!.getBoundingClientRect();
+  await expect.poll(() => document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().bottom - document.querySelector('.tessiven-flower-composer')!.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(0);
+  const input = document.querySelector('.tessiven-flower-composer')!.getBoundingClientRect();
   expect(input.right).toBeLessThanOrEqual(390);
   expect(input.bottom).toBeLessThanOrEqual(844);
   await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
-  await expect.element(editor()).toBeVisible();
+  await expect.poll(() => document.querySelector('.flower-composer textarea')?.checkVisibility() ?? false).toBe(false);
 });
 
 it('sends native file references alongside the exact canvas selection', async () => {
@@ -464,7 +503,7 @@ it('sends native file references alongside the exact canvas selection', async ()
   ]);
 });
 
-it('keeps native approval controls usable at the bottom while replies are hidden', async () => {
+it('keeps native approval controls inside the same conversation window', async () => {
   await page.viewport(1200, 800);
   const submitApproval = vi.fn(async () => ({ ok: true, current: liveBootstrap(thread({ thread_id: 'canvas-thread' }), 4).current }));
   const runtime = mount(false, { submitApproval });
@@ -472,16 +511,15 @@ it('keeps native approval controls usable at the bottom while replies are hidden
   await editor().fill('Inspect Orders');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expectConversationAction(true);
-  await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
   runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
     thread_id: 'canvas-thread', view_version: 3, activity: 'active', turn_id: 'turn', run_id: 'run', queue: [], items: [],
     interactions: [{ id: 'approval-1', turn_id: 'turn', run_id: 'run', kind: 'approval', tool_call_id: 'tool-1',
       approval: { label: 'Inspect service configuration', command: 'cat /workspace/orders.yaml', tool_name: 'terminal.exec', tool_call_id: 'tool-1' } }],
   } });
   await expect.element(page.getByRole('button', { name: 'Approve Inspect service configuration', exact: true })).toBeVisible();
-  const composer = host.querySelector('.tessiven-flower-composer')!;
+  const composer = document.querySelector('.tessiven-flower-output .tessiven-flower-composer')!;
   expect(composer.textContent).toContain('Inspect service configuration');
-  expect(composer.getBoundingClientRect().bottom).toBeLessThanOrEqual(730);
+  expect(composer.getBoundingClientRect().bottom).toBeLessThanOrEqual(document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().bottom);
   await page.getByRole('button', { name: 'Approve Inspect service configuration', exact: true }).click();
   expect(submitApproval).toHaveBeenCalledWith({ thread_id: 'canvas-thread', interaction_id: 'approval-1', approved: true });
 });
