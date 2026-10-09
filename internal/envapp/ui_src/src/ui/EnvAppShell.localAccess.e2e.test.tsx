@@ -3636,6 +3636,53 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('waits for the first authorized session before mounting a standalone canvas and preserves it during recovery', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const ready = deferred<void>();
+    connectMock.mockImplementationOnce(async () => {
+      publishProtocolSnapshot({ state: 'connecting', attempt: 1 });
+      await ready.promise;
+      publishProtocolConnected();
+    });
+    window.history.replaceState({}, '', '/?surface=tessiven&window=service-canvas&canvas=commerce&version=1');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell standaloneTessiven />, host);
+    try {
+      await flushUntil(() => connectMock.mock.calls.length > 0);
+      expect(host.querySelector('[data-testid="tessiven-page"]')).toBeNull();
+      expect(host.querySelector('[data-env-service-canvas-window]')?.getAttribute('data-env-service-canvas-ready')).toBe('false');
+      ready.resolve(undefined);
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="tessiven-page"]')));
+      const canvas = host.querySelector('[data-testid="tessiven-page"]');
+      publishProtocolWaiting(new Error('Runtime is temporarily unavailable'));
+      await flushAsync();
+      expect(host.querySelector('[data-testid="tessiven-page"]')).toBe(canvas);
+    } finally {
+      ready.resolve(undefined);
+      dispose();
+      window.history.replaceState({}, '', '/');
+    }
+  }, 10000);
+
+  it('shows session recovery when a standalone canvas cannot establish its first connection', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    connectMock.mockRejectedValueOnce(new Error('agent_offline'));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell standaloneTessiven />, host);
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="connection-recovery-view"]')));
+      expect(host.querySelector('[data-testid="tessiven-page"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it.each(['restore', 'removed', 'unpinned', 'missing-surface', 'denied', 'offline', 'user-navigation'] as const)(
     'validates a saved dynamic Activity page: %s', async scenario => {
       getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

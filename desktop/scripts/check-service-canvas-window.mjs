@@ -51,6 +51,7 @@ try {
   canvas.on('pageerror', error => report.errors.push(error.message));
   await canvas.locator('.tessiven-library-card').first().waitFor();
   assert.equal(await canvas.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0);
+  assert.equal(await canvas.locator('.tessiven-error, .tessiven-notice').count(), 0);
   assert.equal(await blocked.count(), 0, 'Opening a native window must not report browser popup blocking');
   report.scenarios.push('native-open-without-popup-warning');
   for (const mode of ['light', 'dark']) {
@@ -61,7 +62,8 @@ try {
     await canvas.screenshot({ path: path.join(output, `canvas-${mode}.png`), animations: 'disabled' });
   }
   await dock.click();
-  await until(() => canvas.evaluate(() => document.hasFocus()), 'existing canvas focused');
+  await canvas.waitForFunction(() => document.hasFocus());
+  await canvas.locator('.tessiven-library-card').first().waitFor();
   assert.equal(canvasPages().length, 1, 'Repeated Dock activation reuses its session window');
   assert.equal(await blocked.count(), 0);
   report.scenarios.push('repeated-open-reuses-window');
@@ -73,7 +75,14 @@ try {
     { canvas_id: saved.id, version: saved.latest_version }), { ok: true });
   await canvas.waitForURL(url => url.searchParams.get('canvas') === saved.id && url.searchParams.get('version') === String(saved.latest_version));
   await canvas.locator('.tessiven-node').first().waitFor();
+  assert.equal(await canvas.locator('.tessiven-error, .tessiven-notice').count(), 0);
   assert.equal(canvasPages().length, 1);
+  for (const mode of ['light', 'dark']) {
+    await welcome.evaluate(mode => window.redevenDesktopTheme.setSource(mode), mode);
+    await canvas.waitForFunction(mode => document.documentElement.classList.contains('dark') === (mode === 'dark')
+      && !document.documentElement.dataset.redevenThemeSwitching, mode);
+    await canvas.screenshot({ path: path.join(output, `saved-canvas-${mode}.png`), animations: 'disabled' });
+  }
   report.scenarios.push('exact-canvas-version-opens-in-owned-window');
   assert.deepEqual(await welcome.evaluate(() => window.redevenDesktopShell.openServiceCanvasWindow({})), { ok: false });
   assert.deepEqual(await page.evaluate(() => window.redevenDesktopShell.openServiceCanvasWindow({ url: 'https://other.example/' })), { ok: false });
@@ -84,6 +93,7 @@ try {
   await dock.click();
   const reopened = await until(() => canvasPages()[0], 'closed canvas reopened');
   await reopened.locator('.tessiven-library-card').first().waitFor();
+  assert.equal(await reopened.locator('.tessiven-error, .tessiven-notice').count(), 0);
   assert.equal(await blocked.count(), 0);
   report.scenarios.push('closed-window-reopens-without-warning');
   assert.deepEqual(report.errors, []);

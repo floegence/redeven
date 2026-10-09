@@ -24,6 +24,10 @@ acknowledgement owns success; Chromium's denied `window.open` return value does
 not describe whether Desktop created a window. Browsers retain popup-blocking
 feedback, and native refusal or failure remains visible through localized command
 feedback without starting another opening path.
+The standalone canvas mounts only after the Shell's first authorized session is
+ready, so an initial saved-version request uses the session HTTP owner. First
+connection failures show the existing session recovery actions. Once mounted,
+transient connection recovery retains the existing canvas view.
 
 Automatic layout and library thumbnails use Floe's published compound packing
 with a landscape aspect ratio. Independent members are arranged as readable
