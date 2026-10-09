@@ -6,7 +6,9 @@ export type DesktopDeploymentRequest =
   | { action: 'cancel' }
   | { action: 'manage'; operation: DesktopDeploymentOperation; confirmed: true; administratorPassword?: string };
 export type DesktopDeploymentProgress = Readonly<{
-  stage: 'checking' | 'transferring' | 'authorization_required' | 'authorized' | 'verifying_files' | 'installing_service' | 'starting_service' | 'stopping_service' | 'start' | 'stop' | 'rolling_back' | 'rolled_back' | 'complete' | 'failed';
+  stage: 'checking' | 'preparing_media' | 'transferring' | 'authorization_required' | 'authorized' | 'verifying_files' | 'installing_service' | 'starting_service' | 'stopping_service' | 'start' | 'stop' | 'rolling_back' | 'rolled_back' | 'complete' | 'failed';
+  received_bytes?: number;
+  expected_bytes?: number;
   rollback?: 'complete' | 'failed';
 }>;
 export type DesktopDeploymentResult = Readonly<{
@@ -27,7 +29,13 @@ export function parseDesktopDeploymentRequest(value: unknown): DesktopDeployment
 export function parseDesktopDeploymentProgress(value: unknown): DesktopDeploymentProgress | undefined {
   if (!value || typeof value !== 'object') return;
   const event = value as DesktopDeploymentProgress;
-  if (!['checking', 'transferring', 'authorization_required', 'authorized', 'verifying_files', 'installing_service', 'starting_service', 'stopping_service', 'start', 'stop', 'rolling_back', 'rolled_back', 'complete', 'failed'].includes(event.stage)) return;
+  if (!['checking', 'preparing_media', 'transferring', 'authorization_required', 'authorized', 'verifying_files', 'installing_service', 'starting_service', 'stopping_service', 'start', 'stop', 'rolling_back', 'rolled_back', 'complete', 'failed'].includes(event.stage)) return;
   if (event.rollback !== undefined && !['complete', 'failed'].includes(event.rollback)) return;
-  return { stage: event.stage, ...(event.rollback ? { rollback: event.rollback } : {}) };
+  const bytes: Pick<DesktopDeploymentProgress, 'received_bytes' | 'expected_bytes'> = {};
+  for (const key of ['received_bytes', 'expected_bytes'] as const) {
+    if (event[key] === undefined) continue;
+    if (!Number.isSafeInteger(event[key]) || Number(event[key]) < 0 || Number(event[key]) > 2 ** 32) return;
+    Object.assign(bytes, { [key]: event[key] });
+  }
+  return { stage: event.stage, ...bytes, ...(event.rollback ? { rollback: event.rollback } : {}) };
 }

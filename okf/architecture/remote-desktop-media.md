@@ -18,6 +18,14 @@ work cannot overwrite or authorize a successor generation.
 
 ## Video Scheduling
 
+The physical-seat service uses one latest-sample mailbox for capture and a
+separate 60 Hz cursor stream. Unchanged frames are not encoded repeatedly;
+H.264 reference order is preserved and one settled lossless refinement follows
+activity. Cursor position, visibility and hotspot validity are independent of
+video progress, so pointer motion remains responsive on a static desktop.
+The media worker is attached through an authenticated inherited descriptor and
+bounded backpressure retires the attachment instead of blocking input release.
+
 The published player draws every current decoded picture immediately. A cumulative
 paint receipt names only the latest picture unchanged across a rendering opportunity
 and its following task. Replaced pictures do not receive individual paint receipts;

@@ -7316,6 +7316,7 @@
     "deployPassword": "管理者パスワード（必要な場合）",
     "deployPasswordHint": "今回の SSH 操作にのみ使用します。Redeven は保存せず、デスクトップサービスにも渡しません。",
     "deployConfirm": "許可して続行",
+    "serviceUpdateRequired": "このランタイムのバージョンを使用するには、環境アプリでリモートデスクトップを更新してください。",
     "deployChecking": "SSH ホストを確認中…",
     "deployTransferring": "コンポーネントを転送・検証中…",
     "deployAuthorizing": "今回の SSH 操作を認証中…",

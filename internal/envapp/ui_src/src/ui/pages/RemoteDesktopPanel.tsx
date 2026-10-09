@@ -78,6 +78,8 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const sshServiceUnsupported = () => sshDeploymentAvailable() && loginService()?.state === 'unsupported';
   const sshManaged = () => sshDeploymentAvailable() && loginService()?.backend === 'linux-drm-kms';
   const needsSSHSetup = () => sshManaged() && !sshServiceUnsupported() && loginService()?.state !== 'active';
+  const serviceUpdateRequired = () => loginService()?.reason === 'SERVICE_UPDATE_REQUIRED' || capabilities()?.reason === 'SERVICE_UPDATE_REQUIRED';
+  const setupOperation = (): DesktopDeploymentOperation => serviceUpdateRequired() ? 'update' : loginService()?.state === 'stopped' ? 'start' : 'install';
   const displays = () => capabilities()?.displays ?? [];
   const preparing = () => ['checking', 'downloading', 'receiving', 'verifying', 'installing', 'validating'].includes(status()?.setup?.state ?? '');
   const authorization = () => capabilities()?.state === 'authorization_required' || capabilities()?.state === 'host_action_required';
@@ -132,7 +134,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (preparing()) return i18n.t('remoteDesktop.preparing');
     if (!full()) return i18n.t('remoteDesktop.accessTitle');
     if (sshServiceUnsupported()) return i18n.t('remoteDesktop.unsupported');
-    if (needsSSHSetup()) return i18n.t(loginService()?.state === 'stopped' ? 'remoteDesktop.serviceStopped' : 'remoteDesktop.deploySetup');
+    if (needsSSHSetup()) return i18n.t(serviceUpdateRequired() ? 'remoteDesktop.deployUpdate' : loginService()?.state === 'stopped' ? 'remoteDesktop.serviceStopped' : 'remoteDesktop.deploySetup');
     if (capabilities()?.state === 'locked') return i18n.t('remoteDesktop.locked');
     if (capabilities()?.state === 'setup_required') return i18n.t('remoteDesktop.setupRequired');
     if (available() && approvalCopy()) return i18n.t(approvalCopy()!);
@@ -143,6 +145,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (failure()) return undefined;
     if (!full()) return 'remoteDesktop.accessRequired';
     if (sshServiceUnsupported()) return 'remoteDesktop.deployPlatformUnsupported';
+    if (serviceUpdateRequired()) return 'remoteDesktop.serviceUpdateRequired';
     if (needsSSHSetup()) return 'remoteDesktop.deployHint';
     if (sshManaged()) {
       switch (capabilities()?.reason) {
@@ -247,6 +250,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const deploymentStageCopy = (): EnvAppTranslationKey => {
     switch (deploymentProgress()?.stage) {
       case 'checking': return 'remoteDesktop.deployChecking';
+      case 'preparing_media': return 'remoteDesktop.preparing';
       case 'transferring': case 'verifying_files': return 'remoteDesktop.deployTransferring';
       case 'authorization_required': case 'authorized': return 'remoteDesktop.deployAuthorizing';
       case 'rolling_back': case 'rolled_back': return 'remoteDesktop.deployRollback';
@@ -303,7 +307,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     <Show when={sshManaged() && loginService()?.state === 'active'}><p class="remote-desktop-service-status">{i18n.t('remoteDesktop.serviceActive')}</p></Show>
     <details class="remote-desktop-options">
       <summary><ChevronRight size={14} aria-hidden="true" /><span>{i18n.t('remoteDesktop.options')}</span><span class="remote-desktop-mode">{i18n.t(mode() === 'view' ? 'remoteDesktop.view' : 'remoteDesktop.control')}</span></summary>
-      <Show when={sshManaged() && ['active', 'stopped'].includes(loginService()?.state ?? '')}><div class="remote-desktop-actions remote-desktop-service-actions">
+      <Show when={sshManaged() && (serviceUpdateRequired() || ['active', 'stopped'].includes(loginService()?.state ?? ''))}><div class="remote-desktop-actions remote-desktop-service-actions">
         <For each={['update', loginService()?.state === 'active' ? 'stop' : 'start', 'uninstall'] as DesktopDeploymentOperation[]}>{operation => <Button variant="outline" disabled={!full() || !!busy()} onClick={() => showDeployment(operation)}>{i18n.t(operationLabels[operation])}</Button>}</For>
       </div></Show>
       <div class="remote-desktop-option"><Switch checked={mode() === 'view'} disabled={!!busy()} onChange={value => setMode(value ? 'view' : 'control')} label={i18n.t('remoteDesktop.view')} description={i18n.t('remoteDesktop.viewHint')} /></div>
@@ -318,8 +322,8 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       </div>
     </div>}</Show>
     <div class="remote-desktop-footer">
-      <Button class="remote-desktop-connect" disabled={needsSSHSetup() ? !full() || !!busy() || refreshing() : !canConnect()} aria-describedby={descriptionID} onClick={() => needsSSHSetup() ? showDeployment(loginService()?.state === 'stopped' ? 'start' : 'install') : status()?.control_in_use && mode() === 'control' ? setTakeover(true) : void open(false)}>
-        <StableText class="text-center" reserve={[i18n.t('remoteDesktop.connecting'), i18n.t('remoteDesktop.connect')]}>{i18n.t(needsSSHSetup() ? loginService()?.state === 'stopped' ? 'remoteDesktop.deployStartAction' : 'remoteDesktop.deploySetupAction' : busy() === 'connect' ? 'remoteDesktop.connecting' : 'remoteDesktop.connect')}</StableText><ArrowRight size={16} aria-hidden="true" />
+      <Button class="remote-desktop-connect" disabled={needsSSHSetup() ? !full() || !!busy() || refreshing() : !canConnect()} aria-describedby={descriptionID} onClick={() => needsSSHSetup() ? showDeployment(setupOperation()) : status()?.control_in_use && mode() === 'control' ? setTakeover(true) : void open(false)}>
+        <StableText class="text-center" reserve={[i18n.t('remoteDesktop.connecting'), i18n.t('remoteDesktop.connect')]}>{i18n.t(needsSSHSetup() ? serviceUpdateRequired() ? 'remoteDesktop.deployUpdate' : loginService()?.state === 'stopped' ? 'remoteDesktop.deployStartAction' : 'remoteDesktop.deploySetupAction' : busy() === 'connect' ? 'remoteDesktop.connecting' : 'remoteDesktop.connect')}</StableText><ArrowRight size={16} aria-hidden="true" />
       </Button>
       <p id={descriptionID} role={opened() ? 'status' : undefined}>{i18n.t(opened() ? 'remoteDesktop.windowOpened' : 'remoteDesktop.openHint')}</p>
     </div>
@@ -336,7 +340,9 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
         <input type="password" autocomplete="off" disabled={!!busy()} value={administratorPassword()} onInput={event => setAdministratorPassword(event.currentTarget.value)} />
         <span class="remote-desktop-credential-hint">{i18n.t('remoteDesktop.deployPasswordHint')}</span>
       </label>
-      <Show when={busy() === 'deployment'}><div class="remote-desktop-deployment-progress" role="status"><p>{i18n.t(deploymentStageCopy())}</p><progress aria-label={i18n.t(deploymentStageCopy())} /></div></Show>
+      <Show when={busy() === 'deployment'}><div class="remote-desktop-deployment-progress" role="status"><p>{i18n.t(deploymentStageCopy())}</p><Show when={deploymentProgress()?.expected_bytes} fallback={<progress aria-label={i18n.t(deploymentStageCopy())} />}>
+        {total => <progress aria-label={i18n.t(deploymentStageCopy())} max={total()} value={deploymentProgress()?.received_bytes ?? 0} />}
+      </Show></div></Show>
       <Show when={deploymentResult() && !deploymentResult()?.ok}><div class="remote-desktop-deployment-result" role="alert">
         <p>{i18n.t(deploymentFailureCopy())}</p>
         <Show when={deploymentResult()?.rollback}>{rollback => <p>{i18n.t(rollback() === 'complete' ? 'remoteDesktop.deployRolledBack' : rollback() === 'failed' ? 'remoteDesktop.deployRollbackFailed' : 'remoteDesktop.deployRollbackUnknown')}</p>}</Show>

@@ -6,6 +6,7 @@ export type DesktopServiceKit = Readonly<{ files: ReadonlyMap<string, Buffer>; s
 export type DesktopDeploymentHost = Readonly<{
   lease: DesktopSSHTransportLease;
   runtimePID: number;
+  mediaCache: string;
   loadKit: (architecture: 'amd64' | 'arm64', signal: AbortSignal) => Promise<DesktopServiceKit>;
 }>;
 type DesktopDeploymentHostSource = DesktopDeploymentHost | ((signal: AbortSignal) => Promise<DesktopDeploymentHost>);
@@ -69,7 +70,39 @@ export class RemoteDesktopDeployment {
         const uploaded = await host.lease.run(`cat > ${quote(`${directory}/${name}`)}`, { stdinData: data, signal, timeout_ms: 30_000, stdin_progress_timeout_ms: 30_000 });
         if (uploaded.exit_code !== 0) return { ok: false, code: 'deployment_failed' };
       }
-      const request = { operation, source_directory: directory, runtime_uid: runtimeUID, runtime_gid: runtimeGID, runtime_sha256: runtimeSHA256, service_sha256: kit.serviceSHA256, worker_sha256: kit.workerSHA256 };
+      let mediaSHA256: string | undefined;
+      if (operation === 'install' || operation === 'update') {
+        if (!host.mediaCache.startsWith('/') || /[\0\r\n]/u.test(host.mediaCache)) return { ok: false, code: 'invalid_request' };
+        report({ stage: 'preparing_media' });
+        const preparation = host.lease.stream(`/proc/${host.runtimePID}/exe desktop-service-media --cache ${quote(host.mediaCache)} --output ${quote(`${directory}/media.tar.gz`)}`, { signal, timeout_ms: 20 * 60_000 });
+        const completion = preparation.closed.then(() => undefined, error => error);
+        let pending = '', invalid = false;
+        preparation.stdout.setEncoding('utf8');
+        preparation.stdout.on('data', (chunk: string) => {
+          pending += chunk;
+          if (pending.length > 32 * 1024) { invalid = true; preparation.kill('SIGTERM'); return; }
+          let newline: number;
+          while ((newline = pending.indexOf('\n')) >= 0) {
+            const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
+            try {
+              const value = JSON.parse(line);
+              if (value.media_sha256 !== undefined) {
+                if (mediaSHA256 || !sha256.test(value.media_sha256)) throw new Error('Invalid media digest');
+                mediaSHA256 = value.media_sha256;
+              } else {
+                const event = parseDesktopDeploymentProgress({ stage: 'preparing_media', received_bytes: value.received_bytes, expected_bytes: value.expected_bytes });
+                if (!event) throw new Error('Invalid media progress');
+                report(event);
+              }
+            } catch { invalid = true; preparation.kill('SIGTERM'); }
+          }
+        });
+        preparation.stdin.end();
+        const prepared = await preparation.result;
+        if (await completion || invalid || pending || prepared.exit_code !== 0 || !mediaSHA256) return { ok: false, code: signal.aborted ? 'canceled' : 'deployment_failed' };
+        signal.throwIfAborted();
+      }
+      const request = { operation, source_directory: directory, runtime_uid: runtimeUID, runtime_gid: runtimeGID, runtime_sha256: runtimeSHA256, service_sha256: kit.serviceSHA256, worker_sha256: kit.workerSHA256, ...(mediaSHA256 ? { media_sha256: mediaSHA256 } : {}) };
       // Verify copied bytes in a private root-owned directory on the installed
       // service filesystem; /run is legitimately mounted noexec on some hosts.
       // Send the request only after sudo has consumed its credential and root

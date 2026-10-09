@@ -7320,6 +7320,7 @@
     "deployPassword": "Senha de administrador (se necessária)",
     "deployPasswordHint": "Usada apenas nesta operação SSH. O Redeven não salva a senha nem a envia ao serviço da área de trabalho.",
     "deployConfirm": "Autorizar e continuar",
+    "serviceUpdateRequired": "Atualize a área de trabalho remota no aplicativo do ambiente para usar esta versão do runtime.",
     "deployChecking": "Verificando o host SSH…",
     "deployTransferring": "Transferindo e verificando componentes…",
     "deployAuthorizing": "Autorizando esta operação SSH…",

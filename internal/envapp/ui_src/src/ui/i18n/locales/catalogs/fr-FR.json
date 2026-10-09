@@ -7320,6 +7320,7 @@
     "deployPassword": "Mot de passe administrateur (si nécessaire)",
     "deployPasswordHint": "Utilisé uniquement pour cette opération SSH. Redeven ne le conserve pas et ne le transmet pas au service de bureau.",
     "deployConfirm": "Autoriser et continuer",
+    "serviceUpdateRequired": "Mettez à jour le bureau distant dans l’application d’environnement pour utiliser cette version du runtime.",
     "deployChecking": "Vérification de l’hôte SSH…",
     "deployTransferring": "Transfert et vérification des composants…",
     "deployAuthorizing": "Autorisation de cette opération SSH…",

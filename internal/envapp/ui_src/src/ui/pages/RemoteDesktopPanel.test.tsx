@@ -237,6 +237,20 @@ it('shows the actual unsupported graphics reason without an unusable connection 
   expect(host.textContent).not.toContain('Set up remote desktop');
 });
 
+it('offers an explicit update for an incompatible service instead of installing again', async () => {
+  state.deployment.mockResolvedValue({ ok: true, available: true });
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'SERVICE_UPDATE_REQUIRED' }, login_service: { state: 'failed', backend: 'linux-drm-kms', reason: 'SERVICE_UPDATE_REQUIRED' } });
+  await mount();
+  await vi.waitFor(() => expect(button('Update remote desktop')).toBeDefined());
+  expect(host.textContent).toContain('Update remote desktop in the Env App');
+  host.querySelector<HTMLButtonElement>('.remote-desktop-connect')!.click();
+  const dialog = document.querySelector('[role=dialog]')!;
+  expect(dialog.textContent).toContain('Update remote desktop');
+  expect(state.create).not.toHaveBeenCalled();
+  [...dialog.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'update', confirmed: true })));
+});
+
 it('finishes the operation before refreshing status and allows the canceled result to close', async () => {
   state.status.mockResolvedValueOnce({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
   state.status.mockImplementation(() => new Promise(() => {}));

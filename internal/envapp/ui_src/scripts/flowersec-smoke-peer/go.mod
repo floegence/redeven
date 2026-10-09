@@ -1,6 +1,6 @@
 module github.com/floegence/redeven/flowersec-smoke-peer
 
-go 1.27.1
+go 1.27.2
 
 require github.com/floegence/flowersec/flowersec-go/v5 v5.10.5
 

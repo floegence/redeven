@@ -7,6 +7,15 @@ timestamp: 2026-10-04T13:20:00Z
 ---
 # Summary
 
+The v0.22.29 physical-seat candidate was measured on the task-owned `udesk26`
+DRM output (i915, DP-3, 1920x1280) and `orange` (1920x1080). Three host-local
+rounds on udesk26 reduced input receipt P95 from 66.063--95.319 ms to
+3.569--4.532 ms and DRM cursor feedback P95 to 17.559--17.733 ms. Five-second
+service CPU ticks fell from 416--419 to 49--103, a 75--88% reduction; static
+frames produced no repeated encoded bytes after settling. These are host-local
+Unix/DRM observations, not physical input-to-photon measurements or Desktop
+SSH/browser end-to-end latency.
+
 The 2026-10-04 controlled X11 comparison observes lower client-window response
 latency with `floe-native-apps` v0.22.10, a working NVIDIA encoding path and one
 local host-shaped cursor. Session authority remains owned by the

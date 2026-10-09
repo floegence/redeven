@@ -27,6 +27,7 @@ let conflictNextConnect = false;
 let failDisconnect = true;
 let lockedNextConnect = false;
 let delayAudio = false, audioResponse;
+let desktopState = 'active', holdRecovery = false;
 const configuration = { session: { id: 'qualification', host_name: 'Task desktop', locale: 'en-US', mode: 'control', display_id: '' }, base: '/_redeven_desktop/' };
 const names = { 'input.js': 'remote-input.generated.js', 'pointer.js': 'remote-pointer.generated.js' };
 const server = http.createServer((request, response) => {
@@ -71,7 +72,19 @@ const server = http.createServer((request, response) => {
 });
 const ws = new WebSocketServer({ noServer: true });
 const displays = [{ id: 'one', name: 'Fixture one', width: 320, height: 180, primary: true }, { id: 'two', name: 'Fixture two', width: 640, height: 360, primary: false }];
-function state() { control.send(JSON.stringify({ version: 1, type: 'state', state: 'active', mode: selectedMode, generation, display_id: display, displays })); }
+function state() { control.send(JSON.stringify({ version: 1, type: 'state', state: desktopState, mode: selectedMode, generation, display_id: display, displays })); }
+function packet(header, data = Buffer.alloc(0)) {
+  const encoded = Buffer.from(JSON.stringify({ version: 1, generation, bytes: data.length, ...header }));
+  const prefix = Buffer.alloc(4); prefix.writeUInt32BE(encoded.length);
+  media.send(Buffer.concat([prefix, encoded, data]));
+}
+function cursor(visible = true, trusted = false) {
+  if (!visible) { packet({ type: 'cursor', cursor_visible: false }); return; }
+  const png = new PNG({ width: 16, height: 16 }); png.data.fill(255);
+  packet({ type: 'cursor', codec: 'png', width: 16, height: 16, hot_x: 3, hot_y: 4, hotspot_valid: trusted,
+    cursor_visible: true, cursor_position: { x: 80, y: 60, width: display === 'one' ? 320 : 640, height: display === 'one' ? 180 : 360 } }, PNG.sync.write(png));
+}
+function corruptFrame() { packet({ type: 'frame', codec: 'png', key: true, frame_id: ++frame, width: 640, height: 360, timestamp: 1 }, Buffer.from('invalid png')); }
 function paint(cursor = selectedMode === 'control' && separateCursor ? 'separate' : 'embedded') {
   const png = new PNG({ width: display === 'one' ? 320 : 640, height: display === 'one' ? 180 : 360 });
   for (let i = 0; i < png.data.length; i += 4) { png.data[i] = 30; png.data[i + 1] = 80; png.data[i + 2] = 120; png.data[i + 3] = 255; }
@@ -106,6 +119,7 @@ server.on('upgrade', (request, socket, head) => {
           }
           generation++; selectedMode = command.mode; display = command.display_id || displays.find(item => item.primary).id; state();
         }
+        if (command.method === 'keyframe' && !holdRecovery) { generation++; state(); setTimeout(paint, 25); }
         if (['select_display', 'configure', 'set_mode'].includes(command.method)) {
           assert.equal(command.generation, generation, 'overlapping transition used a stale generation');
           // An already encoded old picture may cross the requested transition.
@@ -482,6 +496,21 @@ try {
   assert.equal(await page.locator('#clipboard-text').inputValue(), '', 'view-only retained the previous controller clipboard');
   assert(!await page.locator('#clipboard-sync').isChecked(), 'view-only still advertised clipboard synchronization');
   await page.keyboard.press('Escape');
+  if (separateCursor) {
+    paint('separate'); cursor();
+    await page.waitForFunction(() => !!document.querySelector('#stage img[src^="data:image/png"]'));
+    const hostCursor = page.locator('#stage img[src^="data:image/png"]');
+    assert(await hostCursor.isVisible(), 'view mode lost the separate host cursor');
+    assert.equal(await canvasCursor(), 'none', 'view mode exposed a second local cursor');
+    const geometry = await hostCursor.evaluate(image => {
+      const picture = document.querySelector('#desktop').getBoundingClientRect(), bounds = image.getBoundingClientRect();
+      return { x: (bounds.left - picture.left) / picture.width, y: (bounds.top - picture.top) / picture.height };
+    });
+    assert(Math.abs(geometry.x - 80 / 640) < .01 && Math.abs(geometry.y - 60 / 360) < .01, 'host cursor diverged from picture coordinates');
+    cursor(false);
+    await page.waitForFunction(() => document.querySelector('#stage img[src^="data:image/png"]').parentElement.hidden);
+    cursor(); await page.waitForFunction(() => !document.querySelector('#stage img[src^="data:image/png"]').parentElement.hidden);
+  }
   const count = messages.filter(item => item.command.method === 'input').length;
   await page.locator('#desktop').click(); await page.keyboard.press('b');
   assert.equal(messages.filter(item => item.command.method === 'input').length, count, 'view mode delivered input');
@@ -490,6 +519,15 @@ try {
   await page.getByRole('button', { name: 'Take control', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
   assert.equal(await canvasCursor(), controlCursor, 'taking control must apply the control frame cursor presentation');
+  if (separateCursor) {
+    assert(!await page.locator('#stage img[src^="data:image/png"]').isVisible(), 'new generation retained the previous host cursor');
+    cursor(); await page.waitForTimeout(40);
+    assert.equal(await canvasCursor(), 'default', 'unknown hotspot must provide an immediate standard arrow');
+    cursor(true, true); await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor.startsWith('url('));
+    cursor(false); await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor === 'none');
+    cursor(); await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor === 'default');
+    assert.notEqual(await page.locator('#settings').evaluate(element => getComputedStyle(element).cursor), 'none', 'toolbar lost its local pointer');
+  }
   assert(messages.some(item => item.command.method === 'set_mode' && item.takeover), 'takeover missing explicit flag');
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'locked', mode: 'control', generation: ++generation }));
   await page.waitForFunction(() => !document.querySelector('#unlock-bar').hidden);
@@ -518,6 +556,23 @@ try {
   await page.locator('#cancel-unlock').click();
   await page.waitForTimeout(20);
   assert(messages.some(item => item.command.method === 'unlock_cancel'), 'unlock cancellation missing');
+  desktopState = 'locked';
+  await page.locator('#start-unlock').click();
+  const beforeRecovery = messages.length;
+  corruptFrame();
+  await page.waitForFunction(() => !document.querySelector('#start-unlock').hidden && !document.querySelector('#start-unlock').disabled);
+  assert(messages.slice(beforeRecovery).some(item => item.command.method === 'keyframe'), 'locked decode failure did not request a fresh generation');
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'locked recovery restored input without explicit unlock intent');
+  await page.keyboard.press('b');
+  assert(!messages.slice(beforeRecovery).some(item => item.command.method === 'unlock_input'), 'locked recovery replayed unlock input');
+  await page.locator('#start-unlock').click();
+  holdRecovery = true; corruptFrame();
+  await page.waitForFunction(() => document.querySelector('#reconnect').hidden === false, null, { timeout: 15000 });
+  assert(await page.locator('#disconnect').isEnabled(), 'recovery timeout trapped the user without disconnect');
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'recovery timeout retained unlock input');
+  holdRecovery = false; desktopState = 'active';
+  await page.locator('#reconnect').click();
+  await page.waitForFunction(() => document.querySelector('#connection').hidden);
   state();
   generation++; state();
   await page.waitForFunction(() => document.querySelector('#unlock-bar').hidden);
