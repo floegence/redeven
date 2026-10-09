@@ -15,7 +15,6 @@ LOCAL_UI_BIND="${REDEVEN_DESKTOP_LOCAL_UI_BIND:-}"
 STOP_EXISTING=1
 STOP_ONLY=0
 DRY_RUN=0
-STOP_RUNTIMES=0
 STOP_TIMEOUT_SECONDS="${REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS:-8}"
 ELECTRON_ARGS=()
 ELECTRON_DEBUG_ARGS=()
@@ -30,7 +29,8 @@ DEVELOPMENT_PORT_LEASE_ROOT=""
 DEVELOPMENT_DESKTOP_PID_FILE=""
 PORTS_EXPLICIT=0
 DESKTOP_PID=""
-DESKTOP_LAUNCHED=0
+DEVELOPMENT_SERVICES_OWNED=0
+SERVICE_HELPER_PID=""
 SHUTDOWN_REQUESTED=0
 SHUTDOWN_EXIT_STATUS=0
 CLEANUP_RUNNING=0
@@ -43,19 +43,22 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/dev_desktop.sh [options] [-- <electron-args>]
 
-Build and start Redeven Desktop from this checkout/worktree. The bundled runtime
-is built from the same uncommitted source tree before Electron starts.
+Build and start Redeven Desktop, its local Runtime, and enabled local Gateways
+saved in this development profile from the current uncommitted source tree.
+Exiting the session stops these development services together. Remote, container,
+URL, and unsaved Gateway services retain their independent lifecycle.
+Saved local Gateways can use the default host directory or a custom location.
 The embedded Env App Plugin UI is enabled for this development launch.
 After building, keep the three newest development bundles plus the selected
 bundle and any older bundles still referenced by running processes.
 
 Options:
   --no-devtools             Do not open Desktop DevTools automatically.
-  --no-stop                 Skip stopping existing Redeven Desktop processes.
-  --stop-only               Stop existing Redeven Desktop processes, then exit.
-  --stop-runtimes           Also stop Redeven runtime processes (interrupts active work).
+  --no-stop                 Skip Desktop shutdown; fails if this instance is still running.
+  --stop-only               Stop this development Desktop, local Runtime, and local Gateways.
+  --stop-runtimes           Retained alias; local development services are always stopped.
   --stop-timeout <seconds>  Seconds to wait before force-stopping processes (default: 8).
-                            Ctrl+C or SIGTERM stops the launched Desktop session and its local Runtime.
+                            Normal exit, Ctrl+C, or SIGTERM stops the session's local services.
   --remote-debugging-port <port|0>
                             Electron Chrome DevTools Protocol port (checkout-derived default, 0 disables).
   --inspect-port <port|0>   Electron main-process inspector port (checkout-derived default, 0 disables).
@@ -472,7 +475,14 @@ stop_current_instance_runtime() {
 	local runtime_root="$DEVELOPMENT_STATE_ROOT/local-environment"
 	local runtime_state_root="$DEVELOPMENT_STATE_ROOT"
 	local failed=0
-	if [ ! -x "$stop_binary" ] && [ -n "$DEVELOPMENT_BUNDLE_ROOT" ] && [ -x "$DEVELOPMENT_BUNDLE_ROOT/redeven" ]; then
+	if [ -z "$DEVELOPMENT_BUNDLE_ROOT" ] && [ -f "$DEVELOPMENT_STATE_ROOT/desktop/dev-runtime-bundle-v1" ]; then
+		local saved_bundle
+		saved_bundle="$(cat "$DEVELOPMENT_STATE_ROOT/desktop/dev-runtime-bundle-v1")"
+		if [[ "$saved_bundle" =~ ^"$DEVELOPMENT_STATE_ROOT/desktop/bundles/"[a-f0-9]{64}$ ]]; then
+			DEVELOPMENT_BUNDLE_ROOT="$saved_bundle"
+		fi
+	fi
+	if [ -n "$DEVELOPMENT_BUNDLE_ROOT" ] && [ -x "$DEVELOPMENT_BUNDLE_ROOT/redeven" ]; then
 		stop_binary="$DEVELOPMENT_BUNDLE_ROOT/redeven"
 	fi
 	if [ ! -x "$stop_binary" ]; then
@@ -488,6 +498,25 @@ stop_current_instance_runtime() {
 		failed=1
 	fi
 	return "$failed"
+}
+
+manage_development_gateways() {
+	local mode="$1" helper_status=0
+	if [ "$DRY_RUN" -eq 1 ]; then
+		printf 'Would %s local Gateway services saved in %q using the current source tree.\n' "$mode" "$DEVELOPMENT_STATE_ROOT"
+		return 0
+	fi
+	node "$SCRIPT_DIR/dev_desktop_gateways.mjs" --mode "$mode" \
+		--state-root "$DEVELOPMENT_STATE_ROOT" --source-root "$ROOT_DIR" &
+	SERVICE_HELPER_PID=$!
+	wait "$SERVICE_HELPER_PID" || helper_status=$?
+	if [ "$mode" = start ] && [ "$SHUTDOWN_REQUESTED" -eq 1 ]; then
+		kill -TERM "$SERVICE_HELPER_PID" >/dev/null 2>&1 || true
+		wait "$SERVICE_HELPER_PID" || true
+		helper_status="$SHUTDOWN_EXIT_STATUS"
+	fi
+	SERVICE_HELPER_PID=""
+	return "$helper_status"
 }
 
 ensure_port_available() {
@@ -585,6 +614,9 @@ request_shutdown() {
   if [ -n "$DESKTOP_PID" ] && pid_exists "$DESKTOP_PID"; then
     kill -TERM "$DESKTOP_PID" >/dev/null 2>&1 || true
   fi
+  if [ -n "$SERVICE_HELPER_PID" ]; then
+    kill -TERM "$SERVICE_HELPER_PID" >/dev/null 2>&1 || true
+  fi
 }
 
 cleanup_development_session() {
@@ -595,7 +627,7 @@ cleanup_development_session() {
   CLEANUP_RUNNING=1
   trap - EXIT INT TERM
 
-  if [ "$SHUTDOWN_REQUESTED" -eq 1 ] && [ "$DESKTOP_LAUNCHED" -eq 1 ]; then
+  if [ "$DEVELOPMENT_SERVICES_OWNED" -eq 1 ]; then
     reset_collected_pids
     collect_desktop_pids
     if [ -n "$DESKTOP_PID" ]; then
@@ -604,6 +636,11 @@ cleanup_development_session() {
     terminate_collected_pids "Redeven Desktop session"
     if ! stop_current_instance_runtime; then
       ui_pkg_log "Failed to stop the development Runtime during session cleanup; inspect the Runtime process inventory before retrying."
+      status=1
+    fi
+    if ! manage_development_gateways stop; then
+      ui_pkg_log "Failed to stop development Gateways; retry with --stop-only."
+      status=1
     fi
   fi
 
@@ -623,11 +660,9 @@ stop_existing_processes() {
   ui_pkg_log "Stopping existing Redeven Desktop processes owned by this checkout before launch..."
   collect_desktop_pids
   terminate_collected_pids "Redeven Desktop"
-	if [ "$STOP_RUNTIMES" -eq 1 ]; then
-		ui_pkg_log "Stopping Redeven runtime processes because --stop-runtimes was provided. This can interrupt active work."
+	if [ "$STOP_ONLY" -eq 1 ]; then
 		stop_current_instance_runtime
-  else
-    ui_pkg_log "Leaving existing Redeven runtime processes running."
+		manage_development_gateways stop
   fi
 }
 
@@ -708,6 +743,7 @@ prepare_instance_bundle_snapshot() {
 		rmdir "$build_root"
 	fi
 	DEVELOPMENT_BUNDLE_ROOT="$snapshot_root"
+	printf '%s\n' "$snapshot_root" > "$DEVELOPMENT_STATE_ROOT/desktop/dev-runtime-bundle-v1"
 	export REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT="$snapshot_root"
 	ui_pkg_log "Development bundle snapshot: $snapshot_root"
 	ui_pkg_log "Development bundle manifest SHA-256: $manifest_digest"
@@ -788,6 +824,11 @@ start_desktop() {
   npm run build
   prepare_instance_bundle_snapshot
   cd "$previous_dir"
+  [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
+  DEVELOPMENT_SERVICES_OWNED=1
+  manage_development_gateways start
+  stop_current_instance_runtime
+  [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
 
   mkdir -p "$(dirname -- "$DEVELOPMENT_DESKTOP_PID_FILE")"
   (
@@ -801,7 +842,6 @@ start_desktop() {
       exec "$@"
     ' redeven-dev-desktop "${cmd[@]}"
   ) &
-  DESKTOP_LAUNCHED=1
   DESKTOP_PID=$!
   desktop_status=0
   wait "$DESKTOP_PID" || desktop_status=$?
@@ -825,7 +865,6 @@ parse_args() {
         shift 1
         ;;
       --stop-runtimes)
-        STOP_RUNTIMES=1
         shift 1
         ;;
       --stop-timeout)
@@ -886,6 +925,10 @@ main() {
 	log_development_configuration
   if [ "$STOP_ONLY" -eq 1 ]; then
     return 0
+  fi
+  if [ "$STOP_EXISTING" -eq 0 ]; then
+    collect_desktop_pids
+    [ "${#COLLECTED_PIDS[@]}" -eq 0 ] || ui_pkg_die "This development Desktop is still running; stop it before starting another session."
   fi
   verify_development_ports
   ensure_desktop_workspace
