@@ -192,20 +192,30 @@ try {
         dialog = page.getByRole('dialog'); await checkDialog(dialog, width);
         assert.equal(await dialog.locator('select').count(), 0, 'Runtime access does not choose a Gateway locally');
         assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).count(), 0, 'Runtime access does not create invitations');
+        assert.equal(await dialog.locator('input[type="file"]').count(), 0, 'Runtime access has no invitation file entry');
+        assert.equal(await dialog.locator('input[type="radio"]').count(), 0, 'Cloud choices appear only after verification');
         const inputs = dialog.locator('input');
         await inputs.nth(0).fill('https://gateway-office.example.internal:7443');
         await inputs.nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
+        await capture(page, `${locale}-${width}-${reducedMotion}-runtime-input`);
         await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).click();
         await dialog.getByText(i18n.t('gatewayJoin.verified'), { exact: true }).waitFor();
         assert.equal(await dialog.isVisible(), true);
-        const about = dialog.locator('details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayJoin.aboutConnection') }) }).first();
-        await capture(page, `${locale}-${width}-${reducedMotion}-runtime-compact`);
-        const aboutOpening = await checkDisclosure(about, reducedMotion);
+        await dialog.getByText(i18n.t('gatewayJoin.accessImpact'), { exact: true }).waitFor();
+        const confirm = dialog.getByRole('button', { name: i18n.t('gatewayJoin.confirmEnable'), exact: true });
+        assert.equal(await confirm.isDisabled(), true, 'Cloud environment choice is explicit');
+        const preserve = dialog.getByRole('radio').first();
+        await preserve.check();
+        assert.equal(await confirm.isEnabled(), true);
         await capture(page, `${locale}-${width}-${reducedMotion}-runtime`);
-        const aboutClosing = await checkDisclosure(about, reducedMotion);
+        await inputs.nth(0).fill('https://gateway-new.example.internal:7443');
+        assert.equal(await confirm.count(), 0, 'Changing the address invalidates the preview');
+        assert.equal(await inputs.nth(1).inputValue(), '123456789ABCDEFGHJKMNPQRSTV');
+        assert.equal(await dialog.locator('input[type="radio"]').count(), 0);
+        assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).isEnabled(), true);
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
         assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(request => ['upsert_gateway', 'update_gateway_policy', 'configure_gateway_cloud'].includes(request.kind))), false);
-        report.cases.push({ locale, width, reducedMotion, policyOpening, policyClosing, aboutOpening, aboutClosing,
+        report.cases.push({ locale, width, reducedMotion, policyOpening, policyClosing, verifiedConfirmation: true, inputInvalidation: true,
           singleSettingsEntry: true, labelledEndpoints: true, nestedSelectDismissal: true, keyboardDisclosure: true, unchangedPermissions: true });
       } finally { await context.close(); }
     }
