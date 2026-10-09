@@ -177,7 +177,7 @@ describe('Flower progress indicator', () => {
     expect(css).not.toContain('.flower-composer-reasoning-control');
   });
 
-  it('delegates composer More positioning to the shared surface floating layer', () => {
+  it('delegates composer More and model menu positioning to the shared surface floating layer', () => {
     const css = flowerStyles();
     const src = surfaceSource();
     const panelRule = cssRule(css, '.flower-composer-more-panel');
@@ -190,7 +190,12 @@ describe('Flower progress indicator', () => {
     expect(panelRule).toContain('width: 100%');
     expect(panelRule).not.toContain('position: absolute');
     expect(panelRule).not.toContain('transform: translateX');
-    expect(modelMenuRule).toContain('transform: translateX(var(--flower-model-menu-shift-x, 0px))');
+    expect(src).toContain('class="flower-model-menu-layer"');
+    expect(src).toContain('owner={modelTriggerRef}');
+    expect(src).not.toContain('modelMenuShiftX');
+    expect(modelMenuRule).toContain('width: 100%');
+    expect(modelMenuRule).not.toContain('position: absolute');
+    expect(modelMenuRule).not.toContain('transform: translateX');
   });
 
   it('lets the expanded companion composer grow while keeping actions bottom-aligned', () => {

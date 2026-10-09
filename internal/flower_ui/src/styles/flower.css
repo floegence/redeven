@@ -2036,22 +2036,21 @@
   background: color-mix(in srgb, var(--border) 66%, transparent);
 }
 
+.flower-model-menu-layer {
+  width: min(26rem, calc(100% - 1rem));
+}
+
 .flower-model-menu {
-  position: absolute;
-  bottom: calc(100% + 0.45rem);
-  left: 0;
-  z-index: 5;
   display: grid;
-  width: min(26rem, 88vw);
-  max-height: min(30rem, 68vh);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  max-height: min(30rem, 68vh, var(--flower-model-menu-available-height, 30rem));
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
   overflow: hidden;
   gap: 0.125rem;
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
   padding: 0.25rem;
-  transform: translateX(var(--flower-model-menu-shift-x, 0px));
   box-shadow:
     0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
 }

@@ -4,6 +4,18 @@ import { runtimeFlowerMethodAllowed, runtimeFlowerPath } from './runtimeFlowerRo
 
 const base = '/_redeven_proxy/api/ai/computer';
 
+describe('Flower model directory routes', () => {
+  it.each(['', '?mode=baseline'])('allows a read-only directory query: %s', query => {
+    const path = '/_redeven_proxy/api/ai/models' + query;
+    expect(runtimeFlowerPath(path)).toBe(path);
+    expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(false);
+  });
+  it.each(['?mode=full', '?mode=baseline&mode=baseline', '?mode=baseline&secret=x', '?mode=%62aseline', '?other=x'])('rejects an unsupported directory query: %s', query => {
+    expect(() => runtimeFlowerPath('/_redeven_proxy/api/ai/models' + query)).toThrow();
+  });
+});
+
 describe('Desktop computer management routes', () => {
   it('allows bounded file previews with exactly one path and the inert preview flag', () => {
     const path = '/_redeven_proxy/api/fs/file?path=%2Fproject%2Freport.html&preview=1';

@@ -9,6 +9,10 @@
   per-source status, and fence results by Runtime/session/settings scope.
 - Keep model selection and execution admission unchanged; update the model
   directory and Desktop session contracts for the shared in-memory resource.
+- Use the published Floe floating layer for the model recovery menu so nested
+  Escape preserves the canvas chat window, composer draft, and trigger focus.
+- Release Desktop stream requests when their renderer document navigates or
+  crashes so repeated reloads cannot exhaust connection slots.
 
 ## 2026-10-08 — Flower computer recovery
 
