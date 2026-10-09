@@ -39,6 +39,19 @@ test('rejects a stale active terminal-web declaration', () => {
   }
 });
 
+test('allows unrelated dependencies with a historical Floeterm version prefix', () => {
+  const fixture = makeFixture();
+  try {
+    const packagePath = path.join(fixture, 'internal/envapp/ui_src/package.json');
+    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+    packageJson.dependencies.katex = '0.18.10';
+    writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    assert.deepEqual(validateFloetermDependencies(fixture), { version: '0.19.2' });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 test('rejects a local package-lock source', () => {
   const fixture = makeFixture();
   try {
