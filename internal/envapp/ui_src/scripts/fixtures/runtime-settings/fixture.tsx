@@ -13,7 +13,7 @@ export function createRuntimeSettingsFixture() {
   const [installMethod, setInstallMethod] = createSignal<'desktop_transfer' | 'remote_download'>('remote_download');
   const [settings, setSettings] = createSignal<AgentSettingsResponse>({
     config_path: '/Users/alex/.redeven-dev/redeven-1854757905/local-environment/config.json',
-    connection: { controlplane_base_url: 'https://cloud.example.com', environment_id: 'env_design_workspace', agent_instance_id: 'runtime_macos_arm64', direct: { artifact_provisioned: true, expires_at_unix_s: 1893456000 } },
+    connection: { access_point_origin: 'https://cloud.example.com', environment_id: 'env_design_workspace', agent_instance_id: 'runtime_macos_arm64', direct: { artifact_provisioned: true, expires_at_unix_s: 1893456000 } },
     runtime: { agent_home_dir: '/Users/alex/workspace', shell: '/bin/zsh', filesystem_scope: { schema_version: 1, default_root_id: 'home', roots: [
       { id: 'home', label: 'Home', path: '/Users/alex/workspace', kind: 'home', permissions: { read: true, write: true }, system: true },
       { id: 'computer', label: 'Computer', path: '/', kind: 'computer', permissions: { read: true, write: false }, system: true },

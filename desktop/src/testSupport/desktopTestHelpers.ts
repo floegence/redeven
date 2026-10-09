@@ -16,7 +16,7 @@ import type {
 import type { StartupReport } from '../main/startup';
 import type { DesktopSessionTransportKind } from '../main/desktopSessionTransport';
 import {
-  projectProviderEnvironmentToLocalRuntimeTarget,
+  projectCloudEnvironmentToLocalRuntimeTarget,
   createDesktopLocalEnvironmentState,
   defaultDesktopLocalEnvironmentAccess,
   type DesktopLocalEnvironmentAccess,
@@ -25,9 +25,9 @@ import {
   type DesktopLocalEnvironmentState,
 } from '../shared/desktopLocalEnvironmentState';
 import {
-  createDesktopProviderEnvironmentRecord,
-  type DesktopProviderEnvironmentRecord,
-} from '../shared/desktopProviderEnvironment';
+  createDesktopCloudEnvironmentRecord,
+  type DesktopCloudEnvironmentRecord,
+} from '../shared/desktopCloudEnvironment';
 
 type TestLocalAccessOverrides = Partial<DesktopLocalEnvironmentAccess>;
 
@@ -45,7 +45,7 @@ type TestLocalEnvironmentOptions = Readonly<{
 }>;
 
 type TestProviderBoundLocalEnvironmentOptions = Readonly<{
-  providerID?: string;
+  cloudID?: string;
   region?: string;
   accessPointID?: string;
   accessPointOrigin?: string;
@@ -75,8 +75,8 @@ type TestDesktopPreferencesOptions = Readonly<Omit<Partial<DesktopPreferences>, 
   saved_runtime_targets?: readonly TestSavedRuntimeTargetInput[];
 }>;
 
-type TestProviderEnvironmentOptions = Readonly<{
-  providerID?: string;
+type TestCloudEnvironmentOptions = Readonly<{
+  cloudID?: string;
   region?: string;
   accessPointID?: string;
   accessPointOrigin?: string;
@@ -94,9 +94,9 @@ function testCurrentRuntime(
   return runtime;
 }
 
-function defaultTestAccessPointOrigin(providerOrigin: string): string {
+function defaultTestAccessPointOrigin(cloudOrigin: string): string {
   try {
-    const parsed = new URL(providerOrigin);
+    const parsed = new URL(cloudOrigin);
     if (parsed.hostname === 'redeven.test') {
       return 'https://dev.redeven.test';
     }
@@ -154,13 +154,13 @@ export function testLocalEnvironment(
 }
 
 export function testProviderBoundLocalEnvironment(
-  providerOrigin: string,
+  cloudOrigin: string,
   envPublicID: string,
   options: TestProviderBoundLocalEnvironmentOptions = {},
 ): DesktopLocalEnvironmentState {
   const layout = localEnvironmentStateLayout();
-  const providerEnvironment = testProviderEnvironment(providerOrigin, envPublicID, {
-    providerID: options.providerID ?? 'example_control_plane',
+  const providerEnvironment = testCloudEnvironment(cloudOrigin, envPublicID, {
+    cloudID: options.cloudID ?? 'example_control_plane',
     region: options.region,
     accessPointID: options.accessPointID,
     accessPointOrigin: options.accessPointOrigin,
@@ -171,7 +171,7 @@ export function testProviderBoundLocalEnvironment(
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
   });
-  return projectProviderEnvironmentToLocalRuntimeTarget(
+  return projectCloudEnvironmentToLocalRuntimeTarget(
     providerEnvironment,
     testLocalEnvironment({
       access: options.access,
@@ -185,18 +185,18 @@ export function testProviderBoundLocalEnvironment(
   );
 }
 
-export function testProviderEnvironment(
-  providerOrigin: string,
+export function testCloudEnvironment(
+  cloudOrigin: string,
   envPublicID: string,
-  options: TestProviderEnvironmentOptions = {},
-): DesktopProviderEnvironmentRecord {
+  options: TestCloudEnvironmentOptions = {},
+): DesktopCloudEnvironmentRecord {
   const region = options.region ?? 'dev';
   const accessPointID = options.accessPointID ?? region;
-  return createDesktopProviderEnvironmentRecord(providerOrigin, envPublicID, {
-    providerID: options.providerID ?? 'example_control_plane',
+  return createDesktopCloudEnvironmentRecord(cloudOrigin, envPublicID, {
+    cloudID: options.cloudID ?? 'example_control_plane',
     region,
     accessPointID,
-    accessPointOrigin: options.accessPointOrigin ?? defaultTestAccessPointOrigin(providerOrigin),
+    accessPointOrigin: options.accessPointOrigin ?? defaultTestAccessPointOrigin(cloudOrigin),
     label: options.label,
     pinned: options.pinned,
     preferredOpenRoute: options.preferredOpenRoute,
@@ -215,18 +215,18 @@ export function testDesktopPreferences(
     local_environment: _localEnvironment,
     ...preferenceOverrides
   } = options;
-  const hasExplicitProviderEnvironments = Object.hasOwn(options, 'provider_environments');
+  const hasExplicitCloudEnvironments = Object.hasOwn(options, 'cloud_environments');
   const providerEnvironmentsByID = new Map(
-    (options.provider_environments ?? base.provider_environments).map((environment) => [environment.id, environment] as const),
+    (options.cloud_environments ?? base.cloud_environments).map((environment) => [environment.id, environment] as const),
   );
 
-  const localProviderBinding = localEnvironment.current_provider_binding;
-  if (localProviderBinding && !hasExplicitProviderEnvironments) {
-    const providerEnvironment = testProviderEnvironment(
-      localProviderBinding.provider_origin,
+  const localProviderBinding = localEnvironment.current_cloud_binding;
+  if (localProviderBinding && !hasExplicitCloudEnvironments) {
+    const providerEnvironment = testCloudEnvironment(
+      localProviderBinding.cloud_origin,
       localProviderBinding.env_public_id,
       {
-        providerID: localProviderBinding.provider_id,
+        cloudID: localProviderBinding.cloud_id,
         accessPointOrigin: localProviderBinding.access_point_origin,
       },
     );
@@ -239,7 +239,7 @@ export function testDesktopPreferences(
     ...base,
     ...preferenceOverrides,
     local_environment: localEnvironment,
-    provider_environments: [...providerEnvironmentsByID.values()],
+    cloud_environments: [...providerEnvironmentsByID.values()],
     saved_environments: (options.saved_environments ?? base.saved_environments).map(normalizeTestSavedEnvironment),
     saved_runtime_targets: (options.saved_runtime_targets ?? base.saved_runtime_targets).map(normalizeTestSavedRuntimeTarget),
   };
@@ -258,7 +258,7 @@ export function testLocalEnvironmentSession(
   const target = buildLocalEnvironmentDesktopTarget(environment);
   const effectiveRunMode = String(startupOverrides.effective_run_mode ?? 'desktop');
   const remoteEnabled = startupOverrides.remote_enabled === true;
-  const currentProviderBinding = environment.current_provider_binding;
+  const currentProviderBinding = environment.current_cloud_binding;
   return {
     session_key: target.session_key,
     target,
@@ -270,9 +270,9 @@ export function testLocalEnvironmentSession(
       local_ui_bridge_url: localUIURL,
       local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       ...(currentProviderBinding ? {
-        provider_origin: currentProviderBinding.provider_origin,
-        controlplane_base_url: currentProviderBinding.access_point_origin,
-        controlplane_provider_id: currentProviderBinding.provider_id,
+        cloud_origin: currentProviderBinding.cloud_origin,
+        access_point_origin: currentProviderBinding.access_point_origin,
+        cloud_id: currentProviderBinding.cloud_id,
         env_public_id: currentProviderBinding.env_public_id,
       } : {}),
       runtime_service: {

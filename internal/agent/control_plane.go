@@ -4,15 +4,12 @@ import (
 	"context"
 	"errors"
 	"strings"
-
-	"github.com/floegence/redeven/internal/config"
 )
 
 type ControlPlaneSetup struct {
-	ProviderOrigin    string
-	AccessPointOrigin string
+	CloudOrigin       string
 	EnvironmentID     string
-	BootstrapTicket   string
+	RuntimeLinkTicket string
 }
 
 type ControlPlaneRuntimeStatus struct {
@@ -35,7 +32,7 @@ func (a *Agent) ControlPlaneRuntimeStatus() ControlPlaneRuntimeStatus {
 
 	baseURL := ""
 	if a.cfg != nil {
-		baseURL = strings.TrimSpace(a.cfg.ControlplaneBaseURL)
+		baseURL = strings.TrimSpace(a.cfg.AccessPointOrigin)
 	}
 	connectable := a.cfg != nil && a.cfg.ValidateRemoteStrict() == nil
 	enabled := a.controlChannelEnabled
@@ -104,35 +101,16 @@ func (a *Agent) ConfigureControlPlane(ctx context.Context, setup ControlPlaneSet
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cfg, err := config.BootstrapProviderLink(ctx, config.ProviderLinkBootstrapArgs{
-		ConfigPath:               a.configPath,
-		ProviderOrigin:           strings.TrimSpace(setup.ProviderOrigin),
-		ControlplaneBaseURL:      strings.TrimSpace(setup.AccessPointOrigin),
-		EnvironmentID:            strings.TrimSpace(setup.EnvironmentID),
-		BootstrapTicket:          strings.TrimSpace(setup.BootstrapTicket),
-		RuntimeVersion:           a.version,
-		LogFormat:                a.cfg.LogFormat,
-		LogLevel:                 a.cfg.LogLevel,
-		AgentHomeDir:             a.cfg.AgentHomeDir,
-		Shell:                    a.cfg.Shell,
-		PreservePermissionPolicy: true,
+	_, err := a.ConnectCloud(ctx, CloudLinkRequest{
+		CloudOrigin:         strings.TrimSpace(setup.CloudOrigin),
+		EnvPublicID:         strings.TrimSpace(setup.EnvironmentID),
+		RuntimeLinkTicket:   strings.TrimSpace(setup.RuntimeLinkTicket),
+		AllowRelinkWhenIdle: true,
 	})
 	if err != nil {
 		return ControlPlaneRuntimeStatus{}, err
 	}
 
-	a.mu.Lock()
-	a.cfg = cfg
-	a.controlChannelEnabled = true
-	a.remoteEnabled = true
-	if a.localUIEnabled {
-		a.effectiveRunMode = "hybrid"
-	} else {
-		a.effectiveRunMode = "remote"
-	}
-	a.mu.Unlock()
-
-	a.startOrRestartControlChannel()
 	return a.ControlPlaneRuntimeStatus(), nil
 }
 

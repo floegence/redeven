@@ -1,6 +1,6 @@
 import { net } from 'electron';
 
-import { normalizeControlPlaneOrigin } from '../shared/controlPlaneProvider';
+import { normalizeControlPlaneOrigin } from '../shared/cloud';
 
 const TLS_ERROR_CODES = new Set([
   'CERT_HAS_EXPIRED',
@@ -47,7 +47,7 @@ export type DesktopProviderRequestErrorCode =
 export class DesktopProviderRequestError extends Error {
   readonly code: DesktopProviderRequestErrorCode;
 
-  readonly providerOrigin: string;
+  readonly cloudOrigin: string;
 
   readonly status: number;
 
@@ -57,7 +57,7 @@ export class DesktopProviderRequestError extends Error {
     code: DesktopProviderRequestErrorCode,
     message: string,
     options: Readonly<{
-      providerOrigin?: string;
+      cloudOrigin?: string;
       status?: number;
       cause?: unknown;
     }> = {},
@@ -65,7 +65,7 @@ export class DesktopProviderRequestError extends Error {
     super(message);
     this.name = 'DesktopProviderRequestError';
     this.code = code;
-    this.providerOrigin = compact(options.providerOrigin);
+    this.cloudOrigin = compact(options.cloudOrigin);
     this.status = normalizeStatus(options.status);
     this.cause = options.cause;
   }
@@ -98,7 +98,7 @@ function normalizeStatus(value: unknown): number {
   return Number.isInteger(numeric) && numeric >= 100 ? numeric : 0;
 }
 
-function providerOriginFromURL(url: string): string {
+function cloudOriginFromURL(url: string): string {
   try {
     return normalizeControlPlaneOrigin(url);
   } catch {
@@ -149,7 +149,7 @@ function collectErrorMetadata(
 }
 
 function normalizeTransportFailure(url: string, error: unknown): DesktopProviderRequestError {
-  const providerOrigin = providerOriginFromURL(url);
+  const cloudOrigin = cloudOriginFromURL(url);
   const codes = new Set<string>();
   const messages: string[] = [];
   collectErrorMetadata(error, codes, messages, new Set<unknown>());
@@ -165,7 +165,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
     return new DesktopProviderRequestError(
       'provider_tls_untrusted',
       'Desktop could not verify the provider certificate. Trust that certificate on this device, then try again.',
-      { providerOrigin, cause: error },
+      { cloudOrigin, cause: error },
     );
   }
 
@@ -173,7 +173,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
     return new DesktopProviderRequestError(
       'provider_dns_failed',
       'Desktop could not resolve the provider host. Check the hostname and local DNS or hosts configuration, then try again.',
-      { providerOrigin, cause: error },
+      { cloudOrigin, cause: error },
     );
   }
 
@@ -181,7 +181,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
     return new DesktopProviderRequestError(
       'provider_timeout',
       'Desktop timed out waiting for the provider to respond.',
-      { providerOrigin, cause: error },
+      { cloudOrigin, cause: error },
     );
   }
 
@@ -189,14 +189,14 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
     return new DesktopProviderRequestError(
       'provider_connection_failed',
       'Desktop could not reach the provider. Make sure it is running and reachable from this device, then try again.',
-      { providerOrigin, cause: error },
+      { cloudOrigin, cause: error },
     );
   }
 
   return new DesktopProviderRequestError(
     'provider_request_failed',
     'Desktop failed to talk to the provider.',
-    { providerOrigin, cause: error },
+    { cloudOrigin, cause: error },
   );
 }
 
@@ -233,7 +233,7 @@ export const electronDesktopProviderTransport: DesktopProviderTransport = async 
       'provider_invalid_response',
       'Desktop could not read the provider response.',
       {
-        providerOrigin: providerOriginFromURL(request.url),
+        cloudOrigin: cloudOriginFromURL(request.url),
         status: response.status,
         cause: error,
       },

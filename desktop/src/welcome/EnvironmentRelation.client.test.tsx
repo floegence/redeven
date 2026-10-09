@@ -63,7 +63,7 @@ describe('linked environment owner interactions', () => {
           runtime_gateway: { supported: true },
         } },
         provider_runtime_link_target: { ...original.provider_runtime_link_target!,
-          provider_connection_state: connectionState, can_connect_provider: true, can_disconnect_provider: true,
+          provider_connection_state: connectionState, can_connect_cloud: true, can_disconnect_cloud: true,
         },
       };
       const harness = await mount({ ...fixture.snapshot,
@@ -100,9 +100,9 @@ describe('linked environment owner interactions', () => {
   it('explains an expired Cloud connection on either tab and routes recovery to the exact Runtime owner', async () => {
     const f = linkedEnvironmentFixture();
     const runtime = { ...f.runtime, provider_runtime_link_target: { ...f.runtime.provider_runtime_link_target!,
-      provider_connection_state: 'authorization_required' as const, can_connect_provider: true,
+      provider_connection_state: 'authorization_required' as const, can_connect_cloud: true,
       credential_recovery: 'waiting_for_service' as const,
-      provider_link_binding: { state: 'linked' as const, connection_state: 'authorization_required' as const,
+      cloud_link_binding: { state: 'linked' as const, connection_state: 'authorization_required' as const,
         remote_enabled: true, last_error_code: 'CONTROL_CREDENTIALS_EXPIRED' },
     } };
     const cloud = { ...f.cloud, remote_route_state: 'offline' as const };
@@ -124,7 +124,7 @@ describe('linked environment owner interactions', () => {
     button(h.owner('cloud').querySelector('[data-cloud-connection-status]')!, 'Restore').click(); await settle();
     // No Cloud card acquires management authority: the existing Runtime review owns the action.
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(runtime.label);
-    expect(h.performAction.mock.calls.some(([request]) => request.kind === 'connect_provider_runtime')).toBe(false);
+    expect(h.performAction.mock.calls.some(([request]) => request.kind === 'connect_cloud_runtime')).toBe(false);
   });
   it('uses one visible owner and owner tabs instead of stacked action surfaces', async () => {
     await mount();
@@ -167,7 +167,7 @@ describe('linked environment owner interactions', () => {
     button(h.owner('cloud'), 'Open via Redeven Cloud').click(); await settle();
     if (state === 'auth_required') {
       button(document, 'Request access').click(); await settle();
-      expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'start_control_plane_connect', provider_origin: h.cloud.provider_origin }));
+      expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'start_control_plane_connect', cloud_origin: h.cloud.cloud_origin }));
     } else {
       expect(document.body.textContent).toContain(state === 'offline' ? 'Redeven Cloud reports offline' : 'Redeven Cloud is unreachable');
     }
@@ -241,8 +241,8 @@ describe('linked environment owner interactions', () => {
     expect(button(h.owner('runtime'), 'Open Env App').disabled).toBe(false);
     expect(h.owner('cloud').querySelector('[data-floe-progress-shimmer]')).not.toBeNull();
     h.publish({ ...h.snapshot, environments: [
-      { ...h.runtime, provider_runtime_link_target: { ...h.runtime.provider_runtime_link_target!, provider_link_state: 'unbound' } },
-      { ...h.cloud, provider_linked_runtime_summary: undefined },
+      { ...h.runtime, provider_runtime_link_target: { ...h.runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' } },
+      { ...h.cloud, cloud_linked_runtime_summary: undefined },
     ] }); await settle();
     expect(document.querySelectorAll('[data-environment-group]')).toHaveLength(2);
     expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
@@ -308,7 +308,7 @@ describe('shared overview and Cloud source grids', () => {
     h.publish(mixedEnvironmentFixture({ syncState: 'provider_unreachable' }).snapshot); await settle();
     expect(visibleCards()).toHaveLength(6);
     expect(document.body.textContent).toContain('Showing last synced results');
-    h.publish({ ...snapshot, control_planes: snapshot.control_planes.slice(1), environments: snapshot.environments.filter(entry => entry.provider_origin !== snapshot.control_planes[0].provider.provider_origin) }); await settle();
+    h.publish({ ...snapshot, control_planes: snapshot.control_planes.slice(1), environments: snapshot.environments.filter(entry => entry.cloud_origin !== snapshot.control_planes[0].cloud.cloud_origin) }); await settle();
     expect(document.querySelectorAll('[data-cloud-source]')).toHaveLength(1);
     expect(visibleCards()).toHaveLength(3);
   });
@@ -338,8 +338,8 @@ describe('Redeven Cloud account overview', () => {
     expect(confirmation.textContent).toContain('Cloud environments, runtimes and their links are kept.');
     button(confirmation, 'Sign out').click(); await settle();
     expect(h.performAction).toHaveBeenLastCalledWith({ kind: 'sign_out_control_plane',
-      provider_origin: snapshot.control_planes[0].provider.provider_origin,
-      provider_id: snapshot.control_planes[0].provider.provider_id });
+      cloud_origin: snapshot.control_planes[0].cloud.cloud_origin,
+      cloud_id: snapshot.control_planes[0].cloud.cloud_id });
   });
   it('cancels sign-out without a request and closes a confirmation when its account disappears', async () => {
     const { snapshot } = mixedEnvironmentFixture();
@@ -375,7 +375,7 @@ describe('Redeven Cloud account overview', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle();
     h.publish(mixedEnvironmentFixture({ syncState: 'auth_required' }).snapshot); await settle();
     button(account, 'Sign in again').click(); await settle();
-    expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'start_control_plane_connect', provider_origin: snapshot.control_planes[0].provider.provider_origin }));
+    expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'start_control_plane_connect', cloud_origin: snapshot.control_planes[0].cloud.cloud_origin }));
   });
 });
 

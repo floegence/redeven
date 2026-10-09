@@ -121,8 +121,8 @@ describe('launcherActionFeedback', () => {
       code: 'control_plane_auth_required',
       scope: 'control_plane',
       message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
-      provider_origin: 'https://provider.example.invalid',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://provider.example.invalid',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
       should_refresh_snapshot: true,
     })).toEqual({
@@ -134,8 +134,8 @@ describe('launcherActionFeedback', () => {
       action: {
         kind: 'reconnect_control_plane',
         label: 'Request access',
-        provider_origin: 'https://provider.example.invalid',
-        provider_id: 'example_control_plane',
+        cloud_origin: 'https://provider.example.invalid',
+        cloud_id: 'example_control_plane',
       },
       auto_dismiss: false,
     });
@@ -149,7 +149,7 @@ describe('launcherActionFeedback', () => {
       code: 'control_plane_auth_required',
       scope: 'control_plane',
       message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
-      provider_origin: 'https://provider.example.invalid',
+      cloud_origin: 'https://provider.example.invalid',
       env_public_id: 'env_demo',
     })).toMatchObject({
       title: 'Redeven Cloud 授权已过期',
@@ -190,10 +190,10 @@ describe('launcherActionFeedback', () => {
     });
   });
 
-  it('keeps provider-link failures separate from runtime-start failures', () => {
+  it('keeps cloud-link failures separate from runtime-start failures', () => {
     expect(launcherActionFailurePresentation(i18n, {
       ok: false,
-      code: 'provider_link_failed',
+      code: 'cloud_link_failed',
       scope: 'environment',
       message: 'Desktop failed to connect the Local Runtime to this provider Environment.',
       should_refresh_snapshot: true,

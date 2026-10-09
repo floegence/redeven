@@ -35,7 +35,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
     bootstrapDesktopSessionContextBridge();
     ipcRendererInvoke.mockResolvedValue(true);
-    expect(await exposedBridge().renewProviderSession()).toBe(true);
+    expect(await exposedBridge().renewCloudSession()).toBe(true);
     expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:provider-session-renew');
   });
   beforeEach(() => {
@@ -139,8 +139,8 @@ describe('bootstrapDesktopSessionContextBridge', () => {
       target_kind: 'local_environment',
       target_route: 'remote_desktop',
       session_source: 'provider_environment',
-      provider_origin: ' https://provider.example.invalid ',
-      provider_id: ' provider-1 ',
+      cloud_origin: ' https://provider.example.invalid ',
+      cloud_id: ' provider-1 ',
       env_public_id: ' env_demo ',
       label: ' Demo Environment ',
     });
@@ -156,8 +156,8 @@ describe('bootstrapDesktopSessionContextBridge', () => {
       target_kind: 'local_environment',
       target_route: 'remote_desktop',
       session_source: 'provider_environment',
-      provider_origin: 'https://provider.example.invalid',
-      provider_id: 'provider-1',
+      cloud_origin: 'https://provider.example.invalid',
+      cloud_id: 'provider-1',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
     });

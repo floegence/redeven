@@ -18,14 +18,14 @@ try {
     import { app } from 'electron';
     import http from 'node:http';
     import assert from 'node:assert/strict';
-    import { electronDesktopProviderTransport } from './src/main/controlPlaneProviderTransport';
-    import { ProviderCredentialRecovery } from './src/main/providerCredentialRecovery';
+    import { electronDesktopProviderTransport } from './src/main/cloudTransport';
+    import { CloudCredentialRecovery } from './src/main/cloudCredentialRecovery';
     app.whenReady().then(async () => {
       const service = http.createServer((_req, res) => { res.writeHead(200); res.end('{}'); });
       const listen = port => new Promise(resolve => service.listen(port, '127.0.0.1', resolve));
       const close = () => new Promise(resolve => service.close(resolve));
       await listen(0); const port = service.address().port; await close();
-      const recovery = new ProviderCredentialRecovery();
+      const recovery = new CloudCredentialRecovery();
       let exchanges = 0, probes = 0;
       const request = async () => {
         try { await electronDesktopProviderTransport({ url: 'http://127.0.0.1:' + port + '/', timeout_ms: 1000 }); return { outcome: 'restored' }; }

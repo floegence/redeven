@@ -13,9 +13,9 @@ vi.mock('electron', () => ({
 import {
   DesktopProviderRequestError,
   electronDesktopProviderTransport,
-} from './controlPlaneProviderTransport';
+} from './cloudTransport';
 
-describe('controlPlaneProviderTransport', () => {
+describe('cloudTransport', () => {
   it.each([
     ['ERR_CONNECTION_REFUSED', 'provider_connection_failed'],
     ['ERR_CONNECTION_RESET', 'provider_connection_failed'],
@@ -47,7 +47,7 @@ describe('controlPlaneProviderTransport', () => {
     }));
 
     const response = await electronDesktopProviderTransport({
-      url: 'https://provider.example.invalid/.well-known/redeven-provider.json',
+      url: 'https://provider.example.invalid/.well-known/redeven-cloud.json',
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -77,12 +77,12 @@ describe('controlPlaneProviderTransport', () => {
     electronState.netFetch.mockRejectedValueOnce(error);
 
     await expect(electronDesktopProviderTransport({
-      url: 'https://dev.redeven.test/.well-known/redeven-provider.json',
+      url: 'https://dev.redeven.test/.well-known/redeven-cloud.json',
       timeout_ms: 15_000,
     })).rejects.toMatchObject({
       name: 'DesktopProviderRequestError',
       code: 'provider_tls_untrusted',
-      providerOrigin: 'https://dev.redeven.test',
+      cloudOrigin: 'https://dev.redeven.test',
     } satisfies Partial<DesktopProviderRequestError>);
   });
 
@@ -90,12 +90,12 @@ describe('controlPlaneProviderTransport', () => {
     electronState.netFetch.mockRejectedValueOnce(new DOMException('The operation timed out.', 'AbortError'));
 
     await expect(electronDesktopProviderTransport({
-      url: 'https://dev.redeven.test/.well-known/redeven-provider.json',
+      url: 'https://dev.redeven.test/.well-known/redeven-cloud.json',
       timeout_ms: 15_000,
     })).rejects.toMatchObject({
       name: 'DesktopProviderRequestError',
       code: 'provider_timeout',
-      providerOrigin: 'https://dev.redeven.test',
+      cloudOrigin: 'https://dev.redeven.test',
     } satisfies Partial<DesktopProviderRequestError>);
   });
 
@@ -109,13 +109,13 @@ describe('controlPlaneProviderTransport', () => {
     } as unknown as Response);
 
     await expect(electronDesktopProviderTransport({
-      url: 'https://dev.redeven.test/.well-known/redeven-provider.json',
+      url: 'https://dev.redeven.test/.well-known/redeven-cloud.json',
       timeout_ms: 15_000,
     })).rejects.toMatchObject({
       name: 'DesktopProviderRequestError',
       code: 'provider_invalid_response',
       status: 200,
-      providerOrigin: 'https://dev.redeven.test',
+      cloudOrigin: 'https://dev.redeven.test',
     } satisfies Partial<DesktopProviderRequestError>);
   });
 });

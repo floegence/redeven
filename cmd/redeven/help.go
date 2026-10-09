@@ -9,9 +9,8 @@ import (
 )
 
 const (
-	exampleProviderOrigin  = "https://redeven.test"
-	exampleControlplaneURL = "https://dev.redeven.test"
-	exampleEnvID           = "env_123"
+	exampleCloudOrigin = "https://redeven.test"
+	exampleEnvID       = "env_123"
 )
 
 func rootHelpText() string {
@@ -222,18 +221,17 @@ redeven bootstrap
 Bind the Local Environment to a control-plane environment.
 
 Usage:
-  redeven bootstrap --provider-origin <url> --controlplane <url> --env-id <env_public_id> [ticket flags] [flags]
+  redeven bootstrap [--cloud <url>] --env-id <env_public_id> <ticket source> [flags]
 
 Required flags:
-  --provider-origin <url>           Provider authority origin.
-  --controlplane <url>              Access point controlplane base URL.
   --env-id <env_public_id>          Environment public ID.
-  One bootstrap ticket source:
-    --bootstrap-ticket-stdin        Read the one-time ticket from stdin; hide input on an interactive terminal.
-    --bootstrap-ticket-file <path>  Read the one-time ticket from a protected file.
-    REDEVEN_BOOTSTRAP_TICKET        Fixed environment fallback when no explicit source is selected.
+  One link ticket source:
+    --link-ticket <ticket>          Use the one-time link ticket directly.
+    --link-ticket-stdin             Read the ticket from stdin; hide interactive terminal input.
+    --link-ticket-file <path>       Read the ticket from a protected file.
 
 Optional flags:
+  --cloud <url>                    Cloud origin (default: https://redeven.com).
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --agent-home-dir <path>           Runtime home dir for filesystem-facing features.
   --shell <command>                 Shell command (default: $SHELL or /bin/bash).
@@ -255,23 +253,20 @@ Writes by default:
 
 Examples:
   Bootstrap through stdin from a protected secret source:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-stdin < /run/secrets/redeven-bootstrap-ticket
+    redeven bootstrap --cloud %[1]s --env-id %[2]s --link-ticket-stdin < /run/secrets/redeven-link-ticket
 
   Bootstrap from a protected file:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+    redeven bootstrap --cloud %[1]s --env-id %[2]s --link-ticket-file /run/secrets/redeven-link-ticket
 
   Bootstrap with a stricter permission preset:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket --permission-policy read_only
+    redeven bootstrap --cloud %[1]s --env-id %[2]s --link-ticket-file /run/secrets/redeven-link-ticket --permission-policy read_only
 
   Bootstrap, then start the runtime:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+    redeven bootstrap --cloud %[1]s --env-id %[2]s --link-ticket-file /run/secrets/redeven-link-ticket
     redeven run --mode hybrid
 
-Environment fallback:
-  Secret managers, CI runners, and container orchestrators may inject
-  REDEVEN_BOOTSTRAP_TICKET directly. Environment variables can still be observed
-  by same-user processes, debuggers, and the host platform.
-`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID), "\n")
+The Cloud assigns the Access Point. Ticket sources are mutually exclusive.
+`, exampleCloudOrigin, exampleEnvID), "\n")
 }
 
 func runHelpText() string {
@@ -290,8 +285,8 @@ Modes:
   desktop   Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.
 
 Bootstrap rules:
-  - Recommended flow: run %[4]s once, then use %[5]s.
-  - One-shot flow: pass --mode hybrid, --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket to %[6]s.
+  - Recommended flow: run %[3]s once, then use %[4]s.
+  - One-shot flow: pass --mode hybrid, --cloud, --env-id, and a one-time link ticket to %[5]s.
 
 Local Environment state rules:
   - Redeven uses one Local Environment state at ~/.redeven/local-environment.
@@ -324,7 +319,7 @@ Rich terminal controls:
   - Enter on Sessions opens the active-session view; type to filter by user, app, channel, or target.
   - Enter on Logs opens the full runtime log view; Esc returns to the overview.
   - Enter on Control plane connects or disconnects when remote config is valid.
-  - If remote config is missing, Enter opens Provider, Access Point, Environment, and bootstrap ticket setup fields.
+  - If remote config is missing, Enter opens Cloud, Environment, and link ticket setup fields.
 
 Flags:
   --mode <remote|hybrid|local|desktop>
@@ -332,11 +327,11 @@ Flags:
   --local-ui-bind <host:port>       Saved bind address, or localhost:23998 for a new environment.
   --local-ui-protocol <http|https>  Connection security (default: saved protocol or http).
   --local-ui-bind-override <addr>  One-start bind override; keeps the saved address.
-  --provider-origin <url>           Provider authority origin for one-shot bootstrap.
-  --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.
+  --cloud <url>           Cloud origin (default: https://redeven.com) for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
-  --bootstrap-ticket-stdin          Read the one-time bootstrap ticket from stdin; hide input on an interactive terminal.
-  --bootstrap-ticket-file <path>    Read the one-time bootstrap ticket from a protected file.
+  --link-ticket <ticket>           Use the one-time link ticket directly.
+  --link-ticket-stdin          Read the one-time link ticket from stdin; hide input on an interactive terminal.
+  --link-ticket-file <path>    Read the one-time link ticket from a protected file.
   --permission-policy <preset>      Local permission policy when bootstrapping inline.
   --password-prompt                 Prompt for the Local UI password without echo.
   --password-stdin                  Read the Local UI password from stdin.
@@ -371,13 +366,13 @@ Examples:
     redeven run --local-ui-bind 0.0.0.0:23998 --password-file /run/secrets/redeven-local-ui-password
 
   One-shot hybrid run without a separate bootstrap step:
-    redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+    redeven run --mode hybrid --cloud %[1]s --env-id %[2]s --link-ticket-file /run/secrets/redeven-link-ticket
 
 Environment fallback:
   Secret managers, CI runners, and container orchestrators may inject
-  REDEVEN_LOCAL_UI_PASSWORD or REDEVEN_BOOTSTRAP_TICKET directly. Environment
-  variables can still be observed by same-user processes, debuggers, and the host platform.
-`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, "`redeven bootstrap`", "`redeven run --mode hybrid`", "`redeven run`"), "\n")
+  REDEVEN_LOCAL_UI_PASSWORD directly. Environment variables can still be observed
+  by same-user processes, debuggers, and the host platform.
+`, exampleCloudOrigin, exampleEnvID, "`redeven bootstrap`", "`redeven run --mode hybrid`", "`redeven run`"), "\n")
 }
 
 func searchHelpText() string {
@@ -999,13 +994,11 @@ func removedSecretFlagMigration(name string) []string {
 		}
 	case "bootstrap-ticket":
 		return []string{
-			"Migration: use --bootstrap-ticket-stdin, --bootstrap-ticket-file, or the fixed REDEVEN_BOOTSTRAP_TICKET environment fallback.",
 			"The removed flag is not accepted because command-line values can enter shell history and process listings.",
 		}
 	case "bootstrap-ticket-env":
 		return []string{
-			"Migration: inject the fixed REDEVEN_BOOTSTRAP_TICKET variable, or use --bootstrap-ticket-stdin or --bootstrap-ticket-file.",
-			"Redeven no longer accepts caller-selected environment variable names for bootstrap tickets.",
+			"Redeven no longer accepts caller-selected environment variable names for link tickets.",
 		}
 	default:
 		return nil
@@ -1022,7 +1015,7 @@ func translateStartupSecretError(err error, command string) (string, []string) {
 		return fmt.Sprintf("invalid startup secret options: %s", secretErr.Error()),
 			[]string{fmt.Sprintf("Hint: choose one explicit source for `%s`; an explicit source overrides the fixed environment fallback.", command)}
 	case startupSecretErrorStdinConflict:
-		return "invalid startup secret options: password and bootstrap ticket cannot both read stdin",
+		return "invalid startup secret options: password and link ticket cannot both read stdin",
 			[]string{"Hint: put one secret in a protected file, or let Redeven Desktop send both through its private startup envelope."}
 	case startupSecretErrorEnvelopeConflict:
 		return "invalid Desktop startup secrets: --startup-secrets-stdin conflicts with another secret source",

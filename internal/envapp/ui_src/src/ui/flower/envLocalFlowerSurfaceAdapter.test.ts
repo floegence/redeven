@@ -725,7 +725,7 @@ describe('Env local Flower surface adapter', () => {
         return jsonResponse({
           settings: {
             config_path: '/tmp/config.json',
-            connection: { controlplane_base_url: '', environment_id: '', agent_instance_id: '', direct: { artifact_provisioned: false, expires_at_unix_s: 0 } },
+            connection: { access_point_origin: '', environment_id: '', agent_instance_id: '', direct: { artifact_provisioned: false, expires_at_unix_s: 0 } },
             runtime: { agent_home_dir: '/workspace', shell: '/bin/sh' },
             ai: { permission_type: permissionType },
           },

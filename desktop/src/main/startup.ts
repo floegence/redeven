@@ -18,9 +18,9 @@ export type StartupReport = Readonly<{
   exposure?: LocalUIExposure;
   effective_run_mode?: string;
   remote_enabled?: boolean;
-  provider_origin?: string;
-  controlplane_base_url?: string;
-  controlplane_provider_id?: string;
+  cloud_origin?: string;
+  access_point_origin?: string;
+  cloud_id?: string;
   env_public_id?: string;
   state_dir?: string;
   diagnostics_enabled?: boolean;
@@ -81,9 +81,9 @@ export function parseStartupReport(raw: string): StartupReport {
     ...(exposure ? { exposure } : {}),
     effective_run_mode: String(parsed.effective_run_mode ?? '').trim() || undefined,
     remote_enabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,
-    provider_origin: String(parsed.provider_origin ?? '').trim() || undefined,
-    controlplane_base_url: String(parsed.controlplane_base_url ?? '').trim() || undefined,
-    controlplane_provider_id: String(parsed.controlplane_provider_id ?? '').trim() || undefined,
+    cloud_origin: String(parsed.cloud_origin ?? '').trim() || undefined,
+    access_point_origin: String(parsed.access_point_origin ?? '').trim() || undefined,
+    cloud_id: String(parsed.cloud_id ?? '').trim() || undefined,
     env_public_id: String(parsed.env_public_id ?? '').trim() || undefined,
     state_dir: String(parsed.state_dir ?? '').trim() || undefined,
     diagnostics_enabled: typeof parsed.diagnostics_enabled === 'boolean' ? parsed.diagnostics_enabled : undefined,

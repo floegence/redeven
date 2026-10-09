@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   testDesktopPreferences,
-  testProviderEnvironment,
+  testCloudEnvironment,
 } from '../testSupport/desktopTestHelpers';
-import { normalizeDesktopControlPlaneProvider, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import { normalizeDesktopCloud, type DesktopControlPlaneSummary } from '../shared/cloud';
 import { buildDesktopWelcomeSnapshot } from './desktopWelcomeState';
 import {
   buildEnvironmentSourceRegistry,
@@ -47,10 +47,10 @@ function providerAccessPoint() {
 }
 
 function controlPlaneSummary(): DesktopControlPlaneSummary {
-  const provider = normalizeDesktopControlPlaneProvider({
-    protocol_version: 'rcpp-v3',
-    provider_id: 'example_provider',
-    provider_origin: 'https://provider.example.invalid',
+  const provider = normalizeDesktopCloud({
+    protocol_version: 'rcpp-v4',
+    cloud_id: 'example_provider',
+    cloud_origin: 'https://provider.example.invalid',
     display_name: 'Example Provider',
     documentation_url: 'https://provider.example.invalid/docs',
     access_points: [providerAccessPoint()],
@@ -59,10 +59,10 @@ function controlPlaneSummary(): DesktopControlPlaneSummary {
     throw new Error('test provider did not normalize');
   }
   return {
-    provider,
+    cloud: provider,
     account: {
-      provider_id: provider.provider_id,
-      provider_origin: provider.provider_origin,
+      cloud_id: provider.cloud_id,
+      cloud_origin: provider.cloud_origin,
       display_name: provider.display_name,
       user_public_id: 'user_demo',
       user_display_name: 'Demo User',
@@ -116,14 +116,14 @@ describe('environmentSourceRegistry', () => {
   });
 
   it('removing a Gateway removes its environment rows from the snapshot', () => {
-    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+    const providerEnvironment = testCloudEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Provider Env',
     });
     const gateway = gatewaySource({
       environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Provider Env' }],
     });
     const preferences = testDesktopPreferences({
-      provider_environments: [providerEnvironment],
+      cloud_environments: [providerEnvironment],
     });
     const withGateway = buildDesktopWelcomeSnapshot({
       preferences,

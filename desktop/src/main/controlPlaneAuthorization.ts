@@ -1,14 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { normalizeControlPlaneOrigin } from '../shared/controlPlaneProvider';
+import { normalizeControlPlaneOrigin } from '../shared/cloud';
 
 export const DESKTOP_CONTROL_PLANE_PKCE_METHOD = 'S256';
 export const DESKTOP_CONTROL_PLANE_AUTHORIZATION_TTL_MS = 5 * 60_000;
 
 export type PendingControlPlaneAuthorization = Readonly<{
   state: string;
-  provider_origin: string;
-  provider_id?: string;
+  cloud_origin: string;
+  cloud_id?: string;
   code_verifier: string;
   code_challenge: string;
   requested_env_public_id?: string;
@@ -20,8 +20,8 @@ export type PendingControlPlaneAuthorization = Readonly<{
 }>;
 
 type CreatePendingControlPlaneAuthorizationInput = Readonly<{
-  providerOrigin: string;
-  providerID?: string;
+  cloudOrigin: string;
+  cloudID?: string;
   requestedEnvPublicID?: string;
   requestedAccessPointOrigin?: string;
   label?: string;
@@ -48,7 +48,7 @@ export function buildControlPlaneCodeChallenge(codeVerifier: string): string {
 export function createPendingControlPlaneAuthorization(
   input: CreatePendingControlPlaneAuthorizationInput,
 ): PendingControlPlaneAuthorization {
-  const providerOrigin = normalizeControlPlaneOrigin(input.providerOrigin);
+  const cloudOrigin = normalizeControlPlaneOrigin(input.cloudOrigin);
   const requestedAccessPointOrigin = compact(input.requestedAccessPointOrigin) === ''
     ? ''
     : normalizeControlPlaneOrigin(compact(input.requestedAccessPointOrigin));
@@ -57,8 +57,8 @@ export function createPendingControlPlaneAuthorization(
 
   return {
     state: randomBase64URL(16),
-    provider_origin: providerOrigin,
-    provider_id: compact(input.providerID) || undefined,
+    cloud_origin: cloudOrigin,
+    cloud_id: compact(input.cloudID) || undefined,
     code_verifier: codeVerifier,
     code_challenge: buildControlPlaneCodeChallenge(codeVerifier),
     requested_env_public_id: compact(input.requestedEnvPublicID) || undefined,
@@ -71,10 +71,10 @@ export function createPendingControlPlaneAuthorization(
 }
 
 export function buildControlPlaneAuthorizationBrowserURL(
-  providerOrigin: string,
+  cloudOrigin: string,
   pendingAuthorization: PendingControlPlaneAuthorization,
 ): string {
-  const url = new URL('/desktop/connect', normalizeControlPlaneOrigin(providerOrigin));
+  const url = new URL('/desktop/connect', normalizeControlPlaneOrigin(cloudOrigin));
   url.searchParams.set('desktop_state', compact(pendingAuthorization.state));
   url.searchParams.set('code_challenge', compact(pendingAuthorization.code_challenge));
   url.searchParams.set('code_challenge_method', DESKTOP_CONTROL_PLANE_PKCE_METHOD);

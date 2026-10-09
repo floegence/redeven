@@ -1,6 +1,6 @@
 import {
   runtimeServiceAllowsOpenAttempt,
-  type RuntimeServiceProviderLinkBinding,
+  type RuntimeServiceCloudLinkBinding,
   type RuntimeServiceSnapshot,
 } from './runtimeService';
 
@@ -16,8 +16,8 @@ export type DesktopLocalRuntimeOpenPlanState =
 
 export type DesktopLocalRuntimeObservation = Readonly<{
   local_ui_url?: string;
-  controlplane_base_url?: string;
-  controlplane_provider_id?: string;
+  access_point_origin?: string;
+  cloud_id?: string;
   env_public_id?: string;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
@@ -38,8 +38,8 @@ export type DesktopLocalRuntimeOpenPlan = Readonly<{
 }>;
 
 export type DesktopLocalRuntimeProviderBinding = Readonly<{
-  provider_origin: string;
-  provider_id: string;
+  cloud_origin: string;
+  cloud_id: string;
   env_public_id: string;
   access_point_origin: string;
 }>;
@@ -49,13 +49,13 @@ function compact(value: unknown): string {
 }
 
 export function desktopRuntimeProviderBindingMatches(
-  binding: RuntimeServiceProviderLinkBinding | null | undefined,
+  binding: RuntimeServiceCloudLinkBinding | null | undefined,
   expected: Readonly<Partial<DesktopLocalRuntimeProviderBinding>> | null | undefined,
 ): boolean {
   return Boolean(
     binding?.state === 'linked'
-    && compact(binding.provider_origin) === compact(expected?.provider_origin)
-    && compact(binding.provider_id) === compact(expected?.provider_id)
+    && compact(binding.cloud_origin) === compact(expected?.cloud_origin)
+    && compact(binding.cloud_id) === compact(expected?.cloud_id)
     && compact(binding.env_public_id) === compact(expected?.env_public_id)
     && compact(binding.access_point_origin) === compact(expected?.access_point_origin),
   );

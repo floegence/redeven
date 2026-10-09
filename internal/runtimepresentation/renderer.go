@@ -245,7 +245,7 @@ func (r *Renderer) renderPlain(event Event) error {
 	case EventReady:
 		s := event.Snapshot
 		_, err := fmt.Fprintf(r.w, "[ready] environment: %s\n[ready] local ui: %s\n",
-			valueOr(s.EnvironmentURL, buildEnvironmentURL(s.ControlplaneBaseURL, s.EnvPublicID), "not connected"),
+			valueOr(s.EnvironmentURL, buildEnvironmentURL(s.AccessPointOrigin, s.EnvPublicID), "not connected"),
 			firstNonEmpty(s.LocalUIURLs, s.LocalUIBind, "not started"),
 		)
 		return err
@@ -280,8 +280,8 @@ func controlPlaneText(s Snapshot, event Event) string {
 	if event.Phase == PhaseConnectControl && event.Detail != "" {
 		return event.Detail
 	}
-	if s.ControlplaneBaseURL != "" {
-		return "connecting to " + s.ControlplaneBaseURL
+	if s.AccessPointOrigin != "" {
+		return "connecting to " + s.AccessPointOrigin
 	}
 	return "connecting"
 }

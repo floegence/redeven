@@ -12,8 +12,6 @@ import (
 
 const (
 	localUIPasswordEnvName       = "REDEVEN_LOCAL_UI_PASSWORD"
-	bootstrapTicketEnvName       = "REDEVEN_BOOTSTRAP_TICKET"
-	legacyDesktopTicketEnvName   = "REDEVEN_DESKTOP_BOOTSTRAP_TICKET"
 	startupSecretsEnvelopeMaxLen = 64 << 10
 )
 
@@ -24,6 +22,7 @@ const (
 	startupSecretSourcePrompt          startupSecretSource = "prompt"
 	startupSecretSourceStdin           startupSecretSource = "stdin"
 	startupSecretSourceFile            startupSecretSource = "file"
+	startupSecretSourceArgument        startupSecretSource = "argument"
 	startupSecretSourceEnvironment     startupSecretSource = "environment"
 	startupSecretSourceDesktopEnvelope startupSecretSource = "desktop_envelope"
 )
@@ -35,21 +34,21 @@ type resolvedStartupSecret struct {
 
 type resolvedStartupSecrets struct {
 	localUIPassword resolvedStartupSecret
-	bootstrapTicket resolvedStartupSecret
+	linkTicket      resolvedStartupSecret
 }
 
 type startupSecretsOptions struct {
+	linkTicket             string
 	passwordPrompt         bool
 	passwordStdin          bool
 	passwordFile           string
-	bootstrapTicketStdin   bool
-	bootstrapTicketFile    string
+	linkTicketStdin        bool
+	linkTicketFile         string
 	startupSecretsStdin    bool
 	stdin                  io.Reader
 	environment            *startupSecretEnvironment
 	promptPassword         func() (string, error)
 	usePasswordEnv         bool
-	useBootstrapTicketEnv  bool
 	desktopEnvelopeAllowed bool
 	terminalSecretReader   *terminalSecretReader
 }
@@ -57,14 +56,12 @@ type startupSecretsOptions struct {
 type startupSecretEnvironment struct {
 	localUIPassword    string
 	localUIPasswordSet bool
-	bootstrapTicket    string
-	bootstrapTicketSet bool
 }
 
 type startupSecretsEnvelope struct {
-	Version         int     `json:"version"`
-	LocalUIPassword *string `json:"local_ui_password,omitempty"`
-	BootstrapTicket *string `json:"bootstrap_ticket,omitempty"`
+	Version           int     `json:"version"`
+	LocalUIPassword   *string `json:"local_ui_password,omitempty"`
+	RuntimeLinkTicket *string `json:"runtime_link_ticket,omitempty"`
 }
 
 type startupSecretErrorKind string
@@ -97,9 +94,9 @@ func (e *startupSecretError) Error() string {
 	case startupSecretErrorPasswordSources:
 		return "use only one of --password-prompt, --password-stdin, or --password-file"
 	case startupSecretErrorTicketSources:
-		return "use only one of --bootstrap-ticket-stdin or --bootstrap-ticket-file"
+		return "use only one of --link-ticket, --link-ticket-stdin, or --link-ticket-file"
 	case startupSecretErrorStdinConflict:
-		return "password and bootstrap ticket cannot both read the same stdin stream"
+		return "password and link ticket cannot both read the same stdin stream"
 	case startupSecretErrorEnvelopeConflict:
 		return "--startup-secrets-stdin cannot be combined with another secret source"
 	case startupSecretErrorEnvelopeMode:
@@ -137,18 +134,16 @@ func resolveStartupSecrets(opts startupSecretsOptions) (resolvedStartupSecrets, 
 	}
 	passwordEnv := environment.localUIPassword
 	passwordEnvSet := environment.localUIPasswordSet
-	ticketEnv := environment.bootstrapTicket
-	ticketEnvSet := environment.bootstrapTicketSet
 
 	passwordExplicitCount := countTrue(opts.passwordPrompt, opts.passwordStdin, strings.TrimSpace(opts.passwordFile) != "")
-	ticketExplicitCount := countTrue(opts.bootstrapTicketStdin, strings.TrimSpace(opts.bootstrapTicketFile) != "")
+	ticketExplicitCount := countTrue(strings.TrimSpace(opts.linkTicket) != "", opts.linkTicketStdin, strings.TrimSpace(opts.linkTicketFile) != "")
 	if passwordExplicitCount > 1 {
 		return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorPasswordSources}
 	}
 	if ticketExplicitCount > 1 {
 		return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorTicketSources}
 	}
-	if opts.passwordStdin && opts.bootstrapTicketStdin {
+	if opts.passwordStdin && opts.linkTicketStdin {
 		return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorStdinConflict}
 	}
 
@@ -156,7 +151,7 @@ func resolveStartupSecrets(opts startupSecretsOptions) (resolvedStartupSecrets, 
 		if !opts.desktopEnvelopeAllowed {
 			return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorEnvelopeMode}
 		}
-		if passwordExplicitCount > 0 || ticketExplicitCount > 0 || passwordEnvSet || ticketEnvSet {
+		if passwordExplicitCount > 0 || ticketExplicitCount > 0 || passwordEnvSet {
 			return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorEnvelopeConflict}
 		}
 		return resolveStartupSecretsEnvelope(readerOrStdin(opts.stdin))
@@ -168,7 +163,7 @@ func resolveStartupSecrets(opts startupSecretsOptions) (resolvedStartupSecrets, 
 	if err != nil {
 		return resolvedStartupSecrets{}, err
 	}
-	resolved.bootstrapTicket, err = resolveBootstrapTicket(opts, ticketEnv, ticketEnvSet)
+	resolved.linkTicket, err = resolveRuntimeLinkTicket(opts)
 	if err != nil {
 		return resolvedStartupSecrets{}, err
 	}
@@ -177,16 +172,12 @@ func resolveStartupSecrets(opts startupSecretsOptions) (resolvedStartupSecrets, 
 
 func captureAndUnsetStartupSecretEnvironment() startupSecretEnvironment {
 	password, passwordSet := os.LookupEnv(localUIPasswordEnvName)
-	ticket, ticketSet := os.LookupEnv(bootstrapTicketEnvName)
-	for _, name := range []string{localUIPasswordEnvName, bootstrapTicketEnvName, legacyDesktopTicketEnvName} {
+	for _, name := range []string{localUIPasswordEnvName} {
 		_ = os.Unsetenv(name)
 	}
-	ticket = strings.TrimSpace(ticket)
 	return startupSecretEnvironment{
 		localUIPassword:    password,
 		localUIPasswordSet: passwordSet && password != "",
-		bootstrapTicket:    ticket,
-		bootstrapTicketSet: ticketSet && ticket != "",
 	}
 }
 
@@ -233,32 +224,32 @@ func resolveLocalUIPassword(opts startupSecretsOptions, envValue string, envSet 
 	}
 }
 
-func resolveBootstrapTicket(opts startupSecretsOptions, envValue string, envSet bool) (resolvedStartupSecret, error) {
+func resolveRuntimeLinkTicket(opts startupSecretsOptions) (resolvedStartupSecret, error) {
 	var value string
 	var source startupSecretSource
 	switch {
-	case opts.bootstrapTicketStdin:
-		readValue, err := readBootstrapTicketFromStdin(readerOrStdin(opts.stdin), opts.terminalSecretReader)
+	case strings.TrimSpace(opts.linkTicket) != "":
+		value, source = opts.linkTicket, startupSecretSourceArgument
+	case opts.linkTicketStdin:
+		readValue, err := readRuntimeLinkTicketFromStdin(readerOrStdin(opts.stdin), opts.terminalSecretReader)
 		if err != nil {
 			return resolvedStartupSecret{}, err
 		}
 		value, source = readValue, startupSecretSourceStdin
-	case strings.TrimSpace(opts.bootstrapTicketFile) != "":
-		path := strings.TrimSpace(opts.bootstrapTicketFile)
-		readValue, err := readStartupSecretFile(path, "bootstrap ticket")
+	case strings.TrimSpace(opts.linkTicketFile) != "":
+		path := strings.TrimSpace(opts.linkTicketFile)
+		readValue, err := readStartupSecretFile(path, "link ticket")
 		if err != nil {
 			return resolvedStartupSecret{}, err
 		}
 		value, source = readValue, startupSecretSourceFile
-	case opts.useBootstrapTicketEnv && envSet:
-		value, source = envValue, startupSecretSourceEnvironment
 	default:
 		return resolvedStartupSecret{}, nil
 	}
 
-	value = normalizeBootstrapTicket(value)
+	value = normalizeRuntimeLinkTicket(value)
 	if value == "" {
-		return resolvedStartupSecret{}, &startupSecretError{kind: startupSecretErrorEmpty, source: "bootstrap ticket"}
+		return resolvedStartupSecret{}, &startupSecretError{kind: startupSecretErrorEmpty, source: "link ticket"}
 	}
 	return resolvedStartupSecret{value: value, source: source}, nil
 }
@@ -281,7 +272,7 @@ func resolveStartupSecretsEnvelope(reader io.Reader) (resolvedStartupSecrets, er
 		}
 		return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorEnvelope, cause: err}
 	}
-	if envelope.Version != 1 {
+	if envelope.Version != 2 {
 		return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorEnvelope, cause: fmt.Errorf("unsupported version %d", envelope.Version)}
 	}
 
@@ -292,12 +283,12 @@ func resolveStartupSecretsEnvelope(reader io.Reader) (resolvedStartupSecrets, er
 		}
 		resolved.localUIPassword = resolvedStartupSecret{value: *envelope.LocalUIPassword, source: startupSecretSourceDesktopEnvelope}
 	}
-	if envelope.BootstrapTicket != nil {
-		ticket := normalizeBootstrapTicket(*envelope.BootstrapTicket)
+	if envelope.RuntimeLinkTicket != nil {
+		ticket := normalizeRuntimeLinkTicket(*envelope.RuntimeLinkTicket)
 		if ticket == "" {
-			return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorEmpty, source: "Desktop envelope bootstrap ticket"}
+			return resolvedStartupSecrets{}, &startupSecretError{kind: startupSecretErrorEmpty, source: "Desktop envelope link ticket"}
 		}
-		resolved.bootstrapTicket = resolvedStartupSecret{value: ticket, source: startupSecretSourceDesktopEnvelope}
+		resolved.linkTicket = resolvedStartupSecret{value: ticket, source: startupSecretSourceDesktopEnvelope}
 	}
 	return resolved, nil
 }
@@ -346,7 +337,7 @@ func readerOrStdin(reader io.Reader) io.Reader {
 	return os.Stdin
 }
 
-func normalizeBootstrapTicket(value string) string {
+func normalizeRuntimeLinkTicket(value string) string {
 	value = strings.TrimSpace(value)
 	if len(value) >= len("Bearer ") && strings.EqualFold(value[:len("Bearer ")], "Bearer ") {
 		value = strings.TrimSpace(value[len("Bearer "):])

@@ -1,0 +1,1324 @@
+openapi: 3.1.0
+info:
+  title: Redeven Cloud Protocol
+  version: rcpp-v4
+  summary: Cloud authority and assigned Access Point contract for Redeven clients.
+servers:
+  - url: https://redeven.example
+    description: Cloud authority
+  - url: https://sg.redeven.example
+    description: Access point
+tags:
+  - name: CloudAuthority
+  - name: AccessPoint
+  - name: MobileOAuth
+paths:
+  /.well-known/redeven-cloud.json:
+    get:
+      tags:
+        - CloudAuthority
+      operationId: getProviderDiscovery
+      responses:
+        '200':
+          description: Cloud discovery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryResponse'
+  /api/rcpp/v4/desktop/authorize:
+    post:
+      tags:
+        - CloudAuthority
+      operationId: createDesktopAuthorizationCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopAuthorizationRequest'
+      responses:
+        '200':
+          description: Authorization code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopAuthorizationResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/mobile/oauth/config:
+    get:
+      tags:
+        - MobileOAuth
+      operationId: getMobileOAuthConfig
+      responses:
+        '200':
+          description: Public provider login capabilities for native iOS.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileOAuthConfigEnvelope'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/mobile/oauth/sessions:
+    post:
+      tags:
+        - MobileOAuth
+      operationId: createMobileOAuthSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMobileOAuthSessionRequest'
+      responses:
+        '200':
+          description: Native provider authorization URL and opaque mobile state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMobileOAuthSessionEnvelope'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/mobile/oauth/exchange:
+    post:
+      tags:
+        - MobileOAuth
+      operationId: exchangeMobileOAuthCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeMobileOAuthCredentialRequest'
+      responses:
+        '200':
+          description: Provider authorization material for native iOS.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeMobileOAuthCredentialEnvelope'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/mobile/token/refresh:
+    post:
+      tags:
+        - MobileOAuth
+      operationId: refreshMobileAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudTokenRefreshRequest'
+      responses:
+        '200':
+          description: Refreshed mobile access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudTokenRefreshResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/mobile/token/revoke:
+    post:
+      tags:
+        - MobileOAuth
+      operationId: revokeMobileAuthorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudTokenRevokeRequest'
+      responses:
+        '204':
+          description: Mobile authorization revoked.
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/desktop/connect/exchange:
+    post:
+      tags:
+        - CloudAuthority
+      operationId: exchangeDesktopAuthorizationCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopConnectExchangeRequest'
+      responses:
+        '200':
+          description: Desktop authorization material.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopConnectExchangeResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/desktop/token/refresh:
+    post:
+      tags:
+        - CloudAuthority
+      operationId: refreshDesktopAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudTokenRefreshRequest'
+      responses:
+        '200':
+          description: Refreshed desktop access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudTokenRefreshResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/desktop/token/revoke:
+    post:
+      tags:
+        - CloudAuthority
+      operationId: revokeDesktopAuthorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudTokenRevokeRequest'
+      responses:
+        '204':
+          description: Authorization revoked.
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/me:
+    get:
+      tags:
+        - CloudAuthority
+      operationId: getProviderAccount
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Provider account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudMeResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/environments:
+    get:
+      tags:
+        - AccessPoint
+      operationId: listCloudEnvironments
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Environments visible at this access point.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudEnvironmentListResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/environments/runtime-health/query:
+    post:
+      tags:
+        - AccessPoint
+      operationId: queryCloudEnvironmentRuntimeHealth
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudEnvironmentRuntimeHealthQueryRequest'
+      responses:
+        '200':
+          description: Runtime health snapshots.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudEnvironmentRuntimeHealthQueryResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/environments/{envId}/desktop/open-session:
+    post:
+      tags:
+        - AccessPoint
+      operationId: createDesktopOpenSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Desktop open-session materials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopOpenSessionResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/environments/{envId}/runtime-link/authorizations:
+    post:
+      tags:
+        - AccessPoint
+      operationId: createRuntimeLinkAuthorization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeLinkAuthorizationRequest'
+      responses:
+        '200':
+          description: Short-lived Runtime-link ticket bound to the user, provider, access point, and Environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeLinkAuthorizationResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/runtime-link/exchange:
+    post:
+      tags:
+        - AccessPoint
+      operationId: exchangeRuntimeLinkTicket
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeLinkExchangeRequest'
+      responses:
+        '200':
+          description: Runtime binding metadata and one exact control_artifact_pool_v2 initial delivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeLinkExchangeResponse'
+        '409':
+          $ref: '#/components/responses/RuntimeLinkConflict'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v4/runtime-link/resolve:
+    post:
+      tags:
+        - CloudAuthority
+      operationId: resolveRuntimeLinkAccessPoint
+      description: >-
+        Validate the link ticket and return its authoritative assignment without consuming it. Credentials never follow
+        cross-origin redirects.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeLinkResolveRequest'
+      responses:
+        '200':
+          description: 'Assigned Access Point. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeLinkResolveResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    RuntimeLinkConflict:
+      description: >-
+        Runtime-link delivery or binding conflict. An expired delivery is terminal for that delivery ID; the caller must
+        request a fresh ticket and rotate the ID.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - success
+              - error
+            properties:
+              success:
+                type: boolean
+                const: false
+              error:
+                type: object
+                additionalProperties: false
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - RUNTIME_LINK_DELIVERY_EXPIRED
+                      - RUNTIME_LINK_BINDING_STALE
+                      - CONTROL_POOL_RELINK_REQUIRED
+                      - ENVIRONMENT_BINDING_OCCUPIED
+                  message:
+                    type: string
+    ErrorEnvelope:
+      description: Standard error envelope.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                const: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+  schemas:
+    DiscoveryResponse:
+      type: object
+      required:
+        - protocol_version
+        - cloud_id
+        - display_name
+        - cloud_origin
+        - documentation_url
+        - access_points
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v4
+        cloud_id:
+          type: string
+        display_name:
+          type: string
+        cloud_origin:
+          type: string
+          format: uri
+        documentation_url:
+          type: string
+        access_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudAccessPoint'
+    CloudAccessPoint:
+      type: object
+      required:
+        - access_point_id
+        - region
+        - display_name
+        - access_point_origin
+        - status
+      properties:
+        access_point_id:
+          type: string
+        region:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        country_code:
+          type: string
+        city:
+          type: string
+        status:
+          type: string
+        health_status:
+          type: string
+    DesktopAuthorizationRequest:
+      type: object
+      required:
+        - code_challenge
+        - code_challenge_method
+      properties:
+        code_challenge:
+          type: string
+        code_challenge_method:
+          type: string
+          const: S256
+    DesktopAuthorizationResponse:
+      type: object
+      required:
+        - authorization_code
+        - expires_at_unix_ms
+      properties:
+        authorization_code:
+          type: string
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    MobileOAuthConfigResponse:
+      type: object
+      required:
+        - cloud_origin
+        - oauth_providers
+      properties:
+        cloud_origin:
+          type: string
+          format: uri
+        oauth_providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileOAuthSummary'
+    MobileOAuthConfigEnvelope:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/MobileOAuthConfigResponse'
+    MobileOAuthSummary:
+      type: object
+      required:
+        - oauth_provider
+        - display_name
+        - scopes
+        - code_challenge_methods_supported
+        - redirect_uri
+      properties:
+        oauth_provider:
+          type: string
+          enum:
+            - apple
+            - google
+            - github
+        display_name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+        redirect_uri:
+          type: string
+          pattern: ^(|com\.floegence\.redeven:/oauth/(google|github))$
+          description: Empty for Apple native Sign in with Apple; provider callback URI for Google and GitHub.
+          example: com.floegence.redeven:/oauth/google
+    CreateMobileOAuthSessionRequest:
+      type: object
+      required:
+        - oauth_provider
+        - cloud_origin
+        - client_state
+        - code_challenge
+        - code_challenge_method
+        - redirect_uri
+        - app_instance_id
+      properties:
+        oauth_provider:
+          type: string
+          enum:
+            - apple
+            - google
+            - github
+        cloud_origin:
+          type: string
+          format: uri
+        client_state:
+          type: string
+          minLength: 1
+          maxLength: 256
+        code_challenge:
+          type: string
+          minLength: 43
+          maxLength: 128
+        code_challenge_method:
+          type: string
+          const: S256
+        redirect_uri:
+          type: string
+          pattern: ^(|com\.floegence\.redeven:/oauth/(google|github))$
+          description: Empty for Apple native Sign in with Apple; provider callback URI for Google and GitHub.
+          example: com.floegence.redeven:/oauth/google
+        app_instance_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    CreateMobileOAuthSessionResponse:
+      type: object
+      required:
+        - oauth_provider
+        - cloud_origin
+        - authorization_url
+        - mobile_oauth_state
+        - expires_at_unix_ms
+      properties:
+        oauth_provider:
+          type: string
+          enum:
+            - apple
+            - google
+            - github
+        cloud_origin:
+          type: string
+          format: uri
+        authorization_url:
+          type: string
+          description: Empty for Apple native Sign in with Apple; absolute provider authorization URL for Google and GitHub.
+        mobile_oauth_state:
+          type: string
+          description: Opaque one-time mobile provider state handle.
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    CreateMobileOAuthSessionEnvelope:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/CreateMobileOAuthSessionResponse'
+    ExchangeMobileOAuthCredentialRequest:
+      oneOf:
+        - $ref: '#/components/schemas/ExchangeAppleMobileOAuthCredentialRequest'
+        - $ref: '#/components/schemas/ExchangeGoogleMobileOAuthCredentialRequest'
+        - $ref: '#/components/schemas/ExchangeGitHubMobileOAuthCredentialRequest'
+    ExchangeMobileOAuthCredentialBase:
+      type: object
+      required:
+        - oauth_provider
+        - cloud_origin
+        - code_verifier
+        - redirect_uri
+        - mobile_oauth_state
+        - client_state
+        - app_instance_id
+      properties:
+        cloud_origin:
+          type: string
+          format: uri
+        code_verifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+        mobile_oauth_state:
+          type: string
+          minLength: 1
+          description: Opaque one-time mobile provider state handle returned by the session endpoint.
+        client_state:
+          type: string
+          minLength: 1
+          maxLength: 256
+        app_instance_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    ExchangeAppleMobileOAuthCredentialRequest:
+      allOf:
+        - $ref: '#/components/schemas/ExchangeMobileOAuthCredentialBase'
+        - type: object
+          required:
+            - oauth_provider
+            - identity_token
+          properties:
+            oauth_provider:
+              type: string
+              const: apple
+            redirect_uri:
+              type: string
+              const: ''
+            identity_token:
+              type: string
+              minLength: 1
+              description: >-
+                Auth verifies JWS signature, issuer, audience, expiry, verified email, and nonce bound to the PKCE S256
+                challenge.
+    ExchangeGoogleMobileOAuthCredentialRequest:
+      allOf:
+        - $ref: '#/components/schemas/ExchangeMobileOAuthCredentialBase'
+        - type: object
+          required:
+            - oauth_provider
+            - code
+          properties:
+            oauth_provider:
+              type: string
+              const: google
+            code:
+              type: string
+              minLength: 1
+            redirect_uri:
+              type: string
+              const: com.floegence.redeven:/oauth/google
+    ExchangeGitHubMobileOAuthCredentialRequest:
+      allOf:
+        - $ref: '#/components/schemas/ExchangeMobileOAuthCredentialBase'
+        - type: object
+          required:
+            - oauth_provider
+            - code
+          properties:
+            oauth_provider:
+              type: string
+              const: github
+            code:
+              type: string
+              minLength: 1
+            redirect_uri:
+              type: string
+              const: com.floegence.redeven:/oauth/github
+    ExchangeMobileOAuthCredentialResponse:
+      type: object
+      required:
+        - access_token
+        - access_expires_at_unix_ms
+        - refresh_token
+        - authorization_expires_at_unix_ms
+        - cloud_id
+        - cloud_origin
+        - account
+        - access_points
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        refresh_token:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+        cloud_id:
+          type: string
+        cloud_origin:
+          type: string
+          format: uri
+        account:
+          $ref: '#/components/schemas/CloudMeResponse'
+        access_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudAccessPoint'
+    ExchangeMobileOAuthCredentialEnvelope:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ExchangeMobileOAuthCredentialResponse'
+    DesktopConnectExchangeRequest:
+      type: object
+      required:
+        - authorization_code
+        - code_verifier
+      properties:
+        authorization_code:
+          type: string
+        code_verifier:
+          type: string
+    DesktopConnectExchangeResponse:
+      type: object
+      required:
+        - access_token
+        - access_expires_at_unix_ms
+        - refresh_token
+        - authorization_expires_at_unix_ms
+        - cloud_id
+        - cloud_origin
+        - account
+        - access_points
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        refresh_token:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+        cloud_id:
+          type: string
+        cloud_origin:
+          type: string
+          format: uri
+        account:
+          $ref: '#/components/schemas/CloudMeResponse'
+        access_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudAccessPoint'
+    CloudTokenRefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    CloudTokenRefreshResponse:
+      type: object
+      required:
+        - access_token
+        - access_expires_at_unix_ms
+        - authorization_expires_at_unix_ms
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+    CloudTokenRevokeRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    CloudMeResponse:
+      type: object
+      required:
+        - user_public_id
+        - user_display_name
+        - authorization_expires_at_unix_ms
+      properties:
+        user_public_id:
+          type: string
+        user_display_name:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+    CloudEnvironmentListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_version
+        - environments
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v4
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudEnvironmentSummary'
+    CloudEnvironmentSummary:
+      type: object
+      required:
+        - env_public_id
+        - name
+        - region
+        - access_point_id
+        - access_point_origin
+        - access
+      properties:
+        env_public_id:
+          type: string
+        name:
+          type: string
+        region:
+          type: string
+        access_point_id:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        environment_url:
+          type: string
+        description:
+          type: string
+        namespace_public_id:
+          type: string
+        namespace_name:
+          type: string
+        status:
+          type: string
+        lifecycle_status:
+          type: string
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+        runtime_health:
+          $ref: '#/components/schemas/CloudEnvironmentRuntimeHealth'
+        access:
+          $ref: '#/components/schemas/CloudEnvironmentAccess'
+    CloudEnvironmentAccess:
+      type: object
+      additionalProperties: false
+      required:
+        - can_connect
+        - workspace_read
+        - workspace_write
+        - workspace_execute
+      properties:
+        can_connect:
+          type: boolean
+        workspace_read:
+          type: boolean
+        workspace_write:
+          type: boolean
+        workspace_execute:
+          type: boolean
+    CloudEnvironmentRuntimeHealthQueryRequest:
+      type: object
+      required:
+        - env_public_ids
+      properties:
+        env_public_ids:
+          type: array
+          items:
+            type: string
+    CloudEnvironmentRuntimeHealthQueryResponse:
+      type: object
+      required:
+        - environments
+      properties:
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudEnvironmentRuntimeHealth'
+    CloudEnvironmentRuntimeHealth:
+      type: object
+      required:
+        - env_public_id
+        - runtime_status
+        - observed_at_unix_ms
+      properties:
+        env_public_id:
+          type: string
+        runtime_status:
+          type: string
+          enum:
+            - online
+            - offline
+        observed_at_unix_ms:
+          type: integer
+          format: int64
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+        offline_reason_code:
+          type: string
+        offline_reason:
+          type: string
+    DesktopOpenSessionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - access_point_origin
+        - expires_at_unix_ms
+      properties:
+        remote_session_url:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    RuntimeLinkAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_version
+        - env_public_id
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v4
+        env_public_id:
+          type: string
+          minLength: 1
+    RuntimeLinkAuthorizationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_version
+        - runtime_link_ticket
+        - expires_at_unix_ms
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v4
+        runtime_link_ticket:
+          type: string
+          minLength: 1
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+          minimum: 1
+    RuntimeLinkExchangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_version
+        - env_public_id
+        - cloud_origin
+        - local_environment_public_id
+        - agent_instance_id
+        - delivery_request_id_b64u
+      properties:
+        expected_binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Renew only the current matching association at this generation; never create or replace one.
+        protocol_version:
+          type: string
+          const: rcpp-v4
+        env_public_id:
+          type: string
+          minLength: 1
+        cloud_origin:
+          type: string
+          format: uri
+        local_environment_public_id:
+          type: string
+          minLength: 1
+        agent_instance_id:
+          type: string
+          minLength: 1
+        delivery_request_id_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        hostname:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        runtime_version:
+          type: string
+    RuntimeLinkExchangeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_version
+        - cloud_id
+        - cloud_origin
+        - access_point_id
+        - access_point_origin
+        - env_public_id
+        - control_artifact_pool
+        - local_environment_binding
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v4
+        cloud_id:
+          type: string
+        cloud_origin:
+          type: string
+          format: uri
+        access_point_id:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        env_public_id:
+          type: string
+        control_artifact_pool:
+          $ref: '#/components/schemas/RuntimeLinkInitialControlArtifactPoolV2'
+        local_environment_binding:
+          $ref: '#/components/schemas/CloudLocalEnvironmentBinding'
+    RuntimeControlArtifactPoolV2:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - logical_cloud_binding_id
+        - binding_generation
+        - target_waterline
+        - refresh_horizon_seconds
+        - server_highest_artifact_sequence
+        - entries
+        - response_digest_b64u
+      properties:
+        version:
+          type: string
+          const: control_artifact_pool_v2
+        logical_cloud_binding_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        target_waterline:
+          type: integer
+          const: 2
+        refresh_horizon_seconds:
+          type: integer
+          const: 60
+        server_highest_artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+          description: >-
+            Authenticated durable server high-watermark after this exact delivery. Top-up entries are internally
+            contiguous but may start after an expired, undelivered sequence range.
+        entries:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+        response_digest_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: >-
+            For bootstrap, SHA-256 of the canonical pool JSON with this field empty. For top-up, SHA-256 of the
+            canonical outer response with this field empty, including top_up_request_id_b64u.
+    RuntimeControlArtifactPoolTopUpRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - env_public_id
+        - local_environment_public_id
+        - binding_generation
+        - top_up_request_id_b64u
+      properties:
+        env_public_id:
+          type: string
+          minLength: 1
+        local_environment_public_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        top_up_request_id_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: >-
+            Canonical base64url encoding of a fresh 32-byte idempotency ID persisted before RPC type 41006. Existing IDs
+            are replayed before capacity enforcement; a new ID after 65,536 accepted bootstrap and top-up delivery IDs
+            in the exact binding generation receives 409/control_pool_relink_required and requires relinking.
+    RuntimeControlArtifactPoolTopUpResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - top_up_request_id_b64u
+        - pool
+      properties:
+        top_up_request_id_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: Exact ID echoed from the persisted pending request and covered by response_digest_b64u.
+        pool:
+          allOf:
+            - $ref: '#/components/schemas/RuntimeControlArtifactPoolV2'
+            - type: object
+              properties:
+                entries:
+                  type: array
+                  maxItems: 4
+                  items:
+                    $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+      description: >-
+        Flowersec RPC type 41006 response; exact serialized JSON is limited to 524,288 bytes. The same request ID
+        replays the same outbox bytes until its replay horizon. Entries are internally contiguous, but their first
+        sequence may be above the Runtime's local high-watermark when an older undelivered outbox expired;
+        server_highest_artifact_sequence authenticates that forward gap.
+    RuntimeControlArtifactPoolAck:
+      type: object
+      additionalProperties: false
+      required:
+        - env_public_id
+        - binding_generation
+        - top_up_request_id_b64u
+        - response_digest_b64u
+        - highest_artifact_sequence
+      properties:
+        env_public_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        top_up_request_id_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        response_digest_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        highest_artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+    RuntimeControlArtifactPoolAckResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+          const: true
+      description: >-
+        Exact Flowersec RPC type 41007 response. Repeating an ACK for the same outbox is idempotent; an expired
+        tombstone returns top_up_request_expired and never issues replacement artifacts for that ID.
+    RuntimeControlArtifactPoolEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - artifact_json
+        - artifact_channel_id
+        - binding_generation
+        - artifact_sequence
+        - expires_at_unix_s
+      properties:
+        artifact_json:
+          type: object
+          description: >-
+            Opaque Flowersec 5 artifact JSON; its exact serialized form is limited to 65,536 bytes and consumers must
+            pass it only to the published SDK parser.
+        artifact_channel_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        expires_at_unix_s:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+    CloudLocalEnvironmentBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - local_environment_public_id
+        - user_public_id
+        - env_public_id
+        - generation
+      properties:
+        local_environment_public_id:
+          type: string
+        user_public_id:
+          type: string
+        env_public_id:
+          type: string
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        hostname:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        runtime_version:
+          type: string
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+    RuntimeLinkInitialControlArtifactPoolV2:
+      allOf:
+        - $ref: '#/components/schemas/RuntimeControlArtifactPoolV2'
+        - type: object
+          properties:
+            entries:
+              type: array
+              minItems: 2
+              maxItems: 2
+              items:
+                $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+    RuntimeLinkResolveRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_version
+        - env_public_id
+      properties:
+        protocol_version:
+          const: rcpp-v4
+        env_public_id:
+          type: string
+          minLength: 1
+    RuntimeLinkResolveResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_version
+        - cloud_id
+        - cloud_origin
+        - env_public_id
+        - access_point_id
+        - access_point_origin
+        - expires_at_unix_ms
+      properties:
+        protocol_version:
+          const: rcpp-v4
+        cloud_id:
+          type: string
+          minLength: 1
+        cloud_origin:
+          type: string
+          format: uri
+        env_public_id:
+          type: string
+          minLength: 1
+        access_point_id:
+          type: string
+          minLength: 1
+        access_point_origin:
+          type: string
+          format: uri
+        expires_at_unix_ms:
+          type: integer
+          format: int64

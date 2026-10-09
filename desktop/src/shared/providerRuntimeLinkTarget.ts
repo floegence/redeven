@@ -1,46 +1,46 @@
 import type {
   RuntimeServiceProviderConnectionState,
-  RuntimeServiceProviderLinkBinding,
-  RuntimeServiceProviderLinkState,
+  RuntimeServiceCloudLinkBinding,
+  RuntimeServiceCloudLinkState,
   RuntimeServiceSnapshot,
 } from './runtimeService';
 import type { DesktopRuntimeControlStatus } from './desktopRuntimePresence';
 
-export type DesktopProviderRuntimeLinkTargetKind = 'local_environment' | 'wsl_environment' | 'ssh_environment';
+export type DesktopCloudRuntimeLinkTargetKind = 'local_environment' | 'wsl_environment' | 'ssh_environment';
 
-export type DesktopProviderRuntimeLinkTargetID = `local:${string}` | `wsl:${string}` | `ssh:${string}`;
+export type DesktopCloudRuntimeLinkTargetID = `local:${string}` | `wsl:${string}` | `ssh:${string}`;
 
-export type DesktopProviderEnvironmentOccupancyState =
+export type DesktopCloudEnvironmentOccupancyState =
   | 'available'
   | 'linked_here'
   | 'occupied_by_known_runtime'
   | 'occupied_by_provider_online_runtime';
 
-export type DesktopProviderEnvironmentOccupancy = Readonly<{
-  state: DesktopProviderEnvironmentOccupancyState;
-  runtime_target_id?: DesktopProviderRuntimeLinkTargetID;
-  runtime_kind?: DesktopProviderRuntimeLinkTargetKind;
+export type DesktopCloudEnvironmentOccupancy = Readonly<{
+  state: DesktopCloudEnvironmentOccupancyState;
+  runtime_target_id?: DesktopCloudRuntimeLinkTargetID;
+  runtime_kind?: DesktopCloudRuntimeLinkTargetKind;
   runtime_label?: string;
   provider_connection_state?: RuntimeServiceProviderConnectionState;
 }>;
 
-export type DesktopProviderEnvironmentCandidate = Readonly<{
+export type DesktopCloudEnvironmentCandidate = Readonly<{
   provider_environment_id: string;
   label: string;
-  provider_origin: string;
-  provider_id: string;
+  cloud_origin: string;
+  cloud_id: string;
   env_public_id: string;
   access_point_origin: string;
   provider_label?: string;
   route_state: 'online' | 'offline' | 'unknown';
-  occupancy: DesktopProviderEnvironmentOccupancy;
+  occupancy: DesktopCloudEnvironmentOccupancy;
   disabled_reason_code?: string;
   disabled_reason?: string;
 }>;
 
-export type DesktopProviderRuntimeLinkTarget = Readonly<{
-  id: DesktopProviderRuntimeLinkTargetID;
-  kind: DesktopProviderRuntimeLinkTargetKind;
+export type DesktopCloudRuntimeLinkTarget = Readonly<{
+  id: DesktopCloudRuntimeLinkTargetID;
+  kind: DesktopCloudRuntimeLinkTargetKind;
   environment_id: string;
   label: string;
   runtime_key: string;
@@ -57,15 +57,15 @@ export type DesktopProviderRuntimeLinkTarget = Readonly<{
     next_retry_at_unix_ms?: number;
     attempt_count: number;
   }>;
-  provider_link_state: RuntimeServiceProviderLinkState;
-  provider_link_binding?: RuntimeServiceProviderLinkBinding;
-  provider_origin?: string;
-  provider_origin_supported: boolean;
-  provider_id?: string;
+  cloud_link_state: RuntimeServiceCloudLinkState;
+  cloud_link_binding?: RuntimeServiceCloudLinkBinding;
+  cloud_origin?: string;
+  cloud_origin_supported: boolean;
+  cloud_id?: string;
   env_public_id?: string;
   access_point_origin?: string;
-  can_connect_provider: boolean;
-  can_disconnect_provider: boolean;
+  can_connect_cloud: boolean;
+  can_disconnect_cloud: boolean;
   blocked_reason_code?: string;
   blocked_reason?: string;
 }>;
@@ -74,10 +74,10 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function desktopProviderRuntimeLinkTargetID(
-  kind: DesktopProviderRuntimeLinkTargetKind,
+export function desktopCloudRuntimeLinkTargetID(
+  kind: DesktopCloudRuntimeLinkTargetKind,
   runtimeKey: string,
-): DesktopProviderRuntimeLinkTargetID {
+): DesktopCloudRuntimeLinkTargetID {
   const cleanRuntimeKey = compact(runtimeKey);
   if (cleanRuntimeKey === '') {
     throw new Error('Runtime target key is required.');
@@ -90,25 +90,25 @@ export function desktopProviderRuntimeLinkTargetID(
   return `${prefix}:${cleanRuntimeKey}`;
 }
 
-export function normalizeDesktopProviderRuntimeLinkTargetID(
+export function normalizeDesktopCloudRuntimeLinkTargetID(
   value: unknown,
-): DesktopProviderRuntimeLinkTargetID | null {
+): DesktopCloudRuntimeLinkTargetID | null {
   const cleanValue = compact(value);
   if (cleanValue.startsWith('local:') && cleanValue.length > 'local:'.length) {
-    return cleanValue as DesktopProviderRuntimeLinkTargetID;
+    return cleanValue as DesktopCloudRuntimeLinkTargetID;
   }
   if (cleanValue.startsWith('ssh:') && cleanValue.length > 'ssh:'.length) {
-    return cleanValue as DesktopProviderRuntimeLinkTargetID;
+    return cleanValue as DesktopCloudRuntimeLinkTargetID;
   }
   if (cleanValue.startsWith('wsl:') && cleanValue.length > 'wsl:'.length) {
-    return cleanValue as DesktopProviderRuntimeLinkTargetID;
+    return cleanValue as DesktopCloudRuntimeLinkTargetID;
   }
   return null;
 }
 
-export function desktopProviderRuntimeLinkTargetKindFromID(
-  value: DesktopProviderRuntimeLinkTargetID,
-): DesktopProviderRuntimeLinkTargetKind {
+export function desktopCloudRuntimeLinkTargetKindFromID(
+  value: DesktopCloudRuntimeLinkTargetID,
+): DesktopCloudRuntimeLinkTargetKind {
   return value.startsWith('ssh:')
     ? 'ssh_environment'
     : value.startsWith('wsl:')
@@ -116,8 +116,8 @@ export function desktopProviderRuntimeLinkTargetKindFromID(
       : 'local_environment';
 }
 
-export function desktopProviderRuntimeLinkTargetRuntimeKey(
-  value: DesktopProviderRuntimeLinkTargetID,
+export function desktopCloudRuntimeLinkTargetRuntimeKey(
+  value: DesktopCloudRuntimeLinkTargetID,
 ): string {
   return value.replace(/^(local|wsl|ssh):/u, '');
 }

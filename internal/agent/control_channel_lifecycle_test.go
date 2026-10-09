@@ -13,7 +13,7 @@ import (
 
 func TestControlChannelAcceptsPlatformTrustRoots(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := providerLinkRemoteConfig(t, configPath)
+	cfg := cloudLinkRemoteConfig(t, configPath)
 	// Exhaustion terminates acquisition without making any network request.
 	cfg.ControlArtifactPool.Entries = nil
 	if err := cfg.ValidateRemoteStrict(); err != nil {

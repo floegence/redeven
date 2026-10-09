@@ -273,7 +273,7 @@ func targetExecUnsupportedMessage(kind string) string {
 		return "Redeven recognized this SSH container target, but `redeven targets exec` does not execute inside remote container placements in this version."
 	case TargetKindSSHEnvironment:
 		return "Redeven recognized this SSH target, but no saved SSH execution route is available for `redeven targets exec`."
-	case TargetKindProviderEnvironment:
+	case TargetKindCloudEnvironment:
 		return "Redeven recognized this provider environment target, but target command execution requires a concrete local or SSH runtime target."
 	case TargetKindGatewayEnvironment:
 		return "Redeven recognized this Gateway target, but target command execution requires a concrete local or SSH runtime target."

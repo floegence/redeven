@@ -67,10 +67,10 @@ func openTTYForPasswordPrompt() (*passwordPromptTTY, error) {
 	return nil, errPasswordPromptRequiresTTY
 }
 
-func readBootstrapTicketFromStdin(reader io.Reader, terminalReader *terminalSecretReader) (string, error) {
+func readRuntimeLinkTicketFromStdin(reader io.Reader, terminalReader *terminalSecretReader) (string, error) {
 	file, isFile := reader.(*os.File)
 	if !isFile {
-		return readStartupSecret(reader, "bootstrap ticket")
+		return readStartupSecret(reader, "link ticket")
 	}
 	if terminalReader == nil {
 		terminalReader = &terminalSecretReader{
@@ -80,24 +80,24 @@ func readBootstrapTicketFromStdin(reader io.Reader, terminalReader *terminalSecr
 		}
 	}
 	if terminalReader.isTerminal == nil || !terminalReader.isTerminal(int(file.Fd())) {
-		return readStartupSecret(reader, "bootstrap ticket")
+		return readStartupSecret(reader, "link ticket")
 	}
 	if terminalReader.readPassword == nil {
-		return "", &startupSecretError{kind: startupSecretErrorRead, source: "bootstrap ticket", cause: errors.New("terminal secret reader is unavailable")}
+		return "", &startupSecretError{kind: startupSecretErrorRead, source: "link ticket", cause: errors.New("terminal secret reader is unavailable")}
 	}
 	promptWriter := terminalReader.promptWriter
 	if promptWriter == nil {
 		promptWriter = io.Discard
 	}
 
-	_, _ = fmt.Fprint(promptWriter, "Enter bootstrap ticket: ")
+	_, _ = fmt.Fprint(promptWriter, "Enter link ticket: ")
 	raw, err := terminalReader.readPassword(int(file.Fd()))
 	_, _ = fmt.Fprintln(promptWriter)
 	if err != nil {
-		return "", &startupSecretError{kind: startupSecretErrorRead, source: "bootstrap ticket", cause: err}
+		return "", &startupSecretError{kind: startupSecretErrorRead, source: "link ticket", cause: err}
 	}
 	if len(raw) > startupSecretsEnvelopeMaxLen {
-		return "", &startupSecretError{kind: startupSecretErrorTooLarge, source: "bootstrap ticket"}
+		return "", &startupSecretError{kind: startupSecretErrorTooLarge, source: "link ticket"}
 	}
 	return string(raw), nil
 }

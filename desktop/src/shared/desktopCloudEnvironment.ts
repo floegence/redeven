@@ -1,14 +1,14 @@
 import type {
-  DesktopProviderEnvironment,
-  DesktopProviderEnvironmentAccess,
-} from './controlPlaneProvider';
-import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
+  DesktopCloudEnvironment,
+  DesktopCloudEnvironmentAccess,
+} from './cloud';
+import { normalizeControlPlaneOrigin } from './cloud';
 import {
-  normalizeDesktopProviderEnvironmentID,
+  normalizeDesktopCloudEnvironmentID,
   type DesktopLocalEnvironmentPreferredOpenRoute,
 } from './desktopLocalEnvironmentState';
 
-export type DesktopProviderEnvironmentRemoteCatalogEntry = Readonly<{
+export type DesktopCloudEnvironmentRemoteCatalogEntry = Readonly<{
   region: string;
   access_point_id: string;
   access_point_origin: string;
@@ -19,13 +19,13 @@ export type DesktopProviderEnvironmentRemoteCatalogEntry = Readonly<{
   status: string;
   lifecycle_status: string;
   last_seen_at_unix_ms: number;
-  access?: DesktopProviderEnvironmentAccess;
+  access?: DesktopCloudEnvironmentAccess;
 }>;
 
-export type DesktopProviderEnvironmentRecord = Readonly<{
+export type DesktopCloudEnvironmentRecord = Readonly<{
   id: string;
-  provider_origin: string;
-  provider_id: string;
+  cloud_origin: string;
+  cloud_id: string;
   env_public_id: string;
   region: string;
   access_point_id: string;
@@ -38,26 +38,26 @@ export type DesktopProviderEnvironmentRecord = Readonly<{
   preferred_open_route: DesktopLocalEnvironmentPreferredOpenRoute;
   remote_web_supported: boolean;
   remote_desktop_supported: boolean;
-  remote_catalog_entry?: DesktopProviderEnvironmentRemoteCatalogEntry;
+  remote_catalog_entry?: DesktopCloudEnvironmentRemoteCatalogEntry;
 }>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function desktopProviderEnvironmentID(providerOrigin: string, envPublicID: string): string {
-  const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
-  const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
+export function desktopCloudEnvironmentID(cloudOrigin: string, envPublicID: string): string {
+  const normalizedOrigin = normalizeControlPlaneOrigin(cloudOrigin);
+  const normalizedEnvPublicID = normalizeDesktopCloudEnvironmentID(envPublicID);
   return `provider:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
 }
 
-export function defaultDesktopProviderEnvironmentLabel(envPublicID: string): string {
-  return normalizeDesktopProviderEnvironmentID(envPublicID);
+export function defaultDesktopCloudEnvironmentLabel(envPublicID: string): string {
+  return normalizeDesktopCloudEnvironmentID(envPublicID);
 }
 
-export function desktopProviderEnvironmentRemoteCatalogEntryFromPublished(
-  published: DesktopProviderEnvironment,
-): DesktopProviderEnvironmentRemoteCatalogEntry {
+export function desktopCloudEnvironmentRemoteCatalogEntryFromPublished(
+  published: DesktopCloudEnvironment,
+): DesktopCloudEnvironmentRemoteCatalogEntry {
   return {
     region: compact(published.region),
     access_point_id: compact(published.access_point_id),
@@ -73,34 +73,34 @@ export function desktopProviderEnvironmentRemoteCatalogEntryFromPublished(
   };
 }
 
-type CreateDesktopProviderEnvironmentRecordOptions = Readonly<{
+type CreateDesktopCloudEnvironmentRecordOptions = Readonly<{
   label?: string;
   pinned?: boolean;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
-  providerID: string;
+  cloudID: string;
   region: string;
   accessPointID: string;
   accessPointOrigin: string;
   remoteWebSupported?: boolean;
   remoteDesktopSupported?: boolean;
-  remoteCatalogEntry?: DesktopProviderEnvironmentRemoteCatalogEntry;
+  remoteCatalogEntry?: DesktopCloudEnvironmentRemoteCatalogEntry;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
 }>;
 
-export function createDesktopProviderEnvironmentRecord(
-  providerOrigin: string,
+export function createDesktopCloudEnvironmentRecord(
+  cloudOrigin: string,
   envPublicID: string,
-  options: CreateDesktopProviderEnvironmentRecordOptions,
-): DesktopProviderEnvironmentRecord {
-  const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
-  const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
-  const providerID = compact(options.providerID);
+  options: CreateDesktopCloudEnvironmentRecordOptions,
+): DesktopCloudEnvironmentRecord {
+  const normalizedOrigin = normalizeControlPlaneOrigin(cloudOrigin);
+  const normalizedEnvPublicID = normalizeDesktopCloudEnvironmentID(envPublicID);
+  const cloudID = compact(options.cloudID);
   const region = compact(options.region);
   const accessPointID = compact(options.accessPointID);
   const accessPointOrigin = normalizeControlPlaneOrigin(options.accessPointOrigin);
-  if (providerID === '') {
+  if (cloudID === '') {
     throw new Error('Provider ID is required.');
   }
   if (region === '' || accessPointID === '') {
@@ -113,14 +113,14 @@ export function createDesktopProviderEnvironmentRecord(
     Date.now(),
   );
   return {
-    id: desktopProviderEnvironmentID(normalizedOrigin, normalizedEnvPublicID),
-    provider_origin: normalizedOrigin,
-    provider_id: providerID,
+    id: desktopCloudEnvironmentID(normalizedOrigin, normalizedEnvPublicID),
+    cloud_origin: normalizedOrigin,
+    cloud_id: cloudID,
     env_public_id: normalizedEnvPublicID,
     region,
     access_point_id: accessPointID,
     access_point_origin: accessPointOrigin,
-    label: compact(options.label) || defaultDesktopProviderEnvironmentLabel(normalizedEnvPublicID),
+    label: compact(options.label) || defaultDesktopCloudEnvironmentLabel(normalizedEnvPublicID),
     pinned: options.pinned === true,
     created_at_ms: Number(options.createdAtMS ?? now) || now,
     updated_at_ms: Number(options.updatedAtMS ?? now) || now,
@@ -133,13 +133,13 @@ export function createDesktopProviderEnvironmentRecord(
 }
 
 export function providerEnvironmentSupportsRemoteDesktop(
-  environment: DesktopProviderEnvironmentRecord,
+  environment: DesktopCloudEnvironmentRecord,
 ): boolean {
   return environment.remote_desktop_supported === true;
 }
 
 export function providerEnvironmentStableSortKey(
-  environment: DesktopProviderEnvironmentRecord,
+  environment: DesktopCloudEnvironmentRecord,
 ): readonly [number, number, string, string] {
   return [
     environment.pinned ? 0 : 1,

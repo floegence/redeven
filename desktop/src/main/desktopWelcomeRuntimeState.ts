@@ -36,8 +36,8 @@ function runtimeStateFromStartup(
     local_ui_urls: startup.local_ui_urls ?? [localUIURL],
     effective_run_mode: compact(startup.effective_run_mode),
     remote_enabled: startup.remote_enabled === true,
-    controlplane_base_url: compact(startup.controlplane_base_url) || undefined,
-    controlplane_provider_id: compact(startup.controlplane_provider_id) || undefined,
+    access_point_origin: compact(startup.access_point_origin) || undefined,
+    cloud_id: compact(startup.cloud_id) || undefined,
     env_public_id: compact(startup.env_public_id) || undefined,
     password_required: startup.password_required === true,
     exposure: startup.exposure,
@@ -129,8 +129,8 @@ function withCurrentRuntime(
   if (
     existingURL === nextURL
     && JSON.stringify(existingRuntime?.local_ui_urls ?? []) === JSON.stringify(currentRuntime?.local_ui_urls ?? [])
-    && (existingRuntime?.controlplane_base_url ?? '') === (currentRuntime?.controlplane_base_url ?? '')
-    && (existingRuntime?.controlplane_provider_id ?? '') === (currentRuntime?.controlplane_provider_id ?? '')
+    && (existingRuntime?.access_point_origin ?? '') === (currentRuntime?.access_point_origin ?? '')
+    && (existingRuntime?.cloud_id ?? '') === (currentRuntime?.cloud_id ?? '')
     && (existingRuntime?.env_public_id ?? '') === (currentRuntime?.env_public_id ?? '')
     && (existingRuntime?.password_required ?? false) === (currentRuntime?.password_required ?? false)
     && (existingRuntime?.effective_run_mode ?? '') === (currentRuntime?.effective_run_mode ?? '')

@@ -3,7 +3,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
-import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import { createDesktopI18n } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
 import { invitationFixture } from '../testSupport/gatewayMembershipFixture';
@@ -16,9 +16,9 @@ function button(key: Parameters<typeof i18n.t>[0]) {
   if (!found) throw new Error(`Missing button ${key}`);
   return found;
 }
-const target: DesktopProviderRuntimeLinkTarget = { id: 'ssh:created', kind: 'ssh_environment', environment_id: 'created', label: 'Created Runtime', runtime_key: 'created', runtime_url: 'http://localhost:12345',
-  runtime_running: true, runtime_openable: true, runtime_control_status: { state: 'available' }, provider_connection_state: 'unlinked', provider_link_state: 'unbound',
-  provider_origin_supported: false, can_connect_provider: false, can_disconnect_provider: false };
+const target: DesktopCloudRuntimeLinkTarget = { id: 'ssh:created', kind: 'ssh_environment', environment_id: 'created', label: 'Created Runtime', runtime_key: 'created', runtime_url: 'http://localhost:12345',
+  runtime_running: true, runtime_openable: true, runtime_control_status: { state: 'available' }, provider_connection_state: 'unlinked', cloud_link_state: 'unbound',
+  cloud_origin_supported: false, can_connect_cloud: false, can_disconnect_cloud: false };
 const environment = { id: 'created', label: 'Created Runtime' } as DesktopEnvironmentEntry;
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });

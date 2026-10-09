@@ -34,7 +34,7 @@ function settingsResponse(): AgentSettingsResponse {
   return {
     config_path: '/Users/me/.redeven/local-environment/config.json',
     connection: {
-      controlplane_base_url: '',
+      access_point_origin: '',
       environment_id: 'local-environment',
       agent_instance_id: 'agent-local',
       direct: {

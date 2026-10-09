@@ -29,7 +29,7 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
-func TestConnectProviderRetriesWhenRegionHasNotStarted(t *testing.T) {
+func TestConnectCloudRetriesWhenRegionHasNotStarted(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -37,45 +37,45 @@ func TestConnectProviderRetriesWhenRegionHasNotStarted(t *testing.T) {
 	origin := "https://" + listener.Addr().String()
 	_ = listener.Close()
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	a := newProviderLinkTestAgent(t, cfgPath, &config.Config{AgentHomeDir: t.TempDir()})
-	_, err = a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin: "https://redeven.test", ProviderID: "example_control_plane",
-		EnvPublicID: "env_new", AccessPointOrigin: origin, RuntimeLinkTicket: "ticket-123",
+	a := newCloudLinkTestAgent(t, cfgPath, &config.Config{AgentHomeDir: t.TempDir()})
+	_, err = a.ConnectCloud(context.Background(), CloudLinkRequest{
+		CloudOrigin: origin, CloudID: "example_control_plane",
+		EnvPublicID: "env_new", RuntimeLinkTicket: "ticket-123",
 	})
-	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorUnavailable {
-		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorUnavailable)
+	var linkErr *CloudLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorUnavailable {
+		t.Fatalf("ConnectCloud() error = %v, want %s", err, CloudLinkErrorUnavailable)
 	}
 }
 
-func TestConnectProviderDoesNotRetryUntrustedRegionCertificate(t *testing.T) {
+func TestConnectCloudDoesNotRetryUntrustedRegionCertificate(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Error("untrusted certificate must stop before the exchange")
 	}))
 	defer server.Close()
-	a := newProviderLinkTestAgent(t, filepath.Join(t.TempDir(), "config.json"), nil)
-	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin: "https://redeven.test", ProviderID: "example_control_plane",
-		EnvPublicID: "env_new", AccessPointOrigin: server.URL, RuntimeLinkTicket: "ticket-123",
+	a := newCloudLinkTestAgent(t, filepath.Join(t.TempDir(), "config.json"), nil)
+	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+		CloudOrigin: server.URL, CloudID: "example_control_plane",
+		EnvPublicID: "env_new", RuntimeLinkTicket: "ticket-123",
 	})
-	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorExchangeFailed {
-		t.Fatalf("ConnectProvider() error = %v, want certificate review", err)
+	var linkErr *CloudLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorExchangeFailed {
+		t.Fatalf("ConnectCloud() error = %v, want certificate review", err)
 	}
 }
 
-func TestConnectProviderRetriesTemporaryDNSFailure(t *testing.T) {
-	a := newProviderLinkTestAgent(t, filepath.Join(t.TempDir(), "config.json"), nil)
-	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin: "https://redeven.test", ProviderID: "example_control_plane",
-		EnvPublicID: "env_new", AccessPointOrigin: "https://dev.redeven.test", RuntimeLinkTicket: "ticket-123",
+func TestConnectCloudRetriesTemporaryDNSFailure(t *testing.T) {
+	a := newCloudLinkTestAgent(t, filepath.Join(t.TempDir(), "config.json"), nil)
+	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+		CloudOrigin: "https://redeven.test", CloudID: "example_control_plane",
+		EnvPublicID: "env_new", RuntimeLinkTicket: "ticket-123",
 		runtimeLinkHTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return nil, &net.DNSError{Name: "redeven.test", Err: "temporary resolver failure", IsTemporary: true}
 		})},
 	})
-	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorUnavailable {
-		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorUnavailable)
+	var linkErr *CloudLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorUnavailable {
+		t.Fatalf("ConnectCloud() error = %v, want %s", err, CloudLinkErrorUnavailable)
 	}
 }
 
@@ -121,7 +121,7 @@ func testDirectConnectInfo() *config.DirectConnectInfo {
 	}
 }
 
-func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
+func cloudLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 	t.Helper()
 	policy, err := config.ParsePermissionPolicyPreset("")
 	if err != nil {
@@ -129,9 +129,9 @@ func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 	}
 	digest := sha256.Sum256([]byte(controlArtifactFixture))
 	cfg := &config.Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
-		ControlplaneProviderID:   "example_control_plane",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
+		CloudID:                  "example_control_plane",
 		EnvironmentID:            "env_demo",
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        7,
@@ -174,7 +174,7 @@ func linkProviderControlForTest(a *Agent, caller *providerDisconnectFakeRPC) {
 	a.controlRegistered = true
 }
 
-func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Agent {
+func newCloudLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Agent {
 	t.Helper()
 	if cfgPath == "" {
 		cfgPath = filepath.Join(t.TempDir(), "config.json")
@@ -211,19 +211,30 @@ func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) 
 	return a
 }
 
-func providerLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *http.Request)) *httptest.Server {
+func cloudLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *http.Request)) *httptest.Server {
 	t.Helper()
 	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json" {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v4/runtime-link/resolve" {
+			var request struct {
+				EnvPublicID string `json:"env_public_id"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"provider_id":"example_control_plane"}`))
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"protocol_version": "rcpp-v4", "cloud_id": "example_control_plane",
+				"cloud_origin": "https://" + r.Host, "env_public_id": request.EnvPublicID,
+				"access_point_id": "dev", "access_point_origin": "https://" + r.Host,
+				"expires_at_unix_ms": time.Now().Add(time.Minute).UnixMilli(),
+			})
 			return
 		}
 		handler(w, r)
 	}))
 }
 
-type providerLinkRuntimeLinkPoolEntry struct {
+type cloudLinkRuntimeLinkPoolEntry struct {
 	ArtifactJSON      json.RawMessage `json:"artifact_json"`
 	ArtifactChannelID string          `json:"artifact_channel_id"`
 	BindingGeneration int64           `json:"binding_generation"`
@@ -231,20 +242,20 @@ type providerLinkRuntimeLinkPoolEntry struct {
 	ExpiresAtUnixS    int64           `json:"expires_at_unix_s"`
 }
 
-type providerLinkRuntimeLinkPool struct {
-	Version                       string                             `json:"version"`
-	LogicalProviderBindingID      string                             `json:"logical_provider_binding_id"`
-	BindingGeneration             int64                              `json:"binding_generation"`
-	TargetWaterline               int                                `json:"target_waterline"`
-	RefreshHorizonSeconds         int64                              `json:"refresh_horizon_seconds"`
-	ServerHighestArtifactSequence uint64                             `json:"server_highest_artifact_sequence"`
-	Entries                       []providerLinkRuntimeLinkPoolEntry `json:"entries"`
-	ResponseDigestB64u            string                             `json:"response_digest_b64u"`
+type cloudLinkRuntimeLinkPool struct {
+	Version                       string                          `json:"version"`
+	LogicalCloudBindingID         string                          `json:"logical_cloud_binding_id"`
+	BindingGeneration             int64                           `json:"binding_generation"`
+	TargetWaterline               int                             `json:"target_waterline"`
+	RefreshHorizonSeconds         int64                           `json:"refresh_horizon_seconds"`
+	ServerHighestArtifactSequence uint64                          `json:"server_highest_artifact_sequence"`
+	Entries                       []cloudLinkRuntimeLinkPoolEntry `json:"entries"`
+	ResponseDigestB64u            string                          `json:"response_digest_b64u"`
 }
 
-func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelPrefix string) {
+func writeCloudRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelPrefix string) {
 	t.Helper()
-	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v3/runtime-link/exchange" {
+	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
 		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 	}
 	if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
@@ -254,14 +265,14 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 		ExpectedBindingGeneration int64  `json:"expected_binding_generation"`
 		ProtocolVersion           string `json:"protocol_version"`
 		EnvPublicID               string `json:"env_public_id"`
-		ProviderOrigin            string `json:"provider_origin"`
+		CloudOrigin               string `json:"cloud_origin"`
 		LocalEnvironmentPublicID  string `json:"local_environment_public_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		t.Fatalf("Decode(request) error = %v", err)
 	}
-	if payload.ProtocolVersion != "rcpp-v3" || payload.ProviderOrigin == "" {
-		t.Fatalf("ProviderOrigin is empty")
+	if payload.ProtocolVersion != "rcpp-v4" || payload.CloudOrigin == "" {
+		t.Fatalf("CloudOrigin is empty")
 	}
 	endpoints, err := flowercontrol.NewEndpointSet(flowercontrol.EndpointConfig{
 		ID: "websocket", URL: "wss://example.com/flowersec/v3/direct", TLS: flowercontrol.CAPolicy(),
@@ -274,14 +285,14 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 		generation = payload.ExpectedBindingGeneration + 1
 	}
 	expires := time.Now().Add(4 * time.Minute).Truncate(time.Second)
-	pool := providerLinkRuntimeLinkPool{
+	pool := cloudLinkRuntimeLinkPool{
 		Version:                       config.ControlArtifactPoolContractVersion,
-		LogicalProviderBindingID:      "binding-7",
+		LogicalCloudBindingID:         "binding-7",
 		BindingGeneration:             generation,
 		TargetWaterline:               config.ControlArtifactTargetWaterline,
 		RefreshHorizonSeconds:         config.ControlArtifactRefreshHorizonS,
 		ServerHighestArtifactSequence: config.ControlArtifactTargetWaterline,
-		Entries:                       make([]providerLinkRuntimeLinkPoolEntry, 0, config.ControlArtifactTargetWaterline),
+		Entries:                       make([]cloudLinkRuntimeLinkPoolEntry, 0, config.ControlArtifactTargetWaterline),
 	}
 	for sequence := 1; sequence <= config.ControlArtifactTargetWaterline; sequence++ {
 		channelID := fmt.Sprintf("%s-%d", channelPrefix, sequence)
@@ -298,7 +309,7 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 		if issueErr != nil {
 			t.Fatal(issueErr)
 		}
-		pool.Entries = append(pool.Entries, providerLinkRuntimeLinkPoolEntry{
+		pool.Entries = append(pool.Entries, cloudLinkRuntimeLinkPoolEntry{
 			ArtifactJSON:      issued.ArtifactJSON(),
 			ArtifactChannelID: channelID,
 			BindingGeneration: generation,
@@ -314,9 +325,9 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 	pool.ResponseDigestB64u = base64.RawURLEncoding.EncodeToString(digest[:])
 	w.Header().Set("Content-Type", "application/json")
 	response := map[string]any{
-		"protocol_version":      "rcpp-v3",
-		"provider_id":           "example_control_plane",
-		"provider_origin":       payload.ProviderOrigin,
+		"protocol_version":      "rcpp-v4",
+		"cloud_id":              "example_control_plane",
+		"cloud_origin":          payload.CloudOrigin,
 		"access_point_id":       "dev",
 		"access_point_origin":   "https://" + r.Host,
 		"env_public_id":         payload.EnvPublicID,
@@ -332,70 +343,68 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 	}
 }
 
-func TestConnectProviderPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *testing.T) {
+func TestConnectCloudPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	a := newProviderLinkTestAgent(t, cfgPath, nil)
-	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+	a := newCloudLinkTestAgent(t, cfgPath, nil)
+	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ticket expired", http.StatusUnauthorized)
 	})
 	defer server.Close()
 
-	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:        "https://redeven.test",
-		ProviderID:            "example_control_plane",
+	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+		CloudOrigin:           server.URL,
+		CloudID:               "example_control_plane",
 		EnvPublicID:           "env_demo",
-		AccessPointOrigin:     server.URL,
 		RuntimeLinkTicket:     "ticket-123",
 		runtimeLinkHTTPClient: server.Client(),
 	})
 	if err == nil {
-		t.Fatalf("ConnectProvider() error = nil, want Runtime link exchange failure")
+		t.Fatalf("ConnectCloud() error = nil, want Runtime link exchange failure")
 	}
-	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != "PROVIDER_LINK_AUTHORIZATION_REQUIRED" {
-		t.Fatalf("ConnectProvider() error = %v, want %s", err, "PROVIDER_LINK_AUTHORIZATION_REQUIRED")
+	var linkErr *CloudLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != "CLOUD_LINK_AUTHORIZATION_REQUIRED" {
+		t.Fatalf("ConnectCloud() error = %v, want %s", err, "CLOUD_LINK_AUTHORIZATION_REQUIRED")
 	}
-	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateUnbound {
-		t.Fatalf("ProviderLinkBinding() = %#v, want unbound", binding)
+	if binding := a.CloudLinkBinding(); binding.State != runtimeservice.CloudLinkStateUnbound {
+		t.Fatalf("CloudLinkBinding() = %#v, want unbound", binding)
 	}
 	if _, loadErr := config.Load(cfgPath); loadErr == nil || !strings.Contains(loadErr.Error(), "no such file") {
 		t.Fatalf("config.Load() error = %v, want no saved config", loadErr)
 	}
 }
 
-func TestConnectProviderDistinguishesRevokedPermissionFromExpiredAuthorization(t *testing.T) {
+func TestConnectCloudDistinguishesRevokedPermissionFromExpiredAuthorization(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	a := newProviderLinkTestAgent(t, cfgPath, nil)
-	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+	a := newCloudLinkTestAgent(t, cfgPath, nil)
+	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = io.WriteString(w, `{"error":{"code":"NOT_AUTHORIZED","message":"permission revoked"}}`)
 	})
 	defer server.Close()
 
-	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:        "https://redeven.test",
-		ProviderID:            "example_control_plane",
+	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+		CloudOrigin:           server.URL,
+		CloudID:               "example_control_plane",
 		EnvPublicID:           "env_demo",
-		AccessPointOrigin:     server.URL,
 		RuntimeLinkTicket:     "ticket-123",
 		runtimeLinkHTTPClient: server.Client(),
 	})
 	if err == nil {
-		t.Fatal("ConnectProvider() error = nil, want permission rejection")
+		t.Fatal("ConnectCloud() error = nil, want permission rejection")
 	}
-	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorPermissionRevoked {
-		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorPermissionRevoked)
+	var linkErr *CloudLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorPermissionRevoked {
+		t.Fatalf("ConnectCloud() error = %v, want %s", err, CloudLinkErrorPermissionRevoked)
 	}
 }
 
-func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
+func TestConnectCloudRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	initial := &config.Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://old.example.invalid",
-		ControlplaneProviderID:   "old_provider",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://old.example.invalid",
+		CloudID:                  "old_provider",
 		EnvironmentID:            "env_old",
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        1,
@@ -406,29 +415,28 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	if err := config.Save(cfgPath, initial); err != nil {
 		t.Fatalf("config.Save() error = %v", err)
 	}
-	a := newProviderLinkTestAgent(t, cfgPath, initial)
+	a := newCloudLinkTestAgent(t, cfgPath, initial)
 	releaseExchange := make(chan struct{})
 	exchangeStarted := make(chan struct{})
-	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		close(exchangeStarted)
 		<-releaseExchange
-		writeProviderRuntimeLinkResponse(t, w, r, "ch_new")
+		writeCloudRuntimeLinkResponse(t, w, r, "ch_new")
 	})
 	defer server.Close()
 
 	errCh := make(chan error, 1)
 	go func() {
-		_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-			ProviderOrigin:            "https://redeven.test",
-			ProviderID:                "example_control_plane",
+		_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+			CloudOrigin:               server.URL,
+			CloudID:                   "example_control_plane",
 			EnvPublicID:               "env_new",
-			AccessPointOrigin:         server.URL,
 			RuntimeLinkTicket:         "ticket-123",
 			AllowRelinkWhenIdle:       true,
-			ExpectedProviderOrigin:    initial.ProviderOrigin,
-			ExpectedProviderID:        initial.ControlplaneProviderID,
+			ExpectedCloudOrigin:       initial.CloudOrigin,
+			ExpectedCloudID:           initial.CloudID,
 			ExpectedEnvPublicID:       initial.EnvironmentID,
-			ExpectedAccessPointOrigin: initial.ControlplaneBaseURL,
+			ExpectedAccessPointOrigin: initial.AccessPointOrigin,
 			ExpectedGeneration:        initial.BindingGeneration,
 			runtimeLinkHTTPClient:     server.Client(),
 		})
@@ -450,39 +458,39 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		var linkErr *ProviderLinkError
-		if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorActiveWork {
-			t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorActiveWork)
+		var linkErr *CloudLinkError
+		if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorActiveWork {
+			t.Fatalf("ConnectCloud() error = %v, want %s", err, CloudLinkErrorActiveWork)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("ConnectProvider() did not return")
+		t.Fatal("ConnectCloud() did not return")
 	}
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	if cfg.ControlplaneBaseURL != initial.ControlplaneBaseURL ||
+	if cfg.AccessPointOrigin != initial.AccessPointOrigin ||
 		cfg.EnvironmentID != initial.EnvironmentID ||
 		cfg.BindingGeneration != initial.BindingGeneration ||
 		cfg.Direct == nil || cfg.Direct.ExpiresAtUnixS != initial.Direct.ExpiresAtUnixS || cfg.Direct.Spent {
 		t.Fatalf("config changed after blocked relink: %#v", cfg)
 	}
-	if binding := a.ProviderLinkBinding(); binding.EnvPublicID != "env_old" || binding.BindingGeneration != 1 {
-		t.Fatalf("ProviderLinkBinding() changed after blocked relink: %#v", binding)
+	if binding := a.CloudLinkBinding(); binding.EnvPublicID != "env_old" || binding.BindingGeneration != 1 {
+		t.Fatalf("CloudLinkBinding() changed after blocked relink: %#v", binding)
 	}
 }
 
-func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(t *testing.T) {
-	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		writeProviderRuntimeLinkResponse(t, w, r, "ch_refreshed")
+func TestConnectCloudRefreshesExistingMatchingBindingWhenExplicitlyRequested(t *testing.T) {
+	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		writeCloudRuntimeLinkResponse(t, w, r, "ch_refreshed")
 	})
 	defer server.Close()
 
 	cfg := &config.Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      server.URL,
-		ControlplaneProviderID:   "example_control_plane",
+		CloudOrigin:              server.URL,
+		AccessPointOrigin:        server.URL,
+		CloudID:                  "example_control_plane",
 		EnvironmentID:            "env_demo",
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        3,
@@ -494,7 +502,7 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatalf("config.Save() error = %v", err)
 	}
-	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+	a := newCloudLinkTestAgent(t, cfgPath, cfg)
 
 	before := a.RuntimeServiceSnapshot()
 	if before.RemoteEnabled {
@@ -503,33 +511,32 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	if before.EffectiveRunMode != "desktop" {
 		t.Fatalf("EffectiveRunMode before connect = %q, want desktop", before.EffectiveRunMode)
 	}
-	if before.Bindings.ProviderLink.State != runtimeservice.ProviderLinkStateLinked || before.Bindings.ProviderLink.RemoteEnabled {
-		t.Fatalf("ProviderLink before connect = %#v, want linked but remote disabled", before.Bindings.ProviderLink)
+	if before.Bindings.CloudLink.State != runtimeservice.CloudLinkStateLinked || before.Bindings.CloudLink.RemoteEnabled {
+		t.Fatalf("CloudLink before connect = %#v, want linked but remote disabled", before.Bindings.CloudLink)
 	}
 	// Startup can enable remote mode even when expired artifacts prevent a
 	// control session. An explicit refresh must still obtain a fresh pool.
 	a.enableProviderControlChannelLocked()
 
-	resp, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:        "https://redeven.test",
-		ProviderID:            "example_control_plane",
+	resp, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+		CloudOrigin:           server.URL,
+		CloudID:               "example_control_plane",
 		EnvPublicID:           "env_demo",
-		AccessPointOrigin:     server.URL,
 		RuntimeLinkTicket:     "ticket-123",
 		runtimeLinkHTTPClient: server.Client(),
 	})
 	if err != nil {
-		t.Fatalf("ConnectProvider() error = %v", err)
+		t.Fatalf("ConnectCloud() error = %v", err)
 	}
-	if resp.Binding.State != runtimeservice.ProviderLinkStateLinked || !resp.Binding.RemoteEnabled {
-		t.Fatalf("ConnectProvider() binding = %#v, want linked with remote enabled", resp.Binding)
+	if resp.Binding.State != runtimeservice.CloudLinkStateLinked || !resp.Binding.RemoteEnabled {
+		t.Fatalf("ConnectCloud() binding = %#v, want linked with remote enabled", resp.Binding)
 	}
 	after := a.RuntimeServiceSnapshot()
 	if !after.RemoteEnabled || after.EffectiveRunMode != "hybrid" {
 		t.Fatalf("RuntimeServiceSnapshot() after connect = %#v, want hybrid remote enabled", after)
 	}
-	if after.Bindings.ProviderLink.State != runtimeservice.ProviderLinkStateLinked || !after.Bindings.ProviderLink.RemoteEnabled {
-		t.Fatalf("ProviderLink after connect = %#v, want linked remote enabled", after.Bindings.ProviderLink)
+	if after.Bindings.CloudLink.State != runtimeservice.CloudLinkStateLinked || !after.Bindings.CloudLink.RemoteEnabled {
+		t.Fatalf("CloudLink after connect = %#v, want linked remote enabled", after.Bindings.CloudLink)
 	}
 	saved, err := config.Load(cfgPath)
 	if err != nil {
@@ -546,19 +553,19 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	}
 }
 
-func TestDisconnectProviderSendsRuntimeDisconnectBeforeClearingConfig(t *testing.T) {
+func TestDisconnectCloudSendsRuntimeDisconnectBeforeClearingConfig(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := providerLinkRemoteConfig(t, cfgPath)
-	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+	cfg := cloudLinkRemoteConfig(t, cfgPath)
+	a := newCloudLinkTestAgent(t, cfgPath, cfg)
 	fakeRPC := &providerDisconnectFakeRPC{}
 	linkProviderControlForTest(a, fakeRPC)
 
-	resp, err := a.DisconnectProvider(context.Background())
+	resp, err := a.DisconnectCloud(context.Background())
 	if err != nil {
-		t.Fatalf("DisconnectProvider() error = %v", err)
+		t.Fatalf("DisconnectCloud() error = %v", err)
 	}
-	if resp.Binding.State != runtimeservice.ProviderLinkStateUnbound || resp.Binding.LastDisconnectedAtUnixMS <= 0 {
-		t.Fatalf("DisconnectProvider() binding = %#v, want unbound with disconnect time", resp.Binding)
+	if resp.Binding.State != runtimeservice.CloudLinkStateUnbound || resp.Binding.LastDisconnectedAtUnixMS <= 0 {
+		t.Fatalf("DisconnectCloud() binding = %#v, want unbound with disconnect time", resp.Binding)
 	}
 
 	fakeRPC.mu.Lock()
@@ -573,8 +580,8 @@ func TestDisconnectProviderSendsRuntimeDisconnectBeforeClearingConfig(t *testing
 		t.Fatalf("Unmarshal(runtime disconnect request) error = %v", err)
 	}
 	if req.EnvPublicID != "env_demo" ||
-		req.ProviderOrigin != "https://redeven.test" ||
-		req.ProviderID != "example_control_plane" ||
+		req.CloudOrigin != "https://redeven.test" ||
+		req.CloudID != "example_control_plane" ||
 		req.AccessPointOrigin != "https://dev.redeven.test" ||
 		req.LocalEnvironmentPublicID != "le_existing" ||
 		req.BindingGeneration != 7 ||
@@ -587,9 +594,9 @@ func TestDisconnectProviderSendsRuntimeDisconnectBeforeClearingConfig(t *testing
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	if saved.ProviderOrigin != "" ||
-		saved.ControlplaneBaseURL != "" ||
-		saved.ControlplaneProviderID != "" ||
+	if saved.CloudOrigin != "" ||
+		saved.AccessPointOrigin != "" ||
+		saved.CloudID != "" ||
 		saved.EnvironmentID != "" ||
 		saved.LocalEnvironmentPublicID != "" ||
 		saved.BindingGeneration != 0 ||
@@ -603,33 +610,33 @@ func TestDisconnectProviderSendsRuntimeDisconnectBeforeClearingConfig(t *testing
 	if a.currentControlRPC() != nil {
 		t.Fatalf("currentControlRPC still set after provider disconnect")
 	}
-	binding := a.ProviderLinkBinding()
-	if binding.State != runtimeservice.ProviderLinkStateUnbound {
-		t.Fatalf("ProviderLinkBinding() = %#v, want unbound", binding)
+	binding := a.CloudLinkBinding()
+	if binding.State != runtimeservice.CloudLinkStateUnbound {
+		t.Fatalf("CloudLinkBinding() = %#v, want unbound", binding)
 	}
 }
 
-func TestDisconnectProviderConflictDoesNotClearConfig(t *testing.T) {
+func TestDisconnectCloudConflictDoesNotClearConfig(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := providerLinkRemoteConfig(t, cfgPath)
-	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+	cfg := cloudLinkRemoteConfig(t, cfgPath)
+	a := newCloudLinkTestAgent(t, cfgPath, cfg)
 	msg := "local environment binding mismatch"
 	fakeRPC := &providerDisconnectFakeRPC{rpcError: &flowersec.RPCError{Code: 409, Message: msg}}
 	linkProviderControlForTest(a, fakeRPC)
 
-	_, err := a.DisconnectProvider(context.Background())
-	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorBindingNotCurrent {
-		t.Fatalf("DisconnectProvider() error = %v, want %s", err, ProviderLinkErrorBindingNotCurrent)
+	_, err := a.DisconnectCloud(context.Background())
+	var linkErr *CloudLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorBindingNotCurrent {
+		t.Fatalf("DisconnectCloud() error = %v, want %s", err, CloudLinkErrorBindingNotCurrent)
 	}
 
 	saved, loadErr := config.Load(cfgPath)
 	if loadErr != nil {
 		t.Fatalf("config.Load() error = %v", loadErr)
 	}
-	if saved.ProviderOrigin != cfg.ProviderOrigin ||
-		saved.ControlplaneBaseURL != cfg.ControlplaneBaseURL ||
-		saved.ControlplaneProviderID != cfg.ControlplaneProviderID ||
+	if saved.CloudOrigin != cfg.CloudOrigin ||
+		saved.AccessPointOrigin != cfg.AccessPointOrigin ||
+		saved.CloudID != cfg.CloudID ||
 		saved.EnvironmentID != cfg.EnvironmentID ||
 		saved.LocalEnvironmentPublicID != cfg.LocalEnvironmentPublicID ||
 		saved.BindingGeneration != cfg.BindingGeneration ||
@@ -638,31 +645,31 @@ func TestDisconnectProviderConflictDoesNotClearConfig(t *testing.T) {
 		len(saved.ControlArtifactPool.Entries) != len(cfg.ControlArtifactPool.Entries) {
 		t.Fatalf("config changed after rejected disconnect: %#v", saved)
 	}
-	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateLinked || !binding.RemoteEnabled {
-		t.Fatalf("ProviderLinkBinding() = %#v, want linked remote enabled", binding)
+	if binding := a.CloudLinkBinding(); binding.State != runtimeservice.CloudLinkStateLinked || !binding.RemoteEnabled {
+		t.Fatalf("CloudLinkBinding() = %#v, want linked remote enabled", binding)
 	}
 }
 
-func TestDisconnectProviderClearsConfigWithoutActiveControlChannel(t *testing.T) {
+func TestDisconnectCloudClearsConfigWithoutActiveControlChannel(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := providerLinkRemoteConfig(t, cfgPath)
-	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+	cfg := cloudLinkRemoteConfig(t, cfgPath)
+	a := newCloudLinkTestAgent(t, cfgPath, cfg)
 
-	resp, err := a.DisconnectProvider(context.Background())
+	resp, err := a.DisconnectCloud(context.Background())
 	if err != nil {
-		t.Fatalf("DisconnectProvider() error = %v", err)
+		t.Fatalf("DisconnectCloud() error = %v", err)
 	}
-	if resp.Binding.State != runtimeservice.ProviderLinkStateUnbound || resp.Binding.LastDisconnectedAtUnixMS <= 0 {
-		t.Fatalf("DisconnectProvider() binding = %#v, want unbound with disconnect time", resp.Binding)
+	if resp.Binding.State != runtimeservice.CloudLinkStateUnbound || resp.Binding.LastDisconnectedAtUnixMS <= 0 {
+		t.Fatalf("DisconnectCloud() binding = %#v, want unbound with disconnect time", resp.Binding)
 	}
 
 	saved, loadErr := config.Load(cfgPath)
 	if loadErr != nil {
 		t.Fatalf("config.Load() error = %v", loadErr)
 	}
-	if saved.ProviderOrigin != "" ||
-		saved.ControlplaneBaseURL != "" ||
-		saved.ControlplaneProviderID != "" ||
+	if saved.CloudOrigin != "" ||
+		saved.AccessPointOrigin != "" ||
+		saved.CloudID != "" ||
 		saved.EnvironmentID != "" ||
 		saved.LocalEnvironmentPublicID != "" ||
 		saved.BindingGeneration != 0 ||
@@ -673,16 +680,16 @@ func TestDisconnectProviderClearsConfigWithoutActiveControlChannel(t *testing.T)
 	if saved.AgentInstanceID != "ai_existing" {
 		t.Fatalf("AgentInstanceID = %q, want preserved", saved.AgentInstanceID)
 	}
-	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateUnbound {
-		t.Fatalf("ProviderLinkBinding() = %#v, want unbound", binding)
+	if binding := a.CloudLinkBinding(); binding.State != runtimeservice.CloudLinkStateUnbound {
+		t.Fatalf("CloudLinkBinding() = %#v, want unbound", binding)
 	}
 }
 
-func TestConnectProviderRenewsExactBindingWithoutRestartingLocalWork(t *testing.T) {
+func TestConnectCloudRenewsExactBindingWithoutRestartingLocalWork(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := providerLinkRemoteConfig(t, cfgPath)
+	cfg := cloudLinkRemoteConfig(t, cfgPath)
 	var expectedGeneration int64
-	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Error(err)
@@ -697,21 +704,22 @@ func TestConnectProviderRenewsExactBindingWithoutRestartingLocalWork(t *testing.
 		}
 		expectedGeneration = request.ExpectedBindingGeneration
 		r.Body = io.NopCloser(bytes.NewReader(raw))
-		writeProviderRuntimeLinkResponse(t, w, r, "renewal")
+		writeCloudRuntimeLinkResponse(t, w, r, "renewal")
 	})
 	defer server.Close()
-	cfg.ControlplaneBaseURL = server.URL
+	cfg.CloudOrigin = server.URL
+	cfg.AccessPointOrigin = server.URL
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatal(err)
 	}
-	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+	a := newCloudLinkTestAgent(t, cfgPath, cfg)
 	localWork := &activeSession{connectedAtUnixMs: 1, meta: session.Meta{EndpointID: LocalEnvPublicIDForAgent()}}
 	a.sessions["local-work"] = localWork
-	result, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin: cfg.ProviderOrigin, ProviderID: cfg.ControlplaneProviderID, EnvPublicID: cfg.EnvironmentID,
-		AccessPointOrigin: cfg.ControlplaneBaseURL, RuntimeLinkTicket: "ticket-123", RenewCurrentBinding: true,
-		ExpectedProviderOrigin: cfg.ProviderOrigin, ExpectedProviderID: cfg.ControlplaneProviderID,
-		ExpectedEnvPublicID: cfg.EnvironmentID, ExpectedAccessPointOrigin: cfg.ControlplaneBaseURL,
+	result, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+		CloudOrigin: cfg.CloudOrigin, CloudID: cfg.CloudID, EnvPublicID: cfg.EnvironmentID,
+		RuntimeLinkTicket: "ticket-123", RenewCurrentBinding: true,
+		ExpectedCloudOrigin: cfg.CloudOrigin, ExpectedCloudID: cfg.CloudID,
+		ExpectedEnvPublicID: cfg.EnvironmentID, ExpectedAccessPointOrigin: cfg.AccessPointOrigin,
 		ExpectedGeneration: cfg.BindingGeneration, runtimeLinkHTTPClient: server.Client(),
 	})
 	if err != nil {
@@ -729,5 +737,34 @@ func TestConnectProviderRenewsExactBindingWithoutRestartingLocalWork(t *testing.
 	}
 	if saved.AgentHomeDir != cfg.AgentHomeDir || saved.AgentInstanceID != cfg.AgentInstanceID {
 		t.Fatal("renewal replaced local runtime configuration")
+	}
+}
+
+func TestConnectCloudRenewalRejectsChangedAccessPointBeforeExchange(t *testing.T) {
+	server := cloudLinkTestServer(t, func(http.ResponseWriter, *http.Request) {
+		t.Error("changed Access Point must be reviewed before ticket exchange")
+	})
+	defer server.Close()
+	path := filepath.Join(t.TempDir(), "config.json")
+	cfg := cloudLinkRemoteConfig(t, "")
+	cfg.CloudOrigin = server.URL
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	a := newCloudLinkTestAgent(t, path, cfg)
+	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+		CloudOrigin: cfg.CloudOrigin, CloudID: cfg.CloudID, EnvPublicID: cfg.EnvironmentID,
+		RuntimeLinkTicket: "ticket-123", RenewCurrentBinding: true,
+		ExpectedCloudOrigin: cfg.CloudOrigin, ExpectedCloudID: cfg.CloudID,
+		ExpectedEnvPublicID: cfg.EnvironmentID, ExpectedAccessPointOrigin: cfg.AccessPointOrigin,
+		ExpectedGeneration: cfg.BindingGeneration, runtimeLinkHTTPClient: server.Client(),
+	})
+	var linkErr *CloudLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorBindingChanged {
+		t.Fatalf("renewal error = %v, want changed binding", err)
+	}
+	saved, err := config.Load(path)
+	if err != nil || saved.AccessPointOrigin != cfg.AccessPointOrigin || saved.BindingGeneration != cfg.BindingGeneration {
+		t.Fatal("failed renewal changed the saved binding")
 	}
 }

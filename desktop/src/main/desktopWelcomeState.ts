@@ -23,8 +23,8 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import {
   desktopControlPlaneKey,
   type DesktopControlPlaneSummary,
-  type DesktopProviderEnvironment,
-} from '../shared/controlPlaneProvider';
+  type DesktopCloudEnvironment,
+} from '../shared/cloud';
 import {
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
@@ -34,17 +34,17 @@ import {
 import {
   localEnvironmentStateKind,
   localEnvironmentAccess,
-  localEnvironmentProviderID,
-  localEnvironmentProviderOrigin,
+  localEnvironmentCloudID,
+  localEnvironmentCloudOrigin,
   localEnvironmentPublicID,
   localEnvironmentSupportsRemoteDesktop,
   type DesktopLocalEnvironmentState,
 } from '../shared/desktopLocalEnvironmentState';
 import {
-  createDesktopProviderEnvironmentRecord,
-  desktopProviderEnvironmentRemoteCatalogEntryFromPublished,
-  type DesktopProviderEnvironmentRecord,
-} from '../shared/desktopProviderEnvironment';
+  createDesktopCloudEnvironmentRecord,
+  desktopCloudEnvironmentRemoteCatalogEntryFromPublished,
+  type DesktopCloudEnvironmentRecord,
+} from '../shared/desktopCloudEnvironment';
 import {
   desktopProviderCatalogFreshness,
   desktopProviderRemoteRouteState,
@@ -68,18 +68,18 @@ import { desktopRuntimePackageStateFromRuntimeService } from '../shared/desktopR
 import {
   normalizeRuntimeServiceSnapshot,
   runtimeServiceProviderConnectionState,
-  runtimeServiceProviderLinkBinding,
+  runtimeServiceCloudLinkBinding,
   runtimeServiceIsOpenable,
-  runtimeServiceSupportsProviderLink,
+  runtimeServiceSupportsCloudLink,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import {
-  desktopProviderRuntimeLinkTargetID,
-  type DesktopProviderEnvironmentCandidate,
-  type DesktopProviderEnvironmentOccupancy,
-  type DesktopProviderRuntimeLinkTargetKind,
-  type DesktopProviderRuntimeLinkTarget,
-  type DesktopProviderRuntimeLinkTargetID,
+  desktopCloudRuntimeLinkTargetID,
+  type DesktopCloudEnvironmentCandidate,
+  type DesktopCloudEnvironmentOccupancy,
+  type DesktopCloudRuntimeLinkTargetKind,
+  type DesktopCloudRuntimeLinkTarget,
+  type DesktopCloudRuntimeLinkTargetID,
 } from '../shared/providerRuntimeLinkTarget';
 import {
   desktopRuntimeTargetID,
@@ -102,7 +102,7 @@ import {
 } from '../shared/redevenCloud';
 
 export {
-  desktopProviderRuntimeLinkTargetID,
+  desktopCloudRuntimeLinkTargetID,
 };
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
@@ -226,11 +226,11 @@ export function buildControlPlaneIssue(
   code: string,
   message: string,
   options: Readonly<{
-    providerOrigin?: string;
+    cloudOrigin?: string;
     status?: number;
   }> = {},
 ): DesktopWelcomeIssue {
-  const providerOrigin = compact(options.providerOrigin);
+  const cloudOrigin = compact(options.cloudOrigin);
   const status = Number.isInteger(options.status) && Number(options.status) >= 100
     ? Math.floor(Number(options.status))
     : 0;
@@ -272,7 +272,7 @@ export function buildControlPlaneIssue(
       'status: blocked',
       `code: ${code}`,
       `message: ${message}`,
-      providerOrigin !== '' ? `provider origin: ${providerOrigin}` : '',
+      cloudOrigin !== '' ? `provider origin: ${cloudOrigin}` : '',
       status > 0 ? `http status: ${status}` : '',
     ]),
     target_url: '',
@@ -544,7 +544,7 @@ function openSessionByURL(
 
 function providerRuntimeLinkKindForHostAccess(
   hostAccess: DesktopRuntimeHostAccess,
-): DesktopProviderRuntimeLinkTargetKind {
+): DesktopCloudRuntimeLinkTargetKind {
   return hostAccess.kind === 'ssh_host'
     ? 'ssh_environment'
     : hostAccess.kind === 'wsl_host'
@@ -576,9 +576,9 @@ function openSessionsByLocalEnvironment(
   return out;
 }
 
-function openSessionsByProviderEnvironment(
+function openSessionsByCloudEnvironment(
   sessions: readonly DesktopSessionSummary[],
-  environment: DesktopProviderEnvironmentRecord,
+  environment: DesktopCloudEnvironmentRecord,
 ): Readonly<Partial<Record<DesktopLocalEnvironmentStateRoute, DesktopSessionSummary>>> {
   const out: Partial<Record<DesktopLocalEnvironmentStateRoute, DesktopSessionSummary>> = {};
   for (const session of sessions) {
@@ -586,8 +586,8 @@ function openSessionsByProviderEnvironment(
       continue;
     }
     const matchesProviderIdentity = (
-      session.target.provider_origin === environment.provider_origin
-      && session.target.provider_id === environment.provider_id
+      session.target.cloud_origin === environment.cloud_origin
+      && session.target.cloud_id === environment.cloud_id
       && session.target.env_public_id === environment.env_public_id
     );
     if (!matchesProviderIdentity && session.target.environment_id !== environment.id) {
@@ -599,11 +599,11 @@ function openSessionsByProviderEnvironment(
 }
 
 function providerEnvironmentSummaryFromRecord(
-  environment: DesktopProviderEnvironmentRecord,
-): DesktopProviderEnvironment {
+  environment: DesktopCloudEnvironmentRecord,
+): DesktopCloudEnvironment {
   return {
-    provider_id: environment.provider_id,
-    provider_origin: environment.provider_origin,
+    cloud_id: environment.cloud_id,
+    cloud_origin: environment.cloud_origin,
     env_public_id: environment.env_public_id,
     region: environment.region,
     access_point_id: environment.access_point_id,
@@ -622,14 +622,14 @@ function providerEnvironmentSummaryFromRecord(
 
 function fallbackControlPlaneSummaries(
   controlPlanes: DesktopPreferences['control_planes'],
-  providerEnvironments: readonly DesktopProviderEnvironmentRecord[],
+  providerEnvironments: readonly DesktopCloudEnvironmentRecord[],
 ): readonly DesktopControlPlaneSummary[] {
   return controlPlanes.map((controlPlane) => ({
     ...controlPlane,
     environments: providerEnvironments
       .filter((environment) => (
-        environment.provider_origin === controlPlane.provider.provider_origin
-        && environment.provider_id === controlPlane.provider.provider_id
+        environment.cloud_origin === controlPlane.cloud.cloud_origin
+        && environment.cloud_id === controlPlane.cloud.cloud_id
       ))
       .map(providerEnvironmentSummaryFromRecord),
     sync_state: controlPlane.last_synced_at_ms > 0 ? 'ready' : 'idle',
@@ -642,7 +642,7 @@ function fallbackControlPlaneSummaries(
 
 function providerEnvironmentCandidateRouteState(
   remoteRouteState: DesktopProviderRemoteRouteState,
-): DesktopProviderEnvironmentCandidate['route_state'] {
+): DesktopCloudEnvironmentCandidate['route_state'] {
   return remoteRouteState === 'ready'
     ? 'online'
     : remoteRouteState === 'unknown' || remoteRouteState === 'stale'
@@ -651,14 +651,14 @@ function providerEnvironmentCandidateRouteState(
 }
 
 function providerEnvironmentCandidatesForSnapshot(
-  environments: readonly DesktopProviderEnvironmentRecord[],
+  environments: readonly DesktopCloudEnvironmentRecord[],
   controlPlanes: readonly DesktopControlPlaneSummary[],
-  runtimeLinkTargets: readonly DesktopProviderRuntimeLinkTarget[],
-  selectedRuntimeTargetID: DesktopProviderRuntimeLinkTargetID,
-): readonly DesktopProviderEnvironmentCandidate[] {
+  runtimeLinkTargets: readonly DesktopCloudRuntimeLinkTarget[],
+  selectedRuntimeTargetID: DesktopCloudRuntimeLinkTargetID,
+): readonly DesktopCloudEnvironmentCandidate[] {
   return environments.map((environment) => {
     const routeDetails = providerEnvironmentRouteDetails(environment, controlPlanes);
-    const linkedRuntime = linkedRuntimeTargetForProviderEnvironment(environment, runtimeLinkTargets);
+    const linkedRuntime = linkedRuntimeTargetForCloudEnvironment(environment, runtimeLinkTargets);
     const occupancy = providerEnvironmentOccupancyForRuntimeTarget(
       routeDetails,
       linkedRuntime,
@@ -667,35 +667,35 @@ function providerEnvironmentCandidatesForSnapshot(
     return {
       provider_environment_id: environment.id,
       label: compact(routeDetails.providerEnvironment?.label) || compact(environment.label) || environment.env_public_id,
-      provider_origin: environment.provider_origin,
-      provider_id: environment.provider_id,
+      cloud_origin: environment.cloud_origin,
+      cloud_id: environment.cloud_id,
       env_public_id: environment.env_public_id,
       access_point_origin: environment.access_point_origin,
-      provider_label: compact(routeDetails.controlPlane?.display_label) || environment.provider_origin,
+      provider_label: compact(routeDetails.controlPlane?.display_label) || environment.cloud_origin,
       route_state: providerEnvironmentCandidateRouteState(routeDetails.remoteRouteState),
       occupancy,
     };
   });
 }
 
-function linkedRuntimeTargetForProviderEnvironment(
-  environment: DesktopProviderEnvironmentRecord,
-  runtimeLinkTargets: readonly DesktopProviderRuntimeLinkTarget[],
+function linkedRuntimeTargetForCloudEnvironment(
+  environment: DesktopCloudEnvironmentRecord,
+  runtimeLinkTargets: readonly DesktopCloudRuntimeLinkTarget[],
   includeInFlightBinding = false,
-): DesktopProviderRuntimeLinkTarget | null {
+): DesktopCloudRuntimeLinkTarget | null {
   return runtimeLinkTargets.find((target) => (
-    (target.provider_link_state === 'linked' || (includeInFlightBinding && ['linking', 'disconnecting'].includes(target.provider_link_state)))
-    && target.provider_origin === environment.provider_origin
-    && target.provider_id === environment.provider_id
+    (target.cloud_link_state === 'linked' || (includeInFlightBinding && ['linking', 'disconnecting'].includes(target.cloud_link_state)))
+    && target.cloud_origin === environment.cloud_origin
+    && target.cloud_id === environment.cloud_id
     && target.env_public_id === environment.env_public_id
     && target.access_point_origin === environment.access_point_origin
   )) ?? null;
 }
 
 function occupancyFromLinkedRuntimeTarget(
-  linkedRuntime: DesktopProviderRuntimeLinkTarget,
-  state: Extract<DesktopProviderEnvironmentOccupancy['state'], 'linked_here' | 'occupied_by_known_runtime'>,
-): DesktopProviderEnvironmentOccupancy {
+  linkedRuntime: DesktopCloudRuntimeLinkTarget,
+  state: Extract<DesktopCloudEnvironmentOccupancy['state'], 'linked_here' | 'occupied_by_known_runtime'>,
+): DesktopCloudEnvironmentOccupancy {
   return {
     state,
     runtime_target_id: linkedRuntime.id,
@@ -707,9 +707,9 @@ function occupancyFromLinkedRuntimeTarget(
 
 function providerEnvironmentOccupancyForRuntimeTarget(
   routeDetails: ReturnType<typeof providerEnvironmentRouteDetails>,
-  linkedRuntime: DesktopProviderRuntimeLinkTarget | null,
-  selectedRuntimeTargetID: DesktopProviderRuntimeLinkTargetID,
-): DesktopProviderEnvironmentOccupancy {
+  linkedRuntime: DesktopCloudRuntimeLinkTarget | null,
+  selectedRuntimeTargetID: DesktopCloudRuntimeLinkTargetID,
+): DesktopCloudEnvironmentOccupancy {
   if (linkedRuntime) {
     return occupancyFromLinkedRuntimeTarget(
       linkedRuntime,
@@ -737,37 +737,37 @@ function runtimeControlBlockedReasonCode(
   }
 }
 
-function buildProviderRuntimeLinkTarget(input: Readonly<{
-  id: DesktopProviderRuntimeLinkTarget['id'];
-  kind: DesktopProviderRuntimeLinkTarget['kind'];
+function buildCloudRuntimeLinkTarget(input: Readonly<{
+  id: DesktopCloudRuntimeLinkTarget['id'];
+  kind: DesktopCloudRuntimeLinkTarget['kind'];
   environmentID: string;
   label: string;
   runtimeKey: string;
   runtimeURL: string;
   runtimeRunning?: boolean;
-  runtimeControlStatus?: DesktopProviderRuntimeLinkTarget['runtime_control_status'];
+  runtimeControlStatus?: DesktopCloudRuntimeLinkTarget['runtime_control_status'];
   runtimeService?: RuntimeServiceSnapshot;
   redevenCloudOriginPolicy: RedevenCloudOriginPolicy;
-}>): DesktopProviderRuntimeLinkTarget {
+}>): DesktopCloudRuntimeLinkTarget {
   const runtimeURL = compact(input.runtimeURL);
   const runtimeService = input.runtimeService
     ? normalizeRuntimeServiceSnapshot(input.runtimeService)
     : undefined;
-  const providerLinkBinding = runtimeServiceProviderLinkBinding(runtimeService);
+  const cloudLinkBinding = runtimeServiceCloudLinkBinding(runtimeService);
   const providerConnectionState = runtimeServiceProviderConnectionState(runtimeService);
   const runtimeRunning = input.runtimeRunning ?? runtimeURL !== '';
-  const providerLinkSupported = runtimeServiceSupportsProviderLink(runtimeService);
+  const cloudLinkSupported = runtimeServiceSupportsCloudLink(runtimeService);
   const runtimeControlStatus = input.runtimeControlStatus ?? defaultRuntimeControlStatusForRunningState(runtimeRunning);
   const blockedReasonCode = (() => {
     const runtimeControlBlocked = runtimeControlBlockedReasonCode(runtimeRunning, runtimeControlStatus);
     if (runtimeControlBlocked !== '') {
       return runtimeControlBlocked;
     }
-    if (!providerLinkSupported) {
-      return 'provider_link_unsupported';
+    if (!cloudLinkSupported) {
+      return 'cloud_link_unsupported';
     }
-    if (providerLinkBinding.state === 'linking' || providerLinkBinding.state === 'disconnecting') {
-      return 'provider_link_busy';
+    if (cloudLinkBinding.state === 'linking' || cloudLinkBinding.state === 'disconnecting') {
+      return 'cloud_link_busy';
     }
     return '';
   })();
@@ -779,9 +779,9 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
         return runtimeControlStatus.state === 'missing'
           ? runtimeControlStatus.message
           : 'Restart this runtime from Desktop so runtime-control can be prepared.';
-      case 'provider_link_unsupported':
+      case 'cloud_link_unsupported':
         return 'Restart this runtime with the current Desktop Runtime before connecting it to Redeven Cloud.';
-      case 'provider_link_busy':
+      case 'cloud_link_busy':
         return 'The Redeven Cloud link is already changing state for this Runtime.';
       default:
         return '';
@@ -799,18 +799,18 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     runtime_control_status: runtimeControlStatus,
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
     provider_connection_state: providerConnectionState,
-    provider_link_state: providerLinkBinding.state,
-    provider_link_binding: providerLinkBinding,
-    provider_origin: providerLinkBinding.provider_origin,
-    provider_origin_supported: isRedevenCloudOrigin(
-      providerLinkBinding.provider_origin ?? '',
+    cloud_link_state: cloudLinkBinding.state,
+    cloud_link_binding: cloudLinkBinding,
+    cloud_origin: cloudLinkBinding.cloud_origin,
+    cloud_origin_supported: isRedevenCloudOrigin(
+      cloudLinkBinding.cloud_origin ?? '',
       input.redevenCloudOriginPolicy,
     ),
-    provider_id: providerLinkBinding.provider_id,
-    env_public_id: providerLinkBinding.env_public_id,
-    access_point_origin: providerLinkBinding.access_point_origin,
-    can_connect_provider: blockedReasonCode === '' && ['unlinked', 'authorization_required', 'disabled', 'error'].includes(providerConnectionState),
-    can_disconnect_provider: providerLinkBinding.state === 'linked',
+    cloud_id: cloudLinkBinding.cloud_id,
+    env_public_id: cloudLinkBinding.env_public_id,
+    access_point_origin: cloudLinkBinding.access_point_origin,
+    can_connect_cloud: blockedReasonCode === '' && ['unlinked', 'authorization_required', 'disabled', 'error'].includes(providerConnectionState),
+    can_disconnect_cloud: cloudLinkBinding.state === 'linked',
     ...(blockedReasonCode !== '' ? { blocked_reason_code: blockedReasonCode } : {}),
     ...(blockedReason !== '' ? { blocked_reason: blockedReason } : {}),
   };
@@ -818,31 +818,31 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
 
 function controlPlaneSummaryByIdentity(
   controlPlanes: readonly DesktopControlPlaneSummary[],
-  providerOrigin: string,
-  providerID: string,
+  cloudOrigin: string,
+  cloudID: string,
 ): DesktopControlPlaneSummary | null {
-  const cleanProviderOrigin = compact(providerOrigin);
-  const cleanProviderID = compact(providerID);
-  if (cleanProviderOrigin === '' || cleanProviderID === '') {
+  const cleanCloudOrigin = compact(cloudOrigin);
+  const cleanProviderID = compact(cloudID);
+  if (cleanCloudOrigin === '' || cleanProviderID === '') {
     return null;
   }
   return controlPlanes.find((entry) => (
-    entry.provider.provider_origin === cleanProviderOrigin
-    && entry.provider.provider_id === cleanProviderID
+    entry.cloud.cloud_origin === cleanCloudOrigin
+    && entry.cloud.cloud_id === cleanProviderID
   )) ?? null;
 }
 
 function controlPlaneEnvironmentSummary(
   controlPlanes: readonly DesktopControlPlaneSummary[],
-  providerOrigin: string,
-  providerID: string,
+  cloudOrigin: string,
+  cloudID: string,
   envPublicID: string,
 ): DesktopControlPlaneSummary['environments'][number] | null {
   const cleanEnvPublicID = compact(envPublicID);
   if (cleanEnvPublicID === '') {
     return null;
   }
-  const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, providerOrigin, providerID);
+  const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, cloudOrigin, cloudID);
   if (!controlPlane) {
     return null;
   }
@@ -850,29 +850,29 @@ function controlPlaneEnvironmentSummary(
 }
 
 function providerEnvironmentRecordKey(
-  providerOrigin: string,
-  providerID: string,
+  cloudOrigin: string,
+  cloudID: string,
   envPublicID: string,
 ): string {
-  return `${compact(providerOrigin)}\n${compact(providerID)}\n${compact(envPublicID)}`;
+  return `${compact(cloudOrigin)}\n${compact(cloudID)}\n${compact(envPublicID)}`;
 }
 
 function providerEnvironmentRecordsFromControlPlanes(
   controlPlanes: readonly DesktopControlPlaneSummary[],
-): readonly DesktopProviderEnvironmentRecord[] {
-  const records: DesktopProviderEnvironmentRecord[] = [];
+): readonly DesktopCloudEnvironmentRecord[] {
+  const records: DesktopCloudEnvironmentRecord[] = [];
   for (const controlPlane of controlPlanes) {
     for (const environment of controlPlane.environments) {
-      records.push(createDesktopProviderEnvironmentRecord(
-        controlPlane.provider.provider_origin,
+      records.push(createDesktopCloudEnvironmentRecord(
+        controlPlane.cloud.cloud_origin,
         environment.env_public_id,
         {
-          providerID: controlPlane.provider.provider_id,
+          cloudID: controlPlane.cloud.cloud_id,
           region: environment.region,
           accessPointID: environment.access_point_id,
           accessPointOrigin: environment.access_point_origin,
           label: environment.label,
-          remoteCatalogEntry: desktopProviderEnvironmentRemoteCatalogEntryFromPublished(environment),
+          remoteCatalogEntry: desktopCloudEnvironmentRemoteCatalogEntryFromPublished(environment),
           createdAtMS: controlPlane.last_synced_at_ms,
           updatedAtMS: controlPlane.last_synced_at_ms,
         },
@@ -883,23 +883,23 @@ function providerEnvironmentRecordsFromControlPlanes(
 }
 
 function providerEnvironmentRecordsForSnapshot(
-  stored: readonly DesktopProviderEnvironmentRecord[],
+  stored: readonly DesktopCloudEnvironmentRecord[],
   controlPlanes: readonly DesktopControlPlaneSummary[],
-): readonly DesktopProviderEnvironmentRecord[] {
+): readonly DesktopCloudEnvironmentRecord[] {
   const activeCatalogKeys = new Set<string>();
-  const recordsByKey = new Map<string, DesktopProviderEnvironmentRecord>();
+  const recordsByKey = new Map<string, DesktopCloudEnvironmentRecord>();
   const storedByKey = new Map(stored.map((environment) => [
-    providerEnvironmentRecordKey(environment.provider_origin, environment.provider_id, environment.env_public_id),
+    providerEnvironmentRecordKey(environment.cloud_origin, environment.cloud_id, environment.env_public_id),
     environment,
   ] as const));
 
   for (const environment of providerEnvironmentRecordsFromControlPlanes(controlPlanes)) {
-    const key = providerEnvironmentRecordKey(environment.provider_origin, environment.provider_id, environment.env_public_id);
+    const key = providerEnvironmentRecordKey(environment.cloud_origin, environment.cloud_id, environment.env_public_id);
     activeCatalogKeys.add(key);
     const storedEnvironment = storedByKey.get(key);
     recordsByKey.set(key, storedEnvironment
-      ? createDesktopProviderEnvironmentRecord(environment.provider_origin, environment.env_public_id, {
-          providerID: environment.provider_id,
+      ? createDesktopCloudEnvironmentRecord(environment.cloud_origin, environment.env_public_id, {
+          cloudID: environment.cloud_id,
           region: environment.region,
           accessPointID: environment.access_point_id,
           accessPointOrigin: environment.access_point_origin,
@@ -917,11 +917,11 @@ function providerEnvironmentRecordsForSnapshot(
   }
 
   for (const environment of stored) {
-    const key = providerEnvironmentRecordKey(environment.provider_origin, environment.provider_id, environment.env_public_id);
+    const key = providerEnvironmentRecordKey(environment.cloud_origin, environment.cloud_id, environment.env_public_id);
     if (recordsByKey.has(key)) {
       continue;
     }
-    const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, environment.provider_origin, environment.provider_id);
+    const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, environment.cloud_origin, environment.cloud_id);
     const hasFreshCatalog = controlPlane?.sync_state === 'ready' && controlPlane.catalog_freshness === 'fresh';
     if (!hasFreshCatalog || activeCatalogKeys.has(key)) {
       recordsByKey.set(key, environment);
@@ -1134,10 +1134,10 @@ function localEnvironmentRemoteRouteDetails(
     };
   }
 
-  const providerOrigin = localEnvironmentProviderOrigin(environment);
-  const providerID = localEnvironmentProviderID(environment);
+  const cloudOrigin = localEnvironmentCloudOrigin(environment);
+  const cloudID = localEnvironmentCloudID(environment);
   const envPublicID = localEnvironmentPublicID(environment);
-  const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, providerOrigin, providerID);
+  const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, cloudOrigin, cloudID);
   if (!controlPlane) {
     return {
       providerEnvironment: null,
@@ -1149,8 +1149,8 @@ function localEnvironmentRemoteRouteDetails(
 
   const providerEnvironment = controlPlaneEnvironmentSummary(
     controlPlanes,
-    providerOrigin,
-    providerID,
+    cloudOrigin,
+    cloudID,
     envPublicID,
   );
   const remoteRouteState = desktopProviderRemoteRouteState({
@@ -1204,8 +1204,8 @@ function buildLocalEnvironmentEntry(
   const isOpening = sessionIsOpening(localSession);
   const access = localEnvironmentAccess(environment);
   const kind = localEnvironmentStateKind(environment);
-  const providerOrigin = localEnvironmentProviderOrigin(environment);
-  const providerID = localEnvironmentProviderID(environment);
+  const cloudOrigin = localEnvironmentCloudOrigin(environment);
+  const cloudID = localEnvironmentCloudID(environment);
   const envPublicID = localEnvironmentPublicID(environment);
   const resolvedLocalRuntimeState = presence
     ? (presence.running ? 'running' : 'not_running')
@@ -1218,7 +1218,7 @@ function buildLocalEnvironmentEntry(
   const resolvedLocalRuntimeURL = resolvedLocalRuntimeURLs[0] ?? '';
   const startedAtUnixMS = runtimeStartedAtUnixMS(runtimeObservation?.started_at_unix_ms);
   const runtimeService = preferredRuntimeService(localEnvironmentRuntimeService(environment), cachedRuntimeHealth, presence);
-  const providerLink = runtimeService?.bindings?.provider_link;
+  const cloudLink = runtimeService?.bindings?.cloud_link;
   const resolvedLocalCloseBehavior = localCloseBehavior(resolvedLocalRuntimeState);
   const localRuntimeFallbackHealth = cachedRuntimeHealth
     ?? (
@@ -1248,8 +1248,8 @@ function buildLocalEnvironmentEntry(
     runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
     maintenance: runtimeMaintenance,
   });
-  const providerRuntimeLinkTarget = buildProviderRuntimeLinkTarget({
-    id: desktopProviderRuntimeLinkTargetID('local_environment', environment.id),
+  const providerRuntimeLinkTarget = buildCloudRuntimeLinkTarget({
+    id: desktopCloudRuntimeLinkTargetID('local_environment', environment.id),
     kind: 'local_environment',
     environmentID: environment.id,
     label: environment.label,
@@ -1273,7 +1273,7 @@ function buildLocalEnvironmentEntry(
     ? String(remoteRoute.providerEnvironment?.environment_url ?? '').trim()
     : '';
   const providerIdentitySummary = kind === 'controlplane'
-    ? [providerOrigin, envPublicID].filter(Boolean).join(' / ')
+    ? [cloudOrigin, envPublicID].filter(Boolean).join(' / ')
     : '';
   return {
     id: environment.id,
@@ -1306,18 +1306,18 @@ function buildLocalEnvironmentEntry(
     default_open_route: 'local_host',
     open_local_session_key: localSession?.session_key,
     open_local_session_lifecycle: sessionLifecycle(localSession),
-    provider_origin: providerLink?.state === 'linked'
-      ? providerLink.provider_origin
+    cloud_origin: cloudLink?.state === 'linked'
+      ? cloudLink.cloud_origin
       : kind === 'controlplane'
-        ? providerOrigin
+        ? cloudOrigin
         : undefined,
-    provider_id: providerLink?.state === 'linked'
-      ? providerLink.provider_id
+    cloud_id: cloudLink?.state === 'linked'
+      ? cloudLink.cloud_id
       : kind === 'controlplane'
-        ? providerID
+        ? cloudID
         : undefined,
-    env_public_id: providerLink?.state === 'linked'
-      ? providerLink.env_public_id
+    env_public_id: cloudLink?.state === 'linked'
+      ? cloudLink.env_public_id
       : kind === 'controlplane'
         ? envPublicID
         : undefined,
@@ -1326,7 +1326,7 @@ function buildLocalEnvironmentEntry(
     provider_lifecycle_status: remoteRoute.providerEnvironment?.lifecycle_status,
     provider_last_seen_at_unix_ms: remoteRoute.providerEnvironment?.last_seen_at_unix_ms,
     control_plane_sync_state: kind === 'controlplane'
-      ? controlPlaneSummaryByIdentity(controlPlanes, providerOrigin, providerID)?.sync_state
+      ? controlPlaneSummaryByIdentity(controlPlanes, cloudOrigin, cloudID)?.sync_state
       : undefined,
     local_route_state: resolvedLocalRouteState,
     remote_route_state: kind === 'controlplane' ? remoteRoute.remoteRouteState : undefined,
@@ -1334,7 +1334,7 @@ function buildLocalEnvironmentEntry(
     remote_state_reason: kind === 'controlplane' ? remoteRoute.remoteStateReason : undefined,
     pinned: environment.pinned,
     control_plane_label: kind === 'controlplane'
-      ? controlPlaneSummaryByIdentity(controlPlanes, providerOrigin, providerID)?.display_label
+      ? controlPlaneSummaryByIdentity(controlPlanes, cloudOrigin, cloudID)?.display_label
       : undefined,
     tag: isOpen ? 'Open' : 'Local',
     category: 'local',
@@ -1408,7 +1408,7 @@ function offlineRuntimeHealthForProviderRoute(
 }
 
 function providerEnvironmentRouteDetails(
-  environment: DesktopProviderEnvironmentRecord,
+  environment: DesktopCloudEnvironmentRecord,
   controlPlanes: readonly DesktopControlPlaneSummary[],
 ): Readonly<{
   controlPlane: DesktopControlPlaneSummary | null;
@@ -1419,13 +1419,13 @@ function providerEnvironmentRouteDetails(
 }> {
   const controlPlane = controlPlaneSummaryByIdentity(
     controlPlanes,
-    environment.provider_origin,
-    environment.provider_id,
+    environment.cloud_origin,
+    environment.cloud_id,
   );
   const providerEnvironment = controlPlaneEnvironmentSummary(
     controlPlanes,
-    environment.provider_origin,
-    environment.provider_id,
+    environment.cloud_origin,
+    environment.cloud_id,
     environment.env_public_id,
   );
   const remoteRouteState = controlPlane
@@ -1447,17 +1447,17 @@ function providerEnvironmentRouteDetails(
   };
 }
 
-function buildProviderEnvironmentEntry(
-  environment: DesktopProviderEnvironmentRecord,
+function buildCloudEnvironmentEntry(
+  environment: DesktopCloudEnvironmentRecord,
   controlPlanes: readonly DesktopControlPlaneSummary[],
   openSessions: readonly DesktopSessionSummary[],
-  runtimeLinkTargets: readonly DesktopProviderRuntimeLinkTarget[],
+  runtimeLinkTargets: readonly DesktopCloudRuntimeLinkTarget[],
 ): DesktopEnvironmentEntry {
-  const sessions = openSessionsByProviderEnvironment(openSessions, environment);
+  const sessions = openSessionsByCloudEnvironment(openSessions, environment);
   const remoteSession = sessions.remote_desktop ?? null;
   const routeDetails = providerEnvironmentRouteDetails(environment, controlPlanes);
   // Display identity survives in-flight binding changes; candidate occupancy still requires linked.
-  const linkedRuntime = linkedRuntimeTargetForProviderEnvironment(environment, runtimeLinkTargets, true);
+  const linkedRuntime = linkedRuntimeTargetForCloudEnvironment(environment, runtimeLinkTargets, true);
   const remoteRuntimeHealth = routeDetails.providerEnvironment
     ? providerEnvironmentRuntimeHealth(routeDetails.providerEnvironment)
     : offlineRuntimeHealthForProviderRoute(routeDetails.remoteRouteState, routeDetails.remoteStateReason);
@@ -1471,7 +1471,7 @@ function buildProviderEnvironmentEntry(
   const runtimeHealth = remoteRuntimeHealth;
   const remoteEnvironmentURL = compact(routeDetails.providerEnvironment?.environment_url)
     || compact(environment.remote_catalog_entry?.environment_url);
-  const controlPlaneLabel = compact(routeDetails.controlPlane?.display_label) || environment.provider_origin;
+  const controlPlaneLabel = compact(routeDetails.controlPlane?.display_label) || environment.cloud_origin;
   const label = compact(routeDetails.providerEnvironment?.label)
     || compact(environment.label)
     || environment.env_public_id;
@@ -1491,7 +1491,7 @@ function buildProviderEnvironmentEntry(
     open_local_session_lifecycle: undefined,
     open_remote_session_key: remoteSession?.session_key,
     open_remote_session_lifecycle: sessionLifecycle(remoteSession),
-    provider_linked_runtime_summary: linkedRuntime
+    cloud_linked_runtime_summary: linkedRuntime
       ? {
           runtime_target_id: linkedRuntime.id,
           runtime_kind: linkedRuntime.kind,
@@ -1499,11 +1499,11 @@ function buildProviderEnvironmentEntry(
           provider_connection_state: linkedRuntime.provider_connection_state,
         }
       : undefined,
-    provider_origin: environment.provider_origin,
-    provider_id: environment.provider_id,
+    cloud_origin: environment.cloud_origin,
+    cloud_id: environment.cloud_id,
     env_public_id: environment.env_public_id,
     provider_source_id: routeDetails.controlPlane
-      ? desktopControlPlaneKey(routeDetails.controlPlane.provider.provider_origin, routeDetails.controlPlane.provider.provider_id)
+      ? desktopControlPlaneKey(routeDetails.controlPlane.cloud.cloud_origin, routeDetails.controlPlane.cloud.cloud_id)
       : undefined,
     remote_environment_url: remoteEnvironmentURL || undefined,
     provider_status: routeDetails.providerEnvironment?.status ?? environment.remote_catalog_entry?.status,
@@ -1560,14 +1560,14 @@ function buildEnvironmentEntries(
       openSessionsByLocalEnvironment(openSessions, environment),
       controlPlanes,
       localRuntimeHealth[environment.id],
-      managedRuntimePresenceByTargetID[desktopProviderRuntimeLinkTargetID('local_environment', environment.id)],
+      managedRuntimePresenceByTargetID[desktopCloudRuntimeLinkTargetID('local_environment', environment.id)],
       redevenCloudOriginPolicy,
     )),
     ...visibleSavedRuntimeTargets.map(target => buildSavedRuntimeTargetEntry(
       target,
       openSessionByRuntimeTarget(openSessions, target),
       savedRuntimeTargetHealth[target.id],
-      managedRuntimePresenceByTargetID[desktopProviderRuntimeLinkTargetID(providerRuntimeLinkKindForHostAccess(target.host_access), target.id)],
+      managedRuntimePresenceByTargetID[desktopCloudRuntimeLinkTargetID(providerRuntimeLinkKindForHostAccess(target.host_access), target.id)],
       redevenCloudOriginPolicy,
     )),
   ];
@@ -1578,11 +1578,11 @@ function buildEnvironmentEntries(
     ...runtimeEntries.map(entry => ({
       ...entry,
       provider_environment_candidates: entry.provider_runtime_link_target
-        ? providerEnvironmentCandidatesForSnapshot(preferences.provider_environments, controlPlanes, runtimeLinkTargets, entry.provider_runtime_link_target.id)
+        ? providerEnvironmentCandidatesForSnapshot(preferences.cloud_environments, controlPlanes, runtimeLinkTargets, entry.provider_runtime_link_target.id)
         : [],
     })),
-    ...preferences.provider_environments.map((environment) => (
-      buildProviderEnvironmentEntry(
+    ...preferences.cloud_environments.map((environment) => (
+      buildCloudEnvironmentEntry(
         environment,
         controlPlanes,
         openSessions,
@@ -1764,8 +1764,8 @@ function buildSavedRuntimeTargetEntry(
   const startedAtUnixMS = runtimeStartedAtUnixMS(runtimeObservation?.started_at_unix_ms);
   const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, runtimeHealth, presence);
   const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
-  const providerRuntimeLinkTarget = buildProviderRuntimeLinkTarget({
-    id: desktopProviderRuntimeLinkTargetID(targetKind, target.id),
+  const providerRuntimeLinkTarget = buildCloudRuntimeLinkTarget({
+    id: desktopCloudRuntimeLinkTargetID(targetKind, target.id),
     kind: targetKind,
     environmentID: target.id,
     label: target.label,
@@ -1869,11 +1869,11 @@ export function buildDesktopWelcomeSnapshot(
   const platformCapabilities = args.platformCapabilities ?? resolveDesktopPlatformCapabilities(process.platform);
   const controlPlanes = args.controlPlanes ?? fallbackControlPlaneSummaries(
     preferences.control_planes,
-    preferences.provider_environments,
+    preferences.cloud_environments,
   );
   const snapshotPreferences: DesktopPreferences = {
     ...preferences,
-    provider_environments: providerEnvironmentRecordsForSnapshot(preferences.provider_environments, controlPlanes),
+    cloud_environments: providerEnvironmentRecordsForSnapshot(preferences.cloud_environments, controlPlanes),
   };
   const openSessions = sortOpenSessions(args.openSessions ?? []);
   const issue = args.issue ?? null;

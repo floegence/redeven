@@ -4,7 +4,7 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   testDesktopPreferences,
   testLocalEnvironment,
-  testProviderEnvironment,
+  testCloudEnvironment,
   testProviderBoundLocalEnvironment,
   testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
@@ -201,8 +201,8 @@ describe('environmentGuidanceSession', () => {
             },
           },
         }),
-        provider_environments: [
-          testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+        cloud_environments: [
+          testCloudEnvironment('https://provider.example.invalid', 'env_demo', {
             preferredOpenRoute: 'local_host',
           }),
         ],

@@ -12,7 +12,7 @@ export interface DesktopSessionContextSnapshot {
   target_kind?: 'local_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
   target_route: 'local_host' | 'remote_desktop';
   session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui' | 'runtime_gateway';
-  provider_origin?: string;
+  cloud_origin?: string;
   provider_id?: string;
   env_public_id?: string;
   label?: string;
@@ -53,7 +53,7 @@ export interface DesktopSessionContextBridge {
   requestTransportRecoveryNow?: () => Promise<boolean>;
   stopTransportRecovery?: () => Promise<boolean>;
   retryDesktopModels?: () => Promise<boolean>;
-  renewProviderSession?: () => Promise<boolean>;
+  renewCloudSession?: () => Promise<boolean>;
   notifyAppReady?: (payload: {
     state: 'access_gate_interactive' | 'runtime_connected';
     timings?: Readonly<{
@@ -85,7 +85,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   const targetKind = compact(candidate.target_kind);
   const targetRoute = compact(candidate.target_route);
   const sessionSource = compact(candidate.session_source);
-  const providerOrigin = compact(candidate.provider_origin);
+  const cloudOrigin = compact(candidate.cloud_origin);
   const providerID = compact(candidate.provider_id);
   const envPublicID = compact(candidate.env_public_id);
   const label = compact(candidate.label);
@@ -112,7 +112,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
     ...(targetKind === 'local_environment' || targetKind === 'external_local_ui' || targetKind === 'ssh_environment' || targetKind === 'gateway_environment' ? { target_kind: targetKind } : {}),
     target_route: targetRoute,
     ...(sessionSource === 'local_runtime' || sessionSource === 'provider_environment' || sessionSource === 'ssh_environment' || sessionSource === 'external_local_ui' || sessionSource === 'runtime_gateway' ? { session_source: sessionSource } : {}),
-    ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
+    ...(cloudOrigin !== '' ? { cloud_origin: cloudOrigin } : {}),
     ...(providerID !== '' ? { provider_id: providerID } : {}),
     ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
     ...(label !== '' ? { label } : {}),
@@ -272,12 +272,12 @@ export async function requestDesktopTransportRecoveryNow(): Promise<boolean> {
   }
 }
 
-export async function renewDesktopProviderSession(envPublicID: string): Promise<boolean | null> {
+export async function renewDesktopCloudSession(envPublicID: string): Promise<boolean | null> {
   const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
-  if (!bridge || typeof bridge.renewProviderSession !== 'function') return null;
+  if (!bridge || typeof bridge.renewCloudSession !== 'function') return null;
   const context = bridge.getSnapshot();
   if (context?.session_source !== 'provider_environment' || context.env_public_id !== envPublicID) return false;
-  try { return await bridge.renewProviderSession() === true; } catch { return false; }
+  try { return await bridge.renewCloudSession() === true; } catch { return false; }
 }
 
 export function desktopRendererStorageScopeID(): string {

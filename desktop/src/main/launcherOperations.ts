@@ -24,8 +24,8 @@ type CreateLauncherOperationInput = Readonly<{
   environment_label?: string;
   gateway_id?: string;
   gateway_environment_id?: string;
-  provider_origin?: string;
-  provider_id?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   status?: DesktopLauncherOperationStatus;
   phase: string;
   title: string;
@@ -380,8 +380,8 @@ export class LauncherOperationRegistry {
       environment_label: compact(input.environment_label) || undefined,
       gateway_id: compact(input.gateway_id) || undefined,
       gateway_environment_id: compact(input.gateway_environment_id) || undefined,
-      provider_origin: compact(input.provider_origin) || undefined,
-      provider_id: compact(input.provider_id) || undefined,
+      cloud_origin: compact(input.cloud_origin) || undefined,
+      cloud_id: compact(input.cloud_id) || undefined,
       started_at_unix_ms: startedAtUnixMs,
       updated_at_unix_ms: startedAtUnixMs,
       status: input.status ?? 'running',

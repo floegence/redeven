@@ -41,7 +41,7 @@ describe('sys codec', () => {
             supported: true,
             bind_method: 'runtime_control_v2',
           },
-          provider_link: {
+          cloud_link: {
             supported: true,
             bind_method: 'runtime_control_v2',
           },
@@ -58,9 +58,9 @@ describe('sys codec', () => {
             model_count: 2,
             missing_key_provider_ids: ['openai', 'anthropic', 'openai'],
           },
-          provider_link: {
+          cloud_link: {
             state: 'linked',
-            provider_origin: ' https://redeven.test ',
+            cloud_origin: ' https://redeven.test ',
             provider_id: ' dev_redeven ',
             env_public_id: ' env_demo ',
             access_point_origin: ' https://dev.redeven.test ',
@@ -108,7 +108,7 @@ describe('sys codec', () => {
             supported: true,
             bindMethod: 'runtime_control_v2',
           },
-          providerLink: {
+          cloudLink: {
             supported: true,
             bindMethod: 'runtime_control_v2',
           },
@@ -125,9 +125,9 @@ describe('sys codec', () => {
             modelCount: 2,
             missingKeyProviderIds: ['anthropic', 'openai'],
           },
-          providerLink: {
+          cloudLink: {
             state: 'linked',
-            providerOrigin: 'https://redeven.test',
+            cloudOrigin: 'https://redeven.test',
             providerId: 'dev_redeven',
             envPublicId: 'env_demo',
             accessPointOrigin: 'https://dev.redeven.test',
@@ -184,7 +184,7 @@ describe('sys codec', () => {
           reasonCode: undefined,
           message: undefined,
         },
-        providerLink: {
+        cloudLink: {
           supported: false,
           bindMethod: undefined,
           reasonCode: undefined,
@@ -208,9 +208,9 @@ describe('sys codec', () => {
           missingKeyProviderIds: undefined,
           lastError: undefined,
         },
-        providerLink: {
+        cloudLink: {
           state: 'unsupported',
-          providerOrigin: undefined,
+          cloudOrigin: undefined,
           providerId: undefined,
           envPublicId: undefined,
           localEnvironmentPublicId: undefined,

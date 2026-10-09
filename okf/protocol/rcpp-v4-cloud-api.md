@@ -1,23 +1,27 @@
 ---
 type: Protocol Contract
-title: RCPP v3 provider API
-description: Provider discovery, health, open-session, Runtime link, and access authorization contract.
-tags: [protocol, provider, openapi, desktop, runtime, access]
+title: RCPP v4 Cloud API
+description: Single Cloud input, authoritative Access Point assignment, native OAuth and access authorization.
+tags: [protocol, cloud, openapi, desktop, runtime, access]
 timestamp: 2026-08-28T00:00:00Z
 ---
 # Summary
 
-RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. `Provider` is the protocol and engineering term; the supported Desktop product surface presents this control plane as `Redeven Cloud`. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.
+RCPP v4 has one Cloud authority and Cloud-assigned Access Points. Runtime accepts one Cloud origin, resolves a link ticket's assignment, exchanges at that Access Point, persists the exact binding and then connects. Cloud identity uses `cloud_id` and `cloud_origin`; model providers remain a separate AI concept. Cloud grants access, while direct Runtime management retains its existing owner. Old protocols fail explicitly; local saved-state migration preserves identities and credentials without retaining an old network path.
 
 # Contract
 
 ## Discovery and access
 
-Provider exposes the fixed `rcpp-v3` discovery, Desktop authorization, Environment list, health, Desktop open-session, and Runtime-link authorization/exchange routes. Open-session is access-only and never carries either a process-management instruction or a `bootstrap_ticket`. Runtime link is a separate two-step flow: a Provider access token with namespace admin permission obtains a short-lived, independently typed ticket, then Runtime exchanges that ticket on the same access point using an exact request and a durable idempotency ID.
+Cloud exposes `/.well-known/redeven-cloud.json` and fixed `/api/rcpp/v4` authorization and access routes. CLI uses `--cloud` (default `https://redeven.com`) and mutually exclusive `--link-ticket`, `--link-ticket-file` or `--link-ticket-stdin`. Cloud input alone never bootstraps or rebinds. Console setup and Desktop issue the same `runtime_link_ticket` while retaining their setup-ready and permission checks. Runtime calls Cloud `runtime-link/resolve` without consuming the ticket, then exchanges at the returned Access Point using one DTO and durable delivery ID. Clients never infer regional domains, decode tickets for routing or forward credentials across origin redirects. Open-session remains access-only.
 
-Environment list responses publish `protocol_version=rcpp-v3` and describe identity, availability, health, access routes, and the current user's explicit `can_connect`, workspace-read, workspace-write, and workspace-execute capabilities. They do not contain `runtime_management`, lifecycle permissions, permits, target generations, bindings, relay state, supervisor freshness, or operation projections. Health is an access observation and cannot make Provider a lifecycle coordinator.
+Environment list responses publish `protocol_version=rcpp-v4` and describe identity, availability, health, access routes, and the current user's explicit `can_connect`, workspace-read, workspace-write, and workspace-execute capabilities. They do not contain `runtime_management`, lifecycle permissions, permits, target generations, bindings, relay state, supervisor freshness, or operation projections. Health is an access observation and cannot make Provider a lifecycle coordinator.
 
-Runtime-link delivery is independent from the frozen v2 manual-install bootstrap endpoint. Its ticket type, request/response DTOs, outbox `delivery_kind`, exact replay bytes, error codes, and encryption AAD are distinct. An expired delivery returns `409/RUNTIME_LINK_DELIVERY_EXPIRED`; a manual bootstrap delivery can never be replayed as an RCPP v3 response. The v2 mobile-auth namespace is likewise independent and does not make v2 Desktop or Provider-access routes valid.
+One v4 Runtime-link path replaces the retired manual bootstrap protocol. Exact replay cannot advance a generation twice. An expired delivery returns `409/RUNTIME_LINK_DELIVERY_EXPIRED`. Control pools use the independent `control_artifact_pool_v2` contract. Portal retires old responses without rewriting ciphertext, digest or AAD; request IDs, sequences and replay fences remain durable. Native login, refresh and revocation use `/api/rcpp/v4/mobile`, with third-party identity named `OAuthProvider` / `oauth_provider`.
+
+## Saved state migration
+
+Runtime atomically migrates `provider_origin`, `controlplane_base_url` and `controlplane_provider_id` to current Cloud fields and pool schema 1 to 2. Artifact bytes, spend state, pending maintenance and generation remain intact. A pending pre-v4 delivery retains local identity but receives a new v4 request ID. Desktop migrates account and environment catalogs transactionally, preserves identity keys, file paths and encoded refresh tokens, and rolls back failed writes. Conflicting fields and unknown versions fail without modifying source data. No migration changes authorization, selected environment or Runtime binding. Runtime Service epoch 45 retains the upgrade window for epochs 9 through 44 and the Runtime-owned model directory contract.
 
 ## Authorization boundary
 
@@ -43,7 +47,7 @@ If a Runtime later reports an unsupported legacy control-plane link, Desktop ide
 
 ## Saved connection recovery
 
-A saved Provider association is intent, not proof of connectivity. Runtime Service exposes `provider_link.connection_state`: `connected` requires successful control registration; `connecting` and `retrying` retain Flowersec ownership; `authorization_required` distinguishes exhausted credentials from revoked or rejected access. `disabled`, `error`, and `unknown` never count as online. An empty standby reserve does not invalidate a registered session or an in-flight connection attempt. Terminal registration and heartbeat failures retire the unusable session. CLI startup emits actionable recovery guidance while Local UI remains available.
+A saved Provider association is intent, not proof of connectivity. Runtime Service exposes `cloud_link.connection_state`: `connected` requires successful control registration; `connecting` and `retrying` retain Flowersec ownership; `authorization_required` distinguishes exhausted credentials from revoked or rejected access. `disabled`, `error`, and `unknown` never count as online. An empty standby reserve does not invalidate a registered session or an in-flight connection attempt. Terminal registration and heartbeat failures retire the unusable session. CLI startup emits actionable recovery guidance while Local UI remains available.
 
 Desktop observes only already attached, running Runtime management endpoints, even when Welcome is closed. Only `CONTROL_CREDENTIALS_EXPIRED` and `CONTROL_CREDENTIALS_EXHAUSTED` permit automatic credential renewal with a saved account authorization. It never starts a Runtime, opens an SSH bridge, changes a device association, or extends/reuses a spent artifact. Missing authorization directs users to account sign-in. Other terminal failures require explicit review. Runtime cards report the actual Cloud state separately from local availability and offer restoration of the selected saved connection without unlinking or restarting local work.
 
@@ -57,13 +61,13 @@ Expired account authorization requires sign-in; revoked permission requires acce
 
 # Boundaries
 
-RCPP v3 does not mirror Desktop Launcher Operations or Gateway state. Provider may route requests to Runtime directly or through an optional Gateway, but it cannot start or repair the destination. An Environment with Provider or Gateway access but no direct Desktop management channel remains access-only.
+RCPP v4 does not mirror Desktop Launcher Operations or Gateway state. Cloud may route requests to Runtime directly or through an optional Gateway, but it cannot start or repair the destination. An Environment with Cloud or Gateway access but no direct Desktop management channel remains access-only.
 
 # Evidence
 
-- `redeven:desktop/src/main/controlPlaneProviderClient.ts:1` - Desktop Provider discovery, health, open-session, and Runtime-link adapter.
-- `redeven:desktop/src/shared/controlPlaneProvider.ts:1` - Access-only Provider DTOs exposed to Desktop.
-- `redeven:desktop/src/main/providerCredentialRecovery.ts` - Bounded credential exchange, service probing, diagnostics and explicit-intent serialization.
+- `redeven:desktop/src/main/cloudClient.ts:1` - Desktop Provider discovery, health, open-session, and Runtime-link adapter.
+- `redeven:desktop/src/shared/cloud.ts:1` - Access-only Provider DTOs exposed to Desktop.
+- `redeven:desktop/src/main/cloudCredentialRecovery.ts` - Bounded credential exchange, service probing, diagnostics and explicit-intent serialization.
 - `redeven:desktop/scripts/check-cloud-recovery.mjs` - Real Electron connection refusal and late-service recovery without duplicate issuance.
 - `redeven:desktop/src/main/desktopWelcomeState.ts:737` - Projects main-process origin policy into Runtime-link targets and Welcome state.
 - `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Separates Provider cards from direct Runtime operation targets.
@@ -71,5 +75,5 @@ RCPP v3 does not mirror Desktop Launcher Operations or Gateway state. Provider m
 - `redeven:desktop/src/main/desktopPreferences.ts:1808` - Idempotent Desktop-local cleanup of unsupported saved control-plane state.
 - `redeven:desktop/src/main/main.ts:4003` - Startup persistence and authorization-boundary enforcement.
 - `redeven:desktop/src/welcome/viewModel.ts:646` - Unsupported legacy Runtime-link presentation and manual recovery boundary.
-- `spec/openapi/rcpp-v3.yaml:1` - Machine-readable RCPP v3 and isolated manual-bootstrap contract.
+- `spec/openapi/rcpp-v4.yaml:1` - Machine-readable v4 Cloud, mobile OAuth and unified Runtime-link contract.
 - `spec/openapi/gateway-v5.yaml:1` - Gateway access-only protocol surface.

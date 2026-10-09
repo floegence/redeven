@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildDesktopProviderRuntimeLinkPlan } from './providerRuntimeLinkPlanner';
-import type { DesktopProviderEnvironmentCandidate, DesktopProviderRuntimeLinkTarget } from './providerRuntimeLinkTarget';
+import { buildDesktopCloudRuntimeLinkPlan } from './providerRuntimeLinkPlanner';
+import type { DesktopCloudEnvironmentCandidate, DesktopCloudRuntimeLinkTarget } from './providerRuntimeLinkTarget';
 import {
   runtimeServiceProviderConnectionState,
-  type RuntimeServiceProviderLinkBinding,
+  type RuntimeServiceCloudLinkBinding,
   type RuntimeServiceSnapshot,
 } from './runtimeService';
 
-function provider(): DesktopProviderEnvironmentCandidate {
+function provider(): DesktopCloudEnvironmentCandidate {
   return {
     provider_environment_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
     label: 'Demo Environment',
-    provider_origin: 'https://redeven.test',
-    provider_id: 'example_control_plane',
+    cloud_origin: 'https://redeven.test',
+    cloud_id: 'example_control_plane',
     env_public_id: 'env_demo',
     access_point_origin: 'https://dev.redeven.test',
     provider_label: 'Demo Provider',
@@ -22,7 +22,7 @@ function provider(): DesktopProviderEnvironmentCandidate {
   };
 }
 
-function runtimeService(binding: RuntimeServiceProviderLinkBinding): RuntimeServiceSnapshot {
+function runtimeService(binding: RuntimeServiceCloudLinkBinding): RuntimeServiceSnapshot {
   return {
     protocol_version: 'redeven-runtime-v2',
     effective_run_mode: 'desktop',
@@ -37,16 +37,16 @@ function runtimeService(binding: RuntimeServiceProviderLinkBinding): RuntimeServ
     },
     capabilities: {
       desktop_model_source: { supported: true, bind_method: 'runtime_control_v2' },
-      provider_link: { supported: true, bind_method: 'runtime_control_v2' },
+      cloud_link: { supported: true, bind_method: 'runtime_control_v2' },
     },
     bindings: {
       desktop_model_source: { state: 'unbound' },
-      provider_link: binding,
+      cloud_link: binding,
     },
   };
 }
 
-function target(overrides: Partial<DesktopProviderRuntimeLinkTarget> = {}): DesktopProviderRuntimeLinkTarget {
+function target(overrides: Partial<DesktopCloudRuntimeLinkTarget> = {}): DesktopCloudRuntimeLinkTarget {
   const service = overrides.runtime_service ?? runtimeService({ state: 'unbound', remote_enabled: false });
   return {
     id: 'ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default',
@@ -62,18 +62,18 @@ function target(overrides: Partial<DesktopProviderRuntimeLinkTarget> = {}): Desk
     },
     runtime_service: service,
     provider_connection_state: runtimeServiceProviderConnectionState(service),
-    provider_link_state: service.bindings!.provider_link.state,
-    provider_link_binding: service.bindings!.provider_link,
-    provider_origin_supported: true,
-    can_connect_provider: true,
-    can_disconnect_provider: false,
+    cloud_link_state: service.bindings!.cloud_link.state,
+    cloud_link_binding: service.bindings!.cloud_link,
+    cloud_origin_supported: true,
+    can_connect_cloud: true,
+    can_disconnect_cloud: false,
     ...overrides,
   };
 }
 
-describe('buildDesktopProviderRuntimeLinkPlan', () => {
+describe('buildDesktopCloudRuntimeLinkPlan', () => {
   it('allows an unbound running SSH runtime to connect to a provider environment', () => {
-    expect(buildDesktopProviderRuntimeLinkPlan(target(), provider())).toMatchObject({
+    expect(buildDesktopCloudRuntimeLinkPlan(target(), provider())).toMatchObject({
       state: 'target_ready',
       can_connect: true,
       can_disconnect: false,
@@ -85,16 +85,16 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     const binding = {
       state: 'linked' as const,
       connection_state: 'connected' as const,
-      provider_origin: 'https://redeven.test',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
       access_point_origin: 'https://dev.redeven.test',
       remote_enabled: true,
     };
-    expect(buildDesktopProviderRuntimeLinkPlan(target({
+    expect(buildDesktopCloudRuntimeLinkPlan(target({
       runtime_service: runtimeService(binding),
-      provider_link_state: 'linked',
-      provider_link_binding: binding,
+      cloud_link_state: 'linked',
+      cloud_link_binding: binding,
     }), provider())).toMatchObject({
       state: 'already_linked',
       can_connect: false,
@@ -107,18 +107,18 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     const binding = {
       state: 'linked' as const,
       connection_state: 'connected' as const,
-      provider_origin: 'https://redeven.test',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
       access_point_origin: 'https://dev.redeven.test',
       remote_enabled: false,
     };
-    expect(buildDesktopProviderRuntimeLinkPlan(target({
+    expect(buildDesktopCloudRuntimeLinkPlan(target({
       runtime_service: runtimeService(binding),
-      provider_link_state: 'linked',
-      provider_link_binding: binding,
-      can_connect_provider: true,
-      can_disconnect_provider: true,
+      cloud_link_state: 'linked',
+      cloud_link_binding: binding,
+      can_connect_cloud: true,
+      can_disconnect_cloud: true,
     }), provider())).toMatchObject({
       state: 'renewal_required',
       can_connect: true,
@@ -131,18 +131,18 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     const binding = {
       state: 'linked' as const,
       connection_state: 'connected' as const,
-      provider_origin: 'https://redeven.test',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
       access_point_origin: 'https://dev.redeven.test',
       remote_enabled: false,
     };
-    expect(buildDesktopProviderRuntimeLinkPlan(target({
+    expect(buildDesktopCloudRuntimeLinkPlan(target({
       runtime_service: runtimeService(binding),
-      provider_link_state: 'linked',
-      provider_link_binding: binding,
-      can_connect_provider: true,
-      can_disconnect_provider: true,
+      cloud_link_state: 'linked',
+      cloud_link_binding: binding,
+      can_connect_cloud: true,
+      can_disconnect_cloud: true,
     }), {
       ...provider(),
       occupancy: {
@@ -164,15 +164,15 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     const binding = {
       state: 'linked' as const,
       connection_state: 'connected' as const,
-      provider_origin: 'https://other.example.invalid',
-      provider_id: 'other',
+      cloud_origin: 'https://other.example.invalid',
+      cloud_id: 'other',
       env_public_id: 'env_other',
       remote_enabled: true,
     };
-    expect(buildDesktopProviderRuntimeLinkPlan(target({
+    expect(buildDesktopCloudRuntimeLinkPlan(target({
       runtime_service: runtimeService(binding),
-      provider_link_state: 'linked',
-      provider_link_binding: binding,
+      cloud_link_state: 'linked',
+      cloud_link_binding: binding,
     }), provider())).toMatchObject({
       state: 'linked_elsewhere',
       can_connect: false,
@@ -181,7 +181,7 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
   });
 
   it('blocks provider environments already occupied by another managed runtime', () => {
-    expect(buildDesktopProviderRuntimeLinkPlan(target(), {
+    expect(buildDesktopCloudRuntimeLinkPlan(target(), {
       ...provider(),
       occupancy: {
         state: 'occupied_by_known_runtime',
@@ -198,7 +198,7 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
   });
 
   it('blocks provider environments reported online by the provider when Desktop cannot identify the runtime', () => {
-    expect(buildDesktopProviderRuntimeLinkPlan(target(), {
+    expect(buildDesktopCloudRuntimeLinkPlan(target(), {
       ...provider(),
       occupancy: { state: 'occupied_by_provider_online_runtime' },
     })).toMatchObject({
@@ -209,7 +209,7 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
   });
 
   it('blocks when runtime-control is missing', () => {
-    expect(buildDesktopProviderRuntimeLinkPlan(target({
+    expect(buildDesktopCloudRuntimeLinkPlan(target({
       runtime_control_status: {
         state: 'missing',
         reason_code: 'not_reported',

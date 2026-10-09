@@ -60,7 +60,7 @@ type Capability struct {
 
 type Capabilities struct {
 	DesktopModelSource Capability `json:"desktop_model_source"`
-	ProviderLink       Capability `json:"provider_link"`
+	CloudLink          Capability `json:"cloud_link"`
 	RuntimeGateway     Capability `json:"runtime_gateway"`
 }
 
@@ -87,35 +87,35 @@ type Binding struct {
 }
 
 type Bindings struct {
-	DesktopModelSource Binding             `json:"desktop_model_source"`
-	ProviderLink       ProviderLinkBinding `json:"provider_link"`
+	DesktopModelSource Binding          `json:"desktop_model_source"`
+	CloudLink          CloudLinkBinding `json:"cloud_link"`
 }
 
-type ProviderLinkState string
+type CloudLinkState string
 
 const (
-	ProviderLinkStateUnbound       ProviderLinkState = "unbound"
-	ProviderLinkStateLinking       ProviderLinkState = "linking"
-	ProviderLinkStateLinked        ProviderLinkState = "linked"
-	ProviderLinkStateDisconnecting ProviderLinkState = "disconnecting"
-	ProviderLinkStateUnsupported   ProviderLinkState = "unsupported"
-	ProviderLinkStateError         ProviderLinkState = "error"
+	CloudLinkStateUnbound       CloudLinkState = "unbound"
+	CloudLinkStateLinking       CloudLinkState = "linking"
+	CloudLinkStateLinked        CloudLinkState = "linked"
+	CloudLinkStateDisconnecting CloudLinkState = "disconnecting"
+	CloudLinkStateUnsupported   CloudLinkState = "unsupported"
+	CloudLinkStateError         CloudLinkState = "error"
 )
 
-type ProviderLinkBinding struct {
-	State                    ProviderLinkState `json:"state"`
-	ConnectionState          string            `json:"connection_state"`
-	ProviderOrigin           string            `json:"provider_origin,omitempty"`
-	ProviderID               string            `json:"provider_id,omitempty"`
-	EnvPublicID              string            `json:"env_public_id,omitempty"`
-	AccessPointOrigin        string            `json:"access_point_origin,omitempty"`
-	LocalEnvironmentPublicID string            `json:"local_environment_public_id,omitempty"`
-	BindingGeneration        int64             `json:"binding_generation,omitempty"`
-	RemoteEnabled            bool              `json:"remote_enabled"`
-	LastConnectedAtUnixMS    int64             `json:"last_connected_at_unix_ms,omitempty"`
-	LastDisconnectedAtUnixMS int64             `json:"last_disconnected_at_unix_ms,omitempty"`
-	LastErrorCode            string            `json:"last_error_code,omitempty"`
-	LastErrorMessage         string            `json:"last_error_message,omitempty"`
+type CloudLinkBinding struct {
+	State                    CloudLinkState `json:"state"`
+	ConnectionState          string         `json:"connection_state"`
+	CloudOrigin              string         `json:"cloud_origin,omitempty"`
+	CloudID                  string         `json:"cloud_id,omitempty"`
+	EnvPublicID              string         `json:"env_public_id,omitempty"`
+	AccessPointOrigin        string         `json:"access_point_origin,omitempty"`
+	LocalEnvironmentPublicID string         `json:"local_environment_public_id,omitempty"`
+	BindingGeneration        int64          `json:"binding_generation,omitempty"`
+	RemoteEnabled            bool           `json:"remote_enabled"`
+	LastConnectedAtUnixMS    int64          `json:"last_connected_at_unix_ms,omitempty"`
+	LastDisconnectedAtUnixMS int64          `json:"last_disconnected_at_unix_ms,omitempty"`
+	LastErrorCode            string         `json:"last_error_code,omitempty"`
+	LastErrorMessage         string         `json:"last_error_message,omitempty"`
 }
 
 type Snapshot struct {
@@ -241,7 +241,7 @@ func NormalizeAIReadiness(readiness AIReadiness) AIReadiness {
 
 func NormalizeCapabilities(capabilities Capabilities) Capabilities {
 	capabilities.DesktopModelSource = NormalizeCapability(capabilities.DesktopModelSource)
-	capabilities.ProviderLink = NormalizeCapability(capabilities.ProviderLink)
+	capabilities.CloudLink = NormalizeCapability(capabilities.CloudLink)
 	capabilities.RuntimeGateway = NormalizeCapability(capabilities.RuntimeGateway)
 	return capabilities
 }
@@ -261,14 +261,14 @@ func NormalizeCapability(capability Capability) Capability {
 
 func NormalizeBindings(bindings Bindings, capabilities Capabilities) Bindings {
 	bindings.DesktopModelSource = NormalizeBinding(bindings.DesktopModelSource, capabilities.DesktopModelSource)
-	bindings.ProviderLink = NormalizeProviderLinkBinding(bindings.ProviderLink, capabilities.ProviderLink)
+	bindings.CloudLink = NormalizeCloudLinkBinding(bindings.CloudLink, capabilities.CloudLink)
 	return bindings
 }
 
-func NormalizeProviderLinkBinding(binding ProviderLinkBinding, capability Capability) ProviderLinkBinding {
-	binding.State = ProviderLinkState(strings.TrimSpace(string(binding.State)))
-	binding.ProviderOrigin = strings.TrimSpace(binding.ProviderOrigin)
-	binding.ProviderID = strings.TrimSpace(binding.ProviderID)
+func NormalizeCloudLinkBinding(binding CloudLinkBinding, capability Capability) CloudLinkBinding {
+	binding.State = CloudLinkState(strings.TrimSpace(string(binding.State)))
+	binding.CloudOrigin = strings.TrimSpace(binding.CloudOrigin)
+	binding.CloudID = strings.TrimSpace(binding.CloudID)
 	binding.EnvPublicID = strings.TrimSpace(binding.EnvPublicID)
 	binding.AccessPointOrigin = strings.TrimSpace(binding.AccessPointOrigin)
 	binding.LocalEnvironmentPublicID = strings.TrimSpace(binding.LocalEnvironmentPublicID)
@@ -284,22 +284,22 @@ func NormalizeProviderLinkBinding(binding ProviderLinkBinding, capability Capabi
 		binding.LastDisconnectedAtUnixMS = 0
 	}
 	if !capability.Supported {
-		return ProviderLinkBinding{State: ProviderLinkStateUnsupported}
+		return CloudLinkBinding{State: CloudLinkStateUnsupported}
 	}
 	switch binding.State {
-	case ProviderLinkStateUnbound,
-		ProviderLinkStateLinking,
-		ProviderLinkStateLinked,
-		ProviderLinkStateDisconnecting,
-		ProviderLinkStateUnsupported,
-		ProviderLinkStateError:
+	case CloudLinkStateUnbound,
+		CloudLinkStateLinking,
+		CloudLinkStateLinked,
+		CloudLinkStateDisconnecting,
+		CloudLinkStateUnsupported,
+		CloudLinkStateError:
 	default:
-		binding.State = ProviderLinkStateUnbound
+		binding.State = CloudLinkStateUnbound
 	}
-	if binding.State == ProviderLinkStateUnsupported {
-		binding.State = ProviderLinkStateUnbound
+	if binding.State == CloudLinkStateUnsupported {
+		binding.State = CloudLinkStateUnbound
 	}
-	if binding.State != ProviderLinkStateLinked {
+	if binding.State != CloudLinkStateLinked {
 		binding.RemoteEnabled = false
 		binding.ConnectionState = "unlinked"
 	} else {

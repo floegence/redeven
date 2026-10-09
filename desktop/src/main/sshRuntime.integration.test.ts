@@ -156,7 +156,7 @@ function currentRuntimeService() {
         supported: true,
         bind_method: 'runtime_control_v1',
       },
-      provider_link: {
+      cloud_link: {
         supported: true,
         bind_method: 'runtime_control_v1',
       },
@@ -171,7 +171,7 @@ function currentRuntimeService() {
             model_count: 1,
         }
         : { state: 'unbound' },
-      provider_link: { state: 'unbound' },
+      cloud_link: { state: 'unbound' },
     },
   };
 }

@@ -257,7 +257,7 @@ func (r *Renderer) richActivityBlock(width int, event Event, scenario richScenar
 		controlValue = "Enter " + status.ActionLabel
 	}
 	lines = append(lines, r.richMetricLine("Control", controlValue, r.richControlLine(event, scenario), r.richTone(scenario), RichFocusControlPlane, width))
-	provider := r.providerLinkSummary(overview)
+	provider := r.cloudLinkSummary(overview)
 	if provider != "" {
 		lines = append(lines, r.richMetricLine("Provider", provider, "remote access binding", richMuted, "", width))
 	}
@@ -332,8 +332,8 @@ func (r *Renderer) controlPlaneStatus(event Event) ControlPlaneStatus {
 	return ControlPlaneStatus{Enabled: true, Label: controlPlaneText(event.Snapshot, event)}
 }
 
-func (r *Renderer) providerLinkSummary(overview RuntimeOverview) string {
-	state := strings.TrimSpace(overview.ProviderLink.State)
+func (r *Renderer) cloudLinkSummary(overview RuntimeOverview) string {
+	state := strings.TrimSpace(overview.CloudLink.State)
 	if state == "" {
 		if overview.RemoteEnabled {
 			state = "enabled"
@@ -341,8 +341,8 @@ func (r *Renderer) providerLinkSummary(overview RuntimeOverview) string {
 			state = "unbound"
 		}
 	}
-	if overview.ProviderLink.ProviderID != "" {
-		return state + " · " + overview.ProviderLink.ProviderID
+	if overview.CloudLink.CloudID != "" {
+		return state + " · " + overview.CloudLink.CloudID
 	}
 	return state
 }
@@ -436,7 +436,7 @@ func (r *Renderer) richAccessRows(width int, event Event, scenario richScenario)
 	s := event.Snapshot
 	envURL := s.EnvironmentURL
 	if envURL == "" {
-		envURL = buildEnvironmentURL(s.ControlplaneBaseURL, s.EnvPublicID)
+		envURL = buildEnvironmentURL(s.AccessPointOrigin, s.EnvPublicID)
 	}
 	if scenario == richScenarioStartup && envURL == "" {
 		envURL = "waiting for runtime registration"
@@ -448,8 +448,8 @@ func (r *Renderer) richAccessRows(width int, event Event, scenario richScenario)
 	}{
 		{"Local UI", firstNonEmpty(s.LocalUIURLs, s.LocalUIBind, "not started"), richAccent},
 		{"Environment", valueOr(envURL, "not connected"), richAccent},
-		{"Provider", valueOr(r.runtimeOverview(event).ProviderLink.ProviderOrigin, s.ProviderOrigin, "not linked"), richText},
-		{"Access Point", valueOr(r.runtimeOverview(event).ProviderLink.AccessPointOrigin, s.ControlplaneBaseURL, "not linked"), richText},
+		{"Provider", valueOr(r.runtimeOverview(event).CloudLink.CloudOrigin, s.CloudOrigin, "not linked"), richText},
+		{"Access Point", valueOr(r.runtimeOverview(event).CloudLink.AccessPointOrigin, s.AccessPointOrigin, "not linked"), richText},
 	}
 
 	var b strings.Builder
@@ -479,7 +479,7 @@ func (r *Renderer) richCompactAccessRows(width int, event Event, scenario richSc
 	s := event.Snapshot
 	envURL := s.EnvironmentURL
 	if envURL == "" {
-		envURL = buildEnvironmentURL(s.ControlplaneBaseURL, s.EnvPublicID)
+		envURL = buildEnvironmentURL(s.AccessPointOrigin, s.EnvPublicID)
 	}
 	if scenario == richScenarioStartup && envURL == "" {
 		envURL = "waiting for registration"
@@ -514,7 +514,7 @@ func (r *Renderer) richExposureRows(width int, event Event, compact bool) string
 }
 
 func (r *Renderer) richControlPlaneSetupRows(width int) string {
-	labels := []string{"Provider", "Access Point", "Environment", "Ticket"}
+	labels := []string{"Cloud", "Environment", "Link Ticket"}
 	values := r.setup.Fields
 	var b strings.Builder
 	b.WriteString("│ ")
@@ -524,7 +524,7 @@ func (r *Renderer) richControlPlaneSetupRows(width int) string {
 	b.WriteString(" │\n")
 	for i, label := range labels {
 		value := values[i]
-		if i == 3 && value != "" {
+		if i == 2 && value != "" {
 			value = strings.Repeat("•", minInt(richVisibleLen(value), 18))
 		}
 		if i == r.setup.Active && !r.setup.Submitting {
@@ -561,13 +561,11 @@ func (r *Renderer) richControlPlaneSetupRows(width int) string {
 func richControlPlaneSetupPlaceholder(index int) string {
 	switch index {
 	case 0:
-		return "https://redeven.test"
+		return "https://redeven.com"
 	case 1:
-		return "https://dev.redeven.test"
-	case 2:
 		return "env_..."
 	default:
-		return "paste bootstrap ticket"
+		return "paste Runtime link ticket"
 	}
 }
 

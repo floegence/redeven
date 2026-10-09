@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from './App';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { buildDesktopSettingsSurfaceSnapshot } from '../main/settingsPageContent';
-import { testDesktopPreferences, testProviderEnvironment } from '../testSupport/desktopTestHelpers';
+import { testDesktopPreferences, testCloudEnvironment } from '../testSupport/desktopTestHelpers';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLauncherActionResult, DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { DesktopSettingsResult } from '../shared/settingsIPC';
@@ -39,9 +39,9 @@ async function mount(load: (request: { environment_id: string }) => Promise<Desk
   const storage = new Map<string, string>();
   vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() });
   vi.stubGlobal('CSS', { escape: (value: string) => value });
-  const cloud = testProviderEnvironment('https://provider.example.invalid', 'cloud-fixture');
+  const cloud = testCloudEnvironment('https://provider.example.invalid', 'cloud-fixture');
   let snapshot = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences({
-    provider_environments: [cloud],
+    cloud_environments: [cloud],
     saved_runtime_targets: [{ schema_version: 2, id, label: 'Fixture SSH', host_access: hostAccess, placement,
       pinned: false, auto_runtime_probe_enabled: true, ssh_password: '', ssh_password_configured: false,
       created_at_ms: 1, updated_at_ms: 1, last_used_at_ms: 1 }],

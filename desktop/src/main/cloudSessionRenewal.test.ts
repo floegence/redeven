@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createProviderSessionRenewal, isProviderSessionRenewalDocument } from './providerSessionRenewal';
+import { createCloudSessionRenewal, isCloudSessionRenewalDocument } from './cloudSessionRenewal';
 
 const origin = 'https://env-demo.dev.redeven-sandbox.test';
 function launchURL(overrides: Record<string, unknown> = {}) {
@@ -10,13 +10,13 @@ function fixture() {
   const requestOpenSession = vi.fn(async () => launchURL());
   const fetch = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ success: true, data: { env_public_id: 'env_demo', floe_app: 'com.floegence.redeven.agent', code_space_id: 'env-ui' } })));
   const isCurrent = vi.fn(() => true);
-  return { requestOpenSession, fetch, isCurrent, renew: createProviderSessionRenewal({ origin, envPublicID: 'env_demo', requestOpenSession, fetch, isCurrent }) };
+  return { requestOpenSession, fetch, isCurrent, renew: createCloudSessionRenewal({ origin, envPublicID: 'env_demo', requestOpenSession, fetch, isCurrent }) };
 }
 describe('provider sandbox session renewal', () => {
   it('admits only the owning bootstrap document as a native renewal caller', () => {
-    expect(isProviderSessionRenewalDocument(`${origin}/_redeven_boot/`, origin)).toBe(true);
+    expect(isCloudSessionRenewalDocument(`${origin}/_redeven_boot/`, origin)).toBe(true);
     for (const url of ['invalid', `${origin}/_redeven_proxy/env/`, `${origin}/_redevplugin/`, 'https://other.test/_redeven_boot/']) {
-      expect(isProviderSessionRenewalDocument(url, origin)).toBe(false);
+      expect(isCloudSessionRenewalDocument(url, origin)).toBe(false);
     }
   });
   it('coalesces concurrent expiry recovery and exchanges only the native authorized ticket', async () => {

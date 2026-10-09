@@ -29,9 +29,9 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 	}
 
 	if err := config.Save(layout.ConfigPath, &config.Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
-		ControlplaneProviderID:   "provider_1",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
+		CloudID:                  "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
 		AgentHomeDir:             "/workspace",
@@ -66,9 +66,9 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 				EffectiveRunMode: "hybrid",
 				RemoteEnabled:    true,
 				Bindings: runtimeservice.Bindings{
-					ProviderLink: runtimeservice.ProviderLinkBinding{
-						ProviderOrigin:    "https://redeven.test",
-						ProviderID:        "provider_1",
+					CloudLink: runtimeservice.CloudLinkBinding{
+						CloudOrigin:       "https://redeven.test",
+						CloudID:           "provider_1",
 						EnvPublicID:       "env_123",
 						AccessPointOrigin: "https://dev.redeven.test",
 					},
@@ -281,7 +281,7 @@ func TestExecuteTargetCommandReturnsStructuredUnsupportedForRecognizedTargetShap
 		raw  string
 		kind string
 	}{
-		{name: "provider environment", raw: "provider:https%3A%2F%2Fredeven.test:env:env_123", kind: TargetKindProviderEnvironment},
+		{name: "provider environment", raw: "provider:https%3A%2F%2Fredeven.test:env:env_123", kind: TargetKindCloudEnvironment},
 		{name: "gateway environment", raw: "gateway:gw_123:env:env_123", kind: TargetKindGatewayEnvironment},
 		{name: "external local ui", raw: "external_local_ui:http%3A%2F%2F127.0.0.1%3A23998%2F", kind: TargetKindExternalLocalUI},
 		{name: "local container", raw: "local:container:docker:dev:abc12345", kind: TargetKindLocalContainerRuntime},

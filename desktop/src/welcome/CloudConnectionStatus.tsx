@@ -28,7 +28,7 @@ export function cloudConnectionTitleKey(runtime: DesktopEnvironmentEntry, cloud:
     case 'tls_error': return 'providerRecovery.tlsError';
     case 'binding_changed': return 'providerRecovery.bindingChanged';
     case 'unknown': return 'providerRecovery.unknown';
-    case 'authorization_required': return target?.provider_link_binding?.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED'
+    case 'authorization_required': return target?.cloud_link_binding?.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED'
       ? 'providerRecovery.expired' : 'providerRecovery.needsAuthorization';
     default: return 'providerRecovery.attention';
   }
@@ -62,11 +62,11 @@ export function CloudConnectionStatus(props: Readonly<{
     }
   });
   const restoreAction = createMemo(() => buildProviderBackedEnvironmentActionModel(props.runtime)
-    .action_presentation.menu_actions.find(item => item.action.intent === 'connect_provider_runtime')?.action);
+    .action_presentation.menu_actions.find(item => item.action.intent === 'connect_cloud_runtime')?.action);
   const canRestore = () => !['connected', 'connecting', 'restoring', 'retrying', 'unknown', 'tls_error', 'sign_in_required', 'permission_required', 'binding_changed'].includes(state())
     && restoreAction()?.enabled;
   const diagnostics = () => target()?.credential_recovery_details;
-  const errorCode = () => diagnostics()?.last_error_code ?? target()?.provider_link_binding?.last_error_code;
+  const errorCode = () => diagnostics()?.last_error_code ?? target()?.cloud_link_binding?.last_error_code;
   const restore = () => {
     const action = restoreAction();
     if (action && canRestore()) { setDetailsOpen(false); props.onRuntimeAction(action); }

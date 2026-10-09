@@ -3942,7 +3942,7 @@ export const redevenWireSchemas = {
                 },
                 "required": []
               },
-              "provider_link": {
+              "cloud_link": {
                 "kind": "object",
                 "properties": {
                   "supported": {
@@ -4037,7 +4037,7 @@ export const redevenWireSchemas = {
                 },
                 "required": []
               },
-              "provider_link": {
+              "cloud_link": {
                 "kind": "object",
                 "properties": {
                   "state": {
@@ -4046,7 +4046,7 @@ export const redevenWireSchemas = {
                   "connection_state": {
                     "kind": "string"
                   },
-                  "provider_origin": {
+                  "cloud_origin": {
                     "kind": "string"
                   },
                   "provider_id": {

@@ -91,8 +91,8 @@ export function buildDesktopRuntimeOperationPlans(
     stop: hiddenDesktopRuntimeOperationPlan('stop'),
     restart: hiddenDesktopRuntimeOperationPlan('restart'),
     update: hiddenDesktopRuntimeOperationPlan('update'),
-    connect_provider: hiddenDesktopRuntimeOperationPlan('connect_provider'),
-    disconnect_provider: hiddenDesktopRuntimeOperationPlan('disconnect_provider'),
+    connect_cloud: hiddenDesktopRuntimeOperationPlan('connect_cloud'),
+    disconnect_cloud: hiddenDesktopRuntimeOperationPlan('disconnect_cloud'),
   };
   if (input.surface === 'provider_card') {
     return {
@@ -231,8 +231,8 @@ export function buildDesktopRuntimeOperationPlans(
         menuVisibility: hasManagement ? 'stable' : 'hidden',
       },
     ),
-    connect_provider: desktopRuntimeOperationPlan(
-      'connect_provider',
+    connect_cloud: desktopRuntimeOperationPlan(
+      'connect_cloud',
       input.runtime_control_status?.state === 'available' && runtimeServiceIsOpenable(input.runtime_service)
         ? 'available'
         : 'blocked',
@@ -246,7 +246,7 @@ export function buildDesktopRuntimeOperationPlans(
           : undefined,
       },
     ),
-    disconnect_provider: desktopRuntimeOperationPlan('disconnect_provider', 'available', 'runtime_control_rpc', {
+    disconnect_cloud: desktopRuntimeOperationPlan('disconnect_cloud', 'available', 'runtime_control_rpc', {
       requiresConfirmation: true,
     }),
   };

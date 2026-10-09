@@ -131,8 +131,8 @@ func (a *Agent) UpdateGatewayEndpoints(invitation gp.MemberInvitation) error {
 	return restartErr
 }
 func (a *Agent) changeGateway(invitation gp.MemberInvitation, choice string, replace bool) error {
-	a.providerLinkMu.Lock()
-	defer a.providerLinkMu.Unlock()
+	a.cloudLinkMu.Lock()
+	defer a.cloudLinkMu.Unlock()
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
 	a.mu.Lock()

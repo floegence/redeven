@@ -9,8 +9,8 @@ import {
 export type EnvironmentGuidancePendingIntent = Extract<
   EnvironmentActionIntent,
   | 'refresh_runtime'
-  | 'connect_provider_runtime'
-  | 'disconnect_provider_runtime'
+  | 'connect_cloud_runtime'
+  | 'disconnect_cloud_runtime'
   | 'open_with_preflight'
   | 'initialize_and_open'
   | 'start_and_open'
@@ -46,8 +46,8 @@ export function isEnvironmentGuidancePendingIntent(
   intent: EnvironmentActionIntent,
 ): intent is EnvironmentGuidancePendingIntent {
   return intent === 'refresh_runtime'
-    || intent === 'connect_provider_runtime'
-    || intent === 'disconnect_provider_runtime'
+    || intent === 'connect_cloud_runtime'
+    || intent === 'disconnect_cloud_runtime'
     || intent === 'open_with_preflight'
     || intent === 'initialize_and_open'
     || intent === 'start_and_open'
@@ -111,12 +111,12 @@ export function failEnvironmentGuidanceIntent(
 
   const fallback = (() => {
     switch (state.pending_intent) {
-      case 'connect_provider_runtime':
+      case 'connect_cloud_runtime':
         return {
           title: 'Provider link failed',
           detail: 'Desktop could not connect this runtime to the provider Environment.',
         };
-      case 'disconnect_provider_runtime':
+      case 'disconnect_cloud_runtime':
         return {
           title: 'Provider unlink failed',
           detail: 'Desktop could not disconnect this runtime from its provider Environment.',
@@ -319,13 +319,13 @@ export function guidanceSessionNotice(
         title: 'Checking runtime status…',
         detail: 'Desktop is probing the latest runtime health for this environment.',
       };
-    case 'connect_provider_runtime':
+    case 'connect_cloud_runtime':
       return {
         tone: 'info',
         title: 'Connecting runtime…',
         detail: 'Desktop is requesting a provider link ticket and connecting the selected runtime.',
       };
-    case 'disconnect_provider_runtime':
+    case 'disconnect_cloud_runtime':
       return {
         tone: 'info',
         title: 'Disconnecting runtime…',

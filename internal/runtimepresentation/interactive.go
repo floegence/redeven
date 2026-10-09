@@ -44,7 +44,7 @@ const (
 )
 
 type controlPlaneSetupState struct {
-	Fields     [4]string
+	Fields     [3]string
 	Active     int
 	Submitting bool
 	Error      string
@@ -379,13 +379,13 @@ func (r *Renderer) runControlPlaneAction() {
 func (r *Renderer) openControlPlaneSetup() {
 	r.mu.Lock()
 	if r.setup.Fields[0] == "" {
-		r.setup.Fields[0] = strings.TrimSpace(r.snapshot.ProviderOrigin)
+		r.setup.Fields[0] = strings.TrimSpace(r.snapshot.CloudOrigin)
+		if r.setup.Fields[0] == "" {
+			r.setup.Fields[0] = "https://redeven.com"
+		}
 	}
 	if r.setup.Fields[1] == "" {
-		r.setup.Fields[1] = strings.TrimSpace(r.snapshot.ControlplaneBaseURL)
-	}
-	if r.setup.Fields[2] == "" {
-		r.setup.Fields[2] = strings.TrimSpace(r.snapshot.EnvPublicID)
+		r.setup.Fields[1] = strings.TrimSpace(r.snapshot.EnvPublicID)
 	}
 	r.setup.Active = 0
 	r.setup.Error = ""
@@ -443,7 +443,7 @@ func (r *Renderer) handleControlPlaneSetupEnter() {
 	r.mu.Lock()
 	active := r.setup.Active
 	r.mu.Unlock()
-	if active < 3 {
+	if active < 2 {
 		r.moveControlPlaneSetupField(1)
 		return
 	}
@@ -477,10 +477,9 @@ func (r *Renderer) submitControlPlaneSetup() {
 	r.mu.Lock()
 	controller := r.controller
 	setup := ControlPlaneSetup{
-		ProviderOrigin:    strings.TrimSpace(r.setup.Fields[0]),
-		AccessPointOrigin: strings.TrimSpace(r.setup.Fields[1]),
-		EnvironmentID:     strings.TrimSpace(r.setup.Fields[2]),
-		BootstrapTicket:   strings.TrimSpace(r.setup.Fields[3]),
+		CloudOrigin:       strings.TrimSpace(r.setup.Fields[0]),
+		EnvironmentID:     strings.TrimSpace(r.setup.Fields[1]),
+		RuntimeLinkTicket: strings.TrimSpace(r.setup.Fields[2]),
 	}
 	r.setup.Submitting = true
 	r.setup.Error = ""
@@ -501,17 +500,21 @@ func (r *Renderer) submitControlPlaneSetup() {
 }
 
 func (r *Renderer) finishControlPlaneSetup(message string, success bool, setup ControlPlaneSetup) {
+	accessPointOrigin := ""
+	if success && r.controller != nil {
+		accessPointOrigin = r.controller.RuntimeOverview().CloudLink.AccessPointOrigin
+	}
 	r.mu.Lock()
 	r.setup.Submitting = false
 	if success {
 		r.expanded = RichPanelNone
 		r.notice = message
-		r.setup.Fields[3] = ""
-		r.snapshot.ProviderOrigin = setup.ProviderOrigin
-		r.snapshot.ControlplaneBaseURL = setup.AccessPointOrigin
+		r.setup.Fields[2] = ""
+		r.snapshot.CloudOrigin = setup.CloudOrigin
+		r.snapshot.AccessPointOrigin = accessPointOrigin
 		r.snapshot.EnvPublicID = setup.EnvironmentID
 		r.snapshot.ControlChannelEnabled = true
-		r.snapshot.EnvironmentURL = BuildEnvironmentURL(setup.AccessPointOrigin, setup.EnvironmentID)
+		r.snapshot.EnvironmentURL = BuildEnvironmentURL(accessPointOrigin, setup.EnvironmentID)
 	} else {
 		r.setup.Error = message
 	}

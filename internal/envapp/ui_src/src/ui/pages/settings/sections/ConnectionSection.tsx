@@ -18,7 +18,7 @@ export function ConnectionSection() {
   const ctx = useEnvSettingsPage();
   const i18n = useI18n();
   const conn = () => ctx.settings()?.connection;
-  const controlPlaneURL = () => String(conn()?.controlplane_base_url ?? '').trim();
+  const controlPlaneURL = () => String(conn()?.access_point_origin ?? '').trim();
   const environmentID = () => String(conn()?.environment_id ?? '').trim();
   const runtimeInstanceID = () => String(conn()?.agent_instance_id ?? '').trim();
   const artifactReady = () => Boolean(conn()?.direct?.artifact_provisioned);

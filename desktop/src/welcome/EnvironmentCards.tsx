@@ -13,7 +13,7 @@ import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton } from './App';
 import { CloudConnectionStatus, cloudConnectionState, cloudConnectionTitleKey } from './CloudConnectionStatus';
-import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import type { DesktopControlPlaneSummary } from '../shared/cloud';
 import { DesktopTooltip } from './DesktopTooltip';
 import { ConsoleActionIconButton, EnvironmentStatusIndicator } from './environmentCardPrimitives';
 import { buildEnvironmentLibraryLayoutModel, buildProviderBackedEnvironmentActionModel, environmentControlPlaneLabel,
@@ -444,8 +444,8 @@ export function EnvironmentCardsPanel(
           }}
           onSignIn={() => {
             const cloud = projectedGroup(groupID).provider_entry!;
-            const source = props.controlPlanes.find(source => source.provider.provider_origin === cloud.provider_origin
-              && source.provider.provider_id === cloud.provider_id);
+            const source = props.controlPlanes.find(source => source.cloud.cloud_origin === cloud.cloud_origin
+              && source.cloud.cloud_id === cloud.cloud_id);
             if (source) void props.reconnectControlPlane(source);
           }} />
       )}

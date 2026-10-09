@@ -1,4 +1,4 @@
-import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/cloud';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 
 export type EnvironmentLibraryDisplayGroup = Readonly<{
@@ -16,7 +16,7 @@ export type EnvironmentLibraryDisplayGroup = Readonly<{
 export function environmentLibrarySearchText(entry: DesktopEnvironmentEntry): string {
   return [
     entry.label, entry.local_ui_url, ...(entry.local_ui_urls ?? []), entry.remote_environment_url,
-    entry.secondary_text, entry.control_plane_label, entry.provider_origin, entry.env_public_id,
+    entry.secondary_text, entry.control_plane_label, entry.cloud_origin, entry.env_public_id,
     entry.gateway_label, entry.gateway_env_id, entry.gateway_endpoint_label, entry.gateway_member?.metadata.hostname,
     entry.ssh_details?.ssh_destination, entry.ssh_details?.runtime_root,
     entry.ssh_details?.release_base_url, entry.ssh_details?.bootstrap_strategy,
@@ -27,11 +27,11 @@ export function environmentLibrarySearchText(entry: DesktopEnvironmentEntry): st
 function providerIdentityMatches(runtime: DesktopEnvironmentEntry, provider: DesktopEnvironmentEntry): boolean {
   const target = runtime.provider_runtime_link_target;
   return Boolean(target
-    && ['linked', 'linking', 'disconnecting'].includes(target.provider_link_state)
-    && target.provider_origin && target.provider_id && target.env_public_id
-    && target.id === provider.provider_linked_runtime_summary?.runtime_target_id
-    && target.provider_origin === provider.provider_origin
-    && target.provider_id === provider.provider_id
+    && ['linked', 'linking', 'disconnecting'].includes(target.cloud_link_state)
+    && target.cloud_origin && target.cloud_id && target.env_public_id
+    && target.id === provider.cloud_linked_runtime_summary?.runtime_target_id
+    && target.cloud_origin === provider.cloud_origin
+    && target.cloud_id === provider.cloud_id
     && target.env_public_id === provider.env_public_id);
 }
 
@@ -96,8 +96,8 @@ export function splitPinnedEnvironmentGroupIDs(groups: readonly EnvironmentLibra
 }
 
 export function environmentCloudSourceID(entry: DesktopEnvironmentEntry): string | undefined {
-  return entry.kind === 'provider_environment' && entry.provider_origin && entry.provider_id
-    ? desktopControlPlaneKey(entry.provider_origin, entry.provider_id) : undefined;
+  return entry.kind === 'provider_environment' && entry.cloud_origin && entry.cloud_id
+    ? desktopControlPlaneKey(entry.cloud_origin, entry.cloud_id) : undefined;
 }
 
 export type EnvironmentCloudSection = Readonly<{
@@ -115,9 +115,9 @@ export function environmentCloudSections(
 ): readonly EnvironmentCloudSection[] {
   const search = query.trim().toLowerCase();
   return sources.flatMap(source => {
-    const id = desktopControlPlaneKey(source.provider.provider_origin, source.provider.provider_id);
+    const id = desktopControlPlaneKey(source.cloud.cloud_origin, source.cloud.cloud_id);
     const members = groups.filter(group => group.cloud_source_id === id);
-    const sourceMatches = [source.display_label, source.provider.provider_origin, source.account.user_display_name]
+    const sourceMatches = [source.display_label, source.cloud.cloud_origin, source.account.user_display_name]
       .some(value => value.toLowerCase().includes(search));
     const visible = sourceMatches ? members : members.filter(group => group.search_text.includes(search));
     return !sourceMatches && visible.length === 0 ? [] : [{

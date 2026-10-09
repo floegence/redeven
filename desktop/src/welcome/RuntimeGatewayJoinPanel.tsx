@@ -1,14 +1,14 @@
 import { ChevronDown, Info } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createSignal, onCleanup, onMount, For, Show, type JSX } from 'solid-js';
-import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import { normalizeGatewayInvitation, type GatewayMembershipStatus, type GatewayMembershipOperation } from '../shared/gatewayJoin';
 import type { GatewayMemberInvitation } from '../shared/gatewayMembership';
 import type { DesktopI18n } from '../shared/i18n';
 
 /** Local consent and recovery share one Runtime membership API. */
 export function RuntimeGatewayJoinPanel(props: Readonly<{
-  targetID: DesktopProviderRuntimeLinkTargetID; i18n: DesktopI18n; disabled?: boolean;
+  targetID: DesktopCloudRuntimeLinkTargetID; i18n: DesktopI18n; disabled?: boolean;
   invitation?: GatewayMemberInvitation; focusOwner?: () => void;
   embedded?: boolean; onClose?: () => void;
   openRequest?: number; hideTrigger?: boolean;

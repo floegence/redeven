@@ -151,7 +151,7 @@ func writeTestConfig(t *testing.T) string {
 
 	// Minimal valid config for config.Load. Includes E2EE PSK to validate redaction in /api/settings.
 	raw := `{
-  "controlplane_base_url": "https://example.com",
+  "access_point_origin": "https://example.com",
   "environment_id": "env_123",
   "agent_instance_id": "agent_123",
   "direct": {
@@ -198,7 +198,7 @@ func writeTestConfigWithAI(t *testing.T) string {
 	p := filepath.Join(dir, "config.json")
 
 	raw := `{
-  "controlplane_base_url": "https://example.com",
+  "access_point_origin": "https://example.com",
   "environment_id": "env_123",
   "agent_instance_id": "agent_123",
   "direct": {

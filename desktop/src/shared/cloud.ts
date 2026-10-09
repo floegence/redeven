@@ -3,9 +3,9 @@ import type {
   DesktopProviderCatalogFreshness,
 } from './providerEnvironmentState';
 
-export type DesktopProviderProtocolVersion = 'rcpp-v3';
+export type DesktopCloudProtocolVersion = 'rcpp-v4';
 
-export type DesktopProviderAccessPoint = Readonly<{
+export type DesktopCloudAccessPoint = Readonly<{
   access_point_id: string;
   region: string;
   display_name: string;
@@ -17,45 +17,45 @@ export type DesktopProviderAccessPoint = Readonly<{
   health_status: string;
 }>;
 
-export type DesktopControlPlaneProvider = Readonly<{
-  protocol_version: DesktopProviderProtocolVersion;
-  provider_id: string;
+export type DesktopCloud = Readonly<{
+  protocol_version: DesktopCloudProtocolVersion;
+  cloud_id: string;
   display_name: string;
-  provider_origin: string;
+  cloud_origin: string;
   documentation_url: string;
-  access_points: readonly DesktopProviderAccessPoint[];
+  access_points: readonly DesktopCloudAccessPoint[];
 }>;
 
 export type DesktopControlPlaneAccount = Readonly<{
-  provider_id: string;
-  provider_origin: string;
+  cloud_id: string;
+  cloud_origin: string;
   display_name: string;
   user_public_id: string;
   user_display_name: string;
   authorization_expires_at_unix_ms: number;
 }>;
 
-export type DesktopProviderRuntimeStatus = 'online' | 'offline';
+export type DesktopCloudRuntimeStatus = 'online' | 'offline';
 
-export type DesktopProviderEnvironmentAccess = Readonly<{
+export type DesktopCloudEnvironmentAccess = Readonly<{
   can_connect: boolean;
   workspace_read: boolean;
   workspace_write: boolean;
   workspace_execute: boolean;
 }>;
 
-export type DesktopProviderEnvironmentRuntimeHealth = Readonly<{
+export type DesktopCloudEnvironmentRuntimeHealth = Readonly<{
   env_public_id: string;
-  runtime_status: DesktopProviderRuntimeStatus;
+  runtime_status: DesktopCloudRuntimeStatus;
   observed_at_unix_ms: number;
   last_seen_at_unix_ms: number;
   offline_reason_code: string;
   offline_reason: string;
 }>;
 
-export type DesktopProviderEnvironment = Readonly<{
-  provider_id: string;
-  provider_origin: string;
+export type DesktopCloudEnvironment = Readonly<{
+  cloud_id: string;
+  cloud_origin: string;
   env_public_id: string;
   region: string;
   access_point_id: string;
@@ -68,14 +68,14 @@ export type DesktopProviderEnvironment = Readonly<{
   status: string;
   lifecycle_status: string;
   last_seen_at_unix_ms: number;
-  runtime_health?: DesktopProviderEnvironmentRuntimeHealth;
-  access?: DesktopProviderEnvironmentAccess;
+  runtime_health?: DesktopCloudEnvironmentRuntimeHealth;
+  access?: DesktopCloudEnvironmentAccess;
 }>;
 
 export type DesktopControlPlaneSummary = Readonly<{
-  provider: DesktopControlPlaneProvider;
+  cloud: DesktopCloud;
   account: DesktopControlPlaneAccount;
-  environments: readonly DesktopProviderEnvironment[];
+  environments: readonly DesktopCloudEnvironment[];
   display_label: string;
   last_synced_at_ms: number;
   sync_state: DesktopControlPlaneSyncState;
@@ -108,14 +108,14 @@ export function suggestControlPlaneDisplayLabel(rawURL: string): string {
   }
 }
 
-export function defaultControlPlaneDisplayLabel(providerOrigin: string): string {
-  const suggested = suggestControlPlaneDisplayLabel(normalizeControlPlaneOrigin(providerOrigin));
-  return suggested === '' ? normalizeControlPlaneOrigin(providerOrigin) : suggested;
+export function defaultControlPlaneDisplayLabel(cloudOrigin: string): string {
+  const suggested = suggestControlPlaneDisplayLabel(normalizeControlPlaneOrigin(cloudOrigin));
+  return suggested === '' ? normalizeControlPlaneOrigin(cloudOrigin) : suggested;
 }
 
-export function normalizeControlPlaneDisplayLabel(value: unknown, providerOrigin: string): string {
+export function normalizeControlPlaneDisplayLabel(value: unknown, cloudOrigin: string): string {
   const clean = compact(value);
-  return clean === '' ? defaultControlPlaneDisplayLabel(providerOrigin) : clean;
+  return clean === '' ? defaultControlPlaneDisplayLabel(cloudOrigin) : clean;
 }
 
 export function normalizeControlPlaneOrigin(rawURL: string): string {
@@ -147,17 +147,17 @@ export function normalizeControlPlaneOrigin(rawURL: string): string {
   return parsed.toString().replace(/\/$/u, '');
 }
 
-export function desktopControlPlaneKey(providerOrigin: string, providerID: string): string {
-  const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
-  const normalizedProviderID = compact(providerID);
+export function desktopControlPlaneKey(cloudOrigin: string, cloudID: string): string {
+  const normalizedOrigin = normalizeControlPlaneOrigin(cloudOrigin);
+  const normalizedProviderID = compact(cloudID);
   if (normalizedProviderID === '') {
     throw new Error('Provider ID is required.');
   }
   return `${normalizedOrigin}|${normalizedProviderID}`;
 }
 
-function normalizeProviderProtocolVersion(value: unknown): DesktopProviderProtocolVersion | null {
-  return compact(value) === 'rcpp-v3' ? 'rcpp-v3' : null;
+function normalizeCloudProtocolVersion(value: unknown): DesktopCloudProtocolVersion | null {
+  return compact(value) === 'rcpp-v4' ? 'rcpp-v4' : null;
 }
 
 function normalizeUnixMS(value: unknown): number {
@@ -181,12 +181,12 @@ function normalizeEnvironmentURL(value: unknown): string {
   }
 }
 
-function normalizeProviderRuntimeStatus(value: unknown): DesktopProviderRuntimeStatus | null {
+function normalizeCloudRuntimeStatus(value: unknown): DesktopCloudRuntimeStatus | null {
   const clean = compact(value).toLowerCase();
   return clean === 'online' || clean === 'offline' ? clean : null;
 }
 
-export function normalizeDesktopProviderEnvironmentAccess(value: unknown): DesktopProviderEnvironmentAccess | null {
+export function normalizeDesktopCloudEnvironmentAccess(value: unknown): DesktopCloudEnvironmentAccess | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Record<string, unknown>;
   return {
@@ -197,16 +197,16 @@ export function normalizeDesktopProviderEnvironmentAccess(value: unknown): Deskt
   };
 }
 
-export function normalizeDesktopProviderEnvironmentRuntimeHealth(
+export function normalizeDesktopCloudEnvironmentRuntimeHealth(
   value: unknown,
-): DesktopProviderEnvironmentRuntimeHealth | null {
+): DesktopCloudEnvironmentRuntimeHealth | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
 
   const candidate = value as Record<string, unknown>;
   const envPublicID = compact(candidate.env_public_id);
-  const runtimeStatus = normalizeProviderRuntimeStatus(candidate.runtime_status);
+  const runtimeStatus = normalizeCloudRuntimeStatus(candidate.runtime_status);
   const observedAtUnixMS = normalizeUnixMS(candidate.observed_at_unix_ms);
   if (envPublicID === '' || !runtimeStatus || observedAtUnixMS <= 0) {
     return null;
@@ -222,18 +222,18 @@ export function normalizeDesktopProviderEnvironmentRuntimeHealth(
   };
 }
 
-export function normalizeDesktopProviderEnvironmentRuntimeHealthList(
+export function normalizeDesktopCloudEnvironmentRuntimeHealthList(
   value: unknown,
-): readonly DesktopProviderEnvironmentRuntimeHealth[] {
+): readonly DesktopCloudEnvironmentRuntimeHealth[] {
   if (!value || typeof value !== 'object') {
     return [];
   }
 
   const candidate = value as Record<string, unknown>;
   const environments = Array.isArray(candidate.environments) ? candidate.environments : [];
-  const out: DesktopProviderEnvironmentRuntimeHealth[] = [];
+  const out: DesktopCloudEnvironmentRuntimeHealth[] = [];
   for (const environment of environments) {
-    const normalized = normalizeDesktopProviderEnvironmentRuntimeHealth(environment);
+    const normalized = normalizeDesktopCloudEnvironmentRuntimeHealth(environment);
     if (!normalized) {
       continue;
     }
@@ -242,7 +242,7 @@ export function normalizeDesktopProviderEnvironmentRuntimeHealthList(
   return out;
 }
 
-export function normalizeDesktopProviderAccessPoint(value: unknown): DesktopProviderAccessPoint | null {
+export function normalizeDesktopCloudAccessPoint(value: unknown): DesktopCloudAccessPoint | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
@@ -281,12 +281,12 @@ export function normalizeDesktopProviderAccessPoint(value: unknown): DesktopProv
   };
 }
 
-export function normalizeDesktopProviderAccessPointList(value: unknown): readonly DesktopProviderAccessPoint[] {
+export function normalizeDesktopCloudAccessPointList(value: unknown): readonly DesktopCloudAccessPoint[] {
   const source = Array.isArray(value) ? value : [];
-  const out: DesktopProviderAccessPoint[] = [];
+  const out: DesktopCloudAccessPoint[] = [];
   const seenIDs = new Set<string>();
   for (const item of source) {
-    const accessPoint = normalizeDesktopProviderAccessPoint(item);
+    const accessPoint = normalizeDesktopCloudAccessPoint(item);
     if (!accessPoint || seenIDs.has(accessPoint.access_point_id)) {
       continue;
     }
@@ -296,44 +296,44 @@ export function normalizeDesktopProviderAccessPointList(value: unknown): readonl
   return out;
 }
 
-export function normalizeDesktopControlPlaneProvider(value: unknown): DesktopControlPlaneProvider | null {
+export function normalizeDesktopCloud(value: unknown): DesktopCloud | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
 
   const candidate = value as Record<string, unknown>;
-  const protocolVersion = normalizeProviderProtocolVersion(candidate.protocol_version);
+  const protocolVersion = normalizeCloudProtocolVersion(candidate.protocol_version);
   if (!protocolVersion) {
     return null;
   }
 
-  const providerID = compact(candidate.provider_id);
+  const cloudID = compact(candidate.cloud_id);
   const displayName = compact(candidate.display_name);
   const documentationURL = compact(candidate.documentation_url);
-  const accessPoints = normalizeDesktopProviderAccessPointList(candidate.access_points);
-  if (providerID === '' || displayName === '' || documentationURL === '' || accessPoints.length === 0) {
+  const accessPoints = normalizeDesktopCloudAccessPointList(candidate.access_points);
+  if (cloudID === '' || displayName === '' || documentationURL === '' || accessPoints.length === 0) {
     return null;
   }
 
-  let providerOrigin = '';
+  let cloudOrigin = '';
   try {
-    providerOrigin = normalizeControlPlaneOrigin(compact(candidate.provider_origin));
+    cloudOrigin = normalizeControlPlaneOrigin(compact(candidate.cloud_origin));
   } catch {
     return null;
   }
 
   return {
     protocol_version: protocolVersion,
-    provider_id: providerID,
+    cloud_id: cloudID,
     display_name: displayName,
-    provider_origin: providerOrigin,
+    cloud_origin: cloudOrigin,
     documentation_url: documentationURL,
     access_points: accessPoints,
   };
 }
 
 type NormalizeDesktopControlPlaneAccountOptions = Readonly<{
-  provider: DesktopControlPlaneProvider;
+  cloud: DesktopCloud;
 }>;
 
 export function normalizeDesktopControlPlaneAccount(
@@ -353,23 +353,23 @@ export function normalizeDesktopControlPlaneAccount(
   }
 
   return {
-    provider_id: options.provider.provider_id,
-    provider_origin: options.provider.provider_origin,
-    display_name: options.provider.display_name,
+    cloud_id: options.cloud.cloud_id,
+    cloud_origin: options.cloud.cloud_origin,
+    display_name: options.cloud.display_name,
     user_public_id: userPublicID,
     user_display_name: userDisplayName,
     authorization_expires_at_unix_ms: authorizationExpiresAtUnixMS,
   };
 }
 
-type NormalizeDesktopProviderEnvironmentOptions = Readonly<{
-  provider: DesktopControlPlaneProvider;
+type NormalizeDesktopCloudEnvironmentOptions = Readonly<{
+  cloud: DesktopCloud;
 }>;
 
-export function normalizeDesktopProviderEnvironment(
+export function normalizeDesktopCloudEnvironment(
   value: unknown,
-  options: NormalizeDesktopProviderEnvironmentOptions,
-): DesktopProviderEnvironment | null {
+  options: NormalizeDesktopCloudEnvironmentOptions,
+): DesktopCloudEnvironment | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
@@ -397,8 +397,8 @@ export function normalizeDesktopProviderEnvironment(
   }
 
   return {
-    provider_id: options.provider.provider_id,
-    provider_origin: options.provider.provider_origin,
+    cloud_id: options.cloud.cloud_id,
+    cloud_origin: options.cloud.cloud_origin,
     env_public_id: envPublicID,
     region,
     access_point_id: accessPointID,
@@ -411,24 +411,24 @@ export function normalizeDesktopProviderEnvironment(
     status: compact(candidate.status),
     lifecycle_status: compact(candidate.lifecycle_status),
     last_seen_at_unix_ms: normalizeUnixMS(candidate.last_seen_at_unix_ms),
-    runtime_health: normalizeDesktopProviderEnvironmentRuntimeHealth(candidate.runtime_health) ?? undefined,
-    access: normalizeDesktopProviderEnvironmentAccess(candidate.access) ?? undefined,
+    runtime_health: normalizeDesktopCloudEnvironmentRuntimeHealth(candidate.runtime_health) ?? undefined,
+    access: normalizeDesktopCloudEnvironmentAccess(candidate.access) ?? undefined,
   };
 }
 
-export function normalizeDesktopProviderEnvironmentList(
+export function normalizeDesktopCloudEnvironmentList(
   value: unknown,
-  options: NormalizeDesktopProviderEnvironmentOptions,
-): readonly DesktopProviderEnvironment[] {
+  options: NormalizeDesktopCloudEnvironmentOptions,
+): readonly DesktopCloudEnvironment[] {
   if (!value || typeof value !== 'object') {
     return [];
   }
 
   const candidate = value as Record<string, unknown>;
   const environments = Array.isArray(candidate.environments) ? candidate.environments : [];
-  const out: DesktopProviderEnvironment[] = [];
+  const out: DesktopCloudEnvironment[] = [];
   for (const environment of environments) {
-    const normalized = normalizeDesktopProviderEnvironment(environment, options);
+    const normalized = normalizeDesktopCloudEnvironment(environment, options);
     if (!normalized) {
       continue;
     }

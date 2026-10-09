@@ -4,7 +4,7 @@ import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import { mixedEnvironmentFixture } from './mixedEnvironmentFixture';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import { desktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import { desktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import { resolveDesktopPlatformCapabilities } from '../shared/desktopPlatformCapabilities';
 
@@ -33,7 +33,7 @@ export function compactEnvironmentPreviewFixture() {
     runtimeTargets.forEach((target, index) => {
       if (!allTypes && index > 0) return;
       const kind: 'wsl_environment' | 'ssh_environment' = target.host_access.kind === 'wsl_host' ? 'wsl_environment' : 'ssh_environment';
-      const id = desktopProviderRuntimeLinkTargetID(kind, target.id);
+      const id = desktopCloudRuntimeLinkTargetID(kind, target.id);
       const p = { ...sshPresence, target_id: id, placement_target_id: target.id, environment_id: target.id,
         label: target.label, kind, host_access: target.host_access, placement: target.placement,
         local_ui_url: 'http://localhost:23998/', local_ui_urls: index === 0 ? ['http://localhost:23998/', 'http://192.0.2.10:23998/'] : ['http://localhost:23998/'],

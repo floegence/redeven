@@ -74,13 +74,13 @@ describe('environment relationship contract', () => {
     const { runtime, cloud } = linkedEnvironmentFixture();
     expect(buildEnvironmentLibraryDisplayGroups([runtime])[0].provider_entry).toBeUndefined();
     expect(buildEnvironmentLibraryDisplayGroups([cloud])[0].primary_entry).toBe(cloud);
-    expect(buildEnvironmentLibraryDisplayGroups([runtime, { ...cloud, provider_linked_runtime_summary: undefined }])).toHaveLength(2);
-    const unbound = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, provider_link_state: 'unbound' as const } };
-    expect(buildEnvironmentLibraryDisplayGroups([unbound, { ...cloud, provider_linked_runtime_summary: undefined }])).toHaveLength(2);
+    expect(buildEnvironmentLibraryDisplayGroups([runtime, { ...cloud, cloud_linked_runtime_summary: undefined }])).toHaveLength(2);
+    const unbound = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' as const } };
+    expect(buildEnvironmentLibraryDisplayGroups([unbound, { ...cloud, cloud_linked_runtime_summary: undefined }])).toHaveLength(2);
   });
   it('does not retain a stale pair after unlinking', () => {
     const { runtime, cloud } = linkedEnvironmentFixture();
-    const unlinked = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, provider_link_state: 'unbound' as const } };
+    const unlinked = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' as const } };
     expect(buildEnvironmentLibraryDisplayGroups([unlinked, cloud])).toHaveLength(2);
   });
 });

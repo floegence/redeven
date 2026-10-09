@@ -73,8 +73,8 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
       return 'runtimeMessage.desktopUpdateRequired';
     case 'environment_open_failed':
       return 'progress.environmentOpenFailedTitle';
-    case 'provider_link_failed':
-      return 'runtimeMessage.providerLinkFailedTitle';
+    case 'cloud_link_failed':
+      return 'runtimeMessage.cloudLinkFailedTitle';
     case 'workspace_engine_prepare_failed':
       return 'progress.workspaceEnginePrepareFailedTitle';
     case 'operation_canceled':
@@ -139,8 +139,8 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
       return 'progress.runtimeHostCommandFailedSummary';
     case 'environment_open_failed':
       return 'progress.environmentOpenFailedSummary';
-    case 'provider_link_failed':
-      return 'runtimeMessage.providerLinkFailedDetail';
+    case 'cloud_link_failed':
+      return 'runtimeMessage.cloudLinkFailedDetail';
     case 'workspace_engine_prepare_failed':
       return 'progress.workspaceEnginePrepareFailedSummary';
     case 'operation_canceled':

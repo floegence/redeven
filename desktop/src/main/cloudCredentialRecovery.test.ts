@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ProviderCredentialRecovery, providerCredentialsNeedRenewal } from './providerCredentialRecovery';
+import { CloudCredentialRecovery, providerCredentialsNeedRenewal } from './cloudCredentialRecovery';
 
 describe('provider credential recovery', () => {
   beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(0); });
@@ -20,7 +20,7 @@ describe('provider credential recovery', () => {
   });
 
   it('coalesces concurrent wake events and ignores late completion after a user action', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     let finish!: (result: { outcome: 'restored' }) => void;
     const exchange = vi.fn(() => new Promise<{ outcome: 'restored' }>(resolve => { finish = resolve; }));
     let current = true;
@@ -38,7 +38,7 @@ describe('provider credential recovery', () => {
   });
 
   it('waits for a read-only service probe after bounded exchanges, then recovers after a late Portal start', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     const exchange = vi.fn(async () => ({ outcome: 'retry' as const }));
     const probe = vi.fn(async () => ({ outcome: 'retry' as const }));
     for (const now of [0, 1, 29_999, 30_000, 30_001, 150_000, 210_000]) {
@@ -55,7 +55,7 @@ describe('provider credential recovery', () => {
   });
 
   it('keeps the cause and retry time without probing terminal authorization failures', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     const probe = vi.fn(async () => ({ outcome: 'restored' as const }));
     await recovery.renew({ ...args(), now: 100, probe,
       exchange: async () => ({ outcome: 'sign_in_required', error_code: 'authorization_expired' }) });
@@ -67,7 +67,7 @@ describe('provider credential recovery', () => {
   });
 
   it('wake preserves terminal review and issued credentials while advancing only recoverable waits', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     const terminal = vi.fn(async () => ({ outcome: 'permission_required' as const }));
     await recovery.renew({ ...args(), exchange: terminal });
     recovery.wake();
@@ -82,7 +82,7 @@ describe('provider credential recovery', () => {
   });
 
   it('waits for an already-sent exchange before explicit disconnect and discards its stale completion', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     let finish!: (value: { outcome: 'restored' }) => void;
     let current = true;
     const task = recovery.renew({ ...args(), isCurrent: () => current,
@@ -101,7 +101,7 @@ describe('provider credential recovery', () => {
   });
 
   it('does not keep issuing generations until a connection actually succeeds', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     const exchange = vi.fn(async () => ({ outcome: 'restored' as const }));
     await recovery.renew({ ...args(), exchange });
     recovery.wake();
@@ -116,7 +116,7 @@ describe('provider credential recovery', () => {
   });
 
   it('measures backoff from exchange completion rather than request start', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     const exchange = vi.fn(async () => {
       vi.setSystemTime(20_000);
       return { outcome: 'retry' as const };
@@ -130,7 +130,7 @@ describe('provider credential recovery', () => {
   });
 
   it('stops read-only probes when permission is revoked', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     const exchange = vi.fn(async () => ({ outcome: 'retry' as const }));
     const probe = vi.fn(async () => ({ outcome: 'permission_required' as const, error_code: 'forbidden' }));
     for (const now of [0, 30_000, 150_000, 210_000]) await recovery.renew({ ...args(), now, exchange, probe });
@@ -143,7 +143,7 @@ describe('provider credential recovery', () => {
   });
 
   it('stops terminal failures until authorization or user intent changes', async () => {
-    const recovery = new ProviderCredentialRecovery();
+    const recovery = new CloudCredentialRecovery();
     const exchange = vi.fn(async () => ({ outcome: 'attention' as const }));
     await recovery.renew({ ...args(), exchange });
     await recovery.renew({ ...args(), now: 500_000, exchange });
@@ -154,7 +154,7 @@ describe('provider credential recovery', () => {
 
   it.each(['sign_in_required', 'permission_required', 'binding_changed'] as const)(
     'preserves %s without retrying until the authorization identity changes', async outcome => {
-      const recovery = new ProviderCredentialRecovery();
+      const recovery = new CloudCredentialRecovery();
       const exchange = vi.fn(async () => ({ outcome }));
       await recovery.renew({ ...args(), exchange });
       expect(recovery.state('local:one', 7)).toBe(outcome);

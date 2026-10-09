@@ -136,7 +136,7 @@ import {
   selectLatestDesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import { launcherOperationInterruptionPresentation } from '../shared/launcherOperationInterruptionPresentation';
-import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import type { DesktopControlPlaneSummary } from '../shared/cloud';
 import {
   type DesktopLocalUIPasswordMode,
   type DesktopSettingsDraft,
@@ -183,12 +183,12 @@ import type {
   DesktopRuntimeTargetID,
 } from '../shared/desktopRuntimePlacement';
 import {
-  buildDesktopProviderRuntimeLinkPlan,
-  type DesktopProviderRuntimeLinkPlanState,
+  buildDesktopCloudRuntimeLinkPlan,
+  type DesktopCloudRuntimeLinkPlanState,
 } from '../shared/providerRuntimeLinkPlanner';
 import type {
-  DesktopProviderEnvironmentCandidate,
-  DesktopProviderRuntimeLinkTarget,
+  DesktopCloudEnvironmentCandidate,
+  DesktopCloudRuntimeLinkTarget,
 } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import type {
@@ -270,7 +270,7 @@ import {
   type DesktopThemePickerSnapshot,
 } from './DesktopThemePicker';
 import { RuntimeStatusOrb } from './RuntimeStatusOrb';
-import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
+import { desktopControlPlaneKey } from '../shared/cloud';
 import {
   DESKTOP_ACTION_TOAST_LIMIT,
   queueDesktopActionToast,
@@ -468,14 +468,14 @@ type SSHPasswordConnectionDialogState = SSHBackedConnectionDialogState;
 type SSHPasswordDraftState = SSHPasswordConnectionDialogState | GatewaySetupDialogState;
 
 type ControlPlaneDialogState = Readonly<{
-  provider_origin: string;
+  cloud_origin: string;
 }> | null;
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
-type ControlPlaneProviderPresetOption = Readonly<{
+type CloudPresetOption = Readonly<{
   domain: string;
-  provider_origin: string;
+  cloud_origin: string;
 }>;
 
 type RuntimeLauncherActionKind =
@@ -489,11 +489,11 @@ type DesktopEnvironmentRuntimeActionRequest = Extract<
   Readonly<{ kind: RuntimeLauncherActionKind }>
 >;
 
-type ProviderRuntimeLinkConfirmationAction = 'connect' | 'disconnect';
+type CloudRuntimeLinkConfirmationAction = 'connect' | 'disconnect';
 
-type ProviderRuntimeLinkConfirmationState = Readonly<{
+type CloudRuntimeLinkConfirmationState = Readonly<{
   environment: DesktopEnvironmentEntry;
-  action: ProviderRuntimeLinkConfirmationAction;
+  action: CloudRuntimeLinkConfirmationAction;
 }>;
 
 
@@ -783,8 +783,8 @@ function environmentActionTranslationKey(action: EnvironmentActionModel): Deskto
     case 'start_and_open': return 'environmentAction.startAndOpen';
     case 'request_open_access': return 'environmentAction.requestAccess';
     case 'resolve_gateway': return 'environmentStatus.resolveGateway';
-    case 'connect_provider_runtime': return 'environmentAction.connectToProviderEllipsis';
-    case 'disconnect_provider_runtime': return 'environmentAction.disconnectFromProvider';
+    case 'connect_cloud_runtime': return 'environmentAction.connectToProviderEllipsis';
+    case 'disconnect_cloud_runtime': return 'environmentAction.disconnectFromProvider';
     case 'start_runtime': return 'environmentAction.startRuntime';
     case 'stop_runtime': return 'environmentAction.stopRuntime';
     case 'restart_runtime': return 'environmentAction.restartRuntime';
@@ -1180,10 +1180,10 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Runtime is preparing the environment app.': 'runtimeMessage.runtimePreparingEnvironmentApp',
     'Desktop will wait for the Environment App to finish preparing.': 'runtimeMessage.desktopWaitEnvironmentAppPreparing',
     'Desktop will try opening this runtime and report upgrade guidance if the runtime rejects the connection.': 'runtimeMessage.desktopTryOpenRuntimeReportUpgrade',
-    'Provider link needs attention.': 'runtimeMessage.providerLinkNeedsAttentionDetail',
-    'The Redeven Cloud link is already changing state for this Runtime.': 'runtimeMessage.providerLinkNeedsAttentionDetail',
-    'Provider link is unavailable for this runtime.': 'runtimeMessage.providerLinkUnavailableDetail',
-    'Choose an available Provider Environment before connecting this runtime.': 'runtimeMessage.providerLinkConnectUnavailableDetail',
+    'Provider link needs attention.': 'runtimeMessage.cloudLinkNeedsAttentionDetail',
+    'The Redeven Cloud link is already changing state for this Runtime.': 'runtimeMessage.cloudLinkNeedsAttentionDetail',
+    'Provider link is unavailable for this runtime.': 'runtimeMessage.cloudLinkUnavailableDetail',
+    'Choose an available Provider Environment before connecting this runtime.': 'runtimeMessage.cloudLinkConnectUnavailableDetail',
     'The legacy control-plane link cannot be disconnected in its current state.': 'runtimeMessage.legacyControlPlaneDisconnectUnavailableDetail',
     'Runtime is offline or unavailable right now. Start it from its source, then refresh status.': 'runtimeMessage.runtimeOfflineRefresh',
     'Desktop needs fresh provider authorization before it can open or connect this provider Environment.': 'runtimeMessage.providerAuthRequired',
@@ -1201,7 +1201,7 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Open becomes available once the runtime is ready on this SSH host.': 'runtimeMessage.sshRuntimeReady',
     'Open becomes available once the runtime is ready on this device.': 'runtimeMessage.localRuntimeReady',
     'This Local Environment uses the runtime bundled with Redeven Desktop. Open becomes available after the Desktop update handoff refreshes the app and bundled local runtime.': 'runtimeMessage.desktopLocalRuntimeUpdateHandoffReady',
-    'Desktop could not connect this runtime to the provider Environment.': 'runtimeMessage.providerLinkFailedDetail',
+    'Desktop could not connect this runtime to the provider Environment.': 'runtimeMessage.cloudLinkFailedDetail',
     'Desktop could not disconnect this runtime from its provider Environment.': 'runtimeMessage.providerUnlinkFailedDetail',
     'Desktop could not refresh the runtime status.': 'runtimeMessage.statusRefreshFailedDetail',
     'The runtime is still offline on this SSH host. Start it from the same host, then try again.': 'runtimeMessage.runtimeStillOfflineSshDetail',
@@ -1303,7 +1303,7 @@ function localizedOverlayTitle(i18n: DesktopI18n, title: string): string {
     'Runtime offline': 'runtimeMessage.runtimeOfflineTitle',
     'Connect to provider to continue': 'runtimeMessage.connectProviderTitle',
     'Connect to Redeven Cloud to continue': 'runtimeMessage.connectProviderTitle',
-    'Provider link failed': 'runtimeMessage.providerLinkFailedTitle',
+    'Provider link failed': 'runtimeMessage.cloudLinkFailedTitle',
     'Provider unlink failed': 'runtimeMessage.providerUnlinkFailedTitle',
     'Status refresh failed': 'runtimeMessage.statusRefreshFailedTitle',
     'Checking runtime status…': 'runtimeMessage.checkingRuntimeStatusTitle',
@@ -1773,8 +1773,8 @@ function environmentRuntimeServiceSnapshot(
 
 function controlPlaneFilterValue(controlPlane: DesktopControlPlaneSummary): string {
   return desktopControlPlaneKey(
-    controlPlane.provider.provider_origin,
-    controlPlane.provider.provider_id,
+    controlPlane.cloud.cloud_origin,
+    controlPlane.cloud.cloud_id,
   );
 }
 
@@ -2048,48 +2048,48 @@ function suggestConnectionLabel(state: ConnectionDialogState): string | null {
   }
 }
 
-export function controlPlaneProviderPresetOptions(
-  providerOrigins: readonly string[],
-): readonly ControlPlaneProviderPresetOption[] {
-  return providerOrigins.flatMap((providerOrigin) => {
+export function cloudPresetOptions(
+  cloudOrigins: readonly string[],
+): readonly CloudPresetOption[] {
+  return cloudOrigins.flatMap((cloudOrigin) => {
     try {
-      const url = new URL(providerOrigin);
-      if (url.origin !== providerOrigin || url.protocol !== 'https:') {
+      const url = new URL(cloudOrigin);
+      if (url.origin !== cloudOrigin || url.protocol !== 'https:') {
         return [];
       }
-      return [{ domain: url.hostname, provider_origin: url.origin }];
+      return [{ domain: url.hostname, cloud_origin: url.origin }];
     } catch {
       return [];
     }
   });
 }
 
-function controlPlaneProviderPresetForOrigin(
-  providerOrigin: string,
-  options: readonly ControlPlaneProviderPresetOption[],
-): ControlPlaneProviderPresetOption | null {
-  const clean = trimString(providerOrigin);
+function cloudPresetForOrigin(
+  cloudOrigin: string,
+  options: readonly CloudPresetOption[],
+): CloudPresetOption | null {
+  const clean = trimString(cloudOrigin);
   if (clean === '') {
     return null;
   }
-  return options.find((option) => option.provider_origin === clean) ?? null;
+  return options.find((option) => option.cloud_origin === clean) ?? null;
 }
 
-function defaultControlPlaneProviderPreset(
-  options: readonly ControlPlaneProviderPresetOption[],
-): ControlPlaneProviderPresetOption | null {
+function defaultCloudPreset(
+  options: readonly CloudPresetOption[],
+): CloudPresetOption | null {
   return options[0] ?? null;
 }
 
 function createControlPlaneDialogState(
-  options: readonly ControlPlaneProviderPresetOption[],
+  options: readonly CloudPresetOption[],
   overrides: Partial<Exclude<ControlPlaneDialogState, null>> = {},
 ): Exclude<ControlPlaneDialogState, null> {
-  const requestedProviderOrigin = trimString(overrides.provider_origin);
-  const defaultPreset = defaultControlPlaneProviderPreset(options);
+  const requestedCloudOrigin = trimString(overrides.cloud_origin);
+  const defaultPreset = defaultCloudPreset(options);
   return {
-    provider_origin: controlPlaneProviderPresetForOrigin(requestedProviderOrigin, options)?.provider_origin
-      ?? defaultPreset?.provider_origin
+    cloud_origin: cloudPresetForOrigin(requestedCloudOrigin, options)?.cloud_origin
+      ?? defaultPreset?.cloud_origin
       ?? '',
   };
 }
@@ -2505,8 +2505,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();
   onCleanup(() => flowerDraftCoordinator.dispose());
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
-  const controlPlaneProviderPresets = createMemo(() => (
-    controlPlaneProviderPresetOptions(snapshot().redeven_cloud_origins)
+  const cloudPresets = createMemo(() => (
+    cloudPresetOptions(snapshot().redeven_cloud_origins)
   ));
   const [languageSnapshot, setLanguageSnapshot] = createSignal<RedevenLanguageSnapshot>(
     shellLanguage?.getSnapshot() ?? FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT,
@@ -2618,14 +2618,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     && route.id === deleteTarget()?.default_access_route_id) && deleteReplacementRoutes().length > 0;
   let deletedGatewayFocus: HTMLElement | undefined;
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
-  const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
-  const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
+  const [providerRuntimeLinkConfirmation, setCloudRuntimeLinkConfirmation] = createSignal<CloudRuntimeLinkConfirmationState | null>(null);
+  const [providerRuntimeLinkCloudEnvironmentID, setCloudRuntimeLinkCloudEnvironmentID] = createSignal('');
   const [signOutControlPlaneTarget, setSignOutControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   createEffect(() => {
     const target = signOutControlPlaneTarget();
     if (target && !snapshot().control_planes.some(source => (
-      source.provider.provider_origin === target.provider.provider_origin
-      && source.provider.provider_id === target.provider.provider_id
+      source.cloud.cloud_origin === target.cloud.cloud_origin
+      && source.cloud.cloud_id === target.cloud.cloud_id
     ))) setSignOutControlPlaneTarget(null);
   });
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
@@ -2864,30 +2864,30 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ));
   const providerRuntimeLinkBusy = createMemo(() => (
     providerRuntimeLinkConfirmation()?.action === 'disconnect'
-      ? busyStateMatchesAction(busyState(), 'disconnect_provider_runtime')
-      : busyStateMatchesAction(busyState(), 'connect_provider_runtime')
+      ? busyStateMatchesAction(busyState(), 'disconnect_cloud_runtime')
+      : busyStateMatchesAction(busyState(), 'connect_cloud_runtime')
   ));
   const providerRuntimeLinkCandidatePlans = createMemo(() => {
     const target = providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target;
     if (!target) {
       return [] as readonly Readonly<{
-        candidate: DesktopProviderEnvironmentCandidate;
+        candidate: DesktopCloudEnvironmentCandidate;
         canConnect: boolean;
         message: string;
       }>[];
     }
     return providerRuntimeLinkCandidates().map((candidate) => {
-      const plan = buildDesktopProviderRuntimeLinkPlan(target, candidate);
+      const plan = buildDesktopCloudRuntimeLinkPlan(target, candidate);
       return {
         candidate,
         canConnect: plan.can_connect,
-        message: localizedProviderRuntimeLinkPlanMessage(i18n(), target, candidate, plan.state),
+        message: localizedCloudRuntimeLinkPlanMessage(i18n(), target, candidate, plan.state),
       };
     });
   });
   const providerRuntimeLinkSelectedPlan = createMemo(() => (
     providerRuntimeLinkCandidatePlans().find((item) => (
-      item.candidate.provider_environment_id === providerRuntimeLinkProviderEnvironmentID()
+      item.candidate.provider_environment_id === providerRuntimeLinkCloudEnvironmentID()
     )) ?? null
   ));
   const providerRuntimeLinkConfirmDisabled = createMemo(() => (
@@ -3417,15 +3417,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'reconnect_control_plane': {
         dismissActionToast(toastID);
         const displayLabel = snapshot().control_planes.find((controlPlane) => (
-          controlPlane.provider.provider_origin === action.provider_origin
+          controlPlane.cloud.cloud_origin === action.cloud_origin
           && (
-            !action.provider_id
-            || controlPlane.provider.provider_id === action.provider_id
+            !action.cloud_id
+            || controlPlane.cloud.cloud_id === action.cloud_id
           )
         ))?.display_label;
         const result = await performLauncherAction({
           kind: 'start_control_plane_connect',
-          provider_origin: action.provider_origin,
+          cloud_origin: action.cloud_origin,
           display_label: displayLabel,
         });
         if (result?.outcome === 'started_control_plane_connect') {
@@ -3841,7 +3841,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setSettingsError('');
     setConnectionDialogError('');
     setControlPlaneDialogError('');
-    setControlPlaneDialogState(createControlPlaneDialogState(controlPlaneProviderPresets()));
+    setControlPlaneDialogState(createControlPlaneDialogState(cloudPresets()));
   }
 
   function openGatewayMembers(gateway: DesktopGatewaySource): void {
@@ -3855,7 +3855,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateControlPlaneDialogField(
-    name: 'provider_origin',
+    name: 'cloud_origin',
     value: string,
   ): void {
     void name;
@@ -3865,8 +3865,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       return {
         ...current,
-        provider_origin: controlPlaneProviderPresetForOrigin(value, controlPlaneProviderPresets())?.provider_origin
-          ?? defaultControlPlaneProviderPreset(controlPlaneProviderPresets())?.provider_origin
+        cloud_origin: cloudPresetForOrigin(value, cloudPresets())?.cloud_origin
+          ?? defaultCloudPreset(cloudPresets())?.cloud_origin
           ?? '',
       };
     });
@@ -4204,7 +4204,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return opened;
   }
 
-  async function openProviderEnvironment(
+  async function openCloudEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     _route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
@@ -4499,9 +4499,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result.ok && result.outcome === 'refreshed_environment_runtime';
   }
 
-  function requestProviderRuntimeLinkConfirmation(
+  function requestCloudRuntimeLinkConfirmation(
     environment: DesktopEnvironmentEntry,
-    action: ProviderRuntimeLinkConfirmationAction,
+    action: CloudRuntimeLinkConfirmationAction,
   ): void {
     // IMPORTANT: Provider-link confirmation is intentionally reachable only from
     // Local/SSH runtime cards. Provider Environment cards must never grant or
@@ -4515,46 +4515,46 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     if (action === 'connect' && (environment.provider_environment_candidates?.length ?? 0) === 0) {
-      setErrorMessage('connect', i18n().t('environmentCenter.noProviderEnvironmentsToConnect'));
+      setErrorMessage('connect', i18n().t('environmentCenter.noCloudEnvironmentsToConnect'));
       return;
     }
-    setProviderRuntimeLinkProviderEnvironmentID(action === 'disconnect' || target.provider_link_state === 'linked'
+    setCloudRuntimeLinkCloudEnvironmentID(action === 'disconnect' || target.cloud_link_state === 'linked'
       ? providerEnvironmentIDForRuntimeTarget(environment)
       : '');
-    setProviderRuntimeLinkConfirmation({
+    setCloudRuntimeLinkConfirmation({
       environment,
       action,
     });
   }
 
-  function closeProviderRuntimeLinkConfirmation(): void {
-    setProviderRuntimeLinkConfirmation(null);
-    setProviderRuntimeLinkProviderEnvironmentID('');
+  function closeCloudRuntimeLinkConfirmation(): void {
+    setCloudRuntimeLinkConfirmation(null);
+    setCloudRuntimeLinkCloudEnvironmentID('');
   }
 
   function providerEnvironmentIDForRuntimeTarget(environment: DesktopEnvironmentEntry): string {
     const target = environment.provider_runtime_link_target;
-    if (!target?.provider_origin || !target.provider_id || !target.env_public_id) {
+    if (!target?.cloud_origin || !target.cloud_id || !target.env_public_id) {
       return '';
     }
     return snapshot().environments.find((entry) => (
       entry.kind === 'provider_environment'
-      && entry.provider_origin === target.provider_origin
-      && entry.provider_id === target.provider_id
+      && entry.cloud_origin === target.cloud_origin
+      && entry.cloud_id === target.cloud_id
       && entry.env_public_id === target.env_public_id
     ))?.id ?? '';
   }
 
-  async function confirmProviderRuntimeLinkAction(): Promise<void> {
+  async function confirmCloudRuntimeLinkAction(): Promise<void> {
     const confirmation = providerRuntimeLinkConfirmation();
     if (!confirmation) {
       return;
     }
     const latestEnvironment = await loadLatestEnvironmentEntry(confirmation.environment.id) ?? confirmation.environment;
-    const providerEnvironmentID = providerRuntimeLinkProviderEnvironmentID();
+    const providerEnvironmentID = providerRuntimeLinkCloudEnvironmentID();
     if (confirmation.action === 'connect') {
       if (providerEnvironmentID === '') {
-        setErrorMessage('connect', i18n().t('environmentCenter.chooseProviderEnvironmentFirst'));
+        setErrorMessage('connect', i18n().t('environmentCenter.chooseCloudEnvironmentFirst'));
         return;
       }
       const target = latestEnvironment.provider_runtime_link_target;
@@ -4562,12 +4562,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         candidate.provider_environment_id === providerEnvironmentID
       ));
       if (!target || !providerEnvironment) {
-        setErrorMessage('connect', i18n().t('environmentCenter.resolveProviderEnvironmentError'));
+        setErrorMessage('connect', i18n().t('environmentCenter.resolveCloudEnvironmentError'));
         return;
       }
-      const plan = buildDesktopProviderRuntimeLinkPlan(target, providerEnvironment);
+      const plan = buildDesktopCloudRuntimeLinkPlan(target, providerEnvironment);
       if (!plan.can_connect) {
-        setErrorMessage('connect', localizedProviderRuntimeLinkPlanMessage(i18n(), target, providerEnvironment, plan.state));
+        setErrorMessage('connect', localizedCloudRuntimeLinkPlanMessage(i18n(), target, providerEnvironment, plan.state));
         return;
       }
     }
@@ -4575,7 +4575,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ? await disconnectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect')
       : await connectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect');
     if (ok) {
-      closeProviderRuntimeLinkConfirmation();
+      closeCloudRuntimeLinkConfirmation();
     }
   }
 
@@ -4590,7 +4590,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return false;
     }
     const result = await performLauncherAction({
-      kind: 'connect_provider_runtime',
+      kind: 'connect_cloud_runtime',
       provider_environment_id: providerEnvironmentID,
       runtime_target_id: target.id,
     }, errorTarget);
@@ -4617,7 +4617,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return false;
     }
     const result = await performLauncherAction({
-      kind: 'disconnect_provider_runtime',
+      kind: 'disconnect_cloud_runtime',
       ...(providerEnvironmentID !== '' ? { provider_environment_id: providerEnvironmentID } : {}),
       runtime_target_id: target.id,
     }, errorTarget);
@@ -4773,7 +4773,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return openLocalEnvironment(environment, errorTarget, route);
     }
     if (environment.kind === 'provider_environment') {
-      return openProviderEnvironment(environment, errorTarget, route);
+      return openCloudEnvironment(environment, errorTarget, route);
     }
     if (environment.kind === 'gateway_environment') {
       return openGatewayEnvironment(environment, errorTarget);
@@ -4905,11 +4905,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           bindReinstallOperationResult(result, bindOperation);
           return result?.outcome === 'previewed_reinstall_target';
         }
-      case 'connect_provider_runtime':
-        requestProviderRuntimeLinkConfirmation(environment, 'connect');
+      case 'connect_cloud_runtime':
+        requestCloudRuntimeLinkConfirmation(environment, 'connect');
         return true;
-      case 'disconnect_provider_runtime':
-        requestProviderRuntimeLinkConfirmation(environment, 'disconnect');
+      case 'disconnect_cloud_runtime':
+        requestCloudRuntimeLinkConfirmation(environment, 'disconnect');
         return true;
       case 'resolve_gateway':
         if (environment.kind === 'gateway_environment') {
@@ -5117,11 +5117,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'request_open_access') {
-      if (environment.kind === 'provider_environment' && environment.provider_origin) {
+      if (environment.kind === 'provider_environment' && environment.cloud_origin) {
         const result = await performLauncherAction(
           {
             kind: 'start_control_plane_connect',
-            provider_origin: environment.provider_origin,
+            cloud_origin: environment.cloud_origin,
             display_label: environment.label,
           },
           'connect',
@@ -5217,16 +5217,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       };
     }
 
-    if (action.intent === 'connect_provider_runtime') {
-      requestProviderRuntimeLinkConfirmation(environment, 'connect');
+    if (action.intent === 'connect_cloud_runtime') {
+      requestCloudRuntimeLinkConfirmation(environment, 'connect');
       return {
         close_panel: true,
         next_session: null,
       };
     }
 
-    if (action.intent === 'disconnect_provider_runtime') {
-      requestProviderRuntimeLinkConfirmation(environment, 'disconnect');
+    if (action.intent === 'disconnect_cloud_runtime') {
+      requestCloudRuntimeLinkConfirmation(environment, 'disconnect');
       return {
         close_panel: true,
         next_session: null,
@@ -5249,7 +5249,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherAction({
       kind: 'start_control_plane_connect',
-      provider_origin: trimString(state.provider_origin),
+      cloud_origin: trimString(state.cloud_origin),
       display_label: 'Redeven Cloud',
     }, 'control_plane_dialog');
     if (result?.outcome === 'started_control_plane_connect') {
@@ -5261,7 +5261,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function reconnectControlPlane(controlPlane: DesktopControlPlaneSummary): Promise<void> {
     const result = await performLauncherAction({
       kind: 'start_control_plane_connect',
-      provider_origin: controlPlane.provider.provider_origin,
+      cloud_origin: controlPlane.cloud.cloud_origin,
       display_label: 'Redeven Cloud',
     });
     if (result?.outcome === 'started_control_plane_connect') {
@@ -5272,8 +5272,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function refreshControlPlane(controlPlane: DesktopControlPlaneSummary): Promise<void> {
     const result = await performLauncherAction({
       kind: 'refresh_control_plane',
-      provider_origin: controlPlane.provider.provider_origin,
-      provider_id: controlPlane.provider.provider_id,
+      cloud_origin: controlPlane.cloud.cloud_origin,
+      cloud_id: controlPlane.cloud.cloud_id,
     });
     if (result?.outcome === 'refreshed_control_plane') {
       showActionToast(
@@ -5981,8 +5981,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setBusyState({
       action: 'delete_environment',
       environment_id: target.id,
-      provider_origin: '',
-      provider_id: '',
+      cloud_origin: '',
+      cloud_id: '',
       gateway_id: registrationRef?.kind === 'gateway_environment' ? registrationRef.gateway_id : '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
@@ -6024,8 +6024,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherAction({
       kind: 'sign_out_control_plane',
-      provider_origin: target.provider.provider_origin,
-      provider_id: target.provider.provider_id,
+      cloud_origin: target.cloud.cloud_origin,
+      cloud_id: target.cloud.cloud_id,
     });
     if (result?.outcome === 'signed_out_control_plane') {
       setSignOutControlPlaneTarget(null);
@@ -6566,8 +6566,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <Show when={settingsPresentation()?.environment.managed_runtime_host_access?.kind === 'wsl_host'} fallback={(
                   <div class="space-y-4">
                     <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n().t('settings.cloudManaged')}</p>
-                    <p class="select-text break-all font-mono text-xs">{settingsPresentation()?.environment.provider_origin}</p>
-                    <Button onClick={() => { const url = settingsPresentation()?.environment.provider_origin; if (url) void openConnectionInBrowser(url); }}>
+                    <p class="select-text break-all font-mono text-xs">{settingsPresentation()?.environment.cloud_origin}</p>
+                    <Button onClick={() => { const url = settingsPresentation()?.environment.cloud_origin; if (url) void openConnectionInBrowser(url); }}>
                       {i18n().t('settings.manageCloud')}
                     </Button>
                   </div>
@@ -6731,7 +6731,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <ControlPlaneDialog
         i18n={i18n()}
         logoSrc={headerLogoSrc()}
-        providerOptions={controlPlaneProviderPresets()}
+        providerOptions={cloudPresets()}
         state={controlPlaneDialogState()}
         error={controlPlaneDialogError()}
         busyState={busyState()}
@@ -6858,7 +6858,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         open={providerRuntimeLinkDialogOpen()}
         onOpenChange={(open) => {
           if (!open) {
-            closeProviderRuntimeLinkConfirmation();
+            closeCloudRuntimeLinkConfirmation();
           }
         }}
         title={providerRuntimeLinkActionLabel()}
@@ -6866,14 +6866,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <div class="flex justify-end gap-2">
             <Button
               variant="ghost"
-              onClick={() => closeProviderRuntimeLinkConfirmation()}
+              onClick={() => closeCloudRuntimeLinkConfirmation()}
               disabled={providerRuntimeLinkBusy()}
             >
               {i18n().t('common.cancel')}
             </Button>
             <Button
               variant={providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'destructive' : 'primary'}
-              onClick={() => void confirmProviderRuntimeLinkAction()}
+              onClick={() => void confirmCloudRuntimeLinkAction()}
               loading={providerRuntimeLinkBusy()}
               disabled={providerRuntimeLinkConfirmDisabled()}
             >
@@ -6909,7 +6909,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                     >
                       <span>
                         <span class="block font-medium">{item.candidate.label}</span>
-                        <span class="block text-xs text-muted-foreground">{item.candidate.provider_label || item.candidate.provider_origin} · {item.candidate.env_public_id}</span>
+                        <span class="block text-xs text-muted-foreground">{item.candidate.provider_label || item.candidate.cloud_origin} · {item.candidate.env_public_id}</span>
                         <Show when={!item.canConnect}>
                           <span class="block text-xs text-muted-foreground">{item.message}</span>
                         </Show>
@@ -6918,10 +6918,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                         type="radio"
                         name="provider-runtime-link-target"
                         disabled={!item.canConnect}
-                        checked={providerRuntimeLinkProviderEnvironmentID() === item.candidate.provider_environment_id}
+                        checked={providerRuntimeLinkCloudEnvironmentID() === item.candidate.provider_environment_id}
                         onChange={() => {
                           if (item.canConnect) {
-                            setProviderRuntimeLinkProviderEnvironmentID(item.candidate.provider_environment_id);
+                            setCloudRuntimeLinkCloudEnvironmentID(item.candidate.provider_environment_id);
                           }
                         }}
                       />
@@ -6933,7 +6933,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>
             <p class="text-xs text-muted-foreground">
-              {i18n().t('desktop.provider')}: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.provider_origin || i18n().t('environmentCenter.unknownProvider')}</span>
+              {i18n().t('desktop.provider')}: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.cloud_origin || i18n().t('environmentCenter.unknownProvider')}</span>
             </p>
             <p class="text-xs text-muted-foreground">
               {i18n().t('environmentCenter.sourceEnvironment')}: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.env_public_id || 'unknown'}</span>
@@ -8270,18 +8270,18 @@ function isEnvironmentActionBusy(
   switch (action.intent) {
     case 'request_open_access':
       return (
-        busyState.provider_origin !== '' &&
-        busyState.provider_origin === action.provider_origin &&
+        busyState.cloud_origin !== '' &&
+        busyState.cloud_origin === action.cloud_origin &&
         busyState.action === 'start_control_plane_connect'
       );
     case 'pair_gateway':
       return busyStateMatchesGateway(busyState, action.gateway_id ?? '', ['refresh_gateway']);
     case 'update_desktop':
       return busyStateMatchesEnvironment(busyState, environmentID, ['manage_desktop_update']);
-    case 'connect_provider_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_runtime']);
-    case 'disconnect_provider_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_provider_runtime']);
+    case 'connect_cloud_runtime':
+      return busyStateMatchesEnvironment(busyState, environmentID, ['connect_cloud_runtime']);
+    case 'disconnect_cloud_runtime':
+      return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_cloud_runtime']);
     default:
       return false;
   }
@@ -9366,9 +9366,9 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
       return AlertTriangle;
     case 'pair_gateway':
       return ShieldCheck;
-    case 'connect_provider_runtime':
+    case 'connect_cloud_runtime':
       return ShieldCheck;
-    case 'disconnect_provider_runtime':
+    case 'disconnect_cloud_runtime':
       return Shield;
     default:
       return null;
@@ -9382,9 +9382,9 @@ function splitMenuItemToneData(intent: EnvironmentActionIntent): string {
       return 'danger';
     case 'start_runtime':
     case 'pair_gateway':
-    case 'connect_provider_runtime':
+    case 'connect_cloud_runtime':
       return 'primary';
-    case 'disconnect_provider_runtime':
+    case 'disconnect_cloud_runtime':
       return 'accent';
     default:
       return '';
@@ -9460,8 +9460,8 @@ export function EnvironmentSplitActionButton(
   const menuGroups = createMemo(() => {
     const actions = props.presentation.menu_actions;
     if (!props.gatewayAction) return [{ actions, gatewayAction: undefined }];
-    const cloudIndex = actions.findIndex(item => item.action.intent === 'connect_provider_runtime'
-      || item.action.intent === 'disconnect_provider_runtime');
+    const cloudIndex = actions.findIndex(item => item.action.intent === 'connect_cloud_runtime'
+      || item.action.intent === 'disconnect_cloud_runtime');
     const accessIndex = cloudIndex < 0 ? actions.length : cloudIndex;
     return [
       { actions: actions.slice(0, accessIndex), gatewayAction: undefined },
@@ -10218,18 +10218,18 @@ function ControlPlanesPanel(props: Readonly<{
 
 function localizedProviderRuntimeTargetLabel(
   i18n: DesktopI18n,
-  target: DesktopProviderRuntimeLinkTarget,
+  target: DesktopCloudRuntimeLinkTarget,
 ): string {
   return target.kind === 'ssh_environment'
     ? i18n.t('providerRuntimeLink.sshRuntime')
     : i18n.t('providerRuntimeLink.localRuntime');
 }
 
-function localizedProviderRuntimeLinkPlanMessage(
+function localizedCloudRuntimeLinkPlanMessage(
   i18n: DesktopI18n,
-  target: DesktopProviderRuntimeLinkTarget,
-  providerEnvironment: DesktopProviderEnvironmentCandidate,
-  state: DesktopProviderRuntimeLinkPlanState,
+  target: DesktopCloudRuntimeLinkTarget,
+  providerEnvironment: DesktopCloudEnvironmentCandidate,
+  state: DesktopCloudRuntimeLinkPlanState,
 ): string {
   const runtimeLabel = localizedProviderRuntimeTargetLabel(i18n, target);
   switch (state) {
@@ -10243,8 +10243,8 @@ function localizedProviderRuntimeLinkPlanMessage(
       return i18n.t('providerRuntimeLink.runtimeControlMissing', {
         runtime: runtimeLabel,
       });
-    case 'provider_link_unsupported':
-      return i18n.t('providerRuntimeLink.providerLinkUnsupported', {
+    case 'cloud_link_unsupported':
+      return i18n.t('providerRuntimeLink.cloudLinkUnsupported', {
         runtime: runtimeLabel,
       });
     case 'renewal_required':
@@ -13319,7 +13319,7 @@ function GatewayActionRecoveryNotice(props: Readonly<{
 function GatewaySetupDialog(props: Readonly<{
   restoreFocus: () => void;
   gateway?: DesktopGatewaySource;
-  targets: readonly DesktopProviderRuntimeLinkTarget[];
+  targets: readonly DesktopCloudRuntimeLinkTarget[];
   refresh: () => Promise<unknown>;
   nativeHostSupported: boolean;
   i18n: DesktopI18n;
@@ -13816,17 +13816,17 @@ function GatewaySetupDialog(props: Readonly<{
 }
 
 function officialProviderOptionForOrigin(
-  providerOrigin: string,
-  options: readonly ControlPlaneProviderPresetOption[],
-): ControlPlaneProviderPresetOption | null {
-  return controlPlaneProviderPresetForOrigin(providerOrigin, options) ?? defaultControlPlaneProviderPreset(options);
+  cloudOrigin: string,
+  options: readonly CloudPresetOption[],
+): CloudPresetOption | null {
+  return cloudPresetForOrigin(cloudOrigin, options) ?? defaultCloudPreset(options);
 }
 
 function OfficialProviderPicker(props: Readonly<{
   i18n: DesktopI18n;
-  options: readonly ControlPlaneProviderPresetOption[];
-  providerOrigin: string;
-  onSelect: (providerOrigin: string) => void;
+  options: readonly CloudPresetOption[];
+  cloudOrigin: string;
+  onSelect: (cloudOrigin: string) => void;
   autofocus?: boolean;
 }>) {
   const canChooseTarget = props.options.length > 1;
@@ -13837,13 +13837,13 @@ function OfficialProviderPicker(props: Readonly<{
   let buttonRef: HTMLButtonElement | undefined;
   let listboxRef: HTMLDivElement | undefined;
 
-  const selectedProvider = createMemo(() => officialProviderOptionForOrigin(props.providerOrigin, props.options));
+  const selectedProvider = createMemo(() => officialProviderOptionForOrigin(props.cloudOrigin, props.options));
   const selectedIndex = createMemo(() => Math.max(0, props.options.findIndex((option) => (
-    option.provider_origin === selectedProvider()?.provider_origin
+    option.cloud_origin === selectedProvider()?.cloud_origin
   ))));
 
   createEffect(on(
-    [open, () => props.providerOrigin],
+    [open, () => props.cloudOrigin],
     ([isOpen]) => {
       if (isOpen) {
         setHighlightedIndex(selectedIndex());
@@ -13890,8 +13890,8 @@ function OfficialProviderPicker(props: Readonly<{
     setHighlightedIndex((current) => (current + delta + count) % count);
   }
 
-  function selectProvider(option: ControlPlaneProviderPresetOption): void {
-    props.onSelect(option.provider_origin);
+  function selectProvider(option: CloudPresetOption): void {
+    props.onSelect(option.cloud_origin);
     setOpen(false);
     buttonRef?.focus();
   }
@@ -13972,7 +13972,7 @@ function OfficialProviderPicker(props: Readonly<{
             </span>
             <span class="min-w-0">
               <span class="block truncate text-[length:var(--floe-type-body)] font-semibold tracking-normal text-foreground">{selectedProvider()?.domain ?? ''}</span>
-              <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{selectedProvider()?.provider_origin ?? ''}</span>
+              <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{selectedProvider()?.cloud_origin ?? ''}</span>
             </span>
           </span>
           <ChevronDown class={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open() && 'rotate-180')} />
@@ -13992,7 +13992,7 @@ function OfficialProviderPicker(props: Readonly<{
             <div class="min-h-0 flex-1 overflow-auto">
               <For each={props.options}>
                 {(option, index) => {
-                  const selected = createMemo(() => selectedProvider()?.provider_origin === option.provider_origin);
+                  const selected = createMemo(() => selectedProvider()?.cloud_origin === option.cloud_origin);
                   const highlighted = createMemo(() => highlightedIndex() === index());
                   return (
                     <button
@@ -14020,7 +14020,7 @@ function OfficialProviderPicker(props: Readonly<{
                         </span>
                         <span class="min-w-0">
                           <span class="block truncate text-[length:var(--floe-type-body)] font-semibold">{option.domain}</span>
-                          <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{option.provider_origin}</span>
+                          <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{option.cloud_origin}</span>
                         </span>
                       </span>
                       <Show when={selected()}>
@@ -14041,18 +14041,18 @@ function OfficialProviderPicker(props: Readonly<{
 function ControlPlaneDialog(props: Readonly<{
   i18n: DesktopI18n;
   logoSrc: string;
-  providerOptions: readonly ControlPlaneProviderPresetOption[];
+  providerOptions: readonly CloudPresetOption[];
   state: ControlPlaneDialogState;
   error: string;
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
-  updateField: (name: 'provider_origin', value: string) => void;
+  updateField: (name: 'cloud_origin', value: string) => void;
   onConnect: () => Promise<void>;
 }>) {
   // See ConnectionDialog: memoize the open boolean so that identity churn in
   // `props.state` never re-triggers the overlay-mask focus trap mid-typing.
   const isOpen = createMemo(() => props.state !== null);
-  const canContinue = createMemo(() => trimString(props.state?.provider_origin) !== '');
+  const canContinue = createMemo(() => trimString(props.state?.cloud_origin) !== '');
   return (
     <Dialog
       open={isOpen()}
@@ -14078,9 +14078,9 @@ function ControlPlaneDialog(props: Readonly<{
           <OfficialProviderPicker
             i18n={props.i18n}
             options={props.providerOptions}
-            providerOrigin={props.state?.provider_origin ?? props.providerOptions[0]?.provider_origin ?? ''}
+            cloudOrigin={props.state?.cloud_origin ?? props.providerOptions[0]?.cloud_origin ?? ''}
             autofocus
-            onSelect={(providerOrigin) => props.updateField('provider_origin', providerOrigin)}
+            onSelect={(cloudOrigin) => props.updateField('cloud_origin', cloudOrigin)}
           />
           <p class="mt-5 max-w-[22rem] text-xs leading-5 text-muted-foreground">
             {props.i18n.t('connectionDialog.providerAuthorizationHelp')}

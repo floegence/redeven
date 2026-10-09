@@ -5,9 +5,10 @@
     "previous_release": "v0.13.11",
     "reviewed_at": "2026-10-08",
     "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Epoch 44 requires the Runtime-owned baseline model directory and independent Flower history initialization. Existing selections, canvas references, and conversation records are preserved.",
-    "same_window_rationale": "Desktop consumes the typed model directory and strict baseline query; older Runtime peers must use the existing upgrade path.",
+    "summary": "Epoch 45 requires Cloud-named Runtime Service bindings and RCPP v4, retaining the Runtime-owned baseline model directory and independent Flower history initialization. Existing identities, permissions, generations, credential state, selections, canvas references and conversation records are preserved.",
+    "same_window_rationale": "RCPP v4 removes old network protocols and unifies Cloud assignment and Runtime link. Desktop also consumes the typed model directory and strict baseline query. Older Runtime peers upgrade through the retained epoch window.",
     "checked_surfaces": [
+      "Epoch 45: Cloud identity migration, single-address Runtime bootstrap, Desktop Runtime link and credential renewal, pool contract v2, Local UI health, startup reports, sys.ping, Env App and SSH Runtime compatibility.",
       "Epoch 44 covers baseline and bounded full model-directory reads, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, source isolation, and independently loaded Tessiven-bound Flower history. No database migration.",
       "Gateway host bridge, signed identity and access-code enrollment, client revocation, Desktop local/SSH/container management and URL-only access require compatibility epoch 43.",
       "Gateway v5 invitation import, automatic endpoint selection, failover, endpoint updates, durable membership migration, Cloud egress and closure delivery. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume compatibility epoch 42.",
@@ -33,7 +34,7 @@
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 33. HTTP/HTTPS browser refresh retains the existing absolute login lifetime; Runtime restart and security changes still revoke ordinary sessions. Flower HTTP requests retain the complete issued cookie pair, and native CodeSpace descriptors supply access_cookie_name across forwarded ports.",
       "Desktop management consumers share one leased bridge and isolate settings from model preparation. Desktop model connect and pre-upgrade RPC admission use existing AI readiness: transient 503, blocked 409, permanent request/authentication errors unchanged. The connector already classifies these statuses; endpoint paths, successful payloads, TOTP state and Runtime Service wire shapes are unchanged, so epoch 32 remains sufficient.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 32; epoch 31 is upgrade-only. Runtime owns encrypted authentication state, one-shot factors, recovery, absolute session expiry and revocation. Native CodeSpace receives a one-shot exact-resource delegation from its authenticated parent and resumes within that parent lifetime. Public URL query credentials are rejected. Private authenticated host management retains its independent authority and never claims TOTP verification.",
-      "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 31; epoch 30 is upgrade-only. Runtime provider_link.connection_state reports connected only after control registration, separates retrying, authorization_required, disabled, error and unknown, and preserves local availability when Cloud credentials expire. Desktop renews only expired or exhausted credential pools for an already attached target, fences account and binding generations, stops after bounded transient retries, and exposes restore plus explicit disconnect when recovery needs review. Portal renewals atomically advance the matching binding generation and reject stale or replayed requests; permission revocation is distinct from sign-in expiry. Flowersec remains the sole transport reconnect owner.",
+      "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 31; epoch 30 is upgrade-only. Runtime cloud_link.connection_state reports connected only after control registration, separates retrying, authorization_required, disabled, error and unknown, and preserves local availability when Cloud credentials expire. Desktop renews only expired or exhausted credential pools for an already attached target, fences account and binding generations, stops after bounded transient retries, and exposes restore plus explicit disconnect when recovery needs review. Portal renewals atomically advance the matching binding generation and reject stale or replayed requests; permission revocation is distinct from sign-in expiry. Flowersec remains the sole transport reconnect owner.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 30; epoch 29 is upgrade-only. Chrome status reports host, platform, Linux Chrome detection and one prerequisite or launch diagnostic. Action failures preserve stage, reason and diagnostic ID in the existing error_code/data envelope. Linux launch checks the current graphical session and observes process exits without claiming handshake readiness. Source package generation and cache validation require computer.zip; historical published packages remain installable and report missing capability explicitly.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 29; epoch 28 is upgrade-only. Authenticated computer/managed/browser GET/PUT/POST manages installation and preference. Source selection and enabling never download. Installed binaries and website data survive disable/restart. Runtime release archives and SSH installation retain computer.zip; native Desktop stages thin helpers, while managed WSL retains the matching Linux archive. Browser ZIPs are optional pinned official distributions.",
       "Flower displays images, video, audio, and isolated HTML through published Floe Webapp v0.58.0. Local image clicks reuse the existing file preview and expose distinct containing-folder navigation; non-file images use shared floating previews. The existing authenticated file endpoint adds bounded preview=1 reads, serving HTML as inert text only. Desktop admits the exact file-preview GET and transfers bounded binary bytes. Conversation, Runtime Service, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, and storage contracts are unchanged; compatibility epoch 28 remains sufficient.",
@@ -91,7 +92,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 44,
+  "compatibility_epoch": 45,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -127,7 +128,8 @@
     40,
     41,
     42,
-    43
+    43,
+    44
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

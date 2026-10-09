@@ -1,30 +1,30 @@
-import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
-import type { RuntimeServiceProviderLinkBinding } from '../shared/runtimeService';
+import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
+import type { RuntimeServiceCloudLinkBinding } from '../shared/runtimeService';
 
-export type ProviderCredentialRecoveryState = NonNullable<DesktopProviderRuntimeLinkTarget['credential_recovery']>;
-export type ProviderCredentialRecoveryOutcome = 'restored' | 'retry' | Exclude<ProviderCredentialRecoveryState, 'restoring' | 'waiting' | 'waiting_for_service'>;
-export type ProviderCredentialRecoveryResult = Readonly<{ outcome: ProviderCredentialRecoveryOutcome; error_code?: string }>;
+export type CloudCredentialRecoveryState = NonNullable<DesktopCloudRuntimeLinkTarget['credential_recovery']>;
+export type CloudCredentialRecoveryOutcome = 'restored' | 'retry' | Exclude<CloudCredentialRecoveryState, 'restoring' | 'waiting' | 'waiting_for_service'>;
+export type CloudCredentialRecoveryResult = Readonly<{ outcome: CloudCredentialRecoveryOutcome; error_code?: string }>;
 
-export function providerCredentialsNeedRenewal(binding: RuntimeServiceProviderLinkBinding): boolean {
+export function providerCredentialsNeedRenewal(binding: RuntimeServiceCloudLinkBinding): boolean {
   return binding.remote_enabled && binding.state === 'linked' && binding.connection_state === 'authorization_required'
     && (binding.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED' || binding.last_error_code === 'CONTROL_CREDENTIALS_EXHAUSTED')
     && Boolean(binding.local_environment_public_id) && (binding.binding_generation ?? 0) > 0;
 }
 
 // This bounds authorization exchanges only. Flowersec still owns transport retry.
-export class ProviderCredentialRecovery {
+export class CloudCredentialRecovery {
   private readonly attempts = new Map<string, {
     identity: string; generation: number; count: number; next: number; last: number; error?: string;
-    state: ProviderCredentialRecoveryState; done: boolean;
+    state: CloudCredentialRecoveryState; done: boolean;
   }>();
   private readonly running = new Map<string, Promise<void>>();
 
-  state(targetID: string, generation: number): ProviderCredentialRecoveryState | undefined {
+  state(targetID: string, generation: number): CloudCredentialRecoveryState | undefined {
     const attempt = this.attempts.get(targetID);
     return attempt?.generation === generation && !attempt.done ? attempt.state : undefined;
   }
 
-  details(targetID: string, generation: number): DesktopProviderRuntimeLinkTarget['credential_recovery_details'] {
+  details(targetID: string, generation: number): DesktopCloudRuntimeLinkTarget['credential_recovery_details'] {
     const attempt = this.attempts.get(targetID);
     if (!attempt || attempt.generation !== generation || attempt.done) return undefined;
     return { last_error_code: attempt.error, last_attempt_at_unix_ms: attempt.last,
@@ -55,8 +55,8 @@ export class ProviderCredentialRecovery {
   async renew(args: {
     targetID: string; identity: string; generation: number; now: number;
     isCurrent: () => boolean;
-    exchange: () => Promise<ProviderCredentialRecoveryResult>;
-    probe?: () => Promise<ProviderCredentialRecoveryResult>;
+    exchange: () => Promise<CloudCredentialRecoveryResult>;
+    probe?: () => Promise<CloudCredentialRecoveryResult>;
     changed: () => void;
   }): Promise<void> {
     if (this.running.has(args.targetID) || !args.isCurrent()) return;
@@ -69,7 +69,7 @@ export class ProviderCredentialRecovery {
       attempt.generation = args.generation;
       attempt.done = false;
       attempt.state = 'attention';
-      attempt.error = 'PROVIDER_LINK_BINDING_CHANGED';
+      attempt.error = 'CLOUD_LINK_BINDING_CHANGED';
     }
     if (attempt.done || !['waiting', 'waiting_for_service'].includes(attempt.state) || args.now < attempt.next) return;
     const current = attempt;

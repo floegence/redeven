@@ -9,7 +9,7 @@ import type {
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { applyLocalAccessResumeHeader } from './localAccessAuth';
-import { renewDesktopProviderSession } from './desktopSessionContext';
+import { renewDesktopCloudSession } from './desktopSessionContext';
 import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
 import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
 import {
@@ -289,7 +289,7 @@ async function fetchJSONWithEnvSessionAutoRecover<T>(
     if (opts?.envSessionAutoRecover && isEnvSessionUnauthorizedError(e)) {
       if (init.signal?.aborted) throw e;
       const envID = asString(opts.envPublicID) || getEnvPublicIDFromSession();
-      const renewed = await renewDesktopProviderSession(envID);
+      const renewed = await renewDesktopCloudSession(envID);
       if (renewed === true) return fetchJSON<T>(input, init);
       if (renewed === false) throw e;
       redirectToControlPlaneForEnvSessionRecovery(envID);

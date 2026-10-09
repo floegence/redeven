@@ -8,8 +8,8 @@ export type DesktopRuntimeOperation =
   | 'stop'
   | 'restart'
   | 'update'
-  | 'connect_provider'
-  | 'disconnect_provider';
+  | 'connect_cloud'
+  | 'disconnect_cloud';
 
 export type DesktopRuntimeOperationAvailability =
   | 'available'
@@ -70,9 +70,9 @@ export function desktopRuntimeOperationLabel(operation: DesktopRuntimeOperation)
       return 'Restart runtime';
     case 'update':
       return 'Update runtime';
-    case 'connect_provider':
+    case 'connect_cloud':
       return 'Connect to provider';
-    case 'disconnect_provider':
+    case 'disconnect_cloud':
       return 'Disconnect from provider';
   }
 }

@@ -4,10 +4,10 @@ import {
   normalizeControlPlaneDisplayLabel,
   normalizeControlPlaneOrigin,
   normalizeDesktopControlPlaneAccount,
-  normalizeDesktopControlPlaneProvider,
-  normalizeDesktopProviderEnvironmentList,
+  normalizeDesktopCloud,
+  normalizeDesktopCloudEnvironmentList,
   suggestControlPlaneDisplayLabel,
-} from './controlPlaneProvider';
+} from './cloud';
 
 function accessPoint(overrides: Record<string, unknown> = {}) {
   return {
@@ -26,17 +26,17 @@ function accessPoint(overrides: Record<string, unknown> = {}) {
 
 function provider(overrides: Record<string, unknown> = {}) {
   return {
-    protocol_version: 'rcpp-v3',
-    provider_id: 'example_control_plane',
+    protocol_version: 'rcpp-v4',
+    cloud_id: 'example_control_plane',
     display_name: 'Example Control Plane',
-    provider_origin: 'https://redeven.test',
+    cloud_origin: 'https://redeven.test',
     documentation_url: 'https://redeven.test/help/control-plane-providers',
     access_points: [accessPoint()],
     ...overrides,
   };
 }
 
-describe('controlPlaneProvider', () => {
+describe('cloud', () => {
   it('normalizes provider origins to a stable root URL', () => {
     expect(normalizeControlPlaneOrigin(' https://provider.example.invalid/env/list?q=1#hash ')).toBe(
       'https://provider.example.invalid',
@@ -64,18 +64,18 @@ describe('controlPlaneProvider', () => {
   });
 
   it('normalizes discovery payloads', () => {
-    expect(normalizeDesktopControlPlaneProvider(provider({
-      provider_id: ' example_control_plane ',
+    expect(normalizeDesktopCloud(provider({
+      cloud_id: ' example_control_plane ',
       display_name: ' Example Control Plane ',
-      provider_origin: 'https://redeven.test/root/path',
+      cloud_origin: 'https://redeven.test/root/path',
       access_points: [accessPoint({
         access_point_origin: 'https://dev.redeven.test/root/path',
       })],
     }))).toEqual({
-      protocol_version: 'rcpp-v3',
-      provider_id: 'example_control_plane',
+      protocol_version: 'rcpp-v4',
+      cloud_id: 'example_control_plane',
       display_name: 'Example Control Plane',
-      provider_origin: 'https://redeven.test',
+      cloud_origin: 'https://redeven.test',
       documentation_url: 'https://redeven.test/help/control-plane-providers',
       access_points: [{
         access_point_id: 'dev',
@@ -89,13 +89,13 @@ describe('controlPlaneProvider', () => {
         health_status: 'healthy',
       }],
     });
-    expect(normalizeDesktopControlPlaneProvider(provider({
+    expect(normalizeDesktopCloud(provider({
       protocol_version: 'unknown',
     }))).toBeNull();
   });
 
   it('normalizes provider accounts from me responses', () => {
-    const normalizedProvider = normalizeDesktopControlPlaneProvider(provider());
+    const normalizedProvider = normalizeDesktopCloud(provider());
     expect(normalizedProvider).not.toBeNull();
 
     expect(normalizeDesktopControlPlaneAccount({
@@ -103,10 +103,10 @@ describe('controlPlaneProvider', () => {
       user_display_name: ' Demo User ',
       authorization_expires_at_unix_ms: 1_770_000_000_000,
     }, {
-      provider: normalizedProvider!,
+      cloud: normalizedProvider!,
     })).toEqual({
-      provider_id: 'example_control_plane',
-      provider_origin: 'https://redeven.test',
+      cloud_id: 'example_control_plane',
+      cloud_origin: 'https://redeven.test',
       display_name: 'Example Control Plane',
       user_public_id: 'user_demo',
       user_display_name: 'Demo User',
@@ -115,10 +115,10 @@ describe('controlPlaneProvider', () => {
   });
 
   it('normalizes provider environment lists while dropping malformed rows', () => {
-    const normalizedProvider = normalizeDesktopControlPlaneProvider(provider());
+    const normalizedProvider = normalizeDesktopCloud(provider());
     expect(normalizedProvider).not.toBeNull();
 
-    expect(normalizeDesktopProviderEnvironmentList({
+    expect(normalizeDesktopCloudEnvironmentList({
       environments: [
         {
           env_public_id: ' env_123 ',
@@ -140,11 +140,11 @@ describe('controlPlaneProvider', () => {
         },
       ],
     }, {
-      provider: normalizedProvider!,
+      cloud: normalizedProvider!,
     })).toEqual([
       {
-        provider_id: 'example_control_plane',
-        provider_origin: 'https://redeven.test',
+        cloud_id: 'example_control_plane',
+        cloud_origin: 'https://redeven.test',
         env_public_id: 'env_123',
         region: 'dev',
         access_point_id: 'dev',
@@ -162,7 +162,7 @@ describe('controlPlaneProvider', () => {
   });
 
   it('allows access point ids and regions to differ when normalizing provider payloads', () => {
-    expect(normalizeDesktopControlPlaneProvider(provider({
+    expect(normalizeDesktopCloud(provider({
       access_points: [accessPoint({
         access_point_id: 'sg-edge',
         region: 'sg',
@@ -176,9 +176,9 @@ describe('controlPlaneProvider', () => {
       ],
     }));
 
-    const normalizedProvider = normalizeDesktopControlPlaneProvider(provider());
+    const normalizedProvider = normalizeDesktopCloud(provider());
     expect(normalizedProvider).not.toBeNull();
-    expect(normalizeDesktopProviderEnvironmentList({
+    expect(normalizeDesktopCloudEnvironmentList({
       environments: [{
         env_public_id: 'env_123',
         name: 'Staging',
@@ -187,7 +187,7 @@ describe('controlPlaneProvider', () => {
         access_point_origin: 'https://sg.redeven.test',
       }],
     }, {
-      provider: normalizedProvider!,
+      cloud: normalizedProvider!,
     })).toEqual([
       expect.objectContaining({
         region: 'sg',

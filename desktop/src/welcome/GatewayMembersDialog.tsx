@@ -4,13 +4,13 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'so
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionSuccess } from '../shared/desktopLauncherIPC';
 import type { GatewayCloudPermission, GatewayEndpoint, GatewayMemberInvitation, GatewayPolicy } from '../shared/gatewayMembership';
-import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopI18n } from '../shared/i18n';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { DesktopTooltip } from './DesktopTooltip';
 
 export function GatewayMembersPanel(props: Readonly<{
-  gateway?: DesktopGatewaySource; i18n: DesktopI18n; targets: readonly DesktopProviderRuntimeLinkTarget[];
+  gateway?: DesktopGatewaySource; i18n: DesktopI18n; targets: readonly DesktopCloudRuntimeLinkTarget[];
   section?: 'connection' | 'runtimes'; refresh: () => Promise<unknown>;
 }>) {
   const [busy, setBusy] = createSignal(false);

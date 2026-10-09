@@ -11,7 +11,6 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 		got := buildRunBootstrapArgs(
 			"/tmp/redeven",
 			"https://redeven.test",
-			"https://dev.redeven.test",
 			"env_123",
 			"ticket-123",
 			"",
@@ -29,7 +28,6 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 		got := buildRunBootstrapArgs(
 			"/tmp/redeven",
 			"https://redeven.test",
-			"https://dev.redeven.test",
 			"env_123",
 			"ticket-123",
 			"execute_read",
@@ -46,11 +44,10 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 		assertRunBootstrapArgsCore(t, got)
 	})
 
-	t.Run("bootstrap ticket args populate the alternate credential field", func(t *testing.T) {
+	t.Run("link ticket args populate the alternate credential field", func(t *testing.T) {
 		got := buildRunBootstrapArgs(
 			"/tmp/redeven",
 			"https://redeven.test",
-			"https://dev.redeven.test",
 			"env_123",
 			"ticket-123",
 			"",
@@ -58,8 +55,8 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"dev",
 		)
 
-		if got.BootstrapTicket != "ticket-123" {
-			t.Fatalf("BootstrapTicket = %q, want %q", got.BootstrapTicket, "ticket-123")
+		if got.RuntimeLinkTicket != "ticket-123" {
+			t.Fatalf("RuntimeLinkTicket = %q, want %q", got.RuntimeLinkTicket, "ticket-123")
 		}
 	})
 }
@@ -69,17 +66,14 @@ func assertRunBootstrapArgsCore(t *testing.T, got config.BootstrapArgs) {
 	if got.StateRoot != "/tmp/redeven" {
 		t.Fatalf("StateRoot = %q", got.StateRoot)
 	}
-	if got.ProviderOrigin != "https://redeven.test" {
-		t.Fatalf("ProviderOrigin = %q", got.ProviderOrigin)
-	}
-	if got.ControlplaneBaseURL != "https://dev.redeven.test" {
-		t.Fatalf("ControlplaneBaseURL = %q", got.ControlplaneBaseURL)
+	if got.CloudOrigin != "https://redeven.test" {
+		t.Fatalf("CloudOrigin = %q", got.CloudOrigin)
 	}
 	if got.EnvironmentID != "env_123" {
 		t.Fatalf("EnvironmentID = %q", got.EnvironmentID)
 	}
-	if got.BootstrapTicket != "ticket-123" {
-		t.Fatalf("BootstrapTicket = %q, want %q", got.BootstrapTicket, "ticket-123")
+	if got.RuntimeLinkTicket != "ticket-123" {
+		t.Fatalf("RuntimeLinkTicket = %q, want %q", got.RuntimeLinkTicket, "ticket-123")
 	}
 	if got.RuntimeVersion != "dev" {
 		t.Fatalf("RuntimeVersion = %q, want dev", got.RuntimeVersion)

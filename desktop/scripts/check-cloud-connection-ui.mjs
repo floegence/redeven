@@ -26,7 +26,7 @@ try {
       credential_recovery_details: { last_error_code: code, last_attempt_at_unix_ms: 1_800_000_000_000,
         next_retry_at_unix_ms: recovery === 'waiting_for_service' ? 1_800_000_060_000 : undefined, attempt_count: 3 },
     });
-    if (code === 'CONTROL_CREDENTIALS_EXPIRED') local.provider_runtime_link_target.provider_link_binding.last_error_code = code;
+    if (code === 'CONTROL_CREDENTIALS_EXPIRED') local.provider_runtime_link_target.cloud_link_binding.last_error_code = code;
     const remote = next.environments.find(entry => entry.id === cloud.id);
     Object.assign(remote, { remote_route_state: 'offline', control_plane_sync_state: recovery === 'sign_in_required' ? 'auth_required' : 'ready' });
     return next;
@@ -156,7 +156,7 @@ try {
     for (const [state, code, key] of [
       ['restoring', '', 'restoringDetail'],
       ['permission_required', 'forbidden', 'permissionDetail'],
-      ['binding_changed', 'PROVIDER_LINK_BINDING_CHANGED', 'bindingDetail'],
+      ['binding_changed', 'CLOUD_LINK_BINDING_CHANGED', 'bindingDetail'],
       ['attention', 'provider_tls_untrusted', 'tlsDetail'],
     ]) {
       await publish(failedSnapshot(state, code));
@@ -169,7 +169,7 @@ try {
     await page.keyboard.press('Escape'); await details.waitFor({ state: 'detached' });
     await publish(failedSnapshot('sign_in_required', 'authorization_expired'));
     await status().getByRole('button', { name: i18n.t('providerRecovery.signInAction'), exact: true }).click();
-    await page.waitForFunction(origin => window.settingsFixture.requests.some(request => request.kind === 'start_control_plane_connect' && request.provider_origin === origin), cloud.provider_origin);
+    await page.waitForFunction(origin => window.settingsFixture.requests.some(request => request.kind === 'start_control_plane_connect' && request.cloud_origin === origin), cloud.cloud_origin);
     await publish(snapshot);
     await status().getByText(i18n.t('providerRecovery.connected'), { exact: true }).waitFor();
     assert.equal(await status().locator('.redeven-cloud-connection-action').count(), 0, 'recovered connection removes recovery actions');

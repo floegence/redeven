@@ -6,7 +6,7 @@ import type {
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
-import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/cloud';
 import type { DesktopControlPlaneSyncState } from '../shared/providerEnvironmentState';
 import {
   runtimeServiceAllowsOpenAttempt,
@@ -23,15 +23,15 @@ import {
   desktopGatewayStatusLabel,
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
-import { buildDesktopProviderRuntimeLinkPlan } from '../shared/providerRuntimeLinkPlanner';
+import { buildDesktopCloudRuntimeLinkPlan } from '../shared/providerRuntimeLinkPlanner';
 import {
-  normalizeDesktopProviderRuntimeLinkTargetID,
-  type DesktopProviderRuntimeLinkTarget,
-  type DesktopProviderRuntimeLinkTargetID,
+  normalizeDesktopCloudRuntimeLinkTargetID,
+  type DesktopCloudRuntimeLinkTarget,
+  type DesktopCloudRuntimeLinkTargetID,
 } from '../shared/providerRuntimeLinkTarget';
 import {
   desktopEntryKindSupportsDirectRuntimeOperations,
-  desktopProviderEnvironmentOpenRoute,
+  desktopCloudEnvironmentOpenRoute,
 } from '../shared/environmentManagementPrinciples';
 import {
   desktopRuntimeOperationLabel,
@@ -187,8 +187,8 @@ export type EnvironmentActionIntent =
   | 'start_and_open'
   | 'request_open_access'
   | 'resolve_gateway'
-  | 'connect_provider_runtime'
-  | 'disconnect_provider_runtime'
+  | 'connect_cloud_runtime'
+  | 'disconnect_cloud_runtime'
   | 'start_runtime'
   | 'stop_runtime'
   | 'restart_runtime'
@@ -208,8 +208,8 @@ export type EnvironmentActionModel = Readonly<{
   variant: 'default' | 'outline';
   continue_open_after_completion?: boolean;
   route?: DesktopLocalEnvironmentStateRoute;
-  provider_origin?: string;
-  provider_id?: string;
+  cloud_origin?: string;
+  cloud_id?: string;
   gateway_id?: string;
   runtime_operation?: DesktopRuntimeOperation;
   runtime_operation_method?: DesktopRuntimeOperationMethod;
@@ -622,10 +622,10 @@ function orderEnvironmentCardFacts(
 
 export function environmentControlPlaneLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'provider_environment'
-    || environment.provider_runtime_link_target?.provider_origin_supported === true) {
+    || environment.provider_runtime_link_target?.cloud_origin_supported === true) {
     return 'Redeven Cloud';
   }
-  return compact(environment.control_plane_label) || compact(environment.provider_origin);
+  return compact(environment.control_plane_label) || compact(environment.cloud_origin);
 }
 
 export function runtimeHasUnsupportedLegacyControlPlaneLink(
@@ -635,8 +635,8 @@ export function runtimeHasUnsupportedLegacyControlPlaneLink(
   return Boolean(
     target
     && target.provider_connection_state !== 'unlinked'
-    && compact(target.provider_origin) !== ''
-    && target.provider_origin_supported === false,
+    && compact(target.cloud_origin) !== ''
+    && target.cloud_origin_supported === false,
   );
 }
 
@@ -743,10 +743,10 @@ function legacyControlPlaneFact(environment: DesktopEnvironmentEntry): Environme
 export function buildEnvironmentCardFactsModel(environment: DesktopEnvironmentEntry): readonly EnvironmentCardFactModel[] {
   const facts = baseEnvironmentCardFactsModel(environment);
   const target = environment.provider_runtime_link_target;
-  if (target?.provider_link_state !== 'linked') return facts;
+  if (target?.cloud_link_state !== 'linked') return facts;
   const state = target.credential_recovery ?? target.provider_connection_state;
   const valueKey: DesktopTranslationKey = state === 'authorization_required'
-    ? target.provider_link_binding?.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED' ? 'providerRecovery.expired' : 'providerRecovery.needsAuthorization'
+    ? target.cloud_link_binding?.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED' ? 'providerRecovery.expired' : 'providerRecovery.needsAuthorization'
     : state === 'permission_required' ? 'providerRecovery.permissionRevoked'
     : state === 'sign_in_required' ? 'environmentCenter.cloudSignInRequired'
     : state === 'binding_changed' ? 'providerRecovery.attention'
@@ -823,11 +823,11 @@ function cloudEnvironmentFacts(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
   return [
-    buildEnvironmentCardFact('SOURCE', environment.control_plane_label || environment.provider_origin || 'UNKNOWN', {
-      ...(environment.provider_origin && environment.provider_id ? { action: {
-        kind: 'focus_cloud_source', source_id: desktopControlPlaneKey(environment.provider_origin, environment.provider_id),
-        label: `Show ${environment.control_plane_label || environment.provider_origin}`,
-        aria_label: `Show ${environment.control_plane_label || environment.provider_origin}`,
+    buildEnvironmentCardFact('SOURCE', environment.control_plane_label || environment.cloud_origin || 'UNKNOWN', {
+      ...(environment.cloud_origin && environment.cloud_id ? { action: {
+        kind: 'focus_cloud_source', source_id: desktopControlPlaneKey(environment.cloud_origin, environment.cloud_id),
+        label: `Show ${environment.control_plane_label || environment.cloud_origin}`,
+        aria_label: `Show ${environment.control_plane_label || environment.cloud_origin}`,
       } as const } : {}),
     }),
     providerEnvironmentIDFact(environment),
@@ -1166,7 +1166,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     enabled: true,
     variant: 'default',
     ...(environment.kind === 'provider_environment'
-      ? { route: desktopProviderEnvironmentOpenRoute() }
+      ? { route: desktopCloudEnvironmentOpenRoute() }
       : primaryRoute
       ? { route: primaryRoute }
       : {}),
@@ -1217,7 +1217,7 @@ function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopLoca
   }
   // IMPORTANT: Provider Open and Runtime management use separate Provider
   // routes; neither may borrow credentials or transport from another card.
-  return desktopProviderEnvironmentOpenRoute();
+  return desktopCloudEnvironmentOpenRoute();
 }
 
 function providerRemoteRouteMenuAction(
@@ -1268,7 +1268,7 @@ function providerRemoteRouteMenuAction(
   return null;
 }
 
-function runtimeProviderLinkMenuAction(
+function runtimeCloudLinkMenuAction(
   environment: DesktopEnvironmentEntry,
 ): EnvironmentActionMenuItemModel | null {
   // IMPORTANT: Provider-link controls live only on Local/SSH runtime cards.
@@ -1279,11 +1279,11 @@ function runtimeProviderLinkMenuAction(
   const target = environment.provider_runtime_link_target;
   if (!target) {
     return {
-      id: 'connect_provider_runtime',
+      id: 'connect_cloud_runtime',
       label: 'Connect...',
       label_key: 'environmentAction.connectToProviderEllipsis',
       action: {
-        intent: 'connect_provider_runtime',
+        intent: 'connect_cloud_runtime',
         label: 'Connect...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         enabled: false,
@@ -1293,15 +1293,15 @@ function runtimeProviderLinkMenuAction(
     };
   }
   if (runtimeHasUnsupportedLegacyControlPlaneLink(environment)) {
-    const canDisconnect = target.can_disconnect_provider
+    const canDisconnect = target.can_disconnect_cloud
       || target.provider_connection_state === 'connected'
       || target.provider_connection_state === 'disconnecting';
     return {
-      id: 'disconnect_provider_runtime',
+      id: 'disconnect_cloud_runtime',
       label: 'Disconnect legacy control-plane link',
       label_key: 'environmentAction.disconnectLegacyControlPlane',
       action: {
-        intent: 'disconnect_provider_runtime',
+        intent: 'disconnect_cloud_runtime',
         label: 'Disconnect legacy control-plane link',
         label_key: 'environmentAction.disconnectLegacyControlPlane',
         enabled: canDisconnect,
@@ -1315,31 +1315,31 @@ function runtimeProviderLinkMenuAction(
     case 'disabled':
     case 'error':
       return {
-        id: 'connect_provider_runtime', label: 'Restore Redeven Cloud connection', label_key: 'providerRecovery.restore',
-        action: { intent: 'connect_provider_runtime', label: 'Restore Redeven Cloud connection',
-          label_key: 'providerRecovery.restore', enabled: target.can_connect_provider, variant: 'outline' },
+        id: 'connect_cloud_runtime', label: 'Restore Redeven Cloud connection', label_key: 'providerRecovery.restore',
+        action: { intent: 'connect_cloud_runtime', label: 'Restore Redeven Cloud connection',
+          label_key: 'providerRecovery.restore', enabled: target.can_connect_cloud, variant: 'outline' },
       };
     case 'retrying':
       return {
-        id: 'connect_provider_runtime', label: 'Reconnecting to Redeven Cloud', label_key: 'providerRecovery.retrying',
-        action: { intent: 'connect_provider_runtime', label: 'Reconnecting to Redeven Cloud',
+        id: 'connect_cloud_runtime', label: 'Reconnecting to Redeven Cloud', label_key: 'providerRecovery.retrying',
+        action: { intent: 'connect_cloud_runtime', label: 'Reconnecting to Redeven Cloud',
           label_key: 'providerRecovery.retrying', enabled: false, variant: 'outline',
           disabled_reason: 'Redeven Cloud is reconnecting automatically.' },
       };
     case 'unknown':
       return {
-        id: 'connect_provider_runtime', label: 'Review Redeven Cloud connection', label_key: 'providerRecovery.restore',
-        action: { intent: 'connect_provider_runtime', label: 'Review Redeven Cloud connection',
+        id: 'connect_cloud_runtime', label: 'Review Redeven Cloud connection', label_key: 'providerRecovery.restore',
+        action: { intent: 'connect_cloud_runtime', label: 'Review Redeven Cloud connection',
           label_key: 'providerRecovery.restore', enabled: false, variant: 'outline',
           disabled_reason: 'The Runtime has not confirmed its Redeven Cloud connection.' },
       };
     case 'connected':
       return {
-        id: 'disconnect_provider_runtime',
+        id: 'disconnect_cloud_runtime',
         label: 'Disconnect from Redeven Cloud',
         label_key: 'environmentAction.disconnectFromProvider',
         action: {
-          intent: 'disconnect_provider_runtime',
+          intent: 'disconnect_cloud_runtime',
           label: 'Disconnect from Redeven Cloud',
           label_key: 'environmentAction.disconnectFromProvider',
           enabled: true,
@@ -1348,11 +1348,11 @@ function runtimeProviderLinkMenuAction(
       };
     case 'connecting':
       return {
-        id: 'connect_provider_runtime',
+        id: 'connect_cloud_runtime',
         label: 'Connect...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
-          intent: 'connect_provider_runtime',
+          intent: 'connect_cloud_runtime',
           label: 'Connect...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
@@ -1362,11 +1362,11 @@ function runtimeProviderLinkMenuAction(
       };
     case 'disconnecting':
       return {
-        id: 'disconnect_provider_runtime',
+        id: 'disconnect_cloud_runtime',
         label: 'Disconnect from Redeven Cloud',
         label_key: 'environmentAction.disconnectFromProvider',
         action: {
-          intent: 'disconnect_provider_runtime',
+          intent: 'disconnect_cloud_runtime',
           label: 'Disconnect from Redeven Cloud',
           label_key: 'environmentAction.disconnectFromProvider',
           enabled: true,
@@ -1375,11 +1375,11 @@ function runtimeProviderLinkMenuAction(
       };
     case 'unsupported':
       return {
-        id: 'connect_provider_runtime',
+        id: 'connect_cloud_runtime',
         label: 'Connect...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
-          intent: 'connect_provider_runtime',
+          intent: 'connect_cloud_runtime',
           label: 'Connect...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
@@ -1390,14 +1390,14 @@ function runtimeProviderLinkMenuAction(
     case 'unlinked':
       break;
   }
-  const canConnect = runtimeProviderLinkCanConnect(environment, target);
+  const canConnect = runtimeCloudLinkCanConnect(environment, target);
   const label = 'Connect...';
   return {
-    id: 'connect_provider_runtime',
+    id: 'connect_cloud_runtime',
     label,
     label_key: 'environmentAction.connectToProviderEllipsis',
     action: {
-      intent: 'connect_provider_runtime',
+      intent: 'connect_cloud_runtime',
       label,
       label_key: 'environmentAction.connectToProviderEllipsis',
       enabled: canConnect,
@@ -1407,12 +1407,12 @@ function runtimeProviderLinkMenuAction(
   };
 }
 
-function runtimeProviderLinkCanConnect(
+function runtimeCloudLinkCanConnect(
   environment: DesktopEnvironmentEntry,
-  target: DesktopProviderRuntimeLinkTarget,
+  target: DesktopCloudRuntimeLinkTarget,
 ): boolean {
   const plans = (environment.provider_environment_candidates ?? []).map((candidate) => (
-    buildDesktopProviderRuntimeLinkPlan(target, candidate)
+    buildDesktopCloudRuntimeLinkPlan(target, candidate)
   ));
   return plans.some((plan) => plan.can_connect)
     || plans.some((plan) => plan.state === 'provider_environment_occupied');
@@ -1443,23 +1443,23 @@ function runtimeOperationIntent(operation: DesktopRuntimeOperation): Environment
   }
 }
 
-function runtimeProviderLinkDisconnectMenuAction(
+function runtimeCloudLinkDisconnectMenuAction(
   environment: DesktopEnvironmentEntry,
 ): EnvironmentActionMenuItemModel | null {
   const target = environment.provider_runtime_link_target;
   if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind) || !target || runtimeHasUnsupportedLegacyControlPlaneLink(environment)
-    || target.provider_link_state !== 'linked' || !target.can_disconnect_provider) {
+    || target.cloud_link_state !== 'linked' || !target.can_disconnect_cloud) {
     return null;
   }
   if (!['authorization_required', 'disabled', 'error', 'retrying', 'unknown'].includes(target.provider_connection_state)) {
     return null;
   }
   return {
-    id: 'disconnect_provider_runtime',
+    id: 'disconnect_cloud_runtime',
     label: 'Disconnect from Redeven Cloud',
     label_key: 'environmentAction.disconnectFromProvider',
     action: {
-      intent: 'disconnect_provider_runtime',
+      intent: 'disconnect_cloud_runtime',
       label: 'Disconnect from Redeven Cloud',
       label_key: 'environmentAction.disconnectFromProvider',
       enabled: true,
@@ -1577,13 +1577,13 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
       },
     });
   }
-  const runtimeProviderLinkAction = runtimeProviderLinkMenuAction(environment);
-  if (runtimeProviderLinkAction) {
-    items.push(runtimeProviderLinkAction);
+  const runtimeCloudLinkAction = runtimeCloudLinkMenuAction(environment);
+  if (runtimeCloudLinkAction) {
+    items.push(runtimeCloudLinkAction);
   }
-  const runtimeProviderLinkDisconnectAction = runtimeProviderLinkDisconnectMenuAction(environment);
-  if (runtimeProviderLinkDisconnectAction) {
-    items.push(runtimeProviderLinkDisconnectAction);
+  const runtimeCloudLinkDisconnectAction = runtimeCloudLinkDisconnectMenuAction(environment);
+  if (runtimeCloudLinkDisconnectAction) {
+    items.push(runtimeCloudLinkDisconnectAction);
   }
   if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
     const refreshPlan = environment.runtime_operations.refresh;
@@ -1619,7 +1619,7 @@ function blockedPrimaryActionGuidanceAction(
     'start_runtime',
     'update_runtime',
     'restart_runtime',
-    'connect_provider_runtime',
+    'connect_cloud_runtime',
   ];
   const recoveryAction = recoveryIntents
     .map((intent) => menuActions.find((item) => item.action.enabled && item.action.intent === intent))
@@ -1642,7 +1642,7 @@ function primaryGuidanceActionLabel(action: EnvironmentActionModel): string {
       return action.label;
     case 'restart_runtime':
       return 'Restart';
-    case 'connect_provider_runtime':
+    case 'connect_cloud_runtime':
       return 'Connect';
     default:
       return 'Continue';
@@ -1782,7 +1782,7 @@ function blockedPrimaryActionTitle(
   environment: DesktopEnvironmentEntry,
   action: EnvironmentActionModel,
 ): string {
-  if (action.intent === 'connect_provider_runtime') {
+  if (action.intent === 'connect_cloud_runtime') {
     return 'Connect to Redeven Cloud to continue';
   }
   if (action.intent === 'update_runtime') {
@@ -1800,7 +1800,7 @@ function blockedPrimaryActionDetail(
   environment: DesktopEnvironmentEntry,
   action: EnvironmentActionModel,
 ): string {
-  if (action.intent === 'connect_provider_runtime') {
+  if (action.intent === 'connect_cloud_runtime') {
     return 'Connect this runtime to a Redeven Cloud Environment first. Open stays separate and becomes available after the link is ready.';
   }
   if (action.intent === 'update_runtime') {
@@ -1901,8 +1901,8 @@ function primaryActionOverlay(
           label: 'Request access',
           enabled: true,
           variant: 'default',
-          provider_origin: environment.provider_origin,
-          provider_id: environment.provider_id,
+          cloud_origin: environment.cloud_origin,
+          cloud_id: environment.cloud_id,
         },
       }],
     };
@@ -2076,8 +2076,8 @@ export function buildProviderBackedEnvironmentActionModel(
           label: 'Request access',
           enabled: true,
           variant: 'outline' as const,
-          provider_origin: environment.provider_origin,
-          provider_id: environment.provider_id,
+          cloud_origin: environment.cloud_origin,
+          cloud_id: environment.cloud_id,
         },
       }]
     : runtimeMenuActions(environment);
@@ -2134,7 +2134,7 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
     return [
       {
         label: 'Redeven Cloud',
-        value: environment.provider_origin ?? '',
+        value: environment.cloud_origin ?? '',
         monospace: true,
       },
       {
@@ -2303,22 +2303,22 @@ export function environmentMatchesLibrarySearch(
 }
 
 export function environmentProviderFilterValue(environment: DesktopEnvironmentEntry): string {
-  const providerOrigin = compact(environment.provider_origin);
-  const providerID = compact(environment.provider_id);
-  if (providerOrigin === '' || providerID === '') {
+  const cloudOrigin = compact(environment.cloud_origin);
+  const cloudID = compact(environment.cloud_id);
+  if (cloudOrigin === '' || cloudID === '') {
     return '';
   }
   try {
-    return desktopControlPlaneKey(providerOrigin, providerID);
+    return desktopControlPlaneKey(cloudOrigin, cloudID);
   } catch {
     return '';
   }
 }
 
 export function runtimeTargetEnvironmentLibraryFilterValue(
-  runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
+  runtimeTargetID: DesktopCloudRuntimeLinkTargetID,
 ): string {
-  const normalizedTargetID = normalizeDesktopProviderRuntimeLinkTargetID(runtimeTargetID);
+  const normalizedTargetID = normalizeDesktopCloudRuntimeLinkTargetID(runtimeTargetID);
   return normalizedTargetID
     ? `${RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX}${normalizedTargetID}`
     : '';
@@ -2326,12 +2326,12 @@ export function runtimeTargetEnvironmentLibraryFilterValue(
 
 export function runtimeTargetEnvironmentLibraryFilterTargetID(
   providerFilter: string,
-): DesktopProviderRuntimeLinkTargetID | null {
+): DesktopCloudRuntimeLinkTargetID | null {
   const activeFilter = compact(providerFilter);
   if (!activeFilter.startsWith(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX)) {
     return null;
   }
-  return normalizeDesktopProviderRuntimeLinkTargetID(
+  return normalizeDesktopCloudRuntimeLinkTargetID(
     activeFilter.slice(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX.length),
   );
 }

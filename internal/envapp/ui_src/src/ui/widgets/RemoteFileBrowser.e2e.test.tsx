@@ -1447,7 +1447,7 @@ beforeEach(() => {
     if (init?.method === 'GET') {
       return {
         config_path: '/tmp/redeven/config.json',
-        connection: { controlplane_base_url: '', environment_id: 'env-1', agent_instance_id: 'agent-1', direct: { ws_url: '', channel_id: '', channel_init_expire_at_unix_s: 0, default_suite: 1, e2ee_psk_set: false } },
+        connection: { access_point_origin: '', environment_id: 'env-1', agent_instance_id: 'agent-1', direct: { ws_url: '', channel_id: '', channel_init_expire_at_unix_s: 0, default_suite: 1, e2ee_psk_set: false } },
         runtime: {
           agent_home_dir: '/workspace',
           shell: '/bin/sh',
@@ -1471,7 +1471,7 @@ beforeEach(() => {
       return {
         settings: {
           config_path: '/tmp/redeven/config.json',
-          connection: { controlplane_base_url: '', environment_id: 'env-1', agent_instance_id: 'agent-1', direct: { ws_url: '', channel_id: '', channel_init_expire_at_unix_s: 0, default_suite: 1, e2ee_psk_set: false } },
+          connection: { access_point_origin: '', environment_id: 'env-1', agent_instance_id: 'agent-1', direct: { ws_url: '', channel_id: '', channel_init_expire_at_unix_s: 0, default_suite: 1, e2ee_psk_set: false } },
           runtime: {
             agent_home_dir: String(body.agent_home_dir ?? '/workspace'),
             shell: String(body.shell ?? '/bin/sh'),

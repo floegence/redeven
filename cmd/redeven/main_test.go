@@ -54,7 +54,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
 			"Run mode (default: local).",
 			"run `redeven bootstrap` once, then use `redeven run --mode hybrid`.",
-			"pass --mode hybrid, --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket",
+			"pass --mode hybrid, --cloud, --env-id, and a one-time link ticket",
 			"--state-root <path>",
 			"--presentation <auto|rich|plain|machine>",
 			"Loopback examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, [::1]:24000",
@@ -76,14 +76,12 @@ func TestRunCLIHelp(t *testing.T) {
 		}
 		assertContainsAll(t, stdout,
 			"Required flags:",
-			"--provider-origin <url>",
-			"--controlplane <url>",
+			"--cloud <url>",
 			"--env-id <env_public_id>",
-			"--bootstrap-ticket-stdin",
-			"--bootstrap-ticket-file <path>",
-			"REDEVEN_BOOTSTRAP_TICKET",
+			"--link-ticket-stdin",
+			"--link-ticket-file <path>",
 			"--state-root <path>",
-			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-stdin < /run/secrets/redeven-bootstrap-ticket",
+			"redeven bootstrap --cloud https://redeven.test --env-id env_123 --link-ticket-stdin < /run/secrets/redeven-link-ticket",
 		)
 	})
 
@@ -173,19 +171,17 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"missing required flags for `redeven bootstrap`: --provider-origin, --controlplane, --env-id, one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)",
-			"Example: redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket",
+			"Example: redeven bootstrap --cloud https://redeven.test --env-id env_123 --link-ticket-file /run/secrets/redeven-link-ticket",
 		)
 	})
 
 	t.Run("run incomplete inline bootstrap flags explain the missing flag", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "hybrid", "--provider-origin", "https://redeven.test", "--controlplane", "https://dev.redeven.test", "--env-id", "env_123")
+		code, _, stderr := runCLITest(t, "run", "--mode", "hybrid", "--cloud", "https://redeven.test", "--env-id", "env_123")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)",
-			"Hint: provide --provider-origin, --controlplane, --env-id, and one bootstrap ticket source together, or run `redeven bootstrap` first.",
+			"Hint: provide --cloud, --env-id, and one link ticket source together, or run `redeven bootstrap` first.",
 		)
 	})
 
@@ -198,16 +194,13 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			"--mode", "desktop",
 			"--state-root", stateRoot,
 			"--startup-report-file", reportPath,
-			"--provider-origin", "https://redeven.test",
-			"--controlplane", "https://dev.redeven.test",
+			"--cloud", "https://redeven.test",
 			"--env-id", "env_123",
 		)
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
-		assertContainsAll(t, stderr,
-			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)",
-		)
+		assertContainsAll(t, stderr)
 
 		body, err := os.ReadFile(reportPath)
 		if err != nil {
@@ -223,7 +216,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		if report.Code != desktopLaunchCodeStartupInvalid {
 			t.Fatalf("Code = %q, want %q", report.Code, desktopLaunchCodeStartupInvalid)
 		}
-		if !strings.Contains(report.Message, "missing flag one bootstrap ticket") {
+		if !strings.Contains(report.Message, "missing flag one Runtime link ticket") {
 			t.Fatalf("Message = %q", report.Message)
 		}
 		if report.Diagnostics == nil || report.Diagnostics.StateDir != filepath.Join(stateRoot, "local-environment") {
@@ -365,25 +358,24 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		)
 	})
 
-	t.Run("multiple bootstrap ticket sources explain the conflict", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--bootstrap-ticket-stdin", "--bootstrap-ticket-file", filepath.Join(t.TempDir(), "ticket"))
+	t.Run("multiple link ticket sources explain the conflict", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--link-ticket-stdin", "--link-ticket-file", filepath.Join(t.TempDir(), "ticket"))
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid startup secret options: use only one of --bootstrap-ticket-stdin or --bootstrap-ticket-file",
+			"invalid startup secret options: use only one of --link-ticket, --link-ticket-stdin, or --link-ticket-file",
 			"Hint: choose one explicit source for `redeven run`",
 		)
 	})
 
-	t.Run("removed bootstrap ticket env flag gives fixed-variable migration", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--bootstrap-ticket-env", "OLD_TICKET_VAR")
+	t.Run("removed link ticket env flag gives fixed-variable migration", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--link-ticket-env", "OLD_TICKET_VAR")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"unknown flag for `redeven run`: --bootstrap-ticket-env",
-			"Migration: inject the fixed REDEVEN_BOOTSTRAP_TICKET variable, or use --bootstrap-ticket-stdin or --bootstrap-ticket-file.",
+			"unknown flag for `redeven run`: --link-ticket-env",
 		)
 	})
 
@@ -394,7 +386,6 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"unknown flag for `redeven bootstrap`: --bootstrap-ticket",
-			"Migration: use --bootstrap-ticket-stdin, --bootstrap-ticket-file, or the fixed REDEVEN_BOOTSTRAP_TICKET environment fallback.",
 		)
 		if strings.Contains(stderr, "do-not-echo") {
 			t.Fatalf("removed flag value leaked in stderr: %s", stderr)
@@ -424,9 +415,9 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"runtime is not bootstrapped for remote or hybrid mode:",
-			"Hint: run `redeven bootstrap` first, or pass --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket directly to `redeven run`.",
-			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket",
-			"redeven run --mode hybrid --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket",
+			"Hint: run `redeven bootstrap` first, or pass --cloud, --env-id, and a one-time link ticket directly to `redeven run`.",
+			"redeven bootstrap --cloud https://redeven.test --env-id env_123 --link-ticket-file /run/secrets/redeven-link-ticket",
+			"redeven run --mode hybrid --cloud https://redeven.test --env-id env_123 --link-ticket-file /run/secrets/redeven-link-ticket",
 		)
 	})
 }
@@ -543,9 +534,9 @@ func TestTargetsCommandJSON(t *testing.T) {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 	if err := config.Save(layout.ConfigPath, &config.Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
-		ControlplaneProviderID:   "provider_1",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
+		CloudID:                  "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
 	}); err != nil {
@@ -825,9 +816,9 @@ func TestEnvCommandJSON(t *testing.T) {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 	if err := config.Save(layout.ConfigPath, &config.Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
-		ControlplaneProviderID:   "provider_1",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
+		CloudID:                  "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
 	}); err != nil {
@@ -1003,9 +994,9 @@ func TestEnvRestartStoppedLocalRuntimeReturnsDesktopHandoffPlan(t *testing.T) {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 	if err := config.Save(layout.ConfigPath, &config.Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
-		ControlplaneProviderID:   "provider_1",
+		CloudOrigin:              "https://redeven.test",
+		AccessPointOrigin:        "https://dev.redeven.test",
+		CloudID:                  "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
 	}); err != nil {

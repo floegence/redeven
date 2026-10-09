@@ -10,12 +10,12 @@ import (
 )
 
 func TestProviderConnectionDoesNotInferOnlineFromSavedBinding(t *testing.T) {
-	cfg := providerLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
+	cfg := cloudLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
 	for i := range cfg.ControlArtifactPool.Entries {
 		cfg.ControlArtifactPool.Entries[i].ExpiresAtUnixS = time.Now().Add(-72 * time.Hour).Unix()
 	}
 	a := &Agent{cfg: cfg, remoteEnabled: true, controlChannelEnabled: true, effectiveRunMode: "hybrid"}
-	encoded, err := json.Marshal(a.ProviderLinkBinding())
+	encoded, err := json.Marshal(a.CloudLinkBinding())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,13 +32,13 @@ func TestProviderConnectionDoesNotInferOnlineFromSavedBinding(t *testing.T) {
 }
 
 func TestProviderRefreshRejectsStaleMatchingBinding(t *testing.T) {
-	cfg := providerLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
+	cfg := cloudLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
 	a := &Agent{cfg: cfg}
-	err := a.providerLinkCanReplaceCurrentLocked(ProviderLinkRequest{
-		ProviderOrigin: cfg.ProviderOrigin, ProviderID: cfg.ControlplaneProviderID,
-		EnvPublicID: cfg.EnvironmentID, AccessPointOrigin: cfg.ControlplaneBaseURL,
-		ExpectedProviderOrigin: cfg.ProviderOrigin, ExpectedProviderID: cfg.ControlplaneProviderID,
-		ExpectedEnvPublicID: cfg.EnvironmentID, ExpectedAccessPointOrigin: cfg.ControlplaneBaseURL,
+	err := a.cloudLinkCanReplaceCurrentLocked(CloudLinkRequest{
+		CloudOrigin: cfg.CloudOrigin, CloudID: cfg.CloudID,
+		EnvPublicID:         cfg.EnvironmentID,
+		ExpectedCloudOrigin: cfg.CloudOrigin, ExpectedCloudID: cfg.CloudID,
+		ExpectedEnvPublicID: cfg.EnvironmentID, ExpectedAccessPointOrigin: cfg.AccessPointOrigin,
 		ExpectedGeneration: cfg.BindingGeneration + 1,
 	})
 	if err == nil {
@@ -47,7 +47,7 @@ func TestProviderRefreshRejectsStaleMatchingBinding(t *testing.T) {
 }
 
 func TestProviderConnectionRecoveryBoundaries(t *testing.T) {
-	cfg := providerLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
+	cfg := cloudLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
 	for i := range cfg.ControlArtifactPool.Entries {
 		cfg.ControlArtifactPool.Entries[i].Spent = true
 	}
@@ -86,7 +86,7 @@ func (source waitingProviderArtifactSource) Acquire(ctx context.Context) (flower
 }
 
 func TestProviderConnectionDoesNotRenewDuringLastArtifactAttempt(t *testing.T) {
-	cfg := providerLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
+	cfg := cloudLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
 	for i := range cfg.ControlArtifactPool.Entries {
 		cfg.ControlArtifactPool.Entries[i].Spent = true
 	}

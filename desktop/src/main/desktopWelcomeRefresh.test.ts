@@ -45,7 +45,7 @@ describe('Welcome health refresh relationship continuity', () => {
           startup: { local_ui_url: runtime.local_ui_url, local_ui_urls: [runtime.local_ui_url],
             started_at_unix_ms: runtime.runtime_started_at_unix_ms! - 60_000,
             runtime_service: { ...runtime.runtime_service!, bindings: {
-              ...runtime.runtime_service!.bindings!, provider_link: { state: 'unbound', remote_enabled: false },
+              ...runtime.runtime_service!.bindings!, cloud_link: { state: 'unbound', remote_enabled: false },
             } },
           },
         });
@@ -60,7 +60,7 @@ describe('Welcome health refresh relationship continuity', () => {
       expect(refreshing.primary_entry.runtime_health.freshness).toBe('checking');
       expect(refreshing.primary_entry.local_ui_urls).toEqual(pair.primary_entry.local_ui_urls);
       expect(refreshing.primary_entry.runtime_started_at_unix_ms).toBe(pair.primary_entry.runtime_started_at_unix_ms);
-      expect(refreshing.provider_entry?.provider_linked_runtime_summary?.runtime_target_id).toBe(linkedTarget.key);
+      expect(refreshing.provider_entry?.cloud_linked_runtime_summary?.runtime_target_id).toBe(linkedTarget.key);
       expect(refreshing.primary_entry.provider_runtime_link_target?.runtime_control_status.state).toBe('missing');
       resolve(await linkedTarget.probe());
       await pending;
@@ -69,7 +69,7 @@ describe('Welcome health refresh relationship continuity', () => {
       // A completed unlink is authoritative; continuity must not retain a stale pair.
       const observed = await linkedTarget.probe();
       const unboundService = { ...observed.health!.runtime_service!, bindings: {
-        ...observed.health!.runtime_service!.bindings!, provider_link: { state: 'unbound' as const, remote_enabled: false },
+        ...observed.health!.runtime_service!.bindings!, cloud_link: { state: 'unbound' as const, remote_enabled: false },
       } };
       await store.refresh([{ ...linkedTarget, probe: async () => ({
         health: { ...observed.health!, runtime_service: unboundService },

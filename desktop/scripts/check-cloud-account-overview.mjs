@@ -108,8 +108,8 @@ try {
     await page.screenshot({ path: `${output}/${locale}-sign-out.png`, animations: 'disabled' });
     await confirmation.getByRole('button', { name: i18n.t('environmentCenter.cloudSignOut'), exact: true }).click();
     const request = await page.evaluate(() => window.settingsFixture.requests.at(-1));
-    assert.deepEqual(request, { kind: 'sign_out_control_plane', provider_origin: snapshot.control_planes[0].provider.provider_origin, provider_id: snapshot.control_planes[0].provider.provider_id });
-    await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), { ...snapshot, control_planes: snapshot.control_planes.slice(1), environments: snapshot.environments.filter(entry => entry.kind !== 'provider_environment' || entry.provider_origin !== snapshot.control_planes[0].provider.provider_origin) });
+    assert.deepEqual(request, { kind: 'sign_out_control_plane', cloud_origin: snapshot.control_planes[0].provider.cloud_origin, cloud_id: snapshot.control_planes[0].provider.cloud_id });
+    await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), { ...snapshot, control_planes: snapshot.control_planes.slice(1), environments: snapshot.environments.filter(entry => entry.kind !== 'provider_environment' || entry.cloud_origin !== snapshot.control_planes[0].provider.cloud_origin) });
     await confirmation.waitFor({ state: 'detached' });
     assert.equal(await page.locator('.redeven-cloud-source-header').count(), 1);
     report.cases.push(`${locale}:account-totals-localized-recovery-responsive-status-details-focus-sign-out`);

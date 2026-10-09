@@ -60,12 +60,12 @@ type Options struct {
 	Bind     BindSpec
 	Protocol string
 
-	DisableSelfUpgrade     bool
-	EffectiveRunMode       string
-	RemoteEnabled          bool
-	ControlplaneBaseURL    string
-	ControlplaneProviderID string
-	EnvPublicID            string
+	DisableSelfUpgrade bool
+	EffectiveRunMode   string
+	RemoteEnabled      bool
+	AccessPointOrigin  string
+	CloudID            string
+	EnvPublicID        string
 
 	// AppServer is the Env App local API and proxy handler mounted under /_redeven_proxy/*.
 	AppServer *appserver.Server
@@ -454,8 +454,8 @@ func New(opts Options) (*Server, error) {
 		selfUpgradeDisabled:       opts.DisableSelfUpgrade,
 		effectiveRunMode:          strings.TrimSpace(opts.EffectiveRunMode),
 		remoteEnabled:             opts.RemoteEnabled,
-		controlplaneBaseURL:       strings.TrimSpace(opts.ControlplaneBaseURL),
-		controlplaneProviderID:    strings.TrimSpace(opts.ControlplaneProviderID),
+		controlplaneBaseURL:       strings.TrimSpace(opts.AccessPointOrigin),
+		controlplaneProviderID:    strings.TrimSpace(opts.CloudID),
 		envPublicID:               strings.TrimSpace(opts.EnvPublicID),
 		localPermissionCap:        &localPermissionCap,
 		appServer:                 opts.AppServer,

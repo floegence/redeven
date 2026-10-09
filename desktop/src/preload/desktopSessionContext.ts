@@ -25,7 +25,7 @@ export interface DesktopSessionContextBridge {
   requestTransportRecoveryNow: () => Promise<boolean>;
   stopTransportRecovery: () => Promise<boolean>;
   retryDesktopModels: () => Promise<boolean>;
-  renewProviderSession: () => Promise<boolean>;
+  renewCloudSession: () => Promise<boolean>;
   notifyAppReady: (payload: DesktopSessionAppReadyPayload) => void;
 }
 
@@ -67,7 +67,7 @@ export function bootstrapDesktopSessionContextBridge(): void {
 
   const bridge: DesktopSessionContextBridge = {
     retryDesktopModels: async () => (await ipcRenderer.invoke(DESKTOP_MODEL_SOURCE_RETRY_CHANNEL)) === true,
-    renewProviderSession: async () => (
+    renewCloudSession: async () => (
       await ipcRenderer.invoke(DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL)
     ) === true,
     getSnapshot: () => {
@@ -81,8 +81,8 @@ export function bootstrapDesktopSessionContextBridge(): void {
       const targetKind = String(candidate.target_kind ?? '').trim();
       const targetRoute = String(candidate.target_route ?? '').trim();
       const sessionSource = String(candidate.session_source ?? '').trim();
-      const providerOrigin = String(candidate.provider_origin ?? '').trim();
-      const providerID = String(candidate.provider_id ?? '').trim();
+      const cloudOrigin = String(candidate.cloud_origin ?? '').trim();
+      const cloudID = String(candidate.cloud_id ?? '').trim();
       const envPublicID = String(candidate.env_public_id ?? '').trim();
       const label = String(candidate.label ?? '').trim();
       const documentTransport = String(candidate.document_transport ?? '').trim();
@@ -106,8 +106,8 @@ export function bootstrapDesktopSessionContextBridge(): void {
         ...(targetKind === 'local_environment' || targetKind === 'external_local_ui' || targetKind === 'ssh_environment' || targetKind === 'gateway_environment' ? { target_kind: targetKind } : {}),
         target_route: targetRoute,
         ...(sessionSource === 'local_runtime' || sessionSource === 'provider_environment' || sessionSource === 'ssh_environment' || sessionSource === 'external_local_ui' || sessionSource === 'runtime_gateway' ? { session_source: sessionSource } : {}),
-        ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
-        ...(providerID !== '' ? { provider_id: providerID } : {}),
+        ...(cloudOrigin !== '' ? { cloud_origin: cloudOrigin } : {}),
+        ...(cloudID !== '' ? { cloud_id: cloudID } : {}),
         ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
         ...(label !== '' ? { label } : {}),
         ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),

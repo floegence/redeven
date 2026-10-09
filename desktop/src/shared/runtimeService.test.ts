@@ -15,10 +15,10 @@ import {
   runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceProviderConnectionState,
-  runtimeServiceProviderLinkBinding,
-  runtimeServiceProviderLinkMatches,
+  runtimeServiceCloudLinkBinding,
+  runtimeServiceCloudLinkMatches,
   runtimeServiceSupportsDesktopModelSource,
-  runtimeServiceSupportsProviderLink,
+  runtimeServiceSupportsCloudLink,
   runtimeServiceSupportsRuntimeGateway,
 } from './runtimeService';
 
@@ -33,8 +33,8 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the Runtime-owned model directory compatibility window', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(44);
+  it('publishes the Cloud v4 and Runtime-owned model directory compatibility window', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(45);
     expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.13.0');
     expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.13.0');
   });
@@ -285,7 +285,7 @@ describe('runtimeService', () => {
           state: 'bound',
           session_id: ' desktop-session ',
           model_count: 2,
-          missing_key_provider_ids: ['openai', '', 'anthropic', 'openai'],
+          missing_key_cloud_ids: ['openai', '', 'anthropic', 'openai'],
         },
       },
       active_workload: {},
@@ -298,7 +298,7 @@ describe('runtimeService', () => {
       state: 'bound',
       session_id: 'desktop-session',
       model_count: 2,
-      missing_key_provider_ids: ['anthropic', 'openai'],
+      missing_key_cloud_ids: ['anthropic', 'openai'],
     });
   });
 
@@ -308,15 +308,15 @@ describe('runtimeService', () => {
       compatibility: 'compatible',
       open_readiness: { state: 'openable' },
       capabilities: {
-        provider_link: {
+        cloud_link: {
           supported: true,
         },
       },
       bindings: {
-        provider_link: {
+        cloud_link: {
           state: 'linked',
-          provider_origin: ' https://provider.example.invalid ',
-          provider_id: ' example_control_plane ',
+          cloud_origin: ' https://provider.example.invalid ',
+          cloud_id: ' example_control_plane ',
           env_public_id: ' env_demo ',
           local_environment_public_id: ' lenv_demo ',
           binding_generation: 5,
@@ -327,26 +327,26 @@ describe('runtimeService', () => {
       active_workload: {},
     });
 
-    expect(runtimeServiceSupportsProviderLink(snapshot)).toBe(true);
-    expect(snapshot.capabilities?.provider_link.bind_method).toBe('runtime_control_v2');
-    expect(runtimeServiceProviderLinkBinding(snapshot)).toMatchObject({
+    expect(runtimeServiceSupportsCloudLink(snapshot)).toBe(true);
+    expect(snapshot.capabilities?.cloud_link.bind_method).toBe('runtime_control_v2');
+    expect(runtimeServiceCloudLinkBinding(snapshot)).toMatchObject({
       state: 'linked',
-      provider_origin: 'https://provider.example.invalid',
-      provider_id: 'example_control_plane',
+      cloud_origin: 'https://provider.example.invalid',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
       local_environment_public_id: 'lenv_demo',
       binding_generation: 5,
       remote_enabled: false,
       last_connected_at_unix_ms: 1778750000000,
     });
-    expect(runtimeServiceProviderLinkMatches(snapshot, {
-      provider_origin: 'https://provider.example.invalid',
-      provider_id: 'example_control_plane',
+    expect(runtimeServiceCloudLinkMatches(snapshot, {
+      cloud_origin: 'https://provider.example.invalid',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_demo',
     })).toBe(true);
-    expect(runtimeServiceProviderLinkMatches(snapshot, {
-      provider_origin: 'https://provider.example.invalid',
-      provider_id: 'example_control_plane',
+    expect(runtimeServiceCloudLinkMatches(snapshot, {
+      cloud_origin: 'https://provider.example.invalid',
+      cloud_id: 'example_control_plane',
       env_public_id: 'env_other',
     })).toBe(false);
   });
@@ -382,10 +382,10 @@ describe('runtimeService', () => {
       compatibility: 'compatible',
       open_readiness: { state: 'openable' },
       bindings: {
-        provider_link: {
+        cloud_link: {
           state: 'linked',
-          provider_origin: 'https://provider.example.invalid',
-          provider_id: 'example_control_plane',
+          cloud_origin: 'https://provider.example.invalid',
+          cloud_id: 'example_control_plane',
           env_public_id: 'env_demo',
           remote_enabled: true,
         },
@@ -393,8 +393,8 @@ describe('runtimeService', () => {
       active_workload: {},
     });
 
-    expect(runtimeServiceSupportsProviderLink(snapshot)).toBe(false);
-    expect(runtimeServiceProviderLinkBinding(snapshot)).toMatchObject({
+    expect(runtimeServiceSupportsCloudLink(snapshot)).toBe(false);
+    expect(runtimeServiceCloudLinkBinding(snapshot)).toMatchObject({
       state: 'unsupported',
       remote_enabled: false,
     });
@@ -405,8 +405,8 @@ describe('runtimeService', () => {
       compatibility: 'compatible',
       open_readiness: { state: 'openable' },
       active_workload: {},
-      capabilities: { provider_link: { supported: true } },
-      bindings: { provider_link: { state: 'unbound' } },
+      capabilities: { cloud_link: { supported: true } },
+      bindings: { cloud_link: { state: 'unbound' } },
     }))).toBe('unlinked');
 
     expect(runtimeServiceProviderConnectionState(normalizeRuntimeServiceSnapshot({
@@ -414,12 +414,12 @@ describe('runtimeService', () => {
       open_readiness: { state: 'openable' },
       remote_enabled: true,
       active_workload: {},
-      capabilities: { provider_link: { supported: true } },
+      capabilities: { cloud_link: { supported: true } },
       bindings: {
-        provider_link: {
+        cloud_link: {
           state: 'linked',
-          provider_origin: 'https://provider.example.invalid',
-          provider_id: 'example_control_plane',
+          cloud_origin: 'https://provider.example.invalid',
+          cloud_id: 'example_control_plane',
           env_public_id: 'env_demo',
           remote_enabled: true,
         },
@@ -431,12 +431,12 @@ describe('runtimeService', () => {
       open_readiness: { state: 'openable' },
       remote_enabled: false,
       active_workload: {},
-      capabilities: { provider_link: { supported: true } },
+      capabilities: { cloud_link: { supported: true } },
       bindings: {
-        provider_link: {
+        cloud_link: {
           state: 'linked',
-          provider_origin: 'https://provider.example.invalid',
-          provider_id: 'example_control_plane',
+          cloud_origin: 'https://provider.example.invalid',
+          cloud_id: 'example_control_plane',
           env_public_id: 'env_demo',
           remote_enabled: false,
         },
@@ -458,7 +458,7 @@ it.each(['inspecting', 'optimizing', 'migrating', 'verifying', 'recovering', 'ba
 });
 
 it.each(['connected', 'connecting', 'retrying', 'authorization_required', 'error'])('uses the actual reported Cloud state: %s', connection_state => {
-  const snapshot = normalizeRuntimeServiceSnapshot({ remote_enabled: true, capabilities: { provider_link: { supported: true } },
-    bindings: { provider_link: { state: 'linked', remote_enabled: true, connection_state } } });
+  const snapshot = normalizeRuntimeServiceSnapshot({ remote_enabled: true, capabilities: { cloud_link: { supported: true } },
+    bindings: { cloud_link: { state: 'linked', remote_enabled: true, connection_state } } });
   expect(runtimeServiceProviderConnectionState(snapshot)).toBe(connection_state);
 });

@@ -304,7 +304,7 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 		t.Fatalf("missing runtime-control endpoint")
 	}
 
-	req, err := http.NewRequest(http.MethodPost, endpoint.BaseURL+"/v2/provider-link", nil)
+	req, err := http.NewRequest(http.MethodPost, endpoint.BaseURL+"/v2/cloud-link", nil)
 	if err != nil {
 		t.Fatalf("NewRequest() error = %v", err)
 	}
