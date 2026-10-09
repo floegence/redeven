@@ -109,7 +109,8 @@ export function TessivenFlowerPanel(props: {
   const embedded: FlowerEmbeddedConversation = {
     get scope() { return `tessiven:${props.request.selection.canvas_id}`; },
     get threadID() { return props.request.flower_thread_id; },
-    get contextAction() { return contextAction(); },
+    get initialContextAction() { return contextAction(); },
+    get contextAction() { return props.request.selection.object_refs.length ? contextAction() : undefined; },
     get request() { return props.request.nonce ? props.request : undefined; },
     onThreadBound: props.onThreadBound,
     placeholder: '',

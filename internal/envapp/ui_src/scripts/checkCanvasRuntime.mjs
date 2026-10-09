@@ -23,7 +23,7 @@ const output = options.get('--output');
 const temp = await mkdtemp(path.join(os.tmpdir(), 'redeven-canvas-acceptance-'));
 const state = path.join(temp, 'state');
 const libraryPath = path.join(state, 'local-environment/apps/tessiven/canvases.sqlite');
-const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), scenarios: [], question_geometry: [] };
+const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), scenarios: [], question_geometry: [], canvas_context: [] };
 let runtime, browser, runtimeLog = '', providerCalls = 0, questionNext = false;
 let canvasSaveNext;
 let layeredCanvas;
@@ -109,7 +109,33 @@ function observe(page) {
   return errors;
 }
 
-async function verifyReplies(page, name) {
+async function sendCanvasMessage(page, text, objectRefs) {
+  const replies = page.locator('.tessiven-flower-output');
+  const request = page.waitForRequest(request => {
+    if (request.method() !== 'POST' || !new URL(request.url()).pathname.endsWith('/turns')) return false;
+    return request.postDataJSON()?.input?.text === text;
+  });
+  const replyCount = (await replies.innerText()).split(reply).length;
+  await replies.locator('.flower-composer textarea').fill(text);
+  await replies.getByRole('button', { name: 'Send', exact: true }).click();
+  const body = (await request).postDataJSON();
+  if (objectRefs === null) {
+    assert.equal(body.input.context_action, undefined, 'Ordinary canvas follow-ups do not submit another whole-canvas reference');
+  } else {
+    assert.deepEqual(body.input.context_action?.context, [{ kind: 'tessiven_selection',
+      canvas_id: body.input.context_action.context[0].canvas_id,
+      version_id: body.input.context_action.context[0].version_id, object_refs: objectRefs }]);
+  }
+  await until(async () => (await replies.innerText()).split(reply).length > replyCount, 'new visible streamed Flower reply');
+  await until(() => page.locator('.tessiven [data-flower-selected-thread-status="success"]').count(), 'canonical Flower completion');
+  const message = replies.locator('[data-flower-message-role="user"]').filter({ hasText: text });
+  await message.waitFor();
+  assert.equal(await message.locator('.flower-chat-context-chips').count(), objectRefs === null ? 0 : 1,
+    'Canonical user messages display references only when the turn submitted them');
+  report.canvas_context.push({ text, object_refs: objectRefs, reference_cards: await message.locator('.flower-chat-context-chips').count() });
+}
+
+async function verifyReplies(page, name, newConversation) {
   const surface = page.locator('.tessiven');
   const replies = page.locator('.tessiven-flower-output');
   const assertAskFlowerStyle = async (button, label, checkSeparator = false) => {
@@ -171,6 +197,9 @@ async function verifyReplies(page, name) {
   assert.equal(await page.locator('.tessiven-flower-composer--initial').count(), 0, 'Existing canvases do not use the new-canvas composer placement');
   assert.equal(await page.locator('.flower-composer-context-reference').count(), 0, 'Whole canvas context stays implicit');
   const replyCount = (await replies.innerText()).split(reply).length;
+  const firstRequest = page.waitForRequest(request => request.method() === 'POST'
+    && new URL(request.url()).pathname.endsWith('/turns')
+    && request.postDataJSON()?.input?.text === 'Explain the storefront and database relationship.');
   await composer.fill('Explain the storefront and database relationship.');
   await replies.getByRole('button', { name: 'Send', exact: true }).click();
   const feedbackStyle = await replies.locator('.flower-model-status-lane--conversation').evaluate(lane => {
@@ -180,6 +209,20 @@ async function verifyReplies(page, name) {
   assert.deepEqual(feedbackStyle, { border: '0px', top: '4px', bottom: '8px' }, 'Live feedback uses compact spacing without a divider');
   await until(async () => (await replies.innerText()).split(reply).length > replyCount, 'new visible streamed Flower reply');
   await until(() => surface.locator('[data-flower-selected-thread-status="success"]').count(), 'canonical Flower completion');
+  const initialContext = (await firstRequest).postDataJSON().input.context_action;
+  if (newConversation) {
+    assert.equal(initialContext?.context[0]?.kind, 'tessiven_selection');
+    assert.deepEqual(initialContext.context[0].object_refs, [], 'A new canvas conversation starts with the implicit whole-canvas reference');
+  } else assert.equal(initialContext, undefined, 'Restoring a saved canvas conversation does not add whole-canvas context');
+  report.scenarios.push(newConversation ? 'new-conversation-initial-canvas-context' : 'restored-conversation-without-repeated-canvas-context');
+  await sendCanvasMessage(page, `Explain the next step for ${name}.`, null);
+  await replies.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  await localCall.click();
+  await detail.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+  await sendCanvasMessage(page, `Explain this selected call for ${name}.`, ['demo-api-call']);
+  await replies.getByRole('button', { name: 'Remove reference demo-api-call', exact: true }).click();
+  await sendCanvasMessage(page, `Continue without a reference for ${name}.`, null);
+  report.scenarios.push(`${name}-explicit-reference-and-ordinary-follow-ups`);
   const title = replies.locator('[data-floe-floating-window-titlebar]');
   assert.equal(Math.round((await title.boundingBox()).height), 43, 'Replies use the approved compact chrome');
   await replies.getByRole('button', { name: 'Reply actions', exact: true }).click();
@@ -515,7 +558,7 @@ try {
   await popup.locator('.tessiven-library-card').first().waitFor();
   assert.equal(new URL(popup.url()).searchParams.get('window'), 'service-canvas');
   assert.equal(await popup.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0, 'Standalone canvas has no Env App shell');
-  await verifyReplies(popup, 'standalone-replies-light');
+  await verifyReplies(popup, 'standalone-replies-light', true);
   await verifyShortQuestion(popup, 'standalone');
   await saveLayeredCanvas(popup, origin);
   await verifyLayeredCanvas(popup, 'standalone-hadoop');
@@ -528,7 +571,7 @@ try {
   await page.locator('.tessiven-library-card').first().waitFor();
   assert.ok(await activityBar.isVisible(), 'Activity keeps its navigation rail');
   assert.equal(await activityBar.getByRole('button', { name: 'Tessiven service canvas', exact: true }).getAttribute('aria-pressed'), 'true');
-  await verifyReplies(page, 'activity-replies-light');
+  await verifyReplies(page, 'activity-replies-light', false);
   await verifyShortQuestion(page, 'activity');
   await verifyEmptyCanvas(page);
   await verifyLayeredCanvas(page, 'activity-hadoop');
