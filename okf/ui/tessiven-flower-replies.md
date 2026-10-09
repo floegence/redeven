@@ -35,6 +35,9 @@ inside their own content region. The composer keeps the canonical rounded input
 surface and its action controls remain inside the window at short heights.
 Very short hosts reduce inner spacing while retaining usable controls and a
 scrollable reading region; long drafts yield editor height to their footer.
+Questions fade softly at the lower scroll edge instead of using a divider above
+the action row. End padding keeps the final choice fully readable when scrolled
+to the bottom; the action controls remain outside the fade.
 
 # Actions and continuity
 
