@@ -7,19 +7,22 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync, backup } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 
 const options = new Map();
 for (let index = 2; index < process.argv.length; index += 2) {
   const key = process.argv[index], value = process.argv[index + 1];
-  assert(['--binary', '--output'].includes(key) && value, 'Required: --binary <built Runtime bundle> --output <evidence directory>');
+  assert(['--binary', '--output', '--canvas-library'].includes(key) && value, 'Required: --binary <built Runtime bundle> --output <evidence directory> [--canvas-library <historical SQLite library>]');
   options.set(key, path.resolve(value));
 }
 assert(options.has('--binary') && options.has('--output'), 'Required: --binary <built Runtime bundle> --output <evidence directory>');
 const root = path.resolve(import.meta.dirname, '../../../..');
 const output = options.get('--output');
 const temp = await mkdtemp(path.join(os.tmpdir(), 'redeven-canvas-acceptance-'));
+const state = path.join(temp, 'state');
+const libraryPath = path.join(state, 'local-environment/apps/tessiven/canvases.sqlite');
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), scenarios: [] };
 let runtime, browser, runtimeLog = '', providerCalls = 0;
 const reply = 'The storefront calls Orders API, which reads the Orders database.';
@@ -82,9 +85,10 @@ async function verifyReplies(page, name) {
   const composer = surface.locator('.flower-composer textarea');
   await composer.waitFor();
   assert.equal(await surface.locator('.flower-composer-context-reference').count(), 0, 'Whole canvas context stays implicit');
+  const replyCount = (await replies.innerText()).split(reply).length;
   await composer.fill('Explain the storefront and database relationship.');
   await surface.getByRole('button', { name: 'Send', exact: true }).click();
-  await until(async () => (await replies.innerText()).includes(reply), 'visible streamed Flower reply');
+  await until(async () => (await replies.innerText()).split(reply).length > replyCount, 'new visible streamed Flower reply');
   await until(() => surface.locator('[data-flower-selected-thread-status="success"]').count(), 'canonical Flower completion');
   const title = replies.locator('[data-floe-floating-window-titlebar]');
   assert.equal(Math.round((await title.boundingBox()).height), 43, 'Replies use the approved compact chrome');
@@ -105,16 +109,25 @@ async function verifyReplies(page, name) {
   report.scenarios.push(name);
 }
 
-try {
-  await mkdir(output, { recursive: true });
-  const binary = path.join(temp, 'redeven');
-  await copyFile(options.get('--binary'), binary);
-  // Carry the already staged published plugin bundle. Runtime owns its validation.
-  for (const name of ['redevplugin-runtime', '.redevplugin-release-artifacts-verified.json', 'REDEVPLUGIN_RUNTIME.spdx.json', 'REDEVPLUGIN_THIRD_PARTY_NOTICES.md', 'redevplugin-runtime.provenance.json', 'redevplugin-runtime.sig', 'redevplugin-runtime.pem']) {
-    await copyFile(path.join(path.dirname(options.get('--binary')), name), path.join(temp, name));
+function readLibraryRecords(db) {
+  return {
+    canvases: db.prepare('SELECT id,title,description,latest_version,archived,created_at,updated_at FROM canvases ORDER BY id').all(),
+    versions: db.prepare('SELECT * FROM versions ORDER BY canvas_id,number').all(),
+    requests: db.prepare('SELECT * FROM requests ORDER BY request_id').all(),
+  };
+}
+
+async function stopRuntime() {
+  if (runtime && runtime.exitCode === null && runtime.signalCode === null) {
+    const exited = new Promise(resolve => runtime.once('exit', resolve));
+    runtime.kill('SIGTERM');
+    await exited;
   }
-  const startupFile = path.join(temp, 'startup.json');
-  runtime = spawn(binary, ['run', '--mode', 'local', '--state-root', path.join(temp, 'state'), '--local-ui-bind', '127.0.0.1:0', '--presentation', 'machine', '--startup-report-file', startupFile], {
+}
+
+async function startRuntime(binary, startupFile) {
+  await rm(startupFile, { force: true });
+  runtime = spawn(binary, ['run', '--mode', 'local', '--state-root', state, '--local-ui-bind', '127.0.0.1:0', '--presentation', 'machine', '--startup-report-file', startupFile], {
     cwd: temp, env: { ...process.env, GOWORK: 'off' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   runtime.stdout.on('data', chunk => { runtimeLog += chunk; });
@@ -124,8 +137,51 @@ try {
     catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
   }, 'startup report');
   assert.equal(startup.status, 'ready');
+  report.runtime = { pid: runtime.pid, origin: startup.local_ui_url, state };
+  return startup;
+}
+
+try {
+  await mkdir(output, { recursive: true });
+  const binary = path.join(temp, 'redeven');
+  await copyFile(options.get('--binary'), binary);
+  // Carry the already staged published plugin bundle. Runtime owns its validation.
+  for (const name of ['redevplugin-runtime', '.redevplugin-release-artifacts-verified.json', 'REDEVPLUGIN_RUNTIME.spdx.json', 'REDEVPLUGIN_THIRD_PARTY_NOTICES.md', 'redevplugin-runtime.provenance.json', 'redevplugin-runtime.sig', 'redevplugin-runtime.pem']) {
+    await copyFile(path.join(path.dirname(options.get('--binary')), name), path.join(temp, name));
+  }
+  let originalRecords;
+  if (options.has('--canvas-library')) {
+    const source = new DatabaseSync(options.get('--canvas-library'), { readOnly: true });
+    try {
+      assert.equal(source.prepare('PRAGMA user_version').get().user_version, 1, 'Historical qualification starts from v1');
+      originalRecords = readLibraryRecords(source);
+      await mkdir(path.dirname(libraryPath), { recursive: true });
+      await backup(source, libraryPath);
+    } finally {
+      source.close();
+    }
+  }
+  const startupFile = path.join(temp, 'startup.json');
+  let startup = await startRuntime(binary, startupFile);
+  if (originalRecords) {
+    const verifyMigration = () => {
+      const db = new DatabaseSync(libraryPath, { readOnly: true });
+      try {
+        assert.equal(db.prepare('PRAGMA user_version').get().user_version, 2);
+        assert.deepEqual(readLibraryRecords(db), originalRecords, 'Upgrade preserves all canvas, version, and request records');
+        assert.equal(db.prepare("SELECT COUNT(*) AS count FROM canvases WHERE flower_thread_id <> ''").get().count, 0);
+      } finally {
+        db.close();
+      }
+    };
+    verifyMigration();
+    await stopRuntime();
+    startup = await startRuntime(binary, startupFile);
+    verifyMigration();
+    report.migration = { from: 1, to: 2, canvases: originalRecords.canvases.length, versions: originalRecords.versions.length, requests: originalRecords.requests.length };
+    report.scenarios.push('historical-library-upgrade-and-runtime-restart');
+  }
   const origin = startup.local_ui_url;
-  report.runtime = { pid: runtime.pid, origin, state: path.join(temp, 'state') };
   const initialLayout = await requestJSON(origin, '/_redeven_proxy/api/workbench/layout/snapshot');
   assert.equal(initialLayout.revision, 0);
   await until(async () => {
@@ -166,7 +222,7 @@ try {
   await page.locator('[data-workbench-dock-action="tessiven"]').click();
   const popup = await opened, popupErrors = observe(popup);
   await popup.waitForLoadState('domcontentloaded');
-  await popup.locator('.tessiven-library-card').waitFor();
+  await popup.locator('.tessiven-library-card').first().waitFor();
   assert.equal(new URL(popup.url()).searchParams.get('window'), 'service-canvas');
   assert.equal(await popup.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0, 'Standalone canvas has no Env App shell');
   await verifyReplies(popup, 'standalone-replies-light');
@@ -176,10 +232,21 @@ try {
   const activityBar = page.locator('[data-floe-shell-slot="activity-bar"]');
   await activityBar.waitFor();
   await activityBar.getByRole('button', { name: 'Tessiven service canvas', exact: true }).click();
-  await page.locator('.tessiven-library-card').waitFor();
+  await page.locator('.tessiven-library-card').first().waitFor();
   assert.ok(await activityBar.isVisible(), 'Activity keeps its navigation rail');
   assert.equal(await activityBar.getByRole('button', { name: 'Tessiven service canvas', exact: true }).getAttribute('aria-pressed'), 'true');
   await verifyReplies(page, 'activity-replies-light');
+  if (originalRecords) {
+    const surface = page.locator('.tessiven');
+    for (const canvas of originalRecords.canvases.filter(canvas => !canvas.archived)) {
+      await surface.getByRole('button', { name: 'Canvases', exact: true }).click();
+      await surface.getByRole('button', { name: canvas.title, exact: true }).click();
+      await surface.locator('.tessiven-node').first().waitFor();
+      assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0, 'Migrated canvas renders without an error');
+      await page.screenshot({ path: path.join(output, `migrated-canvas-${canvas.id}.png`), animations: 'disabled' });
+    }
+    report.scenarios.push('all-migrated-active-canvases-render');
+  }
   assert.deepEqual(errors, [], 'Full Env App has no uncaught or layout-load errors');
   assert.deepEqual(popupErrors, [], 'Standalone canvas has no uncaught errors');
   assert.ok(providerCalls >= 2, 'Both surfaces completed real Flower turns');
@@ -196,11 +263,7 @@ try {
 } finally {
   await browser?.close();
   if (provider.listening) await new Promise(resolve => provider.close(resolve));
-  if (runtime && runtime.exitCode === null && runtime.signalCode === null) {
-    const exited = new Promise(resolve => runtime.once('exit', resolve));
-    runtime.kill('SIGTERM');
-    await exited;
-  }
+  await stopRuntime();
   await writeFile(path.join(output, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
   await rm(temp, { recursive: true, force: true });
 }

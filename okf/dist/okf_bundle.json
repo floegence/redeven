@@ -25,7 +25,7 @@
               "tessiven"
             ],
             "summary": "Tessiven is the Runtime-owned library of immutable service canvases. Each\ncanvas stores a complete `redeven.io/tessiven/v1` YAML document and every save\ncreates a new version. The Runtime is the single owner of canvas data; the\nDesktop Welcome surface and the local Env App render that same library. A\nfailed validation or version conflict leaves the last saved document intact.",
-            "section_count": 2
+            "section_count": 3
           },
           {
             "concept_id": "architecture.native-runtime-bridge",
@@ -18963,7 +18963,7 @@
         "persistence",
         "tessiven"
       ],
-      "timestamp": "2026-10-06T00:00:00Z",
+      "timestamp": "2026-10-08T00:00:00Z",
       "frontmatter": {
         "description": "Store immutable service canvases in one Runtime-owned library.",
         "tags": [
@@ -18971,11 +18971,11 @@
           "persistence",
           "tessiven"
         ],
-        "timestamp": "2026-10-06T00:00:00Z",
+        "timestamp": "2026-10-08T00:00:00Z",
         "title": "Tessiven canvas contract",
         "type": "Architecture Contract"
       },
-      "body_length": 3418,
+      "body_length": 4425,
       "summary": "Tessiven is the Runtime-owned library of immutable service canvases. Each\ncanvas stores a complete `redeven.io/tessiven/v1` YAML document and every save\ncreates a new version. The Runtime is the single owner of canvas data; the\nDesktop Welcome surface and the local Env App render that same library. A\nfailed validation or version conflict leaves the last saved document intact.",
       "sections": [
         {
@@ -18984,6 +18984,13 @@
           "level": 1,
           "body": "- A canvas document contains stable IDs for Runtime nodes, visual groups,\n  business services, instances, external resources, relations, and evidence.\n- Groups are visual membership only. Instance bindings and Runtime references\n  are data references and do not grant permission or create a connection. A\n  descriptive or unavailable Runtime remains unbound and may only carry an\n  explicit `unknown` or `unavailable` observation.\n- A physical node may belong to multiple logical groups while retaining one\n  stable node ID and one inventory of instances. Optional group `instanceRefs`\n  identifies exact project or cluster membership; every referenced instance\n  must run on a node in that group's `nodeRefs`. Omitting `instanceRefs` retains\n  membership of all instances on those nodes. Rendering replicas never become\n  persistent nodes, execution targets, or independent management identities.\n- Relations require evidence and may form cycles. Missing observations remain\n  explicitly unknown.\n- The schema accepts data and presentation hints only. It does not accept\n  executable scripts, credentials, arbitrary styles, or management commands.\n  Position coordinates express preferred placement, not fixed geometry. Their\n  schema describes automatic layout as the default; collision resolution belongs\n  to the published renderer under the [canvas UI contract](../ui/tessiven-canvas.md).\n  Validation and save success confirm valid persisted data, not visual acceptance.\n- Saves use an expected latest version and an idempotent request ID. Flower\n  content changes produce complete new versions; history is immutable.\n- A fresh empty library receives one fictional example before accepting\n  requests. Archived canvases count as existing data, so archiving the example\n  does not recreate it on restart. Existing user canvases remain intact.\n- UI creation accepts only a request ID and title, and saves an empty first\n  version. Network retries return the same canvas. User-authored document\n  mutations use the authorized Flower tools, not manual HTTP write routes.\n- Historical and archived versions are readable but cannot mutate resources.",
           "char_count": 2149
+        },
+        {
+          "id": "storage-upgrades",
+          "title": "Storage Upgrades",
+          "level": 1,
+          "body": "The `tessiven_canvas_library` SQLite lineage starts at schema v1. Schema v2\nadds an initially empty `flower_thread_id` to each canvas. Runtime startup\nvalidates the exact historical shape for its recorded version before opening a\nwritable connection, then automatically migrates v1 to v2 before accepting\nrequests. Source and target verification, the column addition, schema version,\nand migration metadata commit in one transaction. Canvas identities, archive\nstate, immutable YAML versions, and idempotent request results remain intact.\n\nMigration or verification failure rolls back to the supported source database.\nUnknown kinds, future versions, and schema drift fail read-only; they must never\ntrigger a reset or manual data deletion. Schema errors identify the rejected\nobject and expected version. A fresh v2 library and an upgraded v1 library must\nboth reopen successfully.",
+          "char_count": 882
         },
         {
           "id": "boundaries",
@@ -18998,6 +19005,11 @@
           "id": "internal/tessiven/document_test.go:0:shared-node membership validation and yaml round-trip.",
           "source": "internal/tessiven/document_test.go",
           "description": "Shared-node membership validation and YAML round-trip."
+        },
+        {
+          "id": "internal/tessiven/schema_test.go:0:historical upgrade, restart, rollback, and read-only rejection.",
+          "source": "internal/tessiven/schema_test.go",
+          "description": "Historical upgrade, restart, rollback, and read-only rejection."
         }
       ],
       "snippet": "Tessiven is the Runtime-owned library of immutable service canvases. Each canvas stores a complete `redeven.io/tessiven/v1` YAML document and every save creates a new version. The Runtime is the single owner of canvas data; the",
@@ -35301,5 +35313,5 @@
       ]
     }
   ],
-  "source_sha256": "b7404ab6ee5af96d25f666e87308f5f3af43fd85e435f15a120a0f3af9cdbc89"
+  "source_sha256": "0b5583d9b4ef89d7b0f08270dbbe9102eda9ce40d15bc0111d9255a8b4dffb92"
 }

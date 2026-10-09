@@ -11,6 +11,8 @@ import (
 const schemaKind = "tessiven_canvas_library"
 const schemaVersion = 2
 
+const canvasSchemaV1 = `CREATE TABLE canvases (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, latest_version INTEGER NOT NULL CHECK(latest_version > 0), archived INTEGER NOT NULL CHECK(archived IN (0,1)), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`
+
 var schemaStatements = []string{
 	`CREATE TABLE canvases (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, latest_version INTEGER NOT NULL CHECK(latest_version > 0), archived INTEGER NOT NULL CHECK(archived IN (0,1)), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, flower_thread_id TEXT NOT NULL DEFAULT '')`,
 	`CREATE TABLE versions (canvas_id TEXT NOT NULL REFERENCES canvases(id), number INTEGER NOT NULL CHECK(number > 0), document_yaml TEXT NOT NULL, digest TEXT NOT NULL, created_at INTEGER NOT NULL, source TEXT NOT NULL, summary TEXT NOT NULL, PRIMARY KEY(canvas_id,number))`,
@@ -23,8 +25,13 @@ func schemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{Kind: schemaKind, CurrentVersion: schemaVersion, MinimumVersion: 1, Pragmas: []string{"PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON", "PRAGMA busy_timeout=3000"}, ValidateExisting: validateExistingSchema, Initialize: initializeSchema, Migrations: []sqliteutil.Migration{{FromVersion: 1, ToVersion: 2, Apply: migrateToV2}}, Verify: verifySchema}
 }
 func migrateToV2(tx *sql.Tx) error {
-	_, err := tx.Exec(`ALTER TABLE canvases ADD COLUMN flower_thread_id TEXT NOT NULL DEFAULT ''`)
-	return err
+	if err := verifySchemaVersion(tx, 1); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE canvases ADD COLUMN flower_thread_id TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	return verifySchemaVersion(tx, 2)
 }
 func initializeSchema(tx *sql.Tx) error {
 	for _, statement := range schemaStatements {
@@ -52,27 +59,34 @@ func validateExistingSchema(tx *sql.Tx) error {
 	if version < 1 {
 		return &sqliteutil.DatabaseTooOldError{Kind: schemaKind, Version: version, MinimumVersion: 1}
 	}
-	return verifySchema(tx)
+	return verifySchemaVersion(tx, version)
 }
 func verifySchema(tx *sql.Tx) error {
+	return verifySchemaVersion(tx, schemaVersion)
+}
+func verifySchemaVersion(tx *sql.Tx, version int) error {
 	expected := map[string]bool{}
-	for _, statement := range schemaStatements {
+	for index, statement := range schemaStatements {
+		if index == 0 && version == 1 {
+			statement = canvasSchemaV1
+		}
 		expected[strings.Join(strings.Fields(statement), " ")] = true
 	}
-	rows, err := tx.Query(`SELECT sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__redeven_db_meta' ORDER BY name`)
+	rows, err := tx.Query(`SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__redeven_db_meta' ORDER BY name`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var statement string
-		if err = rows.Scan(&statement); err != nil {
+		var objectType, name string
+		var statement sql.NullString
+		if err = rows.Scan(&objectType, &name, &statement); err != nil {
 			rows.Close()
 			return err
 		}
-		key := strings.Join(strings.Fields(statement), " ")
+		key := strings.Join(strings.Fields(statement.String), " ")
 		if !expected[key] {
 			rows.Close()
-			return fmt.Errorf("unsupported Tessiven schema object")
+			return fmt.Errorf("unsupported Tessiven v%d schema object: %s %q", version, objectType, name)
 		}
 		delete(expected, key)
 	}
@@ -82,7 +96,7 @@ func verifySchema(tx *sql.Tx) error {
 		return err
 	}
 	if len(expected) != 0 {
-		return fmt.Errorf("missing Tessiven schema objects")
+		return fmt.Errorf("missing Tessiven v%d schema objects", version)
 	}
 	var integrity string
 	if err = tx.QueryRow(`PRAGMA quick_check`).Scan(&integrity); err != nil {

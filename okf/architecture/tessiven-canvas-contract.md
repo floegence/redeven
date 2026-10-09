@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Tessiven canvas contract
 description: Store immutable service canvases in one Runtime-owned library.
 tags: [architecture, tessiven, persistence]
-timestamp: 2026-10-06T00:00:00Z
+timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
@@ -45,6 +45,22 @@ failed validation or version conflict leaves the last saved document intact.
   mutations use the authorized Flower tools, not manual HTTP write routes.
 - Historical and archived versions are readable but cannot mutate resources.
 
+# Storage Upgrades
+
+The `tessiven_canvas_library` SQLite lineage starts at schema v1. Schema v2
+adds an initially empty `flower_thread_id` to each canvas. Runtime startup
+validates the exact historical shape for its recorded version before opening a
+writable connection, then automatically migrates v1 to v2 before accepting
+requests. Source and target verification, the column addition, schema version,
+and migration metadata commit in one transaction. Canvas identities, archive
+state, immutable YAML versions, and idempotent request results remain intact.
+
+Migration or verification failure rolls back to the supported source database.
+Unknown kinds, future versions, and schema drift fail read-only; they must never
+trigger a reset or manual data deletion. Schema errors identify the rejected
+object and expected version. A fresh v2 library and an upgraded v1 library must
+both reopen successfully.
+
 # Boundaries
 
 The local Runtime owns the SQLite canvas library and immutable version
@@ -62,5 +78,6 @@ background, or synchronize libraries between devices.
 - `internal/tessiven/document_test.go` - Shared-node membership validation and YAML round-trip.
 - `internal/tessiven/store.go`
 - `internal/tessiven/store_test.go`
+- `internal/tessiven/schema_test.go` - Historical upgrade, restart, rollback, and read-only rejection.
 - `internal/tessiven/onboarding_test.go`
 - `internal/codeapp/appserver/tessiven_test.go`
