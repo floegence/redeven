@@ -50,6 +50,12 @@ const npmLicenseOverrides = new Map([
 
 const npmCoordinateLicenseOverrides = new Map([
   ['elkjs@0.12.0', { license: 'EPL-2.0 OR GPL-3.0-or-later', note: 'Redeven selects EPL-2.0 for the unmodified ELK layout engine; the verified license and exact source reference are reproduced below.' }],
+  ['libavoid-js@0.5.0-beta.5', { license: 'LGPL-2.1-or-later', note: 'Reviewed as an unmodified, independently replaceable WASM library; exact artifacts, corresponding source, and license are verified below.' }],
+  ...['android-arm64', 'darwin-arm64', 'darwin-x64', 'linux-arm-gnueabihf', 'linux-arm64-gnu', 'linux-arm64-musl', 'linux-riscv64-gnu', 'linux-x64-gnu', 'linux-x64-musl', 'win32-arm64-msvc', 'win32-x64-msvc'].map(platform => [
+    `@napi-rs/canvas-${platform}@1.0.9`,
+    { license: 'MIT', note: 'License audited from the exact registry package manifest.' },
+  ]),
+  ['@napi-rs/canvas@1.0.9', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['cytoscape@3.34.3', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['dayjs@1.11.23', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['es-module-lexer@2.3.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
@@ -738,10 +744,12 @@ function policyViolations(entries) {
     }
     const reviewedELKChoice = entry.name === 'elkjs' && entry.version === '0.12.0'
       && license === 'EPL-2.0 OR GPL-3.0-or-later';
-    if (/\bGPL\b|GPL-\d/iu.test(license) && !/\b(MIT|Apache-2\.0|MPL-2\.0|BSD|ISC)\b/iu.test(license) && !reviewedELKChoice) {
+    const reviewedLibavoid = entry.name === 'libavoid-js' && entry.version === '0.5.0-beta.5'
+      && license === 'LGPL-2.1-or-later';
+    if (/\bGPL\b|GPL-\d/iu.test(license) && !/\b(MIT|Apache-2\.0|MPL-2\.0|BSD|ISC)\b/iu.test(license) && !reviewedELKChoice && !reviewedLibavoid) {
       violations.push(`${entry.name}@${entry.version}: GPL-only style license ${license}`);
     }
-    if (/\bLGPL\b|LGPL-\d/iu.test(license)) {
+    if (/\bLGPL\b|LGPL-\d/iu.test(license) && !reviewedLibavoid) {
       violations.push(`${entry.name}@${entry.version}: LGPL license requires explicit review (${license})`);
     }
   }
@@ -899,6 +907,46 @@ ${license.toString('utf8').trim()}
 \`\`\``;
 }
 
+function renderLibavoidNotices() {
+  const coreRoot = fs.realpathSync(path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core'));
+  const core = JSON.parse(fs.readFileSync(path.join(coreRoot, 'package.json'), 'utf8'));
+  if (core.dependencies?.['libavoid-js'] !== '0.5.0-beta.5') throw new Error('Review the new graph routing library version and distribution contract.');
+  const files = {
+    'dist/libavoid.wasm': '65deb7172894049eb554cf6e02c520274ac117a1992d3d16a3f346c09ceb41e5',
+    'dist/licenses/libavoid.txt': '6da7ddf40cfea6f568961825b14478e879875f6ad033fad57889ae5bd52103f4',
+    'dist/licenses/libavoid-sources.tar.gz': 'ddf37dd4dad24cb8e7899537ec3ec048b72bcc909bf89efef4e38e6df14b4bf8',
+  };
+  for (const [file, expected] of Object.entries(files)) {
+    const bytes = fs.readFileSync(path.join(coreRoot, file));
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== expected) throw new Error(`Graph routing distribution artifact changed: ${file}`);
+  }
+  const license = fs.readFileSync(path.join(coreRoot, 'dist/licenses/libavoid.txt'), 'utf8');
+  return `## libavoid Orthogonal Router
+
+Floe supplies \`libavoid-js@0.5.0-beta.5\` under LGPL-2.1-or-later. The unmodified
+libavoid WASM is loaded as a separate asset and may be replaced with an
+API-compatible build. Redeven permits modification and reverse engineering
+for debugging modifications to this covered library. This license covers
+libavoid and its JavaScript bindings; Redeven remains separately licensed.
+Copyright belongs to Monash University and the other libavoid contributors;
+libavoid-js is maintained by Vladyslav Hnatiuk.
+
+Corresponding source, build scripts, and license are included at
+\`dist/licenses/libavoid-sources.tar.gz\` in the exact published Floe package:
+https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-${core.version}.tgz
+The source revisions are
+https://github.com/Aksem/libavoid-js/tree/5062a42fbd82fff562afeebcbb7b1ed45eed8e75
+and https://github.com/Aksem/adaptagrams/tree/0ab3467b4ed3523bb3e404a0dd7da7647d9eb13d.
+Extract the source archive, enter \`libavoid-js\`, run
+\`python3 tools/generate.py\` with Docker available, then \`npm install\` and
+\`npm run build\`. Preserve this notice, the license, independent replacement,
+and access to the corresponding source when redistributing the library.
+
+\`\`\`text
+${license.trim()}
+\`\`\``;
+}
+
 function renderBrowserMediaNotices() {
   const root = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floebrowser');
   const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -1048,6 +1096,8 @@ Flower's headless Chromium browser is installed separately, only after user conf
 ${renderBrowserMediaNotices()}
 
 ${renderELKNotices()}
+
+${renderLibavoidNotices()}
 
 ## License Policy Guard
 

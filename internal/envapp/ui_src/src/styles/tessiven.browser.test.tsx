@@ -5,7 +5,7 @@ import { createSignal } from 'solid-js';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { page } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TessivenGraph } from '../../../../tessiven_ui/src/TessivenGraph';
+import { TessivenGraph, type GraphBrowseState } from '../../../../tessiven_ui/src/TessivenGraph';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Version } from '../../../../tessiven_ui/src/types';
 import hadoopDocument from './fixtures/tessiven-hadoop.json';
@@ -125,7 +125,7 @@ function contrast(foreground: string, background: string) {
 }
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
-function mount(count = 2, version = fixture(count)) {
+function mount(count = 2, version = fixture(count), browseState?: GraphBrowseState) {
   host = document.createElement('div');
   host.style.cssText = 'width:1250px;height:740px;position:relative';
   host.className = 'tessiven';
@@ -142,11 +142,37 @@ function mount(count = 2, version = fixture(count)) {
         onAsk={ask}
         onInspect={inspect}
         visible={visible()}
+        browseState={browseState}
       />
     ),
     host,
   );
   return { ask, inspect, setVisible };
+}
+
+function routeMetrics() {
+  const paths = [...host.querySelectorAll<SVGPathElement>('.floe-graph__edge')].map(edge => {
+    const numbers = edge.getAttribute('d')!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    return Array.from({ length: numbers.length / 2 }, (_, i) => ({ x: numbers[i * 2], y: numbers[i * 2 + 1] }));
+  });
+  const segments = paths.flatMap((path, edge) => path.slice(1).map((b, i) => ({ a: path[i], b, edge })));
+  const length = segments.reduce((sum, s) => sum + Math.abs(s.a.x - s.b.x) + Math.abs(s.a.y - s.b.y), 0);
+  let sharedLength = 0, crossings = 0;
+  for (const [index, s] of segments.entries()) for (const t of segments.slice(index + 1)) {
+    if (s.edge === t.edge) continue;
+    const horizontal = s.a.y === s.b.y, otherHorizontal = t.a.y === t.b.y;
+    if (horizontal === otherHorizontal) {
+      const fixed = horizontal ? 'y' : 'x', axis = horizontal ? 'x' : 'y';
+      if (Math.abs(s.a[fixed] - t.a[fixed]) < 0.01)
+        sharedLength += Math.max(0, Math.min(Math.max(s.a[axis], s.b[axis]), Math.max(t.a[axis], t.b[axis]))
+          - Math.max(Math.min(s.a[axis], s.b[axis]), Math.min(t.a[axis], t.b[axis])));
+    } else {
+      const h = horizontal ? s : t, v = horizontal ? t : s;
+      if (v.a.x > Math.min(h.a.x, h.b.x) && v.a.x < Math.max(h.a.x, h.b.x)
+        && h.a.y > Math.min(v.a.y, v.b.y) && h.a.y < Math.max(v.a.y, v.b.y)) crossings++;
+    }
+  }
+  return { paths, segments, length, sharedLength, crossings };
 }
 beforeEach(async () => {
   await page.viewport(1300, 800);
@@ -170,9 +196,25 @@ describe('Tessiven real graph interactions', () => {
     expect(host.querySelector('[role="alert"]')).toBeNull();
     const projected = projectCanvas(version.document, new Set(version.document.presentation?.initiallyExpanded), {});
     expect([...projected.relations.values()].flat()).toHaveLength(40);
+    await page.getByRole('button', { name: 'Fit canvas', exact: true }).hover();
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
       .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+    const metrics = routeMetrics();
+    // The unchanged user fixture previously had 26,020px of routes, 11,043.5px
+    // of shared segments, and 32 crossings at these saved positions.
+    expect(metrics.sharedLength, JSON.stringify({ length: metrics.length, sharedLength: metrics.sharedLength, crossings: metrics.crossings })).toBeLessThan(1_100);
+    expect(metrics.length).toBeLessThan(14_000);
+    expect(metrics.crossings, JSON.stringify({ length: metrics.length, sharedLength: metrics.sharedLength, crossings: metrics.crossings })).toBeLessThanOrEqual(16);
+    for (const segment of metrics.segments)
+      expect(segment.a.x === segment.b.x || segment.a.y === segment.b.y).toBe(true);
     const cards = [...host.querySelectorAll<HTMLElement>('.floe-graph__node')];
+    for (const card of cards) {
+      const left = Number.parseFloat(card.style.left), top = Number.parseFloat(card.style.top);
+      const right = left + Number.parseFloat(card.style.width), bottom = top + Number.parseFloat(card.style.height);
+      for (const { a, b } of metrics.segments)
+        expect(Math.max(a.x, b.x) <= left + 0.001 || Math.min(a.x, b.x) >= right - 0.001
+          || Math.max(a.y, b.y) <= top + 0.001 || Math.min(a.y, b.y) >= bottom - 0.001).toBe(true);
+    }
     for (const [index, card] of cards.entries()) {
       const a = card.getBoundingClientRect();
       for (const other of cards.slice(index + 1)) {
@@ -185,6 +227,30 @@ describe('Tessiven real graph interactions', () => {
       for (const [name, value] of Object.entries(theme.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
       await page.screenshot({ path: `../../.vitest-attachments/redeven-hadoop-${theme.name}.png` });
     }
+  });
+  it('keeps nearby border connections readable at inspection scale and narrow widths', async () => {
+    await page.viewport(1600, 1000);
+    const version: Version = { ...fixture(), document: hadoopDocument as Version['document'] };
+    mount(10, version, { expanded: version.document.presentation!.initiallyExpanded!, selectedNodes: {},
+      viewport: { x: 520, y: 420, scale: 0.65 } });
+    host.style.width = '1540px';
+    host.style.height = '920px';
+    await expect.poll(() => host.querySelectorAll('.floe-graph__edge').length).toBe(27);
+    for (const theme of builtInShellThemePresets.filter(theme => ['porcelain-light', 'porcelain-dark'].includes(theme.name))) {
+      document.documentElement.classList.toggle('dark', theme.mode === 'dark');
+      for (const [name, value] of Object.entries(theme.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
+      await page.screenshot({ path: `../../.vitest-attachments/redeven-hadoop-routing-detail-${theme.name}.png` });
+    }
+    await page.getByRole('group', { name: 'HDFS 元数据与 YARN 调度主控层', exact: true }).hover({ position: { x: 20, y: 20 } });
+    expect(host.querySelectorAll('.floe-graph__edge').length).toBeLessThan(27);
+    expect(host.querySelectorAll('.floe-graph__edge').length).toBeGreaterThan(0);
+    await page.screenshot({ path: '../../.vitest-attachments/redeven-hadoop-routing-hover.png' });
+    await page.viewport(430, 740);
+    host.style.width = '390px';
+    host.style.height = '670px';
+    await page.getByRole('button', { name: 'Fit canvas' }).click();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    await page.screenshot({ path: '../../.vitest-attachments/redeven-hadoop-routing-narrow.png' });
   });
   it('renders collapsed Hadoop groups without applying hidden members coordinate hints', async () => {
     const document = structuredClone(hadoopDocument) as Version['document'];
