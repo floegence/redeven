@@ -1358,6 +1358,12 @@
 }
 .tessiven-flower-chat .flower-composer textarea { flex: 0 1 auto; }
 .tessiven-flower-chat .flower-composer-footer { flex: 0 0 auto; }
+.tessiven-flower-chat .flower-input-request-actions { border-top: 0; }
+.tessiven-flower-chat .flower-input-request-questions {
+  /* End padding lets the last choice scroll beyond the fading edge. */
+  padding-bottom: 16px;
+  mask-image: linear-gradient(to bottom, black calc(100% - min(16px, 25%)), transparent);
+}
 @container (max-height: 179px) {
   .tessiven-flower-chat .flower-chat-bottom-dock { padding: 0 8px 8px; }
   .tessiven-flower-chat .flower-chat-bottom-dock .flower-composer[data-flower-bottom-mode] { padding: 6px; gap: 4px; }

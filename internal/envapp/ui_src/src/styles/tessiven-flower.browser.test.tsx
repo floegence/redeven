@@ -107,6 +107,8 @@ it('keeps long questions scrollable with all reply controls inside a short canva
   const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
   const content = output.querySelector<HTMLElement>('[data-floe-floating-window-content]')!;
   const questions = output.querySelector<HTMLElement>('.flower-input-request-questions')!;
+  expect(getComputedStyle(output.querySelector('.flower-input-request-actions')!).borderTopWidth).toBe('0px');
+  expect(getComputedStyle(questions).maskImage).toContain('linear-gradient');
   for (const preset of builtInShellThemePresets) {
     document.documentElement.classList.toggle('dark', preset.mode === 'dark');
     for (const [token, value] of Object.entries(preset.semanticTokens ?? {}))
@@ -127,6 +129,8 @@ it('keeps long questions scrollable with all reply controls inside a short canva
       await page.screenshot({ path: `__screenshots__/tessiven-short-question-${preset.name}-${width}-${height}.png` });
       questions.scrollTop = questions.scrollHeight;
       await expect.poll(() => questions.scrollTop).toBeGreaterThan(0);
+      const lastChoice = questions.querySelector<HTMLElement>('.flower-input-request-choice-custom')!;
+      expect(lastChoice.getBoundingClientRect().bottom).toBeLessThanOrEqual(questions.getBoundingClientRect().bottom - 15);
     }
   }
   await page.getByText('Map it to a real environment', { exact: true }).click();

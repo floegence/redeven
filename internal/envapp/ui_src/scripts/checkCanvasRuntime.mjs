@@ -145,6 +145,8 @@ async function verifyShortQuestion(page, name) {
       const content = window.querySelector('[data-floe-floating-window-content]').getBoundingClientRect();
       const composer = window.querySelector('.flower-composer');
       const scroll = window.querySelector('.flower-input-request-questions');
+      const actions = window.querySelector('.flower-input-request-actions');
+      const view = window.ownerDocument.defaultView;
       const buttons = [...window.querySelectorAll('.flower-input-request-actions button')].map(button => {
         const rect = button.getBoundingClientRect();
         return { bottom: rect.bottom, right: rect.right, top: rect.top };
@@ -152,10 +154,13 @@ async function verifyShortQuestion(page, name) {
       scroll.scrollTop = scroll.scrollHeight;
       return { bottom: content.bottom, right: content.right, top: content.top, buttons,
         border: window.ownerDocument.defaultView.getComputedStyle(composer).borderTopWidth, radius: parseFloat(window.ownerDocument.defaultView.getComputedStyle(composer).borderRadius),
+        actionBorder: view.getComputedStyle(actions).borderTopWidth, mask: view.getComputedStyle(scroll).maskImage,
         scrollHeight: scroll.scrollHeight, clientHeight: scroll.clientHeight, scrollTop: scroll.scrollTop };
     });
     assert.equal(geometry.border, '1px');
     assert.ok(geometry.radius >= 8);
+    assert.equal(geometry.actionBorder, '0px');
+    assert.ok(geometry.mask.includes('linear-gradient'));
     report.question_geometry.push({ name, width, height, ...geometry });
     assert.ok(geometry.clientHeight >= 24 && geometry.scrollHeight > geometry.clientHeight && geometry.scrollTop > 0, 'All question choices remain reachable by internal scrolling');
     for (const button of geometry.buttons) assert.ok(button.bottom <= geometry.bottom - 8 && button.right <= geometry.right - 8 && button.top >= geometry.top, 'Question controls stay inside the short window');
