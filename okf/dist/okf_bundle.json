@@ -34330,7 +34330,7 @@
         "title": "Tessiven canvas",
         "type": "UI Contract"
       },
-      "body_length": 16277,
+      "body_length": 17622,
       "summary": "Tessiven presents one progressively detailed canvas for understanding where\nbusiness services run. Solid Runtime node cards sit inside tinted dashed visual\ngroups; external dependencies use a separate card treatment. Edges are muted\nuntil a related group or object is focused. Wheel zoom and drag pan belong to\nthe canvas, while object details and the read-only document remain normal selectable\ntext. Flower is the editing surface; the canvas has no manual content editor.",
       "sections": [
         {
@@ -34344,8 +34344,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The released Floe graph component owns pan, zoom, routing, layout, focus, and\nfloating-layer mechanics. Redeven owns the Tessiven projection and business\ndata. The graph renders the [saved version document](../architecture/tessiven-canvas-contract.md)\nwithout introducing independent topology state. Selecting a node, group, or\nhistorical version cannot change its management permissions. Ask Flower focuses\nthe canvas composer and never sends a message automatically.",
-          "char_count": 468
+          "body": "The iOS host bundles the shared TessivenGraph and the published Floe graph engine\nas fixed application resources. `buildNativeServiceCanvas.mjs` exports the browser\nSolid entry, the unchanged ELK worker in a local Blob, libavoid WebAssembly,\ndependency licenses and corresponding source, plus a hash manifest tied to the\nRedeven source commit. The local CSP permits the published Emscripten function\nconstructors; scripts, layout assets and worker code remain bundled, with no\nremote script or frame source. This is WebKit document execution, not native\ncode download or a native JIT.\n\nThe host supplies saved-version data and theme through one update function.\nThe data-only bridge reports loading, rendered, failure, or an immutable object\nselection; iOS validates the canvas, version and referenced objects before\nopening native details or Flower. Library, history, document export and API\nauthorization remain native-owned. No credential or session transport is\nexposed to the renderer. Two-finger zoom suppresses single-pointer viewport\nupdates until all fingers leave; ordinary pan retains the published graph\ninteraction. Native rendering has bounded loading and explicit retry, and never\nfalls back to a second layout engine.\n\nThe released Floe graph component owns pan, zoom, routing, layout, focus, and\nfloating-layer mechanics. Redeven owns the Tessiven projection and business\ndata. The graph renders the [saved version document](../architecture/tessiven-canvas-contract.md)\nwithout introducing independent topology state. Selecting a node, group, or\nhistorical version cannot change its management permissions. Ask Flower focuses\nthe canvas composer and never sends a message automatically.",
+          "char_count": 1703
         }
       ],
       "evidence": [
@@ -35497,5 +35497,5 @@
       ]
     }
   ],
-  "source_sha256": "41d26c5645878a81121cd6cf1f6e0fb752d86b4a602d782b432ae8a58aa98d48"
+  "source_sha256": "24d2afaaa99437f703fa916821ff41c5641310347b5006d616be681ec37b6717"
 }
