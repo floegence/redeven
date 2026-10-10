@@ -2,6 +2,7 @@ import { flowerExtensionsAdapter } from '../../../../../flower_ui/host/extension
 import { computerManagementAdapter } from '../../../../../flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../../flower_ui/host/computerFramePath';
 import { messageFilePath } from '../../../../../flower_ui/host/messageFilePath';
+import { messageAttachmentPath } from '../../../../../flower_ui/host/messageAttachmentPath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../../flower_ui/src/computerViewer';
 import type { FlowerComputerFrameSource } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
@@ -285,6 +286,22 @@ async function loadEnvStagedAttachmentPreview(
     || contentType === 'text/plain'
     || contentType === 'text/plain; charset=utf-8';
   if (!safeType) throw new Error('Flower returned an unsupported attachment preview content type.');
+  return response.blob();
+}
+
+async function loadEnvMessageAttachment(url: string, signal: AbortSignal): Promise<Blob> {
+  const response = await fetch(messageAttachmentPath(url), await prepareLocalApiRequestInit({
+    method: 'GET',
+    signal,
+    headers: { Accept: 'text/plain, image/png, image/jpeg, image/gif, image/webp, application/pdf' },
+  }));
+  if (!response.ok) {
+    throw new LocalApiError({
+      message: `Attachment preview failed with HTTP ${response.status}.`,
+      status: response.status,
+      code: 'ATTACHMENT_PREVIEW_FAILED',
+    });
+  }
   return response.blob();
 }
 
@@ -685,6 +702,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
     loadComputerFrame: loadEnvComputerFrame,
+    loadMessageAttachment: ({ url, signal }) => loadEnvMessageAttachment(url, signal),
     loadMessageFile: async ({ path, signal }) => {
       const response = await fetch(messageFilePath(path), await prepareLocalApiRequestInit({ method: 'GET', signal }));
       if (!response.ok) throw new Error('File preview is unavailable.');

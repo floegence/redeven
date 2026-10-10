@@ -126,7 +126,9 @@ export function requestRuntimeFlowerHTTP(
         } : {}),
       },
     }, (response) => {
-      void readRuntimeFlowerHTTPResponse(response, url.pathname === '/_redeven_proxy/api/fs/file' ? 64 << 20 : Infinity).then(resolve, reject);
+      const maxBytes = url.pathname === '/_redeven_proxy/api/fs/file' ? 64 << 20
+        : /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(url.pathname) ? 10 << 20 : Infinity;
+      void readRuntimeFlowerHTTPResponse(response, maxBytes).then(resolve, reject);
     });
     req.on('timeout', () => {
       const error = new Error('Flower runtime request timed out.');

@@ -3008,6 +3008,11 @@
   background: var(--flower-chat-surface-elevated);
 }
 
+.flower-message-image[data-loading='true'] {
+  background: var(--flower-chat-surface-elevated);
+  cursor: default;
+}
+
 .flower-message-file {
   display: flex;
   width: min(24rem, 100%);

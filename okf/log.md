@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-10: Authenticated message attachment previews
+
+- Route historical and queued [attachment previews](ui/flower-composer-attachments.md)
+  through host access preparation and scoped Desktop Runtime IPC.
+- Keep preview failures independent of model capabilities, and preserve lazy
+  image loading with cancellation and Blob URL cleanup.
+
 ## 2026-10-10: Unified Go toolchain and cleanup
 
 - Use Go 1.27.2 in both upstream and downstream module builds, CI, and maintained instructions.
