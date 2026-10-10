@@ -1,7 +1,8 @@
-import { Show, createSignal } from 'solid-js';
+import { Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { Plus, Minus, Maximize } from '@floegence/floe-webapp-core/icons';
-import { TessivenGraph, type TessivenViewportControl, type GraphBrowseState } from '../TessivenGraph';
+import { TessivenGraph, type TessivenViewportControl, type GraphBrowseState, type TessivenViewOptions } from '../TessivenGraph';
+import { attachTouchViewport } from './touchViewport';
 import type { Version, Selection } from '../types';
 import enUS from '../locales/en-US.json';
 import '../tessiven.css';
@@ -10,7 +11,10 @@ import '../../native/native.css';
 declare global {
   interface Window {
     webkit?: { messageHandlers?: { canvas?: { postMessage: (message: unknown) => void } } };
-    serviceCanvas?: { update: (input: { version: Version; historical: boolean; dark: boolean; contrast: boolean }) => void };
+    serviceCanvas?: {
+      update: (input: { version: Version; historical: boolean; dark: boolean; contrast: boolean }) => void;
+      command: (input: { canvas_id: string; version_id: number; action: 'expand' | 'collapse' | 'all' | 'group' }) => void;
+    };
   }
 }
 
@@ -27,49 +31,44 @@ function NativeCanvas() {
   const browsing = new Map<string, GraphBrowseState>();
   let control: TessivenViewportControl | undefined;
   const zoom = (factor: number) => control?.zoom(factor, window.innerWidth / 2, window.innerHeight / 2);
-  let pinch: { distance: number; x: number; y: number } | undefined;
-  const touches = (event: TouchEvent) => {
-    const a = event.touches[0], b = event.touches[1];
-    return a && b ? { distance: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 } : undefined;
-  };
-  const start = (event: TouchEvent) => {
-    if (event.touches.length !== 2) return;
-    pinch = touches(event);
-    control?.setTouchZooming(true);
-    event.preventDefault();
-  };
-  const move = (event: TouchEvent) => {
-    const next = touches(event);
-    if (!pinch || !next || !control) return;
-    event.preventDefault();
-    control.zoom(next.distance / Math.max(1, pinch.distance), pinch.x, pinch.y, next.x - pinch.x, next.y - pinch.y);
-    pinch = next;
-  };
-  document.addEventListener('touchstart', start, { passive: false });
-  document.addEventListener('touchmove', move, { passive: false });
-  const end = (event: TouchEvent) => {
-    if (event.touches.length < 2) pinch = undefined;
-    if (event.touches.length === 0) control?.setTouchZooming(false);
-  };
-  document.addEventListener('touchend', end);
-  document.addEventListener('touchcancel', end);
+  let host: HTMLElement | undefined;
+  let touch: ReturnType<typeof attachTouchViewport> | undefined;
+  onMount(() => {
+    if (host) {
+      touch = attachTouchViewport(host, () => control);
+      onCleanup(touch.dispose);
+    }
+  });
+  const viewOptions = (options: TessivenViewOptions) => window.webkit?.messageHandlers?.canvas?.postMessage({
+    type: 'viewOptions', canvas_id: input()?.version.canvas_id, version_id: input()?.version.number, ...options,
+  });
   window.serviceCanvas = {
+    command(value) {
+      const version = input()?.version;
+      if (!control || value.canvas_id !== version?.canvas_id || value.version_id !== version.number) return;
+      switch (value.action) {
+        case 'expand': control.expandAll(); break;
+        case 'collapse': control.collapseAll(); break;
+        case 'all': case 'group': control.setServiceScope(value.action); break;
+      }
+    },
     update(value) {
       document.documentElement.dataset.theme = value.dark ? 'dark' : 'light';
       document.documentElement.classList.toggle('dark', value.dark);
       document.documentElement.classList.toggle('high-contrast', value.contrast);
       const previous = input();
       if (previous?.version.canvas_id !== value.version.canvas_id || previous.version.number !== value.version.number || previous.historical !== value.historical) {
+        touch?.reset();
         setInput({ version: value.version, historical: value.historical });
       }
     },
   };
   notify('ready');
-  return <main class="tessiven"><Show when={input()} keyed>{value => <TessivenGraph
+  return <main class="tessiven" ref={host}><Show when={input()} keyed>{value => <TessivenGraph
     version={value.version} historical={value.historical} t={t} visible={true}
     onAsk={selection => notify('ask', selection)} onDetails={selection => notify('details', selection)}
     onInspect={() => undefined} onViewportControl={value => { control = value; }}
-    tools="groups" onZoomChange={setScale}
+    tools="hidden" onZoomChange={setScale} onViewOptions={viewOptions}
     onRenderState={state => notify(state)}
     browseState={browsing.get(value.version.canvas_id)}
     onBrowseState={state => browsing.set(value.version.canvas_id, state)}

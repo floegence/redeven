@@ -48,10 +48,19 @@ export type GraphBrowseState = {
   viewport: { x: number; y: number; scale: number };
   serviceScope?: NodeServiceScope;
 };
+export type TessivenViewOptions = {
+  hasGroups: boolean;
+  canExpand: boolean;
+  canCollapse: boolean;
+  serviceScope: NodeServiceScope;
+};
 export type TessivenViewportControl = {
   zoom: (factor: number, x: number, y: number, dx?: number, dy?: number) => void;
-  setTouchZooming: (active: boolean) => void;
+  pan: (dx: number, dy: number) => void;
   fit: () => void;
+  expandAll: () => void;
+  collapseAll: () => void;
+  setServiceScope: (scope: NodeServiceScope) => void;
 };
 export function TessivenGraph(props: {
   version: Version;
@@ -66,7 +75,8 @@ export function TessivenGraph(props: {
   onDetails?: (selection: Selection) => void;
   onViewportControl?: (control: TessivenViewportControl) => void;
   onRenderState?: (state: 'loading' | 'rendered' | 'error') => void;
-  tools?: 'all' | 'groups' | 'hidden';
+  tools?: 'all' | 'hidden';
+  onViewOptions?: (options: TessivenViewOptions) => void;
   onZoomChange?: (scale: number) => void;
 }) {
   const [expanded, setExpanded] = createSignal(
@@ -103,11 +113,16 @@ export function TessivenGraph(props: {
   let previousExpanded = new Set(expanded());
   let positionMode: 'preferred' | 'compact' = 'preferred';
   let host: HTMLDivElement | undefined;
-  let touchZooming = false;
   onCleanup(() => { generation += 1; engine.dispose(); });
   onMount(() => props.onViewportControl?.({
     fit,
-    setTouchZooming(active) { touchZooming = active; },
+    expandAll: () => toggleAll(true),
+    collapseAll: () => toggleAll(false),
+    setServiceScope: updateServiceScope,
+    pan(dx, dy) {
+      close();
+      setViewport(previous => ({ ...previous, x: previous.x + dx, y: previous.y + dy }));
+    },
     zoom(factor, x, y, dx = 0, dy = 0) {
       setViewport(previous => {
         const scale = Math.max(0.15, Math.min(2.5, previous.scale * factor));
@@ -117,6 +132,15 @@ export function TessivenGraph(props: {
     },
   }));
   createEffect(() => props.onZoomChange?.(viewport().scale));
+  createEffect(() => {
+    const groups = props.version.document.groups ?? [];
+    props.onViewOptions?.({
+      hasGroups: groups.length > 0,
+      canExpand: groups.some(group => !expanded().has(group.id)),
+      canCollapse: groups.some(group => expanded().has(group.id)),
+      serviceScope: serviceScope(),
+    });
+  });
   onCleanup(() => {
     // Empty canvases have no meaningful viewport to restore after Flower maps them.
     if (!layout().nodes.length) return;
@@ -369,6 +393,12 @@ export function TessivenGraph(props: {
       return next;
     });
     close();
+  }
+  function updateServiceScope(scope: NodeServiceScope) {
+    if (scope === serviceScope()) return;
+    positionMode = 'compact';
+    close();
+    setServiceScope(scope);
   }
   function toggleAll(open: boolean) {
     const current = selected();
@@ -671,7 +701,7 @@ export function TessivenGraph(props: {
       <GraphCanvas
         layout={layout()}
         viewport={viewport()}
-        onViewportChange={value => { if (!touchZooming) setViewport(value); }}
+        onViewportChange={setViewport}
         ariaLabel={props.t('canvasLabel')}
         selected={selected()}
         renderNode={renderCard}
@@ -682,21 +712,19 @@ export function TessivenGraph(props: {
         onInteractionStart={() => close()}
         minimap={layout().nodes.length ? { ariaLabel: props.t('canvasOverview') } : undefined}
       />
-      <Show when={props.tools !== 'hidden' && (props.tools !== 'groups' || props.version.document.groups?.length || layoutPending())}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
-        <Show when={props.tools !== 'groups'}>
+      <Show when={props.tools !== 'hidden'}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
           <button onClick={fit}>{props.t('fit')}</button>
           <span>{Math.round(viewport().scale * 100)}%</span>
-        </Show>
         <Show when={props.version.document.groups?.length}>
           <button onClick={() => toggleAll(true)} disabled={props.version.document.groups!.every(group => expanded().has(group.id))}>{props.t('expandAllGroups')}</button>
           <button onClick={() => toggleAll(false)} disabled={!props.version.document.groups!.some(group => expanded().has(group.id))}>{props.t('collapseAllGroups')}</button>
           <select aria-label={props.t('nodeServiceScope')} value={serviceScope()}
-            onChange={event => { positionMode = 'compact'; close(); setServiceScope(event.currentTarget.value as NodeServiceScope); }}>
+            onChange={event => updateServiceScope(event.currentTarget.value as NodeServiceScope)}>
             <option value="all">{props.t('allNodeServices')}</option>
             <option value="group">{props.t('groupNodeServices')}</option>
           </select>
         </Show>
-        <Show when={props.tools !== 'groups'}><button
+        <button
           onClick={(event) =>
             show(
               {
@@ -711,7 +739,7 @@ export function TessivenGraph(props: {
           aria-label={props.t('canvasMenu')}
         >
           ⋯
-        </button></Show>
+        </button>
         <Show when={layoutPending()}><span class="tessiven-layout-pending" role="status" aria-label={props.t('layoutUpdating')} /></Show>
       </div></Show>
       <Show when={popup()} keyed>
