@@ -3195,7 +3195,7 @@
     "saveFirst": "請先儲存位址變更，再建立邀請。",
     "inviteHelp": "在此產生邀請碼，將位址和碼分享給執行階段管理員。",
     "connectionAddresses": "執行階段連線位址",
-    "connectionAddressesHelp": "這些是執行階段可用來連線的位址。監聽仍在此裝置上設定，Cloud 另行設定。",
+    "connectionAddressesHelp": "這些 HTTPS 位址會分享給執行階段。請填寫執行階段可連線的位址；修改此清單不會變更本機監聽。",
     "address": "位址",
     "addAddress": "新增位址",
     "removeAddress": "移除位址",
@@ -3252,5 +3252,29 @@
     "authorizedAt": "授權時間",
     "lastSeen": "最近存取",
     "codeHelpTitle": "如何使用存取碼"
+  },
+  "gatewayDiscovery": {
+    "title": "這台電腦上的 Gateway",
+    "useAddress": "填入位址",
+    "useNamed": "填入 {name} 的位址：{address}",
+    "help": "繼續後，由所選執行階段驗證此位址是否可連線。"
+  },
+  "gatewayNetwork": {
+    "listenTitle": "本機監聽",
+    "listenHelp": "設定 Gateway 在本機綁定的 IP 位址與連接埠。多個位址以逗號分隔。",
+    "listenAddress": "綁定位址",
+    "nextStart": "重新啟動後生效",
+    "active": "目前監聽：",
+    "advanced": "進階設定",
+    "allowedHosts": "允許的 Hosts",
+    "allHosts": "允許所有主機名稱",
+    "restrictedHosts": "受限主機名稱：{count}",
+    "hostsHelp": "留空可允許任何請求主機名稱。如需限制，請輸入確切的主機名稱或 IP 位址，以逗號分隔，不含通訊協定或連接埠。執行階段與 Desktop 仍須取得存取授權。",
+    "invalidListen": "請輸入本機 IP:連接埠，多個位址以逗號分隔，例如 0.0.0.0:7443。",
+    "invalidHosts": "請輸入確切的主機名稱或 IP 位址，以逗號分隔；不支援網址、連接埠與萬用字元。",
+    "save": "儲存網路設定",
+    "saving": "正在儲存…",
+    "saved": "網路設定已儲存。",
+    "restartRequired": "請重新啟動 Gateway，使已儲存的綁定位址生效。"
   }
 }

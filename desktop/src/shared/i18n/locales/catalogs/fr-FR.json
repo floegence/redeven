@@ -3201,7 +3201,7 @@
     "saveFirst": "Enregistrez les adresses modifiées avant de créer une invitation.",
     "inviteHelp": "Générez un code ici, puis partagez l’adresse et le code avec l’administrateur de l’environnement d’exécution.",
     "connectionAddresses": "Adresses de connexion de l’environnement",
-    "connectionAddressesHelp": "Ce sont les adresses que les environnements peuvent utiliser. Le listener reste sur cet appareil ; Cloud se configure séparément.",
+    "connectionAddressesHelp": "Ces adresses HTTPS sont partagées avec les environnements d’exécution. Choisissez des adresses qu’ils peuvent atteindre. Modifier cette liste ne change pas l’écoute locale.",
     "address": "Adresse",
     "addAddress": "Ajouter une adresse",
     "removeAddress": "Supprimer l’adresse",
@@ -3258,5 +3258,29 @@
     "authorizedAt": "Autorisé",
     "lastSeen": "Dernier accès",
     "codeHelpTitle": "Utiliser ce code"
+  },
+  "gatewayDiscovery": {
+    "title": "Gateway sur cet ordinateur",
+    "useAddress": "Utiliser cette adresse",
+    "useNamed": "Utiliser l’adresse de {name} : {address}",
+    "help": "En continuant, l’environnement d’exécution choisi vérifiera si cette adresse est accessible."
+  },
+  "gatewayNetwork": {
+    "listenTitle": "Écoute locale",
+    "listenHelp": "Définissez les adresses IP et les ports locaux auxquels Gateway se lie. Séparez plusieurs entrées par des virgules.",
+    "listenAddress": "Adresses d’écoute",
+    "nextStart": "Après redémarrage",
+    "active": "Écoute actuelle :",
+    "advanced": "Paramètres avancés",
+    "allowedHosts": "Noms d’hôte autorisés",
+    "allHosts": "Tous les noms d’hôte autorisés",
+    "restrictedHosts": "Noms d’hôte restreints : {count}",
+    "hostsHelp": "Laissez vide pour autoriser tout nom d’hôte dans les requêtes. Pour les restreindre, saisissez des noms d’hôte ou des adresses IP exacts, séparés par des virgules, sans schéma d’URL ni port. L’autorisation d’accès de l’environnement d’exécution et de Desktop reste obligatoire.",
+    "invalidListen": "Saisissez des adresses locales IP:port séparées par des virgules, par exemple 0.0.0.0:7443.",
+    "invalidHosts": "Saisissez des noms d’hôte ou des adresses IP exacts séparés par des virgules. Les URL, ports et caractères génériques ne sont pas pris en charge.",
+    "save": "Enregistrer les paramètres réseau",
+    "saving": "Enregistrement…",
+    "saved": "Paramètres réseau enregistrés.",
+    "restartRequired": "Redémarrez Gateway pour appliquer les adresses d’écoute enregistrées."
   }
 }

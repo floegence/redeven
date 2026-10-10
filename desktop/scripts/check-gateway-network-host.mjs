@@ -1,0 +1,80 @@
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {mkdir,mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const desktop=fileURLToPath(new URL('../',import.meta.url)),root=path.resolve(desktop,'..');
+const require=createRequire(import.meta.url);
+const {GatewayLifecycleManager}=require('../dist/main/gatewayLifecycleManager.js');
+const {RuntimeLifecycleCoordinator}=require('../dist/main/runtimeLifecycleCoordinator.js');
+const {DefaultDesktopSSHTransportManager}=require('../dist/main/sshTransportManager.js');
+const trust=require('../dist/main/gatewayTrust.js');
+const state=await mkdtemp(path.join(os.tmpdir(),'redeven-gateway-network-'));
+const output=path.join(desktop,'dist/gateway-network-host-acceptance');
+await mkdir(output,{recursive:true});
+const marker=randomUUID(),commit=execFileSync('git',['rev-parse','--short=12','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+const secrets=new Map(),ssh=new DefaultDesktopSSHTransportManager();
+const secretStore={readSecret:key=>secrets.get(key)??'',writeSecret:(key,value)=>secrets.set(key,value),deleteSecret:key=>secrets.delete(key)};
+const options={ssh_transport_manager:ssh,secret_store:secretStore,runtime_release_tag:'v0.0.0-dev',release_base_url:'',source_runtime_root:root,target_commit:commit,
+ asset_cache_root:path.join(state,'cache'),temp_root:path.join(state,'temp'),lifecycle_coordinator:new RuntimeLifecycleCoordinator()};
+await mkdir(options.temp_root);
+const lifecycle=new GatewayLifecycleManager(options);
+let record={schema_version:4,gateway_id:marker,display_name:'Network qualification',local_enabled:true,connection:{kind:'local_host',runtime_root:state},created_at_ms:1,updated_at_ms:1};
+const stateRoot=path.join(state,'gateways',marker,'state'),seedBinary=path.join(state,'seed-gateway');
+const report={status:'running',marker,commit,state,stateRoot,cases:[]};
+try {
+ execFileSync(path.join(root,'scripts/build_runtime_binary.sh'),['--goos',process.platform,'--goarch',process.arch==='x64'?'amd64':process.arch,'--output',seedBinary,'--command','./cmd/redeven-gateway','--version',options.runtime_release_tag,'--commit',commit,'--build-time',new Date().toISOString()],{cwd:root,stdio:'inherit',timeout:600000,env:{...process.env,GOWORK:'off'}});
+ const seed=JSON.parse(execFileSync(seedBinary,['service-start','--state-root',stateRoot,'--member-listen','127.0.0.1:0'],{encoding:'utf8'}));
+ report.seed={pid:seed.pid,listen:seed.listen,memberListen:seed.member_listen};
+ execFileSync(seedBinary,['service-stop','--state-root',stateRoot],{stdio:'ignore'});
+ const session=await lifecycle.startGateway(record),material=trust.createGatewayPairingMaterial(record);
+ const challenge=await session.client.pairingChallenge(record,trust.pairingChallengeRequest(material));
+ trust.assertGatewayPairingChallenge({record,material,challenge});
+ const completion=await session.client.completePairing(record,trust.buildPairingCompleteRequest(material,challenge));
+ trust.assertGatewayPairingCompleteResponse(material,challenge,completion);
+ record={...record,trust_profile:await trust.completeGatewayPairing({record,material,challenge,trust_accepted:true,secret_store:secretStore})};
+ const before=await lifecycle.catalog(record);
+ const endpoint={endpoint_id:'local',address:`https://${before.gateway.active_listener_addresses[0]}`,scope:'lan',priority:0};
+ const settings={listen_addresses:['127.0.0.1:0','[::1]:0'],allowed_hosts:['127.0.0.1','::1'],endpoints:[endpoint]};
+ const saved=await session.client.updateNetworkSettings(record,settings);
+ assert.equal(saved.restart_required,true);
+ const staged=await lifecycle.catalog(record);
+ assert.equal(staged.gateway.listener_restart_required,true);
+ assert.deepEqual(staged.gateway.active_listener_addresses,before.gateway.active_listener_addresses);
+ assert.deepEqual(staged.gateway.listener_addresses,settings.listen_addresses);
+ assert.deepEqual(staged.gateway.allowed_hosts,settings.allowed_hosts);
+ assert.equal(staged.gateway.gateway_public_key_fingerprint,before.gateway.gateway_public_key_fingerprint);
+ report.cases.push('Desktop host bridge saves all network settings without interrupting the active listener or changing identity');
+ const invitation=await session.client.invite(record);
+ assert.deepEqual(invitation.share_addresses,[endpoint.address]);
+ assert.equal(staged.members.length,0);
+ report.cases.push('Only the explicitly confirmed connection address is delivered; saving and invitation issuance do not enroll a Runtime');
+ await lifecycle.restartGateway(record);
+ const restored=await lifecycle.catalog(record);
+ assert.equal(restored.gateway.listener_restart_required,false);
+ assert.equal(restored.gateway.active_listener_addresses.length,2);
+ assert.deepEqual(restored.gateway.listener_addresses,settings.listen_addresses);
+ assert.deepEqual(restored.gateway.allowed_hosts,settings.allowed_hosts);
+ assert.deepEqual(restored.gateway.member_endpoints,settings.endpoints);
+ assert.equal(restored.gateway.gateway_id,before.gateway.gateway_id);
+ assert.deepEqual(restored.gateway.permissions,before.gateway.permissions);
+ report.cases.push('Explicit restart applies stored bindings and preserves confirmed endpoints, Host restriction, identity and host permissions');
+ report.status='passed';
+ console.log('PASS real Desktop host bridge network configuration and restart');
+} catch(error) {
+ report.status='failed';report.error=String(error.stack||error);throw error;
+} finally {
+ const errors=[];
+ await lifecycle.stopGateway(record).catch(error=>errors.push(String(error)));
+ await lifecycle.clear(record).catch(error=>errors.push(String(error)));
+ await ssh.dispose().catch(error=>errors.push(String(error)));
+ try{execFileSync(seedBinary,['service-stop','--state-root',stateRoot],{stdio:'ignore'});}catch(error){errors.push(String(error));}
+ if(!errors.length)await rm(state,{recursive:true,force:true});
+ report.cleanup={temporaryStateRemoved:errors.length===0,errors};
+ await writeFile(path.join(output,'report.json'),JSON.stringify(report,null,2)+'\n');
+ if(errors.length)throw new Error(`Gateway network cleanup failed: ${errors.join('; ')}`);
+}

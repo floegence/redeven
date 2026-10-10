@@ -3195,7 +3195,7 @@
     "saveFirst": "招待を作成する前にアドレスの変更を保存してください。",
     "inviteHelp": "ここでコードを生成し、アドレスとコードをランタイム管理者に共有してください。",
     "connectionAddresses": "ランタイム接続アドレス",
-    "connectionAddressesHelp": "ランタイムが接続に使用できるアドレスです。リスナーはこのデバイスで待ち受け、Cloud は別途設定します。",
+    "connectionAddressesHelp": "これらの HTTPS アドレスをランタイムに共有します。ランタイムが接続できるアドレスを指定してください。この一覧を変更してもローカルリスナーは変わりません。",
     "address": "アドレス",
     "addAddress": "アドレスを追加",
     "removeAddress": "アドレスを削除",
@@ -3252,5 +3252,29 @@
     "authorizedAt": "承認日時",
     "lastSeen": "最終アクセス",
     "codeHelpTitle": "アクセスコードの使い方"
+  },
+  "gatewayDiscovery": {
+    "title": "このコンピューターの Gateway",
+    "useAddress": "アドレスを入力",
+    "useNamed": "{name} のアドレスを使用：{address}",
+    "help": "続行すると、選択したランタイムがこのアドレスへの接続を確認します。"
+  },
+  "gatewayNetwork": {
+    "listenTitle": "ローカルリスナー",
+    "listenHelp": "Gateway がローカルでバインドする IP アドレスとポートを指定します。複数の場合はカンマで区切ります。",
+    "listenAddress": "バインドアドレス",
+    "nextStart": "再起動後に適用",
+    "active": "現在の待ち受け先：",
+    "advanced": "詳細設定",
+    "allowedHosts": "許可するホスト名",
+    "allHosts": "すべてのホスト名を許可",
+    "restrictedHosts": "許可するホスト名：{count}",
+    "hostsHelp": "空欄にすると、リクエストのすべてのホスト名を許可します。制限する場合は、正確なホスト名または IP アドレスをカンマで区切って入力してください。URL のスキームとポートは含めません。ランタイムと Desktop のアクセス認可は引き続き必要です。",
+    "invalidListen": "ローカルの IP:ポートをカンマで区切って入力してください。例：0.0.0.0:7443。",
+    "invalidHosts": "正確なホスト名または IP アドレスをカンマで区切って入力してください。URL、ポート、ワイルドカードは使用できません。",
+    "save": "ネットワーク設定を保存",
+    "saving": "保存中…",
+    "saved": "ネットワーク設定を保存しました。",
+    "restartRequired": "保存したバインドアドレスを適用するには Gateway を再起動してください。"
   }
 }

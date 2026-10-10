@@ -60,9 +60,9 @@ describe('Gateway member management', () => {
     const address = document.querySelector<HTMLInputElement>('.redeven-gateway-endpoint input')!;
     address.value = 'https://gateway.example:7443';
     address.dispatchEvent(new Event('input', { bubbles: true }));
-    button(i18n.t('gatewayMembers.saveAddresses')).click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_endpoints', gateway_id: gateway.gateway_id,
-      endpoints: [{ ...catalogFixture.gateway.member_endpoints[0]!, address: 'https://gateway.example:7443' }] });
+    button(i18n.t('gatewayNetwork.save')).click(); await settle();
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_network_settings', gateway_id: gateway.gateway_id,
+      settings: {listen_addresses:[gateway.listener_address],allowed_hosts:[],endpoints: [{ ...catalogFixture.gateway.member_endpoints[0]!, address: 'https://gateway.example:7443' }]} });
   });
   it('cancels an address-removal animation when the edited Gateway changes', async () => {
     const setGateway = mount(vi.fn(), undefined, gateway, 'connection'); await settle();
@@ -137,4 +137,58 @@ describe('Gateway member management', () => {
     expect([...document.querySelectorAll('input')].filter(input => input.type !== 'hidden').every(input => input.disabled)).toBe(true);
     expect(perform).not.toHaveBeenCalled();
   });
+});
+
+describe('Gateway network configuration',()=>{
+ it('separates binding from connection addresses and starts Host restrictions collapsed',async()=>{
+  const perform=vi.fn().mockResolvedValue({ok:true,outcome:'gateway_members_updated'});
+  mount(perform,undefined,gateway,'connection');await settle();
+  const advanced=document.querySelector<HTMLDetailsElement>('[data-gateway-network-advanced]');
+  expect(advanced).toBeTruthy();expect(advanced!.open).toBe(false);
+  expect(document.getElementById('gateway-listen-addresses')).toBeTruthy();
+  expect(document.getElementById('gateway-allowed-hosts')).toBeTruthy();
+  const binding=document.getElementById('gateway-listen-addresses') as HTMLInputElement;
+  binding.value='0.0.0.0:7555';binding.dispatchEvent(new Event('input',{bubbles:true}));
+  button(i18n.t('gatewayNetwork.save')).click();await settle();
+  expect(perform).toHaveBeenCalledExactlyOnceWith({kind:'update_gateway_network_settings',gateway_id:gateway.gateway_id,
+   settings:{listen_addresses:['0.0.0.0:7555'],allowed_hosts:[],endpoints:gateway.member_endpoints}});
+ });
+ it('keeps drafts and shows a useful validation error for invalid listener addresses',async()=>{
+  const perform=vi.fn();mount(perform,undefined,gateway,'connection');await settle();
+  const binding=document.getElementById('gateway-listen-addresses') as HTMLInputElement;
+  binding.value='https://bad.example:7443';binding.dispatchEvent(new Event('input',{bubbles:true}));
+  button(i18n.t('gatewayNetwork.save')).click();await settle();
+  expect(perform).not.toHaveBeenCalled();expect(binding.value).toBe('https://bad.example:7443');
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayNetwork.invalidListen'));
+  expect(document.activeElement).toBe(binding);
+  expect(binding.getAttribute('aria-invalid')).toBe('true');
+ });
+});
+
+it('opens advanced settings and focuses an invalid Host restriction',async()=>{
+ const perform=vi.fn();mount(perform,undefined,gateway,'connection');await settle();
+ const hosts=document.getElementById('gateway-allowed-hosts') as HTMLInputElement;
+ hosts.value='*.example';hosts.dispatchEvent(new Event('input',{bubbles:true}));
+ button(i18n.t('gatewayNetwork.save')).click();await settle();
+ expect(perform).not.toHaveBeenCalled();
+ expect(document.querySelector<HTMLDetailsElement>('[data-gateway-network-advanced]')?.open).toBe(true);
+ expect(document.activeElement).toBe(hosts);
+});
+
+it('refreshes clean network fields from the authoritative catalog while preserving a typed draft',async()=>{
+ const setGateway=mount(vi.fn(),undefined,gateway,'connection');await settle();
+ const endpoint={...gateway.member_endpoints![0]!,address:'https://changed.example:7443'};
+ setGateway({...gateway,member_endpoints:[endpoint],listener_addresses:['127.0.0.1:7555'],allowed_hosts:['changed.example']});await settle();
+ const address=document.querySelector<HTMLInputElement>('.redeven-gateway-endpoint input')!;
+ expect(address.value).toBe(endpoint.address);
+ expect((document.getElementById('gateway-allowed-hosts') as HTMLInputElement).value).toBe('changed.example');
+ address.value='https://draft.example:7443';address.dispatchEvent(new Event('input',{bubbles:true}));
+ setGateway({...gateway,member_endpoints:[{...endpoint,address:'https://newer.example:7443'}]});await settle();
+ expect(address.value).toBe('https://draft.example:7443');
+});
+it('disables invitation issuance when another settings tab removes all confirmed endpoints',async()=>{
+ const setGateway=mount(vi.fn());await settle();
+ setGateway({...gateway,member_endpoints:[]});await settle();
+ expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
+ expect(document.body.textContent).toContain(i18n.t('gatewayMembers.noConnectionAddresses'));
 });

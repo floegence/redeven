@@ -2,6 +2,30 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  gatewayDiscovery: {
+    "title": "Gateway on this computer",
+    "useAddress": "Use address",
+    "useNamed": "Use {name}: {address}",
+    "help": "The selected Runtime will verify this address when you continue."
+},
+  gatewayNetwork: {
+    "listenTitle": "Local listener",
+    "listenHelp": "Choose the local IP addresses and ports Gateway binds to. Separate multiple bindings with commas.",
+    "listenAddress": "Bind addresses",
+    "nextStart": "Applies after restart",
+    "active": "Listening now:",
+    "advanced": "Advanced",
+    "allowedHosts": "Allowed Hosts",
+    "allHosts": "All hostnames allowed",
+    "restrictedHosts": "Restricted hostnames: {count}",
+    "hostsHelp": "Leave empty to allow any request hostname. To restrict requests, list exact hostnames or IP addresses separated by commas, without a URL scheme or port. Runtime and Desktop authorization is still required.",
+    "invalidListen": "Enter local IP:port bindings separated by commas, such as 0.0.0.0:7443.",
+    "invalidHosts": "Enter exact hostnames or IP addresses separated by commas. URLs, ports and wildcards are not supported.",
+    "save": "Save network settings",
+    "saving": "Saving…",
+    "saved": "Network settings saved.",
+    "restartRequired": "Restart Gateway to apply the saved bind addresses."
+},
   gatewayClients: {
     "connectionSettings": "Connection settings",
     "runtimes": "Runtimes",
@@ -130,7 +154,7 @@ export const enUS = {
     usedByRuntime: 'Used by a Runtime',
     saveFirst: 'Save address changes before creating an invitation.',
     "connectionAddresses": "Runtime connection addresses",
-    "connectionAddressesHelp": "These are the addresses Runtime devices may try. The listener stays on this device; Cloud is configured separately.",
+    "connectionAddressesHelp": "These HTTPS addresses are shared with Runtimes. Choose addresses they can reach; changing this list does not change the local listener.",
     "address": "Address",
     "addAddress": "Add address",
     "removeAddress": "Remove address",

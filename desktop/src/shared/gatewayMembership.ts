@@ -86,3 +86,9 @@ export type GatewayAuthorizedClient = Readonly<{
  client_key_id: string; client_name: string; paired_at_unix_ms: number;
  last_verified_at_unix_ms: number; revoked_at_unix_ms: number;
 }>;
+
+export type GatewayNetworkSettings = Readonly<{
+ listen_addresses: readonly string[];
+ allowed_hosts: readonly string[];
+ endpoints: readonly GatewayEndpoint[];
+}>;

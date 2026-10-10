@@ -1,3 +1,5 @@
+import { normalizeGatewayNetworkSettings } from './gatewayNetworkSettings';
+import type { GatewayNetworkSettings } from './gatewayMembership';
 import type { GatewayEndpoint, GatewayMember, GatewayClientAccessCode, GatewayAuthorizedClient, GatewayPolicy, GatewayInvitationCodeDelivery, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
 import { type GatewayMembershipStatus, type GatewayMembershipOperation, type GatewayEnrollmentPurpose, type GatewayJoinPreview } from './gatewayJoin';
 import { normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from './gatewayCloud';
@@ -249,6 +251,7 @@ export type DesktopLauncherActionKind =
   | 'list_gateway_clients'
   | 'revoke_gateway_client'
   | 'update_gateway_endpoints'
+  | 'update_gateway_network_settings'
   | 'remove_gateway_member'
   | 'reevaluate_gateway_member'
   | 'update_gateway_policy'
@@ -875,6 +878,7 @@ export type DesktopLauncherActionRequest = Readonly<
   | { kind: 'issue_gateway_access_code'; gateway_id: string }
   | { kind: 'list_gateway_clients'; gateway_id: string }
   | { kind: 'revoke_gateway_client'; gateway_id: string; client_key_id: string }
+  | { kind: 'update_gateway_network_settings'; gateway_id: string; settings: GatewayNetworkSettings }
   | { kind: 'update_gateway_endpoints'; gateway_id: string; endpoints: readonly GatewayEndpoint[] }
   | { kind: 'remove_gateway_member'; gateway_id: string; member_id: string; member_version: number }
   | { kind: 'reevaluate_gateway_member'; gateway_id: string; member_id: string; member_version: number }
@@ -917,6 +921,7 @@ export type DesktopLauncherActionSuccess = Readonly<{
   gateway_member_results?: readonly GatewayMemberOperationResult[];
   gateway_cloud?: GatewayCloudSummary;
   gateway_membership?: GatewayMembershipStatus;
+  gateway_network_settings?: Readonly<{ settings: GatewayNetworkSettings; restart_required: boolean }>;
   ok: true;
   outcome: DesktopLauncherActionOutcome;
   environment_id?: string;
@@ -1193,6 +1198,11 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'dismiss_gateway_rebuild': {
       const gateway_id = compact((candidate as { gateway_id?: unknown }).gateway_id);
       return gateway_id ? { kind, gateway_id } : null;
+    }
+    case 'update_gateway_network_settings': {
+      const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id);
+      const settings = normalizeGatewayNetworkSettings(input.settings);
+      return gateway_id && settings ? {kind, gateway_id, settings} : null;
     }
     case 'update_gateway_endpoints': {
       const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id);

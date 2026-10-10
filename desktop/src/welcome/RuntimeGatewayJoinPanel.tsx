@@ -1,5 +1,8 @@
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
+import { localGatewaySuggestions } from './localGatewaySuggestions';
+import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input, StableText } from '@floegence/floe-webapp-core/ui';
-import { createEffect, createSignal, onCleanup, onMount, Show, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { GatewayJoinPreview, GatewayMembershipStatus, GatewayMembershipOperation, GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
@@ -7,7 +10,7 @@ import type { DesktopI18n } from '../shared/i18n';
 /** Verification belongs to the selected Runtime; only a verified preview can be confirmed. */
 export function RuntimeGatewayJoinPanel(props: Readonly<{
   targetID: DesktopCloudRuntimeLinkTargetID; targetLabel?: string; i18n: DesktopI18n; disabled?: boolean;
-  address?: string; code?: string; focusOwner?: () => void;
+  gateways?: readonly DesktopGatewaySource[]; address?: string; code?: string; focusOwner?: () => void;
   embedded?: boolean; onClose?: () => void; openRequest?: number; hideTrigger?: boolean;
 }>) {
   const [open, setOpen] = createSignal(false);
@@ -23,11 +26,13 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const [choice, setChoice] = createSignal<'preserve' | 'new'>();
   const [now, setNow] = createSignal(Date.now());
   let generation = 0, statusGeneration = 0;
-  let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, confirmButton: HTMLButtonElement | undefined, firstChoice: HTMLInputElement | undefined;
+  let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, codeInput: HTMLInputElement | undefined, confirmButton: HTMLButtonElement | undefined, firstChoice: HTMLInputElement | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastOpenRequest = props.openRequest ?? 0;
   const expiryTimer = setInterval(() => setNow(Date.now()), 1000);
   const text = props.i18n.t;
+  const suggestions = createMemo(() => localGatewaySuggestions(props.gateways ?? [], props.targetID));
+  function fillAddress(value: string) { invalidate(); setAddress(value); queueMicrotask(() => codeInput?.focus()); }
   const invalidate = () => { generation++; setPreview(undefined); setChoice(undefined); setBusy(false); setError(''); };
   createEffect(() => { const target = props.targetID; const nextAddress = props.address; const nextCode = props.code; void target;
     invalidate(); setAddress(nextAddress ?? ''); setCode(nextCode ?? ''); setStatus(undefined); setPurpose('join');
@@ -91,15 +96,22 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         <Show when={status()?.publication_error_code}><p role="alert">{text(status()?.publication_error_code === 'BINDING_PROOF_REQUIRED' ? 'gatewayJoin.bindingProofRequired' : 'gatewayJoin.cloudUnavailable')}</p></Show>
         <Show when={leaving()}><p role="alert" class="text-warning">{text('gatewayMembers.leaveImpact')}</p></Show>
       </section>}>
-        <section class="redeven-gateway-join-section space-y-4">
-          <div><p class="text-xs text-muted-foreground">{text('gatewayJoin.targetRuntime')}</p><p class="break-all font-medium">{props.targetLabel ?? props.targetID}</p></div>
+        <section class="redeven-gateway-join-section">
+          <div class="redeven-gateway-join-target"><Monitor class="h-4 w-4 shrink-0 text-muted-foreground" /><div class="min-w-0"><p class="text-xs text-muted-foreground">{text('gatewayJoin.targetRuntime')}</p><p class="break-words font-medium">{props.targetLabel ?? props.targetID}</p></div></div>
           <label class="block space-y-2 text-sm"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
             onInput={event => { invalidate(); setAddress(event.currentTarget.value); }} /></label>
-          <label class="block space-y-2 text-sm"><span>{text('gatewayJoin.code')}</span><Input value={code()} autocomplete="off" spellcheck={false} disabled={busy()}
+          <Show when={suggestions().length}><section class="redeven-gateway-local-suggestions" aria-label={text('gatewayDiscovery.title')}>
+            <p class="text-xs font-medium text-muted-foreground">{text('gatewayDiscovery.title')}</p>
+            <For each={suggestions()}>{suggestion => <div class="redeven-gateway-local-suggestion">
+              <div class="min-w-0"><p class="truncate text-sm font-medium" title={suggestion.name}>{suggestion.name}</p><p class="break-all font-mono text-xs text-muted-foreground">{suggestion.address}</p></div>
+              <Button data-gateway-suggestion={suggestion.gatewayID} class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" disabled={busy()} aria-label={text('gatewayDiscovery.useNamed',{name:suggestion.name,address:suggestion.address})} onClick={() => fillAddress(suggestion.address)}>{text('gatewayDiscovery.useAddress')}<ArrowRight class="h-3.5 w-3.5" /></Button>
+            </div>}</For>
+            <p class="text-xs text-muted-foreground">{text('gatewayDiscovery.help')}</p>
+          </section></Show>
+          <label class="block space-y-2 text-sm"><span>{text('gatewayJoin.code')}</span><Input ref={codeInput} value={code()} autocomplete="off" spellcheck={false} disabled={busy()}
             onInput={event => { invalidate(); setCode(event.currentTarget.value); }} onKeyDown={event => { if (event.key === 'Enter' && !busy() && address().trim() && code().trim()) { event.preventDefault(); void verify(); } }} /></label>
-          <p class="text-sm text-muted-foreground">{text('gatewayJoin.codeHelp')}</p>
         </section>
-        <Show when={preview()}>{value => <section class="redeven-gateway-join-section space-y-3">
+        <Show when={preview()}>{value => <section class="redeven-gateway-join-section">
           <p class="font-medium text-primary">{text('gatewayJoin.verified')}</p>
           <dl class="redeven-gateway-join-summary"><div><span>{text('gatewayJoin.gateway')}</span><strong>{value().gateway_name}</strong></div><div><span>{text('gatewayJoin.targetRuntime')}</span><strong>{props.targetLabel ?? value().target_runtime_id}</strong></div><div><span>{text('gatewayJoin.expiry')}</span><strong>{new Date(value().expires_at_unix_ms).toLocaleTimeString(props.i18n.locale)}</strong></div></dl>
           <p class="text-sm text-muted-foreground">{text(purpose() === 'update-endpoints' ? 'gatewayJoin.endpointsHelp' : 'gatewayJoin.accessImpact')}</p>

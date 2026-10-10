@@ -174,8 +174,8 @@ func TestSchemaThreeMigrationRetiresUnconsumedInvitationsPreservingReceipts(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reopened.state.SchemaVersion != 3 {
-		t.Fatalf("schema version = %d, want 3", reopened.state.SchemaVersion)
+	if reopened.state.SchemaVersion != 4 {
+		t.Fatalf("schema version = %d, want 4", reopened.state.SchemaVersion)
 	}
 	if got := reopened.state.Invitations[consumed.InvitationID].Response; got == nil || got.MemberID != response.MemberID {
 		t.Fatal("consumed response receipt was not preserved")
@@ -190,7 +190,7 @@ func TestFutureMembershipSchemaIsRejectedWithoutRewrite(t *testing.T) {
 	store, identity := membershipStore(t)
 	store.mu.Lock()
 	future := store.clone()
-	future.SchemaVersion = 4
+	future.SchemaVersion = 5
 	if err := gatewaystate.Write(store.path, future); err != nil {
 		store.mu.Unlock()
 		t.Fatal(err)

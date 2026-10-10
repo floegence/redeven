@@ -3196,7 +3196,7 @@
     "inviteHelp": "在此生成邀请码，将地址和码分享给运行时管理员。",
     "createInvitation": "生成邀请码",
     "connectionAddresses": "运行时连接地址",
-    "connectionAddressesHelp": "这些是运行时可能尝试连接的地址。监听仍在此设备上配置，Cloud 另行设置。",
+    "connectionAddressesHelp": "这些 HTTPS 地址将分享给运行时。请填写运行时能够访问的地址；修改此列表不会改变本机监听。",
     "address": "地址",
     "addAddress": "添加地址",
     "removeAddress": "移除地址",
@@ -3252,5 +3252,29 @@
     "authorizedAt": "授权时间",
     "lastSeen": "最近访问",
     "codeHelpTitle": "如何使用访问码"
+  },
+  "gatewayDiscovery": {
+    "title": "本机上的 Gateway",
+    "useAddress": "填入地址",
+    "useNamed": "填入 {name} 的地址：{address}",
+    "help": "继续后，由所选运行时验证此地址是否可达。"
+  },
+  "gatewayNetwork": {
+    "listenTitle": "本机监听",
+    "listenHelp": "设置 Gateway 在本机绑定的 IP 地址和端口。多个地址用逗号分隔。",
+    "listenAddress": "绑定地址",
+    "nextStart": "重启后生效",
+    "active": "当前监听：",
+    "advanced": "高级设置",
+    "allowedHosts": "允许的 Hosts",
+    "allHosts": "允许所有主机名",
+    "restrictedHosts": "受限主机名：{count}",
+    "hostsHelp": "留空允许任意请求主机名。如需限制，请填写确切的主机名或 IP 地址，用逗号分隔，不含协议或端口。运行时和 Desktop 仍须获得访问授权。",
+    "invalidListen": "请输入本机 IP:端口，多个地址用逗号分隔，例如 0.0.0.0:7443。",
+    "invalidHosts": "请输入确切的主机名或 IP 地址，用逗号分隔；不支持网址、端口和通配符。",
+    "save": "保存网络设置",
+    "saving": "正在保存…",
+    "saved": "网络设置已保存。",
+    "restartRequired": "请重启 Gateway，使已保存的绑定地址生效。"
   }
 }

@@ -3201,7 +3201,7 @@
     "saveFirst": "Salve as alterações de endereço antes de criar um convite.",
     "inviteHelp": "Gere um código aqui e compartilhe o endereço e o código com o administrador do ambiente de execução.",
     "connectionAddresses": "Endereços de conexão do ambiente",
-    "connectionAddressesHelp": "Estes são os endereços que os ambientes podem usar. O listener permanece neste dispositivo; o Cloud é configurado separadamente.",
+    "connectionAddressesHelp": "Estes endereços HTTPS são compartilhados com os ambientes de execução. Escolha endereços que eles possam acessar. Alterar esta lista não muda a escuta local.",
     "address": "Endereço",
     "addAddress": "Adicionar endereço",
     "removeAddress": "Remover endereço",
@@ -3258,5 +3258,29 @@
     "authorizedAt": "Autorizado",
     "lastSeen": "Último acesso",
     "codeHelpTitle": "Como usar este código"
+  },
+  "gatewayDiscovery": {
+    "title": "Gateway neste computador",
+    "useAddress": "Usar endereço",
+    "useNamed": "Usar o endereço de {name}: {address}",
+    "help": "Ao continuar, o ambiente de execução selecionado verificará se este endereço está acessível."
+  },
+  "gatewayNetwork": {
+    "listenTitle": "Escuta local",
+    "listenHelp": "Escolha os endereços IP e as portas locais aos quais o Gateway se vincula. Separe várias entradas por vírgulas.",
+    "listenAddress": "Endereços de escuta",
+    "nextStart": "Após reiniciar",
+    "active": "Escuta atual:",
+    "advanced": "Configurações avançadas",
+    "allowedHosts": "Nomes de host permitidos",
+    "allHosts": "Todos os nomes de host permitidos",
+    "restrictedHosts": "Nomes de host restritos: {count}",
+    "hostsHelp": "Deixe vazio para permitir qualquer nome de host nas solicitações. Para restringir, informe nomes de host ou endereços IP exatos separados por vírgulas, sem esquema de URL ou porta. O ambiente de execução e o Desktop ainda precisam de autorização de acesso.",
+    "invalidListen": "Informe endereços locais IP:porta separados por vírgulas, como 0.0.0.0:7443.",
+    "invalidHosts": "Informe nomes de host ou endereços IP exatos separados por vírgulas. URLs, portas e curingas não são aceitos.",
+    "save": "Salvar configurações de rede",
+    "saving": "Salvando…",
+    "saved": "Configurações de rede salvas.",
+    "restartRequired": "Reinicie o Gateway para aplicar os endereços de escuta salvos."
   }
 }

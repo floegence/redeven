@@ -9,7 +9,7 @@ export const memberFixture: GatewayMember = {
 };
 export const catalogFixture: GatewayCatalogResponse = {
   protocol_version: GATEWAY_PROTOCOL_VERSION, gateway: { gateway_id: 'gateway_fixture', display_name: 'Gateway', gateway_public_key_fingerprint: 'fixture', listener_address: ':7443',
-    listener_addresses: [':7443'], listener_running: true, endpoint_last_used_at: {},
+    listener_addresses: [':7443'], active_listener_addresses:[],allowed_hosts:[],listener_restart_required:false, listener_running: true, endpoint_last_used_at: {},
     member_endpoints: [{ endpoint_id: 'lan', address: 'https://gateway.internal:7443', scope: 'lan', priority: 0 }], member_tls_root_pem: 'fixture', permissions: { access: true, manage_members: true, configure_cloud: true } },
   members: [memberFixture], revision: 1, policy: { revision: 1, default_cloud_allowed: false, publication_mode: 'manual' },
   rebuild_required: false, hook_status: { 'member.admit': 'not_configured', 'access.open': 'not_configured', 'cloud.publish': 'not_configured' },

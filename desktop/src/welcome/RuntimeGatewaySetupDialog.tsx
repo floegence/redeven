@@ -1,3 +1,4 @@
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
@@ -6,7 +7,7 @@ import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 
 /** Registration and local Runtime startup precede the single membership API. */
 export function RuntimeGatewaySetupDialog(props: Readonly<{
-  environment?: DesktopEnvironmentEntry; i18n: DesktopI18n;
+  gateways?: readonly DesktopGatewaySource[]; environment?: DesktopEnvironmentEntry; i18n: DesktopI18n;
   start: (environment: DesktopEnvironmentEntry) => Promise<boolean>; close: () => void;
 }>) {
   const [busy, setBusy] = createSignal(false), [error, setError] = createSignal('');
@@ -43,6 +44,6 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
         <Button class="cursor-pointer" variant="outline" onClick={props.close}>{props.i18n.t('gatewayJoin.notNow')}</Button>
         <Button class="cursor-pointer" loading={busy()} onClick={() => void start()}>{props.i18n.t('gatewayJoin.startAndContinue')}</Button>
       </div>
-    </div>}>{value => <RuntimeGatewayJoinPanel embedded targetID={value} targetLabel={target()?.label} i18n={props.i18n} onClose={props.close} />}</Show>
+    </div>}>{value => <RuntimeGatewayJoinPanel gateways={props.gateways} embedded targetID={value} targetLabel={target()?.label} i18n={props.i18n} onClose={props.close} />}</Show>
   </Dialog>;
 }

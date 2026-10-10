@@ -5866,6 +5866,9 @@ async function syncGatewayRecord(
         listener_address: catalog.gateway.listener_address,
         listener_addresses: catalog.gateway.listener_addresses,
         listener_running: catalog.gateway.listener_running,
+        active_listener_addresses: catalog.gateway.active_listener_addresses,
+        listener_restart_required: catalog.gateway.listener_restart_required,
+        allowed_hosts: catalog.gateway.allowed_hosts,
         endpoint_last_used_at: catalog.gateway.endpoint_last_used_at,
         member_endpoints: catalog.gateway.member_endpoints,
         rebuild_required: catalog.rebuild_required, hook_status: catalog.hook_status,
@@ -6037,7 +6040,7 @@ function runtimeLifecycleTitleKey(operation: 'start' | 'stop' | 'restart' | 'upd
 }
 
 async function manageGatewayMemberFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'update_gateway_network_settings' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.gateway_id);
   if (!record) return launcherActionFailure('environment_missing', 'gateway', 'This Gateway is no longer available.', { shouldRefreshSnapshot: true });
@@ -6054,8 +6057,10 @@ async function manageGatewayMemberFromLauncher(
       return { ...launcherActionSuccess('gateway_invitation_created'), gateway_invitation_code: await client.invite(record) };
     }
     let results: DesktopLauncherActionSuccess['gateway_member_results'];
-	if (request.kind === 'update_gateway_endpoints') await client.updateEndpoints(record, request.endpoints);
-	else if (request.kind === 'remove_gateway_member') {
+    let network: DesktopLauncherActionSuccess['gateway_network_settings'];
+    if (request.kind === 'update_gateway_network_settings') network = await client.updateNetworkSettings(record, request.settings);
+    else if (request.kind === 'update_gateway_endpoints') await client.updateEndpoints(record, request.endpoints);
+    else if (request.kind === 'remove_gateway_member') {
       await client.removeMember(record, request.member_id, request.member_version);
       for (const session of liveGatewayEnvironmentSessions(record.gateway_id, request.member_id)) {
         failGatewaySessionTransport(session, new GatewayClientError('MEMBER_REMOVED', 'Gateway membership was removed.'));
@@ -6065,7 +6070,7 @@ async function manageGatewayMemberFromLauncher(
     else if (request.kind === 'update_gateway_members') results = await client.updateMembers(record, request.items);
     else await client.dismissMigration(record);
     await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
-    return { ...launcherActionSuccess('gateway_members_updated'), gateway_member_results: results };
+    return { ...launcherActionSuccess('gateway_members_updated'), gateway_member_results: results, gateway_network_settings: network };
   } catch (error) { return gatewayActionFailure(record, error); }
 }
 
@@ -17893,6 +17898,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'revoke_gateway_client':
     case 'invite_gateway_runtime':
     case 'update_gateway_endpoints':
+    case 'update_gateway_network_settings':
     case 'remove_gateway_member':
     case 'reevaluate_gateway_member':
     case 'update_gateway_policy':
