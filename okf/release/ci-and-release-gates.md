@@ -77,14 +77,20 @@ Docker Runtime E2E, OKF, serial uncached Go tests, and golangci-lint. Any
 generator that changes the tree fails the gate.
 
 `go.mod` is the single authoritative Go toolchain version and currently pins
-Go 1.27.1. Every GitHub Actions `setup-go` step resolves that file through
+Go 1.27.2. Every GitHub Actions `setup-go` step resolves that file through
 `go-version-file: go.mod`; repository checks select the matching
-`GOTOOLCHAIN=go1.27.1+auto`; public README prerequisites and badges mirror the
+the module's Go directive; public README prerequisites and badges mirror the
 same value. Quick CI and the exact-main final integration gate run
 `scripts/check_go_version_consistency.mjs`, which rejects drift among these
 sources and requires the local gate runtime to report the exact version. Build,
 test, Desktop, and release paths therefore cannot silently select an older Go
 patch release.
+
+Offline staged notice checks resolve the installed toolchain from the staged
+module before running the generator with `GOTOOLCHAIN=local`. An older `go` on
+PATH must not override that selection. Resolution uses the same offline
+environment, so a missing cached toolchain fails before generation without
+downloading, installing, or changing the index.
 
 `.node-version` is the single authoritative first-party Node.js toolchain and
 pins Node 26.7.0. GitHub Actions resolves it through `node-version-file`, while

@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { canonicalGoVersion } from './check_go_version_consistency.mjs';
 
 const noticeInputs = new Set([
   'THIRD_PARTY_NOTICES.md',
@@ -10,6 +11,7 @@ const noticeInputs = new Set([
   'go.sum',
   '.githooks/pre-commit',
   'scripts/check_staged_third_party_notices.mjs',
+  'scripts/check_go_version_consistency.mjs',
   'scripts/generate_third_party_notices.mjs',
   'scripts/javascript_lock_inventory.mjs',
   'scripts/terminal_agent_icon_integrity.mjs',
@@ -59,6 +61,27 @@ try {
     GOVCS: '*:off',
     GOTOOLCHAIN: 'local',
   });
+  // Read the launcher without automatic switching: Go refuses SDK checksum
+  // verification with GOSUMDB=off even when that SDK is already installed.
+  const installed = JSON.parse(execFileSync('go', ['env', '-json', 'GOROOT', 'GOVERSION', 'GOMODCACHE', 'GOHOSTOS', 'GOHOSTARCH'], {
+    cwd: snapshot,
+    env,
+    encoding: 'utf8',
+  }));
+  const expectedVersion = `go${canonicalGoVersion(snapshot)}`;
+  const goRoot = installed.GOVERSION === expectedVersion
+    ? installed.GOROOT
+    : path.join(installed.GOMODCACHE, `golang.org/toolchain@v0.0.1-${expectedVersion}.${installed.GOHOSTOS}-${installed.GOHOSTARCH}`);
+  const goBinary = path.join(goRoot, 'bin', process.platform === 'win32' ? 'go.exe' : 'go');
+  if (!fs.existsSync(goBinary)) {
+    throw new Error('The staged module Go toolchain is not installed; prepare it before committing.');
+  }
+  env.PATH = path.join(goRoot, 'bin') + path.delimiter + (env.PATH ?? '');
+  env.GOROOT = goRoot;
+  const actualVersion = execFileSync(goBinary, ['env', 'GOVERSION'], { cwd: snapshot, env, encoding: 'utf8' }).trim();
+  if (actualVersion !== expectedVersion) {
+    throw new Error(`The installed Go toolchain reports ${actualVersion}, expected ${expectedVersion}.`);
+  }
   console.log('[INFO] Third-party notices: checking staged content offline');
   const result = spawnSync(process.execPath, [path.join(snapshot, 'scripts/generate_third_party_notices.mjs'), '--check'], {
     cwd: snapshot,
@@ -71,6 +94,7 @@ try {
   console.error(`[ERROR] ${error.message}`);
   console.error('Prepare the locked dependencies and Go module cache, then run node scripts/generate_third_party_notices.mjs.');
   console.error('If dependencies are missing, install with pnpm install --frozen-lockfile in desktop and internal/envapp/ui_src.');
+  console.error('Prepare the Go version declared by the staged go.mod before retrying; the hook only uses installed toolchains.');
   console.error('Use git add to stage the matching dependency inputs and THIRD_PARTY_NOTICES.md, then retry the commit.');
   console.error('This hook does not download dependencies, regenerate notices, or change the index.');
   process.exitCode = 1;

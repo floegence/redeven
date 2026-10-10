@@ -17,9 +17,36 @@ function fixture(t) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-notice-hook-test-'));
   const root = path.join(temporary, 'repo with spaces');
   const log = path.join(temporary, 'generator.json');
+  const oldGoBin = path.join(temporary, 'old go', 'bin');
+  const moduleCache = path.join(temporary, 'toolchain cache');
+  const selectedGoRoot = path.join(moduleCache, 'golang.org/toolchain@v0.0.1-go1.27.2.darwin-arm64');
+  fs.mkdirSync(oldGoBin, { recursive: true });
+  fs.mkdirSync(path.join(selectedGoRoot, 'bin'), { recursive: true });
+  const oldGo = path.join(oldGoBin, 'go');
+  fs.writeFileSync(oldGo, `#!${process.execPath}
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+if (process.argv[2] === 'env' && process.argv[3] === '-json') {
+  for (const [key, value] of Object.entries({ GOTOOLCHAIN: 'local', GOPROXY: 'off', GOSUMDB: 'off', GOVCS: '*:off', GOWORK: 'off' })) assert.equal(process.env[key], value);
+  assert.match(fs.readFileSync('go.mod', 'utf8'), /go 1\\.27\\.2/);
+  console.log(JSON.stringify({ GOROOT: process.env.REDEVEN_NOTICE_TEST_GO_ROOT, GOVERSION: process.env.REDEVEN_NOTICE_TEST_NATIVE_TOOLCHAIN === '1' ? 'go1.27.2' : 'go1.27.1', GOMODCACHE: process.env.REDEVEN_NOTICE_TEST_MISSING_TOOLCHAIN === '1' ? '/missing-toolchain-cache' : process.env.REDEVEN_NOTICE_TEST_MODCACHE, GOHOSTOS: 'darwin', GOHOSTARCH: 'arm64' }));
+} else {
+  assert.equal(process.argv.slice(2).join(' '), 'env GOVERSION');
+  console.log('go1.27.1');
+}
+`);
+  fs.chmodSync(oldGo, 0o755);
+  const selectedGo = path.join(selectedGoRoot, 'bin', 'go');
+  fs.writeFileSync(selectedGo, `#!${process.execPath}
+import assert from 'node:assert/strict';
+assert.equal(process.env.GOTOOLCHAIN, 'local');
+assert.equal(process.argv.slice(2).join(' '), 'env GOVERSION');
+console.log(process.env.REDEVEN_NOTICE_TEST_WRONG_VERSION === '1' ? 'go1.27.1' : 'go1.27.2');
+`);
+  fs.chmodSync(selectedGo, 0o755);
   fs.mkdirSync(root);
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
-  const env = { ...environment, REDEVEN_NOTICE_TEST_LOG: log };
+  const env = { ...environment, PATH: oldGoBin + path.delimiter + environment.PATH, REDEVEN_NOTICE_TEST_LOG: log, REDEVEN_NOTICE_TEST_GO_ROOT: selectedGoRoot, REDEVEN_NOTICE_TEST_MODCACHE: moduleCache };
   const git = (...args) => execFileSync('git', args, { cwd: root, env, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   const write = (name, value) => {
     fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
@@ -32,17 +59,22 @@ function fixture(t) {
   fs.chmodSync(path.join(root, '.githooks/pre-commit'), 0o755);
   const checker = path.join(sourceRoot, 'scripts/check_staged_third_party_notices.mjs');
   if (fs.existsSync(checker)) write('scripts/check_staged_third_party_notices.mjs', fs.readFileSync(checker));
+  write('scripts/check_go_version_consistency.mjs', fs.readFileSync(path.join(sourceRoot, 'scripts/check_go_version_consistency.mjs')));
   write('scripts/check_readme_localizations.mjs', '');
   write('scripts/open_source_hygiene_check.sh', '#!/bin/sh\nexit 0\n');
   fs.chmodSync(path.join(root, 'scripts/open_source_hygiene_check.sh'), 0o755);
   write('scripts/generate_third_party_notices.mjs', `
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 assert.deepEqual(process.argv.slice(2), ['--check']);
 for (const [key, value] of Object.entries({ GOWORK: 'off', GOPROXY: 'off', GOSUMDB: 'off', GOTOOLCHAIN: 'local', GOVCS: '*:off', GOFLAGS: '' })) {
   assert.equal(process.env[key], value, key);
 }
 assert.equal(process.env.GIT_INDEX_FILE, undefined);
+if (process.env.REDEVEN_NOTICE_TEST_CHECK_TOOLCHAIN === '1') {
+  assert.equal(execFileSync('go', ['env', 'GOVERSION'], { encoding: 'utf8' }).trim(), 'go1.27.2');
+}
 fs.readFileSync('go.sum');
 assert.equal(fs.readFileSync('internal/envapp/ui_src/node_modules/license-evidence', 'utf8'), 'installed');
 fs.writeFileSync(process.env.REDEVEN_NOTICE_TEST_LOG, JSON.stringify({ snapshot: process.cwd() }));
@@ -51,11 +83,12 @@ assert.equal(fs.readFileSync('THIRD_PARTY_NOTICES.md', 'utf8'), fs.readFileSync(
   write(lockPath, 'v1\n');
   write('THIRD_PARTY_NOTICES.md', 'v1\n');
   write('go.sum', 'baseline\n');
+  write('go.mod', 'module example.test/notices\n\ngo 1.27.2\n');
   git('add', '.');
   git('commit', '-q', '-m', 'fixture baseline');
   git('config', 'core.hooksPath', '.githooks');
   write('internal/envapp/ui_src/node_modules/license-evidence', 'installed');
-  const run = () => spawnSync('bash', ['.githooks/pre-commit'], { cwd: root, env: { ...env, GIT_INDEX_FILE: path.join(root, '.git/index') }, encoding: 'utf8' });
+  const run = (overrides = {}) => spawnSync('bash', ['.githooks/pre-commit'], { cwd: root, env: { ...env, GIT_INDEX_FILE: path.join(root, '.git/index'), ...overrides }, encoding: 'utf8' });
   return { root, log, git, write, run };
 }
 
@@ -155,7 +188,7 @@ test('dependency and bundled-license inputs all trigger the existing generator',
     'scripts/terminal_agent_icon_integrity.mjs',
   ]) {
     fs.rmSync(f.log, { force: true });
-    f.write(name, 'changed fixture input\n');
+    f.write(name, name === 'go.mod' ? 'module example.test/notices\n\ngo 1.27.2\n// staged change\n' : 'changed fixture input\n');
     f.git('add', name);
     success(f.run());
     assert.ok(fs.existsSync(f.log), `The generator must run for ${name}`);
@@ -168,4 +201,48 @@ test('initial commits check the staged tree without requiring an existing HEAD',
   f.git('update-ref', '-d', 'refs/heads/main');
   success(f.run());
   assert.ok(fs.existsSync(f.log));
+});
+
+test('selects the cached staged-module toolchain offline despite an older Go on PATH', (t) => {
+  const f = fixture(t);
+  f.write(lockPath, 'v2\n');
+  f.write('THIRD_PARTY_NOTICES.md', 'v2\n');
+  f.git('add', lockPath, 'THIRD_PARTY_NOTICES.md');
+  f.write('go.mod', 'module example.test/notices\n\ngo 1.27.1\n');
+  const index = f.git('write-tree');
+  success(f.run({ REDEVEN_NOTICE_TEST_CHECK_TOOLCHAIN: '1' }));
+  assert.equal(f.git('write-tree'), index);
+  assert.match(fs.readFileSync(path.join(f.root, 'go.mod'), 'utf8'), /go 1\.27\.1/);
+});
+
+test('an unavailable cached toolchain rejects the check before generator execution', (t) => {
+  const f = fixture(t);
+  f.write(lockPath, 'v2\n');
+  f.write('THIRD_PARTY_NOTICES.md', 'v2\n');
+  f.git('add', lockPath, 'THIRD_PARTY_NOTICES.md');
+  const index = f.git('write-tree');
+  rejected(f.run({ REDEVEN_NOTICE_TEST_MISSING_TOOLCHAIN: '1' }));
+  assert.equal(fs.existsSync(f.log), false);
+  assert.equal(f.git('write-tree'), index);
+});
+
+test('uses an exact installed native toolchain without requiring a cached SDK', (t) => {
+  const f = fixture(t);
+  f.write(lockPath, 'v2\n');
+  f.write('THIRD_PARTY_NOTICES.md', 'v2\n');
+  f.git('add', lockPath, 'THIRD_PARTY_NOTICES.md');
+  success(f.run({ REDEVEN_NOTICE_TEST_NATIVE_TOOLCHAIN: '1', REDEVEN_NOTICE_TEST_CHECK_TOOLCHAIN: '1', REDEVEN_NOTICE_TEST_MISSING_TOOLCHAIN: '1' }));
+});
+
+test('rejects an installed SDK whose binary reports the wrong version', (t) => {
+  const f = fixture(t);
+  f.write(lockPath, 'v2\n');
+  f.write('THIRD_PARTY_NOTICES.md', 'v2\n');
+  f.git('add', lockPath, 'THIRD_PARTY_NOTICES.md');
+  const index = f.git('write-tree');
+  const result = f.run({ REDEVEN_NOTICE_TEST_WRONG_VERSION: '1' });
+  rejected(result);
+  assert.match(result.stderr, /reports go1\.27\.1, expected go1\.27\.2/);
+  assert.equal(fs.existsSync(f.log), false);
+  assert.equal(f.git('write-tree'), index);
 });

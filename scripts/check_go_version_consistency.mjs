@@ -9,7 +9,7 @@ function readText(root, path) {
   return readFileSync(join(root, path), "utf8");
 }
 
-function canonicalGoVersion(root) {
+export function canonicalGoVersion(root) {
   const match = readText(root, "go.mod").match(/^go ([0-9]+\.[0-9]+\.[0-9]+)$/mu);
   if (!match) {
     throw new Error("go.mod must declare an exact patch-level Go version");

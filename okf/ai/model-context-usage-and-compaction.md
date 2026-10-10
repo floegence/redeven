@@ -7,7 +7,7 @@ timestamp: 2026-10-10T00:00:00Z
 ---
 # Summary
 
-Published Floret v7.27.1 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
+Published Floret v7.27.2 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
 
 # Contract
 
