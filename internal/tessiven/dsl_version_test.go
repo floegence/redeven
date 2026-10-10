@@ -338,3 +338,37 @@ func TestGeneratedLegacyRequestsRemainReplayableAfterDSLUpgrade(t *testing.T) {
 		})
 	}
 }
+
+func TestFreshCreationAndLegacyRevisionOperationsWriteCurrentDSL(t *testing.T) {
+	path, request, _ := createV1Library(t)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	created, err := s.Create(t.Context(), "fresh-create", "Fresh canvas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	renamed, err := s.Rename(t.Context(), request.CanvasID, RevisionRequest{RequestID: "fresh-rename", ExpectedVersion: 2, Title: "Renamed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied, err := s.Duplicate(t.Context(), request.CanvasID, RevisionRequest{RequestID: "fresh-copy", Version: 1, Title: "Copied"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := s.Restore(t.Context(), request.CanvasID, RevisionRequest{RequestID: "fresh-restore", ExpectedVersion: 3, Version: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, result := range []SaveResult{created, renamed, copied, restored} {
+		if result.Version.DSLVersion != tessivenspec.CurrentVersion || result.Version.Document.APIVersion != tessivenspec.CurrentAPIVersion || !strings.Contains(result.Version.DocumentYAML, tessivenspec.CurrentAPIVersion) {
+			t.Fatal("new revision kept a legacy DSL header")
+		}
+	}
+	old, err := s.Version(t.Context(), request.CanvasID, 1)
+	if err != nil || old.DocumentYAML != request.DocumentYAML {
+		t.Fatal("revision operations rewrote legacy history")
+	}
+}
