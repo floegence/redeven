@@ -8101,21 +8101,23 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-attachment-item {
   display: grid;
-  flex: 1 1 17rem;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 22rem;
+  max-width: min(18rem, 100%);
+  height: 2rem;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--muted) 38%, transparent);
-  padding: 0.375rem 0.5rem;
+  padding: 0 0.375rem;
 }
 
 .flower-attachment-preview-trigger {
   display: grid;
   width: 100%;
+  height: 100%;
   min-width: 0;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -8183,8 +8185,8 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-attachment-file-icon {
   display: inline-flex;
-  width: 2rem;
-  height: 2rem;
+  width: 1rem;
+  height: 1rem;
   align-items: center;
   justify-content: center;
   color: var(--muted-foreground);
@@ -8196,15 +8198,16 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-attachment-body,
-.flower-attachment-name,
-.flower-attachment-meta {
+.flower-attachment-name {
   min-width: 0;
 }
 
 .flower-attachment-body {
+  position: relative;
   display: flex;
+  height: 100%;
   flex-direction: column;
-  gap: 0.2rem;
+  justify-content: center;
 }
 
 .flower-attachment-name {
@@ -8212,19 +8215,9 @@ button.flower-attachment-preview-trigger:disabled {
   color: var(--foreground);
   font-size: var(--floe-type-body);
   font-weight: 500;
-  line-height: 1.25rem;
+  line-height: 1rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.flower-attachment-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.6875rem;
-  line-height: 1rem;
-  overflow-wrap: anywhere;
 }
 
 .flower-attachment-progress {
@@ -8246,18 +8239,51 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-attachment-actions {
   display: flex;
-  min-width: 0;
+  min-width: 3.5rem;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.125rem;
+  gap: 0;
+}
+
+.flower-attachment-item[data-attachment-source='long_text'] .flower-attachment-actions {
+  min-width: 5.25rem;
 }
 
 .flower-attachment-feedback {
   display: block;
-  height: 2lh;
   overflow: auto;
   font-size: 0.6875rem;
   line-height: 1rem;
+}
+
+.flower-attachment-item[data-attachment-kind='file']:not([data-attachment-status='staged_ready']) .flower-attachment-body {
+  padding-bottom: 0.75rem;
+}
+
+.flower-attachment-item[data-attachment-kind='file'] .flower-attachment-feedback {
+  position: absolute;
+  right: 0;
+  bottom: 0.0625rem;
+  left: 0;
+  height: 0.75rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  line-height: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-attachment-item[data-attachment-kind='file'] .flower-attachment-progress {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.flower-attachment-item[data-attachment-kind='file'] .flower-attachment-icon-button {
+  width: 1.75rem;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
 }
 
 .flower-attachment-item[data-attachment-kind='image'] {
@@ -8285,6 +8311,7 @@ button.flower-attachment-preview-trigger:disabled {
   position: absolute;
   top: 0;
   right: 0;
+  min-width: 0;
   gap: 0;
 }
 
@@ -8446,6 +8473,21 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-composer-attachment-button > svg {
   width: 1rem;
   height: 1rem;
+}
+
+.flower-attachment-item .flower-attachment-remove {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.flower-attachment-item:hover .flower-attachment-remove,
+.flower-attachment-item:has(:focus-visible) .flower-attachment-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.flower-attachment-item:is(:hover, :has(:focus-visible)) .flower-attachment-remove:disabled {
+  opacity: 0.45;
 }
 
 .flower-composer-over-limit {
@@ -10895,15 +10937,38 @@ button.flower-attachment-preview-trigger:disabled {
     flex-basis: 44px;
   }
 
-  .flower-attachment-item[data-attachment-kind='image'] .flower-attachment-icon-button {
+  .flower-attachment-item .flower-attachment-actions .flower-attachment-icon-button {
     width: 44px;
     height: 44px;
     min-width: 44px;
     min-height: 44px;
   }
 
+  .flower-attachment-item[data-attachment-kind='file'] {
+    height: 44px;
+  }
+
+  .flower-attachment-actions {
+    min-width: 88px;
+  }
+
+  .flower-attachment-item[data-attachment-source='long_text'] .flower-attachment-actions {
+    min-width: 132px;
+  }
+
   .flower-attachment-item[data-attachment-kind='image'] .flower-attachment-icon-button::before {
     inset: 0.5rem;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .flower-attachment-item .flower-attachment-remove {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .flower-attachment-item .flower-attachment-remove:disabled {
+    opacity: 0.45;
   }
 }
 

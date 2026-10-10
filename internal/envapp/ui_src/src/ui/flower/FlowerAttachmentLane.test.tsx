@@ -82,16 +82,38 @@ describe('FlowerAttachmentLane', () => {
       />
     ), host);
     try {
-      const cancel = host.querySelector('button[aria-label="Cancel"]') as HTMLButtonElement;
-      cancel.focus();
-      expect(document.activeElement).toBe(cancel);
+      const remove = host.querySelector('button[aria-label="Remove"]') as HTMLButtonElement;
+      remove.focus();
+      expect(document.activeElement).toBe(remove);
       setItems([uploadingItem(50)]);
-      expect(host.querySelector('button[aria-label="Cancel"]')).toBe(cancel);
-      expect(document.activeElement).toBe(cancel);
+      expect(host.querySelector('button[aria-label="Remove"]')).toBe(remove);
+      expect(document.activeElement).toBe(remove);
       expect((host.querySelector('progress') as HTMLProgressElement).value).toBe(50);
     } finally {
       dispose();
       host.remove();
+    }
+  });
+
+  it.each(['queued', 'uploading'] as const)('uses one X to cancel a %s file attachment', (status) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onCancel = vi.fn();
+    const onRemove = vi.fn();
+    const dispose = render(() => (
+      <FlowerAttachmentLane
+        items={[{ ...uploadingItem(1), status }]} copy={copy}
+        onRetry={vi.fn()} onReselect={vi.fn()} onCancel={onCancel}
+        onRemove={onRemove} onRestore={vi.fn()}
+      />
+    ), host);
+    try {
+      expect(host.querySelectorAll('button')).toHaveLength(1);
+      (host.querySelector('button[aria-label="Remove"]') as HTMLButtonElement).click();
+      expect(onCancel).toHaveBeenCalledWith('local-1');
+      expect(onRemove).not.toHaveBeenCalled();
+    } finally {
+      dispose(); host.remove();
     }
   });
 
@@ -120,8 +142,8 @@ describe('FlowerAttachmentLane', () => {
       expect(document.activeElement).toBe(remove);
       expect((host.querySelector('progress') as HTMLProgressElement).value).toBe(75);
       remove.click();
-      expect(onRemove).toHaveBeenCalledWith(image.local_id);
-      expect(onCancel).not.toHaveBeenCalled();
+      expect(onCancel).toHaveBeenCalledWith(image.local_id);
+      expect(onRemove).not.toHaveBeenCalled();
       setItems([{ ...image, status: 'upload_error', error_code: 'attachment_upload_failed' }]);
       expect(host.querySelector('.flower-attachment-error')?.textContent).toBe('Upload failed');
       expect(host.querySelector('[role="listitem"]')?.getAttribute('aria-describedby')).toBe('flower-attachment-error-local-1');
@@ -199,7 +221,7 @@ describe('FlowerAttachmentLane', () => {
     }
   });
 
-  it('exposes complete file metadata and polite lifecycle announcements', () => {
+  it('shows only the ready filename while retaining accessible metadata and lifecycle announcements', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const ready: FlowerAttachmentItem = {
@@ -226,6 +248,10 @@ describe('FlowerAttachmentLane', () => {
       expect(host.querySelector('[role="listitem"]')?.getAttribute('aria-label')).toBe(
         'notes.txt, 100 B, 3 lines, text/plain, Ready',
       );
+      const item = host.querySelector('[role="listitem"]')!;
+      expect(item.textContent).toBe('notes.txt');
+      expect(item.querySelector('.flower-attachment-meta')).toBeNull();
+      expect(item.querySelector('.flower-attachment-feedback')).toBeNull();
     } finally {
       dispose();
       host.remove();
