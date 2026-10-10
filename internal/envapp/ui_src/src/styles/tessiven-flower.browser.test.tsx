@@ -768,3 +768,80 @@ it('keeps native approval controls inside the same conversation window', async (
   await page.getByRole('button', { name: 'Approve Inspect service configuration', exact: true }).click();
   expect(submitApproval).toHaveBeenCalledWith({ thread_id: 'canvas-thread', interaction_id: 'approval-1', approved: true });
 });
+
+
+it('paints successive assistant and reasoning chunks before a canvas turn completes', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount(false, {}, false, true, {
+    selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 0,
+  });
+  await expect.element(editor()).toBeVisible();
+  await editor().fill('Explain the architecture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  const input = runtime.sent.mock.calls[0][0];
+  for (let index = 0; index < 3; index++) {
+    runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+      thread_id: 'canvas-thread', view_version: index + 2, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, queue: [], interactions: [], items: [
+        { id: `user:${input.client_request_id}`, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: input.prompt },
+        { id: 'thinking', turn_id: 'turn', run_id: 'run', ordinal: 2, kind: 'thinking', live: true, text: `Inspecting layer ${index}` },
+        { id: 'reply', turn_id: 'turn', run_id: 'run', ordinal: 3, kind: 'assistant', live: true, text: `Current canvas output ${index}` },
+      ],
+    } });
+    await expect.element(page.getByText(`Current canvas output ${index}`, { exact: true })).toBeVisible();
+    expect(document.querySelector('[data-flower-selected-thread-status="running"]')).not.toBeNull();
+  }
+});
+
+it('keeps appended live output visible after a long canvas tool history', async () => {
+  await page.viewport(1000, 480);
+  const runtime = mount();
+  host.style.cssText = 'position:absolute;inset:0;width:1000px;height:480px';
+  await editor().fill('Refine the current canvas');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  const history = Array.from({ length: 30 }, (_, index) => ({
+    id: `history-${index}`, kind: 'assistant' as const, turn_id: 'turn', run_id: 'run', ordinal: index + 1,
+    text: `Verified existing canvas section ${index}.\n\nAll services and relationships are preserved.`,
+  }));
+  let text = '';
+  for (let index = 0; index < 5; index++) {
+    text += `\n\nLive refinement ${index}: ${'Preserving the current service inventory. '.repeat(12)}\n\nVisible tail ${index}`;
+    runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+      thread_id: 'canvas-thread', view_version: index + 2, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, queue: [], interactions: [], items: [
+        ...history, { id: 'live-reply', kind: 'assistant', turn_id: 'turn', run_id: 'run', ordinal: 31, live: true, text },
+      ],
+    } });
+    await expect.element(page.getByText(`Visible tail ${index}`, { exact: true })).toBeVisible();
+    await expect.poll(() => {
+      const tail = Array.from(document.querySelectorAll<HTMLElement>('.flower-chat-md-raw-tail, .flower-chat-md-block p'))
+        .find(element => element.textContent?.trim().endsWith(`Visible tail ${index}`));
+      const viewport = document.querySelector<HTMLElement>('.flower-chat-transcript');
+      if (!tail || !viewport) return false;
+      return tail.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().bottom + 2;
+    }).toBe(true);
+    expect(document.querySelector('[data-flower-selected-thread-status="running"]')).not.toBeNull();
+  }
+});
+
+it('shows reasoning as it arrives before any assistant reply or tool result', async () => {
+  await page.viewport(1000, 600);
+  const runtime = mount(false, {}, false, true);
+  await editor().fill('Update the architecture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  let text = '';
+  for (let index = 0; index < 3; index++) {
+    text += `Inspecting canvas layer ${index}.\n\n`;
+    runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+      thread_id: 'canvas-thread', view_version: index + 2, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, queue: [], interactions: [], items: [
+        { id: 'thinking', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'thinking', live: true, text },
+      ],
+    } });
+    await expect.poll(() => document.querySelector('.flower-thinking-content')?.textContent).toContain(`Inspecting canvas layer ${index}.`);
+    expect(document.querySelector('.flower-thinking-content')!.clientHeight).toBeGreaterThan(0);
+  }
+});
