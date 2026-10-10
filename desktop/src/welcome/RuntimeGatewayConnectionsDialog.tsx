@@ -19,6 +19,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   const [choice, setChoice] = createSignal<'preserve' | 'new'>();
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
+  const [displayMode, setDisplayMode] = createSignal<'leave' | 'publish'>(props.mode ?? 'leave');
   const targetID = createMemo(() => props.targetID);
   const mode = createMemo(() => props.mode);
   const gatewayID = createMemo(() => props.gatewayID);
@@ -39,12 +40,13 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   // Equivalent snapshots do not reinitialize a target's confirmation session.
   createEffect(on([targetID, mode, gatewayID], ([target, operation, requestedGateway]) => {
     const current = ++generation;
+    if (!operation) return;
+    setDisplayMode(operation);
     setChoice(undefined);
     setError('');
     setStatus(undefined);
     setSelected('');
     setBusy(false);
-    if (!operation) return;
     void (async () => {
       try {
         const result = await window.redevenDesktopLauncher?.performAction({
@@ -96,13 +98,13 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
     }
   }
 
-  const submitDisabled = () => busy() || !member() || member()?.phase === 'removal_pending'
+  const submitDisabled = () => !mode() || busy() || !member() || member()?.phase === 'removal_pending'
     || mode() === 'publish' && (member()?.cloud_publication === true
       || Boolean(status()?.existing_environment_id && !choice()));
 
   return (
     <Dialog open={!!mode()} onOpenChange={value => { if (!value) close(); }}
-      title={text(mode() === 'publish' ? 'gatewayConnections.publishTitle' : 'gatewayConnections.unpairTitle')}
+      title={text(displayMode() === 'publish' ? 'gatewayConnections.publishTitle' : 'gatewayConnections.unpairTitle')}
       closeLabel={text('common.close')} class="redeven-gateway-dialog">
       <div class="space-y-4">
         <Show when={members().length > 1 && !gatewayID()}>
@@ -123,13 +125,13 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
           <div class="space-y-2">
             <p class="truncate font-medium" title={item().gateway_name || item().gateway_id}>{item().gateway_name || item().gateway_id}</p>
             <p class="break-all text-xs text-muted-foreground">{item().endpoints?.[0]?.address}</p>
-            <p class="text-sm text-muted-foreground">{text(mode() === 'publish' ? 'gatewayConnections.publishHelp' : 'gatewayConnections.unpairImpact')}</p>
-            <Show when={mode() === 'leave' && item().cloud_publication}>
+            <p class="text-sm text-muted-foreground">{text(displayMode() === 'publish' ? 'gatewayConnections.publishHelp' : 'gatewayConnections.unpairImpact')}</p>
+            <Show when={displayMode() === 'leave' && item().cloud_publication}>
               <p role="alert" class="text-sm text-warning">{text('gatewayConnections.cloudImpact')}</p>
             </Show>
           </div>
         )}</Show>
-        <Show when={mode() === 'publish' && status()?.existing_environment_id}>
+        <Show when={displayMode() === 'publish' && status()?.existing_environment_id}>
           <fieldset class="space-y-3" disabled={busy()}>
             <legend class="mb-2 text-sm font-medium">{text('gatewayJoin.existingEnvironment')}</legend>
             <For each={['preserve', 'new'] as const}>{value => (
@@ -151,10 +153,10 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
         <div class="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" class="cursor-pointer whitespace-nowrap" disabled={busy()} onClick={close}>{text('common.cancel')}</Button>
-          <Button ref={confirm} variant={mode() === 'leave' ? 'destructive' : 'default'} class="cursor-pointer whitespace-nowrap"
+          <Button ref={confirm} variant={displayMode() === 'leave' ? 'destructive' : 'default'} class="cursor-pointer whitespace-nowrap"
             disabled={submitDisabled()} onClick={() => void submit()}>
             <StableText reserve={[text('gatewayConnections.unpair'), text('gatewayConnections.publish')]}>
-              {text(mode() === 'publish' ? 'gatewayConnections.publish' : 'gatewayConnections.unpair')}
+              {text(displayMode() === 'publish' ? 'gatewayConnections.publish' : 'gatewayConnections.unpair')}
             </StableText>
           </Button>
         </div>

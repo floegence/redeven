@@ -1,5 +1,6 @@
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
+import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import { buildGatewayDesktopTarget, type DesktopSessionSummary } from '../main/desktopTarget';
 import { memberFixture } from './gatewayMembershipFixture';
 import { mixedEnvironmentFixture } from './mixedEnvironmentFixture';
@@ -18,15 +19,15 @@ export function runtimeConnectionFixture(options: {
     phase: 'joined' as const, cloud_publication: index === 1,
     endpoints: [{ address: `https://${gateway_name.toLowerCase()}.internal:7443` }],
   }));
-  const presences = Object.fromEntries(Object.entries(fixture.inputs.managedRuntimePresenceByTargetID).map(([id, presence]) => {
-    if (presence.runtime_service.bindings?.cloud_link?.state !== 'linked') return [id, presence];
+  const presences = Object.fromEntries<DesktopRuntimePresence>(Object.entries(fixture.inputs.managedRuntimePresenceByTargetID).map(([id, presence]) => {
+    if (presence.runtime_service.bindings?.cloud_link?.state !== 'linked') return [id, presence] as const;
     return [id, { ...presence, runtime_service: { ...presence.runtime_service,
       gateway_memberships: memberships,
-      capabilities: { ...presence.runtime_service.capabilities,
+      capabilities: { ...presence.runtime_service.capabilities!,
         cloud_link: { supported: options.cloudManagement !== false, reason_code: options.cloudManagement === false ? 'gateway_managed' : undefined },
         runtime_gateway: { supported: true },
       },
-    } }];
+    } }] as const;
   }));
   const gatewaySources: DesktopGatewaySource[] = memberships.map((member, index) => ({
     gateway_id: `registration-${index}`, display_name: member.gateway_name, local_enabled: true,
