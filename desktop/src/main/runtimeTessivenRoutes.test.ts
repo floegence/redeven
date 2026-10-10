@@ -8,6 +8,8 @@ describe('Tessiven Desktop request authority', () => {
   it('allows exact canvas and version routes through the existing local adapter', () => {
     for (const path of [
       `${base}/schema`,
+      `${base}/schema?version=v1`,
+      `${base}/schema?version=v1.0.0`,
       `${base}/events`,
       `${base}/canvases?query=commerce&archived=false`,
       `${base}/canvases/canvas/versions/12`,
@@ -26,6 +28,10 @@ describe('Tessiven Desktop request authority', () => {
     for (const path of [
       `https://attacker.example${base}/schema`,
       `${base}/events?target=remote`,
+      `${base}/schema?version=`,
+      `${base}/schema?version=v1&version=v1.0.0`,
+      `${base}/schema?version=v1&target=remote`,
+      `${base}/schema?version=${"x".repeat(65)}`,
       `${base}/canvases?archived=true&archived=false`,
       `${base}/canvases/c/versions/0`,
       `${base}/host`,

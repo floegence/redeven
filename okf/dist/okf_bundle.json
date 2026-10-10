@@ -19244,7 +19244,7 @@
         "title": "Tessiven DSL versioning",
         "type": "Architecture Contract"
       },
-      "body_length": 5933,
+      "body_length": 6368,
       "summary": "The Runtime owns Tessiven DSL schema selection and explicit forward migrations.\nNew documents use `apiVersion: redeven.io/tessiven/v1.0.0`. Supported legacy\n`redeven.io/tessiven/v1` remains readable through a reviewed `v1 -\u003e v1.0.0`\nupgrade. Reads project current structured data while preserving historical YAML,\ndigest and revision identity. Authorized edits save a new current snapshot.\nUnknown versions, invalid source/target documents or migration failures leave\nstored data intact; users need a compatible Runtime or a valid repair.",
       "sections": [
         {
@@ -19265,8 +19265,8 @@
           "id": "new-snapshots-and-failure-boundary",
           "title": "New Snapshots And Failure Boundary",
           "level": 1,
-          "body": "Creation, imports, full save and exact edits write the current DSL. The existing\nexpected-version check, permissions, idempotency and save transaction remain the\nsingle write boundary. A legacy v1 save updates only the root version scalar,\nretaining unrelated text, comments, quoting, IDs, bindings and layout hints.\nRestore, duplicate and rename also create current snapshots under strict\nvalidation. Existing history is never bulk-rewritten.\n\nRetry identity uses the original submitted arguments, before migration. An exact\nretry recovers its original result; submitting normalized arguments under the\nsame request ID is a conflict. A previously committed historical retry remains\nrecoverable without rerunning it as a new write. A failed schema validation,\nmigration, placement repair or version check creates neither a version nor a\nrequest result, and leaves the last canvas intact.\n\nDSL upgrades do not change the `tessiven_canvas_library` SQLite lineage. The\n[canvas storage contract](tessiven-canvas-contract.md) continues to own atomic\nstartup database upgrades independently.",
-          "char_count": 1085
+          "body": "Creation, imports, full save and exact edits write the current DSL. The existing\nexpected-version check, permissions, idempotency and save transaction remain the\nsingle write boundary. A legacy v1 save updates only the root version scalar,\nretaining unrelated text, comments, quoting, IDs, bindings and layout hints.\nRestore, duplicate and rename also create current snapshots under strict\nvalidation. Existing history is never bulk-rewritten.\n\nRetry identity uses the original submitted arguments, before migration. An exact\nretry recovers its original result; submitting normalized arguments under the\nsame request ID is a conflict. A previously committed historical retry remains\nrecoverable without rerunning it as a new write. Generated rename/copy\narguments retain their source DSL identity, and empty creation retains its\noriginal v1 argument encoding while that historical format remains supported.\nThese compatibility encodings serve persisted pre-semver request fingerprints\nonly; Save upgrades every newly written snapshot to the current DSL. A failed schema validation,\nmigration, placement repair or version check creates neither a version nor a\nrequest result, and leaves the last canvas intact.\n\nDSL upgrades do not change the `tessiven_canvas_library` SQLite lineage. The\n[canvas storage contract](tessiven-canvas-contract.md) continues to own atomic\nstartup database upgrades independently.",
+          "char_count": 1407
         },
         {
           "id": "schema-and-flower-contract",
@@ -19316,6 +19316,11 @@
           "id": "internal/tessiven/schema_test.go:0:database migration preserves historical request results.",
           "source": "internal/tessiven/schema_test.go",
           "description": "Database migration preserves historical request results."
+        },
+        {
+          "id": "desktop/src/main/runtimeTessivenRoutes.test.ts:0:exact schema query transport without alternate authorities.",
+          "source": "desktop/src/main/runtimeTessivenRoutes.test.ts",
+          "description": "Exact schema query transport without alternate authorities."
         },
         {
           "id": "internal/codeapp/appserver/tessiven_test.go:0:version selector and permission boundary.",
@@ -35997,5 +36002,5 @@
       ]
     }
   ],
-  "source_sha256": "9bb7f75b11d4f9cc9d4e305b6f8d3ae5657211b1506d4603b4b0fb97b1f2e1c8"
+  "source_sha256": "dc6e8ed02ac109494b3c0dd8149457905c0c0bbd784f2dbf3c60dc8725f5d509"
 }

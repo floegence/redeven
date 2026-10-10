@@ -109,7 +109,9 @@ func (s *Service) Create(ctx context.Context, requestID, title string) (SaveResu
 	if strings.TrimSpace(title) == "" {
 		return SaveResult{}, ErrInvalidRequest
 	}
-	source, err := documentYAML(&Document{APIVersion: tessivenspec.CurrentAPIVersion, Kind: "ServiceCanvas", Metadata: Metadata{Title: title}})
+	// Keep the original creation argument encoding for historical retry identity.
+	// Save upgrades each newly persisted snapshot to the current DSL.
+	source, err := documentYAML(&Document{APIVersion: tessivenspec.Namespace + "v1", Kind: "ServiceCanvas", Metadata: Metadata{Title: title}})
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -385,6 +387,8 @@ func (s *Service) Duplicate(ctx context.Context, id string, req RevisionRequest)
 	if req.Title != "" {
 		v.Document.Metadata.Title = req.Title
 	}
+	// Retain the source DSL in generated arguments for pre-upgrade retries.
+	v.Document.APIVersion = tessivenspec.Namespace + v.DSLVersion
 	source, err := documentYAML(v.Document)
 	if err != nil {
 		return SaveResult{}, err
@@ -400,6 +404,8 @@ func (s *Service) Rename(ctx context.Context, id string, req RevisionRequest) (S
 		return SaveResult{}, err
 	}
 	v.Document.Metadata.Title = req.Title
+	// Retain the source DSL in generated arguments for pre-upgrade retries.
+	v.Document.APIVersion = tessivenspec.Namespace + v.DSLVersion
 	source, err := documentYAML(v.Document)
 	if err != nil {
 		return SaveResult{}, err

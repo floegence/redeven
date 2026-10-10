@@ -14,7 +14,7 @@ export const TESSIVEN_RUNTIME_ROUTES = [
   {
     path: `${TESSIVEN_RUNTIME_BASE}/schema`,
     methods: ['GET'],
-    allowsQuery: noQuery,
+    allowsQuery: query({ version: (value) => value.length > 0 && value.length <= 64 }),
   },
   {
     path: `${TESSIVEN_RUNTIME_BASE}/validate`,

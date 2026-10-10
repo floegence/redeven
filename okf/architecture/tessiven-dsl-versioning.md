@@ -73,7 +73,11 @@ validation. Existing history is never bulk-rewritten.
 Retry identity uses the original submitted arguments, before migration. An exact
 retry recovers its original result; submitting normalized arguments under the
 same request ID is a conflict. A previously committed historical retry remains
-recoverable without rerunning it as a new write. A failed schema validation,
+recoverable without rerunning it as a new write. Generated rename/copy
+arguments retain their source DSL identity, and empty creation retains its
+original v1 argument encoding while that historical format remains supported.
+These compatibility encodings serve persisted pre-semver request fingerprints
+only; Save upgrades every newly written snapshot to the current DSL. A failed schema validation,
 migration, placement repair or version check creates neither a version nor a
 request result, and leaves the last canvas intact.
 
@@ -102,5 +106,6 @@ must be evidence-backed under the
 - `internal/tessiven/store.go` - Immutable history, original retry identity and atomic new snapshots.
 - `internal/tessiven/dsl_version_test.go` - Styles, complete paths, unknown versions, edit and restart.
 - `internal/tessiven/schema_test.go` - Database migration preserves historical request results.
+- `desktop/src/main/runtimeTessivenRoutes.test.ts` - Exact schema query transport without alternate authorities.
 - `internal/codeapp/appserver/tessiven_test.go` - Version selector and permission boundary.
 - `internal/ai/tessiven_tools_test.go` - Model-visible exact schema selection.

@@ -72,6 +72,8 @@ func TestLegacyMigrationPreservesScalarStyles(t *testing.T) {
 		{"explicit-tag", "apiVersion: !!str '" + old + "'\n", "apiVersion: !!str '" + current + "'\n"},
 		{"literal", "apiVersion: |- # keep\n  " + old + "\n", "apiVersion: |- # keep\n  " + current + "\n"},
 		{"folded", "apiVersion: >-\n  " + old + "\n", "apiVersion: >-\n  " + current + "\n"},
+		{"cr-only", "# preface\rapiVersion: " + old + "\r", "# preface\rapiVersion: " + current + "\r"},
+		{"nel", "# preface\u0085apiVersion: " + old + "\n", "# preface\u0085apiVersion: " + current + "\n"},
 		{"crlf", "apiVersion: " + old + "\r\n", "apiVersion: " + current + "\r\n"},
 		{"unicode-flow", "{metadata: {title: '版本'}, apiVersion: '" + old + "', kind: ServiceCanvas}\n", "{metadata: {title: '版本'}, apiVersion: '" + current + "', kind: ServiceCanvas}\n"},
 		{"json", `{"kind":"ServiceCanvas","apiVersion":"redeven.io/tessiven/v1","metadata":{"title":"Example"}}`, `{"kind":"ServiceCanvas","apiVersion":"redeven.io/tessiven/v1.0.0","metadata":{"title":"Example"}}`},
@@ -280,5 +282,59 @@ func TestLegacyUpgradeCannotPersistAnOversizedTarget(t *testing.T) {
 	result := Validate(source)
 	if result.Valid || len(result.Diagnostics) != 1 || result.Diagnostics[0].Path != "/apiVersion" || !strings.Contains(result.Diagnostics[0].Message, "upgraded document exceeds") {
 		t.Fatalf("target size must be checked before persistence: %+v", result.Diagnostics)
+	}
+}
+
+func TestGeneratedLegacyRequestsRemainReplayableAfterDSLUpgrade(t *testing.T) {
+	path, base, _ := createV1Library(t)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, operation := range []string{"created", "rename", "duplicate"} {
+		t.Run(operation, func(t *testing.T) {
+			document := Validate(base.DocumentYAML).Document
+			document.APIVersion = "redeven.io/tessiven/v1"
+			document.Metadata.Title = "Generated title"
+			req := SaveRequest{RequestID: "legacy-" + operation}
+			switch operation {
+			case "created":
+				document = &Document{APIVersion: "redeven.io/tessiven/v1", Kind: "ServiceCanvas", Metadata: Metadata{Title: "Generated title"}}
+				req.Summary = "Create canvas"
+			case "rename":
+				req.CanvasID = base.CanvasID
+				req.ExpectedVersion = 2
+				req.Summary = "Rename canvas"
+			case "duplicate":
+				req.Summary = fmt.Sprintf("Copy %s version 1", base.CanvasID)
+			}
+			source, err := documentYAML(document)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.DocumentYAML = source
+			input, _ := json.Marshal(struct {
+				SaveRequest
+				Source string
+			}{req, operation})
+			original := SaveResult{Canvas: Canvas{ID: "original-" + operation, LatestVersion: 1}, Version: Version{CanvasID: "original-" + operation, Number: 1, DocumentYAML: source, Digest: digest(source), Source: operation, Document: document}}
+			encoded, _ := json.Marshal(original)
+			if _, err := s.db.Exec(`INSERT INTO requests VALUES(?,?,?)`, req.RequestID, digest(string(input)), string(encoded)); err != nil {
+				t.Fatal(err)
+			}
+			var retry SaveResult
+			switch operation {
+			case "created":
+				retry, err = s.Create(t.Context(), req.RequestID, "Generated title")
+			case "rename":
+				retry, err = s.Rename(t.Context(), base.CanvasID, RevisionRequest{RequestID: req.RequestID, ExpectedVersion: 2, Title: "Generated title"})
+			case "duplicate":
+				retry, err = s.Duplicate(t.Context(), base.CanvasID, RevisionRequest{RequestID: req.RequestID, Version: 1, Title: "Generated title"})
+			}
+			if err != nil || retry.Canvas.ID != original.Canvas.ID || retry.Version.DocumentYAML != source || retry.Version.Document.APIVersion != tessivenspec.CurrentAPIVersion {
+				t.Fatalf("generated legacy retry: %+v %v", retry, err)
+			}
+		})
 	}
 }
