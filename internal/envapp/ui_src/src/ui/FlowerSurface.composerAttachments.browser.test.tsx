@@ -1,7 +1,7 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { describe, expect, it, vi } from 'vitest';
@@ -51,6 +51,62 @@ async function imageFile(name: string): Promise<File> {
 }
 
 describe('Flower composer attachment browser presentation', () => {
+  it.each([false, true])('reveals removal through hover, keyboard, or touch without moving attachments (touch=%s)', async (touch) => {
+    await page.viewport(900, 720);
+    const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+    await media.emulateTouchInput(touch);
+    const host = document.createElement('div');
+    host.className = 'flower-surface';
+    document.body.append(host);
+    const previewURL = URL.createObjectURL(await imageFile('diagram.png'));
+    const file: FlowerAttachmentItem = {
+      local_id: 'file-hover', request_id: 'file-hover', attempt_id: 'file-hover', source: 'file',
+      name: 'notes.txt', mime_type: 'text/plain', size_bytes: 100, status: 'staged_ready',
+      loaded_bytes: 100, progress_indeterminate: false,
+    };
+    const image: FlowerAttachmentItem = { ...file, local_id: 'image-hover', name: 'diagram.png', mime_type: 'image/png', preview_url: previewURL };
+    const [items, setItems] = createSignal<readonly FlowerAttachmentItem[]>([image, file]);
+    const onRemove = vi.fn((id: string) => setItems((current) => current.filter((item) => item.local_id !== id)));
+    const dispose = render(() => <>
+      <button data-outside type="button">Outside</button>
+      <FlowerAttachmentLane items={items()} copy={DEFAULT_FLOWER_SURFACE_COPY.attachments!}
+        onRetry={vi.fn()} onReselect={vi.fn()} onCancel={vi.fn()} onRemove={onRemove} onRestore={vi.fn()} onPreview={vi.fn()} />
+    </>, host);
+    try {
+      await userEvent.click(host.querySelector('[data-outside]')!);
+      for (const expected of [image, file]) {
+        const item = host.querySelector<HTMLElement>('.flower-attachment-item')!;
+        const remove = item.querySelector<HTMLButtonElement>('.flower-attachment-remove')!;
+        const initial = item.getBoundingClientRect().toJSON();
+        expect(getComputedStyle(remove).opacity).toBe(touch ? '1' : '0');
+        expect(getComputedStyle(remove).pointerEvents).toBe(touch ? 'auto' : 'none');
+        if (!touch) {
+          await userEvent.hover(item);
+          expect(getComputedStyle(remove).opacity).toBe('1');
+          expect(item.getBoundingClientRect().toJSON()).toEqual(initial);
+          await userEvent.hover(host.querySelector('[data-outside]')!);
+          expect(getComputedStyle(remove).opacity).toBe('0');
+          await userEvent.keyboard('{Tab}');
+          remove.focus();
+          expect(remove.matches(':focus-visible')).toBe(true);
+          expect(getComputedStyle(remove).opacity).toBe('1');
+          expect(item.getBoundingClientRect().toJSON()).toEqual(initial);
+          await userEvent.keyboard('{Enter}');
+        } else {
+          expect(remove.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+          await userEvent.click(remove);
+        }
+        expect(onRemove).toHaveBeenCalledWith(expected.local_id);
+        // Clear the next-item focus restoration before checking its resting state.
+        await userEvent.click(host.querySelector('[data-outside]')!);
+      }
+      expect(host.querySelectorAll('.flower-attachment-item')).toHaveLength(0);
+    } finally {
+      dispose(); host.remove(); URL.revokeObjectURL(previewURL);
+      await media.emulateTouchInput(false);
+    }
+  });
+
   it('keeps image lifecycle feedback and touch actions inside a stationary thumbnail', async () => {
     await page.viewport(320, 720);
     const host = document.createElement('div');
@@ -151,6 +207,7 @@ describe('Flower composer attachment browser presentation', () => {
       await waitFor(() => runtime.querySelectorAll('[data-attachment-status="staged_ready"]').length === 4);
       const lane = runtime.querySelector('.flower-attachment-lane') as HTMLElement;
       const images = [...lane.querySelectorAll<HTMLElement>('[data-attachment-kind="image"]')];
+      await userEvent.hover(textarea);
       expect(images).toHaveLength(3);
       expect(lane.scrollWidth).toBeLessThanOrEqual(lane.clientWidth + 1);
       for (const item of images) {
@@ -164,14 +221,23 @@ describe('Flower composer attachment browser presentation', () => {
         expect(item.textContent).toBe('');
         const remove = item.querySelector<HTMLButtonElement>('.flower-attachment-actions button')!;
         expect(remove.getAttribute('aria-label')).toBe('Remove attachment');
+        expect(getComputedStyle(remove).opacity).toBe('0');
         expect(getComputedStyle(remove).cursor).toBe('pointer');
         const removeBounds = remove.getBoundingClientRect();
         expect(Math.abs(removeBounds.top - bounds.top)).toBeLessThanOrEqual(1);
         expect(Math.abs(removeBounds.right - bounds.right)).toBeLessThanOrEqual(1);
         if (width === 320) expect(removeBounds.width).toBeGreaterThanOrEqual(44);
       }
-      expect(lane.querySelector('[data-attachment-kind="file"] .flower-attachment-name')?.textContent).toBe('notes.txt');
+      const file = lane.querySelector<HTMLElement>('[data-attachment-kind="file"]')!;
+      expect(file.textContent).toBe('notes.txt');
+      expect(file.querySelector('.flower-attachment-meta, .flower-attachment-feedback')).toBeNull();
+      expect(file.getBoundingClientRect().height).toBe(width === 320 ? 44 : 32);
+      expect(file.getBoundingClientRect().width).toBeLessThanOrEqual(200);
       await page.screenshot({ element: runtime.querySelector('.flower-composer')!, path: `__screenshots__/image-thumbnails-${presentation}-${surfaceWidth}-${theme}.png` });
+      await userEvent.hover(images[0]);
+      expect(getComputedStyle(images[0].querySelector('.flower-attachment-remove')!).opacity).toBe('1');
+      expect(getComputedStyle(file.querySelector('.flower-attachment-remove')!).opacity).toBe('0');
+      await page.screenshot({ element: runtime.querySelector('.flower-composer')!, path: `__screenshots__/attachment-hover-${presentation}-${surfaceWidth}-${theme}.png` });
       await userEvent.click(images[0].querySelector('button.flower-attachment-preview-trigger')!);
       await waitFor(() => previewStagedAttachment.mock.calls.length === 1);
       await userEvent.click(images[0].querySelector('.flower-attachment-actions button')!);
