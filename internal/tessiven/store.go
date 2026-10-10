@@ -252,6 +252,15 @@ func digest(value string) string {
 }
 
 func (s *Service) Save(ctx context.Context, req SaveRequest, source string) (SaveResult, error) {
+	raw, _ := json.Marshal(struct {
+		SaveRequest
+		Source string
+	}{req, source})
+	return s.save(ctx, req, source, digest(string(raw)))
+}
+
+// All canvas writes share validation, retry identity and one atomic transaction.
+func (s *Service) save(ctx context.Context, req SaveRequest, source, fingerprint string) (SaveResult, error) {
 	if !requestIDPattern.MatchString(req.RequestID) || req.ExpectedVersion < 0 || len(req.Summary) > 2000 {
 		return SaveResult{}, ErrInvalidRequest
 	}
@@ -264,11 +273,6 @@ func (s *Service) Save(ctx context.Context, req SaveRequest, source string) (Sav
 	if !validation.Valid {
 		return SaveResult{}, &ValidationError{Diagnostics: validation.Diagnostics}
 	}
-	raw, _ := json.Marshal(struct {
-		SaveRequest
-		Source string
-	}{req, source})
-	fingerprint := digest(string(raw))
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return SaveResult{}, err

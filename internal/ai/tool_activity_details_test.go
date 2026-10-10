@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -137,5 +138,45 @@ func TestStructuredOutputMarksOnlyActualTruncation(t *testing.T) {
 	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "okf.open", Status: toolResultStatusSuccess, Data: map[string]any{"body": strings.Repeat("x", 9000), "truncated": true}})
 	if err != nil || !activity.Payload.(fltools.StructuredActivityPayload).Rows[0].Truncated {
 		t.Fatalf("knowledge output truncation lost: %v", err)
+	}
+}
+
+func TestCanvasReadKeepsLiteralTypedResult(t *testing.T) {
+	yaml := "metadata:\n  title: Readable canvas\n" + strings.Repeat("# unchanged context\n", 500)
+	data, truncated := normalizeTruncatedToolPayload("tessiven.read", map[string]any{"title": "Readable canvas", "version": int64(3), "document_yaml": yaml})
+	if truncated || data.(map[string]any)["document_yaml"] != yaml {
+		t.Fatal("bounded YAML was converted to truncated JSON")
+	}
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "tessiven.read", Status: toolResultStatusSuccess, Data: data})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activity.Label != "Readable canvas" {
+		t.Fatal(activity.Label)
+	}
+	body, _ := json.Marshal(activity)
+	if !strings.Contains(string(body), "unchanged context") || !strings.Contains(string(body), "yaml") {
+		t.Fatalf("literal result not visible: %s", body)
+	}
+}
+
+func TestCanvasEditDetailsKeepReplacementFragmentsWithinOneCodeRow(t *testing.T) {
+	edits := []any{}
+	for i := 0; i < 50; i++ {
+		edits = append(edits, map[string]any{"old_string": fmt.Sprintf("name: Before %d\nkind: api", i), "new_string": fmt.Sprintf("name: After %d\nkind: api", i)})
+	}
+	activity := floretActivityForToolCall("tessiven.edit", map[string]any{"summary": "Rename services", "edits": edits})
+	payload := activity.Payload.(fltools.StructuredActivityPayload)
+	if len(payload.Inputs) != 2 {
+		t.Fatalf("batch exceeded activity input budget: %+v", payload)
+	}
+	var diff string
+	for _, row := range payload.Inputs {
+		if row.Language == "diff" {
+			diff = row.Content
+		}
+	}
+	if !strings.Contains(diff, "-name: Before 0\n-kind: api\n+name: After 0\n+kind: api") || !strings.Contains(diff, "+name: After 49") {
+		t.Fatalf("replacement fragments not preserved: %s", diff)
 	}
 }

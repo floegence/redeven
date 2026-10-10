@@ -527,7 +527,7 @@ function metaForTerminalItem(item: FlowerActivityItem): string {
     .map((chip) => trimString(chip.value));
   return [...executionFacts, trimString(typeof item.payload?.execution_location === 'string' ? item.payload.execution_location : ''), item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
     .filter(Boolean)
-    .filter((value, index, values) => values.indexOf(value) === index)
+    .filter((value, index, values) => value !== 'local_runtime' && values.indexOf(value) === index)
     .join(' · ');
 }
 
@@ -1461,6 +1461,10 @@ type FlowerActivityRendererHandler = (
 ) => FlowerActivityPresentation;
 
 const TOOL_ACTIONS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
+  'tessiven.schema': 'canvasSchema', 'tessiven.list': 'canvasList', 'tessiven.read': 'canvasRead',
+  'tessiven.search': 'canvasSearch', 'tessiven.edit': 'canvasEdit', 'tessiven.validate': 'canvasValidate',
+  'tessiven.save': 'canvasSave', 'tessiven.versions': 'canvasVersions',
+  'tessiven.inspect': 'serviceInspect', 'tessiven.action': 'serviceAction',
   'computer.targets': 'discoverTargets', 'computer.select_target': 'selectTarget',
   'computer.exec': 'execute', 'computer.observe': 'observe', 'computer.screenshot': 'screenshot',
   'computer.click': 'click', 'computer.double_click': 'doubleClick', 'computer.type': 'type',
@@ -1472,7 +1476,7 @@ const TOOL_ACTIONS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
 };
 
 const TOOL_INPUT_LABELS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
-  query: 'inputQuery', paths: 'inputPaths', path: 'inputPaths', root: 'inputPaths', name: 'inputName',
+  summary: 'summary', query: 'inputQuery', paths: 'inputPaths', path: 'inputPaths', root: 'inputPaths', name: 'inputName',
   limit: 'inputLimit', max_results: 'inputLimit', max_matches: 'inputLimit', body_limit: 'inputLimit',
   glob: 'inputGlob', context_lines: 'inputContext', max_depth: 'inputDepth', type: 'inputType',
   tags: 'inputTags', section: 'inputSection', include_evidence: 'inputEvidence', body_offset: 'inputOffset',
@@ -1493,6 +1497,12 @@ function structuredTitle(item: FlowerActivityItem, words: FlowerToolActivityCopy
     const input = structuredRowsFromPayload(item.payload, 'inputs');
     const object = input.find(row => row.title === 'url' || row.title === 'key')?.content;
     return { kind: 'plain', text: intent || payloadValue(item.payload, 'action_summary') || [words[action ?? 'called'], object].filter(Boolean).join(' ') };
+  }
+  if (tool.startsWith('tessiven.') && action) {
+    const canvasID = payloadValue(item.payload, 'canvas_id');
+    const object = label && label !== tool && label !== canvasID && !/^[a-f0-9]{8}-[a-f0-9-]{27}$/iu.test(label)
+      && !isApprovalLifecycleText(label) ? label : '';
+    return { kind: 'plain', text: [words[action], object].filter(Boolean).join(' · ') };
   }
   if (action) {
     const object = label && label !== tool && !isApprovalLifecycleText(label) ? label : '';

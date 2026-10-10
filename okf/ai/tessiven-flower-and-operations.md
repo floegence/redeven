@@ -25,8 +25,25 @@ outcome, so the user must inspect the original manager before trying again.
   mutation requests against them remain blocked.
 - A selected canvas is the update target, including a newly created empty
   canvas. Flower creates another canvas only when the user requests one.
-  Renaming and restoring content use read/validate/save against the latest
-  version, while discussion of historical selections retains that identity.
+  Renaming and restoring content use version-checked writes, while discussion
+  of historical selections retains that identity.
+- Existing canvases support bounded literal YAML reads (default 200, maximum
+  500 lines and 64 KiB), paginated literal search, and exact replacement batches.
+  Search and read return immutable version identity. `tessiven.edit` applies
+  1–50 ordered, uniquely matching replacements, preserves untouched YAML bytes,
+  validates the complete result, and commits one version through the same save
+  transaction and permission boundary as full save. Invalid matches, invalid
+  documents and stale versions change nothing. Retry identity covers the exact
+  edit arguments, not merely the resulting document. Stored versions remain
+  complete snapshots; partial model input does not introduce a storage lineage.
+  The skill prefers search/read/edit for ordinary changes and validate/save for
+  creation or an explicitly requested wholesale rewrite.
+- Tool activity names the canvas operation and meaningful title, never an opaque
+  canvas ID. Read details show literal YAML and line bounds; edit details show
+  replacement fragments; save results show the title, version and summary.
+  Typed bounded tool results retain their JSON shape rather than being converted
+  to a generic truncated raw string. Terminal activity omits the redundant
+  `local_runtime` suffix while preserving meaningful remote target identity.
 - Example targets and inference evidence are fictional. Mapping actual
   infrastructure requires inspecting real targets rather than assigning
   management bindings to example identities.
@@ -93,6 +110,10 @@ External and unmanaged resources support inspection and explanation only.
 
 - `internal/ai/system_skills/redeven-tessiven/SKILL.md`
 - `internal/ai/tessiven_tools.go`
+- `internal/tessiven/edit.go`
+- `internal/tessiven/edit_test.go`
+- `internal/ai/tool_activity_details_test.go`
+- `internal/flower_ui/src/flowerActivityPresentation.test.ts`
 - `internal/tessiven/resources.go`
 - `internal/tessiven/broker.go`
 - `internal/ai/run.go`

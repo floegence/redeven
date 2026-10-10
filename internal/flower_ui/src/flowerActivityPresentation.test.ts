@@ -151,7 +151,7 @@ describe('presentFlowerActivityItem', () => {
       renderer: 'terminal',
       payload: { command: 'redeven targets exec --target ssh:host:remote --json -- uname', execution_location: 'local_runtime' },
     }));
-    expect(launcher.meta).toBe('local_runtime');
+    expect(launcher.meta).toBe('');
   });
 
   it('joins a Subagent operation target to the exact thread summary', () => {
@@ -1519,5 +1519,18 @@ describe('terminal interaction facts', () => {
     const before = presentFlowerActivityItem(history);
     expect(presentFlowerActivityItem(JSON.parse(JSON.stringify(history)))).toEqual(before);
     expect(before.detailBlocks).toContainEqual(expect.objectContaining({ terminal: expect.objectContaining({ first_seq: 3, last_seq: 4, has_more: false }) }));
+  });
+});
+
+
+describe('canvas activity readability', () => {
+  it('names the operation instead of an opaque canvas identifier', () => {
+    const p = presentFlowerActivityItem(item({ tool_name: 'tessiven.save', renderer: 'structured', label: '3629cc98-c6cc-45c3-ab28-c73b68949174' }));
+    expect(p.label).toBe('Save canvas');
+    expect(p.label).not.toContain('3629cc98');
+  });
+  it('keeps useful remote identity and hides the local execution protocol literal', () => {
+    const p = presentFlowerActivityItem(item({ label: 'Inspect the layout', payload: { command: 'pwd', execution_location: 'local_runtime' }, chips: [{ kind: 'execution_location', label: 'local_runtime', value: 'local_runtime' }, { kind: 'target', label: 'SSH host', value: 'SSH host' }] }));
+    expect(p.meta).toBe('SSH host');
   });
 });

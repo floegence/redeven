@@ -267,6 +267,38 @@ describe('Local Environment Flower surface adapter', () => {
     }));
   });
 
+  it('delivers each current update before the Desktop IPC stream ends', async () => {
+    let listener: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
+    let id = '';
+    const bridge: DesktopSettingsBridge = {
+      ...attachmentBridgeStubs(),
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower: vi.fn(), cancel: vi.fn(),
+      startRuntimeFlowerStream: vi.fn(async request => {
+        id = request.stream_id;
+        return { ok: true as const, status: 200, content_type: 'text/event-stream' };
+      }),
+      subscribeRuntimeFlowerStream: vi.fn(receive => { listener = receive; return () => { listener = undefined; }; }),
+    };
+    const controller = new AbortController();
+    const iterator = createLocalEnvironmentFlowerSurfaceAdapter(bridge).connectLiveStream!({ signal: controller.signal })[Symbol.asyncIterator]();
+    const first = iterator.next();
+    await vi.waitFor(() => expect(id).not.toBe(''));
+    for (let index = 0; index < 3; index++) {
+      const next = index ? iterator.next() : first;
+      const value = { schema_version: 1, kind: 'thread.batch', thread_id: 'thread-1', current: {
+        thread_id: 'thread-1', view_version: index + 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+        queue: [], interactions: [], items: [{ id: 'reply', kind: 'assistant', ordinal: 1, turn_id: 'turn', run_id: 'run', live: true, text: 'Live reply '.repeat(index + 1) }],
+      } };
+      listener?.({ stream_id: id, kind: 'chunk', chunk: new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`) });
+      expect(await next).toEqual({ done: false, value });
+      expect(listener).toBeDefined();
+    }
+    listener?.({ stream_id: id, kind: 'end' });
+    expect((await iterator.next()).done).toBe(true);
+    expect(listener).toBeUndefined();
+  });
+
   it('creates and releases attachment staging scopes without putting capabilities in URL or body', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const requestRuntimeFlower = vi.fn(async (request: RuntimeFlowerRequest) => {

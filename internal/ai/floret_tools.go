@@ -733,7 +733,7 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 		return []fltools.Effect{fltools.EffectRead, fltools.EffectNetwork}
 	case "tessiven.action":
 		return []fltools.Effect{fltools.EffectWrite, fltools.EffectNetwork}
-	case "tessiven.save":
+	case "tessiven.save", "tessiven.edit":
 		return []fltools.Effect{fltools.EffectWrite}
 	case "web.search":
 		return []fltools.Effect{fltools.EffectNetwork}
