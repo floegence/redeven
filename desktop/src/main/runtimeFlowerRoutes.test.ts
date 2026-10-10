@@ -4,6 +4,28 @@ import { runtimeFlowerMethodAllowed, runtimeFlowerPath } from './runtimeFlowerRo
 
 const base = '/_redeven_proxy/api/ai/computer';
 
+describe('Flower admitted attachment preview routes', () => {
+  const upload = '/_redeven_proxy/api/ai/uploads/upl_preview';
+  it.each(['turn_id=turn_1', 'queue_id=queue%3Arequest-second'])('allows scoped GET previews: %s', scope => {
+    const path = `${upload}?thread_id=thread_1&${scope}&preview=1`;
+    expect(runtimeFlowerPath(path)).toBe(path);
+    expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(path, 'DELETE')).toBe(false);
+  });
+  it.each([
+    'preview=1', 'thread_id=thread_1&preview=1', 'thread_id=thread_1&turn_id=turn_1',
+    'thread_id=thread_1&turn_id=turn_1&queue_id=queue_1&preview=1',
+    'thread_id=thread_1&turn_id=turn_1&preview=1&preview=1',
+    'thread_id=thread_1&thread_id=thread_2&turn_id=turn_1&preview=1',
+    'thread_id=thread_1&turn_id=turn_1&preview=0',
+    'thread_id=thread_1&turn_id=turn_1&preview=1&secret=x',
+    'thread_id=thread_1&queue_id=&preview=1',
+    'thread_id=thread_1&queue_id=queue%3Arequest%0Asecond&preview=1',
+  ])('rejects incomplete or ambiguous preview scope: %s', query => {
+    expect(() => runtimeFlowerPath(`${upload}?${query}`)).toThrow();
+  });
+});
+
 describe('Flower model directory routes', () => {
   it.each(['', '?mode=baseline'])('allows a read-only directory query: %s', query => {
     const path = '/_redeven_proxy/api/ai/models' + query;

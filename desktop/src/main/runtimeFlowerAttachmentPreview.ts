@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import type { RuntimeFlowerHTTPResponse } from './runtimeFlowerHTTP';
+import type { RuntimeFlowerMedia } from '../shared/runtimeFlowerIPC';
 
 export const RUNTIME_FLOWER_ATTACHMENT_PREVIEW_MAX_BYTES = 10 << 20;
 export const RUNTIME_FLOWER_ATTACHMENT_PREVIEW_RETENTION_MS = 15 * 60_000;
@@ -21,6 +22,14 @@ function canonicalRuntimeFlowerAttachmentPreviewMediaType(contentType: string | 
     essence !== 'text/plain' || parameters.length !== 1 || parameters[0] !== 'charset=utf-8'
   ))) return '';
   return essence;
+}
+
+export function runtimeFlowerMessageAttachment(response: RuntimeFlowerHTTPResponse): RuntimeFlowerMedia {
+  const mimeType = canonicalRuntimeFlowerAttachmentPreviewMediaType(response.headers['content-type']);
+  if (!RUNTIME_FLOWER_ATTACHMENT_PREVIEW_EXTENSIONS.has(mimeType) || response.bytes.length > RUNTIME_FLOWER_ATTACHMENT_PREVIEW_MAX_BYTES) {
+    throw new Error('Flower returned invalid attachment media.');
+  }
+  return { bytes: new Uint8Array(response.bytes), mime_type: mimeType };
 }
 
 export function runtimeFlowerAttachmentPreviewFilename(contentType: string | string[] | undefined): string {

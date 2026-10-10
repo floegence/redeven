@@ -197,6 +197,21 @@ describe('Local Environment Flower surface adapter', () => {
     controller.abort();
     await expect(adapter.loadMessageFile!({ path: '/project/a b.mp4', signal: controller.signal })).rejects.toThrow();
   });
+
+  it.each(['image/png', 'text/plain', 'application/pdf'])('loads admitted %s attachments through the exact runtime bridge', async mimeType => {
+    const bytes = new Uint8Array([0, 128, 255]);
+    const bridge = bridgeFor(() => ({ bytes, mime_type: mimeType }));
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { runtimeEnvironmentID: 'environment_1' });
+    const controller = new AbortController();
+    const input = { url: '/_redeven_proxy/api/ai/uploads/upl_preview?thread_id=thread_1&turn_id=turn_1', signal: controller.signal };
+    const blob = await adapter.loadMessageAttachment!(input);
+    expect(blob.type).toBe(mimeType);
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledExactlyOnceWith({ method: 'GET', path: `${input.url}&preview=1`, environment_id: 'environment_1' });
+    controller.abort();
+    await expect(adapter.loadMessageAttachment!(input)).rejects.toThrow();
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledTimes(1);
+  });
   it('sends relative pin moves through the runtime bridge without loading detail', async () => {
     const pin = { thread_id: 'thread/source', pinned_at_unix_ms: 10, pin_rank: 3, settings_revision: 20 };
     const bridge = bridgeFor(() => ({ pins: [pin] }));

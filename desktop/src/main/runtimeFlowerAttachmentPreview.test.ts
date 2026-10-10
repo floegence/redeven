@@ -9,6 +9,7 @@ import {
   RUNTIME_FLOWER_ATTACHMENT_PREVIEW_MAX_BYTES,
   RUNTIME_FLOWER_ATTACHMENT_PREVIEW_RETENTION_MS,
   runtimeFlowerAttachmentPreviewFilename,
+  runtimeFlowerMessageAttachment,
   type RuntimeFlowerAttachmentPreviewFileSystem,
 } from './runtimeFlowerAttachmentPreview';
 
@@ -28,6 +29,18 @@ function fileSystem(overrides: Partial<RuntimeFlowerAttachmentPreviewFileSystem>
 }
 
 describe('runtime Flower attachment preview', () => {
+  it.each(['image/png', 'text/plain; charset=utf-8', 'application/pdf'])('preserves preview bytes for %s across IPC', mimeType => {
+    const bytes = Buffer.from([0, 128, 255]);
+    const media = runtimeFlowerMessageAttachment({ ...response(200), headers: { 'content-type': mimeType }, bytes });
+    expect(media.bytes).toEqual(new Uint8Array(bytes));
+    expect(media.mime_type).toBe(mimeType.split(';')[0]);
+  });
+
+  it('rejects oversized and active attachment content before returning it to the renderer', () => {
+    expect(() => runtimeFlowerMessageAttachment({ ...response(200), headers: { 'content-type': 'text/html' }, bytes: Buffer.from('<script>active()</script>') })).toThrow();
+    expect(() => runtimeFlowerMessageAttachment({ ...response(200), headers: { 'content-type': 'image/png' }, bytes: Buffer.alloc(RUNTIME_FLOWER_ATTACHMENT_PREVIEW_MAX_BYTES + 1) })).toThrow();
+  });
+
   it('invalidates expired access and retries exactly once after refresh', async () => {
     const request = vi.fn().mockResolvedValueOnce(response(423)).mockResolvedValueOnce(response(200));
     const invalidateAccess = vi.fn();

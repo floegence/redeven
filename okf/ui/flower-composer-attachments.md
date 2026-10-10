@@ -34,6 +34,15 @@ The shared in-memory value contains text, staged attachment projection, referenc
 
 ## Canonical Presentation
 
+Message attachment previews cross the host's authenticated `loadMessageAttachment`
+boundary. Env App prepares its local access credentials; Desktop sends a scoped
+GET through Runtime IPC and receives bounded bytes with the canonical MIME type.
+The shared surface never resolves a Runtime upload URL against Desktop's `file:`
+origin or fetches it directly. Visible message images load lazily into short-lived
+Blob URLs; disposal aborts pending work and releases each URL. Preview failures
+use localized media-unavailable copy, independently of model capabilities. Image,
+native-file, and UTF-8 text-tool input routes remain separate capability decisions.
+
 Queued rows are Redeven-owned unadmitted projections reconstructed from immutable commands and exact resource metadata. Admitted rows come only from Floret public reads and display canonical attachment name, MIME, size, text statistics, and an optional scoped preview URL. Staged images use a connection-local Blob URL for immediate thumbnails; the URL is released on removal, replacement, consumption, or controller disposal and never enters a draft, request, or canonical history. The chat stream projects image MIME attachments as ordered image blocks and other attachments as file blocks, preserving mixed order and using a static file fallback when a preview is unavailable. Queued preview carries thread and queue, and canonical preview carries thread and turn. Download or preview actions reauthenticate and do not treat a locator as identity. The authenticated response's canonical media type, never the display-name suffix, selects a fixed safe temporary extension; plain text is always `.txt`, while HTML, SVG, missing, or non-canonical media types fail closed before a temporary directory is created. Model capability changes mark staged items incompatible rather than silently dropping them. While the model menu is open, each option checks current MIME routes, long-text support, count, per-file size, and total size and labels support, rejection, loading, or an unavailable check without switching models automatically.
 
 Desktop upload operations permit only one in-flight binary chunk write per operation id. A concurrent chunk is rejected before either offset state or the runtime socket can be touched, while different operations remain independent. If the commit request receives an HTTP 423 challenge, the main process invalidates only the challenged runtime's cached access cookie and returns the failure to the UI. An explicit retry keeps the server idempotency key and runs access preparation again; Desktop never transparently replays a request body after transmission.

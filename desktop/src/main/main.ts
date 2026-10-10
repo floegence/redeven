@@ -292,6 +292,7 @@ import {
 } from './runtimeFlowerHTTP';
 import {
   materializeRuntimeFlowerAttachmentPreview,
+  runtimeFlowerMessageAttachment,
   requestRuntimeFlowerAttachmentPreviewWithAccess,
 } from './runtimeFlowerAttachmentPreview';
 import {
@@ -10623,6 +10624,9 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
     } catch (error) {
       throw new RuntimeFlowerTransportError(error);
     }
+  }
+  if (method === 'GET' && /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(requestPathname) && url.searchParams.get('preview') === '1' && response.status === 200) {
+    return { ok: true, data: runtimeFlowerMessageAttachment(response) };
   }
   const parsed = parseRuntimeFlowerJSON(response.body);
   const error = runtimeFlowerEnvelopeError(parsed, response.status);

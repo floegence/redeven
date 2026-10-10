@@ -126,6 +126,13 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/terminal\/[^/]+\/read$/u, methods: ['GET'], allowsQuery: runtimeFlowerTerminalReadQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['GET', 'DELETE'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/upl_[A-Za-z0-9_-]+$/u, methods: ['GET'], allowsQuery: parsed => {
+    const scopeKey = parsed.searchParams.has('turn_id') ? 'turn_id' : 'queue_id';
+    return [...parsed.searchParams.keys()].length === 3
+      && ['thread_id', scopeKey, 'preview'].every(key => parsed.searchParams.getAll(key).length === 1)
+      && ['thread_id', scopeKey].every(key => Boolean(parsed.searchParams.get(key)?.trim()) && !/[\r\n\0]/u.test(parsed.searchParams.get(key)!))
+      && parsed.searchParams.get('preview') === '1';
+  } },
   { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+\/long_text$/u, methods: ['GET'] },
 ];
 

@@ -145,6 +145,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   loadStagedAttachmentPreview?: FlowerSurfaceAdapter['loadStagedAttachmentPreview'];
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
   loadComputerFrame?: FlowerSurfaceAdapter['loadComputerFrame'];
+  loadMessageAttachment?: FlowerSurfaceAdapter['loadMessageAttachment'];
   openMessageFile?: FlowerSurfaceAdapter['openMessageFile'];
   loadMessageFile?: FlowerSurfaceAdapter['loadMessageFile'];
   computerFrameRate?: FlowerSurfaceAdapter['computerFrameRate'];
@@ -458,6 +459,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
     ...(options.computerFrameRate ? { computerFrameRate: options.computerFrameRate } : {}),
     ...(options.loadComputerFrame ? { loadComputerFrame: options.loadComputerFrame } : {}),
+    ...(options.loadMessageAttachment ? { loadMessageAttachment: options.loadMessageAttachment } : {}),
     ...(options.openMessageFile ? { openMessageFile: options.openMessageFile } : {}),
     ...(options.loadMessageFile ? { loadMessageFile: options.loadMessageFile } : {}),
     ...(options.canMutate !== false && options.inputComputerControl ? { inputComputerControl: options.inputComputerControl } : {}),

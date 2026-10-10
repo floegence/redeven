@@ -13,6 +13,7 @@ import type {
   FlowerPermissionType,
   FlowerSurfaceAdapter,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { getLocalRuntime } from '../services/controlplaneApi';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from '../services/localAccessAuth';
 
 vi.mock('../services/controlplaneApi', () => ({
@@ -26,6 +27,7 @@ globalThis.fetch = fetchMock as unknown as typeof fetch;
 
 beforeEach(() => {
 	fetchMock.mockReset();
+  vi.mocked(getLocalRuntime).mockResolvedValue(null);
   fixtureSettings = {} as AgentSettingsResponse;
 	clearLocalAccessResumeToken();
 });
@@ -212,6 +214,40 @@ describe('Env local Flower surface adapter', () => {
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Freport+%231.html&preview=1', expect.objectContaining({ method: 'GET', signal: controller.signal }));
     fetchMock.mockResolvedValueOnce({ ok: false });
     await expect(adapter.loadMessageFile!({ path: '/workspace/report.html', signal: controller.signal })).rejects.toThrow('unavailable');
+  });
+
+  it('loads persisted message attachments with the local access resume credential', async () => {
+    const blob = new Blob(['attachment'], { type: 'text/plain' });
+    vi.mocked(getLocalRuntime).mockResolvedValue({} as never);
+    writeLocalAccessResumeToken('resume_attachment_123');
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, blob: async () => blob });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_media', envLabel: 'Media', rpc: { ai: {} } as any });
+    const controller = new AbortController();
+
+    expect(await adapter.loadMessageAttachment!({
+      url: '/_redeven_proxy/api/ai/uploads/upl_text?thread_id=thread_text&turn_id=turn_text&preview=1',
+      signal: controller.signal,
+    })).toBe(blob);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('preview=1');
+    expect(init.signal).toBe(controller.signal);
+    expect(new Headers(init.headers).get('X-Redeven-Access-Resume')).toBe('resume_attachment_123');
+  });
+
+  it.each(['https://external.example/_redeven_proxy/api/ai/uploads/upl_text', '/_redeven_proxy/api/settings'])('rejects attachment URLs outside the runtime upload route: %s', async (url) => {
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_media', envLabel: 'Media', rpc: { ai: {} } as any });
+    await expect(adapter.loadMessageAttachment!({ url, signal: new AbortController().signal })).rejects.toThrow('Invalid');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves canonical queue identities in attachment previews', async () => {
+    const blob = new Blob(['queued text'], { type: 'text/plain' });
+    fetchMock.mockResolvedValueOnce({ ok: true, blob: async () => blob });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_media', envLabel: 'Media', rpc: { ai: {} } as any });
+    const url = '/_redeven_proxy/api/ai/uploads/upl_text?thread_id=thread_1&queue_id=queue%3Arequest-second';
+    expect(await adapter.loadMessageAttachment!({ url, signal: new AbortController().signal })).toBe(blob);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${url}&preview=1`);
   });
 
   it('sends a relative pin move and maps only revisioned pin metadata', async () => {

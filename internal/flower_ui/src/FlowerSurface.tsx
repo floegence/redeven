@@ -72,6 +72,7 @@ import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
+import { FlowerMessageImage } from './chat/FlowerMessageImage';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
 import { FlowerWorkingDirectoryControl } from './chat/FlowerWorkingDirectoryControl';
 import { FlowerSetupWelcome } from './chat/FlowerSetupWelcome';
@@ -884,7 +885,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let consumedSettingsFocusRequest = 0;
   const [contextSnapshotPreview, setContextSnapshotPreview] = createSignal<FlowerChatContextSnapshotPreview | null>(null);
   const [attachmentPreview, setAttachmentPreview] = createSignal<FlowerAttachmentPreviewSource | null>(null);
-  const [failedMessageImages, setFailedMessageImages] = createSignal<ReadonlySet<string>>(new Set());
   const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
   const [composerMoreOpen, setComposerMoreOpen] = createSignal(false);
   const [attachmentStateRevision, setAttachmentStateRevision] = createSignal(0);
@@ -7028,7 +7028,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         mimeType: item.mime_type,
         load: async (signal) => {
           const response = await fetch(item.preview_url!, { signal });
-          if (!response.ok) throw new Error(attachmentCopy().errorUnavailable);
+          if (!response.ok) throw new Error(copy().chat.media.unavailable);
           return response.blob();
         },
       });
@@ -9658,10 +9658,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
   };
 
-  const attachmentPreviewURL = (rawURL: string): string => {
-    const url = new URL(rawURL, window.location.href);
-    url.searchParams.set('preview', '1');
-    return url.toString();
+  const loadMessageAttachmentBlob = async (url: string, signal: AbortSignal): Promise<Blob> => {
+    try {
+      if (!props.adapter.loadMessageAttachment) throw new Error('Attachment loader is unavailable.');
+      return await props.adapter.loadMessageAttachment({ url, signal });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw new Error(copy().chat.media.unavailable);
+    }
   };
 
   const openMessageAttachmentPreview = (input: Readonly<{
@@ -9676,16 +9680,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       id: input.id,
       name: trimString(input.name) || attachmentCopy().preview,
       mimeType: trimString(input.mimeType),
-      load: async (signal) => {
-        const response = await fetch(attachmentPreviewURL(url), {
-          method: 'GET',
-          credentials: 'same-origin',
-          headers: { Accept: 'text/plain, image/png, image/jpeg, image/gif, image/webp, application/pdf' },
-          signal,
-        });
-        if (!response.ok) throw new Error(`${attachmentCopy().errorUnavailable} (HTTP ${response.status})`);
-        return response.blob();
-      },
+      load: (signal) => loadMessageAttachmentBlob(url, signal),
     });
   };
 
@@ -9729,44 +9724,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       )}
     >
       {(imageBlock) => (
-        <Show
-          when={!failedMessageImages().has(imageBlock().key)}
-          fallback={(
-            <div class="flower-message-file" data-image-fallback="true" role="img" aria-label={`${attachmentCopy().errorUnavailable}: ${imageBlock().alt ?? attachmentCopy().preview}`}>
-              <FileText class="size-5 shrink-0" aria-hidden="true" />
-              <span class="flower-message-file-copy">
-                <span class="flower-message-file-name">{imageBlock().alt || attachmentCopy().preview}</span>
-                <span class="flower-message-file-meta">{attachmentCopy().errorUnavailable}</span>
-              </span>
-            </div>
-          )}
-        >
-          <a
-            class="flower-message-image"
-            href={imageBlock().src}
-            onClick={(event) => {
-              event.preventDefault();
-              openMessageAttachmentPreview({
-                id: imageBlock().key,
-                name: trimString(imageBlock().alt) || attachmentCopy().preview,
-                mimeType: 'image/*',
-                url: imageBlock().src,
-              });
-            }}
-          >
-            <img
-              src={attachmentPreviewURL(imageBlock().src)}
-              alt={imageBlock().alt ?? ''}
-              loading="lazy"
-              onError={() => setFailedMessageImages((current) => {
-                if (current.has(imageBlock().key)) return current;
-                const next = new Set(current);
-                next.add(imageBlock().key);
-                return next;
-              })}
-            />
-          </a>
-        </Show>
+        <FlowerMessageImage
+          src={imageBlock().src}
+          alt={imageBlock().alt ?? ''}
+          name={imageBlock().alt || attachmentCopy().preview}
+          unavailableLabel={copy().chat.media.unavailable}
+          load={loadMessageAttachmentBlob}
+          onOpen={() => openMessageAttachmentPreview({
+            id: imageBlock().key,
+            name: trimString(imageBlock().alt) || attachmentCopy().preview,
+            mimeType: 'image/*',
+            url: imageBlock().src,
+          })}
+        />
       )}
     </Show>
   );
@@ -12014,7 +11984,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         source={attachmentPreview()}
         zIndex={FLOWER_SURFACE_LAYER.attachmentPreview}
         loadingLabel={attachmentCopy().uploading}
-        unavailableLabel={attachmentCopy().errorUnavailable}
+        unavailableLabel={copy().chat.media.unavailable}
         onClose={() => setAttachmentPreview(null)}
       />
       <div class="flower-chat-main" data-flower-action-layout={bottomActionMode()} data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>

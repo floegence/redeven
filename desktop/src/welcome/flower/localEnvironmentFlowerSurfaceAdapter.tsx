@@ -3,6 +3,7 @@ import type { DesktopSecurityRequest, SecurityResult } from '../../shared/runtim
 import { computerManagementAdapter } from '../../../../internal/flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../internal/flower_ui/host/computerFramePath';
 import { messageFilePath } from '../../../../internal/flower_ui/host/messageFilePath';
+import { messageAttachmentPath } from '../../../../internal/flower_ui/host/messageAttachmentPath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../internal/flower_ui/src/computerViewer';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../../shared/desktopCertificate';
 import { createFlowerModelReadResource, readFlowerModelDirectory, withFlowerModelDirectory, type FlowerModelReadResource } from '../../../../internal/flower_ui/src/modelDirectory';
@@ -841,6 +842,13 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageFilePath(path));
       signal.throwIfAborted();
       if (!(media.bytes instanceof Uint8Array)) throw new Error('File preview is unavailable.');
+      return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });
+    },
+    loadMessageAttachment: async ({ url, signal }) => {
+      signal.throwIfAborted();
+      const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageAttachmentPath(url), undefined, undefined, options.runtimeEnvironmentID);
+      signal.throwIfAborted();
+      if (!(media.bytes instanceof Uint8Array)) throw new Error('Attachment preview is unavailable.');
       return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });
     },
     computerFrameRate: {
