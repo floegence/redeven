@@ -125,7 +125,7 @@ export function TessivenGraph(props: {
     },
     zoom(factor, x, y, dx = 0, dy = 0) {
       setViewport(previous => {
-        const scale = Math.max(0.15, Math.min(2.5, previous.scale * factor));
+        const scale = Math.max(0.1, Math.min(3, previous.scale * factor));
         const ratio = scale / previous.scale;
         return { scale, x: x - (x - previous.x) * ratio + dx, y: y - (y - previous.y) * ratio + dy };
       });

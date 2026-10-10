@@ -250,8 +250,17 @@ exposed to the renderer. The native touch adapter owns one- and two-finger input
 the shared viewport once per animation frame. It does not also start the
 published mouse drag session, whose private viewport defers external updates
 until release. Mouse, wheel, minimap and layout retain the published graph
-interaction. Pointer cancellation, visibility changes and disposal clear the
-touch anchors and pending frame. Native rendering has bounded loading and explicit retry, and never
+interaction. Native graph cards and their action rows share the same touch
+owner: a tap keeps the original action, while movement becomes canvas pan and
+suppresses the resulting click. Pinch anchors use canvas-local coordinates;
+small pinch movement is never filtered as a tap. One/two-finger transitions
+retain the rendered anchor. Fast one-finger release has bounded deceleration,
+with reduced motion disabling coast; new input and view commands stop it.
+Pointer cancellation, visibility changes, resize and disposal clear the
+touch anchors and pending frame. Native viewport limits match the published
+graph's fitted minimum, avoiding a scale jump on the first pinch. Native hosts
+supply only a measured bottom occlusion inset so the shared zoom controls sit
+above the floating Flower entry without shrinking the canvas. Native rendering has bounded loading and explicit retry, and never
 falls back to a second layout engine.
 
 The released Floe graph component owns pan, zoom, routing, layout, focus, and
