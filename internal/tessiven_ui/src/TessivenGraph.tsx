@@ -46,6 +46,10 @@ export type GraphBrowseState = {
   selectedNodes: Record<string, string>;
   viewport: { x: number; y: number; scale: number };
 };
+export type TessivenViewportControl = {
+  zoom: (factor: number, x: number, y: number, dx?: number, dy?: number) => void;
+  setTouchZooming: (active: boolean) => void;
+};
 export function TessivenGraph(props: {
   version: Version;
   historical: boolean;
@@ -56,6 +60,9 @@ export function TessivenGraph(props: {
   visible?: boolean;
   browseState?: GraphBrowseState;
   onBrowseState?: (state: GraphBrowseState) => void;
+  onDetails?: (selection: Selection) => void;
+  onViewportControl?: (control: TessivenViewportControl) => void;
+  onRenderState?: (state: 'loading' | 'rendered' | 'error') => void;
 }) {
   const [expanded, setExpanded] = createSignal(
     new Set(
@@ -89,7 +96,18 @@ export function TessivenGraph(props: {
   let previousExpanded = new Set(expanded());
   let positionMode: 'preferred' | 'compact' = 'preferred';
   let host: HTMLDivElement | undefined;
-  onCleanup(() => engine.dispose());
+  let touchZooming = false;
+  onCleanup(() => { generation += 1; engine.dispose(); });
+  onMount(() => props.onViewportControl?.({
+    setTouchZooming(active) { touchZooming = active; },
+    zoom(factor, x, y, dx = 0, dy = 0) {
+      setViewport(previous => {
+        const scale = Math.max(0.15, Math.min(2.5, previous.scale * factor));
+        const ratio = scale / previous.scale;
+        return { scale, x: x - (x - previous.x) * ratio + dx, y: y - (y - previous.y) * ratio + dy };
+      });
+    },
+  }));
   onCleanup(() => {
     // Empty canvases have no meaningful viewport to restore after Flower maps them.
     if (!layout().nodes.length) return;
@@ -160,6 +178,7 @@ export function TessivenGraph(props: {
   };
   createEffect(() => {
     const projected = projection();
+    props.onRenderState?.('loading');
     const currentExpanded = expanded();
     if (
       currentExpanded.size !== previousExpanded.size ||
@@ -203,6 +222,7 @@ export function TessivenGraph(props: {
         if (id !== generation) return;
         setLayout(next);
         setError('');
+        props.onRenderState?.('rendered');
         if (!initialized) {
           initialized = true;
           requestAnimationFrame(fit);
@@ -210,7 +230,10 @@ export function TessivenGraph(props: {
         centerSelection();
       })
       .catch((cause: unknown) => {
-        if (id === generation) setError(String(cause));
+        if (id === generation) {
+          setError(String(cause));
+          props.onRenderState?.('error');
+        }
       });
   });
   let pendingLocate: string | undefined;
@@ -276,9 +299,7 @@ export function TessivenGraph(props: {
   }
   function show(event: GraphObjectEvent, refs?: string[], menu = false) {
     setSelected(event.object);
-    setPopup({
-      event,
-      refs:
+    const selectionRefs =
         refs ??
         (event.object?.kind === 'edge'
           ? (projection()
@@ -286,7 +307,16 @@ export function TessivenGraph(props: {
               ?.map((value) => value.id) ?? [])
           : event.object
             ? [canonicalRef(event.object.id)]
-            : []),
+            : []);
+    if (props.onDetails) {
+      const selection = { canvas_id: props.version.canvas_id, version_id: props.version.number, object_refs: selectionRefs.slice(0, 100) };
+      if (menu) props.onAsk(selection);
+      else props.onDetails(selection);
+      return;
+    }
+    setPopup({
+      event,
+      refs: selectionRefs,
       menu,
     });
   }
@@ -615,7 +645,7 @@ export function TessivenGraph(props: {
       <GraphCanvas
         layout={layout()}
         viewport={viewport()}
-        onViewportChange={setViewport}
+        onViewportChange={value => { if (!touchZooming) setViewport(value); }}
         ariaLabel={props.t('canvasLabel')}
         selected={selected()}
         renderNode={renderCard}

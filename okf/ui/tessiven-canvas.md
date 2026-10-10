@@ -203,6 +203,25 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
 
 # Boundaries
 
+The iOS host bundles the shared TessivenGraph and the published Floe graph engine
+as fixed application resources. `buildNativeServiceCanvas.mjs` exports the browser
+Solid entry, the unchanged ELK worker in a local Blob, libavoid WebAssembly,
+dependency licenses and corresponding source, plus a hash manifest tied to the
+Redeven source commit. The local CSP permits the published Emscripten function
+constructors; scripts, layout assets and worker code remain bundled, with no
+remote script or frame source. This is WebKit document execution, not native
+code download or a native JIT.
+
+The host supplies saved-version data and theme through one update function.
+The data-only bridge reports loading, rendered, failure, or an immutable object
+selection; iOS validates the canvas, version and referenced objects before
+opening native details or Flower. Library, history, document export and API
+authorization remain native-owned. No credential or session transport is
+exposed to the renderer. Two-finger zoom suppresses single-pointer viewport
+updates until all fingers leave; ordinary pan retains the published graph
+interaction. Native rendering has bounded loading and explicit retry, and never
+falls back to a second layout engine.
+
 The released Floe graph component owns pan, zoom, routing, layout, focus, and
 floating-layer mechanics. Redeven owns the Tessiven projection and business
 data. The graph renders the [saved version document](../architecture/tessiven-canvas-contract.md)
@@ -221,6 +240,8 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven_ui/src/TessivenFlowerPanel.tsx`
 - `internal/flower_ui/src/FlowerSurface.tsx`
 - `internal/tessiven_ui/src/TessivenGraph.tsx`
+- `internal/tessiven_ui/src/native/entry.tsx`
+- `internal/envapp/ui_src/scripts/buildNativeServiceCanvas.mjs`
 - `internal/tessiven_ui/src/TessivenServiceRelations.tsx`
 - `internal/tessiven_ui/src/projection.ts`
 - `internal/tessiven_ui/src/tessiven.css`
