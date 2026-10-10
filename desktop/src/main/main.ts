@@ -8613,7 +8613,7 @@ function createWebServiceBrowserController(
       sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
       void currentGateway.close();
     }
-    if (!contentView.webContents.isDestroyed()) contentView.webContents.close();
+    if (!contentWebContents.isDestroyed()) contentWebContents.close();
     clearWebServiceWindowPartition(partition);
   };
   const windowRecord = preparedWindow ?? createBrowserWindow({
@@ -8640,7 +8640,8 @@ function createWebServiceBrowserController(
       backgroundThrottling: false,
     },
   });
-  const contentViewIdentity = snapshotWebContentsIdentity(contentView.webContents);
+  const contentWebContents = contentView.webContents;
+  const contentViewIdentity = snapshotWebContentsIdentity(contentWebContents);
   sessionKeyByWebContentsID.set(contentViewIdentity.webContentsID, sessionRecord.session_key);
   win.contentView.addChildView(contentView);
   const refreshHostAppearance = applicationWindow ? attachHostApplicationWindow(win, contentView.webContents, browserEntryURL, () => ({
