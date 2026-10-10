@@ -4,6 +4,7 @@
 
 - Adopt released Floret v7.27.0 for incremental prompt records and atomic SQLite layout upgrades, preserving the [opaque storage boundary](ai/flower-storage-ownership-and-migrations.md).
 - Present observed Welcome phases and record controller phase/total durations with actual failure locations in the [readiness lifecycle](architecture/ai-readiness-lifecycle.md).
+- Preserve explicit reasoning drafts across remounting until [model capabilities](ai/model-directory-and-selection.md) have loaded.
 
 ## 2026-10-08 — Non-blocking Flower model directory
 
