@@ -64,7 +64,8 @@ describe('Tessiven actual host scale qualification', () => {
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const readyMs = performance.now() - mounted;
       const initial = { nodes: host.querySelectorAll('.tessiven-node').length, edges: host.querySelectorAll('.floe-graph__edge').length };
-      const overviewNodes = host.querySelector('.floe-graph__minimap-nodes')!.getAttribute('d')!.match(/M/g)?.length ?? 0;
+      const overviewNodes = [...host.querySelectorAll('.floe-graph__minimap-nodes')]
+        .reduce((count, path) => count + (path.getAttribute('d')!.match(/M/g)?.length ?? 0), 0);
       expect(overviewNodes).toBe(projected.graph.nodes.filter(node => node.kind !== 'group').length);
       const layoutLongTaskMax = Math.max(0, ...tasks);
       const overview = page.getByRole('region', { name: 'Canvas overview', exact: true });
@@ -86,7 +87,7 @@ describe('Tessiven actual host scale qualification', () => {
       expect(p95).toBeLessThan(50);
       expect(Math.max(0, ...tasks)).toBeLessThan(100);
       expect(host.querySelectorAll('[role="alert"]')).toHaveLength(0);
-      expect(host.querySelectorAll('.floe-graph__minimap path')).toHaveLength(3);
+      expect(host.querySelectorAll('.floe-graph__minimap path').length).toBeLessThanOrEqual(grouped ? 6 : 2);
       if (grouped) {
         await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
         await expect.poll(() => host.querySelectorAll('.tessiven-node').length, { timeout: 60000 }).toBe(0);

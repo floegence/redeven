@@ -156,6 +156,28 @@ export function TessivenGraph(props: {
   );
   const [renderedProjection, setRenderedProjection] = createSignal<Projection>();
   const projection = () => renderedProjection() ?? requestedProjection();
+  const groupTones = createMemo(() => new Map(
+    (props.version.document.groups ?? []).map((group, index) => [group.id, index % 4]),
+  ));
+  const resourceTone = (kind: string) => ['domain', 'cdn', 'load_balancer'].includes(kind) ? 'network' : 'storage';
+  const minimapStyle = (node: GraphLayoutNode) => {
+    const card = projection().cards.get(node.id);
+    if (card?.kind === 'group') return {
+      fill: `color-mix(in oklab, var(--ts-group-${groupTones().get(node.id) ?? 0}) 82%, var(--background))`,
+      stroke: 'var(--ts-group-line)',
+    };
+    if (card?.kind === 'resource') {
+      const color = `--ts-${resourceTone(card.resource.kind)}`;
+      return {
+        fill: `color-mix(in oklab, var(${color}) 43%, var(--card))`,
+        stroke: `color-mix(in oklab, var(${color}) 70%, var(--foreground))`,
+      };
+    }
+    return {
+      fill: 'var(--ts-node)',
+      stroke: 'color-mix(in oklab, var(--ts-node) 70%, var(--foreground))',
+    };
+  };
   const linkedNode = createMemo(() => {
     const object = hovered() ?? selected();
     const card = object?.kind === 'node' ? projection().cards.get(object.id) : undefined;
@@ -527,11 +549,7 @@ export function TessivenGraph(props: {
       return (
         <section
           class="tessiven-group"
-          data-tone={
-            (props.version.document.groups ?? []).findIndex(
-              (value) => value.id === node.id,
-            ) % 4
-          }
+          data-tone={groupTones().get(node.id) ?? 0}
           data-expanded={card.expanded}
         >
           <header>
@@ -642,11 +660,7 @@ export function TessivenGraph(props: {
       return (
         <section
           class="tessiven-resource"
-          data-resource={
-            ['domain', 'cdn', 'load_balancer'].includes(card.resource.kind)
-              ? 'network'
-              : 'storage'
-          }
+          data-resource={resourceTone(card.resource.kind)}
         >
           <header>
             <span>{props.t(`kind.${card.resource.kind}`)}</span>
@@ -710,7 +724,7 @@ export function TessivenGraph(props: {
         onContextMenu={(event) => show(event, undefined, true)}
         onHover={setHovered}
         onInteractionStart={() => close()}
-        minimap={layout().nodes.length ? { ariaLabel: props.t('canvasOverview') } : undefined}
+        minimap={layout().nodes.length ? { ariaLabel: props.t('canvasOverview'), nodeStyle: minimapStyle } : undefined}
       />
       <Show when={props.tools !== 'hidden'}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
           <button onClick={fit}>{props.t('fit')}</button>
