@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -598,7 +599,7 @@ func TestDisconnectCloudSendsRuntimeDisconnectBeforeClearingConfig(t *testing.T)
 		saved.AccessPointOrigin != "" ||
 		saved.CloudID != "" ||
 		saved.EnvironmentID != "" ||
-		saved.LocalEnvironmentPublicID != "" ||
+		saved.LocalEnvironmentPublicID == "" || saved.LocalEnvironmentPublicID == cfg.LocalEnvironmentPublicID ||
 		saved.BindingGeneration != 0 ||
 		saved.Direct != nil ||
 		saved.ControlArtifactPool != nil {
@@ -671,7 +672,7 @@ func TestDisconnectCloudClearsConfigWithoutActiveControlChannel(t *testing.T) {
 		saved.AccessPointOrigin != "" ||
 		saved.CloudID != "" ||
 		saved.EnvironmentID != "" ||
-		saved.LocalEnvironmentPublicID != "" ||
+		saved.LocalEnvironmentPublicID == "" || saved.LocalEnvironmentPublicID == cfg.LocalEnvironmentPublicID ||
 		saved.BindingGeneration != 0 ||
 		saved.Direct != nil ||
 		saved.ControlArtifactPool != nil {
@@ -682,6 +683,19 @@ func TestDisconnectCloudClearsConfigWithoutActiveControlChannel(t *testing.T) {
 	}
 	if binding := a.CloudLinkBinding(); binding.State != runtimeservice.CloudLinkStateUnbound {
 		t.Fatalf("CloudLinkBinding() = %#v, want unbound", binding)
+	}
+	_, address, delivery := previewGatewayServer(t)
+	before, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := a.PreviewGateway(t.Context(), address, delivery.Code, "join")
+	if err != nil || preview.TargetRuntimeID != saved.LocalEnvironmentPublicID || preview.ExistingEnvironmentID != "" {
+		t.Fatalf("detached Runtime could not preview Gateway access: %v", err)
+	}
+	after, err := os.ReadFile(cfgPath)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("Gateway preview mutated detached Runtime state", err)
 	}
 }
 

@@ -457,6 +457,41 @@ func TestDefaultRunModeIsLocal(t *testing.T) {
 	}
 }
 
+func TestLocalStartupPersistsIdentityBeforeRuntimeManagement(t *testing.T) {
+	for _, mode := range []string{"local", "desktop"} {
+		t.Run(mode, func(t *testing.T) {
+			stateRoot := t.TempDir()
+			layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Stop startup at logger initialization, after configuration preparation
+			// but before application services or management sockets are created.
+			cfg := &config.Config{LogFormat: "unsupported"}
+			if err := config.Save(layout.ConfigPath, cfg); err != nil {
+				t.Fatal(err)
+			}
+			code, _, stderr := runCLITest(t, "run", "--mode", mode, "--state-root", stateRoot, "--presentation", "machine")
+			if code != 1 || !strings.Contains(stderr, "log format") {
+				t.Fatalf("unexpected startup boundary: code=%d stderr=%s", code, stderr)
+			}
+			first, err := config.Load(layout.ConfigPath)
+			if err != nil || first.LocalEnvironmentPublicID == "" || first.AgentInstanceID == "" {
+				t.Fatalf("local startup did not persist a stable Runtime identity: %v", err)
+			}
+			before, err := os.ReadFile(layout.ConfigPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runCLITest(t, "run", "--mode", mode, "--state-root", stateRoot, "--presentation", "machine")
+			after, err := os.ReadFile(layout.ConfigPath)
+			if err != nil || !bytes.Equal(before, after) {
+				t.Fatal("restart changed the persisted Runtime identity", err)
+			}
+		})
+	}
+}
+
 func TestResolveRuntimeLaunchPolicy(t *testing.T) {
 	tests := []struct {
 		name                  string
