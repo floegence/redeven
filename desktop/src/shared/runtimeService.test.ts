@@ -34,7 +34,7 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 
 describe('runtimeService', () => {
   it('publishes the Cloud v4 and Runtime-owned model directory compatibility window', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(45);
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(46);
     expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.13.0');
     expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.13.0');
   });

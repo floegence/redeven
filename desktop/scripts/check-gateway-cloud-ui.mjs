@@ -46,14 +46,10 @@ try {
     assert.deepEqual(await page.evaluate(() => window.gatewayRequests[0]), {
       kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:qualification', operation: 'status',
     }, 'opening must inspect membership without submitting consent');
-    assert.ok((await dialog.innerText()).includes(i18n.t('gatewayMembership.not_joined')), `${locale}: missing membership phase must use a readable fallback`);
-    assert.equal(await dialog.locator('details').evaluateAll(details => details.every(detail => !detail.open)), true, `${locale}: explanatory sections must start collapsed`);
+    assert.equal(await dialog.getByText(i18n.t('gatewayJoin.codeHelp'), { exact: true }).count() > 0, true);
     assert.equal(await dialog.locator('input').count(), 2, `${locale}: address and code inputs must be visible`);
-    const connectionDetails = dialog.locator('details').filter({ hasText: i18n.t('gatewayJoin.aboutConnection') }).first();
-    await connectionDetails.locator('summary').click();
-    assert.equal(await connectionDetails.evaluate(element => element.open), true, `${locale}: connection explanation must expand on demand`);
-    await connectionDetails.locator('summary').click();
-    assert.equal(await connectionDetails.evaluate(element => element.open), false, `${locale}: connection explanation must collapse again`);
+    assert.equal(await dialog.locator('input[type="file"]').count(), 0);
+    assert.equal(await dialog.getByRole('radio').count(), 0, 'Cloud choice requires a verified preview');
     const inputs = dialog.locator('input');
     await inputs.nth(0).fill('https://gateway.internal:7443');
     await inputs.nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
@@ -66,7 +62,6 @@ try {
     assert.equal(await verify.isEnabled(), true, 'failure must retain retry');
     assert.equal(await inputs.nth(0).inputValue(), 'https://gateway.internal:7443', 'failure must preserve address');
     assert.equal(await inputs.nth(1).inputValue(), '123456789ABCDEFGHJKMNPQRSTV', 'failure must preserve code');
-    assert.equal(await dialog.locator('details').evaluateAll(details => details.every(detail => !detail.open)), true, 'failure must keep technical connection details collapsed');
     assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'narrow dialog must fit');
     await captureDialog(page, `${locale}.png`);
     await page.keyboard.press('Escape');
@@ -83,6 +78,10 @@ try {
       window.gatewayRequests = [];
       window.redevenDesktopLauncher = { performAction: async request => {
         window.gatewayRequests.push(request);
+        if (request.operation === 'preview') return { ok: true, outcome: 'gateway_previewed', gateway_preview: {
+          preview_id: 'p'.repeat(43), purpose: request.purpose, gateway_id: 'gateway-qualification', gateway_name: 'Office Gateway',
+          target_runtime_id: 'ssh:qualification', expires_at_unix_ms: Date.now() + 300_000, existing_environment_id: 'environment-qualification',
+        } };
         return { ok: true, outcome: 'runtime_gateway_status', gateway_membership: {
           joined: false, phase: 'not_joined', existing_environment_id: 'environment-qualification',
         } };
@@ -94,11 +93,15 @@ try {
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
     await page.waitForFunction(() => window.gatewayRequests.length === 1);
-    assert.equal(await dialog.getByRole('radio', { name: i18n.t('gatewayJoin.preserve'), exact: true }).isVisible(), true, 'existing environment choice must stay concise');
-    assert.equal(await dialog.getByRole('radio', { name: i18n.t('gatewayJoin.createNew'), exact: true }).isVisible(), true, 'new environment choice must stay concise');
-    assert.equal(await dialog.locator('details').evaluateAll(details => details.every(detail => !detail.open)), true, 'existing environment explanations must start collapsed');
+    assert.equal(await dialog.getByRole('radio').count(), 0);
+    await dialog.getByRole('textbox').nth(0).fill('https://gateway.internal:7443');
+    await dialog.getByRole('textbox').nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
+    await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).click();
+    await dialog.getByText(i18n.t('gatewayJoin.verified'), { exact: true }).waitFor();
+    assert.equal(await dialog.getByRole('radio').count(), 2);
+    assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.confirmEnable'), exact: true }).isDisabled(), true);
     await captureDialog(page, `${locale}-existing-environment.png`);
-    report.cases.push(`${locale}: existing environment choices remain concise with collapsed explanations`);
+    report.cases.push(`${locale}: verified preview requires an explicit existing environment choice`);
     await page.close();
   }
   for (const locale of listDesktopI18nLocales()) {

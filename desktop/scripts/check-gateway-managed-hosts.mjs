@@ -91,13 +91,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     const material = trust.createGatewayPairingMaterial(record);
     const challenge = await session.client.pairingChallenge(record, trust.pairingChallengeRequest(material));
     trust.assertGatewayPairingChallenge({ record, material, challenge });
-    const request = trust.buildPairingCompleteRequest(material, challenge, { access: true, manage_members: true, configure_cloud: true });
+    const permissions = { access: true, manage_members: true, configure_cloud: true };
+    const request = trust.buildPairingCompleteRequest(material, challenge);
     const completion = await session.client.completePairing(record, request);
-    trust.assertGatewayPairingCompleteResponse(material, challenge, completion, request.permissions);
+    trust.assertGatewayPairingCompleteResponse(material, challenge, completion);
     record = { ...record, trust_profile: await trust.completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }) };
     activeRecord = record;
     const catalog = await lifecycle.catalog(record);
-    assert.deepEqual(catalog.gateway.permissions, request.permissions);
+    assert.deepEqual(catalog.gateway.permissions, permissions);
     assert.deepEqual(catalog.gateway.member_endpoints, []);
     await assert.rejects(session.client.invite(record));
     const endpoints = [{ endpoint_id: 'lan', address: 'https://localhost:7443', scope: 'lan', priority: 0 }];

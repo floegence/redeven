@@ -14,6 +14,8 @@
 
 @source './**/*.{ts,tsx,html}';
 @source '../../../flower_ui/src/**/*.{ts,tsx,html}';
+@source not './**/*.test.{ts,tsx}';
+@source not '../../../flower_ui/src/**/*.test.{ts,tsx}';
 @source '../index.html';
 
 @layer base {
