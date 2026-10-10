@@ -47,6 +47,11 @@ Successful Env App shell and entry-asset validation may be reused only inside th
 
 WebRequest diagnostics are installed idempotently for every Electron Session that Desktop uses. An opening root document with final HTTP status 400 or greater fails immediately with transport and status diagnostics; Chromium failures remain immediate through `did-fail-load`. The readiness timeout is reserved for a loaded document that never reports an interactive password gate or connected Runtime state. Renderer projections, Welcome snapshots, persisted preferences, and user diagnostics omit both private bridge fields. The main process projects only `desktop_private_bridge_v2` through the session-context preload for private documents. Env App selects `flowersec-private-loopback/1` only with that exact provenance. Public HTTP uses the separate released HTTPDirect profile; public HTTPS retains normal `flowersec/3` WSS. Placement HTTP/2 is outside Flowersec and cannot weaken its admission, lease, or E2EE rules. [Local UI network exposure](../security/local-ui-network-exposure.md) owns these protocol boundaries.
 
+Worker requests without a window identity resolve their Runtime owner through
+the Electron Session's isolated partition. Existing exact private-origin and
+graphical-scope checks govern bridge authorization. A worker cannot borrow
+another partition's bridge or attach its token to a public origin.
+
 # Boundaries
 
 Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, Gateway, Provider, and session observations must not become competing lifecycle authorities. Desktop must not log or project the bridge token, attach it to a public origin, change the system proxy, modify system-wide trust, add VPN/private-range bypass tables, globally disable proxying, or recover a missing authorized bridge by selecting a public address. Certificate creation and current-user trust installation occur only through explicit settings actions calling the bundled maintenance CLI. The private Flowersec profile cannot become a Provider, Gateway, URL, or public-browser fallback. ReDevPlugin and access components retain their separate execution boundaries.

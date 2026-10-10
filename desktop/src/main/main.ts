@@ -8523,7 +8523,7 @@ async function prepareWebServiceWindowPartition(
   graphicalWindow = false,
 ): Promise<void> {
   const webSession = session.fromPartition(partition);
-  installDesktopDiagnosticsHooks(webSession, forwardID, loopbackGateway, graphicalWindow);
+  installDesktopDiagnosticsHooks(webSession, forwardID, loopbackGateway, graphicalWindow, sessionRecord.transport.partition);
   if (loopbackGateway) await webSession.setProxy({ mode: 'direct' });
   else if (sessionRecord.gateway_member_transport) await prepareGatewayMemberPartition(webSession, sessionRecord.gateway_member_transport);
   else {
@@ -9438,13 +9438,13 @@ async function prepareDesktopSessionTransport(transport: DesktopSessionTransport
   if (transport.proxyPolicy === 'gateway') {
     if (!gatewayMember) throw new Error('Gateway proxy transport is missing its session owner.');
     const webSession = session.fromPartition(transport.partition);
-    installDesktopDiagnosticsHooks(webSession);
+    installDesktopDiagnosticsHooks(webSession, undefined, undefined, false, transport.partition);
     await prepareGatewayMemberPartition(webSession, gatewayMember);
     return;
   }
   if (transport.proxyPolicy !== 'direct') {
     const webSession = transport.partition ? session.fromPartition(transport.partition) : session.defaultSession;
-    installDesktopDiagnosticsHooks(webSession);
+    installDesktopDiagnosticsHooks(webSession, undefined, undefined, false, transport.partition);
     if (transport.partition) await webSession.setProxy({ mode: 'system' });
     return;
   }
@@ -9452,7 +9452,7 @@ async function prepareDesktopSessionTransport(transport: DesktopSessionTransport
   if (!task) {
     task = (async () => {
       const webSession = session.fromPartition(transport.partition);
-      installDesktopDiagnosticsHooks(webSession);
+      installDesktopDiagnosticsHooks(webSession, undefined, undefined, false, transport.partition);
       await webSession.setProxy({ mode: 'direct' });
       return webSession;
     })();
@@ -17945,14 +17945,23 @@ function installDesktopDiagnosticsHooks(
   webServiceForwardID?: string,
   loopbackGateway?: WebServiceLoopbackGateway,
   graphicalWindow = false,
+  ownerPartition?: string,
 ): void {
   if (desktopDiagnosticsHookSessions.has(webSession)) {
     return;
   }
   desktopDiagnosticsHookSessions.add(webSession);
+  const requestOwner = (contentsID: number) => {
+    if (contentsID >= 0) return sessionRecordForWebContentsID(contentsID);
+    // Child workers have no webContents ID. Their isolated network partition
+    // retains the same Runtime owner and request-origin restrictions.
+    return ownerPartition
+      ? [...sessionsByKey.values()].find(record => record.session_partition === ownerPartition) ?? null
+      : null;
+  };
   webSession.webRequest.onBeforeSendHeaders((details, callback) => {
     const contentsID = (details as { webContentsId?: number }).webContentsId ?? -1;
-    const sessionRecord = sessionRecordForWebContentsID(contentsID);
+    const sessionRecord = requestOwner(contentsID);
     const diagnosticHeaders = sessionRecord?.diagnostics.startRequest({
       requestID: details.id,
       method: details.method,
@@ -17979,7 +17988,7 @@ function installDesktopDiagnosticsHooks(
     callback({ requestHeaders });
   });
   webSession.webRequest.onCompleted((details) => {
-    const sessionRecord = sessionRecordForWebContentsID((details as { webContentsId?: number }).webContentsId ?? -1);
+    const sessionRecord = requestOwner((details as { webContentsId?: number }).webContentsId ?? -1);
     if (!sessionRecord) {
       return;
     }
@@ -18032,7 +18041,7 @@ function installDesktopDiagnosticsHooks(
     }
   });
   webSession.webRequest.onErrorOccurred((details) => {
-    const sessionRecord = sessionRecordForWebContentsID((details as { webContentsId?: number }).webContentsId ?? -1);
+    const sessionRecord = requestOwner((details as { webContentsId?: number }).webContentsId ?? -1);
     if (!sessionRecord) {
       return;
     }

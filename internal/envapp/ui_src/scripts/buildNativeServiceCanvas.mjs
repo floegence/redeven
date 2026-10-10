@@ -1,5 +1,6 @@
 import { build } from 'vite';
 import solid from 'vite-plugin-solid';
+import { graphBlobWorkersPlugin } from '@floegence/floe-webapp-core/graph-assets';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -10,22 +11,11 @@ const dependencies = path.resolve(native, '../../envapp/ui_src/node_modules');
 const output = process.argv[2];
 if (!output) throw new Error('Pass the renderer output directory');
 const core = path.join(dependencies, '@floegence/floe-webapp-core/dist');
-// WKWebView cannot start a file-origin worker. Embed the published worker unchanged in a local blob.
-const engine = await fs.readFile(path.join(core, 'components/graph/engine.js'), 'utf8');
-const asset = /new URL\("(\.\.\/\.\.\/assets\/[^"\n]+)", import\.meta\.url\)/.exec(engine);
-if (!asset) throw new Error('Unsupported published graph worker entry');
-const worker = await fs.readFile(path.resolve(core, 'components/graph', asset[1]), 'utf8');
 const modules = new Set();
 await build({
   configFile: false, root: native, base: './',
-  plugins: [solid(), {
-    name: 'native-canvas-worker',
-    transform(code, id) {
-      if (!id.endsWith('/components/graph/engine.js')) return;
-      const expression = /new URL\(\s*\/\* @vite-ignore \*\/\s*"" \+ new URL\([^\n]+\)\.href,\s*import\.meta\.url\s*\)/;
-      if (!expression.test(code)) throw new Error('Unsupported published graph worker factory');
-      return code.replace(expression, () => `URL.createObjectURL(new Blob([${JSON.stringify(worker)}], {type:'text/javascript'}))`);
-    },
+  plugins: [graphBlobWorkersPlugin(), solid(), {
+    name: 'native-canvas-manifest',
     generateBundle(_options, bundle) {
       for (const chunk of Object.values(bundle)) {
         if (chunk.type === 'chunk') for (const id of chunk.moduleIds) modules.add(id);

@@ -6,7 +6,7 @@ import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { createGraphLayoutEngine } from '@floegence/floe-webapp-core/graph';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TessivenGraph, type GraphBrowseState } from '../../../../tessiven_ui/src/TessivenGraph';
+import { TessivenGraph, type GraphBrowseState, type TessivenViewportControl } from '../../../../tessiven_ui/src/TessivenGraph';
 import { TessivenThumbnail } from '../../../../tessiven_ui/src/TessivenThumbnail';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Version } from '../../../../tessiven_ui/src/types';
@@ -189,6 +189,32 @@ afterEach(() => {
   document.documentElement.classList.remove('dark', 'light');
 });
 describe('Tessiven real graph interactions', () => {
+  it('preserves native render notifications and details while controlling touch zoom', async () => {
+    host = document.createElement('div');
+    host.className = 'tessiven';
+    host.style.cssText = 'width:1250px;height:740px;position:relative';
+    document.body.append(host);
+    const states = vi.fn(), details = vi.fn();
+    let control: TessivenViewportControl | undefined;
+    dispose = render(() => <TessivenGraph version={fixture()} historical={false}
+      t={tessivenText('en-US')} onAsk={() => {}} onInspect={() => {}}
+      onDetails={details} onRenderState={states} onViewportControl={value => { control = value; }} />, host);
+    await expect.poll(() => states.mock.calls.at(-1)?.[0]).toBe('rendered');
+    expect(states.mock.calls[0][0]).toBe('loading');
+    await userEvent.click(host.querySelector('.tessiven-node')!);
+    expect(details).toHaveBeenCalledOnce();
+    expect(details.mock.calls[0][0].object_refs).toEqual(['node-0']);
+    expect(host.querySelector('.tessiven-object-popup')).toBeNull();
+    const transform = () => host.querySelector<HTMLElement>('.floe-infinite-canvas__viewport')!.style.transform;
+    const before = transform();
+    control!.setTouchZooming(true);
+    control!.zoom(1.1, 400, 300, 10, 10);
+    expect(transform()).not.toBe(before);
+    control!.setTouchZooming(false);
+    await userEvent.click(page.getByRole('button', { name: 'Collapse all', exact: true }));
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(0);
+    expect(states.mock.calls.at(-1)?.[0]).toBe('rendered');
+  });
   it('changes all group visibility and service scope from the canvas without editing the document', async () => {
     const version = sharedHostsVersion();
     const original = JSON.stringify(version.document);

@@ -1584,7 +1584,7 @@ describe('main routing', () => {
     expect(routeSrc).not.toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live$/u');
     expect(routeSrc).not.toContain('live\\/updates');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/approvals$/u');
-    expect(routeSrc).not.toContain('context\\/compact');
+    expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/context\\/compact$/u');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/order$/u');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/[^/]+$/u');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/[^/]+\\/promote$/u');
@@ -1926,7 +1926,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain('placementBridge: options.transportRecovery != null');
     expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport, options.gatewayMember);');
     expect(mainSrc).toContain("await webSession.setProxy({ mode: 'direct' });");
-    expect(mainSrc).toContain('loopbackGateway?: WebServiceLoopbackGateway,\n  graphicalWindow = false,\n): void');
+    expect(mainSrc).toContain('loopbackGateway?: WebServiceLoopbackGateway,\n  graphicalWindow = false,\n  ownerPartition?: string,\n): void');
+    expect(mainSrc).toContain('if (contentsID >= 0) return sessionRecordForWebContentsID(contentsID);');
+    expect(mainSrc).toContain('record.session_partition === ownerPartition');
     expect(mainSrc).toContain('desktopDiagnosticsHookSessions.has(webSession)');
     expect(mainSrc).toContain('shouldFailDesktopSessionMainDocument({');
     expect(mainSrc).toContain('details.resourceType');

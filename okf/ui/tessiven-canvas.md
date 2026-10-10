@@ -165,7 +165,9 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   SVG rendering; Tessiven supplies its localized accessible name.
 - Complete packing and routing run off the renderer thread. Nodes and routes
   outside the viewport are culled without discarding canonical graph records.
-  Large-graph qualification measures actual host counts, including groups of ten
+  Production qualification serves built assets and verifies the complete layout
+  worker, child ELK worker and raw WASM resource closure. Large-graph
+  qualification measures actual host counts, including groups of ten
   so a thousand-host fixture never silently measures only aggregate cards.
 - Every logical group exposes a visible, labeled expand or collapse action with
   a directional icon. The action remains in the group header in both states and
@@ -223,8 +225,8 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
 
 The iOS host bundles the shared TessivenGraph and the published Floe graph engine
 as fixed application resources. `buildNativeServiceCanvas.mjs` exports the browser
-Solid entry, the unchanged ELK worker in a local Blob, libavoid WebAssembly,
-dependency licenses and corresponding source, plus a hash manifest tied to the
+Solid entry, published Floe blob layout/ELK workers and independently replaceable raw
+libavoid WebAssembly, dependency licenses and corresponding source, plus a hash manifest tied to the
 Redeven source commit. The local CSP permits the published Emscripten function
 constructors; scripts, layout assets and worker code remain bundled, with no
 remote script or frame source. This is WebKit document execution, not native
@@ -260,6 +262,7 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven_ui/src/TessivenGraph.tsx`
 - `internal/tessiven_ui/src/native/entry.tsx`
 - `internal/envapp/ui_src/scripts/buildNativeServiceCanvas.mjs`
+- `scripts/check_native_service_canvas.mjs` - Offline custom-scheme WebKit qualification for shared group controls, service scope, minimap geometry and explicit renderer failure.
 - `internal/tessiven_ui/src/TessivenServiceRelations.tsx`
 - `internal/tessiven_ui/src/projection.ts`
 - `internal/tessiven_ui/src/tessiven.css`
