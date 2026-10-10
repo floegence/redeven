@@ -192,3 +192,24 @@ it('disables invitation issuance when another settings tab removes all confirmed
  expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
  expect(document.body.textContent).toContain(i18n.t('gatewayMembers.noConnectionAddresses'));
 });
+
+it('preserves invitation delivery and member drafts across fresh Gateway snapshots',async()=>{
+ const perform=vi.fn().mockResolvedValue({ok:true,outcome:'gateway_invitation_created',gateway_invitation_code:invitationFixture});
+ const setGateway=mount(perform);await settle();button(i18n.t('gatewayMembers.createInvitation')).click();await settle();
+ const memberSelect=document.querySelector<HTMLSelectElement>('li select')!;select(memberSelect,'allow');
+ const policyInput=document.querySelector<HTMLElement>('[role="checkbox"], input[type="checkbox"]')!;policyInput.click();await settle();
+ setGateway(structuredClone(gateway));await settle();
+ expect(document.querySelector('.redeven-gateway-invitation-card .font-mono')?.textContent?.replaceAll('-','')).toBe(invitationFixture.code);
+ expect(memberSelect.value).toBe('allow');expect(button(i18n.t('gatewayMembers.confirmSave')).disabled).toBe(false);
+ expect(document.body.textContent).toContain(i18n.t('gatewayMembers.affected'));expect(perform).toHaveBeenCalledOnce();
+});
+
+it('preserves listener and Host drafts, disclosure and focus across fresh Gateway snapshots',async()=>{
+ const setGateway=mount(vi.fn(),undefined,gateway,'connection');await settle();
+ const binding=document.getElementById('gateway-listen-addresses') as HTMLInputElement;
+ const hosts=document.getElementById('gateway-allowed-hosts') as HTMLInputElement;
+ const advanced=document.querySelector<HTMLDetailsElement>('[data-gateway-network-advanced]')!;advanced.open=true;
+ for(const [input,value] of [[binding,'0.0.0.0:7555'],[hosts,'draft.example']] as const){input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}
+ hosts.focus();setGateway(structuredClone(gateway));await settle();
+ expect(binding.value).toBe('0.0.0.0:7555');expect(hosts.value).toBe('draft.example');expect(advanced.open).toBe(true);expect(document.activeElement).toBe(hosts);
+});

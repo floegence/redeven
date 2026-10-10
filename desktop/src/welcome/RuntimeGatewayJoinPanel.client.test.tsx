@@ -22,15 +22,80 @@ function verified(value=preview): DesktopLauncherActionResult { return {ok:true,
 function mount(perform: ReturnType<typeof vi.fn>, gateways: readonly DesktopGatewaySource[] = [], initialAddress = "https://gateway.internal:7443") {
  vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
  const root=document.createElement('div');document.body.append(root);
- const [target,setTarget]=createSignal<DesktopCloudRuntimeLinkTargetID>('ssh:chosen');
- dispose=render(()=><RuntimeGatewayJoinPanel targetID={target()} targetLabel="Build Runtime" gateways={gateways} address={initialAddress} code="123456789ABCDEFGHJKMNPQRSTV" i18n={i18n}/>,root);
- const trigger=button(i18n.t('gatewayJoin.title'));trigger.focus();trigger.click();return {trigger,setTarget};
+ const [snapshot,setSnapshot]=createSignal({target:'ssh:chosen' as DesktopCloudRuntimeLinkTargetID,gateways,address:initialAddress,code:'123456789ABCDEFGHJKMNPQRSTV'});
+ dispose=render(()=><RuntimeGatewayJoinPanel targetID={snapshot().target} targetLabel="Build Runtime" gateways={snapshot().gateways} address={snapshot().address} code={snapshot().code} i18n={i18n}/>,root);
+ const trigger=button(i18n.t('gatewayJoin.title'));trigger.focus();trigger.click();return {trigger,
+  setTarget:(target:DesktopCloudRuntimeLinkTargetID)=>setSnapshot(current=>({...current,target})),
+  refreshSnapshot:()=>setSnapshot(current=>({...current,gateways:structuredClone(current.gateways)})),
+  setInvitation:(address:string,code:string)=>setSnapshot(current=>({...current,address,code})),
+ };
 }
 function edit(index:number,value:string){const input=[...document.querySelectorAll<HTMLInputElement>('input:not([type="radio"])')][index]!;input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}
 beforeEach(()=>{vi.stubGlobal('CSS',{escape:(v:string)=>v});HTMLElement.prototype.scrollIntoView=vi.fn();});
 afterEach(()=>{dispose?.();document.body.replaceChildren();vi.unstubAllGlobals();vi.restoreAllMocks();vi.useRealTimers();});
 
 describe('Runtime Gateway address and code interaction',()=>{
+ it('retains typed input, DOM identity and focus across fresh parent snapshots and polling',async()=>{
+  vi.useFakeTimers();const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const {refreshSnapshot}=mount(perform);await vi.advanceTimersByTimeAsync(50);
+  edit(0,'https://draft.example:7443');edit(1,'draft-code');
+  const inputs=[...document.querySelectorAll<HTMLInputElement>('input')];inputs[1]!.focus();
+  for(let index=0;index<3;index++){refreshSnapshot();await vi.advanceTimersByTimeAsync(3100);}
+  expect(document.querySelector('input')).toBe(inputs[0]);
+  expect(inputs.map(input=>input.value)).toEqual(['https://draft.example:7443','draft-code']);
+  expect(document.activeElement).toBe(inputs[1]);
+ });
+ it('retains verified consent across fresh snapshots without issuing another preview',async()=>{
+  vi.useFakeTimers();const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified({...preview,existing_environment_id:'existing'}):status({joined:false,phase:'not_joined'}));
+  const {refreshSnapshot}=mount(perform);await vi.advanceTimersByTimeAsync(50);
+  button(i18n.t('gatewayJoin.verify')).click();await vi.advanceTimersByTimeAsync(50);
+  const option=document.querySelector<HTMLInputElement>('input[type="radio"]')!;option.click();option.focus();
+  refreshSnapshot();await vi.advanceTimersByTimeAsync(3100);
+  expect(document.querySelector('input[type="radio"]')).toBe(option);expect(option.checked).toBe(true);
+  expect(document.activeElement).toBe(option);expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
+  expect(perform.mock.calls.filter(([request])=>request.operation==='preview')).toHaveLength(1);
+ });
+ it('loads changed invitation seeds and requires verification again',async()=>{
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:false,phase:'not_joined'}));
+  const {setInvitation}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
+  setInvitation('https://new.example:7443','regenerated-code');await settle();
+  expect([...document.querySelectorAll<HTMLInputElement>('input')].map(input=>input.value)).toEqual(['https://new.example:7443','regenerated-code']);
+  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(false);
+ });
+ it('does not restore a consumed invitation code when the inventory refreshes',async()=>{
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:request.operation!=='status',phase:request.operation==='status'?'not_joined':'joined'}));
+  const {refreshSnapshot}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();button(i18n.t('gatewayJoin.confirmEnable')).click();await settle();
+  refreshSnapshot();await settle();button(i18n.t('gatewayJoin.replace')).click();await settle();
+  expect(document.querySelectorAll<HTMLInputElement>('input')[1]?.value).toBe('');
+ });
+ it('discards delayed status and preview responses when the target changes',async()=>{
+  let completeStatus!:(value:DesktopLauncherActionResult)=>void,completePreview!:(value:DesktopLauncherActionResult)=>void;
+  const perform=vi.fn().mockImplementation(request=>{
+   if(request.operation==='preview')return new Promise(resolve=>{completePreview=resolve;});
+   if(request.runtime_target_id==='ssh:chosen')return new Promise(resolve=>{completeStatus=resolve;});
+   return Promise.resolve(status({joined:false,phase:'not_joined'}));
+  });
+  const {setTarget}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
+  setTarget('ssh:other');await settle();completeStatus(status({joined:true,phase:'joined'}));completePreview(verified());await settle();
+  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(false);
+  expect(document.querySelector('[role="status"]')).toBeNull();
+ });
+ it('keeps verification pending through a parent refresh and accepts its current response',async()=>{
+  let complete!:(value:DesktopLauncherActionResult)=>void;
+  const perform=vi.fn().mockImplementation(request=>request.operation==='preview'?new Promise(resolve=>{complete=resolve;}):Promise.resolve(status({joined:false,phase:'not_joined'})));
+  const {refreshSnapshot}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
+  refreshSnapshot();await settle();expect(button(i18n.t('gatewayJoin.verifying')).disabled).toBe(true);
+  expect([...document.querySelectorAll<HTMLInputElement>('input')].every(input=>input.disabled)).toBe(true);
+  complete(verified());await settle();expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
+ });
+ it('retains the address but clears the code and consent on close and reopen',async()=>{
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified({...preview,existing_environment_id:'existing'}):status({joined:false,phase:'not_joined'}));
+  const {trigger,refreshSnapshot}=mount(perform);await settle();edit(0,'https://draft.example:7443');
+  button(i18n.t('gatewayJoin.verify')).click();await settle();document.querySelector<HTMLInputElement>('input[type="radio"]')!.click();
+  button(i18n.t('common.cancel')).click();await settle();refreshSnapshot();trigger.click();await settle();
+  expect([...document.querySelectorAll<HTMLInputElement>('input')].map(input=>input.value)).toEqual(['https://draft.example:7443','']);
+  expect(document.querySelector('input[type="radio"]')).toBeNull();expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(true);
+ });
  it('only reads status on open and verifies before presenting explicit consent',async()=>{
   const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified()).mockResolvedValueOnce(status({joined:true,phase:'joined'}));
   const {trigger}=mount(perform);await settle();
@@ -66,10 +131,10 @@ describe('Runtime Gateway address and code interaction',()=>{
   const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValue({ok:false,code:'cloud_link_failed',gateway_error_code:error});mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t(`gatewayJoin.${key}`));expect(document.querySelectorAll('input')[1]?.value).toBe('123456789ABCDEFGHJKMNPQRSTV');
  });
  it.each(['replace','update-endpoints'] as const)('preserves %s input across polling',async purpose=>{
-  vi.useFakeTimers();const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified({...preview,purpose}):status({joined:true,phase:'joined'}));mount(perform);await vi.advanceTimersByTimeAsync(50);button(i18n.t(purpose==='replace'?'gatewayJoin.replace':'gatewayJoin.updateEndpoints')).click();edit(1,'new-code');await vi.advanceTimersByTimeAsync(3100);expect(document.querySelectorAll('input')[1]?.value).toBe('new-code');button(i18n.t('gatewayJoin.verify')).click();await vi.advanceTimersByTimeAsync(50);button(i18n.t('gatewayJoin.confirmEnable')).click();await vi.advanceTimersByTimeAsync(50);expect(perform.mock.calls.find(call=>call[0].operation===purpose)?.[0]).toMatchObject({operation:purpose,preview_id:preview.preview_id});
+  vi.useFakeTimers();const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified({...preview,purpose}):status({joined:true,phase:'joined'}));const {refreshSnapshot}=mount(perform);await vi.advanceTimersByTimeAsync(50);button(i18n.t(purpose==='replace'?'gatewayJoin.replace':'gatewayJoin.updateEndpoints')).click();edit(1,'new-code');refreshSnapshot();await vi.advanceTimersByTimeAsync(3100);expect(document.querySelectorAll('input')[1]?.value).toBe('new-code');button(i18n.t('gatewayJoin.verify')).click();await vi.advanceTimersByTimeAsync(50);button(i18n.t('gatewayJoin.confirmEnable')).click();await vi.advanceTimersByTimeAsync(50);expect(perform.mock.calls.find(call=>call[0].operation===purpose)?.[0]).toMatchObject({operation:purpose,preview_id:preview.preview_id});
  });
  it('retains leave confirmation and recovers polling after a transient failure',async()=>{
-  vi.useFakeTimers();const perform=vi.fn().mockResolvedValueOnce(status({joined:true,phase:'joined'})).mockRejectedValueOnce(new Error('offline')).mockResolvedValue(status({joined:true,phase:'gateway_offline'}));mount(perform);await vi.advanceTimersByTimeAsync(50);button(i18n.t('gatewayMembers.leave')).click();await vi.advanceTimersByTimeAsync(3100);expect(document.body.textContent).toContain(i18n.t('gatewayJoin.failed'));await vi.advanceTimersByTimeAsync(3100);expect(button(i18n.t('gatewayMembers.confirmLeave')).disabled).toBe(false);expect(document.querySelector('[role="status"]')?.textContent).toContain(i18n.t('gatewayMembership.gateway_offline'));
+  vi.useFakeTimers();const perform=vi.fn().mockResolvedValueOnce(status({joined:true,phase:'joined'})).mockRejectedValueOnce(new Error('offline')).mockResolvedValue(status({joined:true,phase:'gateway_offline'}));const {refreshSnapshot}=mount(perform);await vi.advanceTimersByTimeAsync(50);button(i18n.t('gatewayMembers.leave')).click();refreshSnapshot();await vi.advanceTimersByTimeAsync(3100);expect(document.body.textContent).toContain(i18n.t('gatewayJoin.failed'));await vi.advanceTimersByTimeAsync(3100);expect(button(i18n.t('gatewayMembers.confirmLeave')).disabled).toBe(false);expect(document.querySelector('[role="status"]')?.textContent).toContain(i18n.t('gatewayMembership.gateway_offline'));
  });
  it('ignores a delayed verification after close and reopen',async()=>{
   let complete!:(value:DesktopLauncherActionResult)=>void;const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;})).mockResolvedValue(status({joined:false,phase:'not_joined'}));const {trigger}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();button(i18n.t('common.cancel')).click();await settle();trigger.click();await settle();complete(verified());await settle();expect(document.body.textContent).not.toContain(preview.gateway_name);

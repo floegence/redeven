@@ -2,7 +2,7 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { localGatewaySuggestions } from './localGatewaySuggestions';
 import { Monitor, ArrowRight, Check } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input, StableText } from '@floegence/floe-webapp-core/ui';
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { GatewayJoinPreview, GatewayMembershipStatus, GatewayMembershipOperation, GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
@@ -31,13 +31,18 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   let lastOpenRequest = props.openRequest ?? 0;
   const expiryTimer = setInterval(() => setNow(Date.now()), 1000);
   const text = props.i18n.t;
+  // Snapshot identity is observational; only changed enrollment coordinates reset a draft.
+  const targetID = createMemo(() => props.targetID);
+  const initialAddress = createMemo(() => props.address ?? '');
+  const initialCode = createMemo(() => props.code ?? '');
   const suggestions = createMemo(() => localGatewaySuggestions(props.gateways ?? [], props.targetID));
   function fillAddress(value: string) { invalidate(); setAddress(value); queueMicrotask(() => codeInput?.focus()); }
   const invalidate = () => { generation++; setPreview(undefined); setChoice(undefined); setBusy(false); setError(''); };
-  createEffect(() => { const target = props.targetID; const nextAddress = props.address; const nextCode = props.code; void target;
-    invalidate(); setAddress(nextAddress ?? ''); setCode(nextCode ?? ''); setStatus(undefined); setPurpose('join');
-    untrack(() => { if (open()) void refresh(); });
-  });
+  createEffect(on([targetID, initialAddress, initialCode], ([, nextAddress, nextCode]) => {
+    invalidate(); statusGeneration++; clearTimeout(timer);
+    setAddress(nextAddress); setCode(nextCode); setStatus(undefined); setStatusError(''); setPurpose('join'); setLeaving(false);
+    if (open()) void refresh();
+  }));
   const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); setCode(''); setOpen(false); props.onClose?.();
     queueMicrotask(() => trigger?.isConnected ? trigger.focus() : props.focusOwner?.()); };
   onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); });
