@@ -161,8 +161,14 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   is retained with the current canvas browse state, not persisted in its DSL.
 - The interactive overview uses the exact current layout and viewport, including
   collapse and service filtering. Drag its viewport rectangle to pan, click the
-  overview to center, or use arrow keys and Home. Floe owns navigation and compact
-  SVG rendering; Tessiven supplies its localized accessible name.
+  overview to center, or use arrow keys and Home. The overview shares the main
+  canvas's four logical-group tones, host fill, and network/storage resource
+  colors through the published node-style callback. Theme variables update both
+  surfaces together, including attribute-only native dark themes. Equal styles
+  share SVG paths, so overview DOM size depends on the palette rather than the
+  number of hosts. Forced colors use system fills and outlines. Floe owns
+  navigation and compact SVG rendering; Tessiven supplies its localized
+  accessible name and product palette.
 - Complete packing and routing run off the renderer thread. Nodes and routes
   outside the viewport are culled without discarding canonical graph records.
   Production qualification serves built assets and verifies the complete layout

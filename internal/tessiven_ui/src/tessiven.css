@@ -11,7 +11,11 @@
   --ts-muted: color-mix(in oklab, var(--ts-ink) 85%, var(--background));
   --ts-header: #494949;
   --ts-node: color-mix(in oklab, var(--card) 97%, var(--background));
-  --ts-group: #e0ded8;
+  --ts-group-0: #e0ded8;
+  --ts-group-1: #e2d7bf;
+  --ts-group-2: #cbd0e1;
+  --ts-group-3: #dfcedc;
+  --ts-group: var(--ts-group-0);
   --ts-group-line: color-mix(in oklab, #647f9c 82%, var(--foreground));
   --ts-network: #b3cbb3;
   --ts-storage: #e5bda5;
@@ -38,7 +42,10 @@
   --ts-node: oklch(
     from var(--card) clamp(0.33, calc(l + 0.09), 0.44) min(c, 0.025) h
   );
-  --ts-group: #20272f;
+  --ts-group-0: #20272f;
+  --ts-group-1: #393329;
+  --ts-group-2: #2d3142;
+  --ts-group-3: #382e39;
   --ts-group-line: color-mix(in oklab, #8495ad 78%, var(--foreground));
   --ts-network: #284336;
   --ts-storage: #503b30;
@@ -637,6 +644,9 @@
   );
   --graph-dot: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
+.tessiven-canvas .floe-graph__minimap-viewport {
+  fill: transparent;
+}
 .tessiven-canvas-tools button {
   padding: 2px 5px;
 }
@@ -658,22 +668,13 @@
   box-sizing: border-box;
 }
 .tessiven-group[data-tone='1'] {
-  --ts-group: #e2d7bf;
+  --ts-group: var(--ts-group-1);
 }
 .tessiven-group[data-tone='2'] {
-  --ts-group: #cbd0e1;
+  --ts-group: var(--ts-group-2);
 }
 .tessiven-group[data-tone='3'] {
-  --ts-group: #dfcedc;
-}
-.dark .tessiven-group[data-tone='1'] {
-  --ts-group: #393329;
-}
-.dark .tessiven-group[data-tone='2'] {
-  --ts-group: #2d3142;
-}
-.dark .tessiven-group[data-tone='3'] {
-  --ts-group: #382e39;
+  --ts-group: var(--ts-group-3);
 }
 .tessiven-group > header {
   display: flex;

@@ -298,7 +298,7 @@ describe('Tessiven real graph interactions', () => {
     const moved = Number(indicator.getAttribute('x'));
     await userEvent.keyboard('{Home}');
     expect(Number(indicator.getAttribute('x'))).not.toBe(moved);
-    expect(host.querySelector('.floe-graph__minimap')?.querySelectorAll('path')).toHaveLength(3);
+    expect(host.querySelector('.floe-graph__minimap')?.querySelectorAll('path')).toHaveLength(5);
     expect(host.querySelectorAll('[role="alert"]')).toHaveLength(0);
   });
   it('restores the selected service scope when returning to a canvas', async () => {
