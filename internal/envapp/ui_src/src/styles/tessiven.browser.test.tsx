@@ -198,6 +198,7 @@ describe('Tessiven real graph interactions', () => {
     let control: TessivenViewportControl | undefined;
     dispose = render(() => <TessivenGraph version={fixture()} historical={false}
       t={tessivenText('en-US')} onAsk={() => {}} onInspect={() => {}}
+      tools="groups"
       onDetails={details} onRenderState={states} onViewportControl={value => { control = value; }} />, host);
     await expect.poll(() => states.mock.calls.at(-1)?.[0]).toBe('rendered');
     expect(states.mock.calls[0][0]).toBe('loading');
@@ -205,6 +206,9 @@ describe('Tessiven real graph interactions', () => {
     expect(details).toHaveBeenCalledOnce();
     expect(details.mock.calls[0][0].object_refs).toEqual(['node-0']);
     expect(host.querySelector('.tessiven-object-popup')).toBeNull();
+    expect(host.querySelector('.tessiven-canvas-tools [aria-label="Canvas menu"]')).toBeNull();
+    expect(page.getByRole('button', { name: 'Fit canvas', exact: true }).query()).toBeNull();
+    expect(control?.fit).toBeTypeOf('function');
     const transform = () => host.querySelector<HTMLElement>('.floe-infinite-canvas__viewport')!.style.transform;
     const before = transform();
     control!.setTouchZooming(true);
