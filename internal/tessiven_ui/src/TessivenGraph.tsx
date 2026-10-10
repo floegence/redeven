@@ -49,6 +49,7 @@ export type GraphBrowseState = {
 export type TessivenViewportControl = {
   zoom: (factor: number, x: number, y: number, dx?: number, dy?: number) => void;
   setTouchZooming: (active: boolean) => void;
+  fit: () => void;
 };
 export function TessivenGraph(props: {
   version: Version;
@@ -63,6 +64,8 @@ export function TessivenGraph(props: {
   onDetails?: (selection: Selection) => void;
   onViewportControl?: (control: TessivenViewportControl) => void;
   onRenderState?: (state: 'loading' | 'rendered' | 'error') => void;
+  showTools?: boolean;
+  onZoomChange?: (scale: number) => void;
 }) {
   const [expanded, setExpanded] = createSignal(
     new Set(
@@ -99,6 +102,7 @@ export function TessivenGraph(props: {
   let touchZooming = false;
   onCleanup(() => { generation += 1; engine.dispose(); });
   onMount(() => props.onViewportControl?.({
+    fit,
     setTouchZooming(active) { touchZooming = active; },
     zoom(factor, x, y, dx = 0, dy = 0) {
       setViewport(previous => {
@@ -108,6 +112,7 @@ export function TessivenGraph(props: {
       });
     },
   }));
+  createEffect(() => props.onZoomChange?.(viewport().scale));
   onCleanup(() => {
     // Empty canvases have no meaningful viewport to restore after Flower maps them.
     if (!layout().nodes.length) return;
@@ -309,6 +314,7 @@ export function TessivenGraph(props: {
             ? [canonicalRef(event.object.id)]
             : []);
     if (props.onDetails) {
+      if (!menu && !selectionRefs.length) return;
       const selection = { canvas_id: props.version.canvas_id, version_id: props.version.number, object_refs: selectionRefs.slice(0, 100) };
       if (menu) props.onAsk(selection);
       else props.onDetails(selection);
@@ -655,7 +661,7 @@ export function TessivenGraph(props: {
         onHover={setHovered}
         onInteractionStart={() => close()}
       />
-      <div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
+      <Show when={props.showTools !== false}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
         <button onClick={fit}>{props.t('fit')}</button>
         <span>{Math.round(viewport().scale * 100)}%</span>
         <button
@@ -674,7 +680,7 @@ export function TessivenGraph(props: {
         >
           ⋯
         </button>
-      </div>
+      </div></Show>
       <Show when={popup()} keyed>
         {(value) => (
           <TessivenObjectPopup
