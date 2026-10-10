@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js';
-import { createEffect, createSignal, Index, Show } from 'solid-js';
-import { FileText, FolderOpen, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
+import { createEffect, createSignal, Index, onCleanup, Show } from 'solid-js';
+import { FileText, FolderOpen, Refresh, X, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerAttachmentItem } from './createFlowerAttachmentController';
 import { isFlowerImageMimeType } from './flowerAttachmentPresentation';
@@ -142,21 +142,50 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
       </Show>
       <Index each={props.items}>
         {(item) => {
+          let removeButton: HTMLButtonElement | undefined;
+          createEffect(() => {
+            const localID = item().local_id;
+            if (!removeButton) return;
+            const button = removeButton;
+            itemButtons.set(localID, button);
+            onCleanup(() => {
+              if (itemButtons.get(localID) === button) itemButtons.delete(localID);
+            });
+          });
           const status = () => itemStatus(item(), props.copy);
           const error = () => itemError(item(), props.copy);
           const errorDescriptionID = () => `flower-attachment-error-${item().local_id}`;
           const image = () => isFlowerImageMimeType(item().mime_type);
           const previewKey = () => `${item().local_id}:${item().preview_url ?? ''}`;
           const previewable = () => Boolean(props.onPreview && (item().staged || item().preview_url));
+          const attachmentFeedback = () => (
+            <span class="flower-attachment-feedback">
+              <Show when={item().status === 'uploading'}>
+                <Show
+                  when={!item().progress_indeterminate && item().total_bytes !== undefined}
+                  fallback={<span class="flower-attachment-progress-indeterminate">{props.copy.uploading}</span>}
+                >
+                  <progress
+                    class="flower-attachment-progress"
+                    max={item().total_bytes}
+                    value={item().loaded_bytes}
+                    aria-label={`${item().name}: ${props.copy.uploading}`}
+                  />
+                </Show>
+              </Show>
+              <Show when={item().error_code} fallback={
+                <Show when={image() && item().status !== 'uploading'}><span>{status()}</span></Show>
+              }>
+                <span id={errorDescriptionID()} class="flower-attachment-error">{error()}</span>
+              </Show>
+            </span>
+          );
           const attachmentSummary = () => (
             <>
-              <Show
-                when={image() && !failedPreviews().has(previewKey())}
-                fallback={<span class="flower-attachment-file-icon" aria-hidden="true"><FileText /></span>}
-              >
+              <Show when={image()} fallback={<span class="flower-attachment-file-icon" aria-hidden="true"><FileText /></span>}>
                 <span class="flower-attachment-image-thumb" aria-hidden="true">
                   <Show
-                    when={item().preview_url}
+                    when={!failedPreviews().has(previewKey()) && item().preview_url}
                     fallback={<span class="flower-attachment-image-placeholder"><FileText /></span>}
                   >
                     {(url) => (
@@ -176,37 +205,25 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                   </Show>
                 </span>
               </Show>
-              <span class="flower-attachment-body">
-                <span class="flower-attachment-name" title={item().name}>{item().name}</span>
-                <span class="flower-attachment-meta">
-                  <span>{formatIECBytes(item().size_bytes, props.locale)}</span>
-                  <Show when={item().text_stats}><span>{props.copy.lines(item().text_stats!.lines)}</span></Show>
-                  <span>{item().mime_type}</span>
-                  <span data-attachment-status-label>{status()}</span>
+              <Show when={!image()}>
+                <span class="flower-attachment-body">
+                  <span class="flower-attachment-name" title={item().name}>{item().name}</span>
+                  <span class="flower-attachment-meta">
+                    <span>{formatIECBytes(item().size_bytes, props.locale)}</span>
+                    <Show when={item().text_stats}><span>{props.copy.lines(item().text_stats!.lines)}</span></Show>
+                    <span>{item().mime_type}</span>
+                    <span data-attachment-status-label>{status()}</span>
+                  </span>
+                  {attachmentFeedback()}
                 </span>
-                <span class="flower-attachment-feedback"><Show when={item().status === 'uploading'}>
-                  <Show
-                    when={!item().progress_indeterminate && item().total_bytes !== undefined}
-                    fallback={<span class="flower-attachment-progress-indeterminate" role="status">{props.copy.uploading}</span>}
-                  >
-                    <progress
-                      class="flower-attachment-progress"
-                      max={item().total_bytes}
-                      value={item().loaded_bytes}
-                      aria-label={`${item().name}: ${props.copy.uploading}`}
-                    />
-                  </Show>
-                </Show>
-                <Show when={item().error_code}>
-                  <span id={errorDescriptionID()} class="flower-attachment-error">{error()}</span>
-                </Show></span>
-              </span>
+              </Show>
             </>
           );
           return (
             <div
               class="flower-attachment-item"
               role="listitem"
+              data-attachment-kind={image() ? 'image' : 'file'}
               data-attachment-status={item().status}
               aria-label={[
                 item().name,
@@ -232,6 +249,9 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                   {attachmentSummary()}
                 </button>
               </Show>
+              <Show when={image() && item().status !== 'staged_ready'}>
+                {attachmentFeedback()}
+              </Show>
               <span class="flower-attachment-actions">
                 <Show when={item().source === 'long_text'}>
                   <button
@@ -245,9 +265,8 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                     <Refresh aria-hidden="true" />
                   </button>
                 </Show>
-                <Show when={item().status === 'uploading' || item().status === 'queued'}>
+                <Show when={!image() && (item().status === 'uploading' || item().status === 'queued')}>
                   <button
-                    ref={(node) => itemButtons.set(item().local_id, node)}
                     type="button"
                     class="flower-attachment-icon-button"
                     aria-label={props.copy.cancel}
@@ -258,7 +277,6 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                 </Show>
                 <Show when={item().status === 'upload_error'}>
                   <button
-                    ref={(node) => itemButtons.set(item().local_id, node)}
                     type="button"
                     class="flower-attachment-icon-button"
                     aria-label={props.copy.retry}
@@ -269,7 +287,6 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                 </Show>
                 <Show when={item().status === 'reselect_required'}>
                   <button
-                    ref={(node) => itemButtons.set(item().local_id, node)}
                     type="button"
                     class="flower-attachment-icon-button"
                     aria-label={props.copy.reselect}
@@ -281,14 +298,14 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                   </button>
                 </Show>
                 <button
-                  ref={(node) => itemButtons.set(item().local_id, node)}
+                  ref={(node) => { removeButton = node; }}
                   type="button"
                   class="flower-attachment-icon-button"
                   aria-label={props.copy.remove}
                   title={props.copy.remove}
                   disabled={props.disabled}
                   onClick={() => removeWithFocus(item().local_id)}
-                ><XCircle /></button>
+                ><Show when={image()} fallback={<XCircle aria-hidden="true" />}><X aria-hidden="true" /></Show></button>
               </span>
             </div>
           );

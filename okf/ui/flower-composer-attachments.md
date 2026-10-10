@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower composer attachments
 description: Connection-local attachment staging, long-text conversion, and canonical timeline presentation.
 tags: [ui, flower, attachments, composer, accessibility]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-10-09T00:00:00Z
 ---
 # Summary
 
@@ -15,6 +15,8 @@ timestamp: 2026-07-24T00:00:00Z
 # Contract
 
 The attachment lane is part of the composer rather than a separate modal workflow. Each item has a stable size, status, progress treatment, and icon action set. File selection, drop, and paste converge on the same controller and closed capability snapshot. Upload order is preserved independently of completion order. Failed items retain retry or reselect actions, cancellation is immediate, incompatible items remain legible, and sending is enabled only when every included item is ready. Attachment-only turns are valid and never receive invented prompt copy.
+
+Composer images use fixed 96-by-80 CSS-pixel thumbnails with one top-right X removal action. Ready images show no filename, byte count, line count, MIME, or ready label; identity remains available in the preview tooltip and accessible name. Clicking the thumbnail opens the existing preview. Upload progress and necessary failure or capability feedback stay within the same thumbnail, with retry or reselect when needed. Removing an uploading image cancels its active attempt through the existing controller. Image and file items retain submission order, wrap at narrow widths, and share this presentation across full and companion Flower. Removal moves keyboard focus to the adjacent item or back to the attachment picker when the lane is empty.
 
 The inline threshold is exactly 50,000 Unicode code points. Exactly 50,000 stays inline. A paste payload that alone exceeds the threshold is staged as one lossless UTF-8 `long_text` attachment while the surrounding selection remains in the editor. If attachments are unavailable, browser paste remains untouched; if local limits reject conversion, the exact payload, surrounding text, and selection are restored. Typing, restoration, or a smaller paste that makes the whole editor value exceed the threshold keeps the editor intact and shows a restrained conversion status; Send stages the complete original scalar string first. Raw whitespace and newlines over the limit remain valid long text even though trimmed prompt text is empty. During preparation the primary action becomes Stop. Cancellation, a new approval or input request, read-only transition, detail load, or warmup aborts the exact generated upload, preserves the original editor value before admission, and permits an explicit retry. Lone UTF-16 surrogates fail before encoding, and composition events suppress conversion and submission until `compositionend` updates the same connection-local scope.
 
