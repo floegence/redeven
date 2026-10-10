@@ -83,7 +83,7 @@
   "runtimeNode": "런타임 노드",
   "externalResource": "외부 종속 항목",
   "endpoint": "엔드포인트",
-  "unplacedService": "관측된 인스턴스 없음",
+  "unplacedService": "노드 미지정",
   "canvasLabel": "Tessiven 서비스 캔버스",
   "fit": "캔버스 맞춤",
   "details": "상세 정보",

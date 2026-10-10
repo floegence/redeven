@@ -83,7 +83,7 @@
   "runtimeNode": "Laufzeitknoten",
   "externalResource": "Externe Abhängigkeit",
   "endpoint": "Endpunkt",
-  "unplacedService": "Keine beobachtete Instanz",
+  "unplacedService": "Kein Knoten zugeordnet",
   "canvasLabel": "Tessiven-Dienstübersicht",
   "fit": "Ansicht einpassen",
   "details": "Einzelheiten",

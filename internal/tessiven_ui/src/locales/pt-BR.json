@@ -83,7 +83,7 @@
   "runtimeNode": "Nó de execução",
   "externalResource": "Dependência externa",
   "endpoint": "Endpoint",
-  "unplacedService": "Nenhuma instância observada",
+  "unplacedService": "Nenhum nó atribuído",
   "canvasLabel": "Tela de serviços Tessiven",
   "fit": "Ajustar tela",
   "details": "Detalhes",

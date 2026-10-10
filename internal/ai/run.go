@@ -1589,6 +1589,10 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
 		var partial any
+		var documentError *tessiven.ValidationError
+		if errors.As(toolErrRaw, &documentError) {
+			partial = tessiven.Validation{Diagnostics: documentError.Diagnostics}
+		}
 		if strings.HasPrefix(toolName, "mcp_") {
 			partial = result
 		}

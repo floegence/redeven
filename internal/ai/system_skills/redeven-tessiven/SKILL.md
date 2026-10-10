@@ -42,6 +42,20 @@ such nodes unbound; an explicitly requested observation may be recorded as
 - Separate logical services from concrete instances. Roles belong to instances;
   shard identity is separate. Groups are visual membership, not runtime entities.
   Databases and caches may be hosted instances or external resources.
+- Every `services` entry must have at least one `instances` entry referencing
+  an existing node. Model dependencies outside the canvas's hosts as
+  `resources`, not unplaced services. In a reference architecture, describe
+  intended or inferred host placements with unbound instances and inference
+  evidence; do not invent live observations or management bindings. Model host
+  processes and orchestrated workloads according to their actual deployment,
+  without assuming every per-node component is an orchestrated workload.
+  Never delete instances to reduce visual density or display a per-node
+  service once. Keep all actual placements; group collapse and service-scope
+  controls handle browsing density without changing deployment facts.
+  Stored historical versions may return `diagnostics` for missing placements
+  or standalone service layout hints. Read them normally, restore the modeled
+  placements from evidence, and remove service IDs from layers/positions before
+  validating and saving a corrected version. Do not silently guess hosts.
 - Choose `services[].kind` by the service's primary responsibility, not its
   deployment format or product name. Use the most specific schema type:
   `scheduler` for work placement, `controller` for desired-state reconciliation,
@@ -77,8 +91,8 @@ such nodes unbound; an explicitly requested observation may be recorded as
   `presentation.direction` and ordered root-object `presentation.layers`.
   RIGHT and DOWN advance from left to right and top to bottom; LEFT and UP
   reverse those directions. Without spatial intent, omit layers and positions.
-  Layers may reference groups, ungrouped nodes, unplaced services, and
-  resources; grouped nodes and placed services inherit placement from their
+  Layers may reference groups, ungrouped nodes, and
+  resources; grouped nodes and all services inherit placement from their
   group or host. Unassigned roots use the nearest declared layer by relation
   distance; disconnected components follow declared layers deterministically.
 - Omit `presentation.positions` unless the user requests a preferred ordering

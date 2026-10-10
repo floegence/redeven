@@ -83,7 +83,7 @@
   "runtimeNode": "Nœud d’exécution",
   "externalResource": "Dépendance externe",
   "endpoint": "Point de terminaison",
-  "unplacedService": "Aucune instance observée",
+  "unplacedService": "Aucun nœud attribué",
   "canvasLabel": "Canevas de services Tessiven",
   "fit": "Ajuster la vue",
   "details": "Détails",

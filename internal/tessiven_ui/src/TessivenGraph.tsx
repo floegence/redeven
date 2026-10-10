@@ -671,7 +671,7 @@ export function TessivenGraph(props: {
         </section>
       );
     return (
-      <section class="tessiven-unplaced">
+      <section class="tessiven-unplaced" data-placement={card.instanceCount ? 'hosted' : 'missing'}>
         <TessivenIcon kind={card.service.kind} name={card.service.name} />
         <strong>{card.service.name}</strong>
         <small>

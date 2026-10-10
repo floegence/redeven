@@ -23,7 +23,7 @@ import (
 // Exercise provider dispatch, canonical tool execution, durable canvas writes,
 // and unknown-effect settlement together without touching a user's services.
 func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
-	for _, scenario := range []string{"save", "populate_selected_canvas", "unknown_action"} {
+	for _, scenario := range []string{"save", "populate_selected_canvas", "invalid_placement", "unknown_action"} {
 		t.Run(scenario, func(t *testing.T) {
 			action := scenario == "unknown_action"
 			state := t.TempDir()
@@ -43,6 +43,9 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 			}}
 			name := "tessiven_save"
 			args := map[string]any{"request_id": "provider-save", "expected_version": 0, "document_yaml": document, "summary": "Observed fixture"}
+			if scenario == "invalid_placement" {
+				args["document_yaml"] = strings.Split(document, "instances:")[0]
+			}
 			var selectedID string
 			if scenario == "populate_selected_canvas" {
 				empty, err := library.Create(t.Context(), "ui-create", "Untitled canvas")
@@ -89,6 +92,23 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 					return
 				}
 				outputs := collectOpenAIFunctionOutputs(body["input"])
+				if scenario == "invalid_placement" {
+					if len(outputs) != 1 {
+						t.Errorf("missing failed save output: %+v", outputs)
+						return
+					}
+					var result struct {
+						Status    string                 `json:"status"`
+						Truncated bool                   `json:"truncated"`
+						Data      tessiven.Validation    `json:"data"`
+						Error     *struct{ Code string } `json:"error"`
+					}
+					if err := json.Unmarshal([]byte(strings.TrimPrefix(outputs[0].Output, "ERROR: ")), &result); err != nil || result.Status != "error" || result.Truncated || len(result.Data.Diagnostics) != 1 || result.Data.Diagnostics[0].Path != "/services/0/id" || result.Error == nil || result.Error.Code != "INVALID_ARGUMENTS" {
+						t.Errorf("model must receive structured placement diagnostics: %+v %v", result, err)
+					}
+					writeAskUserIntegrationTextResponse(w, flush, "repair", "The service needs a node placement before it can be saved.")
+					return
+				}
 				if len(outputs) != 1 || !strings.Contains(outputs[0].Output, "surface=tessiven") {
 					t.Errorf("saved canvas link missing: %+v", outputs)
 				}
@@ -130,6 +150,12 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 					if canvas.Title == "Commerce" {
 						generated = append(generated, canvas)
 					}
+				}
+				if scenario == "invalid_placement" {
+					if err != nil || len(generated) != 0 || providerCalls.Load() != 2 {
+						t.Fatalf("invalid placement must not save or retry: %+v %v calls=%d", generated, err, providerCalls.Load())
+					}
+					return
 				}
 				if err != nil || len(generated) != 1 {
 					t.Fatal("provider did not save one canvas", canvases, err)

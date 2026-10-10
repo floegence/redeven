@@ -50,7 +50,7 @@
         "$ref": "#/$defs/service"
       },
       "maxItems": 20000,
-      "description": "Stable logical business services."
+      "description": "Stable logical business services. Every service must have at least one instance referencing an existing node. External dependencies belong in resources, not unplaced services."
     },
     "instances": {
       "type": "array",
@@ -58,7 +58,7 @@
         "$ref": "#/$defs/instance"
       },
       "maxItems": 20000,
-      "description": "Concrete service placements."
+      "description": "Service placements on nodes. Reference architectures may use inferred placements without management bindings; placement does not imply a live observation."
     },
     "resources": {
       "type": "array",
@@ -110,7 +110,7 @@
             "items": {
               "type": "string",
               "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
-              "description": "Group, ungrouped node, unplaced service, or resource ID. Grouped nodes and placed services inherit their group's or host's layer."
+              "description": "Group, ungrouped node, or resource ID. Grouped nodes and all services inherit their group's or host's layer; services are never independent layout roots."
             }
           }
         },
@@ -144,7 +144,7 @@
               "objectRef": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
-                "description": "Node, group, unplaced service, or resource ID."
+                "description": "Node, group, or resource ID. Services inherit their host's position."
               },
               "x": {
                 "type": "number",
@@ -235,7 +235,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 512,
-          "description": "Exact Runtime target reference returned by inspection; it grants no authority."
+          "description": "Runtime target reference returned by inspection, or a descriptive reference for an inferred host in a reference architecture. Descriptive references are not connection handles. This field grants no authority."
         },
         "observation": {
           "$ref": "#/$defs/observation"

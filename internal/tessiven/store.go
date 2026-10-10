@@ -38,14 +38,15 @@ type Canvas struct {
 	FlowerThreadID string `json:"flower_thread_id,omitempty"`
 }
 type Version struct {
-	CanvasID     string    `json:"canvas_id"`
-	Number       int64     `json:"number"`
-	DocumentYAML string    `json:"document_yaml"`
-	Digest       string    `json:"digest"`
-	CreatedAt    int64     `json:"created_at"`
-	Source       string    `json:"source"`
-	Summary      string    `json:"summary"`
-	Document     *Document `json:"document,omitempty"`
+	CanvasID     string       `json:"canvas_id"`
+	Number       int64        `json:"number"`
+	DocumentYAML string       `json:"document_yaml"`
+	Digest       string       `json:"digest"`
+	CreatedAt    int64        `json:"created_at"`
+	Source       string       `json:"source"`
+	Summary      string       `json:"summary"`
+	Document     *Document    `json:"document,omitempty"`
+	Diagnostics  []Diagnostic `json:"diagnostics,omitempty"`
 }
 type SaveRequest struct {
 	RequestID       string `json:"request_id"`
@@ -202,11 +203,12 @@ func readVersion(ctx context.Context, q interface {
 	if err != nil {
 		return v, notFound(err)
 	}
-	validation := Validate(v.DocumentYAML)
+	validation := validateDocument(v.DocumentYAML, true)
 	if !validation.Valid || digest(v.DocumentYAML) != v.Digest {
 		return v, errors.New("tessiven stored version failed integrity validation")
 	}
 	v.Document = validation.Document
+	v.Diagnostics = validation.Diagnostics
 	return v, nil
 }
 func (s *Service) Version(ctx context.Context, id string, number int64) (Version, error) {
