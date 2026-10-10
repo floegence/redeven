@@ -79,13 +79,22 @@ The published native qualification passed the GNOME-locker path on both hosts:
 it captured the lock screen, rejected ordinary input, kept an invalid physical
 credential locked, accepted the correct physical credential, retired the old
 generation, rejected unpainted successor input and restored control after a new
-frame receipt. In the current live udesk26 Viewer, the lock screen, cancel path,
-ordinary-input fencing and invalid credential retention passed. The final valid
-credential attempt remains unresolved because the host's `cn`/IBus layout maps
-the physical `$` path differently; the password is known correct through an
-independent `su` check, but this run must not be reported as a successful Viewer
-unlock. Credentials arrive through a pipe and are absent from arguments,
-environment and diagnostic output.
+frame receipt. The current live udesk26 Viewer also passed the lock screen,
+cancel path, ordinary-input fencing, invalid credential retention and successful
+unlock through physical key events. The host's `cn`/IBus layout required the
+physical shifted-symbol key path; after the accepted credential the old
+generation was retired and a new desktop frame restored ordinary control.
+Credentials arrive through a pipe and are absent from arguments, environment
+and diagnostic output.
+
+The current live orange Viewer was opened through the Desktop SSH flow after
+the host service was installed. It displayed the real desktop, delivered a
+control-mode pointer click and wheel event to the host application, accepted
+the `Use local input method` selection while clipboard synchronization stayed
+disabled, and reconnected successfully after an explicit disconnect. This is
+client interaction evidence; it does not claim a physical input-to-photon
+measurement. Orange's network path still showed 21--184 ms RTT variation in
+the earlier run, so a stable end-to-end latency claim remains out of scope.
 
 ## Idle desktop response
 
@@ -136,8 +145,9 @@ synchronization remained disabled. No target-side Portal action was performed.
 
 Browser/Electron Viewer, Wayland and macOS focused qualification, localized panel
 coverage, Go package/race/vet and OKF checks cover the changed contract. They do
-not replace a real client-presentation performance sample or the unresolved live
-udesk26 valid-credential attempt.
+not replace a real client-presentation performance sample or a physical
+input-to-photon measurement. The orange live Viewer path remains sensitive to
+the host network variation described above.
 
 After rebasing onto local main, Go package/race/vet, the X11/Wayland/macOS browser
 Viewer fixtures, 96 panel/localization tests, UI lint/typecheck, Desktop typecheck,
