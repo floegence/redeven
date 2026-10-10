@@ -98,7 +98,10 @@ func TestE2E_FlowerDeepSeekContextCompaction(t *testing.T) {
 				report["requests"] = recorder.snapshot()
 				saveCompactionQualificationJSON(t, filepath.Join(directory, "report.json"), report)
 			}()
-			detail := sendDeepSeekQualificationInput(t, ctx, svc, meta, threadID, "earliest-fact", RunInput{Text: "For this synthetic ongoing project, preserve the exact durable marker " + marker + " and rollout port 7319. Both facts are important. Reply exactly ACK. Do not repeat facts or call tools."})
+			// The unique facts occur only after the old 1,200-byte preview boundary.
+			// Later filler and recall questions never repeat the answers.
+			seed := "For this synthetic ongoing project, the following notes are disposable.\n" + strings.Repeat("Historical setup note without durable facts.\n", 100) + "\nDurable facts: preserve the exact marker " + marker + " and rollout port 7319. These facts remain relevant. Reply exactly ACK without repeating facts or calling tools."
+			detail := sendDeepSeekQualificationInput(t, ctx, svc, meta, threadID, "earliest-fact", RunInput{Text: seed})
 			earliest := lastDeepSeekMain(t, recorder)
 			if earliest.MarkerMessageIndexes[0] < 0 {
 				t.Fatal("earliest fact did not enter the provider request")
@@ -179,6 +182,9 @@ func TestE2E_FlowerDeepSeekContextCompaction(t *testing.T) {
 					t.Fatal("qualification unexpectedly dispatched a tool")
 				}
 				if request.Kind == "summary" {
+					if !request.MarkerPresence[0] || !request.MarkerPresence[1] {
+						t.Fatal("summary input omitted facts beyond the old preview boundary")
+					}
 					summarySeen = true
 					if request.InputTokens <= 0 || request.OutputTokens <= 0 || !request.ResponseMarkerPresence[0] || !request.ResponseMarkerPresence[1] {
 						t.Fatal("summary response lacks facts or native usage")
