@@ -372,7 +372,19 @@ function bridgeTransportTermination(
   });
 }
 
-function startHTTP2Keepalive(session: ClientHttp2Session): Readonly<{
+// The JS stream socket must finish closing before HTTP/2 attempts GOAWAY.
+// A half-closed SSH stdout can already have writable shutdown in progress;
+// destroying HTTP/2 first would write during that shutdown and assert in Node.
+function destroyHTTP2Connection(session: ClientHttp2Session, connection: Duplex, error?: Error): void {
+  if (connection.closed) {
+    session.destroy(error);
+    return;
+  }
+  connection.once('close', () => session.destroy(error));
+  connection.destroy();
+}
+
+function startHTTP2Keepalive(session: ClientHttp2Session, connection: Duplex): Readonly<{
   touch: () => void;
   stop: () => void;
 }> {
@@ -398,7 +410,7 @@ function startHTTP2Keepalive(session: ClientHttp2Session): Readonly<{
     }
     responseTimer = setTimeout(() => {
       responseTimer = null;
-      session.destroy(new RuntimePlacementBridgeHTTP2Error(
+      destroyHTTP2Connection(session, connection, new RuntimePlacementBridgeHTTP2Error(
         'Runtime Placement Bridge HTTP/2 PING timed out.',
       ));
     }, 10_000);
@@ -408,7 +420,7 @@ function startHTTP2Keepalive(session: ClientHttp2Session): Readonly<{
         responseTimer = null;
       }
       if (error && !session.destroyed) {
-        session.destroy(new RuntimePlacementBridgeHTTP2Error(
+        destroyHTTP2Connection(session, connection, new RuntimePlacementBridgeHTTP2Error(
           'Runtime Placement Bridge HTTP/2 PING failed.',
           { cause: error },
         ));
@@ -568,10 +580,16 @@ function writeHTTP2Stream(stream: ClientHttp2Stream, chunk: Buffer): Promise<voi
 function streamingCommandConnection(command: RuntimeHostStreamingCommand): Duplex {
   // @types/node does not yet describe the documented readable/writable pair
   // accepted by Duplex.from(), so keep the cast at this single stdio boundary.
-  return Duplex.from({
+  const connection = Duplex.from({
     readable: command.stdout,
     writable: command.stdin,
   } as unknown as Duplex);
+  // SSH EOF terminates the transport, rather than half-closing HTTP/2. Close
+  // before the socket wrapper sees EOF and starts a competing stdin shutdown.
+  const endConnection = () => connection.destroy();
+  command.stdout.once('end', endConnection);
+  connection.once('close', () => command.stdout.off('end', endConnection));
+  return connection;
 }
 
 async function openRemoteBridgeTransport(
@@ -593,7 +611,7 @@ async function openRemoteBridgeTransport(
     },
   });
   session.setLocalWindowSize(RUNTIME_PLACEMENT_BRIDGE_SESSION_WINDOW_BYTES);
-  const keepalive = startHTTP2Keepalive(session);
+  const keepalive = startHTTP2Keepalive(session, connection);
   const closed = bridgeTransportTermination(command, session);
   try {
     await waitForHTTP2Connect(session, closed, signal);
@@ -624,8 +642,7 @@ async function openRemoteBridgeTransport(
     };
   } catch (error) {
     keepalive.stop();
-    session.destroy();
-    connection.destroy();
+    destroyHTTP2Connection(session, connection);
     await closeStreamingCommand(command);
     throw error;
   }
@@ -737,7 +754,8 @@ export async function startRuntimePlacementBridgeSession(
     streams.clear();
     for (const callbacks of callbacksList) {
       callbacks.error = error;
-      callbacks.request.close(HTTP2_CONSTANTS.NGHTTP2_CANCEL);
+      // The retiring connection owns stream destruction. Sending RST_STREAM
+      // here would write into an SSH pipe whose shutdown may already be pending.
       callbacks.onError?.(error);
     }
   };
@@ -901,8 +919,7 @@ export async function startRuntimePlacementBridgeSession(
     // The bridge process owns every active proxy stream. Stop it before
     // waiting for proxy teardown so a lingering HTTP connection cannot hold
     // lifecycle completion open indefinitely.
-    transport?.session.destroy();
-    transport?.connection.destroy();
+    if (transport) destroyHTTP2Connection(transport.session, transport.connection);
     transport?.command.kill('SIGTERM');
     failActiveStreams(error ?? new Error('Runtime Placement Bridge session is closed.'));
     await Promise.all([
@@ -934,8 +951,7 @@ export async function startRuntimePlacementBridgeSession(
       });
     }
     failActiveStreams(new Error('Runtime Placement Bridge is temporarily unavailable.'));
-    transport.session.destroy();
-    transport.connection.destroy();
+    destroyHTTP2Connection(transport.session, transport.connection);
     await closeStreamingCommand(transport.command);
     if (sessionController.signal.aborted || args.signal?.aborted) {
       await settleBridgeSession();
@@ -1019,14 +1035,12 @@ export async function startRuntimePlacementBridgeSession(
           nextTransportID++,
         );
         if (attemptController.signal.aborted || recoveryPaused || closed) {
-          transport.session.destroy();
-          transport.connection.destroy();
+          destroyHTTP2Connection(transport.session, transport.connection);
           await closeStreamingCommand(transport.command);
           return;
         }
         if (!transport.identity || !bridgeProcessIdentityMatches(expectedIdentity, transport.identity)) {
-          transport.session.destroy();
-          transport.connection.destroy();
+          destroyHTTP2Connection(transport.session, transport.connection);
           await closeStreamingCommand(transport.command);
           throw new RuntimePlacementBridgeIdentityChangedError(
             'The remote Runtime or Gateway process identity changed while Desktop was reconnecting.',
@@ -1106,8 +1120,7 @@ export async function startRuntimePlacementBridgeSession(
       proxy = await startRuntimePlacementLoopbackProxy(bridgeHandle);
     }
   } catch (error) {
-    initialTransport.session.destroy();
-    initialTransport.connection.destroy();
+    destroyHTTP2Connection(initialTransport.session, initialTransport.connection);
     await closeStreamingCommand(initialTransport.command);
     args.signal?.removeEventListener('abort', abortSession);
     throw error;

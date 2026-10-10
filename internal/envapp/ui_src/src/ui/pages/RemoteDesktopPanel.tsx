@@ -105,7 +105,8 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     && loginService()?.state !== 'unsupported';
   const available = () => !loadError() && !sshServiceUnsupported() && (!!capabilities()?.screen || loginDesktopAvailable()) && (mode() === 'view' || !!capabilities()?.input || loginDesktopAvailable())
     && (capabilities()?.state === 'ready' || loginDesktopAvailable() || authorization());
-  const canConnect = () => full() && available() && !preparing() && !busy() && !refreshing();
+  const connectionReady = () => full() && available() && !preparing();
+  const canConnect = () => connectionReady() && !busy() && !refreshing();
   const failure = () => actionError() ?? loadError();
 
   const refresh = (): Promise<void> => {
@@ -159,7 +160,6 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     return i18n.t(available() ? 'remoteDesktop.ready' : 'remoteDesktop.unsupported');
   };
   const stateHint = (): EnvAppTranslationKey | undefined => {
-    if (failure()) return undefined;
     if (!full()) return 'remoteDesktop.accessRequired';
     if (sshServiceUnsupported()) return 'remoteDesktop.deployPlatformUnsupported';
     if (serviceUpdateRequired()) return 'remoteDesktop.serviceUpdateRequired';
@@ -339,7 +339,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       <Button size="icon" variant="ghost" disabled={refreshing() || !!busy()} aria-label={i18n.t('remoteDesktop.refresh')} title={i18n.t('remoteDesktop.refresh')} onClick={() => void refresh()}><Refresh size={16} class={refreshing() ? 'animate-spin motion-reduce:animate-none' : ''} /></Button>
     </div>
     <p class="remote-desktop-description">{i18n.t('remoteDesktop.description')}</p>
-    <Show when={stateHint()}>{key => <p class="remote-desktop-guidance">{i18n.t(key())}</p>}</Show>
+    <Show when={!failure() && stateHint()}>{key => <p class="remote-desktop-guidance">{i18n.t(key())}</p>}</Show>
     <Show when={!sshManaged() && (status()?.capabilities.state === 'setup_required' || preparing())}>
       <div class="remote-desktop-setup">
         <p>{i18n.t('remoteDesktop.setupHint')}</p>
@@ -472,10 +472,15 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
           </Show>
           <Show when={deploymentPhase() === 'applying'}><Button disabled aria-busy="true"><StableText class="text-center" reserve={[i18n.t('remoteDesktop.deployConfirm'), i18n.t('remoteDesktop.installStep')]}>{i18n.t('remoteDesktop.installStep')}</StableText></Button></Show>
           <Show when={deploymentPhase() === 'connection_failed'}>
-            <Button disabled={!full() || !!busy() || refreshing()} onClick={() => {
+            <Button disabled={!!busy() || refreshing()} onClick={() => {
               const attempt = deploymentAttempt;
-              void refresh().then(() => { if (!disposed && attempt === deploymentAttempt && deploymentOperation()) void continueDeploymentConnection(); });
-            }}>{i18n.t('remoteDesktop.connect')}</Button>
+              const connectIntent = connectionReady();
+              void refresh().then(() => {
+                if (disposed || attempt !== deploymentAttempt || !deploymentOperation()) return;
+                if (connectIntent && canConnect()) void continueDeploymentConnection();
+                else setActionError({ title: 'remoteDesktop.connectionFailed', hint: stateHint() ?? 'remoteDesktop.connectionHint' });
+              });
+            }}>{i18n.t(connectionReady() ? 'remoteDesktop.connect' : 'remoteDesktop.refresh')}</Button>
           </Show>
         </div>
       </div>}

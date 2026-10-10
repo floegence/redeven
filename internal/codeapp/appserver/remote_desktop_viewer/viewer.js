@@ -96,7 +96,7 @@ const pointer = hostApplicationPointer.createRemotePointer({
 });
 function revoke() { stats = undefined; refreshStats(); painted = false; lockedFrame = 0; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
-  input.setTextInputMode(state === 'active' && textInput === 'paste' && clientTextAvailable() ? 'text' : 'physical');
+  input.setTextInputMode(state === 'locked' ? 'physical-only' : state === 'active' && textInput === 'paste' && clientTextAvailable() ? 'text' : 'physical');
   player?.setInteraction(!panel.open && (authorized(generation) || unlockAuthorized(generation)));
   canvas.dataset.mode = session.mode;
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'sound', 'text-input', 'volume']) {
@@ -127,6 +127,9 @@ function changeDesktop(method, values, takeover = false) {
   unlocking = false; revoke(); awaitingState = true; player?.reset(generation);
   updateTransitionControls();
   command(method, values, takeover);
+  waitForPicture();
+}
+function waitForPicture() {
   clearTimeout(recoveryTimer);
   recoveryTimer = setTimeout(() => {
     if (stopped || painted) return;
@@ -171,6 +174,7 @@ function unavailableHint(code) {
   }
 }
 function showUnavailable(code) {
+  clearTimeout(recoveryTimer);
   epoch++;
   revoke();
   state = 'unavailable'; reason = code || 'REMOTE_DESKTOP_UNAVAILABLE'; generation = 0;
@@ -215,6 +219,7 @@ function updateState(message) {
   if ($('view-hint')) $('view-hint').hidden = session.mode === 'control';
   if (state !== 'active' || session.mode !== 'control') clearClipboard();
   const permission = /permission|authorization|host_action/i.test(state + ' ' + reason);
+  if (permission || state === 'authorizing') clearTimeout(recoveryTimer);
   const locked = ['locked', 'locking'].includes(state) || ['locked', 'locking'].includes(reason);
   const connecting = ['connecting', 'authorizing'].includes(state);
   if (backend === 'wayland' && state === 'authorizing') {
@@ -245,11 +250,13 @@ async function connect() {
   const current = ++epoch; revoke(); state = 'connecting'; generation = 0; sequence = 0; awaitingMedia = []; awaitingState = false; audioRequest = undefined;
   updateTransitionControls();
   player?.reset(0); control?.close(); media?.close(); status('connecting'); $('reconnect').hidden = true;
-  if (!HostDesktopPlayer.supported()) { status('unsupported', 'unsupportedHint'); return; }
+  if (!HostDesktopPlayer.supported()) { showUnavailable(); return; }
+  waitForPicture();
   try {
-    const response = await windowTransport.fetch(base + 'ticket', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+    const response = await windowTransport.fetch(base + 'ticket', { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(10000) });
     if (!response.ok) {
       if (current !== epoch || stopped) return;
+      clearTimeout(recoveryTimer);
       state = 'disconnected'; status('disconnected', response.status === 404 || response.status === 403 ? 'endedHint' : ''); $('reconnect').hidden = response.status === 404 || response.status === 403; updateTransitionControls();
       // Retry temporary transport/service failures, while expired sessions and
       // revoked access require an explicit action from the authenticated host UI.
@@ -332,13 +339,14 @@ async function connect() {
     };
     const lost = () => {
       if (current !== epoch || stopped) return;
+      clearTimeout(recoveryTimer);
       epoch++; revoke(); state = 'disconnected'; player.reset(0); control.close(); media.close();
       updateTransitionControls();
       clearClipboard(); awaitingMedia = []; status('disconnected'); $('reconnect').hidden = false;
       retryConnection();
     };
     control.onclose = media.onclose = lost;
-  } catch { if (current === epoch && !stopped) { state = 'disconnected'; status('disconnected'); $('reconnect').hidden = false; retryConnection(); } }
+  } catch { if (current === epoch && !stopped) { clearTimeout(recoveryTimer); state = 'disconnected'; status('disconnected'); $('reconnect').hidden = false; updateTransitionControls(); retryConnection(); } }
 }
 
 function element(tag, text, properties = {}) { const node = document.createElement(tag); if (text) node.textContent = text; Object.assign(node, properties); return node; }

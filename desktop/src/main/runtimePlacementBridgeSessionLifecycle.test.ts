@@ -5,7 +5,7 @@ import {
   type ServerHttp2Stream,
 } from 'node:http2';
 import net from 'node:net';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -35,6 +35,7 @@ type MockBridgeCommand = Awaited<ReturnType<typeof createMockBridgeCommand>>;
 type MockBridgeOptions = Readonly<{
   startedAtUnixMS?: number;
   runtimeControlToken?: string;
+  delayedShutdown?: boolean;
   onConnect?: (stream: ServerHttp2Stream, authority: string) => boolean;
 }>;
 
@@ -112,6 +113,13 @@ async function createMockBridgeCommand(options: MockBridgeOptions = {}) {
   });
 
   const stderr = new PassThrough();
+  const stdout = options.delayedShutdown ? socket.pipe(new PassThrough()) : socket;
+  let finishShutdown: (() => void) | undefined;
+  const stdin = options.delayedShutdown ? new Writable({
+    write: (chunk, encoding, callback) => { socket.write(chunk, encoding, callback); },
+    final: (callback) => { finishShutdown = callback; },
+    destroy: (_error, callback) => { finishShutdown?.(); callback(); },
+  }) : socket;
   let settled = false;
   let resolveClosed!: () => void;
   let rejectClosed!: (error: Error) => void;
@@ -139,12 +147,14 @@ async function createMockBridgeCommand(options: MockBridgeOptions = {}) {
   socket.once('close', () => finish());
   const kill = vi.fn((_signal?: NodeJS.Signals) => finish());
   return {
-    stdin: socket,
-    stdout: socket,
+    stdin,
+    stdout,
     stderr,
     closed,
     kill,
     interrupt: (error: Error) => finish(error),
+    endOutput: () => { stdout.end(); },
+    finishOutput: () => { stdout.end(); resolveClosed(); },
     goaway: () => {
       for (const session of sessions) {
         session.goaway();
@@ -217,6 +227,31 @@ beforeEach(() => {
 });
 
 describe('runtime placement HTTP/2 session lifecycle', () => {
+  it('retires active streams after exec EOF without writing a reset into pending shutdown', async () => {
+    const command = await createMockBridgeCommand({ delayedShutdown: true });
+    const session = await startLocalSession(command);
+    const stream = session.openStream('runtime_control');
+    const onError = vi.fn();
+    stream.onError(onError);
+    await stream.write(Buffer.from('pending'));
+    command.endOutput();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    command.finishOutput();
+    await expect(session.closed).resolves.toMatchObject({ kind: 'failed' });
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(command.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('disconnects a half-closed exec with pending writable shutdown without a native assertion', async () => {
+    const command = await createMockBridgeCommand({ delayedShutdown: true });
+    const session = await startLocalSession(command);
+    command.endOutput();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    await session.disconnect();
+    await expect(session.closed).resolves.toEqual({ kind: 'closed' });
+    expect(command.kill).toHaveBeenCalledTimes(1);
+  });
+
   it('uses one exec and one HTTP/2 session while loopback connections become independent streams', async () => {
     const command = await createMockBridgeCommand();
     const session = await startLocalSession(command);

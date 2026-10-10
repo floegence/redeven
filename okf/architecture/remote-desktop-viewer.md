@@ -33,7 +33,10 @@ direct-input keyboard. Explicitly choosing Use local input method sends both
 ordinary characters and locally confirmed composition through one ordered text
 path. Physical navigation and shortcuts retain their key semantics; pending
 modifiers never leak into a text paste. Mode changes cancel composition and
-release held keys. Lock-screen input always uses physical mode; unlocking restores
+release held keys. Lock-screen input uses the published `physical-only` mode:
+the non-editable desktop receives hardware key codes immediately, including
+IME-labelled keys, while the local editor stays disabled and empty. Composition
+and delayed text events cannot create or transmit credentials. Unlocking restores
 the chosen mode only after a successor active frame is painted.
 
 Client text is available when either `text_input` or the existing clipboard
@@ -126,8 +129,10 @@ controls retain the local pointer.
 
 If locked media decoding fails, the viewer revokes unlock input, requests a new
 keyframe and waits for a new generation plus painted frame before offering
-Start unlock again. A bounded recovery timeout exposes Reconnect and Disconnect;
-it never replays queued key or pointer events.
+Start unlock again. Initial ticket acquisition, nonresponsive control channels
+and frame recovery share a ten-second deadline that exposes Reconnect and Disconnect;
+it never replays queued key or pointer events. Explicit OS authorization keeps
+its existing user-driven lifecycle; it is not cut short by the picture deadline.
 Lock is available only after the current control generation has painted. Its
 confirmation belongs to that attachment and generation; losing authority disables
 it permanently, even if a successor becomes active. The user can cancel and open
