@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Gateway Desktop interactions
 description: Invite Runtime members and manage policy with explicit consent, retained drafts and truthful status.
 tags: [gateway, desktop, interaction, validation]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-10T00:00:00Z
 ---
 # Summary
 
@@ -15,11 +15,13 @@ Desktop presents Gateway members, invitations, permissions, policy and optional 
 
 Creating a managed Runtime offers Not now or After setup, add Gateway access. Joining starts only through the explicit trusted Runtime start action. A user who manages a Gateway can select it and issue a signed address-and-code delivery; the Runtime owner enters those two values and verifies them. Issuing a delivery does not silently consent or join.
 
-Add Gateway access describes an approved network path, not Runtime administration; Cloud remains optional. Existing Cloud environments require an explicit preserve/new choice. Replace explains possible interruption and fences the old path. Update connection endpoints accepts a fresh signed descriptor from the same Gateway while preserving membership. Normal Runtime startup reconnects without showing this dialog. Background status polling never owns or resets Cloud credential recovery, continues after transient failures, and displays Runtime publication diagnostics. It updates observations only: imported invitations, ownership choices and leave confirmations survive until an explicit operation succeeds or the user closes the panel.
+Gateway access provides an approved network path; Runtime administration and optional Cloud access retain separate authority. Existing Cloud environments require an explicit preserve/new choice. Replace explains interruption and fences the old path; endpoint updates prove the same Gateway and preserve membership. Normal startup reconnects without this dialog. Polling displays publication diagnostics, recovers from transient failures and never resets Cloud credential recovery or interaction state.
 
 Compact buttons below the address input show a local marker, Gateway name and Use action, with a checkmark derived from the filled address. Multiple endpoints include host and port; accessible names and tooltips retain full addresses. They use confirmed endpoints from enabled, paired, online local-host inventory only, never scan or guess addresses, and exclude loopback for remote Runtimes. Selection invalidates verification, retains and focuses the code. Discovery never overwrites drafts, consumes invitations or grants access. The target uses an inline Runtime identity.
 
 The panel exposes current membership, retry, leave and replace. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending are distinct states. Address, code and target changes invalidate a preview; refresh preserves drafts. Local Runtime management remains available only through its trusted owner, never through a Gateway member card.
+
+Drafts belong to the panel session. Same-target snapshots with unchanged invitation seeds preserve address, code, pending verification, preview, Cloud choice, operation purpose, leave confirmation and focus. Scalar target/address/code changes initialize the session and fence old responses; parent object identity cannot reset it. Closing clears the secret and consent but retains the address on the same panel. Success clears the consumed code, which refresh cannot restore. Reopening a closed setup dialog starts a fresh draft.
 
 ## Members and policy
 
@@ -45,7 +47,7 @@ All shipped locales have explicit translations. Interactive controls provide poi
 
 Every Gateway card menu action, including settings and connection removal, uses the same icon container, spacing and label alignment. Restart uses a power-cycle icon distinct from Refresh; the menu, active card action and confirmation share a reactive icon projection so labels and icons stay in sync. Destructive and disabled styling, keyboard navigation and explicit lifecycle confirmation remain unchanged.
 
-Gateway settings use a comfortably wide, fixed-height, viewport-bounded panel with a pinned tab rail and a scrolling active panel, so switching tabs never changes dialog geometry or carries over another tab's scroll position. Runtime enrollment uses a compact content-sized dialog with one guidance paragraph, a target identity row, optional address suggestions and primary actions below the scrolling content, including before the Runtime is started. Cloud status uses the same body typography, section spacing and stable action alignment. Headings, labels, help and metadata follow a consistent type hierarchy; repeated clients and endpoints use compact rows instead of nested cards. Share endpoint rows expose only the addresses Runtime may use; the Gateway keeps transport metadata and failover ordering internally. The three management areas use an underlined tab rail with keyboard navigation, retained state and animated cross-fades. Address rows, native disclosures, invitation/code results and confirmation notices animate with the tab panels and respect reduced-motion preferences.
+Gateway settings use a wide, fixed-height panel bounded by the viewport, with an underlined pinned tab rail and a scrolling active panel. Tabs retain state, cross-fade and reset scroll without changing dialog geometry. Runtime enrollment uses a compact content-sized dialog with one guidance paragraph, target identity, optional address suggestions and pinned primary actions, including before startup. Cloud shares its typography, spacing and action alignment. Clients and endpoints use compact rows with consistent heading, label, help and metadata hierarchy. Share rows expose Runtime addresses only; transport metadata and failover ordering remain internal. Rows, disclosures, code results and notices animate and respect reduced motion.
 
 The upgrade rebuild notice explains that obsolete Gateway entries must be rejoined. It does not manufacture a migration list or imply that old URL profiles remain executable.
 
@@ -61,6 +63,8 @@ This surface presents current Gateway state and starts explicit user-authorized 
 
 - `redeven:desktop/src/welcome/GatewayMembersDialog.tsx` — Invitations, policies, partial results and reevaluation.
 - `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.tsx` — One consent and recovery form.
+- `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.client.test.tsx` — Snapshot/polling draft retention and target/secret/async-response lifecycle boundaries.
+- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` — Typed and quick-filled drafts survive real launcher snapshot updates through the environment card.
 - `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.tsx` — Managed creation and explicit start.
 - `redeven:desktop/src/welcome/GatewayMembersDialog.client.test.tsx` — Partial failure and retained data.
 - `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.client.test.tsx` — Failed start and invitation consent.

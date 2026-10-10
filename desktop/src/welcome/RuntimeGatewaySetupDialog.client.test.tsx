@@ -61,3 +61,24 @@ it('keeps the saved registration after startup failure and supports cancellation
   button('gatewayJoin.notNow').click(); await settle();
   expect(current()).toBeUndefined(); expect(perform).not.toHaveBeenCalled();
 });
+
+it('preserves enrollment input and focus when the selected environment snapshot refreshes', async () => {
+  const perform = vi.fn().mockResolvedValue({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>({ ...environment, provider_runtime_link_target: target });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} start={async () => true} close={() => setCurrent(undefined)} />, root);
+  await settle();
+  const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
+  for (const [index, value] of ['https://draft.example:7443', 'draft-code'].entries()) {
+    inputs[index]!.value = value; inputs[index]!.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  inputs[1]!.focus();
+  setCurrent(structuredClone(current())); await settle();
+  expect(document.querySelector('input')).toBe(inputs[0]);
+  expect(inputs.map(input => input.value)).toEqual(['https://draft.example:7443', 'draft-code']);
+  expect(document.activeElement).toBe(inputs[1]); expect(perform).toHaveBeenCalledOnce();
+  button('common.cancel').click(); await settle();
+  setCurrent({ ...environment, provider_runtime_link_target: target }); await settle();
+  expect([...document.querySelectorAll<HTMLInputElement>('input')].map(input => input.value)).toEqual(['', '']);
+});

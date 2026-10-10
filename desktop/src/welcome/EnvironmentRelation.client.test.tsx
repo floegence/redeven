@@ -53,6 +53,44 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('linked environment owner interactions', () => {
+  it.each(['typed', 'local suggestion'] as const)('retains Gateway %s drafts across launcher snapshots', async method => {
+    const fixture = mixedEnvironmentFixture();
+    const original = fixture.snapshot.environments.find(entry => entry.kind === 'local_environment')!;
+    const runtime = { ...original, runtime_service: { ...original.runtime_service!,
+      capabilities: { ...original.runtime_service!.capabilities!, runtime_gateway: { supported: true } },
+    } };
+    const gateway = { gateway_id: 'local-gateway', display_name: 'Gateway-local', local_enabled: true as const,
+      connection_kind: 'local_host' as const, management_capability: 'managed_local_host' as const,
+      capabilities: [], status: 'online' as const, trust_state: 'paired' as const, listener_running: true,
+      created_at_ms: 1, updated_at_ms: 1, environments: [],
+      member_endpoints: [{ endpoint_id: 'local', address: 'https://127.0.0.1:7443', scope: 'lan' as const, priority: 0 }],
+    };
+    const snapshot = { ...fixture.snapshot, gateway_sources: [gateway],
+      environments: fixture.snapshot.environments.map(entry => entry.id === runtime.id ? runtime : entry),
+    };
+    const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    const harness = await mount(snapshot);
+    const owner = document.querySelector<HTMLElement>(`[data-owner-id="${runtime.id}"]`)!;
+    button(owner, 'Actions').click(); await settle();
+    button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const inputs = [...dialog.querySelectorAll<HTMLInputElement>('input')];
+    const expected = method === 'typed' ? 'https://typed.example:7443' : gateway.member_endpoints[0].address;
+    if (method === 'local suggestion') dialog.querySelector<HTMLButtonElement>('[data-gateway-suggestion]')!.click();
+    else { inputs[0].value = expected; inputs[0].dispatchEvent(new Event('input', { bubbles: true })); }
+    inputs[1].value = 'draft-code'; inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+    inputs[1].focus();
+    for (let index = 1; index <= 3; index++) {
+      harness.publish({ ...structuredClone(snapshot), snapshot_revision: index }); await settle();
+    }
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(dialog.querySelector('input')).toBe(inputs[0]);
+    expect(inputs.map(input => input.value)).toEqual([expected, 'draft-code']);
+    expect(document.activeElement).toBe(inputs[1]);
+    expect(perform).toHaveBeenCalledOnce();expect(harness.performAction).not.toHaveBeenCalled();
+  });
+
   it.each(['connected', 'authorization_required', 'unlinked'] as const)(
     'groups Gateway access with the %s Cloud actions after Runtime operations',
     async connectionState => {
