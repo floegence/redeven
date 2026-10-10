@@ -3,7 +3,7 @@
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
 button, select { font: inherit; color: inherit; }
-button { cursor: pointer; }
+button { cursor: pointer; appearance: none; border: 0; background: transparent; border-radius: 8px; }
 .tessiven { width: 100%; height: 100%; }
 .tessiven-canvas { touch-action: none; }
 .tessiven .tessiven-canvas-tools { top: auto; left: 12px; right: auto; bottom: 12px; border-radius: 12px; font-size: 13px; gap: 8px; }
