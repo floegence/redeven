@@ -10,13 +10,13 @@ let dispose:(()=>void)|undefined;
 const one={joined:true,phase:'joined',gateway_id:'one',gateway_name:'Office',member_id:'member-one',cloud_publication:false,endpoints:[{address:'https://office.internal:7443',endpoint_id:'lan',scope:'lan',priority:0}]};
 const two={...one,gateway_id:'two',gateway_name:'Lab',member_id:'member-two',cloud_publication:true};
 function button(label:string){const found=[...document.querySelectorAll('button')].find(el=>controlText(el)===label);if(!found)throw new Error(label);return found;}
-function mount(members:unknown[],mode:'leave'|'publish'='leave',existing?:string){
+function mount(members:unknown[],mode:'leave'|'publish'='leave',existing?:string,gatewayID?:string){
  const perform=vi.fn().mockImplementation(async request=> request.operation==='status'?{ok:true,gateway_membership:{joined:true,phase:'joined',memberships:members,existing_environment_id:existing}}:{ok:true,gateway_membership:{joined:false,phase:'not_joined'}});
  vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
  const close=vi.fn(),changed=vi.fn(),root=document.createElement('div');document.body.append(root);
  const [open,setOpen]=createSignal<'leave'|'publish'|undefined>(mode);
  const [snapshot,setSnapshot]=createSignal({targetID:'ssh:runtime' as const});
- dispose=render(()=><RuntimeGatewayConnectionsDialog targetID={snapshot().targetID} i18n={i18n} mode={open()} onClose={()=>{close();setOpen(undefined);}} onChanged={changed}/>,root);
+ dispose=render(()=><RuntimeGatewayConnectionsDialog targetID={snapshot().targetID} gatewayID={gatewayID} i18n={i18n} mode={open()} onClose={()=>{close();setOpen(undefined);}} onChanged={changed}/>,root);
  return {perform,close,changed,refresh:()=>setSnapshot({targetID:'ssh:runtime'})};
 }
 beforeEach(()=>{vi.stubGlobal('CSS',{escape:(value:string)=>value});HTMLElement.prototype.scrollIntoView=vi.fn();});
@@ -38,6 +38,21 @@ it('confirms a single pairing directly without a selector or Cloud migration cho
  const f=mount([one]);await settle();expect(document.querySelector('select')).toBeNull();expect(document.querySelector('input[type="radio"]')).toBeNull();
  button(i18n.t('gatewayConnections.unpair')).click();await settle();
  expect(f.perform.mock.calls.at(-1)?.[0]).toMatchObject({gateway_id:'one',cloud_impact_acknowledged:false});
+});
+it('confirms the already selected Gateway without asking the user to choose again',async()=>{
+ const f=mount([one,two],'leave',undefined,'two');await settle();
+ expect(document.querySelector('select')).toBeNull();
+ expect(document.body.textContent).toContain('Lab');
+ expect(document.body.textContent).toContain(i18n.t('gatewayConnections.cloudImpact'));
+ f.refresh();await settle();expect(f.perform).toHaveBeenCalledOnce();
+ button(i18n.t('gatewayConnections.unpair')).click();await settle();
+ expect(f.perform.mock.calls.at(-1)?.[0]).toMatchObject({gateway_id:'two',cloud_impact_acknowledged:true});
+});
+it('does not substitute another Gateway when the selected pairing has disappeared',async()=>{
+ const f=mount([one],'leave',undefined,'two');await settle();
+ expect(document.querySelector('select')).toBeNull();
+ expect(button(i18n.t('gatewayConnections.unpair')).disabled).toBe(true);
+ expect(f.perform).toHaveBeenCalledOnce();
 });
 it('keeps failed unpair consent and does not report completion',async()=>{
  const f=mount([one]);await settle();f.perform.mockResolvedValueOnce({ok:false,gateway_error_code:'GATEWAY_CLOUD_IMPACT_REQUIRED'});

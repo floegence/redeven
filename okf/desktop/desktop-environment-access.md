@@ -61,7 +61,9 @@ owners keep their cards and settings. Gateway members share one Gateway tab insi
 existing split menu and connection settings without adding a duplicate card.
 The trusted association is available before public health probing and does not
 fabricate or persist a public health identity.
-Without a verified counterpart, the Gateway entry retains its own card.
+Runtime membership summaries use the Gateway pairing fingerprint: SHA-256 of the canonical, trimmed Ed25519 SubjectPublicKeyInfo PEM, encoded as unpadded base64url with `SHA256:`. The enrollment descriptor's raw base64url public key is converted to that representation before projection. Hashing its encoded text would produce a different identity and leave a valid member on a separate card.
+Catalog and open-window observations for the same Gateway registration/member become one entry before ownership projection. The directory retains identity, trust, policy and access availability; the window contributes only its route URL, lifecycle and focus target. Opening or closing a window cannot create another Runtime card or overwrite membership proof. Window counts retain every actual session. Without a verified counterpart, the Gateway entry retains its own card.
+After a Runtime confirms removal, Desktop immediately retires only that member's cached directory observation when the registration and pinned Gateway identity still match. It preserves other Gateway members and learned trust; a mismatched or stale identity is left untouched.
 [Environment library](desktop-environment-library.md) owns Local / Cloud exact
 binding, card layout, search and perspective selection.
 
@@ -123,6 +125,8 @@ existing authorities. Proof observation never upgrades those permissions.
 - `redeven:spec/openapi/gateway-v5.yaml` - Signed membership and service identity schemas.
 - `redeven:desktop/src/main/runtimeAccessIdentity.test.ts` - Signature verification, tampering and replay rejection.
 - `redeven:desktop/src/main/environmentAccess.test.ts` - Binding invalidation, explicit defaults, persistence and malformed-state preservation.
+- `redeven:internal/agent/runtime_service_test.go` - Real enrolled member summaries match the Gateway pairing fingerprint.
+- `redeven:desktop/src/main/gatewayStore.test.ts` - Confirmed member retirement is scoped to the same pinned Gateway.
 - `redeven:desktop/src/welcome/environmentRelation.test.ts` - Existing Cloud perspective ownership with Gateway membership.
 - `redeven:desktop/scripts/check-environment-access-routes.mjs` - Production components, ten locales, explicit routes, Save/Cancel, narrow dark layouts and enlarged text.
 - `redeven:desktop/scripts/fixtures/gateway-access-electron.ts` - Real member access over reverse TLS with independent Runtime login and session lifetimes.

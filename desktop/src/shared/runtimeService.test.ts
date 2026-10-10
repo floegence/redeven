@@ -34,7 +34,7 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 
 describe('runtimeService', () => {
   it('publishes the Gateway network settings and Runtime-owned model directory compatibility window', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(48);
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(49);
     expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.13.0');
     expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.13.0');
   });
@@ -376,7 +376,7 @@ describe('runtimeService', () => {
     expect(legacy.capabilities?.runtime_gateway).toEqual({ supported: false });
   });
 
-  it('marks Provider Link unsupported when runtime capability is absent', () => {
+  it('retains established Cloud identity independently of direct management capability', () => {
     const snapshot = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v1.2.3',
       compatibility: 'compatible',
@@ -395,9 +395,12 @@ describe('runtimeService', () => {
 
     expect(runtimeServiceSupportsCloudLink(snapshot)).toBe(false);
     expect(runtimeServiceCloudLinkBinding(snapshot)).toMatchObject({
-      state: 'unsupported',
-      remote_enabled: false,
+      state: 'linked',
+      cloud_origin: 'https://provider.example.invalid',
+      env_public_id: 'env_demo',
+      remote_enabled: true,
     });
+    expect(runtimeServiceCloudLinkBinding(undefined).state).toBe('unsupported');
   });
 
   it('derives provider connection state from link and runtime remote facts', () => {

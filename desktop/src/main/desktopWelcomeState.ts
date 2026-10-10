@@ -526,7 +526,7 @@ function gatewaySessionTarget(session: DesktopSessionSummary): GatewayDesktopTar
 }
 
 function gatewaySessionEnvironmentEntryID(target: GatewayDesktopTarget): string {
-  return target.session_key;
+  return target.environment_id;
 }
 
 function openSessionByURL(
@@ -810,7 +810,7 @@ function buildCloudRuntimeLinkTarget(input: Readonly<{
     env_public_id: cloudLinkBinding.env_public_id,
     access_point_origin: cloudLinkBinding.access_point_origin,
     can_connect_cloud: blockedReasonCode === '' && ['unlinked', 'authorization_required', 'disabled', 'error'].includes(providerConnectionState),
-    can_disconnect_cloud: cloudLinkBinding.state === 'linked',
+    can_disconnect_cloud: runtimeService?.capabilities?.cloud_link?.supported === true && cloudLinkBinding.state === 'linked',
     ...(blockedReasonCode !== '' ? { blocked_reason_code: blockedReasonCode } : {}),
     ...(blockedReason !== '' ? { blocked_reason: blockedReason } : {}),
   };

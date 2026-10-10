@@ -1,3 +1,4 @@
+import { decorateEnvironmentAccess } from '../main/environmentAccess';
 import { catalogFixture, memberFixture } from '../testSupport/gatewayMembershipFixture';
 import { describe, expect, it } from 'vitest';
 
@@ -67,7 +68,7 @@ describe('environmentLibraryProjection', () => {
         provider_connection_state: 'connected' as const,
       },
     };
-    const groups = buildEnvironmentLibraryDisplayGroups([linkedLocal, linkedProvider]);
+    const groups = buildEnvironmentLibraryDisplayGroups(decorateEnvironmentAccess([linkedLocal, linkedProvider], testDesktopPreferences()));
     const relation = groups.find((group) => group.provider_entry?.id === linkedProvider.id);
 
     expect(relation).toBeTruthy();
@@ -159,7 +160,7 @@ describe('environmentLibraryProjection', () => {
       },
     };
 
-    expect(buildEnvironmentLibraryDisplayGroups([linkedLocal, linkedProvider])).toHaveLength(1);
+    expect(buildEnvironmentLibraryDisplayGroups(decorateEnvironmentAccess([linkedLocal, linkedProvider], testDesktopPreferences()))).toHaveLength(1);
     const dissolved = buildEnvironmentLibraryDisplayGroups([linkedLocal]);
     expect(dissolved).toHaveLength(1);
     expect(dissolved[0]).toMatchObject({

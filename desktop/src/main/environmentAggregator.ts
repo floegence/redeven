@@ -109,10 +109,23 @@ export function buildGatewayEnvironmentEntries(
     )),
     sources,
   );
-  return [
-    ...entries,
-    ...openSessionEntries,
-  ];
+  const byID = new Map(entries.map(entry => [entry.id, entry]));
+  for (const session of openSessionEntries) {
+    const catalog = byID.get(session.id);
+    // Sessions contribute window state, never catalog identity or access authority.
+    byID.set(session.id, catalog ? {
+      ...catalog,
+      local_ui_url: session.local_ui_url,
+      window_state: session.window_state,
+      is_open: session.is_open,
+      is_opening: session.is_opening,
+      open_session_key: session.open_session_key,
+      open_session_lifecycle: session.open_session_lifecycle,
+      open_action: session.open_action,
+      last_used_at_ms: session.last_used_at_ms,
+    } : session);
+  }
+  return [...byID.values()];
 }
 
 function buildGatewayEnvironmentEntry(

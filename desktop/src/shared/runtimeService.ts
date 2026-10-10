@@ -160,7 +160,7 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 48;
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 49;
 export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
@@ -340,17 +340,9 @@ function normalizeCloudLinkBinding(
 ): RuntimeServiceCloudLinkBinding {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const rawState = compact(record.state);
-  const state: RuntimeServiceCloudLinkState = capability.supported
-    ? (
-        rawState === 'linked'
-        || rawState === 'linking'
-        || rawState === 'disconnecting'
-        || rawState === 'error'
-        || rawState === 'unbound'
-          ? rawState
-          : 'unbound'
-      )
-    : 'unsupported';
+  const state: RuntimeServiceCloudLinkState = ['linked', 'linking', 'disconnecting', 'error'].includes(rawState)
+    ? rawState as RuntimeServiceCloudLinkState
+    : capability.supported ? 'unbound' : 'unsupported';
   return {
     state,
     connection_state: normalizeProviderConnectionState(record.connection_state),
@@ -564,9 +556,6 @@ export function runtimeServiceSupportsRuntimeGateway(snapshot: RuntimeServiceSna
 export function runtimeServiceProviderConnectionState(
   snapshot: RuntimeServiceSnapshot | null | undefined,
 ): RuntimeServiceProviderConnectionState {
-  if (!runtimeServiceSupportsCloudLink(snapshot)) {
-    return 'unsupported';
-  }
   const binding = runtimeServiceCloudLinkBinding(snapshot);
   switch (binding.state) {
     case 'unbound':

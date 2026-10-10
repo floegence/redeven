@@ -299,9 +299,6 @@ func NormalizeCloudLinkBinding(binding CloudLinkBinding, capability Capability) 
 	if binding.LastDisconnectedAtUnixMS < 0 {
 		binding.LastDisconnectedAtUnixMS = 0
 	}
-	if !capability.Supported {
-		return CloudLinkBinding{State: CloudLinkStateUnsupported}
-	}
 	switch binding.State {
 	case CloudLinkStateUnbound,
 		CloudLinkStateLinking,
@@ -312,8 +309,12 @@ func NormalizeCloudLinkBinding(binding CloudLinkBinding, capability Capability) 
 	default:
 		binding.State = CloudLinkStateUnbound
 	}
-	if binding.State == CloudLinkStateUnsupported {
-		binding.State = CloudLinkStateUnbound
+	if binding.State == CloudLinkStateUnbound || binding.State == CloudLinkStateUnsupported {
+		if capability.Supported {
+			binding.State = CloudLinkStateUnbound
+		} else {
+			binding.State = CloudLinkStateUnsupported
+		}
 	}
 	if binding.State != CloudLinkStateLinked {
 		binding.RemoteEnabled = false

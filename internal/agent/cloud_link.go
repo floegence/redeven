@@ -161,7 +161,7 @@ func (a *Agent) cloudLinkBindingLocked(errorCode string) runtimeservice.CloudLin
 	if a == nil || a.cfg == nil {
 		return runtimeservice.CloudLinkBinding{State: runtimeservice.CloudLinkStateUnbound}
 	}
-	if err := a.cfg.ValidateRemoteStrict(); err != nil {
+	if err := a.cfg.ValidateRemoteBinding(); err != nil {
 		return runtimeservice.CloudLinkBinding{
 			State:                    runtimeservice.CloudLinkStateUnbound,
 			LastErrorCode:            strings.TrimSpace(errorCode),

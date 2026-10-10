@@ -13,9 +13,9 @@ Welcome derives one Environment library from original snapshot owners. An exactl
 
 ## Relationship identity and projection
 
-Pair Local, SSH, or WSL Runtime entries only when the Runtime link target ID equals the Cloud linked-runtime summary ID and Provider origin, Provider ID, and ENV ID all agree. Names, addresses, and online status do not establish identity. The snapshot builder emits display summaries while a complete exact binding is linking, linked, or disconnecting. Candidate occupancy and operation authorization retain their own strict binding rules; a display summary grants no authority. Unbound, unrelated, or missing counterparts remain independent.
+Pair Local, SSH, or WSL Runtime entries only when the Runtime link target ID equals the Cloud linked-runtime summary ID and Provider origin, Provider ID, and ENV ID all agree. Names, addresses, and online status do not establish identity. The snapshot builder emits display summaries while a complete exact binding is linking, linked, or disconnecting. Candidate occupancy and operation authorization retain their own strict binding rules; a display summary grants no authority. Binding facts, observed connection health and direct-management capability are independent. Gateway-managed Cloud publication, credential recovery, disabled remote access and an offline Cloud directory retain a valid saved association. Runtime validates saved binding shape without treating it as permission to connect; strict connection validation remains required. A fresh unbound or conflicting binding, unrelated identity, or missing counterpart remains independent. Runtime Service epoch 49 publishes this distinction.
 
-Each group retains a stable primary Runtime ID, original owner references, member IDs, Cloud source identity, combined search content, and an any-owner pin result. A standalone Cloud group uses its Cloud entry ID. Build this projection once per snapshot; overview, source grids, filtering, layout, and summary counts consume it. Verified Gateway access members may join an original Runtime card under the
+Each group retains a stable primary Runtime ID, original owner references, member IDs, Cloud source identity, combined search content, and an any-owner pin result. A standalone Cloud group uses its Cloud entry ID. The main process assigns one authoritative `access_group_id` for exact Cloud bindings and trusted Gateway membership. The renderer arranges these owners without repeating identity checks. Build this projection once per snapshot; overview, source grids, filtering, layout, and summary counts consume it. Verified Gateway access members may join an original Runtime card under the
 [verified access routes contract](desktop-environment-access.md), with one shared
 Gateway access tab and no duplicate card. Independently registered direct management owners retain their
 original cards and settings. Gateway management retains its separate projection.
@@ -32,7 +32,7 @@ Trusted Runtime membership summaries expose Gateway name, public endpoints, memb
 
 ## Environment action menu
 
-The Environment card's action menu keeps direct Runtime operations in their existing order. Gateway access and Cloud connection, recovery, and disconnection actions form one adjacent access group after those operations, separated from them by a single divider. No divider or lifecycle action appears between Gateway access and Cloud actions. Cancel Gateway pairing and Publish through Gateway use the same upward menu and existing icon/label layout. Cancellation selects a real member and confirms only its actual Cloud impact; publication alone offers Cloud identity choices. Without Gateway access, the existing menu order remains unchanged; unavailable actions retain their original capability and disabled-state checks.
+The Environment card's action menu keeps direct Runtime operations in their existing order. Gateway access and Cloud connection, recovery, and disconnection actions form one adjacent access group after those operations, separated from them by a single divider. No divider or lifecycle action appears between Gateway access and Cloud actions. Cancel Gateway pairing and Publish through Gateway use the same upward menu and existing icon/label layout. From the Gateway perspective, cancellation fixes the currently selected member and confirms only its actual Cloud impact, without another selector. From Runtime or Cloud, multiple members require an explicit choice. If the fixed member has disappeared, confirmation cannot substitute another member; publication alone offers Cloud identity choices. Without Gateway access, the existing menu order remains unchanged; unavailable actions retain their original capability and disabled-state checks.
 
 ## Cloud sources and counts
 
@@ -50,7 +50,9 @@ Overview counts do not depend on the selected tab. Count each group once and sum
 
 # Evidence
 
-- `redeven:desktop/src/welcome/environmentLibraryProjection.ts` - Exact owner pairing and Cloud source membership.
+- `redeven:desktop/src/main/environmentAccess.ts` - Authoritative connection ownership and preserved access defaults.
+- `redeven:desktop/src/main/runtimeConnectionProjection.test.ts` - Raw Local/SSH/WSL observations, restricted Cloud management, offline catalogs, window deduplication and identity conflicts.
+- `redeven:desktop/src/welcome/environmentLibraryProjection.ts` - One presentation of main-process ownership and Cloud source membership.
 - `redeven:desktop/src/welcome/CloudAccountOverview.tsx` - Account identity, inventory metrics, localized sync details and sign-out action.
 - `redeven:desktop/scripts/check-cloud-account-overview.mjs` - Ten-locale account layout, stale state, recovery, focus and sign-out acceptance.
 - `redeven:desktop/src/welcome/App.tsx` - Source sections, source navigation, and shared grid composition.

@@ -206,6 +206,7 @@ import {
   gatewayRecordToSource,
   gatewayRecordToSourceWithCatalog,
   gatewayRecordToSourceWithError,
+  retireGatewayMemberObservation,
   gatewayRecordSSHPasswordRef,
   stableGatewayID,
   type GatewayRecord,
@@ -19468,8 +19469,22 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
       if (!providerRuntimeTargetIsCurrent(target)) return { ...launcherActionFailure('cloud_link_failed','environment','The Runtime connection changed. Verify again.'), gateway_error_code: 'GATEWAY_PREVIEW_CHANGED' };
       return { ...launcherActionSuccess('gateway_membership_updated'), gateway_preview: preview };
     }
+    const leavingMember = request.operation === 'leave'
+      ? (await manageRuntimeGateway(endpoint, 'status')).memberships?.find(member => member.gateway_id === request.gateway_id)
+      : undefined;
     const result = await manageRuntimeGateway(endpoint, request.operation, request.preview_id, request.environment_choice, request.gateway_id, request.cloud_impact_acknowledged);
     if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');
+    if (leavingMember) {
+      for (const record of await gatewayStore().list()) {
+        const sync = gatewaySyncStateByID.get(record.gateway_id);
+        if (!sync?.source) continue;
+        const source = retireGatewayMemberObservation(record, sync.source, leavingMember);
+        if (source === sync.source) continue;
+        supersedeGatewaySyncTask(record.gateway_id);
+        setGatewaySyncRecord(record, { ...sync, source, background_sync_running: false });
+        gatewayAccessResults.delete(JSON.stringify([record.gateway_id, leavingMember.member_id]));
+      }
+    }
     return { ...launcherActionSuccess('gateway_membership_updated'), gateway_membership: result };
   } catch (error) {
     return { ...launcherActionFailure('cloud_link_failed', 'environment', 'Gateway enrollment could not advance. Check the Gateway and retry.'), gateway_error_code: error instanceof RuntimeControlError ? error.code : 'GATEWAY_UNREACHABLE' };
