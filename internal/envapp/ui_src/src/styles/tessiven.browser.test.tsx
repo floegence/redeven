@@ -198,6 +198,8 @@ describe('Tessiven real graph interactions', () => {
     try {
       await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(2);
       await expect.poll(() => preview.querySelectorAll('[data-preview-object]').length).toBe(5);
+      // Pointer isolation hides unrelated main routes; compare the full geometry.
+      await page.getByRole('button', { name: 'Fit canvas', exact: true }).hover();
       for (const node of preview.querySelectorAll<SVGForeignObjectElement>('[data-preview-object]')) {
         const main = host.querySelector<HTMLElement>(`[data-graph-object="${node.dataset.previewObject}"]`)!;
         expect([node.x.baseVal.value, node.y.baseVal.value, node.width.baseVal.value, node.height.baseVal.value])
