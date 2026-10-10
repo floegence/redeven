@@ -51,6 +51,10 @@ steps. The current step, retained authorization input state, progress, failure
 diagnostic and next action stay visible together. A completed service-management
 action shows its result until the user returns to connection options. A connect
 action continues automatically to viewer admission after successful preparation.
+If preparation succeeds but capture remains unavailable, the same failure step
+names the host reason and offers Refresh. Refresh never silently opens a desktop.
+Connect appears only after current host capability admits it, and transient
+connection failures can retry without repeating administrator authorization.
 Cancellation, retry and recovery use the same surface and restore focus
 to the action that started the flow.
 

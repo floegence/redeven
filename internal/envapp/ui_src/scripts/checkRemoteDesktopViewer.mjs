@@ -1,4 +1,4 @@
-/* global document, window, innerWidth, CompositionEvent, MouseEvent, getComputedStyle */
+/* global document, window, innerWidth, CompositionEvent, KeyboardEvent, MouseEvent, getComputedStyle */
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -27,7 +27,7 @@ let conflictNextConnect = false;
 let failDisconnect = true;
 let lockedNextConnect = false;
 let delayAudio = false, audioResponse;
-let desktopState = 'active', holdRecovery = false;
+let desktopState = 'active', holdRecovery = false, holdTicket = false, holdConnect = false;
 let clientTextOnly = false;
 const configuration = { session: { id: 'qualification', host_name: 'Task desktop', locale: 'en-US', mode: 'control', display_id: '' }, base: '/_redeven_desktop/' };
 const names = { 'input.js': 'remote-input.generated.js', 'pointer.js': 'remote-pointer.generated.js' };
@@ -36,6 +36,7 @@ const server = http.createServer((request, response) => {
   if (request.url === '/launcher') { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><title>Viewer owner fixture</title>'); return; }
   if (request.url === '/_redeven_desktop/ticket') {
     connectionCount++;
+    if (holdTicket) return;
     if (ticketFailures > 0) { ticketFailures--; response.writeHead(503).end(); return; }
     response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ ok: true, data: { token, session: { ...configuration.session, mode: selectedMode } } })); return;
   }
@@ -112,6 +113,7 @@ server.on('upgrade', (request, socket, head) => {
           ? { backend: 'linux-drm-kms', state: 'unavailable', reason: unsupportedReason, screen: false, input: false, unlock: false, locked_screen: false, audio: false, clipboard: false, displays: [] }
           : { backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: !clientTextOnly, text_input: clientTextOnly } }));
         if (command.method === 'connect') {
+          if (holdConnect) return;
           if (lockedNextConnect) {
             lockedNextConnect = false;
             connection.send(JSON.stringify({ version: 1, type: 'error', code: 'LOCKED', generation: ++generation }));
@@ -546,6 +548,12 @@ try {
   assert(await page.locator('#shortcuts').isDisabled(), 'lock screen exposed shortcuts');
   const beforeUnlock = messages.length;
   await page.locator('#start-unlock').click();
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'unlock must keep the local text editor disabled');
+  assert(await page.locator('#desktop').evaluate(element => element === document.activeElement), 'unlock must focus the non-editable desktop');
+  await page.locator('#desktop').evaluate(element => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Process', code: 'KeyT', isComposing: true, bubbles: true, cancelable: true }));
+    element.dispatchEvent(new KeyboardEvent('keyup', { key: 'Process', code: 'KeyT', isComposing: true, bubbles: true }));
+  });
   await page.keyboard.press('a');
   await page.keyboard.press('Control+v');
   await page.keyboard.press('Meta+v');
@@ -553,10 +561,13 @@ try {
       await page.evaluate(() => document.querySelector('.floe-remote-input').dispatchEvent(new window.ClipboardEvent('paste', { bubbles: true, cancelable: true })));
   await page.keyboard.down('Shift');
   await page.locator('#settings').focus();
-  await page.waitForFunction(() => document.querySelector('.floe-remote-input').disabled === false);
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'locked blur must not enable the local editor');
   await page.waitForTimeout(40);
   const unlockCommands = messages.slice(beforeUnlock).map(item => item.command);
   assert(unlockCommands.some(command => command.method === 'unlock_input' && command.input.code === 'KeyA'), 'physical unlock input missing');
+  for (const pressed of [true, false]) {
+    assert(unlockCommands.some(command => command.method === 'unlock_input' && command.input.code === 'KeyT' && command.input.pressed === pressed), 'local IME must preserve physical unlock press and release');
+  }
   assert(unlockCommands.some(command => command.method === 'release_input'), 'locked blur retained held input');
   assert(!unlockCommands.some(command => command.method === 'input' || ['set_clipboard', 'get_clipboard'].includes(command.method) || command.input?.kind === 'paste' || command.input?.code === 'Insert' && command.input?.pressed || /^(Control|Meta)/u.test(command.input?.code ?? '') && command.input?.pressed), 'unlock leaked clipboard, paste or ordinary input');
   await page.keyboard.up('Shift');
@@ -577,6 +588,19 @@ try {
   await page.waitForFunction(() => document.querySelector('#reconnect').hidden === false, null, { timeout: 15000 });
   assert(await page.locator('#disconnect').isEnabled(), 'recovery timeout trapped the user without disconnect');
   assert(await page.locator('.floe-remote-input').isDisabled(), 'recovery timeout retained unlock input');
+  holdTicket = true;
+  await page.locator('#reconnect').click();
+  await page.waitForFunction(() => document.querySelector('#reconnect').hidden === false, null, { timeout: 15000 });
+  assert(await page.locator('#disconnect').isEnabled(), 'stalled Runtime ticket trapped the user without disconnect');
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'stalled Runtime ticket retained input');
+  assert(await page.locator('#desktop').evaluate(element => getComputedStyle(element).visibility === 'hidden'), 'stalled Runtime ticket retained a frozen picture');
+  holdTicket = false;
+  holdConnect = true;
+  await page.locator('#reconnect').click();
+  await page.waitForFunction(() => document.querySelector('#reconnect').hidden === false, null, { timeout: 15000 });
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'unresponsive control channel retained input');
+  assert(await page.locator('#disconnect').isEnabled(), 'unresponsive control channel hid the exit');
+  holdConnect = false;
   holdRecovery = false; desktopState = 'active';
   await page.locator('#reconnect').click();
   await page.waitForFunction(() => document.querySelector('#connection').hidden);
@@ -773,7 +797,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.transportEvents.slice(-3)), [
     '/_redeven_desktop/disconnect', 'response:/_redeven_desktop/disconnect', 'disposed',
   ], 'disconnect must finish through the native transport before disposal');
-  console.log(JSON.stringify({ passed: true, backend, separateCursor, checks: ['painted cursor ownership', 'pointer and drag without media or animation frames', 'captured view-only cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'shortcut receipts', 'browser and Desktop files', 'clipboard epoch fencing', 'fullscreen hide and pin', 'disconnect retry and cleared pixels'] }));
+  console.log(JSON.stringify({ passed: true, backend, separateCursor, checks: ['painted cursor ownership', 'pointer and drag without media or animation frames', 'captured view-only cursor', 'local chrome cursors', 'paint authority', 'explicit client text paste', 'host input default', 'composition cancellation', 'physical keys', 'lock-screen IME isolation and physical release', 'clipboard panel', 'display selection', 'view-only', 'explicit takeover', 'reconnect', 'reconnect audio samples', 'narrow localized settings', 'dialog keyboard', 'shortcut receipts', 'browser and Desktop files', 'clipboard epoch fencing', 'fullscreen hide and pin', 'disconnect retry and cleared pixels'] }));
   }
 } finally {
   await application?.close(); await browser?.close(); for (const socket of sockets) socket.terminate(); ws.close(); await new Promise(resolve => server.close(resolve));

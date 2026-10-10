@@ -404,6 +404,27 @@ it('shows the actual unsupported graphics reason without an unusable connection 
   expect(host.textContent).not.toContain('Set up remote desktop');
 });
 
+it('refreshes an unavailable post-setup desktop in place without offering an impossible connection', async () => {
+  const installed: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'GPU_SCANOUT_UNSUPPORTED' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
+  state.status.mockResolvedValueOnce({ ...installed, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } }).mockResolvedValue(installed);
+  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
+  await mount(); button('Set up').click(); button('Authorize and continue').click();
+  await vi.waitFor(() => expect(host.querySelector('[data-phase=failed]')?.textContent).toContain('graphics device cannot provide'));
+  const flow = host.querySelector('.remote-desktop-deployment-flow');
+  expect(button('Connect to desktop')).toBeUndefined();
+  button('Refresh').click();
+  await vi.waitFor(() => expect(state.status).toHaveBeenCalledTimes(3));
+  expect(host.querySelector('.remote-desktop-deployment-flow')).toBe(flow);
+  expect(state.create).not.toHaveBeenCalled();
+  state.status.mockResolvedValue({ ...installed, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms' } });
+  button('Refresh').click();
+  await vi.waitFor(() => expect(button('Connect to desktop')?.disabled).toBe(false));
+  expect(state.create).not.toHaveBeenCalled();
+  button('Connect to desktop').click();
+  await vi.waitFor(() => expect(state.create).toHaveBeenCalledOnce());
+  expect(state.deployment.mock.calls.filter(([request]) => request.action === 'manage')).toHaveLength(1);
+});
+
 it('offers an explicit update for an incompatible service instead of installing again', async () => {
   state.deployment.mockResolvedValue({ ok: true, available: true });
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'SERVICE_UPDATE_REQUIRED' }, login_service: { state: 'failed', backend: 'linux-drm-kms', reason: 'SERVICE_UPDATE_REQUIRED' } });

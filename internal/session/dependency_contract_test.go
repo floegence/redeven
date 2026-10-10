@@ -25,8 +25,8 @@ const (
 	flowersecGoVersion   = "v5.11.0"
 	flowersecCorePackage = "@floegence/flowersec-core"
 	flowersecCoreVersion = "5.11.0"
-	floeWebappVersion    = "0.86.18"
-	floeEnvCoreVersion   = "0.86.18"
+	floeWebappVersion    = "0.86.19"
+	floeEnvCoreVersion   = "0.86.19"
 )
 
 var flowersecNPMPackages = []string{
