@@ -3,6 +3,31 @@ import { projectCanvas, projectLayoutLayers, projectPositions } from '../../../.
 import { sharedHostsDocument } from './tessiven-shared-hosts.fixture';
 
 describe('shared physical hosts in logical groups', () => {
+  it('keeps ungrouped inventory and legacy full-host group membership in group scope', () => {
+    const document = sharedHostsDocument('mixed');
+    delete document.groups![0].instanceRefs;
+    const projected = projectCanvas(document, new Set(document.groups!.map(group => group.id)), {}, 'group');
+    const ungrouped = projected.cards.get('node-6');
+    expect(ungrouped?.kind === 'node' && ungrouped.instances.map(instance => instance.id)).toEqual(['monitor-6']);
+    const legacy = projected.cards.get('hdfs::node-1');
+    expect(legacy?.kind === 'node' && legacy.instances.map(instance => instance.id)).toEqual(['nn-1', 'zk-1', 'rm-1', 'api-1']);
+  });
+  it('filters only the selected group inventory while preserving canonical references and external relations', () => {
+    const document = sharedHostsDocument();
+    const original = JSON.stringify(document);
+    const all = projectCanvas(document, new Set(['hdfs', 'zk']), {});
+    const grouped = projectCanvas(document, new Set(['hdfs', 'zk']), {}, 'group');
+    const host = grouped.cards.get('hdfs::node-1');
+    const peer = grouped.cards.get('zk::node-1');
+    expect(host?.kind === 'node' && host.instances.map(instance => instance.id)).toEqual(['nn-1']);
+    expect(peer?.kind === 'node' && peer.instances.map(instance => instance.id)).toEqual(['zk-1']);
+    expect(grouped.internalRelations.has('hdfs::node-1')).toBe(false);
+    expect(grouped.graph.edges).toEqual(all.graph.edges);
+    expect(grouped.graph.nodes.find(node => node.id === 'hdfs::node-1')!.height)
+      .toBeLessThan(all.graph.nodes.find(node => node.id === 'hdfs::node-1')!.height);
+    expect(JSON.stringify(document)).toBe(original);
+    expect(projectCanvas(document, new Set(['hdfs', 'zk']), {}).cards).toEqual(all.cards);
+  });
   it('inherits each declared group layer without promoting shared host appearances', () => {
     const document = sharedHostsDocument();
     document.presentation = { direction: 'LEFT', layers: [['hdfs'], ['zk']] };

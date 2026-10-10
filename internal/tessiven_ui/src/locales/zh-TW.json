@@ -220,5 +220,12 @@
   "restoreReplies": "還原大小",
   "newConversation": "新對話",
   "flowerWelcome": "讓畫布呈現你的業務",
-  "flowerWelcomeHint": "讓 Flower 整理服務、解釋關係，或直接修改這張畫布。"
+  "flowerWelcomeHint": "讓 Flower 整理服務、解釋關係，或直接修改這張畫布。",
+  "canvasOverview": "畫布縮圖",
+  "expandAllGroups": "全部展開",
+  "collapseAllGroups": "全部摺疊",
+  "nodeServiceScope": "節點服務",
+  "allNodeServices": "主機全部服務",
+  "groupNodeServices": "目前群組服務",
+  "layoutUpdating": "正在配置畫布"
 }

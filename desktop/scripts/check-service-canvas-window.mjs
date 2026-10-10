@@ -63,6 +63,33 @@ async function setTheme(page, mode, preset) {
     && !document.documentElement.dataset.redevenThemeSwitching, { mode, preset });
 }
 const routingThemes = [['light', 'porcelain-light'], ['dark', 'porcelain-dark'], ['light', 'hc-light']];
+async function verifyCanvasNavigation(page, name) {
+  const count = await page.locator('.tessiven-node').count();
+  await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+  await until(async () => await page.locator('.tessiven-node').count() === 0, 'native bulk collapse');
+  await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+  await until(async () => await page.locator('.tessiven-node').count() === count, 'native bulk expand');
+  const scope = page.getByRole('combobox', { name: 'Node services', exact: true });
+  for (const value of ['group', 'all']) {
+    await scope.selectOption(value);
+    await until(async () => await page.getByRole('status', { name: 'Arranging canvas', exact: true }).count() === 0, 'native service scope');
+    assert.equal(await scope.inputValue(), value);
+  }
+  const overview = page.getByRole('region', { name: 'Canvas overview', exact: true });
+  assert.equal(await overview.locator('path').count(), 3);
+  const transform = () => page.locator('.floe-infinite-canvas__viewport').evaluate(node => node.style.transform);
+  const before = await transform();
+  const box = await overview.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 2 + 8, { steps: 8 });
+  await page.mouse.up();
+  await until(async () => await transform() !== before, 'native overview drag');
+  await overview.focus();
+  await page.keyboard.press('Home');
+  assert.equal(await page.evaluate(() => globalThis.getSelection()?.toString() ?? ''), '');
+  report.scenarios.push(`${name}-bulk-groups-service-scope-overview-drag`);
+}
 async function verifyLocalRoute(page, name, selector = '.tessiven-node .tessiven-local-relation', zoom = false) {
   const replies = page.locator('.tessiven-flower-output');
   if (await replies.count()) await replies.getByRole('button', { name: 'Hide replies', exact: true }).click();
@@ -238,6 +265,7 @@ try {
   await canvas.locator('.tessiven-node').first().waitFor();
   assert.equal(await canvas.locator('.tessiven-error, .tessiven-notice[role="status"]').count(), 0);
   assert.equal(canvasPages().length, 1);
+  await verifyCanvasNavigation(canvas, 'standalone');
   for (const mode of ['light', 'dark']) {
     await welcome.evaluate(mode => window.redevenDesktopTheme.setSource(mode), mode);
     await canvas.waitForFunction(mode => document.documentElement.classList.contains('dark') === (mode === 'dark')
@@ -250,6 +278,7 @@ try {
   await welcome.getByRole('button', { name: 'Tessiven', exact: true }).click();
   await welcome.getByRole('button', { name: saved.title, exact: true }).click();
   await welcome.locator('.tessiven-node').first().waitFor();
+  await verifyCanvasNavigation(welcome, 'desktop-welcome');
   await verifyLocalRoute(welcome, 'desktop-welcome');
   if (canvasArgument) {
     const observed = library.data.canvases.find(canvas => canvas.id === canvasArgument);

@@ -220,5 +220,12 @@
   "restoreReplies": "크기 복원",
   "newConversation": "새 대화",
   "flowerWelcome": "서비스를 이 캔버스에 담아보세요",
-  "flowerWelcomeHint": "Flower에게 서비스 정리, 관계 설명 또는 캔버스 수정을 요청하세요."
+  "flowerWelcomeHint": "Flower에게 서비스 정리, 관계 설명 또는 캔버스 수정을 요청하세요.",
+  "canvasOverview": "캔버스 개요",
+  "expandAllGroups": "모두 펼치기",
+  "collapseAllGroups": "모두 접기",
+  "nodeServiceScope": "노드 서비스",
+  "allNodeServices": "호스트의 모든 서비스",
+  "groupNodeServices": "현재 그룹 서비스",
+  "layoutUpdating": "캔버스 배치 중"
 }

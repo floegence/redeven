@@ -220,5 +220,12 @@
   "restoreReplies": "Rétablir la taille",
   "newConversation": "Nouvelle conversation",
   "flowerWelcome": "Vos services sur ce canevas",
-  "flowerWelcomeHint": "Demandez à Flower de représenter vos services, d’expliquer une relation ou de modifier ce canevas."
+  "flowerWelcomeHint": "Demandez à Flower de représenter vos services, d’expliquer une relation ou de modifier ce canevas.",
+  "canvasOverview": "Aperçu du canevas",
+  "expandAllGroups": "Tout développer",
+  "collapseAllGroups": "Tout réduire",
+  "nodeServiceScope": "Services du nœud",
+  "allNodeServices": "Tous les services de l’hôte",
+  "groupNodeServices": "Services du groupe actuel",
+  "layoutUpdating": "Disposition du canevas"
 }

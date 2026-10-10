@@ -1472,7 +1472,6 @@
   bottom: 16px;
   left: 16px;
   display: flex;
-  gap: 10px;
   align-items: center;
   padding: 5px 8px;
   border: 1px solid var(--border);
@@ -1480,6 +1479,43 @@
   background: var(--card);
   font-size: 11px;
   color: var(--foreground);
+  max-width: calc(100% - 32px);
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 5;
+}
+.tessiven-canvas-tools button,
+.tessiven-canvas-tools select {
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 4px;
+  min-height: 26px;
+}
+.tessiven-canvas-tools button:hover:not(:disabled) { background: var(--muted); }
+.tessiven-canvas-tools button:disabled { cursor: default; opacity: 0.38; }
+.tessiven-canvas-tools select {
+  max-width: 100%;
+  padding: 2px 20px 2px 6px;
+  background-color: var(--muted);
+  color: var(--foreground);
+  border: 1px solid transparent;
+  font-size: 11px;
+}
+.tessiven-layout-pending {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: tessiven-layout-spin 800ms linear infinite;
+}
+@keyframes tessiven-layout-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .tessiven-layout-pending { animation: none; }
+}
+@media (max-width: 650px) {
+  .tessiven-canvas-tools { max-width: calc(100% - 156px); }
+  .tessiven-canvas .floe-graph__minimap { width: 112px; height: 76px; }
 }
 @media (max-width: 650px) {
   .tessiven-toolbar {

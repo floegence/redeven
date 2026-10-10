@@ -4,6 +4,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  batch,
   onCleanup,
   onMount,
   untrack,
@@ -22,7 +23,7 @@ import {
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, Link, ExternalLink } from '@floegence/floe-webapp-core/icons';
 import '@floegence/floe-webapp-core/graph.css';
-import { projectCanvas, projectLayoutOptions } from './projection';
+import { projectCanvas, projectLayoutOptions, type NodeServiceScope, type Projection } from './projection';
 import { TessivenIcon } from './TessivenIcon';
 import { TessivenServiceRelations, type ServiceRelationEndpoint } from './TessivenServiceRelations';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
@@ -45,6 +46,7 @@ export type GraphBrowseState = {
   expanded: string[];
   selectedNodes: Record<string, string>;
   viewport: { x: number; y: number; scale: number };
+  serviceScope?: NodeServiceScope;
 };
 export type TessivenViewportControl = {
   zoom: (factor: number, x: number, y: number, dx?: number, dy?: number) => void;
@@ -77,6 +79,8 @@ export function TessivenGraph(props: {
   const [selectedNodes, setSelectedNodes] = createSignal<
     Record<string, string>
   >(props.browseState?.selectedNodes ?? {});
+  const [serviceScope, setServiceScope] = createSignal<NodeServiceScope>(props.browseState?.serviceScope ?? 'all');
+  const [layoutPending, setLayoutPending] = createSignal(false);
   const [viewport, setViewport] = createSignal(
     props.browseState?.viewport ?? { x: 40, y: 40, scale: 1 },
   );
@@ -120,11 +124,14 @@ export function TessivenGraph(props: {
       expanded: [...expanded()],
       selectedNodes: selectedNodes(),
       viewport: viewport(),
+      serviceScope: serviceScope(),
     });
   });
-  const projection = createMemo(() =>
-    projectCanvas(props.version.document, expanded(), selectedNodes()),
+  const requestedProjection = createMemo(() =>
+    projectCanvas(props.version.document, expanded(), selectedNodes(), serviceScope()),
   );
+  const [renderedProjection, setRenderedProjection] = createSignal<Projection>();
+  const projection = () => renderedProjection() ?? requestedProjection();
   const linkedNode = createMemo(() => {
     const object = hovered() ?? selected();
     const card = object?.kind === 'node' ? projection().cards.get(object.id) : undefined;
@@ -135,8 +142,8 @@ export function TessivenGraph(props: {
     return card?.kind === 'node' ? card.node.id : id;
   };
   const appearance = (nodeId: string, groupId?: string) =>
-    projection().appearances.get(nodeId)?.find(id => {
-      const card = projection().cards.get(id);
+    requestedProjection().appearances.get(nodeId)?.find(id => {
+      const card = requestedProjection().cards.get(id);
       return card?.kind === 'node' && (!groupId || card.group?.id === groupId);
     });
   const allObjects = createMemo(
@@ -182,7 +189,7 @@ export function TessivenGraph(props: {
       );
   };
   createEffect(() => {
-    const projected = projection();
+    const projected = requestedProjection();
     props.onRenderState?.('loading');
     const currentExpanded = expanded();
     if (
@@ -205,6 +212,7 @@ export function TessivenGraph(props: {
       }),
     };
     const id = ++generation;
+    setLayoutPending(true);
     const anchor = untrack(() => {
       const previous = layout().nodes;
       const selectedNode = previous.find(node => node.id === selected()?.id);
@@ -225,18 +233,23 @@ export function TessivenGraph(props: {
       })
       .then((next) => {
         if (id !== generation) return;
-        setLayout(next);
+        batch(() => {
+          setRenderedProjection(projected);
+          setLayout(next);
+          if (!initialized && host) {
+            initialized = true;
+            setViewport(fitGraphViewport(next.bounds, { width: host.clientWidth, height: host.clientHeight }, 56));
+          }
+        });
         setError('');
         props.onRenderState?.('rendered');
-        if (!initialized) {
-          initialized = true;
-          requestAnimationFrame(fit);
-        }
+        setLayoutPending(false);
         centerSelection();
       })
       .catch((cause: unknown) => {
         if (id === generation) {
           setError(String(cause));
+          setLayoutPending(false);
           props.onRenderState?.('error');
         }
       });
@@ -355,6 +368,13 @@ export function TessivenGraph(props: {
       else next.add(id);
       return next;
     });
+    close();
+  }
+  function toggleAll(open: boolean) {
+    const current = selected();
+    const node = current?.kind === 'node' ? projection().graph.nodes.find(node => node.id === current.id) : undefined;
+    if (!open && node?.parentId) setSelected({ kind: 'node', id: node.parentId });
+    setExpanded(new Set(open ? (props.version.document.groups ?? []).map(group => group.id) : []));
     close();
   }
   function locateNode(nodeId: string, groupId: string) {
@@ -660,10 +680,20 @@ export function TessivenGraph(props: {
         onContextMenu={(event) => show(event, undefined, true)}
         onHover={setHovered}
         onInteractionStart={() => close()}
+        minimap={layout().nodes.length ? { ariaLabel: props.t('canvasOverview') } : undefined}
       />
       <Show when={props.showTools !== false}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
         <button onClick={fit}>{props.t('fit')}</button>
         <span>{Math.round(viewport().scale * 100)}%</span>
+        <Show when={props.version.document.groups?.length}>
+          <button onClick={() => toggleAll(true)} disabled={props.version.document.groups!.every(group => expanded().has(group.id))}>{props.t('expandAllGroups')}</button>
+          <button onClick={() => toggleAll(false)} disabled={!props.version.document.groups!.some(group => expanded().has(group.id))}>{props.t('collapseAllGroups')}</button>
+          <select aria-label={props.t('nodeServiceScope')} value={serviceScope()}
+            onChange={event => { positionMode = 'compact'; close(); setServiceScope(event.currentTarget.value as NodeServiceScope); }}>
+            <option value="all">{props.t('allNodeServices')}</option>
+            <option value="group">{props.t('groupNodeServices')}</option>
+          </select>
+        </Show>
         <button
           onClick={(event) =>
             show(
@@ -680,6 +710,7 @@ export function TessivenGraph(props: {
         >
           ⋯
         </button>
+        <Show when={layoutPending()}><span class="tessiven-layout-pending" role="status" aria-label={props.t('layoutUpdating')} /></Show>
       </div></Show>
       <Show when={popup()} keyed>
         {(value) => (

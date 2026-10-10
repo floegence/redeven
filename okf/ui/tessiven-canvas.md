@@ -138,8 +138,8 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
 - Up to 15 Runtime nodes in a group are shown individually. Larger groups use
   a name or ordinal selector and render only the selected node's details.
 - A mixed-deployment host appears inside every logical group it belongs to.
-  Every appearance lists its complete physical service inventory, including
-  services belonging to other groups. A subtle service-row accent identifies
+  By default, every appearance lists its complete physical service inventory,
+  including services belonging to other groups. A subtle service-row accent identifies
   exact membership of the current group; shared-host markers show the number
   of groups without a tooltip. Counts, service operations and Flower references
   use canonical objects, never visual replicas.
@@ -151,6 +151,22 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   another appearance expands its group when necessary and preserves the current
   object reference; closing restores focus. Service-row clicks continue to open
   exact instance details and bound-service inspection.
+- Canvas controls expand or collapse all logical groups in one compact reflow.
+  They preserve the selected visible object, or its enclosing group when hidden,
+  and never create a document version. The default inventory remains all host
+  services; an explicit canvas selector can show only the current group's exact
+  instance membership. Ungrouped hosts retain all services. Local relationship
+  rows whose service endpoints are filtered out are hidden in that view only;
+  canonical references and external relationships remain unchanged. This scope
+  is retained with the current canvas browse state, not persisted in its DSL.
+- The interactive overview uses the exact current layout and viewport, including
+  collapse and service filtering. Drag its viewport rectangle to pan, click the
+  overview to center, or use arrow keys and Home. Floe owns navigation and compact
+  SVG rendering; Tessiven supplies its localized accessible name.
+- Complete packing and routing run off the renderer thread. Nodes and routes
+  outside the viewport are culled without discarding canonical graph records.
+  Large-graph qualification measures actual host counts, including groups of ten
+  so a thousand-host fixture never silently measures only aggregate cards.
 - Every logical group exposes a visible, labeled expand or collapse action with
   a directional icon. The action remains in the group header in both states and
   uses the same state as the projected group contents.
@@ -165,7 +181,7 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   logical aggregate without expanding every host pair. Collapsed groups retain
   internal relations as inspectable rows. Each row opens the original relation
   and evidence and references that relation when asking Flower. A repeated host
-  appearance retains the same complete inventory and local relation rows.
+  appearance retains the same complete inventory and local relation rows by default.
   A titled, separated service calls/access section distinguishes relationship
   rows from service inventory. Hover or keyboard focus previews only that row's
   directional route beside its exact visible source and target services, with
@@ -175,6 +191,8 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   use a loop glyph there; hidden endpoints never connect to substitute rows.
   Released Floe routes fixed local inventory geometry, measured in its own
   coordinate space so canvas zoom and projected surfaces preserve alignment.
+  Row geometry is measured and observed only while a relationship is active;
+  idle inventories never force layout or allocate per-card resize observers.
   Service rows retain their full inventory width without a reserved connector
   gutter. Preview routes may extend beyond the inventory and node border;
   neither the node nor its route SVG clips them. Env App, its standalone window,
@@ -252,6 +270,7 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven/store_test.go`
 - `internal/codeapp/appserver/tessiven.go`
 - `internal/envapp/ui_src/src/styles/tessiven.browser.test.tsx`
+- `internal/envapp/ui_src/src/styles/tessiven-scale.browser.test.tsx` - Explicit 100, 500 and 1,000 physical host qualification, renderer long tasks, navigation frame time and compact visibility.
 - `internal/envapp/ui_src/src/styles/tessiven-shared-hosts.browser.test.tsx` - Complete host inventory, linked hover/focus, original details, membership navigation, themes and projected placement.
 - `internal/envapp/ui_src/src/styles/fixtures/tessiven-hadoop.json`
 - `internal/envapp/ui_src/src/styles/tessiven-library.browser.test.tsx`
