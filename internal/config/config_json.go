@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 var configKnownJSONFields = map[string]struct{}{
@@ -53,15 +54,15 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	if err := (*Config)(&retired).retireLegacyGateway(raw); err != nil {
 		return err
 	}
-	memberMigrated, err := migrateGatewayMembers(raw)
-	if err != nil {
-		return err
-	}
 	if retired.gatewayConfigMigrated {
 		delete(raw, "direct")
 		delete(raw, "control_artifact_pool")
 	}
 	migrated, err := migrateCloudConfigJSON(raw)
+	if err != nil {
+		return err
+	}
+	memberMigrated, err := migrateGatewayMembers(raw)
 	if err != nil {
 		return err
 	}
@@ -207,40 +208,69 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		}
 		out[key] = value
 	}
-	out["gateway_membership_schema_version"] = json.RawMessage("2")
+	out["gateway_membership_schema_version"] = json.RawMessage("3")
 	return json.Marshal(out)
 }
 
 // The v1 singleton becomes the v2 collection without changing credentials,
-// pending deliveries, or the already approved Cloud publication owner.
+// pending deliveries, or the already approved Cloud publication owner. The v3
+// edge retires an implicit publication selection without a persisted Cloud request.
 func migrateGatewayMembers(raw map[string]json.RawMessage) (bool, error) {
 	version := 1
 	if encoded, ok := raw["gateway_membership_schema_version"]; ok {
-		if json.Unmarshal(encoded, &version) != nil || version < 1 || version > 2 {
+		if json.Unmarshal(encoded, &version) != nil || version < 1 || version > 3 {
 			return false, fmt.Errorf("unsupported Gateway membership schema")
 		}
 	}
 	legacy, old := raw["gateway"]
-	if version == 2 {
+	if version >= 2 {
 		if old {
 			return false, fmt.Errorf("singleton Gateway in current membership schema")
 		}
-		return false, nil
-	}
-	if _, exists := raw["gateways"]; exists {
-		return false, fmt.Errorf("Gateway membership schema drift")
-	}
-	if old && !bytes.Equal(bytes.TrimSpace(legacy), []byte("null")) {
-		var member struct {
-			MemberID string `json:"member_id"`
+		if version == 3 {
+			return false, nil
 		}
-		if err := json.Unmarshal(legacy, &member); err != nil || member.MemberID == "" {
-			return false, fmt.Errorf("invalid legacy Gateway member")
-		}
-		raw["gateways"] = append(append([]byte("["), legacy...), ']')
-		raw["gateway_cloud_member_id"], _ = json.Marshal(member.MemberID)
 	}
-	delete(raw, "gateway")
-	raw["gateway_membership_schema_version"] = json.RawMessage("2")
-	return old, nil
+	if version == 1 {
+		if _, exists := raw["gateways"]; exists {
+			return false, fmt.Errorf("Gateway membership schema drift")
+		}
+		if old && !bytes.Equal(bytes.TrimSpace(legacy), []byte("null")) {
+			var member struct {
+				MemberID string `json:"member_id"`
+			}
+			if err := json.Unmarshal(legacy, &member); err != nil || member.MemberID == "" {
+				return false, fmt.Errorf("invalid legacy Gateway member")
+			}
+			raw["gateways"] = append(append([]byte("["), legacy...), ']')
+			raw["gateway_cloud_member_id"], _ = json.Marshal(member.MemberID)
+		}
+		delete(raw, "gateway")
+		raw["gateway_membership_schema_version"] = json.RawMessage("2")
+	}
+	if publication := bytes.TrimSpace(raw["gateway_publication"]); len(publication) == 0 || bytes.Equal(publication, []byte("null")) {
+		// Validate the old selection before retiring it; malformed source state
+		// must not become valid merely because the selected owner is removed.
+		var source configJSON
+		encoded, err := json.Marshal(raw)
+		if err != nil {
+			return false, err
+		}
+		if err := json.Unmarshal(encoded, &source); err != nil {
+			return false, err
+		}
+		for _, member := range source.Gateways {
+			member.MigrateLegacyState()
+		}
+		if err := (*Config)(&source).ValidateLocalMinimal(); err != nil {
+			return false, fmt.Errorf("invalid Gateway membership migration source: %w", err)
+		}
+		if source.ControlArtifactPool != nil && strings.HasPrefix(source.ControlArtifactPool.LogicalBindingID, "gateway-cloud-v2:") {
+			return false, fmt.Errorf("Gateway credential pool has no publication binding")
+		}
+		delete(raw, "gateway_cloud_member_id")
+		delete(raw, "gateway_environment_choice")
+	}
+	raw["gateway_membership_schema_version"] = json.RawMessage("3")
+	return old || version == 2, nil
 }

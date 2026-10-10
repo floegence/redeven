@@ -688,7 +688,6 @@ function linkedRuntimeTargetForCloudEnvironment(
     && target.cloud_origin === environment.cloud_origin
     && target.cloud_id === environment.cloud_id
     && target.env_public_id === environment.env_public_id
-    && target.access_point_origin === environment.access_point_origin
   )) ?? null;
 }
 

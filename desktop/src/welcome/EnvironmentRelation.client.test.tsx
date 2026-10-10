@@ -95,7 +95,8 @@ describe('linked environment owner interactions', () => {
   });
 
   it('renders trusted snapshot connections in one stable card and confirms the selected Gateway from its upward menu', async () => {
-    const fixture = runtimeConnectionFixture({ cloudManagement: false, gatewayWindow: true });
+    const fixture = runtimeConnectionFixture({ cloudManagement: false, gatewayWindow: true,
+      cloudDirectoryAccessPointOrigin: 'https://rotated-region.example.invalid' });
     const snapshot = fixture.snapshot;
     const runtime = snapshot.environments.find(entry => entry.kind === 'local_environment')!;
     const perform = vi.fn(async (_request: DesktopLauncherActionRequest) => ({ ok: true, gateway_membership: {

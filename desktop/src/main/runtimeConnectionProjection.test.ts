@@ -6,6 +6,37 @@ import { buildEnvironmentLibrarySummaryModel, environmentLibraryCount, filterEnv
 
 describe('Runtime connection ownership from raw snapshot inputs', () => {
   it.each(['local_environment', 'ssh_environment', 'wsl_environment'] as const)(
+    'keeps %s Cloud identity when the directory reports another access point', kind => {
+      const { inputs } = runtimeConnectionFixture({ kind });
+      const snapshot = buildDesktopWelcomeSnapshot({ ...inputs, controlPlanes: inputs.controlPlanes.map(source => ({
+        ...source, environments: source.environments.map(environment => ({ ...environment,
+          access_point_origin: 'https://new-region.example.invalid', status: 'offline' as const,
+        })),
+      })) });
+      const runtime = snapshot.environments.find(entry => entry.kind === kind && entry.runtime_service?.gateway_memberships?.length)!;
+      const group = buildEnvironmentLibraryDisplayGroups(snapshot.environments).find(group => group.id === runtime.id)!;
+      expect(group.provider_entry?.env_public_id).toBe('env_0_0');
+      expect(runtime.provider_environment_candidates?.find(candidate => candidate.env_public_id === 'env_0_0')?.access_point_origin).toBe('https://new-region.example.invalid');
+      expect(runtime.provider_runtime_link_target?.access_point_origin).toBe('https://team.example.invalid');
+      expect(runtime.provider_environment_candidates?.find(candidate => candidate.env_public_id === 'env_0_0')?.occupancy.state).toBe('linked_here');
+      expect(group.gateway_entries).toHaveLength(2);
+      expect(buildEnvironmentLibraryDisplayGroups(snapshot.environments)).toHaveLength(8);
+    },
+  );
+
+  it.each(['cloud_origin', 'cloud_id', 'env_public_id'] as const)('keeps a different %s independent despite equal labels and routes', field => {
+    const { inputs } = runtimeConnectionFixture();
+    const presences = Object.fromEntries(Object.entries(inputs.managedRuntimePresenceByTargetID).map(([id, presence]) => [id, {
+      ...presence, runtime_service: { ...presence.runtime_service!, bindings: { ...presence.runtime_service!.bindings!,
+        cloud_link: { ...presence.runtime_service!.bindings!.cloud_link, [field]: field === 'cloud_origin' ? 'https://another-cloud.example.invalid' : 'another-identity' },
+      } },
+    }]));
+    const groups = buildEnvironmentLibraryDisplayGroups(buildDesktopWelcomeSnapshot({ ...inputs, managedRuntimePresenceByTargetID: presences }).environments);
+    expect(groups.find(group => group.primary_entry.runtime_service?.gateway_memberships?.length)?.provider_entry).toBeUndefined();
+    expect(groups).toHaveLength(9);
+  });
+
+  it.each(['local_environment', 'ssh_environment', 'wsl_environment'] as const)(
     'keeps %s, offline Cloud and both Gateway connections in one group with restricted Cloud management', kind => {
       const { inputs } = runtimeConnectionFixture({ kind, cloudManagement: false });
       const snapshot = buildDesktopWelcomeSnapshot({ ...inputs, controlPlanes: inputs.controlPlanes.map(source => ({

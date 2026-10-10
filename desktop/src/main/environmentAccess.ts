@@ -100,12 +100,10 @@ export function decorateEnvironmentAccess(entries: readonly DesktopEnvironmentEn
     if (entry.kind !== 'provider_environment') return { ...entry, ...projections.get(entry.id) };
     const targetID = entry.cloud_linked_runtime_summary?.runtime_target_id;
     const runtime = targetID ? entries.find(candidate => candidate.provider_runtime_link_target?.id === targetID) : undefined;
-    const target = runtime?.provider_runtime_link_target;
-    const matches = target && ['linked', 'linking', 'disconnecting'].includes(target.cloud_link_state)
-      && target.cloud_origin && target.cloud_id && target.env_public_id
-      && target.cloud_origin === entry.cloud_origin && target.cloud_id === entry.cloud_id
-      && target.env_public_id === entry.env_public_id;
-    return { ...entry, access_group_id: matches ? runtime!.id : entry.id };
+    // The snapshot builder establishes the exact Cloud binding once. Route
+    // addresses and management capability are independent of this association.
+    const attached = runtime && ['linked', 'linking', 'disconnecting'].includes(runtime.provider_runtime_link_target!.cloud_link_state);
+    return { ...entry, access_group_id: attached ? runtime.id : entry.id };
   });
 }
 
