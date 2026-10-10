@@ -47,6 +47,10 @@ graph data and actual worker/routing failures remain visible errors.
 Published Floe jointly routes packed and positioned relationships orthogonally.
 Free anchors can use the available spans of all four node and dashed-group
 borders, favor nearby facing spans, and separate parallel paths into lanes.
+Automatic anchors include corridors alongside obstacles; the published router
+chooses their borders jointly so independent calls can reach unused group spans
+without being forced across each other. Automatic endpoint lanes separate
+shared segments without changing explicit port or self-loop constraints.
 Routes avoid intervening cards and unrelated group frames. Explicit port sides,
 relationship identities, and canonical endpoints remain unchanged. Dense
 cross-layer topologies can still require crossings; hover and focus isolate
@@ -173,7 +177,9 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   coordinate space so canvas zoom and projected surfaces preserve alignment.
   Service rows retain their full inventory width without a reserved connector
   gutter. Preview routes may extend beyond the inventory and node border;
-  neither the node nor its route SVG clips them.
+  neither the node nor its route SVG clips them. Env App, its standalone window,
+  and Desktop Welcome pin the same published graph engine; each host must honor
+  the preview clearance instead of silently using an older routing contract.
   Card and group bounds budget every service and relation row, including the
   expansion action, so content never spills outside its node or dashed frame.
 - Theme tokens, high contrast, product locale, and accessible names are used

@@ -85,7 +85,7 @@ describe('Tessiven projection contracts', () => {
     expect(doc.instances).toHaveLength(10000);
     expect(result.graph.edges).toHaveLength(1);
   });
-  it('preserves cycle and self relation identities through collapsed groups', () => {
+  it('keeps collapsed inter-host relations inspectable inside the group', () => {
     const doc = fixture(2);
     doc.relations!.push({
       id: 'peer',
@@ -95,9 +95,16 @@ describe('Tessiven projection contracts', () => {
       evidenceRefs: ['config'],
     });
     const result = projectCanvas(doc, new Set(), {});
-    expect(result.relations.get('application/application')?.[0].id).toBe(
-      'peer',
-    );
+    expect(result.relations.has('application/application')).toBe(false);
+    expect(result.internalRelations.get('application')).toEqual([
+      expect.objectContaining({
+        relation: expect.objectContaining({
+          id: 'peer', from: 'orders-node-0', to: 'orders-node-1',
+          evidenceRefs: ['config'],
+        }),
+        fromServiceRef: 'api', toServiceRef: 'api',
+      }),
+    ]);
     expect(result.graph.nodes.every((n) => n.parentId === undefined)).toBe(
       true,
     );
