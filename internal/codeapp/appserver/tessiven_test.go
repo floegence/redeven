@@ -69,3 +69,34 @@ func TestTessivenWorksWithoutAIAndEnforcesPermissions(t *testing.T) {
 		t.Fatal("failed request modified canvas")
 	}
 }
+
+func TestTessivenSchemaUsesExactDSLVersion(t *testing.T) {
+	svc, err := tessiven.Open(filepath.Join(t.TempDir(), "canvas.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	cap := config.PermissionSet{Read: true}
+	srv := &Server{tessiven: svc, localPermissionCap: &cap}
+	for query, version := range map[string]string{"": "v1.0.0", "?version=v1": "v1", "?version=v1.0.0": "v1.0.0"} {
+		response := performWorkbenchLayoutRequest(t, srv, http.MethodGet, tessivenAPIBase+"/schema"+query, "")
+		if response.Code != 200 {
+			t.Fatal(response.Body.String())
+		}
+		schema := decodeWorkbenchLayoutResponse[map[string]any](t, response)
+		if schema["properties"].(map[string]any)["apiVersion"].(map[string]any)["const"] != "redeven.io/tessiven/"+version {
+			t.Fatal("schema version mismatch")
+		}
+	}
+	for _, query := range []string{"?version=v1.2.3", "?version=v1&version=v1.0.0", "?version=", "?future=true"} {
+		response := performWorkbenchLayoutRequest(t, srv, http.MethodGet, tessivenAPIBase+"/schema"+query, "")
+		if response.Code != 400 {
+			t.Fatalf("unsupported schema selector: %s %d", query, response.Code)
+		}
+	}
+	cap.Read = false
+	response := performWorkbenchLayoutRequest(t, srv, http.MethodGet, tessivenAPIBase+"/schema?version=v1", "")
+	if response.Code != 403 {
+		t.Fatal("version selector bypassed read permission")
+	}
+}

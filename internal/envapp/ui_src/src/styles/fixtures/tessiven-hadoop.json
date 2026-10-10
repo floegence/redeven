@@ -1,5 +1,5 @@
 {
-  "apiVersion": "redeven.io/tessiven/v1",
+  "apiVersion": "redeven.io/tessiven/v1.0.0",
   "kind": "ServiceCanvas",
   "metadata": {
     "title": "Hadoop 服务架构图（HDFS + YARN HA 参考架构）",

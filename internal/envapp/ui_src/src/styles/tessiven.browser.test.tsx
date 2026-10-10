@@ -28,7 +28,7 @@ function fixture(count = 2): Version {
     source: 'manual',
     summary: 'Fixture',
     document: {
-      apiVersion: 'redeven.io/tessiven/v1',
+      apiVersion: 'redeven.io/tessiven/v1.0.0',
       kind: 'ServiceCanvas',
       metadata: { title: 'Commerce / Production' },
       nodes,

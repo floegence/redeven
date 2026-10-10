@@ -68,7 +68,7 @@ afterEach(() => {
 
 it('keeps the canvas available during AI startup and loads its configured model only after readiness', async () => {
   const canvas = { id: 'commerce', title: 'Commerce', latest_version: 1, archived: false, created_at: 1, updated_at: 1 };
-  const version = { canvas_id: canvas.id, number: 1, document: { apiVersion: 'redeven.io/tessiven/v1', kind: 'ServiceCanvas', metadata: { title: canvas.title } }, document_yaml: '', digest: 'fixture', created_at: 1, source: 'created', summary: '' };
+  const version = { canvas_id: canvas.id, number: 1, document: { apiVersion: 'redeven.io/tessiven/v1.0.0', kind: 'ServiceCanvas', metadata: { title: canvas.title } }, document_yaml: '', digest: 'fixture', created_at: 1, source: 'created', summary: '' };
   const h = await mount('connect_environment', 'inspecting', request => {
     if (request.path.startsWith('/_redeven_proxy/api/tessiven/canvases?')) return { canvases: [canvas] };
     if (request.path === '/_redeven_proxy/api/tessiven/canvases/commerce') return canvas;

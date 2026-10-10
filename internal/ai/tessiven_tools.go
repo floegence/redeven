@@ -27,11 +27,11 @@ func builtInTessivenToolDefinitions() []ToolDef {
 		}
 		defs = append(defs, ToolDef{Name: name, Description: description, InputSchema: toolSchemaRaw(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}), Mutating: mutating, RequiresApproval: mutating, Visibility: visibility, Capabilities: capabilities, Source: "builtin", Namespace: "builtin.tessiven", Priority: 100})
 	}
-	add("tessiven.schema", "Read the authoritative Tessiven YAML document JSON Schema. Use before creating or updating a canvas.", map[string]any{}, []string{}, false)
+	add("tessiven.schema", "Read the exact Tessiven DSL JSON Schema. Omit version for the current schema; use a stored dsl_version to inspect a supported historical schema. Never relabel unknown versions.", map[string]any{"version": str("Exact supported DSL version, such as v1.0.0; omit for current")}, []string{}, false)
 	add("tessiven.list", "List business canvases in the local Runtime library. Follow next_cursor for more results.", map[string]any{"query": str("Title or description search"), "cursor": str("Opaque next_cursor"), "archived": map[string]any{"type": "boolean"}}, []string{}, false)
 	add("tessiven.read", "Read a bounded, literal YAML range from an immutable canvas version. Omit version for latest, start_line for 1 and line_count for 200 (maximum 500 lines / 65536 bytes). Returns exact version, title, digest and line bounds; continue at end_line + 1 while has_more. Use search to locate relevant objects. Stored historical placement diagnostics must be repaired before editing.", map[string]any{"canvas_id": str("Exact canvas ID"), "version": integer, "start_line": integer, "line_count": map[string]any{"type": "integer", "minimum": 1, "maximum": 500}}, []string{"canvas_id"}, false)
 	add("tessiven.search", "Find literal text in one immutable canvas version without loading the whole document. Returns matching line numbers and excerpts; continue at next_line when supplied. Pin the returned version for subsequent reads and edits.", map[string]any{"canvas_id": str("Exact canvas ID"), "version": integer, "query": str("Literal single-line text, object ID or name"), "start_line": integer, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50}}, []string{"canvas_id", "query"}, false)
-	add("tessiven.edit", "Edit an existing canvas with a small batch of exact text replacements, like a text Edit tool. Each old_string must match exactly once, in batch order; include surrounding YAML for ambiguity. The complete result is validated and saved atomically as one new version, preserving untouched text. expected_version must be the version read. Retry an uncertain result with the exact request_id and arguments; read again on version conflict. Prefer this tool to full save for existing canvases.", map[string]any{"request_id": str("Unique stable request ID"), "canvas_id": str("Exact existing canvas ID"), "expected_version": map[string]any{"type": "integer", "minimum": 1}, "summary": str("Concise change summary"), "edits": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "object", "properties": map[string]any{"old_string": str("Exact nonempty text read from the base YAML"), "new_string": str("Replacement text; empty deletes")}, "required": []string{"old_string", "new_string"}, "additionalProperties": false}}}, []string{"request_id", "canvas_id", "expected_version", "summary", "edits"}, true)
+	add("tessiven.edit", "Edit an existing canvas with a small batch of exact text replacements, like a text Edit tool. Each old_string must match exactly once, in batch order; include surrounding YAML for ambiguity. The complete result is validated and saved atomically as one new version, preserving untouched text except a reviewed DSL version upgrade. expected_version must be the version read. Retry an uncertain result with the exact request_id and arguments; read again on version conflict. Prefer this tool to full save for existing canvases.", map[string]any{"request_id": str("Unique stable request ID"), "canvas_id": str("Exact existing canvas ID"), "expected_version": map[string]any{"type": "integer", "minimum": 1}, "summary": str("Concise change summary"), "edits": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "object", "properties": map[string]any{"old_string": str("Exact nonempty text read from the base YAML"), "new_string": str("Replacement text; empty deletes")}, "required": []string{"old_string", "new_string"}, "additionalProperties": false}}}, []string{"request_id", "canvas_id", "expected_version", "summary", "edits"}, true)
 	add("tessiven.versions", "List saved versions newest first; continue with before equal to the last number when 100 results are returned.", map[string]any{"canvas_id": str("Exact canvas ID"), "before": integer}, []string{"canvas_id"}, false)
 	add("tessiven.validate", "Validate YAML without changing saved data. Returns locations and reasons for invalid fields or references.", map[string]any{"document_yaml": str("Full YAML document")}, []string{"document_yaml"}, false)
 	add("tessiven.save", "Save a complete new immutable version. Omit canvas_id and use expected_version 0 to create a canvas. Preserve object IDs on updates. Reuse the exact request_id and payload for an uncertain network retry; read again on version conflict.", map[string]any{"request_id": str("Unique stable request ID"), "canvas_id": str("Existing canvas ID; omit to create"), "expected_version": map[string]any{"type": "integer", "minimum": 0}, "document_yaml": str("Complete validated YAML document"), "summary": str("Concise change summary")}, []string{"request_id", "expected_version", "document_yaml", "summary"}, true)
@@ -60,10 +60,13 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 	}
 	switch name {
 	case "tessiven.schema":
-		if len(args) != 0 {
-			return nil, tessiven.ErrInvalidRequest
+		var p struct {
+			Version string `json:"version"`
 		}
-		return tessiven.Schema(), nil
+		if err := decodeTessivenToolArgs(args, &p); err != nil {
+			return nil, err
+		}
+		return tessiven.SchemaForVersion(p.Version)
 	case "tessiven.list":
 		var p struct {
 			Query    string `json:"query"`
@@ -153,5 +156,5 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 }
 
 func tessivenToolSaveResult(result tessiven.SaveResult) map[string]any {
-	return map[string]any{"canvas": result.Canvas, "title": result.Canvas.Title, "version": result.Version.Number, "digest": result.Version.Digest, "summary": result.Version.Summary, "canvas_url": "/_redeven_proxy/env/?surface=tessiven&canvas=" + result.Canvas.ID + "&version=" + strconv.FormatInt(result.Version.Number, 10)}
+	return map[string]any{"canvas": result.Canvas, "title": result.Canvas.Title, "version": result.Version.Number, "dsl_version": result.Version.DSLVersion, "digest": result.Version.Digest, "summary": result.Version.Summary, "canvas_url": "/_redeven_proxy/env/?surface=tessiven&canvas=" + result.Canvas.ID + "&version=" + strconv.FormatInt(result.Version.Number, 10)}
 }

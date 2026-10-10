@@ -3,7 +3,7 @@ import type { CanvasDocument, Version } from '../../../../tessiven_ui/src/types'
 export type SharedHostsScenario = 'two' | 'one' | 'same' | 'mixed';
 export function sharedHostsDocument(scenario: SharedHostsScenario = 'two'): CanvasDocument {
   const document: CanvasDocument = {
-    apiVersion: 'redeven.io/tessiven/v1', kind: 'ServiceCanvas',
+    apiVersion: 'redeven.io/tessiven/v1.0.0', kind: 'ServiceCanvas',
     metadata: { title: 'Hadoop / Core' },
     nodes: [1, 2, 3].map(n => ({ id: `node-${n}`, name: `node-0${n}`, runtimeRef: `conceptual:demo/node-${n}` })),
     groups: [

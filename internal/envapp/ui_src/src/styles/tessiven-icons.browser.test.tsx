@@ -10,7 +10,7 @@ import { TessivenGraph } from '../../../../tessiven_ui/src/TessivenGraph';
 import { TessivenLibraryCard } from '../../../../tessiven_ui/src/TessivenLibraryCard';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Canvas, TessivenTransport, Version } from '../../../../tessiven_ui/src/types';
-import schema from '../../../../../spec/tessiven/v1.schema.json';
+import schema from '../../../../../spec/tessiven/v1.0.0.schema.json';
 
 const serviceKinds = schema.$defs.service.properties.kind.enum;
 const kinds = [...new Set([...serviceKinds, ...schema.$defs.resource.properties.kind.enum])];
@@ -157,7 +157,7 @@ it('renders distinct legacy Kubernetes icons in host cards, folded groups and th
   const version: Version = {
     canvas_id: 'legacy-kubernetes', number: 4, document_yaml: '', digest: 'fixture', created_at: 1, source: 'flower', summary: '',
     document: {
-      apiVersion: 'redeven.io/tessiven/v1', kind: 'ServiceCanvas', metadata: { title: 'Kubernetes / Control plane' },
+      apiVersion: 'redeven.io/tessiven/v1.0.0', kind: 'ServiceCanvas', metadata: { title: 'Kubernetes / Control plane' },
       nodes: [1, 2].map(index => ({ id: `host-${index}`, name: `Control plane ${index}`, runtimeRef: `conceptual:control-${index}` })),
       services: services.map(({ id, name, kind }) => ({ id, name, kind })),
       instances: [1, 2].flatMap(index => services.map(service => ({ id: `${service.id}-${index}`, nodeRef: `host-${index}`, serviceRef: service.id, role: 'peer' }))),
@@ -218,7 +218,7 @@ it('uses the same responsibility icons in real host inventories and saved librar
   const version: Version = {
     canvas_id: 'icons', number: 1, document_yaml: '', digest: 'fixture', created_at: 1, source: 'flower', summary: '',
     document: {
-      apiVersion: 'redeven.io/tessiven/v1', kind: 'ServiceCanvas', metadata: { title: 'Platform services' }, nodes,
+      apiVersion: 'redeven.io/tessiven/v1.0.0', kind: 'ServiceCanvas', metadata: { title: 'Platform services' }, nodes,
       services: serviceKinds.map(kind => ({ id: kind, kind, name: t(`kind.${kind}`) })),
       instances: serviceKinds.map((kind, index) => ({ id: `instance-${kind}`, serviceRef: kind, nodeRef: nodes[Math.floor(index / 4)].id, role: 'standalone' })),
       groups: [{ id: 'platform', name: 'Platform services', nodeRefs: nodes.map(node => node.id) }],

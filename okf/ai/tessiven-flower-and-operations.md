@@ -30,12 +30,15 @@ outcome, so the user must inspect the original manager before trying again.
 - Existing canvases support bounded literal YAML reads (default 200, maximum
   500 lines and 64 KiB), paginated literal search, and exact replacement batches.
   Search and read return immutable version identity. `tessiven.edit` applies
-  1–50 ordered, uniquely matching replacements, preserves untouched YAML bytes,
+  1–50 ordered, uniquely matching replacements, preserves untouched YAML bytes
+  except for a reviewed DSL upgrade,
   validates the complete result, and commits one version through the same save
   transaction and permission boundary as full save. Invalid matches, invalid
   documents and stale versions change nothing. Retry identity covers the exact
   edit arguments, not merely the resulting document. Stored versions remain
   complete snapshots; partial model input does not introduce a storage lineage.
+  Exact schema selection, immutable historical source and automatic new-snapshot
+  upgrades follow the [DSL versioning contract](../architecture/tessiven-dsl-versioning.md).
   The skill prefers search/read/edit for ordinary changes and validate/save for
   creation or an explicitly requested wholesale rewrite.
 - Tool activity names the canvas operation and meaningful title, never an opaque

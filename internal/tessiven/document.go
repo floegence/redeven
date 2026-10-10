@@ -118,9 +118,12 @@ type Diagnostic struct {
 	Message string `json:"message"`
 }
 type Validation struct {
-	Valid       bool         `json:"valid"`
-	Diagnostics []Diagnostic `json:"diagnostics"`
-	Document    *Document    `json:"document,omitempty"`
+	Valid        bool           `json:"valid"`
+	Diagnostics  []Diagnostic   `json:"diagnostics"`
+	Document     *Document      `json:"document,omitempty"`
+	DSLVersion   string         `json:"dsl_version,omitempty"`
+	Migrations   []DSLMigration `json:"migrations,omitempty"`
+	documentYAML string
 }
 type ValidationError struct {
 	Diagnostics []Diagnostic `json:"diagnostics"`
@@ -144,18 +147,28 @@ func (e *ValidationError) InvalidArgumentsMeta() map[string]any {
 	return map[string]any{"path": d.Path, "line": d.Line, "column": d.Column}
 }
 
-var documentSchema = sync.OnceValues(func() (*jsonschema.Schema, error) {
-	c := jsonschema.NewCompiler()
-	c.AssertFormat = true
-	if err := c.AddResource("tessiven.json", strings.NewReader(string(tessivenspec.Schema))); err != nil {
-		return nil, err
+var documentSchemas = sync.OnceValues(func() (map[string]*jsonschema.Schema, error) {
+	result := map[string]*jsonschema.Schema{}
+	for _, format := range tessivenspec.Formats() {
+		c := jsonschema.NewCompiler()
+		c.AssertFormat = true
+		uri := format.Version + ".json"
+		if err := c.AddResource(uri, strings.NewReader(string(format.Schema))); err != nil {
+			return nil, err
+		}
+		schema, err := c.Compile(uri)
+		if err != nil {
+			return nil, err
+		}
+		result[format.Version] = schema
 	}
-	return c.Compile("tessiven.json")
+	return result, nil
 })
 
 func Schema() json.RawMessage { return append(json.RawMessage(nil), tessivenspec.Schema...) }
 
-// Validate rejects ambiguous YAML before applying the single public schema and
+// Validate rejects ambiguous YAML before applying the exact source schema,
+// the reviewed DSL upgrade chain, the current schema, and
 // cross-object contracts. It never interprets source locators or endpoint text.
 func Validate(source string) Validation {
 	return validateDocument(source, false)
@@ -187,8 +200,9 @@ func validateDocument(source string, storedVersion bool) Validation {
 		invalid = true
 		diagnose(path, message)
 	}
+	legacyPlacement := false
 	placement := func(path, message string) {
-		if !storedVersion {
+		if !legacyPlacement {
 			invalid = true
 		}
 		diagnose(path, message)
@@ -287,12 +301,29 @@ func validateDocument(source string, storedVersion bool) Validation {
 		add("", err.Error())
 		return result
 	}
-	schema, err := documentSchema()
+	object, ok := normalized.(map[string]any)
+	if !ok {
+		add("", "A document object is required.")
+		return result
+	}
+	apiVersion, _ := object["apiVersion"].(string)
+	format, supported := dslFormat(strings.TrimPrefix(apiVersion, tessivenspec.Namespace))
+	if !supported || apiVersion != tessivenspec.Namespace+format.Version {
+		add("/apiVersion", unsupportedDSLVersion(apiVersion).Error())
+		return result
+	}
+	result.DSLVersion = format.Version
+	legacyPlacement = storedVersion && format.Version == "v1"
+	schemas, err := documentSchemas()
 	if err != nil {
 		add("", "Document schema unavailable: "+err.Error())
 		return result
 	}
-	if err = schema.Validate(normalized); err != nil {
+	validateSchema := func(version string) bool {
+		err := schemas[version].Validate(normalized)
+		if err == nil {
+			return true
+		}
 		var flatten func(*jsonschema.ValidationError)
 		flatten = func(e *jsonschema.ValidationError) {
 			if len(e.Causes) == 0 {
@@ -308,6 +339,42 @@ func validateDocument(source string, storedVersion bool) Validation {
 		} else {
 			add("", err.Error())
 		}
+		return false
+	}
+	if !validateSchema(format.Version) {
+		return result
+	}
+	result.documentYAML = source
+	for format.UpgradeTo != "" {
+		next, exists := dslFormat(format.UpgradeTo)
+		if !exists {
+			add("/apiVersion", "The DSL upgrade chain is incomplete.")
+			return result
+		}
+		if format.Version != "v1" || next.Version != "v1.0.0" {
+			add("/apiVersion", "The DSL migration is not implemented.")
+			return result
+		}
+		upgraded, err := upgradeLegacyDSLHeader(result.documentYAML, locations["/apiVersion"], tessivenspec.Namespace+next.Version)
+		if err != nil {
+			add("/apiVersion", err.Error())
+			return result
+		}
+		if !storedVersion && len(upgraded) > MaxDocumentBytes {
+			add("/apiVersion", "The upgraded document exceeds 4194304 bytes; reduce the source size before saving.")
+			return result
+		}
+		result.documentYAML = upgraded
+		object["apiVersion"] = tessivenspec.Namespace + next.Version
+		result.Migrations = append(result.Migrations, DSLMigration{From: format.Version, To: next.Version})
+		format = next
+		if !validateSchema(format.Version) {
+			return result
+		}
+	}
+	encoded, err = json.Marshal(normalized)
+	if err != nil {
+		add("", err.Error())
 		return result
 	}
 	var document Document

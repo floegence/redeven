@@ -8,6 +8,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
+- [Tessiven DSL versioning](architecture/tessiven-dsl-versioning.md) - Select frozen semantic-version schemas and upgrade supported documents without rewriting history.
 - [Tessiven canvas contract](architecture/tessiven-canvas-contract.md) - Store one Runtime-owned, versioned YAML canvas library with stable topology identities.
 
 - [Native Runtime bridge](architecture/native-runtime-bridge.md) - Attach native SSH clients to running instances with independent, restricted authorization.

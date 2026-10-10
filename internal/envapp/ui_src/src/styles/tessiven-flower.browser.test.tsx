@@ -46,7 +46,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
   dispose = render(() => <FloeConfigProvider><LayoutProvider>
     {graph && <TessivenGraph t={tessivenText('en-US')} historical={false} onAsk={() => {}} onInspect={() => {}}
       version={{ canvas_id: 'commerce', number: 2, created_at: 1, digest: 'fixture', document_yaml: '', source: 'flower', summary: '',
-        document: { apiVersion: 'redeven.io/tessiven/v1', kind: 'ServiceCanvas', metadata: { title: 'Commerce / Production' },
+        document: { apiVersion: 'redeven.io/tessiven/v1.0.0', kind: 'ServiceCanvas', metadata: { title: 'Commerce / Production' },
           nodes: [{ id: 'core', name: 'production-01', runtimeRef: 'local:local' }],
           groups: [{ id: 'app', name: 'Application', nodeRefs: ['core'] }],
           services: [{ id: 'orders', name: 'Orders API', kind: 'api' }, { id: 'storefront', name: 'Storefront', kind: 'web' }],

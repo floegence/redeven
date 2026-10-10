@@ -58,7 +58,7 @@ export type Evidence = {
 };
 export type LayoutDirection = 'RIGHT' | 'DOWN' | 'LEFT' | 'UP';
 export type CanvasDocument = {
-  apiVersion: 'redeven.io/tessiven/v1';
+  apiVersion: 'redeven.io/tessiven/v1.0.0';
   kind: 'ServiceCanvas';
   metadata: { title: string; description?: string };
   nodes?: CanvasNode[];
@@ -86,7 +86,10 @@ export type Canvas = {
   updated_at: number;
   flower_thread_id?: string;
 };
+export type DSLMigration = { from: string; to: string };
 export type Version = {
+  dsl_version?: string;
+  migrations?: DSLMigration[];
   canvas_id: string;
   number: number;
   document_yaml: string;
@@ -106,6 +109,8 @@ export type Diagnostic = {
   message: string;
 };
 export type Validation = {
+  dsl_version?: string;
+  migrations?: DSLMigration[];
   valid: boolean;
   diagnostics: Diagnostic[];
   document?: CanvasDocument;

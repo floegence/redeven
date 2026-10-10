@@ -106,7 +106,7 @@ func TestTessivenRoutesRealManagedServiceLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer library.Close()
-	document := fmt.Sprintf("apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Fixture}\nnodes: [{id: host, name: Fixture, runtimeRef: 'local:local'}]\nservices: [{id: api, name: Fixture, kind: api}]\ninstances: [{id: service, nodeRef: host, serviceRef: api, role: standalone, binding: {owner: managed_service, resourceId: %s}}]\n", created.Service.ServiceID)
+	document := fmt.Sprintf("apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Fixture}\nnodes: [{id: host, name: Fixture, runtimeRef: 'local:local'}]\nservices: [{id: api, name: Fixture, kind: api}]\ninstances: [{id: service, nodeRef: host, serviceRef: api, role: standalone, binding: {owner: managed_service, resourceId: %s}}]\n", created.Service.ServiceID)
 	saved, err := library.Save(t.Context(), tessiven.SaveRequest{RequestID: "fixture-canvas", DocumentYAML: document}, "manual")
 	if err != nil {
 		t.Fatal(err)

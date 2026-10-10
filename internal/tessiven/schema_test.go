@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
@@ -28,18 +29,19 @@ func createV1Library(t *testing.T) (string, SaveRequest, SaveResult) {
 	if _, err := db.Exec(string(ddl)); err != nil {
 		t.Fatal(err)
 	}
-	request := SaveRequest{RequestID: "historical-save", CanvasID: "canvas-user", ExpectedVersion: 1, DocumentYAML: exampleDocument, Summary: "User revision"}
+	legacy := strings.Replace(exampleDocument, "redeven.io/tessiven/v1.0.0", "redeven.io/tessiven/v1", 1)
+	request := SaveRequest{RequestID: "historical-save", CanvasID: "canvas-user", ExpectedVersion: 1, DocumentYAML: legacy, Summary: "User revision"}
 	result := SaveResult{
 		Canvas:  Canvas{ID: "canvas-user", Title: "User canvas", Description: "Preserved description", LatestVersion: 2, CreatedAt: 100, UpdatedAt: 200},
-		Version: Version{CanvasID: "canvas-user", Number: 2, DocumentYAML: exampleDocument, Digest: digest(exampleDocument), CreatedAt: 200, Source: "flower", Summary: request.Summary},
+		Version: Version{CanvasID: "canvas-user", Number: 2, DocumentYAML: legacy, Digest: digest(legacy), CreatedAt: 200, Source: "flower", Summary: request.Summary},
 	}
 	if _, err := db.Exec(`INSERT INTO canvases VALUES(?,?,?,?,?,?,?), ('canvas-archived','Archived canvas','Archived description',1,1,50,75)`, result.Canvas.ID, result.Canvas.Title, result.Canvas.Description, 2, 0, 100, 200); err != nil {
 		t.Fatal(err)
 	}
 	for _, version := range []Version{
-		{CanvasID: "canvas-user", Number: 1, DocumentYAML: exampleDocument, Digest: digest(exampleDocument), CreatedAt: 100, Source: "manual", Summary: "Initial user version"},
+		{CanvasID: "canvas-user", Number: 1, DocumentYAML: legacy, Digest: digest(legacy), CreatedAt: 100, Source: "manual", Summary: "Initial user version"},
 		result.Version,
-		{CanvasID: "canvas-archived", Number: 1, DocumentYAML: exampleDocument, Digest: digest(exampleDocument), CreatedAt: 50, Source: "import", Summary: "Archived version"},
+		{CanvasID: "canvas-archived", Number: 1, DocumentYAML: legacy, Digest: digest(legacy), CreatedAt: 50, Source: "import", Summary: "Archived version"},
 	} {
 		if _, err := db.Exec(`INSERT INTO versions VALUES(?,?,?,?,?,?,?)`, version.CanvasID, version.Number, version.DocumentYAML, version.Digest, version.CreatedAt, version.Source, version.Summary); err != nil {
 			t.Fatal(err)
@@ -105,10 +107,16 @@ func TestV1LibraryMigratesBeforeOpeningAndPreservesRecords(t *testing.T) {
 	}
 	for number := int64(1); number <= 2; number++ {
 		v, err := s.Version(t.Context(), original.Canvas.ID, number)
-		if err != nil || v.DocumentYAML != exampleDocument || v.Digest != digest(exampleDocument) || v.CreatedAt != number*100 {
+		if err != nil || v.DocumentYAML != request.DocumentYAML || v.Digest != digest(request.DocumentYAML) || v.CreatedAt != number*100 {
 			t.Fatalf("version %d changed: %+v, %v", number, v, err)
 		}
 	}
+	// The persisted retry payload remains immutable; its read projection upgrades.
+	projection := Validate(request.DocumentYAML)
+	original.Version.Document = projection.Document
+	original.Version.Diagnostics = projection.Diagnostics
+	original.Version.DSLVersion = "v1"
+	original.Version.Migrations = []DSLMigration{{From: "v1", To: "v1.0.0"}}
 	retry, err := s.Save(t.Context(), request, "flower")
 	if err != nil || !reflect.DeepEqual(retry, original) {
 		t.Fatalf("historical idempotent result changed: %+v, %v", retry, err)

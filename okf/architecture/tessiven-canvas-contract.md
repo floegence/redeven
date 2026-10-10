@@ -8,7 +8,7 @@ timestamp: 2026-10-08T00:00:00Z
 # Summary
 
 Tessiven is the Runtime-owned library of immutable service canvases. Each
-canvas stores a complete `redeven.io/tessiven/v1` YAML document and every save
+canvas stores a complete `redeven.io/tessiven/v1.0.0` YAML document and every save
 creates a new version. The Runtime is the single owner of canvas data; the
 Desktop Welcome surface and the local Env App render that same library. A
 failed validation or version conflict leaves the last saved document intact.
@@ -26,8 +26,9 @@ failed validation or version conflict leaves the last saved document intact.
   the supported semantic types, including orchestration, execution, network,
   observability, security and data services. Unknown kinds fail validation;
   generic `service` remains valid when the responsibility is unknown. Adding
-  kinds expands the v1 document vocabulary without rewriting saved versions or
-  changing the SQLite schema. The [canvas UI contract](../ui/tessiven-canvas.md)
+  kinds requires a new immutable DSL version under the
+  [DSL versioning contract](tessiven-dsl-versioning.md); it does not rewrite
+  saved versions or change the SQLite schema. The [canvas UI contract](../ui/tessiven-canvas.md)
   owns display-only refinement of generic icons through known service names;
   that catalog never changes the document's canonical kind.
 - Groups are visual membership only. Instance bindings and Runtime references
@@ -72,8 +73,10 @@ failed validation or version conflict leaves the last saved document intact.
   compatibility; schema, references, security, uniqueness and digest checks
   still reject corrupt versions. Reads never rewrite YAML or invent hosts.
   Every new version, including restore, duplicate and rename, requires repair
-  through the current strict validate/save contract. This compatibility lasts
-  for the v1 document lineage because immutable history remains supported.
+  through the current strict validate/save contract. This compatibility is limited
+  to the frozen legacy `v1` input; semantic-version documents must satisfy their
+  current contracts. The [DSL versioning contract](tessiven-dsl-versioning.md)
+  owns version selection, read projections and write upgrades.
 
 # Storage Upgrades
 
@@ -103,7 +106,7 @@ background, or synchronize libraries between devices.
 
 # Evidence
 
-- `spec/tessiven/v1.schema.json`
+- `spec/tessiven/v1.0.0.schema.json`
 - `internal/tessiven/document.go`
 - `internal/tessiven/document_test.go` - Shared-node membership validation and YAML round-trip.
 - `internal/tessiven/store.go`
