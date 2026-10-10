@@ -189,6 +189,53 @@ afterEach(() => {
   document.documentElement.classList.remove('dark', 'light');
 });
 describe('Tessiven real graph interactions', () => {
+  it('keeps legacy unplaced services visible for repair without claiming an observation', async () => {
+    const version = fixture();
+    version.document.services!.push({ id: 'agent', name: 'Node agent', kind: 'node_agent' });
+    version.document.presentation!.layers = [['application'], ['agent'], ['cdn', 'bucket']];
+    version.diagnostics = [{ path: '/services/2/id', line: 1, column: 1, message: 'A service must have at least one instance on an existing node.' }];
+    const original = JSON.stringify(version.document);
+    const { ask } = mount(2, version);
+    await expect.poll(() => host.querySelector('[data-placement="missing"] small')?.textContent).toBe('No node assigned');
+    expect(host.querySelectorAll('.tessiven-error')).toHaveLength(0);
+    const missing = host.querySelector<HTMLElement>('[data-placement="missing"]')!;
+    for (const name of ['porcelain-light', 'porcelain-dark', 'hc-light', 'graphite']) {
+      const theme = builtInShellThemePresets.find(theme => theme.name === name)!;
+      document.documentElement.classList.toggle('dark', theme.mode === 'dark');
+      for (const [key, value] of Object.entries(theme.semanticTokens ?? {}))
+        if (value) document.documentElement.style.setProperty(key, value);
+      const label = missing.querySelector('small')!;
+      expect(contrast(getComputedStyle(label).color, getComputedStyle(missing).backgroundColor)).toBeGreaterThanOrEqual(4.5);
+      await page.screenshot({ path: `../../.vitest-attachments/tessiven-placement-${theme.name}.png` });
+    }
+    await userEvent.click(missing);
+    await page.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+    expect(ask.mock.calls[0][0].object_refs).toEqual(['agent']);
+    expect(JSON.stringify(version.document)).toBe(original);
+  });
+
+  it('shows hosted-service summary counts consistently in the graph and thumbnail', async () => {
+    const version = fixture(16);
+    version.document.groups = [];
+    host = document.createElement('div');
+    host.className = 'tessiven';
+    host.style.cssText = 'width:1250px;height:740px;position:relative';
+    document.body.append(host);
+    const engine = createGraphLayoutEngine();
+    dispose = render(() => <>
+      <TessivenGraph version={version} historical={false} t={tessivenText('en-US')}
+        onAsk={() => {}} onInspect={() => {}} />
+      <TessivenThumbnail document={version.document} t={tessivenText('en-US')} engine={engine} />
+    </>, host);
+    try {
+      await expect.poll(() => host.querySelector('.tessiven-thumbnail-resource small')?.textContent).toBeTruthy();
+      await expect.poll(() => host.querySelectorAll('[data-placement="hosted"]').length).toBe(2);
+      expect([...host.querySelectorAll('[data-placement="hosted"] small')].map(node => node.textContent)).toEqual(['Instances · 16', 'Instances · 16']);
+      expect(host.querySelector('.tessiven-thumbnail')!.textContent).not.toContain('No node assigned');
+      expect(host.querySelector('.tessiven-thumbnail')!.textContent).toContain('Instances · 16');
+    } finally { engine.dispose(); }
+  });
+
   it('preserves native render notifications and details while controlling touch zoom', async () => {
     host = document.createElement('div');
     host.className = 'tessiven';

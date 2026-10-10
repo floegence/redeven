@@ -83,7 +83,7 @@
   "runtimeNode": "Узел среды выполнения",
   "externalResource": "Внешняя зависимость",
   "endpoint": "Конечная точка",
-  "unplacedService": "Наблюдаемых экземпляров нет",
+  "unplacedService": "Узел не назначен",
   "canvasLabel": "Холст сервисов Tessiven",
   "fit": "Вписать холст",
   "details": "Подробности",

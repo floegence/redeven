@@ -37,6 +37,35 @@ func TestServiceResponsibilityKinds(t *testing.T) {
 	}
 }
 
+func TestServicesRequireHostPlacements(t *testing.T) {
+	unplaced := strings.Replace(exampleDocument, "instances:\n  - {id: orders-01, nodeRef: core-01, serviceRef: orders, role: standalone, binding: {owner: managed_service, resourceId: example-service-id}}\n", "", 1)
+	for _, source := range []string{unplaced, unplaced + "presentation:\n  layers:\n    - [orders]\n"} {
+		result := Validate(source)
+		if result.Valid {
+			t.Fatal("a service without a host placement was accepted")
+		}
+		found := false
+		for _, diagnostic := range result.Diagnostics {
+			if diagnostic.Path == "/services/0/id" && strings.Contains(diagnostic.Message, "node") {
+				found = diagnostic.Line > 0 && diagnostic.Column > 0
+			}
+		}
+		if !found {
+			t.Fatalf("missing located service placement diagnostic: %+v", result.Diagnostics)
+		}
+	}
+	// Reference architectures can describe inferred, unmanaged placements.
+	unbound := strings.Replace(exampleDocument, ", binding: {owner: managed_service, resourceId: example-service-id}", "", 1)
+	unbound = strings.Replace(unbound, "runtimeRef: 'local:local'", "runtimeRef: 'conceptual:application'", 1)
+	if result := Validate(unbound); !result.Valid {
+		t.Fatalf("unmanaged reference placement rejected: %+v", result.Diagnostics)
+	}
+	external := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: External dependencies}\nresources:\n  - {id: api, name: External API, kind: external}\n"
+	if result := Validate(external); !result.Valid {
+		t.Fatalf("external resource should not require a host: %+v", result.Diagnostics)
+	}
+}
+
 func TestPresentationPositionHints(t *testing.T) {
 	var schema map[string]any
 	if err := json.Unmarshal(Schema(), &schema); err != nil {
@@ -64,8 +93,8 @@ func TestPresentationPositionHints(t *testing.T) {
 		"services:\n  - {id: orders, name: Orders API, kind: api}",
 		"services:\n  - {id: orders, name: Orders API, kind: api}\n  - {id: catalog, name: Catalog API, kind: api}", 1)
 	unplaced += "presentation:\n  positions:\n    - {objectRef: catalog, x: 20, y: 40}\n"
-	if result := Validate(unplaced); !result.Valid {
-		t.Fatalf("unplaced services must accept preferred positions: %+v", result.Diagnostics)
+	if result := Validate(unplaced); result.Valid {
+		t.Fatal("unplaced services must not accept independent preferred positions")
 	}
 }
 
@@ -96,13 +125,10 @@ func TestPresentationLayers(t *testing.T) {
 	}
 	rootObjects := strings.Replace(exampleDocument,
 		"groups:\n  - {id: application, name: Application nodes, nodeRefs: [core-01]}\n", "", 1)
-	rootObjects = strings.Replace(rootObjects,
-		"services:\n  - {id: orders, name: Orders API, kind: api}",
-		"services:\n  - {id: orders, name: Orders API, kind: api}\n  - {id: catalog, name: Catalog API, kind: api}", 1)
 	rootObjects = strings.Replace(rootObjects, "evidence:\n",
-		"presentation:\n  direction: DOWN\n  layers:\n    - [core-01, catalog]\n    - [assets]\nevidence:\n", 1)
+		"presentation:\n  direction: DOWN\n  layers:\n    - [core-01]\n    - [assets]\nevidence:\n", 1)
 	if result := Validate(rootObjects); !result.Valid {
-		t.Fatalf("ungrouped nodes and unplaced services must be valid root layer objects: %+v", result.Diagnostics)
+		t.Fatalf("ungrouped nodes and resources must be valid root layer objects: %+v", result.Diagnostics)
 	}
 	for _, tc := range []struct {
 		name        string

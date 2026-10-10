@@ -2,6 +2,7 @@
 // Qualify the built product through a fresh, real Runtime. Only model output is
 // scripted; never attach this test to an existing browser or user environment.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
@@ -10,6 +11,7 @@ import path from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { load as loadYAML } from 'js-yaml';
 
 const options = new Map();
 for (let index = 2; index < process.argv.length; index += 2) {
@@ -26,6 +28,8 @@ const libraryPath = path.join(state, 'local-environment/apps/tessiven/canvases.s
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), scenarios: [], question_geometry: [], canvas_context: [] };
 let runtime, browser, runtimeLog = '', providerCalls = 0, questionNext = false;
 let canvasSaveNext;
+let canvasSaveCallID;
+const canvasToolOutputs = new Map();
 let layeredCanvas;
 const reply = 'The storefront calls Orders API, which reads the Orders database.';
 const question = {
@@ -47,12 +51,17 @@ const provider = http.createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;
   const input = JSON.parse(raw);
+  for (const item of input.input ?? []) {
+    if (item.type === 'function_call_output' && item.call_id?.startsWith('canvas-'))
+      canvasToolOutputs.set(item.call_id, JSON.parse(item.output.replace(/^ERROR: /, '')));
+  }
   providerCalls++;
   response.setHeader('Content-Type', 'text/event-stream');
   const send = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
   if (canvasSaveNext && input.tools?.some(tool => tool.name === 'tessiven_save')) {
     const item = { type: 'function_call', id: `canvas-${providerCalls}`, call_id: `canvas-${providerCalls}`, name: 'tessiven_save',
       arguments: JSON.stringify(canvasSaveNext) };
+    canvasSaveCallID = item.call_id;
     canvasSaveNext = undefined;
     send({ type: 'response.output_item.added', output_index: 0, item });
     send({ type: 'response.output_item.done', output_index: 0, item });
@@ -375,6 +384,90 @@ async function saveLayeredCanvas(page, origin) {
   report.scenarios.push('flower-validates-and-saves-layered-hadoop');
 }
 
+async function seedHistoricalPlacementFixture() {
+  // Only the isolated qualification library is written. The two immutable
+  // versions model a document that the former contract admitted.
+  const document = loadYAML(await readFile(path.join(root, 'internal/tessiven/example.yaml'), 'utf8'));
+  document.metadata.title = 'Placement / Reference';
+  const complete = JSON.stringify(document);
+  document.instances = document.instances.filter(instance => instance.serviceRef !== 'demo-worker');
+  document.presentation.layers = [['demo-application'], ['demo-worker']];
+  document.presentation.positions = [{ objectRef: 'demo-worker', x: 400, y: 0 }];
+  const historical = JSON.stringify(document);
+  const db = new DatabaseSync(libraryPath);
+  try {
+    db.exec('BEGIN');
+    db.prepare('INSERT INTO canvases(id,title,description,latest_version,archived,created_at,updated_at) VALUES(?,?,?,2,0,0,0)')
+      .run('placement-qualification', document.metadata.title, document.metadata.description);
+    const insert = db.prepare('INSERT INTO versions(canvas_id,number,document_yaml,digest,created_at,source,summary) VALUES(?,?,?,?,0,?,?)');
+    for (const [index, yaml] of [complete, historical].entries())
+      insert.run('placement-qualification', index + 1, yaml, createHash('sha256').update(yaml).digest('hex'), 'example', 'Historical placement qualification');
+    db.exec('COMMIT');
+  } finally { db.close(); }
+}
+
+async function verifyPlacementRepair(page, origin) {
+  const surface = page.locator('.tessiven');
+  await surface.getByRole('button', { name: 'Canvases', exact: true }).click();
+  await surface.getByRole('button', { name: 'Placement / Reference', exact: true }).click();
+  const missing = surface.locator('[data-placement="missing"]');
+  await missing.waitFor();
+  assert.equal(await missing.locator('small').innerText(), 'No node assigned');
+  assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0);
+  const versionPath = '/_redeven_proxy/api/tessiven/canvases/placement-qualification/versions/';
+  const historical = await requestJSON(origin, `${versionPath}2`);
+  assert.equal(historical.diagnostics.length, 3);
+  const validation = await requestJSON(origin, '/_redeven_proxy/api/tessiven/validate', 'POST', { document_yaml: historical.document_yaml });
+  assert.equal(validation.valid, false);
+  assert.deepEqual(validation.diagnostics, historical.diagnostics);
+  await page.screenshot({ path: path.join(output, 'placement-historical.png'), animations: 'disabled' });
+  await missing.click();
+  await page.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+  const replies = page.locator('.tessiven-flower-output');
+  const sendDocument = async (requestID, yaml, prompt) => {
+    canvasSaveCallID = undefined;
+    canvasSaveNext = { request_id: requestID, canvas_id: 'placement-qualification', expected_version: 2, document_yaml: yaml, summary: prompt };
+    await replies.locator('.flower-composer textarea').fill(prompt);
+    await replies.getByRole('button', { name: 'Send', exact: true }).click();
+    const result = await until(async () => {
+      const approve = replies.locator('.flower-approval-decision-approve:not([disabled])');
+      if (await approve.count()) await approve.first().click();
+      return canvasSaveCallID && canvasToolOutputs.get(canvasSaveCallID);
+    }, 'Flower receives the placement save result');
+    await until(() => surface.locator('[data-flower-selected-thread-status="success"]').count(), 'placement turn completes');
+    return result;
+  };
+  const refused = await sendDocument('placement-invalid', historical.document_yaml, 'Keep the service without a host placement.');
+  report.placement_tool_results = { refused };
+  assert.equal(refused.status, 'error');
+  assert.match(JSON.stringify(refused), /tessiven.invalid_document/);
+  assert.match(JSON.stringify(refused), /\/services\/2\/id/);
+  assert.equal(refused.error.meta.validation_details.path, '/services/2/id');
+  assert.equal(refused.data.diagnostics[0].path, '/services/2/id');
+  assert.equal(refused.data.diagnostics.length, 3);
+  assert.equal((await requestJSON(origin, `${versionPath}latest`)).number, 2, 'Rejected Flower save does not create a version');
+  const complete = await requestJSON(origin, `${versionPath}1`);
+  const saved = await sendDocument('placement-repaired', complete.document_yaml, 'Restore Background jobs on app-01 using the placements in version 1.');
+  assert.equal(saved.status, 'success');
+  await until(async () => (await requestJSON(origin, `${versionPath}latest`)).number === 3, 'Flower saves the repaired version');
+  await until(async () => await missing.count() === 0, 'live canvas removes the missing-node card');
+  await surface.locator('.tessiven-service[data-service-id="demo-worker"]').waitFor();
+  const repaired = await requestJSON(origin, `${versionPath}latest`);
+  assert.equal(repaired.diagnostics, undefined);
+  assert.equal(repaired.document.instances.length, complete.document.instances.length);
+  const preserved = await requestJSON(origin, `${versionPath}2`);
+  assert.equal(preserved.document_yaml, historical.document_yaml);
+  assert.equal(preserved.digest, historical.digest);
+  await page.reload();
+  await page.locator('.tessiven-library-card').first().waitFor();
+  await surface.getByRole('button', { name: 'Placement / Reference', exact: true }).click();
+  await surface.locator('.tessiven-service[data-service-id="demo-worker"]').waitFor();
+  assert.equal(await missing.count(), 0);
+  assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0);
+  await page.screenshot({ path: path.join(output, 'placement-repaired.png'), animations: 'disabled' });
+  report.scenarios.push('historical-placement-read-rejected-flower-save-repair-live-update-refresh');
+}
+
 async function verifyLayeredCanvas(page, name) {
   const surface = page.locator('.tessiven');
   const replies = page.locator('.tessiven-flower-output');
@@ -556,6 +649,14 @@ async function startRuntime(binary, startupFile) {
   return startup;
 }
 
+async function waitFlowerReady(origin) {
+  await until(async () => {
+    const state = (await requestJSON(origin, '/api/local/runtime')).runtime_service.ai_readiness;
+    assert.notEqual(state.state, 'blocked', `Flower startup must not be blocked: ${JSON.stringify(state)}`);
+    return state.state === 'ready' || state.state === 'degraded';
+  }, 'Flower startup maintenance');
+}
+
 try {
   await mkdir(output, { recursive: true });
   const binary = path.join(temp, 'redeven');
@@ -590,20 +691,24 @@ try {
       }
     };
     verifyMigration();
+    await waitFlowerReady(startup.local_ui_url);
     await stopRuntime();
     startup = await startRuntime(binary, startupFile);
     verifyMigration();
     report.migration = { from: 1, to: 2, canvases: originalRecords.canvases.length, versions: originalRecords.versions.length, requests: originalRecords.requests.length };
     report.scenarios.push('historical-library-upgrade-and-runtime-restart');
   }
+  // Let the thread-store owner finish its first initialization before testing
+  // a deliberate restart; never interrupt or repair that owner's bootstrap.
+  await waitFlowerReady(startup.local_ui_url);
+  await stopRuntime();
+  await seedHistoricalPlacementFixture();
+  startup = await startRuntime(binary, startupFile);
+  report.scenarios.push('historical-placement-runtime-restart');
   const origin = startup.local_ui_url;
   const initialLayout = await requestJSON(origin, '/_redeven_proxy/api/workbench/layout/snapshot');
   assert.equal(initialLayout.revision, 0);
-  await until(async () => {
-    const state = (await requestJSON(origin, '/api/local/runtime')).runtime_service.ai_readiness;
-    assert.notEqual(state.state, 'blocked', 'Flower startup must not be blocked');
-    return state.state === 'ready' || state.state === 'degraded';
-  }, 'Flower startup maintenance');
+  await waitFlowerReady(origin);
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
   await requestJSON(origin, '/_redeven_proxy/api/ai/provider_bundle', 'PUT', {
     model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Local acceptance', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text', 'image'], context_window: 400000, max_output_tokens: 8192 }] }] },
@@ -657,6 +762,7 @@ try {
   await verifyShortQuestion(page, 'activity');
   await verifyEmptyCanvas(page);
   await verifyLayeredCanvas(page, 'activity-hadoop');
+  await verifyPlacementRepair(page, origin);
   if (originalRecords) {
     const surface = page.locator('.tessiven');
     for (const canvas of originalRecords.canvases.filter(canvas => !canvas.archived)) {

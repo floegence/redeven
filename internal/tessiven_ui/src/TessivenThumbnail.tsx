@@ -72,7 +72,11 @@ export function TessivenThumbnail(props: {
       >
         <TessivenIcon kind={kind} name={card.kind === 'service' ? card.service.name : undefined} />
         <strong>{node.label}</strong>
-        <small>{props.t(card.kind === 'resource' ? `kind.${kind}` : 'unplacedService')}</small>
+        <small>{card.kind === 'resource'
+          ? props.t(`kind.${kind}`)
+          : card.instanceCount
+            ? `${props.t('collection.instances')} · ${card.instanceCount}`
+            : props.t('unplacedService')}</small>
       </div>
     );
   };

@@ -95,17 +95,19 @@ export type Version = {
   created_at: number;
   source: string;
   summary: string;
+  diagnostics?: Diagnostic[];
 };
 export type VersionSummary = Omit<Version, 'document' | 'document_yaml'>;
 export type SaveResult = { canvas: Canvas; version: Version };
+export type Diagnostic = {
+  path: string;
+  line: number;
+  column: number;
+  message: string;
+};
 export type Validation = {
   valid: boolean;
-  diagnostics: {
-    path: string;
-    line: number;
-    column: number;
-    message: string;
-  }[];
+  diagnostics: Diagnostic[];
   document?: CanvasDocument;
 };
 export type Selection = {

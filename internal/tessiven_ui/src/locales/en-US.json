@@ -83,7 +83,7 @@
   "runtimeNode": "Runtime node",
   "externalResource": "External dependency",
   "endpoint": "Endpoint",
-  "unplacedService": "No observed instance",
+  "unplacedService": "No node assigned",
   "canvasLabel": "Tessiven service canvas",
   "fit": "Fit canvas",
   "details": "Details",

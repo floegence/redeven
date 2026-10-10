@@ -83,7 +83,7 @@
   "runtimeNode": "執行階段節點",
   "externalResource": "外部相依資源",
   "endpoint": "端點",
-  "unplacedService": "尚未觀測到執行個體",
+  "unplacedService": "未指定所屬節點",
   "canvasLabel": "Tessiven 服務畫布",
   "fit": "符合畫布大小",
   "details": "詳細資訊",

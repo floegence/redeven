@@ -1103,6 +1103,9 @@
   color: var(--ts-muted);
   font-size: 10px;
 }
+.tessiven-unplaced[data-placement="missing"] small {
+  color: var(--ts-icon-amber);
+}
 .tessiven-icon {
   width: 23px;
   height: 23px;

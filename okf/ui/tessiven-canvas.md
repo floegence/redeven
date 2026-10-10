@@ -213,8 +213,13 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   service-name aliases refines the displayed icon (for example, containerd uses
   the container-runtime silhouette). Unrecognized names retain the saved kind;
   IDs, descriptions, and unrelated specific kinds never drive this refinement.
-  This display mapping is shared by host inventories, collapsed groups, unplaced
-  services, and thumbnails. It never changes saved responsibilities, management
+  This display mapping is shared by host inventories, collapsed groups, service
+  summaries, and thumbnails. Legacy services without placements display an
+  explicit missing-node label, not an observation status; large hosted-service
+  summaries display their instance count in both graph and thumbnail. The
+  [document contract](../architecture/tessiven-canvas-contract.md) prevents
+  new unplaced services while keeping immutable history readable for repair.
+  The display mapping never changes saved responsibilities, management
   identity, permissions, or historical documents. Separate responsibilities
   include cloud controllers, node agents, container runtimes, network plugins,
   service meshes, ingress, operators, registries, observability, identity, secret

@@ -17,6 +17,10 @@ failed validation or version conflict leaves the last saved document intact.
 
 - A canvas document contains stable IDs for Runtime nodes, visual groups,
   business services, instances, external resources, relations, and evidence.
+- Every service has at least one instance on an existing node. Dependencies
+  outside modeled hosts are resources. Reference architectures may describe
+  inferred host placements without bindings or live observations. A missing
+  placement fails validate/save at the service ID with a source location.
 - A service kind describes its primary responsibility independently of its
   product name, instance role or deployment format. The document schema owns
   the supported semantic types, including orchestration, execution, network,
@@ -42,7 +46,7 @@ failed validation or version conflict leaves the last saved document intact.
   executable scripts, credentials, arbitrary styles, or management commands.
   Optional `presentation.direction` (`RIGHT`, `DOWN`, `LEFT`, or `UP`) and
   ordered `presentation.layers` declare root layout ranks. Layers accept groups,
-  ungrouped nodes, unplaced services, and resources; grouped nodes and placed
+  ungrouped nodes and resources; grouped nodes and all
   services inherit placement from their visual group or host. Every declared
   layer is nonempty and an object may appear only once. Unassigned objects join
   the nearest declared layer by shortest relationship distance; ties and
@@ -62,6 +66,14 @@ failed validation or version conflict leaves the last saved document intact.
   version. Network retries return the same canvas. User-authored document
   mutations use the authorized Flower tools, not manual HTTP write routes.
 - Historical and archived versions are readable but cannot mutate resources.
+- Older immutable versions admitted without service placements remain readable
+  with repair `diagnostics` on the returned version. Only the formerly allowed
+  missing placements and their service-level layers/positions receive this read
+  compatibility; schema, references, security, uniqueness and digest checks
+  still reject corrupt versions. Reads never rewrite YAML or invent hosts.
+  Every new version, including restore, duplicate and rename, requires repair
+  through the current strict validate/save contract. This compatibility lasts
+  for the v1 document lineage because immutable history remains supported.
 
 # Storage Upgrades
 

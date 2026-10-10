@@ -32,6 +32,16 @@ outcome, so the user must inspect the original manager before trying again.
   management bindings to example identities.
 - Flower preserves stable object IDs, adds evidence and observation times, and
   never guesses a management identity from a name, address, or process.
+- Flower models every service on nodes through instances, including inferred
+  unbound placements in reference architectures. External dependencies use
+  resources. It never removes deployment placements to simplify visuals;
+  browsing controls handle density. Historical read diagnostics identify
+  missing placements and invalid service-level layout hints; Flower uses
+  evidence to repair these before creating a new version under the
+  [document contract](../architecture/tessiven-canvas-contract.md).
+  Save validation failures are typed invalid-argument results with source paths
+  and full diagnostic results, so Flower can correct the document rather than
+  treating the failure as a transport error.
 - Mixed deployments reuse physical node IDs across logical group `nodeRefs`
   and use exact `instanceRefs` to distinguish projects and same-type clusters.
   They never duplicate hosts, instances, bindings, or permissions to create a

@@ -83,7 +83,7 @@
   "runtimeNode": "运行时节点",
   "externalResource": "外部依赖",
   "endpoint": "端点",
-  "unplacedService": "尚未观测到实例",
+  "unplacedService": "未归属节点",
   "canvasLabel": "Tessiven 服务画布",
   "fit": "适应画布",
   "details": "详情",

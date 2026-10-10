@@ -126,7 +126,23 @@ type ValidationError struct {
 	Diagnostics []Diagnostic `json:"diagnostics"`
 }
 
-func (e *ValidationError) Error() string { return "Tessiven document validation failed" }
+func (e *ValidationError) Error() string {
+	if len(e.Diagnostics) == 0 {
+		return "Tessiven document validation failed"
+	}
+	d := e.Diagnostics[0]
+	return fmt.Sprintf("Tessiven document validation failed at %s (%d:%d): %s", d.Path, d.Line, d.Column, d.Message)
+}
+
+func (e *ValidationError) InvalidArgumentsCode() string { return "tessiven.invalid_document" }
+
+func (e *ValidationError) InvalidArgumentsMeta() map[string]any {
+	if len(e.Diagnostics) == 0 {
+		return nil
+	}
+	d := e.Diagnostics[0]
+	return map[string]any{"path": d.Path, "line": d.Line, "column": d.Column}
+}
 
 var documentSchema = sync.OnceValues(func() (*jsonschema.Schema, error) {
 	c := jsonschema.NewCompiler()
@@ -142,9 +158,18 @@ func Schema() json.RawMessage { return append(json.RawMessage(nil), tessivenspec
 // Validate rejects ambiguous YAML before applying the single public schema and
 // cross-object contracts. It never interprets source locators or endpoint text.
 func Validate(source string) Validation {
+	return validateDocument(source, false)
+}
+
+// Stored versions admitted before host placement became mandatory remain
+// readable for repair. Only those formerly valid placement/layout rules become
+// diagnostics; schema, reference, and security failures still reject the read.
+// New versions always go through Validate, including restore and duplicate.
+func validateDocument(source string, storedVersion bool) Validation {
 	result := Validation{Diagnostics: []Diagnostic{}}
 	locations := map[string]*yaml.Node{}
-	add := func(path, message string) {
+	invalid := false
+	diagnose := func(path, message string) {
 		if len(result.Diagnostics) >= 100 {
 			return
 		}
@@ -157,6 +182,16 @@ func Validate(source string) Validation {
 			d.Line, d.Column = location.Line, location.Column
 		}
 		result.Diagnostics = append(result.Diagnostics, d)
+	}
+	add := func(path, message string) {
+		invalid = true
+		diagnose(path, message)
+	}
+	placement := func(path, message string) {
+		if !storedVersion {
+			invalid = true
+		}
+		diagnose(path, message)
 	}
 	if len(source) == 0 || len(source) > MaxDocumentBytes {
 		add("", "Document must contain between 1 and 4194304 bytes.")
@@ -349,11 +384,20 @@ func Validate(source string) Validation {
 	for i, v := range document.Nodes {
 		observe(v.Observation, fmt.Sprintf("/nodes/%d", i))
 	}
+	placedServices := map[string]bool{}
 	for i, v := range document.Instances {
 		p := fmt.Sprintf("/instances/%d", i)
 		check(v.NodeRef, p+"/nodeRef", "node")
 		check(v.ServiceRef, p+"/serviceRef", "service")
+		if kinds[v.NodeRef] == "node" && kinds[v.ServiceRef] == "service" {
+			placedServices[v.ServiceRef] = true
+		}
 		observe(v.Observation, p)
+	}
+	for i, service := range document.Services {
+		if !placedServices[service.ID] {
+			placement(fmt.Sprintf("/services/%d/id", i), "A service must have at least one instance on an existing node. Model external dependencies as resources; reference architectures may use unbound, inferred node instances.")
+		}
 	}
 	for i, v := range document.Resources {
 		p := fmt.Sprintf("/resources/%d", i)
@@ -392,10 +436,6 @@ func Validate(source string) Validation {
 				groupedNodes[nodeID] = true
 			}
 		}
-		placedServices := map[string]bool{}
-		for _, instance := range document.Instances {
-			placedServices[instance.ServiceRef] = true
-		}
 		seenLayerObjects := map[string]bool{}
 		for i, layer := range p.Layers {
 			if len(layer) == 0 {
@@ -416,11 +456,13 @@ func Validate(source string) Validation {
 				case "service":
 					if placedServices[id] {
 						add(path, "A placed service inherits its layout layer from its host or group.")
+					} else {
+						placement(path, "A service inherits its layout layer from its host or group; assign it to a node through an instance.")
 					}
 				case "":
 					add(path, "Layout layers must reference an existing root layout object.")
 				default:
-					add(path, "Layout layers support groups, ungrouped nodes, unplaced services, and resources only.")
+					add(path, "Layout layers support groups, ungrouped nodes, and resources only.")
 				}
 			}
 		}
@@ -430,6 +472,8 @@ func Validate(source string) Validation {
 			check(pos.ObjectRef, path, "node", "group", "resource", "service")
 			if kinds[pos.ObjectRef] == "service" && placedServices[pos.ObjectRef] {
 				add(path, "A placed service inherits its preferred position from its host.")
+			} else if kinds[pos.ObjectRef] == "service" {
+				placement(path, "A service inherits its preferred position from its host; assign it to a node through an instance.")
 			}
 			if seen[pos.ObjectRef] {
 				add(path, "An object can have only one layout position.")
@@ -440,7 +484,7 @@ func Validate(source string) Validation {
 	if strings.TrimSpace(document.Metadata.Title) == "" {
 		add("/metadata/title", "Title must not be blank.")
 	}
-	result.Valid = len(result.Diagnostics) == 0
+	result.Valid = !invalid
 	if result.Valid {
 		result.Document = &document
 	}

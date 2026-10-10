@@ -83,7 +83,7 @@
   "runtimeNode": "ランタイムノード",
   "externalResource": "外部依存リソース",
   "endpoint": "エンドポイント",
-  "unplacedService": "観測済みインスタンスなし",
+  "unplacedService": "ノード未割り当て",
   "canvasLabel": "Tessiven サービスキャンバス",
   "fit": "全体を表示",
   "details": "詳細",

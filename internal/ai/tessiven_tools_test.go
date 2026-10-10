@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/tessiven"
 )
@@ -82,12 +83,16 @@ func TestTessivenContextPreservesHistoryAndBoundedReferenceParts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer library.Close()
-	document := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Original}\nservices:\n"
+	document := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Original}\nnodes: [{id: host, name: Reference host, runtimeRef: 'conceptual:host'}]\nservices:\n"
 	refs := []string{}
 	for i := 0; i < 100; i++ {
 		id := strings.Repeat("a", 125) + string(rune('A'+i/26)) + string(rune('A'+i%26))
 		refs = append(refs, id)
 		document += "  - {id: " + id + ", name: service, kind: api}\n"
+	}
+	document += "instances:\n"
+	for _, id := range refs {
+		document += "  - {id: i-" + id[2:] + ", nodeRef: host, serviceRef: " + id + ", role: standalone}\n"
 	}
 	saved, err := library.Save(t.Context(), tessiven.SaveRequest{RequestID: "initial", DocumentYAML: document}, "manual")
 	if err != nil {
@@ -122,6 +127,48 @@ func TestTessivenContextPreservesHistoryAndBoundedReferenceParts(t *testing.T) {
 	}
 	if len(projection.Context) != 2 {
 		t.Fatal("missing skill guidance")
+	}
+}
+
+func TestTessivenToolsRejectUnplacedServicesWithoutCreatingVersions(t *testing.T) {
+	library, err := tessiven.Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	r := &run{host: runHostCapabilities{tessiven: library}}
+	meta := &session.Meta{CanRead: true, CanWrite: true}
+	document := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Reference architecture}\nservices: [{id: api, name: API, kind: api}]\n"
+	result, err := r.execTessivenTool(t.Context(), meta, "tessiven.validate", map[string]any{"document_yaml": document})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validation := result.(tessiven.Validation)
+	if validation.Valid || len(validation.Diagnostics) != 1 || validation.Diagnostics[0].Path != "/services/0/id" {
+		t.Fatalf("missing model-facing placement diagnostic: %+v", validation)
+	}
+	_, err = r.execTessivenTool(t.Context(), meta, "tessiven.save", map[string]any{"request_id": "unplaced", "expected_version": 0, "document_yaml": document, "summary": "Create"})
+	if err == nil {
+		t.Fatal("Flower saved an unplaced service")
+	}
+	toolError := aitools.ClassifyError(aitools.Invocation{ToolName: "tessiven.save"}, err)
+	if toolError.Code != aitools.ErrorCodeInvalidArguments || toolError.Retryable || !strings.Contains(toolError.Message, "/services/0/id") {
+		t.Fatalf("save failure must identify a repairable document error: %+v", toolError)
+	}
+	if toolError.Meta["validation_details"].(map[string]any)["path"] != "/services/0/id" {
+		t.Fatalf("save failure lost its source location: %+v", toolError)
+	}
+	payload, err := modelToolResultPayload(ToolResult{ToolName: "tessiven.save", Status: "error", Error: toolError, Data: validation})
+	if err != nil {
+		t.Fatal(err)
+	}
+	diagnostics := payload["data"].(map[string]any)["diagnostics"].([]any)
+	if payload["truncated"] == true || len(diagnostics) != 1 || diagnostics[0].(map[string]any)["path"] != "/services/0/id" {
+		t.Fatalf("model-facing save diagnostics must remain structured: %+v", payload)
+	}
+	list, err := library.List(t.Context(), "Reference architecture", "", false)
+	if err != nil || len(list.Canvases) != 0 {
+		t.Fatalf("rejected save created a canvas: %+v %v", list, err)
 	}
 }
 
