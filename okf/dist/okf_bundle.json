@@ -518,7 +518,7 @@
               "latency",
               "qualification"
             ],
-            "summary": "Floe Native Apps v0.22.33 and the pending Floe Webapp v0.86.15 release add idle capture wakeup,\nbounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md)\nowns privileged authority; the [viewer contract](../architecture/remote-desktop-viewer.md)\nowns input modes. Locks remain physical-only, and mode changes revoke input.\nThis qualification separates DRM feedback, document contents and presentation.\nNative receipts do not establish visible response or input-to-photon latency.",
+            "summary": "Floe Native Apps v0.22.33 and Floe Webapp v0.86.15 add idle capture wakeup,\nbounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md)\nowns privileged authority; the [viewer contract](../architecture/remote-desktop-viewer.md)\nowns input modes. Locks remain physical-only, and mode changes revoke input.\nThis qualification separates DRM feedback, document contents and presentation.\nNative receipts do not establish visible response or input-to-photon latency.",
             "section_count": 2
           },
           {
@@ -25104,8 +25104,8 @@
         "title": "Physical desktop responsiveness and local input",
         "type": "Qualification Record"
       },
-      "body_length": 10763,
-      "summary": "Floe Native Apps v0.22.33 and the pending Floe Webapp v0.86.15 release add idle capture wakeup,\nbounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md)\nowns privileged authority; the [viewer contract](../architecture/remote-desktop-viewer.md)\nowns input modes. Locks remain physical-only, and mode changes revoke input.\nThis qualification separates DRM feedback, document contents and presentation.\nNative receipts do not establish visible response or input-to-photon latency.",
+      "body_length": 10743,
+      "summary": "Floe Native Apps v0.22.33 and Floe Webapp v0.86.15 add idle capture wakeup,\nbounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md)\nowns privileged authority; the [viewer contract](../architecture/remote-desktop-viewer.md)\nowns input modes. Locks remain physical-only, and mode changes revoke input.\nThis qualification separates DRM feedback, document contents and presentation.\nNative receipts do not establish visible response or input-to-photon latency.",
       "sections": [
         {
           "id": "contract",
@@ -25122,7 +25122,7 @@
           "char_count": 1937
         }
       ],
-      "snippet": "Floe Native Apps v0.22.33 and the pending Floe Webapp v0.86.15 release add idle capture wakeup, bounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md) owns privileged authority; the [vi",
+      "snippet": "Floe Native Apps v0.22.33 and Floe Webapp v0.86.15 add idle capture wakeup, bounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md) owns privileged authority; the [viewer contract](../ar",
       "links": [
         {
           "label": "media contract",
@@ -35751,5 +35751,5 @@
       ]
     }
   ],
-  "source_sha256": "f6c89d77eb5a6cac9de426ff75e89a94a5983a140f4d4b81856a9a1eea1018c9"
+  "source_sha256": "e81d817ce2ed000acc8dc7aeed4bd0ec3c3244f8d3ff312877d29346e9eb2832"
 }
