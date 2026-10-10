@@ -3,11 +3,11 @@ type: AI Runtime Contract
 title: Model context usage and compaction
 description: Independent manual compaction, automatic continuation, and canonical usage presentation.
 tags: [ai, models, context, compaction]
-timestamp: 2026-10-09T00:00:00Z
+timestamp: 2026-10-10T00:00:00Z
 ---
 # Summary
 
-Published Floret v7.26.0 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
+Published Floret v7.27.1 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
 
 # Contract
 
@@ -19,7 +19,15 @@ The command menu, button, and standalone `/compact` use that one action, includi
 
 Floret installs the summary, model-context boundary, and manual terminal result in one transaction. Installation and cancellation have one transaction winner. Successful installation invalidates provider continuation and confirmed input usage; the installed estimate describes current usage until the next normal request confirms it. Noop does not alter context, generation, or continuation. Manual requests do not require the automatic threshold, but still require context above the 50,000-token target, a complete cut, and useful savings. There is no force mode.
 
-The 50,000-token target bounds the resulting message context; it does not require a fixed-length summary or fill unused budget. The actual result combines the generated summary, preserved user requirements, retained complete tail, and checkpoint structure. Summary and tail budgets are limits, so the result may be substantially below the target. The divider reports estimated message context after installation, independently of system-prefix and tool-definition tokens in a complete provider request.
+Floret reads complete eligible canonical history for summarization, preserving
+formatting, tool arguments, references, and runtime facts. Its single budgeted
+loop carries the latest candidate summary through ordered lossless fragments
+when a request cannot fit. It does not clip ordinary messages to fixed previews
+or install truncated output. Intermediate candidates remain upstream-owned
+memory; failure or cancellation preserves the effective context. Redeven adds
+no summary generator, batching policy, or durable compaction state.
+
+The 50,000-token target guides tail selection; it does not require a fixed-length summary or fill unused budget. The actual result combines the generated summary, preserved user requirements, retained complete tail, and checkpoint structure. The summary has a ceiling, so the result may be substantially below the target. Protecting the latest complete input or tool exchange can also exceed the target; Floret records that pressure instead of clipping those messages. The divider reports estimated message context after installation, independently of system-prefix and tool-definition tokens in a complete provider request.
 
 ## Projection and usage
 
@@ -31,7 +39,7 @@ Run input limits remain cumulative Floret `TurnLimits.MaxInputTokens`. Explicit 
 
 ## Real DeepSeek qualification
 
-`scripts/check_flower_context_deepseek.sh --compaction` reads the configured official DeepSeek model and credentials through production parsers and uses isolated state. The recorder retains request classification, hashes, sizes, continuation presence, and native usage without credentials, headers, or source user content. Facts appear only in the earliest synthetic input. Legal public admissions create pressure; the test proves that the original source leaves the retained tail, the summary preserves the facts, and an independent recall succeeds.
+`scripts/check_flower_context_deepseek.sh --compaction` reads the configured official DeepSeek model and credentials through production parsers and uses isolated state. The recorder retains request classification, hashes, sizes, continuation presence, and native usage without credentials, headers, or source user content. Facts appear only at the end of the earliest synthetic input, beyond the former 1,200-byte preview boundary. Qualification also checks that summary requests receive those facts. Legal public admissions create pressure; the test proves that the original source leaves the retained tail, the summary preserves the facts, and an independent recall succeeds.
 
 Four mandatory lanes cover small-history noop, manual installation/replay/restart/repeated installation, automatic compaction with a 256,000/28,000 test budget, and automatic compaction at the configured full budget. Every lane has bounded rounds and time. Missing usage, unavailable providers, skipped tests, timeout, or absent compaction fail qualification. Simulated overflow remains deterministic evidence, never a claim of natural DeepSeek overflow.
 

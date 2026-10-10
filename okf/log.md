@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-10: Complete compaction input
+
+- Adopt released Floret v7.27.1 for complete canonical compaction input and one ordered, budgeted summary loop; retain the [upstream context owner](ai/model-context-usage-and-compaction.md).
+- Strengthen real DeepSeek qualification with unique facts at the end of a long earliest message, beyond the removed preview boundary. Requests must contain those facts before summary preservation and independent recall can pass.
+
 ## 2026-10-09: Flower startup efficiency
 
 - Adopt released Floret v7.27.0 for incremental prompt records and atomic SQLite layout upgrades, preserving the [opaque storage boundary](ai/flower-storage-ownership-and-migrations.md).
