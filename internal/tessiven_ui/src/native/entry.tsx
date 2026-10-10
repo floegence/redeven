@@ -1,5 +1,6 @@
 import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
+import { Plus, Minus, Maximize } from '@floegence/floe-webapp-core/icons';
 import { TessivenGraph, type TessivenViewportControl, type GraphBrowseState } from '../TessivenGraph';
 import type { Version, Selection } from '../types';
 import enUS from '../locales/en-US.json';
@@ -22,8 +23,10 @@ const t = (key: string, values?: Record<string, string | number>) => {
 
 function NativeCanvas() {
   const [input, setInput] = createSignal<{ version: Version; historical: boolean }>();
+  const [scale, setScale] = createSignal(1);
   const browsing = new Map<string, GraphBrowseState>();
   let control: TessivenViewportControl | undefined;
+  const zoom = (factor: number) => control?.zoom(factor, window.innerWidth / 2, window.innerHeight / 2);
   let pinch: { distance: number; x: number; y: number } | undefined;
   const touches = (event: TouchEvent) => {
     const a = event.touches[0], b = event.touches[1];
@@ -66,10 +69,16 @@ function NativeCanvas() {
     version={value.version} historical={value.historical} t={t} visible={true}
     onAsk={selection => notify('ask', selection)} onDetails={selection => notify('details', selection)}
     onInspect={() => undefined} onViewportControl={value => { control = value; }}
+    showTools={false} onZoomChange={setScale}
     onRenderState={state => notify(state)}
     browseState={browsing.get(value.version.canvas_id)}
     onBrowseState={state => browsing.set(value.version.canvas_id, state)}
-  />}</Show></main>;
+  />}</Show><nav class="native-canvas-tools" aria-label="Canvas view">
+    <button aria-label="Zoom out" title="Zoom out" disabled={scale() <= 0.15} onClick={() => zoom(0.8)}><Minus /></button>
+    <output aria-label="Zoom level">{Math.round(scale() * 100)}%</output>
+    <button aria-label="Zoom in" title="Zoom in" disabled={scale() >= 2.5} onClick={() => zoom(1.25)}><Plus /></button>
+    <button aria-label="Fit canvas" title="Fit canvas" onClick={() => control?.fit()}><Maximize /></button>
+  </nav></main>;
 }
 
 window.addEventListener('error', () => notify('error'));
