@@ -16,11 +16,18 @@ timestamp: 2026-10-08T00:00:00Z
 
 ## Storage owners
 
-Redeven consumes published Floret v7.26.0 with `GOWORK=off`. Floret owns journal,
+Redeven consumes published Floret v7.27.0 with `GOWORK=off`. Floret owns journal,
 queue, interactions, context lineage, execution identity and recovery. Redeven
 uses public `InspectSQLite`, `BackupSQLite`, deferred `runtime.Open`, typed
 queue import, `Host.Activate` and `Host.PrepareRestore`; it neither queries nor
 repairs Floret tables.
+
+Floret's physical SQLite format upgrade and incremental prompt-record migration
+run within its one startup transaction. Session-tree schema remains 13; public
+inspection reports the required physical and logical upgrade before Redeven
+creates the complete-set backup. Checkpoints write only relevant new cache
+records. History, continuation, usage, and compact policy remain upstream-owned.
+Redeven never opens or patches cache records and never clears cache as an upgrade.
 
 Product kind `ai_threadstore_product_v1` retains its entire contiguous v1-to-v10
 migration chain. Fresh version 10 has exactly seven tables: schema metadata,

@@ -201,6 +201,38 @@ func TestOpenFloretRuntimeForwardsMigrationPhasesFromFloret(t *testing.T) {
 	}
 }
 
+func TestOpenFloretFailureUsesActualPhaseAndSanitizedLog(t *testing.T) {
+	for _, phase := range []flruntime.StartupPhase{"", flruntime.StartupPhaseMigrating, flruntime.StartupPhaseVerifying} {
+		t.Run(string(phase), func(t *testing.T) {
+			var logs bytes.Buffer
+			_, err := openFloretHost(t.Context(), filepath.Join(t.TempDir(), "floret.sqlite"), nil, slog.New(slog.NewTextHandler(&logs, nil)),
+				func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
+					return flstorage.SQLiteMaintenanceResult{}, nil
+				},
+				func(_ context.Context, opts flruntime.Options) (*flruntime.Host, error) {
+					if phase != "" {
+						opts.StartupProgress.OnStartupPhase(phase)
+					}
+					return nil, errors.New("private backend diagnostic")
+				})
+			var failure *FloretStoreStartupError
+			if !errors.As(err, &failure) {
+				t.Fatal(err)
+			}
+			want := string(phase)
+			if want == "" {
+				want = "opening"
+			}
+			if failure.Phase != want || !strings.Contains(logs.String(), "startup_phase="+want) {
+				t.Fatalf("failure phase=%q logs=%s", failure.Phase, logs.String())
+			}
+			if strings.Contains(logs.String(), "private backend diagnostic") {
+				t.Fatal("raw diagnostic exposed")
+			}
+		})
+	}
+}
+
 func TestClassifyFloretStorageOpenErrorFailsClosedForUnknownAndPermissionErrors(t *testing.T) {
 	tests := []struct {
 		name  string

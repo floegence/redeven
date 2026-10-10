@@ -335,7 +335,16 @@ export const enUS = {
     "unknown": "Connection not verified"
 },
   flowerRuntime: {
-    "preparingDetail": "Flower is preparing its AI service. Conversations will appear automatically when it is ready. You can return to Environments at any time.",
+    startupPhase: {
+      starting: 'Starting the AI service...',
+      inspecting: 'Checking saved conversations...',
+      backing_up: 'Backing up conversations before the upgrade...',
+      optimizing: 'Optimizing conversation storage...',
+      migrating: 'Upgrading conversation storage...',
+      verifying: 'Verifying conversation data...',
+      recovering: 'Waiting for conversation storage to become available...',
+      restoring: 'Restoring conversations from the selected backup...',
+    },
     "unavailableTitle": "Flower is unavailable",
     "unavailableDetail": "Flower’s AI service is not ready to accept requests. Return to Environments to check the runtime status. Your conversations and unsent draft are kept.",
 

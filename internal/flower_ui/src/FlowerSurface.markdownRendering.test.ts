@@ -167,7 +167,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('collapseLabel={() => copy().chat.collapseThinking}');
     expect(src).toContain('class="flower-composer-anchor"');
     expect(src).toContain('executeCompactContextCommand');
-    expect(src).toContain('if (!trimString(selectedThreadID())) return;');
+    expect(src).toContain('if (!threadID) { notifyComposerError(copy().chat.compactContextEmpty); return; }');
     expect(src).not.toContain('contextIndicator()');
     expect(src).not.toContain('selectedThreadThinking');
     expect(src).not.toContain('thinkingIndicator');

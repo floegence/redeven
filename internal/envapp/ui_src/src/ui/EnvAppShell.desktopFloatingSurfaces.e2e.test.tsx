@@ -1037,8 +1037,12 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
 
-      quickInput.focus();
+      const restoredInput = host.querySelector('[data-testid="activity-flower-composer"]') as HTMLTextAreaElement;
+      // Programmatic button clicks do not move focus as real mode-switch clicks do.
+      restoredInput.blur();
+      restoredInput.focus();
       await flushAsync();
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
       (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
       await flushAsync();
       expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('aria-hidden')).toBe('true');

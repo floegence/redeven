@@ -76,7 +76,13 @@ const mocks = vi.hoisted(() => {
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/models')) {
-      return { current_model: 'openai/gpt-5.2', models: [{ id: 'openai/gpt-5.2', label: 'GPT 5.2' }] };
+      return {
+        current_model: 'openai/gpt-5.2',
+        directory: {
+          models: [{ id: 'openai/gpt-5.2', label: 'OpenAI / gpt-5.2', source: 'runtime_config', state: 'ready', provider_id: 'openai', provider_name: 'OpenAI', provider_type: 'openai', model_name: 'gpt-5.2', input_modalities: ['text'] }],
+          sources: [{ id: 'openai', kind: 'runtime_config', state: 'ready' }],
+        },
+      };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads/') && url.includes('/live/events') && (!init || init.method === 'GET')) {
       return { events: [], next_cursor: 0, retained_from_seq: 1 };
@@ -643,7 +649,7 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('stops bootstrap after an in-flight settings request when readiness is lost', async () => {
+    it('stops parallel bootstrap reads when readiness is lost during settings loading', async () => {
       const settingsGate = deferred<void>();
       mocks.state.settingsGate = settingsGate.promise;
       mocks.state.setReadinessSnapshot({
@@ -655,7 +661,12 @@ export function registerEnvAIPageSendTests() {
           state: 'ready', reason_code: '', retryable: false, safe_to_retry: false,
         });
         for (let attempt = 0; attempt < 20 && mocks.fetchLocalApiJSONMock.mock.calls.length === 0; attempt += 1) await flush();
-        expect(mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url)).toEqual(['/_redeven_proxy/api/settings']);
+        const admittedReads = mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url);
+        expect(admittedReads).toEqual(expect.arrayContaining([
+          '/_redeven_proxy/api/settings',
+          '/_redeven_proxy/api/ai/models?mode=baseline',
+          '/_redeven_proxy/api/ai/threads?limit=200',
+        ]));
 
         mocks.state.setReadinessSnapshot({
           state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false,
@@ -666,7 +677,7 @@ export function registerEnvAIPageSendTests() {
         settingsGate.resolve();
         await flush();
         await flush();
-        expect(mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url)).toEqual(['/_redeven_proxy/api/settings']);
+        expect(mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url)).toEqual(admittedReads);
       } finally {
         dispose();
       }

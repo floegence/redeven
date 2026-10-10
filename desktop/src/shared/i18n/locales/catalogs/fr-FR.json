@@ -3015,7 +3015,16 @@
     "certificateRefreshFailed": "Impossible de renouveler le certificat HTTPS. Seules les adresses couvertes par le certificat actuel sont disponibles. L’environnement d’exécution réessaiera automatiquement."
   },
   "flowerRuntime": {
-    "preparingDetail": "Flower prépare son service d’IA. Les conversations s’afficheront automatiquement dès qu’il sera prêt. Vous pouvez revenir à la liste des environnements à tout moment.",
+    "startupPhase": {
+      "starting": "Démarrage du service d’IA...",
+      "inspecting": "Vérification des conversations enregistrées...",
+      "backing_up": "Sauvegarde des conversations avant la mise à niveau...",
+      "optimizing": "Optimisation du stockage des conversations...",
+      "migrating": "Mise à niveau du stockage des conversations...",
+      "verifying": "Validation des données des conversations...",
+      "recovering": "En attente de la disponibilité du stockage des conversations...",
+      "restoring": "Restauration des conversations depuis la sauvegarde sélectionnée..."
+    },
     "unavailableTitle": "Flower est indisponible",
     "unavailableDetail": "Le service d’IA de Flower ne peut pas traiter les requêtes pour le moment. Revenez à la liste des environnements pour vérifier l’état de l’environnement d’exécution. Vos conversations et votre brouillon non envoyé sont conservés.",
     "runtimeTitle": "Mettez à jour le moteur d’exécution pour utiliser Flower",

@@ -1,8 +1,11 @@
 package codeapp
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,6 +16,27 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 )
+
+func TestAIReadinessLogsObservedPhaseAndTotalDurations(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	controller := newAIReadinessController(t.Context(), ai.Options{Logger: logger}, func(_ context.Context, opts ai.Options) (*ai.Service, error) {
+		opts.StoreStartupProgress(ai.FloretStoreStartupBackingUp)
+		opts.StoreStartupProgress(ai.FloretStoreStartupMigrating)
+		opts.StoreStartupProgress(ai.FloretStoreStartupVerifying)
+		return new(ai.Service), nil
+	}, nil)
+	controller.Start()
+	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
+	if err := controller.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"startup_phase=inspecting", "startup_phase=backing_up", "startup_phase=migrating", "startup_phase=verifying", "duration_ms=", "elapsed_ms=", "service startup complete"} {
+		if !strings.Contains(logs.String(), value) {
+			t.Fatalf("missing %q in log %s", value, logs.String())
+		}
+	}
+}
 
 func TestAIReadinessControllerDrainsGenerationBeforeReplacement(t *testing.T) {
 	first := new(ai.Service)

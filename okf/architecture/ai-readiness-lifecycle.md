@@ -33,6 +33,15 @@ hydration cannot execute models or tools during preparation. Floret remains
 the source of actual migration and verification progress. A standalone service
 activates by default only after the same preparation succeeds.
 
+Welcome renders each observed phase in its existing readiness boundary,
+including checking, backup, optimization, upgrade, verification, recovery,
+and restore. Flower mounts only for `ready` or `degraded`, while navigation and
+the shell-owned draft remain available. Phase changes do not start provider
+requests or create a second readiness timer. The controller records elapsed
+phase and total startup durations from its transition timestamps; failure
+classification and logs retain the actual owner phase rather than assuming
+every runtime-open failure occurred during verification.
+
 Failures carry a sanitized component (`floret`, `product`, `read_state`,
 `uploads`, `backup`, or `recovery`), phase, typed reason, `retryable`, and
 `safe_to_retry`. Supported reasons distinguish newer/unsupported formats,
