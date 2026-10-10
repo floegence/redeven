@@ -44,7 +44,7 @@ const server = http.createServer((request, response) => {
     // This fixture owns media/input behavior. Native carrier qualification is
     // TestWindowBrowserE2E and TestWindowTunnelBrowserE2E.
     const html = readFileSync(path.join(assets, 'viewer.html'), 'utf8').replaceAll('{{.Base}}', '/_redeven_desktop/').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'porcelain-dark').replaceAll('{{.Nonce}}', 'qualification').replaceAll('{{.Configuration}}', JSON.stringify(configuration))
-      .replace('<script src="{{.TransportScript}}"></script>', `<script>
+      .replace('<script src="{{.TransportScript}}"></script>', `<script nonce="qualification">
         const fixtureFetch = window.fetch.bind(window);
         window.transportEvents = [];
         window.RedevenWindowTransport = { create: () => ({
@@ -59,6 +59,10 @@ const server = http.createServer((request, response) => {
         }) };
         window.fetch = () => { throw new Error('Viewer bypassed the native transport'); };
       </script>`);
+    const policySource = readFileSync(path.join(root, 'internal/codeapp/appserver/remote_desktop_viewer.go'), 'utf8');
+    const policy = policySource.match(/Set\("Content-Security-Policy", "(.+)"\)/)?.[1];
+    assert(policy, 'viewer production content security policy is missing');
+    response.setHeader('Content-Security-Policy', policy.replace('"+nonce+"', 'qualification'));
     response.setHeader('Content-Type', 'text/html'); response.end(html); return;
   }
   const name = request.url?.split('/').at(-1);
@@ -501,6 +505,8 @@ try {
     paint('separate'); cursor();
     await page.waitForFunction(() => !!document.querySelector('#stage img[src^="data:image/png"]'));
     const hostCursor = page.locator('#stage img[src^="data:image/png"]');
+    await hostCursor.evaluate(image => image.decode());
+    assert.equal(await hostCursor.evaluate(image => image.naturalWidth), 16, 'production policy blocked the host cursor image');
     assert(await hostCursor.isVisible(), 'view mode lost the separate host cursor');
     assert.equal(await canvasCursor(), 'none', 'view mode exposed a second local cursor');
     const geometry = await hostCursor.evaluate(image => {
