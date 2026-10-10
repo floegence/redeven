@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	tessivenspec "github.com/floegence/redeven/spec/tessiven"
 	"gopkg.in/yaml.v3"
@@ -50,7 +51,27 @@ func upgradeLegacyDSLHeader(source string, node *yaml.Node, target string) (stri
 	if node == nil || node.Kind != yaml.ScalarNode || node.Value != tessivenspec.Namespace+"v1" {
 		return "", fmt.Errorf("the legacy DSL version scalar is invalid")
 	}
-	lines := strings.SplitAfter(source, "\n")
+	// Match yaml.v3's line/column convention, retaining every original byte.
+	lines := []string{}
+	lineStart := 0
+	for index, character := range source {
+		if index < lineStart {
+			continue
+		}
+		if character != '\r' && character != '\n' && character != '\u0085' && character != '\u2028' && character != '\u2029' {
+			continue
+		}
+		end := index + utf8.RuneLen(character)
+		if character == '\r' && end < len(source) && source[end] == '\n' {
+			end++
+		}
+		lines = append(lines, source[lineStart:end])
+		lineStart = end
+	}
+	lines = append(lines, source[lineStart:])
+	if node.Line < 1 || node.Line > len(lines) {
+		return "", fmt.Errorf("the legacy version source location is invalid")
+	}
 	offset := 0
 	for _, line := range lines[:node.Line-1] {
 		offset += len(line)
@@ -81,6 +102,9 @@ func upgradeLegacyDSLHeader(source string, node *yaml.Node, target string) (stri
 	}
 	// Explicit YAML scalar tags are retained along with the scalar style.
 	start := offset
+	if start >= len(source) {
+		return "", fmt.Errorf("the legacy version source location is invalid")
+	}
 	if source[start] == '!' {
 		end := strings.IndexAny(source[start:], " \t\r\n")
 		if end < 0 {
