@@ -6076,6 +6076,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     launchChatTurnInFlight.add(sessionKey);
     const session = draftSessionFor(sessionKey);
     const frozen = session.snapshot();
+    const frozenCommand = parseFlowerSlashCommand(frozen.value.text);
     const pendingOperation = transportOutbox().forThread(threadID).find((entry) => entry.operation === 'context_compaction');
     const requestID = pendingOperation?.requestId ?? createFlowerClientRequestID();
     const requestEpoch = liveTransport.connectionEpoch();
@@ -6092,7 +6093,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const current = await props.adapter.compactThreadContext(threadID, { storage_generation: storageGeneration, client_request_id: requestID });
       setTransportOutbox((outbox) => outbox.drop(requestID));
       if (requestEpoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(current);
-      if (session.snapshot().revision === frozen.revision && frozen.value.text.trim() === FLOWER_COMPACT_CONTEXT_COMMAND) {
+      if (session.snapshot().revision === frozen.revision && (frozenCommand.kind === 'intent' || frozenCommand.kind === 'suggest')) {
         updateComposerSessionText(sessionKey, '');
       }
     } catch (error) {
@@ -7668,7 +7669,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && composerFocused()
     && composerSlashCommand().kind === 'suggest'
   ));
-  const composerPrimaryActionIsCommand = createMemo(() => composerSlashCommand().kind === 'intent');
+  const composerPrimaryActionIsCommand = createMemo(() => {
+    const command = composerSlashCommand();
+    return command.kind === 'intent' || command.kind === 'suggest';
+  });
   const composerPrimaryActionIsStop = createMemo(() => (
     longTextPreparing()
     || (Boolean(selectedThreadID()) && selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
