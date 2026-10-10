@@ -139,6 +139,21 @@ describe('linked environment owner interactions', () => {
     expect(perform).toHaveBeenCalledOnce();
     button(dialog, 'Cancel pairing').click(); await settle();
     expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({ operation: 'leave', gateway_id: 'service-1', cloud_impact_acknowledged: true });
+    const remainingMemberships = [fixture.memberships[0]!];
+    const remainingInputs = {
+      ...fixture.inputs,
+      managedRuntimePresenceByTargetID: Object.fromEntries(Object.entries(fixture.inputs.managedRuntimePresenceByTargetID).map(([targetID, presence]) => {
+        if (presence.runtime_service?.bindings?.cloud_link?.state !== 'linked') return [targetID, presence];
+        return [targetID, { ...presence, runtime_service: { ...presence.runtime_service, gateway_memberships: remainingMemberships } }];
+      })),
+      gatewaySources: fixture.gatewaySources.slice(0, 1),
+    };
+    h.publish(buildDesktopWelcomeSnapshot(remainingInputs)); await settle();
+    expect(panel.querySelector('select')).toBeNull();
+    expect(panel.textContent).toContain('Office');
+    expect(panel.textContent).not.toContain('Lab');
+    h.publish(buildDesktopWelcomeSnapshot(fixture.inputs)); await settle();
+    expect(panel.querySelector<HTMLSelectElement>('select')?.value).toBe('service-0');
   });
 
   it.each(['connected', 'authorization_required', 'unlinked'] as const)(

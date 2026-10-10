@@ -39,6 +39,16 @@ it('confirms a single pairing directly without a selector or Cloud migration cho
  button(i18n.t('gatewayConnections.unpair')).click();await settle();
  expect(f.perform.mock.calls.at(-1)?.[0]).toMatchObject({gateway_id:'one',cloud_impact_acknowledged:false});
 });
+it.each(['leave','publish'] as const)('retains the %s confirmation during the closing transition',async mode=>{
+ const f=mount([one],mode);await settle();
+ const dialog=document.querySelector('[role="dialog"]')!;
+ const label=i18n.t(mode==='leave'?'gatewayConnections.unpair':'gatewayConnections.publish');
+ button(label).click();await settle();
+ expect(f.close).toHaveBeenCalledOnce();
+ expect(dialog.textContent).toContain('Office');
+ expect(dialog.textContent).toContain(i18n.t(mode==='leave'?'gatewayConnections.unpairImpact':'gatewayConnections.publishHelp'));
+ expect(dialog.textContent).toContain(i18n.t(mode==='leave'?'gatewayConnections.unpairTitle':'gatewayConnections.publishTitle'));
+});
 it('confirms the already selected Gateway without asking the user to choose again',async()=>{
  const f=mount([one,two],'leave',undefined,'two');await settle();
  expect(document.querySelector('select')).toBeNull();

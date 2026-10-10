@@ -522,6 +522,13 @@ export function EnvironmentCardsPanel(
     const [selectedGateway,setSelectedGateway] = createSignal('');
     const gatewayMembers = () => group().primary_entry.runtime_service?.gateway_memberships ?? [];
     const gatewayMember = () => gatewayMembers().find(item => item.gateway_id === selectedGateway()) ?? gatewayMembers()[0];
+    createEffect(() => {
+      const members = gatewayMembers();
+      const selected = selectedGateway();
+      if (selected && !members.some(member => member.gateway_id === selected)) {
+        setSelectedGateway(members[0]?.gateway_id ?? '');
+      }
+    });
     const gatewayEntry = () => group().gateway_entries?.find(entry => entry.gateway_env_id === gatewayMember()?.member_id
       && entry.gateway_identity_fingerprint === gatewayMember()?.identity_fingerprint
       && entry.gateway_member?.runtime_public_id === gatewayMember()?.runtime_public_id) ?? group().primary_entry;
