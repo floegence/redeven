@@ -3290,10 +3290,10 @@
     "codeHelpTitle": "Как использовать этот код"
   },
   "gatewayDiscovery": {
-    "title": "Gateway на этом компьютере",
-    "useAddress": "Подставить адрес",
-    "useNamed": "Использовать адрес {name}: {address}",
-    "help": "При продолжении выбранная среда выполнения проверит доступность этого адреса."
+    "local": "Локальный",
+    "useAddress": "Использовать",
+    "filled": "Подставлен",
+    "useNamed": "Использовать локальный Gateway {name}: {address}"
   },
   "gatewayNetwork": {
     "listenTitle": "Локальный слушатель",

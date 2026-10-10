@@ -3254,10 +3254,10 @@
     "codeHelpTitle": "접근 코드 사용 방법"
   },
   "gatewayDiscovery": {
-    "title": "이 컴퓨터의 Gateway",
-    "useAddress": "주소 입력",
-    "useNamed": "{name}의 주소 사용: {address}",
-    "help": "계속하면 선택한 런타임이 이 주소에 연결할 수 있는지 확인합니다."
+    "local": "로컬",
+    "useAddress": "사용",
+    "filled": "입력됨",
+    "useNamed": "로컬 Gateway {name} 사용: {address}"
   },
   "gatewayNetwork": {
     "listenTitle": "로컬 리스너",

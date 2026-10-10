@@ -3260,10 +3260,10 @@
     "codeHelpTitle": "Cómo usar este código"
   },
   "gatewayDiscovery": {
-    "title": "Gateway en este equipo",
-    "useAddress": "Usar dirección",
-    "useNamed": "Usar la dirección de {name}: {address}",
-    "help": "Al continuar, el entorno de ejecución elegido comprobará si puede acceder a esta dirección."
+    "local": "Local",
+    "useAddress": "Usar",
+    "filled": "Completado",
+    "useNamed": "Usar el Gateway local {name}: {address}"
   },
   "gatewayNetwork": {
     "listenTitle": "Escucha local",

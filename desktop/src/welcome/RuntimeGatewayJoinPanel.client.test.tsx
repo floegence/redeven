@@ -88,11 +88,17 @@ describe('local Gateway quick fill',()=>{
   const inputs=document.querySelectorAll<HTMLInputElement>('input:not([type="radio"])');
   expect(inputs[0]?.value).toBe('https://gateway.internal:7443');
   const suggestion=document.querySelector<HTMLButtonElement>('[data-gateway-suggestion]');
-  expect(suggestion?.closest('.redeven-gateway-local-suggestion')?.textContent).toContain('Office Gateway');
+  expect(suggestion?.textContent).toContain('Office Gateway');
+  expect(suggestion?.getAttribute('aria-pressed')).toBe('false');
+  expect(suggestion?.querySelector('[data-gateway-local-label]')).toBeTruthy();
+  expect(suggestion?.textContent).not.toContain('https://office.local:7443');
   suggestion!.click();await settle();
   expect(inputs[0]?.value).toBe('https://office.local:7443');
+  expect(suggestion?.getAttribute('aria-pressed')).toBe('true');
   expect(document.activeElement).toBe(inputs[1]);
   expect(perform.mock.calls.every(call=>call[0].operation==='status')).toBe(true);
+  edit(0,'https://other.example:7443');await settle();
+  expect(suggestion?.getAttribute('aria-pressed')).toBe('false');
   expect(document.body.textContent?.split(i18n.t('gatewayJoin.codeHelp')).length).toBe(2);
  });
  it('invalidates a verified preview when a suggestion is selected',async()=>{
@@ -101,6 +107,19 @@ describe('local Gateway quick fill',()=>{
   document.querySelector<HTMLButtonElement>('[data-gateway-suggestion]')!.click();await settle();
   expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();
   expect(button(i18n.t('gatewayJoin.verify'))).toBeDefined();
+ });
+ it('distinguishes confirmed endpoints and reflects only the currently filled address',async()=>{
+  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const alternate={endpoint_id:'public',address:'https://office.example:7443',scope:'public' as const,priority:1};
+  mount(perform,[{...localGateway,member_endpoints:[...localGateway.member_endpoints!,alternate]}]);await settle();
+  const suggestions=[...document.querySelectorAll<HTMLButtonElement>('[data-gateway-suggestion]')];
+  expect(suggestions).toHaveLength(2);
+  expect(suggestions[0]?.textContent).toContain('office.local:7443');
+  expect(suggestions[1]?.textContent).toContain('office.example:7443');
+  suggestions[1]!.click();await settle();
+  expect(document.querySelector<HTMLInputElement>('input')?.value).toBe(alternate.address);
+  expect(suggestions.map(item=>item.getAttribute('aria-pressed'))).toEqual(['false','true']);
+  expect(perform.mock.calls.every(call=>call[0].operation==='status')).toBe(true);
  });
  it('excludes offline, disabled and remote Gateways and loopback addresses for remote Runtimes',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));

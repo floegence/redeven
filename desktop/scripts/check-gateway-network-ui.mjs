@@ -10,6 +10,16 @@ const server = await createSSHSettingsPreviewServer(0,['gateway-network.html']);
 await server.watcher.close();
 const browser = await chromium.launch({headless:true});
 const report = {cases:[],errors:[]};
+function mockGatewayActions() {
+ window.gatewayRequests=[];
+ window.redevenDesktopLauncher={performAction:async request=>{
+  window.gatewayRequests.push(request);
+  if(request.operation==='status')return {ok:true,outcome:'gateway_membership_updated',gateway_membership:{joined:false,phase:'not_joined'}};
+  if(request.operation==='preview')return {ok:true,outcome:'gateway_membership_updated',gateway_preview:{preview_id:'a'.repeat(43),purpose:'join',gateway_id:'gateway',gateway_name:'Office Gateway',target_runtime_id:'runtime',expires_at_unix_ms:Date.now()+600000}};
+  if(request.kind==='update_gateway_network_settings')return {ok:true,outcome:'gateway_members_updated',gateway_network_settings:{settings:request.settings,restart_required:true}};
+  return {ok:true,outcome:'gateway_membership_updated',gateway_membership:{joined:true,phase:'joined'}};
+ }};
+}
 try {
  const {createDesktopI18n,listDesktopI18nLocales} = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/i18n/desktopI18n.ts',import.meta.url)));
  for(const locale of listDesktopI18nLocales()) {
@@ -17,24 +27,30 @@ try {
   for(const view of ['join','settings']) {
    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
    page.on('pageerror',error=>report.errors.push(error.message));
-   await page.addInitScript(()=>{
-    window.gatewayRequests=[];
-    window.redevenDesktopLauncher={performAction:async request=>{
-     window.gatewayRequests.push(request);
-     if(request.operation==='status')return {ok:true,outcome:'gateway_membership_updated',gateway_membership:{joined:false,phase:'not_joined'}};
-     if(request.operation==='preview')return {ok:true,outcome:'gateway_membership_updated',gateway_preview:{preview_id:'a'.repeat(43),purpose:'join',gateway_id:'gateway',gateway_name:'Office Gateway',target_runtime_id:'runtime',expires_at_unix_ms:Date.now()+600000}};
-     if(request.kind==='update_gateway_network_settings')return {ok:true,outcome:'gateway_members_updated',gateway_network_settings:{settings:request.settings,restart_required:true}};
-     return {ok:true,outcome:'gateway_membership_updated',gateway_membership:{joined:true,phase:'joined'}};
-    }};
-   });
+   await page.addInitScript(mockGatewayActions);
    await page.goto(new URL(`gateway-network.html?locale=${locale}&view=${view}`,server.resolvedUrls.local[0]).href);
    if(view==='join') {
     await page.getByRole('button',{name:i18n.t('gatewayJoin.title'),exact:true}).click();
     const inputs=page.locator('[role="dialog"] input');
+    const suggestion=page.locator('[data-gateway-suggestion]');
+    assert.equal(await suggestion.getAttribute('aria-pressed'),'false');
+    assert.equal((await suggestion.innerText()).includes('https://'),false);
+    assert.equal(await suggestion.getByText(i18n.t('gatewayDiscovery.local'),{exact:true}).count(),1);
+    if(['en-US','zh-CN','de-DE'].includes(locale))await page.screenshot({path:`${output}/${locale}-join-empty.png`});
+    const initialSize=await suggestion.boundingBox();
     await inputs.first().fill('https://draft.example:7443');
-    await page.locator('[data-gateway-suggestion]').click();
+    await inputs.first().focus();await page.keyboard.press('Tab');
+    assert.equal(await suggestion.evaluate(el=>el===document.activeElement),true);
+    await page.keyboard.press('Enter');
     assert.equal(await inputs.first().inputValue(),'https://office.local:7443');
     assert.equal(await inputs.nth(1).evaluate(el=>el===document.activeElement),true);
+    assert.equal(await suggestion.getAttribute('aria-pressed'),'true');
+    const filledSize=await suggestion.boundingBox();
+    assert.equal(filledSize.height,initialSize.height);
+    assert.equal(filledSize.width,initialSize.width);
+    await inputs.first().fill('https://edited.example:7443');
+    assert.equal(await suggestion.getAttribute('aria-pressed'),'false');
+    await suggestion.locator('.redeven-gateway-local-name').click();
     await inputs.nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
     await page.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).click();
     await page.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
@@ -64,6 +80,40 @@ try {
    report.cases.push({locale,view,status:'passed'});
    await page.close();
   }
+ }
+ for (const [locale,width,theme,scenario] of [
+  ['zh-CN',1280,'light','default'],['zh-CN',1280,'dark','default'],
+  ['zh-CN',390,'light','long'],['de-DE',390,'dark','long'],
+  ['zh-CN',390,'light','multiple'],['zh-CN',1280,'light','multiple'],
+  ['zh-CN',390,'light','none'],['en-US',1280,'light','none'],
+ ]) {
+  const i18n=createDesktopI18n(locale);
+  const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'});
+  page.on('pageerror',error=>report.errors.push(error.message));
+  await page.addInitScript(mockGatewayActions);
+  await page.goto(new URL(`gateway-network.html?locale=${locale}&theme=${theme}&scenario=${scenario}`,server.resolvedUrls.local[0]).href);
+  const trigger=page.getByRole('button',{name:i18n.t('gatewayJoin.title'),exact:true});
+  await trigger.click();
+  const suggestions=page.locator('[data-gateway-suggestion]');
+  assert.equal(await suggestions.count(),scenario==='none' ? 0 : scenario==='multiple' ? 2 : 1);
+  const dialog=page.getByRole('dialog');
+  const layout=await dialog.evaluate(el=>({width:el.getBoundingClientRect().width,overflow:el.scrollWidth-el.clientWidth}));
+  assert.ok(layout.width<=width-16 && layout.overflow<=1);
+  if(scenario==='long') {
+   const name=suggestions.locator('.redeven-gateway-local-name');
+   assert.equal(await name.evaluate(el=>getComputedStyle(el).textOverflow),'ellipsis');
+   assert.match(await suggestions.getAttribute('title'),/design and engineering team/);
+  }
+  if(scenario==='multiple') {
+   assert.match(await suggestions.nth(0).innerText(),/office\.local:7443/);
+   assert.match(await suggestions.nth(1).innerText(),/office\.example:7443/);
+  }
+  await page.screenshot({path:`${output}/${locale}-${width}-${theme}-${scenario}.png`});
+  if(locale==='zh-CN' && width===1280 && scenario==='default')await dialog.screenshot({path:`${output}/zh-CN-dialog-${theme}.png`});
+  await page.keyboard.press('Escape');
+  assert.equal(await trigger.evaluate(el=>el===document.activeElement),true);
+  report.cases.push({locale,width,theme,scenario,status:'passed'});
+  await page.close();
  }
  assert.deepEqual(report.errors,[]);
  report.status='passed';

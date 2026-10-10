@@ -3254,10 +3254,10 @@
     "codeHelpTitle": "如何使用访问码"
   },
   "gatewayDiscovery": {
-    "title": "本机上的 Gateway",
-    "useAddress": "填入地址",
-    "useNamed": "填入 {name} 的地址：{address}",
-    "help": "继续后，由所选运行时验证此地址是否可达。"
+    "local": "本机",
+    "useAddress": "使用",
+    "filled": "已填入",
+    "useNamed": "使用本机 Gateway {name}：{address}"
   },
   "gatewayNetwork": {
     "listenTitle": "本机监听",

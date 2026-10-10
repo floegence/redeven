@@ -763,25 +763,62 @@
 .redeven-gateway-join-target {
   display: flex;
   align-items: center;
-  gap: .75rem;
-  border-radius: .5rem;
-  background: color-mix(in srgb, var(--muted) 24%, var(--background));
-  padding: .75rem .875rem;
-  font-size: .875rem;
+  gap: .5rem;
+  min-width: 0;
+  color: var(--foreground);
+  font-size: .8125rem;
+}
+
+.redeven-gateway-join-address {
+  display: grid;
+  gap: .5rem;
 }
 
 .redeven-gateway-local-suggestions {
   display: grid;
-  gap: .625rem;
-  border-inline-start: 2px solid color-mix(in srgb, var(--primary) 45%, var(--border));
-  padding-inline-start: .875rem;
+  gap: .375rem;
 }
 
 .redeven-gateway-local-suggestion {
   display: flex;
+  width: 100%;
+  height: 2.5rem;
   align-items: center;
-  justify-content: space-between;
-  gap: .625rem .875rem;
+  justify-content: flex-start;
+  gap: .5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--muted) 22%, var(--background));
+  padding-inline: .75rem;
+  text-align: start;
+}
+
+.redeven-gateway-local-suggestion[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--background));
+}
+
+.redeven-gateway-local-label {
+  flex: none;
+  color: var(--muted-foreground);
+  font-size: .6875rem;
+  font-weight: 400;
+}
+
+.redeven-gateway-local-name {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: .8125rem;
+}
+
+.redeven-gateway-local-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: .375rem;
+  margin-inline-start: auto;
+  color: var(--primary);
+  font-size: .75rem;
 }
 
 .redeven-gateway-setting-badge {
@@ -815,7 +852,5 @@
 .redeven-gateway-network-actions p { flex: 1 1 15rem; }
 
 @media (max-width: 480px) {
-  .redeven-gateway-local-suggestion { flex-wrap: wrap; }
-  .redeven-gateway-local-suggestion > button { margin-inline-start: auto; }
   .redeven-gateway-setting-badge { align-self: flex-start; }
 }
