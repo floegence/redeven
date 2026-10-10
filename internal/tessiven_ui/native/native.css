@@ -6,8 +6,6 @@ button, select { font: inherit; color: inherit; }
 button { cursor: pointer; appearance: none; border: 0; background: transparent; border-radius: 8px; }
 .tessiven { width: 100%; height: 100%; position: relative; }
 .tessiven-canvas { touch-action: none; }
-.tessiven .tessiven-canvas-tools { top: 12px; bottom: auto; left: 12px; max-width: calc(100% - 156px); border-radius: 8px; gap: 4px; }
-.tessiven-canvas-tools button, .tessiven-canvas-tools select { min-height: 44px; }
 .tessiven .floe-graph__minimap { top: 12px; bottom: auto; right: 12px; }
 .tessiven-group-toggle, .tessiven-service { min-height: 36px; }
 .high-contrast .tessiven { --ts-line: var(--foreground); --ts-group-line: var(--foreground); }
@@ -19,3 +17,5 @@ button { cursor: pointer; appearance: none; border: 0; background: transparent; 
 .native-canvas-tools output { width: 44px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .native-canvas-tools button:last-child { margin-left: 4px; border-left: 1px solid var(--border); border-radius: 0; }
 .tessiven .floe-graph__edge { opacity: 0.65; stroke-width: 1.5px; }
+
+.tessiven .floe-infinite-canvas__viewport { will-change: transform; }

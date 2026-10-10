@@ -198,7 +198,7 @@ describe('Tessiven real graph interactions', () => {
     let control: TessivenViewportControl | undefined;
     dispose = render(() => <TessivenGraph version={fixture()} historical={false}
       t={tessivenText('en-US')} onAsk={() => {}} onInspect={() => {}}
-      tools="groups"
+      tools="hidden"
       onDetails={details} onRenderState={states} onViewportControl={value => { control = value; }} />, host);
     await expect.poll(() => states.mock.calls.at(-1)?.[0]).toBe('rendered');
     expect(states.mock.calls[0][0]).toBe('loading');
@@ -211,11 +211,9 @@ describe('Tessiven real graph interactions', () => {
     expect(control?.fit).toBeTypeOf('function');
     const transform = () => host.querySelector<HTMLElement>('.floe-infinite-canvas__viewport')!.style.transform;
     const before = transform();
-    control!.setTouchZooming(true);
     control!.zoom(1.1, 400, 300, 10, 10);
     expect(transform()).not.toBe(before);
-    control!.setTouchZooming(false);
-    await userEvent.click(page.getByRole('button', { name: 'Collapse all', exact: true }));
+    control!.collapseAll();
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(0);
     expect(states.mock.calls.at(-1)?.[0]).toBe('rendered');
   });

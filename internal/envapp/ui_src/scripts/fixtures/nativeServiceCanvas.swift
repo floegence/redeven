@@ -31,9 +31,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
     input.dark = \(dark); input.contrast = \(contrast);
     window.serviceCanvas.update(input);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const tools = document.querySelector('.tessiven-canvas-tools').getBoundingClientRect();
+    if (document.querySelector('.tessiven-canvas-tools')) throw Error('Duplicate native toolbar');
+    const tools = document.querySelector('.native-canvas-tools').getBoundingClientRect();
     const overview = document.querySelector('.floe-graph__minimap').getBoundingClientRect();
-    for (const element of document.querySelectorAll('.tessiven-canvas-tools button, .tessiven-canvas-tools select')) {
+    for (const element of document.querySelectorAll('.native-canvas-tools button')) {
       const box = element.getBoundingClientRect();
       if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight) throw Error('Native control outside viewport');
     }
@@ -67,18 +68,18 @@ final class Bridge: NSObject, WKScriptMessageHandler {
       const until = async read => { for(let i=0;i<300;i++){if(read())return;await new Promise(r=>setTimeout(r,50));}throw Error('Native canvas state timed out'); };
       const nodes = () => document.querySelectorAll('.tessiven-node').length;
       const count=nodes(); if(!count) throw Error('No native nodes');
-      const button = label => [...document.querySelectorAll('button')].find(b=>b.textContent===label);
-      button('Collapse all').click(); await until(()=>nodes()===0 && !document.querySelector('[aria-label="Arranging canvas"]'));
-      button('Expand all').click(); await until(()=>nodes()>0 && !document.querySelector('[aria-label="Arranging canvas"]'));
+      const command = action => window.serviceCanvas.command({canvas_id:'qualification',version_id:1,action});
+      command('collapse'); await until(()=>nodes()===0 && !document.querySelector('[aria-label="Arranging canvas"]'));
+      command('expand'); await until(()=>nodes()>0 && !document.querySelector('[aria-label="Arranging canvas"]'));
       const inventory = () => document.querySelector('[data-group-id="g-master"][data-node-id="n-master-a"]').querySelectorAll('.tessiven-service').length;
       const complete = inventory(); if(complete <= 1) throw Error('Native fixture has no mixed inventory');
-      const scope=document.querySelector('select'); scope.value='group'; scope.dispatchEvent(new Event('change',{bubbles:true}));
+      command('group');
       await until(()=>inventory()===1 && !document.querySelector('[aria-label="Arranging canvas"]'));
-      scope.value='all'; scope.dispatchEvent(new Event('change',{bubbles:true})); await until(()=>inventory()===complete && !document.querySelector('[aria-label="Arranging canvas"]'));
-      const tools=document.querySelector('.tessiven-canvas-tools').getBoundingClientRect(), overview=document.querySelector('.floe-graph__minimap').getBoundingClientRect();
+      command('all'); await until(()=>inventory()===complete && !document.querySelector('[aria-label="Arranging canvas"]'));
+      const tools=document.querySelector('.native-canvas-tools').getBoundingClientRect(), overview=document.querySelector('.floe-graph__minimap').getBoundingClientRect();
       if(tools.right>overview.left && tools.bottom>overview.top && overview.bottom>tools.top) throw Error('Native tools overlap overview');
       if(document.querySelector('[role="alert"]')) throw Error('Native canvas alert');
-      return {nodes:count,overviewPaths:document.querySelectorAll('.floe-graph__minimap path').length,scope:scope.value,allServices:complete,groupServices:1};
+      return {nodes:count,overviewPaths:document.querySelectorAll('.floe-graph__minimap path').length,scope:"all",allServices:complete,groupServices:1};
       """, arguments: [:], in: nil, in: .page) { result in
         switch result {
         case .failure(let error): self.fail(String(describing:error))

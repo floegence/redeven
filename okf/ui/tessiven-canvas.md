@@ -233,16 +233,20 @@ remote script or frame source. This is WebKit document execution, not native
 code download or a native JIT.
 
 The host supplies saved-version data and theme through one update function.
-Native hosts retain their own zoom toolbar and expose shared group/service
-controls at the upper left, with the shared minimap at the upper right. The
-group toolbar is absent when the canvas has no groups and layout has settled.
+Native hosts retain their zoom toolbar and minimap. Group expansion and hosted
+service filtering belong to the native More menu; there is no duplicate graph
+toolbar. A canvas/version-bound command bridge delegates to the shared graph,
+which reports the available actions and current service scope.
 The data-only bridge reports loading, rendered, failure, or an immutable object
 selection; iOS validates the canvas, version and referenced objects before
 opening native details or Flower. Library, history, document export and API
 authorization remain native-owned. No credential or session transport is
-exposed to the renderer. Two-finger zoom suppresses single-pointer viewport
-updates until all fingers leave; ordinary pan retains the published graph
-interaction. Native rendering has bounded loading and explicit retry, and never
+exposed to the renderer. The native touch adapter owns one- and two-finger input exclusively, updating
+the shared viewport once per animation frame. It does not also start the
+published mouse drag session, whose private viewport defers external updates
+until release. Mouse, wheel, minimap and layout retain the published graph
+interaction. Pointer cancellation, visibility changes and disposal clear the
+touch anchors and pending frame. Native rendering has bounded loading and explicit retry, and never
 falls back to a second layout engine.
 
 The released Floe graph component owns pan, zoom, routing, layout, focus, and
