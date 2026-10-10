@@ -29,12 +29,30 @@ type GatewayPermissions struct {
 	ConfigureCloud bool `json:"configure_cloud"`
 }
 
+type GatewayNetworkSettings struct {
+	ListenAddresses []string          `json:"listen_addresses"`
+	AllowedHosts    []string          `json:"allowed_hosts"`
+	Endpoints       []GatewayEndpoint `json:"endpoints"`
+}
+type NetworkSettingsRequest struct {
+	ProtocolVersion string                 `json:"protocol_version"`
+	Settings        GatewayNetworkSettings `json:"settings"`
+}
+type NetworkSettingsResponse struct {
+	ProtocolVersion string                 `json:"protocol_version"`
+	Settings        GatewayNetworkSettings `json:"settings"`
+	RestartRequired bool                   `json:"restart_required"`
+}
+
 type GatewayMetadata struct {
 	GatewayID                   string             `json:"gateway_id"`
 	DisplayName                 string             `json:"display_name"`
 	GatewayPublicKeyFingerprint string             `json:"gateway_public_key_fingerprint"`
 	ListenerAddress             string             `json:"listener_address"`
 	ListenerAddresses           []string           `json:"listener_addresses"`
+	ActiveListenerAddresses     []string           `json:"active_listener_addresses"`
+	AllowedHosts                []string           `json:"allowed_hosts"`
+	ListenerRestartRequired     bool               `json:"listener_restart_required"`
 	ListenerRunning             bool               `json:"listener_running"`
 	EndpointLastUsedAt          map[string]int64   `json:"endpoint_last_used_at"`
 	MemberEndpoints             []GatewayEndpoint  `json:"member_endpoints"`

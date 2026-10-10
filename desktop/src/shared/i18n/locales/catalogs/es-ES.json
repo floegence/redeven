@@ -3201,7 +3201,7 @@
     "saveFirst": "Guarda los cambios de dirección antes de crear una invitación.",
     "inviteHelp": "Genera un código aquí y comparte la dirección y el código con el administrador del entorno de ejecución.",
     "connectionAddresses": "Direcciones de conexión del entorno",
-    "connectionAddressesHelp": "Estas son las direcciones que pueden usar los entornos. El listener permanece en este dispositivo; Cloud se configura por separado.",
+    "connectionAddressesHelp": "Estas direcciones HTTPS se comparten con los entornos de ejecución. Elige direcciones a las que puedan acceder. Cambiar esta lista no modifica la escucha local.",
     "address": "Dirección",
     "addAddress": "Añadir dirección",
     "removeAddress": "Eliminar dirección",
@@ -3258,5 +3258,29 @@
     "authorizedAt": "Autorizado",
     "lastSeen": "Último acceso",
     "codeHelpTitle": "Cómo usar este código"
+  },
+  "gatewayDiscovery": {
+    "title": "Gateway en este equipo",
+    "useAddress": "Usar dirección",
+    "useNamed": "Usar la dirección de {name}: {address}",
+    "help": "Al continuar, el entorno de ejecución elegido comprobará si puede acceder a esta dirección."
+  },
+  "gatewayNetwork": {
+    "listenTitle": "Escucha local",
+    "listenHelp": "Elige las direcciones IP y los puertos locales a los que se vincula Gateway. Separa varias entradas con comas.",
+    "listenAddress": "Direcciones de escucha",
+    "nextStart": "Tras reiniciar",
+    "active": "Escucha actual:",
+    "advanced": "Opciones avanzadas",
+    "allowedHosts": "Nombres de host permitidos",
+    "allHosts": "Todos los nombres de host permitidos",
+    "restrictedHosts": "Nombres de host restringidos: {count}",
+    "hostsHelp": "Déjalo vacío para permitir cualquier nombre de host en las solicitudes. Para restringirlos, escribe nombres de host o direcciones IP exactos separados por comas, sin esquema de URL ni puerto. El entorno de ejecución y Desktop siguen necesitando autorización de acceso.",
+    "invalidListen": "Introduce direcciones locales IP:puerto separadas por comas, por ejemplo 0.0.0.0:7443.",
+    "invalidHosts": "Introduce nombres de host o direcciones IP exactos separados por comas. No se admiten URL, puertos ni comodines.",
+    "save": "Guardar ajustes de red",
+    "saving": "Guardando…",
+    "saved": "Ajustes de red guardados.",
+    "restartRequired": "Reinicia Gateway para aplicar las direcciones de escucha guardadas."
   }
 }

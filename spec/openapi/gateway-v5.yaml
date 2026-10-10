@@ -1320,6 +1320,71 @@
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MemberEndpointUpdateRequest" } } } },
         "responses": { "200": { "description": "Endpoint update", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MemberEndpointUpdateResponse" } } } } }
       }
+    },
+    "/gateway/v5/network-settings": {
+      "post": {
+        "operationId": "gateway_v5_network_settings",
+        "description": "Atomically save confirmed Runtime endpoints, next-start listener bindings and immediate Host restrictions. Requires current verified host management proof. Does not restart Gateway or change member identity.",
+        "security": [
+          {
+            "HostAdministrator": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated Runtime connection endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/NetworkSettingsResponse"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid connection endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Member management permission required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1583,6 +1648,21 @@
           },
           "permissions": {
             "$ref": "#/components/schemas/GatewayPermissions"
+          },
+          "active_listener_addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "listener_restart_required": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1595,7 +1675,10 @@
           "endpoint_last_used_at",
           "member_endpoints",
           "member_tls_root_pem",
-          "permissions"
+          "permissions",
+          "active_listener_addresses",
+          "allowed_hosts",
+          "listener_restart_required"
         ]
       },
       "CatalogRequest": {
@@ -3002,6 +3085,76 @@
           "protocol_version",
           "client_key_id"
         ]
+      },
+      "GatewayNetworkSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "listen_addresses",
+          "allowed_hosts",
+          "endpoints"
+        ],
+        "properties": {
+          "listen_addresses": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "string"
+            },
+            "description": "Local IP:port or hostname:port bindings applied on next Gateway start."
+          },
+          "allowed_hosts": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "string"
+            },
+            "description": "Exact request hostnames or IPs, without scheme or port. Empty permits all. Cloud CONNECT destinations retain separate egress policy."
+          },
+          "endpoints": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/GatewayEndpoint"
+            }
+          }
+        }
+      },
+      "NetworkSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocol_version",
+          "settings"
+        ],
+        "properties": {
+          "protocol_version": {
+            "const": "redeven-gateway-v5"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/GatewayNetworkSettings"
+          }
+        }
+      },
+      "NetworkSettingsResponse": {
+        "type": "object",
+        "required": [
+          "protocol_version",
+          "settings",
+          "restart_required"
+        ],
+        "properties": {
+          "protocol_version": {
+            "const": "redeven-gateway-v5"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/GatewayNetworkSettings"
+          },
+          "restart_required": {
+            "type": "boolean"
+          }
+        }
       }
     }
   }

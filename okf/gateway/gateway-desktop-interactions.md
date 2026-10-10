@@ -17,6 +17,8 @@ Creating a managed Runtime offers Not now or After setup, add Gateway access. Jo
 
 Add Gateway access describes an approved network path, not Runtime administration; Cloud remains optional. Existing Cloud environments require an explicit preserve/new choice. Replace explains possible interruption and fences the old path. Update connection endpoints accepts a fresh signed descriptor from the same Gateway while preserving membership. Normal Runtime startup reconnects without showing this dialog. Background status polling never owns or resets Cloud credential recovery, continues after transient failures, and displays Runtime publication diagnostics. It updates observations only: imported invitations, ownership choices and leave confirmations survive until an explicit operation succeeds or the user closes the panel.
 
+The address field offers quick fill from the trusted Desktop inventory of enabled, paired and online local-host Gateways with confirmed share endpoints. It does not scan the LAN or publish guessed addresses. Remote Runtime targets exclude loopback suggestions. Selecting a suggestion invalidates verification, retains the invitation-code draft, and focuses its input; discovery alone never overwrites a typed address, consumes an invitation or grants access. The target uses its user-facing Runtime label.
+
 The panel exposes current membership, retry, leave and replace. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending are distinct states. Address, code and target changes invalidate a preview; refresh preserves drafts. Local Runtime management remains available only through its trusted owner, never through a Gateway member card.
 
 ## Members and policy
@@ -33,13 +35,17 @@ Runtime invitation codes and Desktop client access codes are separate materials.
 
 The single settings entry owns all three management tabs. Keyboard arrows, Home and End select tabs with roving focus. Tab changes retain endpoint drafts, invitations and unexpired access codes; closing the window discards UI-only drafts and restores its originating card control. Runtime permissions and Cloud Namespace approval are never implied by opening settings or importing a client access code.
 
+## Network settings
+
+Connection settings separates administrator-confirmed Runtime share endpoints from editable local listener bindings. Listener fields show current active addresses and a next-start badge. The advanced request Host section starts collapsed, showing whether all hostnames or an explicit list is allowed. Clean fields follow authoritative catalog changes, while typed drafts survive refresh. Removing all endpoints in Connection settings immediately disables invitation issuance in the Runtimes tab. One Save network settings action persists the three network settings atomically; save feedback distinguishes immediate completion from a required explicit Gateway restart. The separate registration save owns Desktop connection coordinates and naming. [Gateway network settings](gateway-network-settings.md) owns validation, authority and migration semantics.
+
 ## Presentation and accessibility
 
 All shipped locales have explicit translations. Interactive controls provide pointer feedback, keyboard access, visible focus and disabled semantics. Dialog headers contain identity and controls; descriptions belong in the body. Cancel restores the originating control or its surviving owner. Narrow layouts wrap content without hiding actions. Async operations show actual stages rather than invented percentages.
 
 Every Gateway card menu action, including settings and connection removal, uses the same icon container, spacing and label alignment. Restart uses a power-cycle icon distinct from Refresh; the menu, active card action and confirmation share a reactive icon projection so labels and icons stay in sync. Destructive and disabled styling, keyboard navigation and explicit lifecycle confirmation remain unchanged.
 
-Gateway dialogs use a comfortably wide, fixed-height, viewport-bounded panel with a pinned tab rail and a scrolling active panel, so switching tabs never changes dialog geometry or carries over another tab's scroll position. Runtime enrollment keeps its primary actions pinned below the scrolling content, including before the Runtime is started. Cloud status uses the same body typography, section spacing and stable action alignment. Headings, labels, help and metadata follow a consistent type hierarchy; repeated clients and endpoints use compact rows instead of nested cards. Connection settings expose only the addresses Runtime may use; the Gateway keeps transport metadata and failover ordering internally. The three management areas use an underlined tab rail with keyboard navigation, retained state and animated cross-fades. Address rows, native disclosures, invitation/code results and confirmation notices animate with the tab panels and respect reduced-motion preferences.
+Gateway settings use a comfortably wide, fixed-height, viewport-bounded panel with a pinned tab rail and a scrolling active panel, so switching tabs never changes dialog geometry or carries over another tab's scroll position. Runtime enrollment uses a compact content-sized dialog with one guidance paragraph, a target identity row, optional address suggestions and primary actions below the scrolling content, including before the Runtime is started. Cloud status uses the same body typography, section spacing and stable action alignment. Headings, labels, help and metadata follow a consistent type hierarchy; repeated clients and endpoints use compact rows instead of nested cards. Share endpoint rows expose only the addresses Runtime may use; the Gateway keeps transport metadata and failover ordering internally. The three management areas use an underlined tab rail with keyboard navigation, retained state and animated cross-fades. Address rows, native disclosures, invitation/code results and confirmation notices animate with the tab panels and respect reduced-motion preferences.
 
 The upgrade rebuild notice explains that obsolete Gateway entries must be rejoined. It does not manufacture a migration list or imply that old URL profiles remain executable.
 
@@ -48,6 +54,8 @@ The upgrade rebuild notice explains that obsolete Gateway entries must be rejoin
 This surface presents current Gateway state and starts explicit user-authorized operations. It does not mint membership, alter Runtime authority, infer completion from stale observations, or preserve an obsolete URL profile as an executable path.
 
 # Evidence
+
+- `redeven:desktop/scripts/check-gateway-network-ui.mjs` — Ten-locale narrow-screen quick fill, retained input, explicit verification and distinct network settings.
 
 - `redeven:desktop/src/welcome/GatewayClientsPanel.tsx` — Client enrollment, countdown and confirmed revocation.
 

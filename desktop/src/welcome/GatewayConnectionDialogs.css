@@ -504,7 +504,10 @@
   --redeven-welcome-dialog-panel-max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
   display: flex;
   flex-direction: column;
-  height: min(43rem, var(--redeven-welcome-dialog-panel-max-height));
+  width: min(36rem, calc(100vw - 2rem));
+  max-width: min(36rem, calc(100vw - 2rem));
+  height: auto;
+  max-height: var(--redeven-welcome-dialog-panel-max-height);
 }
 
 .redeven-gateway-join-content {
@@ -755,4 +758,64 @@
   .redeven-gateway-content-enter { transition: none; animation: none; }
   .redeven-gateway-disclosure::details-content { transition: none; }
   .redeven-gateway-disclosure > summary svg { transition: none; }
+}
+
+.redeven-gateway-join-target {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--muted) 24%, var(--background));
+  padding: .75rem .875rem;
+  font-size: .875rem;
+}
+
+.redeven-gateway-local-suggestions {
+  display: grid;
+  gap: .625rem;
+  border-inline-start: 2px solid color-mix(in srgb, var(--primary) 45%, var(--border));
+  padding-inline-start: .875rem;
+}
+
+.redeven-gateway-local-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .625rem .875rem;
+}
+
+.redeven-gateway-setting-badge {
+  flex: none;
+  border-radius: .375rem;
+  background: color-mix(in srgb, var(--muted) 42%, var(--background));
+  padding: .25rem .5rem;
+  color: var(--muted-foreground);
+  font-size: .6875rem;
+  line-height: 1.4;
+}
+
+.redeven-gateway-network-advanced {
+  border-block: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-block: .5rem;
+}
+
+.redeven-gateway-network-advanced__content {
+  display: grid;
+  gap: .625rem;
+  padding-block: .75rem;
+}
+
+.redeven-gateway-network-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem 1rem;
+}
+
+.redeven-gateway-network-actions p { flex: 1 1 15rem; }
+
+@media (max-width: 480px) {
+  .redeven-gateway-local-suggestion { flex-wrap: wrap; }
+  .redeven-gateway-local-suggestion > button { margin-inline-start: auto; }
+  .redeven-gateway-setting-badge { align-self: flex-start; }
 }

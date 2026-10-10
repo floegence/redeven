@@ -1,6 +1,7 @@
+import { gatewayAllowedHost, gatewayListenAddress } from '../shared/gatewayNetworkSettings';
 import { Button, Checkbox, Input, StableText } from '@floegence/floe-webapp-core/ui';
-import { ChevronDown, Info, Plus, Trash, Copy } from '@floegence/floe-webapp-core/icons';
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
+import { ChevronDown, Plus, Trash, Copy } from '@floegence/floe-webapp-core/icons';
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from 'solid-js';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionSuccess } from '../shared/desktopLauncherIPC';
 import type { GatewayCloudPermission, GatewayEndpoint, GatewayInvitationCodeDelivery, GatewayPolicy } from '../shared/gatewayMembership';
@@ -28,6 +29,13 @@ export function GatewayMembersPanel(props: Readonly<{
   const [removing, setRemoving] = createSignal('');
   const [savingPolicy, setSavingPolicy] = createSignal(false);
   const [endpointDraft, setEndpointDraft] = createSignal<GatewayEndpoint[]>([]);
+  const [listenDraft, setListenDraft] = createSignal('');
+  const [hostsDraft, setHostsDraft] = createSignal('');
+  const [savedNetwork, setSavedNetwork] = createSignal('');
+  const [networkFieldError, setNetworkFieldError] = createSignal<'listen' | 'hosts'>();
+  let listenInput: HTMLInputElement | undefined, hostsInput: HTMLInputElement | undefined, networkAdvanced: HTMLDetailsElement | undefined;
+  const [networkSaved, setNetworkSaved] = createSignal(false);
+  const [restartRequired, setRestartRequired] = createSignal(false);
   const [savedEndpoints, setSavedEndpoints] = createSignal<readonly GatewayEndpoint[]>([]);
   const [removingEndpointID, setRemovingEndpointID] = createSignal('');
   let generation = 0, gatewayID = '', removalTimer: number | undefined;
@@ -39,8 +47,13 @@ export function GatewayMembersPanel(props: Readonly<{
     gatewayID = next; generation++; setBusy(false); setError(''); setInvitation(undefined); setTargetID('');
     setDraftPolicy(undefined); setOverrides({}); setResults(undefined); setRemoving(''); setSavingPolicy(false); setRemovingEndpointID(''); setEndpointDraft([...(props.gateway?.member_endpoints ?? [])]);
     setSavedEndpoints(props.gateway?.member_endpoints ?? []);
+    const listen = props.gateway?.listener_addresses?.length ? props.gateway.listener_addresses : [props.gateway?.listener_address || ':7443'];
+    setListenDraft(listen.join(', ')); setHostsDraft((props.gateway?.allowed_hosts ?? []).join(', '));
+    setSavedNetwork(JSON.stringify({listen:listen.join(', '), hosts:(props.gateway?.allowed_hosts ?? []).join(', '), endpoints:props.gateway?.member_endpoints ?? []}));
+    setNetworkFieldError(undefined); setNetworkSaved(false); setRestartRequired(props.gateway?.listener_restart_required === true);
   });
   onCleanup(() => { generation++; if (removalTimer !== undefined) window.clearTimeout(removalTimer); });
+  createEffect(() => setRestartRequired(props.gateway?.listener_restart_required === true));
   const members = () => props.gateway?.environments.filter(member => member.state === 'active') ?? [];
   const policy = () => draftPolicy() ?? props.gateway?.policy;
   const targets = createMemo(() => [...new Map(props.targets.filter(target => target.runtime_running && target.runtime_control_status.state === 'available').map(target => [target.id, target])).values()]);
@@ -110,13 +123,41 @@ export function GatewayMembersPanel(props: Readonly<{
     const result = await perform({ kind: 'update_gateway_policy', gateway_id: props.gateway.gateway_id, policy: policy()! });
     if (result) { setDraftPolicy(undefined); setSavingPolicy(false); }
   }
+  const entries = (value: string) => value.split(/[,\n]/u).map(item => item.trim()).filter(Boolean);
+  const networkDirty = () => JSON.stringify({listen:listenDraft(),hosts:hostsDraft(),endpoints:normalizedEndpoints()}) !== savedNetwork();
+  createEffect(on(() => props.gateway, source => untrack(() => {
+    if (!source || source.gateway_id !== gatewayID || busy() || networkDirty()) return;
+    const endpoints = source.member_endpoints ?? [];
+    if (JSON.stringify(endpoints) !== JSON.stringify(savedEndpoints())) setInvitation(undefined);
+    const listen = source.listener_addresses?.length ? source.listener_addresses : [source.listener_address || ':7443'];
+    setSavedEndpoints(endpoints); setEndpointDraft([...endpoints]);
+    setListenDraft(listen.join(', ')); setHostsDraft((source.allowed_hosts ?? []).join(', '));
+    setSavedNetwork(JSON.stringify({listen:listenDraft(),hosts:hostsDraft(),endpoints}));
+  })));
+  function invalidNetworkField(field: 'listen' | 'hosts') {
+    setNetworkFieldError(field); setError(props.i18n.t(field === 'listen' ? 'gatewayNetwork.invalidListen' : 'gatewayNetwork.invalidHosts'));
+    if (field === 'hosts' && networkAdvanced) networkAdvanced.open = true;
+    queueMicrotask(() => (field === 'listen' ? listenInput : hostsInput)?.focus());
+  }
   async function saveEndpoints() {
     if (!props.gateway) return;
     if (removingEndpointID()) return;
     if (!endpointsValid()) { setError(props.i18n.t('gatewayMembers.invalidConnectionAddresses')); return; }
+    const listen = entries(listenDraft()).map(gatewayListenAddress);
+    const hosts = entries(hostsDraft()).map(gatewayAllowedHost);
+    if (!listen.length || listen.includes(null) || new Set(listen).size !== listen.length || listen.length > 16) { invalidNetworkField('listen'); return; }
+    if (hosts.includes(null) || new Set(hosts).size !== hosts.length || hosts.length > 64) { invalidNetworkField('hosts'); return; }
+    setNetworkFieldError(undefined);
     const endpoints = normalizedEndpoints();
-    const result = await perform({ kind: 'update_gateway_endpoints', gateway_id: props.gateway.gateway_id, endpoints });
-    if (result) { setSavedEndpoints(endpoints); setEndpointDraft(endpoints); setInvitation(undefined); }
+    const changedBinding = listen.join(', ') !== (props.gateway.listener_addresses?.join(', ') || props.gateway.listener_address || ':7443');
+    const result = await perform({ kind: 'update_gateway_network_settings', gateway_id: props.gateway.gateway_id, settings:{listen_addresses:listen as string[],allowed_hosts:hosts as string[],endpoints} });
+    if (result) {
+      const settings = result.gateway_network_settings?.settings ?? {listen_addresses:listen as string[],allowed_hosts:hosts as string[],endpoints};
+      setSavedEndpoints(settings.endpoints); setEndpointDraft([...settings.endpoints]); setInvitation(undefined);
+      setListenDraft(settings.listen_addresses.join(', ')); setHostsDraft(settings.allowed_hosts.join(', '));
+      setSavedNetwork(JSON.stringify({listen:listenDraft(),hosts:hostsDraft(),endpoints:settings.endpoints}));
+      setRestartRequired(result.gateway_network_settings?.restart_required ?? changedBinding); setNetworkSaved(true);
+    }
   }
   function removeEndpoint(endpointID: string) {
     if (removingEndpointID()) return;
@@ -139,19 +180,10 @@ export function GatewayMembersPanel(props: Readonly<{
         <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'dismiss_gateway_rebuild', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.close')}</Button>
       </div></Show>
       <Show when={props.section === 'connection'}>
-      <details class="redeven-gateway-disclosure redeven-gateway-listen-details group">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden"><span>{props.i18n.t('gatewayMembers.listenerAddress')}</span><ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
-        <div class="redeven-gateway-help pt-1">
-          <p>{props.i18n.t('gatewayMembers.listenerAddressHelp')}</p>
-        </div>
-        <div class="redeven-gateway-listen-value">
-          <span class="break-all font-mono text-foreground">{props.gateway?.listener_addresses?.join(', ') || props.gateway?.listener_address || '—'}</span>
-          <span class="text-muted-foreground">{props.i18n.t(props.gateway?.listener_running ? 'gatewayMembers.listenerActive' : 'gatewayMembers.localOnly')}</span>
-        </div>
-      </details>
       <section class="redeven-gateway-settings-section">
         <div>
-          <h3 class="redeven-gateway-section-title flex items-center gap-2">{props.i18n.t('gatewayMembers.connectionAddresses')}<DesktopTooltip content={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><button type="button" class="cursor-pointer text-muted-foreground" aria-label={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><Info class="h-4 w-4" /></button></DesktopTooltip></h3>
+          <h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayMembers.connectionAddresses')}</h3>
+          <p class="redeven-gateway-help mt-1">{props.i18n.t('gatewayMembers.connectionAddressesHelp')}</p>
         </div>
         <div class="redeven-gateway-endpoint-list">
           <For each={endpointDraft()}>{(endpoint, index) => <div class="redeven-gateway-endpoint-shell" data-endpoint-id={endpoint.endpoint_id} classList={{ 'redeven-gateway-endpoint-shell--removing': removingEndpointID() === endpoint.endpoint_id }} inert={removingEndpointID() === endpoint.endpoint_id}>
@@ -170,10 +202,18 @@ export function GatewayMembersPanel(props: Readonly<{
         </div>
         <div class="flex flex-wrap gap-2">
           <Button class="cursor-pointer" size="xs" variant="outline" icon={Plus} disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members || endpointDraft().length >= 16} onClick={() => setEndpointDraft(current => [...current, { endpoint_id: `endpoint_${crypto.randomUUID().replaceAll('-', '')}`, address: '', scope: 'lan', priority: current.length }])}>{props.i18n.t('gatewayMembers.addAddress')}</Button>
-          <Button class="cursor-pointer" size="xs" disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} onClick={() => void saveEndpoints()}>{props.i18n.t('gatewayMembers.saveAddresses')}</Button>
         </div>
-        <Show when={endpointsDirty()}><p role="status" class="text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.saveFirst')}</p></Show>
       </section>
+      <section class="redeven-gateway-settings-section redeven-gateway-section-divider">
+        <div class="redeven-gateway-section-heading"><div><h3>{props.i18n.t('gatewayNetwork.listenTitle')}</h3><p>{props.i18n.t('gatewayNetwork.listenHelp')}</p></div><span class="redeven-gateway-setting-badge">{props.i18n.t('gatewayNetwork.nextStart')}</span></div>
+        <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayNetwork.listenAddress')}</span><Input ref={listenInput} aria-invalid={networkFieldError() === 'listen' || undefined} id="gateway-listen-addresses" class="font-mono" value={listenDraft()} placeholder="0.0.0.0:7443, [::]:7443" size="sm" spellcheck={false} disabled={busy() || !props.gateway?.permissions?.manage_members} onInput={event => { setListenDraft(event.currentTarget.value); setNetworkSaved(false); setNetworkFieldError(undefined); setError(''); }} /></label>
+        <Show when={props.gateway?.listener_running}><p class="redeven-gateway-help text-xs">{props.i18n.t('gatewayNetwork.active')} <code class="break-all">{(props.gateway?.active_listener_addresses ?? props.gateway?.listener_addresses ?? [props.gateway?.listener_address]).join(', ')}</code></p></Show>
+      </section>
+      <details ref={networkAdvanced} data-gateway-network-advanced class="redeven-gateway-disclosure redeven-gateway-network-advanced group">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden"><span>{props.i18n.t('gatewayNetwork.advanced')}</span><span class="ml-auto text-xs font-normal text-muted-foreground">{props.i18n.t(entries(hostsDraft()).length ? 'gatewayNetwork.restrictedHosts' : 'gatewayNetwork.allHosts',{count:entries(hostsDraft()).length})}</span><ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+        <div class="redeven-gateway-network-advanced__content"><label class="redeven-gateway-field"><span>{props.i18n.t('gatewayNetwork.allowedHosts')}</span><Input ref={hostsInput} aria-invalid={networkFieldError() === 'hosts' || undefined} id="gateway-allowed-hosts" class="font-mono" value={hostsDraft()} placeholder="gateway.example, 192.168.1.10" size="sm" spellcheck={false} disabled={busy() || !props.gateway?.permissions?.manage_members} onInput={event => { setHostsDraft(event.currentTarget.value); setNetworkSaved(false); setNetworkFieldError(undefined); setError(''); }} /></label><p class="redeven-gateway-help">{props.i18n.t('gatewayNetwork.hostsHelp')}</p></div>
+      </details>
+      <div class="redeven-gateway-network-actions"><Show when={networkSaved() || restartRequired()}><p role="status" class="redeven-gateway-help">{props.i18n.t(restartRequired() ? 'gatewayNetwork.restartRequired' : 'gatewayNetwork.saved')}</p></Show><Button class="ml-auto cursor-pointer whitespace-nowrap" size="sm" disabled={busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members || !networkDirty()} onClick={() => void saveEndpoints()}><StableText reserve={[props.i18n.t('gatewayNetwork.save'),props.i18n.t('gatewayNetwork.saving')]}>{props.i18n.t(busy() ? 'gatewayNetwork.saving' : 'gatewayNetwork.save')}</StableText></Button></div>
       </Show>
       <Show when={props.section !== 'connection'}>
       <section class="redeven-gateway-settings-section">

@@ -3200,7 +3200,7 @@
     "saveFirst": "Adressänderungen vor dem Erstellen einer Einladung speichern.",
     "inviteHelp": "Erstellen Sie hier einen Code und teilen Sie Adresse und Code mit dem Administrator der Laufzeitumgebung.",
     "connectionAddresses": "Verbindungsadressen der Laufzeit",
-    "connectionAddressesHelp": "Dies sind die Adressen, die Laufzeiten verwenden können. Der Listener bleibt auf diesem Gerät; Cloud wird separat konfiguriert.",
+    "connectionAddressesHelp": "Diese HTTPS-Adressen werden mit Laufzeiten geteilt. Wählen Sie für sie erreichbare Adressen. Änderungen an dieser Liste ändern den lokalen Listener nicht.",
     "address": "Adresse",
     "addAddress": "Adresse hinzufügen",
     "removeAddress": "Adresse entfernen",
@@ -3257,5 +3257,29 @@
     "authorizedAt": "Autorisiert",
     "lastSeen": "Letzter Zugriff",
     "codeHelpTitle": "So verwenden Sie diesen Code"
+  },
+  "gatewayDiscovery": {
+    "title": "Gateway auf diesem Computer",
+    "useAddress": "Adresse übernehmen",
+    "useNamed": "Adresse von {name} übernehmen: {address}",
+    "help": "Beim Fortfahren prüft die gewählte Laufzeit, ob diese Adresse erreichbar ist."
+  },
+  "gatewayNetwork": {
+    "listenTitle": "Lokaler Listener",
+    "listenHelp": "Legen Sie die lokalen IP-Adressen und Ports fest, an die Gateway gebunden wird. Trennen Sie mehrere Einträge durch Kommas.",
+    "listenAddress": "Bind-Adressen",
+    "nextStart": "Nach Neustart wirksam",
+    "active": "Aktuell gebunden:",
+    "advanced": "Erweitert",
+    "allowedHosts": "Erlaubte Hostnamen",
+    "allHosts": "Alle Hostnamen erlaubt",
+    "restrictedHosts": "Beschränkte Hostnamen: {count}",
+    "hostsHelp": "Leer lassen, um jeden Anfrage-Hostnamen zuzulassen. Für Einschränkungen exakte Hostnamen oder IP-Adressen durch Kommas trennen, ohne URL-Schema oder Port. Laufzeit und Desktop benötigen weiterhin eine Zugriffsberechtigung.",
+    "invalidListen": "Lokale IP:Port-Einträge durch Kommas trennen, zum Beispiel 0.0.0.0:7443.",
+    "invalidHosts": "Exakte Hostnamen oder IP-Adressen durch Kommas trennen. URLs, Ports und Platzhalter werden nicht unterstützt.",
+    "save": "Netzwerkeinstellungen speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Netzwerkeinstellungen gespeichert.",
+    "restartRequired": "Gateway neu starten, um die gespeicherten Bind-Adressen anzuwenden."
   }
 }

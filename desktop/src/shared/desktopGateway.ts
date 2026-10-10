@@ -149,6 +149,9 @@ export type DesktopGatewaySource = Readonly<{
   listener_address?: string;
   listener_addresses?: readonly string[];
   listener_running?: boolean;
+  active_listener_addresses?: readonly string[];
+  listener_restart_required?: boolean;
+  allowed_hosts?: readonly string[];
   endpoint_last_used_at?: Readonly<Record<string, number>>;
   member_endpoints?: readonly GatewayEndpoint[];
   runtime_root?: string;

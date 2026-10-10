@@ -6,6 +6,7 @@ import { createDesktopI18n } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
 import type { GatewayJoinPreview, GatewayMembershipStatus } from '../shared/gatewayJoin';
 import type { DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 
 let dispose: (() => void) | undefined;
@@ -18,11 +19,11 @@ function button(label: string) {
 }
 function status(value: GatewayMembershipStatus): DesktopLauncherActionResult { return {ok:true,outcome:'gateway_membership_updated',gateway_membership:value}; }
 function verified(value=preview): DesktopLauncherActionResult { return {ok:true,outcome:'gateway_membership_updated',gateway_preview:value}; }
-function mount(perform: ReturnType<typeof vi.fn>) {
+function mount(perform: ReturnType<typeof vi.fn>, gateways: readonly DesktopGatewaySource[] = [], initialAddress = "https://gateway.internal:7443") {
  vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
  const root=document.createElement('div');document.body.append(root);
  const [target,setTarget]=createSignal<DesktopCloudRuntimeLinkTargetID>('ssh:chosen');
- dispose=render(()=><RuntimeGatewayJoinPanel targetID={target()} targetLabel="Build Runtime" address="https://gateway.internal:7443" code="123456789ABCDEFGHJKMNPQRSTV" i18n={i18n}/>,root);
+ dispose=render(()=><RuntimeGatewayJoinPanel targetID={target()} targetLabel="Build Runtime" gateways={gateways} address={initialAddress} code="123456789ABCDEFGHJKMNPQRSTV" i18n={i18n}/>,root);
  const trigger=button(i18n.t('gatewayJoin.title'));trigger.focus();trigger.click();return {trigger,setTarget};
 }
 function edit(index:number,value:string){const input=[...document.querySelectorAll<HTMLInputElement>('input:not([type="radio"])')][index]!;input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}
@@ -72,5 +73,39 @@ describe('Runtime Gateway address and code interaction',()=>{
  });
  it('ignores a delayed verification after close and reopen',async()=>{
   let complete!:(value:DesktopLauncherActionResult)=>void;const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;})).mockResolvedValue(status({joined:false,phase:'not_joined'}));const {trigger}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();button(i18n.t('common.cancel')).click();await settle();trigger.click();await settle();complete(verified());await settle();expect(document.body.textContent).not.toContain(preview.gateway_name);
+ });
+});
+
+const localGateway: DesktopGatewaySource = {
+ gateway_id:'local-gateway',display_name:'Office Gateway',local_enabled:true,connection_kind:'local_host',
+ management_capability:'managed_local_host',capabilities:[],status:'online',trust_state:'paired',listener_running:true,
+ created_at_ms:1,updated_at_ms:1,environments:[],member_endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}],
+};
+describe('local Gateway quick fill',()=>{
+ it('offers known local addresses without replacing a draft or authorizing access',async()=>{
+  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  mount(perform,[localGateway]);await settle();
+  const inputs=document.querySelectorAll<HTMLInputElement>('input:not([type="radio"])');
+  expect(inputs[0]?.value).toBe('https://gateway.internal:7443');
+  const suggestion=document.querySelector<HTMLButtonElement>('[data-gateway-suggestion]');
+  expect(suggestion?.closest('.redeven-gateway-local-suggestion')?.textContent).toContain('Office Gateway');
+  suggestion!.click();await settle();
+  expect(inputs[0]?.value).toBe('https://office.local:7443');
+  expect(document.activeElement).toBe(inputs[1]);
+  expect(perform.mock.calls.every(call=>call[0].operation==='status')).toBe(true);
+  expect(document.body.textContent?.split(i18n.t('gatewayJoin.codeHelp')).length).toBe(2);
+ });
+ it('invalidates a verified preview when a suggestion is selected',async()=>{
+  const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified());
+  mount(perform,[localGateway]);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
+  document.querySelector<HTMLButtonElement>('[data-gateway-suggestion]')!.click();await settle();
+  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();
+  expect(button(i18n.t('gatewayJoin.verify'))).toBeDefined();
+ });
+ it('excludes offline, disabled and remote Gateways and loopback addresses for remote Runtimes',async()=>{
+  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  mount(perform,[{...localGateway,status:'offline'},{...localGateway,allowed_hosts:['other.example']},{...localGateway,local_enabled:false},{...localGateway,connection_kind:'ssh_host'},
+   {...localGateway,member_endpoints:[{endpoint_id:'loopback',address:'https://127.0.0.1:7443',scope:'lan',priority:0}]}]);await settle();
+  expect(document.querySelector('[data-gateway-suggestion]')).toBeNull();
  });
 });

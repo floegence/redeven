@@ -563,6 +563,9 @@ export function gatewayRecordToSourceWithCatalog(
     listener_address?: string;
     listener_addresses?: DesktopGatewaySource['listener_addresses'];
     listener_running?: boolean;
+    active_listener_addresses?: readonly string[];
+    listener_restart_required?: boolean;
+    allowed_hosts?: readonly string[];
     endpoint_last_used_at?: DesktopGatewaySource['endpoint_last_used_at'];
     permissions?: DesktopGatewaySource['permissions'];
     policy?: DesktopGatewaySource['policy'];
@@ -590,6 +593,9 @@ export function gatewayRecordToSourceWithCatalog(
     listener_address: catalog.listener_address,
     listener_addresses: catalog.listener_addresses,
     listener_running: catalog.listener_running,
+    active_listener_addresses: catalog.active_listener_addresses,
+    listener_restart_required: catalog.listener_restart_required,
+    allowed_hosts: catalog.allowed_hosts,
     endpoint_last_used_at: catalog.endpoint_last_used_at,
     member_endpoints: catalog.member_endpoints,
     environments: [...(catalog.environments ?? [])],

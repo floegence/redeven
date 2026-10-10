@@ -73,7 +73,7 @@ func originAllowed(store *Store, request *http.Request) bool {
 
 func (l *Listener) Server(tlsConfig *tls.Config, egress http.Handler) (*flowersec.WebSocketHTTPServer, error) {
 	return flowersec.NewWebSocketHTTPServer(flowersec.WebSocketHTTPServerOptions{
-		Handler: l.acceptor.Handler(), ApplicationHandler: l.applicationHandler(egress),
+		Handler: l.acceptor.Handler(), AuthorizeWebSocketRequest: l.store.AllowsHost, ApplicationHandler: l.applicationHandler(egress),
 		TLSConfig: tlsConfig, ReadHeaderTimeout: 10 * time.Second,
 	})
 }
@@ -83,6 +83,10 @@ func (l *Listener) applicationHandler(egress http.Handler) http.Handler {
 	l.store.RegisterMemberHandlers(mux)
 	mux.Handle("GET "+InvitationExchangePath, l.exchange)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect && !l.store.AllowsHost(r) {
+			http.Error(w, "HOST_NOT_ALLOWED", http.StatusForbidden)
+			return
+		}
 		if r.Method == http.MethodConnect || r.URL.Path == "/v5/member/cloud" || r.URL.Path == "/v5/member/cloud-closure" {
 			if egress == nil {
 				http.Error(w, "CLOUD_NOT_CONFIGURED", http.StatusForbidden)

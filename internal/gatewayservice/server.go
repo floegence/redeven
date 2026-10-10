@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,7 @@ type Server struct {
 	rebuildRequired   bool
 	listenerMu        sync.Mutex
 	listenerAddresses []string
+	activeBindings    []string
 }
 
 type envelope struct {
@@ -236,6 +238,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /gateway/v5/members/reevaluate", s.handleReevaluate)
 	mux.HandleFunc("POST /gateway/v5/invitation-codes", s.handleInvitation)
 	mux.HandleFunc("POST /gateway/v5/endpoints", s.handleEndpoints)
+	mux.HandleFunc("POST /gateway/v5/network-settings", s.handleNetworkSettings)
 	mux.HandleFunc("POST /gateway/v5/members/remove", s.handleRemove)
 	mux.HandleFunc("POST /gateway/v5/members/policy", s.handleMemberPolicy)
 	mux.HandleFunc("POST /gateway/v5/policy", s.handlePolicy)
@@ -271,9 +274,11 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 		}
 		s.listenerMu.Lock()
 		s.listenerAddresses = nil
+		s.activeBindings = nil
 		s.listenerMu.Unlock()
 	}
-	for _, address := range s.members.Endpoint().ListenAddresses {
+	bindings := s.members.Endpoint().ListenAddresses
+	for _, address := range bindings {
 		member, err := net.Listen("tcp", address)
 		if err != nil {
 			shutdown()
@@ -300,6 +305,7 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 		starters = append(starters, func() { defer cancel(); _ = memberServer.Serve(member) })
 	}
 	s.listenerMu.Lock()
+	s.activeBindings = slices.Clone(bindings)
 	for _, member := range listeners[1:] {
 		s.listenerAddresses = append(s.listenerAddresses, member.Addr().String())
 	}
@@ -446,6 +452,9 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	metadata.ListenerAddresses = append([]string(nil), endpoint.ListenAddresses...)
 	s.listenerMu.Lock()
 	metadata.ListenerRunning = len(s.listenerAddresses) > 0
+	metadata.ActiveListenerAddresses = append([]string{}, s.listenerAddresses...)
+	metadata.ListenerRestartRequired = metadata.ListenerRunning && !slices.Equal(s.activeBindings, endpoint.ListenAddresses)
+	metadata.AllowedHosts = append([]string{}, endpoint.AllowedHosts...)
 	s.listenerMu.Unlock()
 	metadata.EndpointLastUsedAt = s.members.EndpointUsage()
 	metadata.MemberEndpoints, metadata.MemberTLSRootPEM, metadata.Permissions = s.members.Endpoints(), endpoint.RootPEM, client.Permissions
@@ -464,6 +473,27 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	rebuildRequired := s.rebuildRequired
 	s.migrationMu.Unlock()
 	writeResult(w, gp.CatalogResponse{ProtocolVersion: gp.Version, Gateway: metadata, Members: members, Policy: policy, Revision: revision, RebuildRequired: rebuildRequired, HookStatus: s.hooks.Status()}, nil)
+}
+
+func (s *Server) handleNetworkSettings(w http.ResponseWriter, r *http.Request) {
+	var request gp.NetworkSettingsRequest
+	client, ok := s.authenticated(w, r, &request)
+	if !ok {
+		return
+	}
+	if !client.Permissions.ManageMembers {
+		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
+		return
+	}
+	if err := s.members.UpdateNetworkSettings(request.Settings); err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	settings := s.members.NetworkSettings()
+	s.listenerMu.Lock()
+	restart := len(s.listenerAddresses) > 0 && !slices.Equal(s.activeBindings, settings.ListenAddresses)
+	s.listenerMu.Unlock()
+	writeResult(w, gp.NetworkSettingsResponse{ProtocolVersion: gp.Version, Settings: settings, RestartRequired: restart}, nil)
 }
 
 func (s *Server) handleEndpoints(w http.ResponseWriter, r *http.Request) {

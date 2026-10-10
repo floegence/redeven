@@ -1,3 +1,5 @@
+import type { GatewayNetworkSettings } from '../shared/gatewayMembership';
+import { normalizeGatewayNetworkSettings } from '../shared/gatewayNetworkSettings';
 import type { GatewayMemberServiceResponse } from '../shared/gatewayMembership';
 import { randomBytes } from 'node:crypto';
 import http from 'node:http';
@@ -26,6 +28,9 @@ export type GatewayCatalogResponse = Readonly<{
     listener_address: string;
     listener_addresses?: readonly string[];
     listener_running?: boolean;
+    active_listener_addresses?: readonly string[];
+    listener_restart_required?: boolean;
+    allowed_hosts?: readonly string[];
     endpoint_last_used_at?: Readonly<Record<string, number>>;
     member_endpoints: readonly GatewayEndpoint[]; member_tls_root_pem: string; permissions: GatewayPermissions;
   }>;
@@ -131,6 +136,9 @@ export function normalizeGatewayCatalogResponse(value: unknown): GatewayCatalogR
       gateway_public_key_fingerprint: text(gateway.gateway_public_key_fingerprint), listener_address: text(gateway.listener_address), member_endpoints: memberEndpoints,
       listener_addresses: Array.isArray(gateway.listener_addresses) ? gateway.listener_addresses.map(value => text(value)) : [],
       listener_running: gateway.listener_running === true,
+      active_listener_addresses: Array.isArray(gateway.active_listener_addresses) ? gateway.active_listener_addresses.map(value => text(value)) : [],
+      listener_restart_required: gateway.listener_restart_required === true,
+      allowed_hosts: Array.isArray(gateway.allowed_hosts) ? gateway.allowed_hosts.map(value => text(value)) : [],
       endpoint_last_used_at: Object.fromEntries(Object.entries(object(gateway.endpoint_last_used_at ?? {})).map(([key, value]) => [id(key), integer(value, 0)])),
       member_tls_root_pem: text(gateway.member_tls_root_pem, 16_384), permissions: permissions(gateway.permissions),
     }, members, policy: policy(item.policy), revision: integer(item.revision, 1), rebuild_required: boolean(item.rebuild_required),
@@ -256,6 +264,13 @@ export class GatewayClient {
     return { protocol_version: version(item.protocol_version), invitation_id: id(item.invitation_id), gateway_id: id(item.gateway_id), gateway_name: text(item.gateway_name,256), gateway_public_key: text(item.gateway_public_key), share_address: address, share_addresses: addresses, code, issued_at_unix_ms: integer(item.issued_at_unix_ms,1), expires_at_unix_ms: integer(item.expires_at_unix_ms,1), signature: text(item.signature) };
   }
 
+  async updateNetworkSettings(record: GatewayRecord, settings: GatewayNetworkSettings, options: GatewayRequestOptions = {}): Promise<{settings:GatewayNetworkSettings; restart_required:boolean}> {
+    const value = object(await this.request(record, 'network-settings', {protocol_version:GATEWAY_PROTOCOL_VERSION, settings}, options));
+    version(value.protocol_version);
+    const normalized = normalizeGatewayNetworkSettings(value.settings);
+    if (!normalized) return invalid();
+    return {settings:normalized, restart_required:boolean(value.restart_required)};
+  }
   async updateEndpoints(record: GatewayRecord, endpoints: readonly GatewayEndpoint[], options: GatewayRequestOptions = {}): Promise<readonly GatewayEndpoint[]> {
     const value = object(await this.request(record, 'endpoints', { protocol_version: GATEWAY_PROTOCOL_VERSION, endpoints }, options));
     version(value.protocol_version);

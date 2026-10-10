@@ -40,6 +40,7 @@ type Endpoint struct {
 	URL                string   `json:"url"`
 	ListenAddress      string   `json:"listen_address"`
 	ListenAddresses    []string `json:"listen_addresses,omitempty"`
+	AllowedHosts       []string `json:"allowed_hosts"`
 	CertificateOrigins []string `json:"certificate_origins,omitempty"`
 	RootPEM            string   `json:"root_pem"`
 	RootKeyPEM         string   `json:"root_key_pem"`
@@ -133,7 +134,8 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 		if err != nil {
 			return nil, err
 		}
-		s.state = memberState{SchemaVersion: 3, GatewayID: identity.ID, Revision: 1, Endpoint: endpoint, Policy: gp.GatewayPolicy{Revision: 1, PublicationMode: gp.PublicationManual}, Members: map[string]MemberRecord{}, Invitations: map[string]invitationRecord{}, CloudCommands: map[string]cloudCommandDelivery{}, Admissions: map[string]Admission{}}
+		endpoint.AllowedHosts = []string{}
+		s.state = memberState{SchemaVersion: 4, GatewayID: identity.ID, Revision: 1, Endpoint: endpoint, Policy: gp.GatewayPolicy{Revision: 1, PublicationMode: gp.PublicationManual}, Members: map[string]MemberRecord{}, Invitations: map[string]invitationRecord{}, CloudCommands: map[string]cloudCommandDelivery{}, Admissions: map[string]Admission{}}
 		if confirmedURL != "" {
 			s.state.AdvertisedEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_primary", Address: endpoint.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
 		}
@@ -164,7 +166,12 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 		s.state.SchemaVersion = 3
 		migrated = true
 	}
-	if s.state.SchemaVersion != 3 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
+	if s.state.SchemaVersion == 3 {
+		s.state.Endpoint.AllowedHosts = []string{}
+		s.state.SchemaVersion = 4
+		migrated = true
+	}
+	if s.state.Endpoint.AllowedHosts == nil || s.state.SchemaVersion != 4 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
 		return nil, ErrState
 	}
 	if s.state.CloudCommands == nil {
@@ -173,6 +180,9 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 	if len(s.state.Endpoint.ListenAddresses) == 0 {
 		s.state.Endpoint.ListenAddresses = []string{s.state.Endpoint.ListenAddress}
 		migrated = true
+	}
+	if _, err := normalizeNetworkSettings(gp.GatewayNetworkSettings{ListenAddresses: s.state.Endpoint.ListenAddresses, AllowedHosts: s.state.Endpoint.AllowedHosts, Endpoints: s.state.AdvertisedEndpoints}); err != nil {
+		return nil, ErrState
 	}
 	for _, address := range s.state.Endpoint.ListenAddresses {
 		if _, _, err := net.SplitHostPort(address); err != nil {
