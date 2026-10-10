@@ -2754,7 +2754,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerReasoningEnabled = createMemo(() => reasoningCapabilitySupportsControl(selectedReasoningCapability()));
   const composerLaunchReasoningSelection = createMemo(() => (composerReasoningEnabled() ? composerReasoningSelection() : undefined));
   createEffect(() => {
-    if (selectedThreadID() || !selectedModelOption() || composerReasoningEnabled()) return;
+    if (selectedThreadID() || !modelDirectory() || !selectedModelOption() || composerReasoningEnabled()) return;
     if (!currentComposerSessionDraft().reasoningOverride) return;
     updateCurrentComposerSessionDraft((draft) => (
       draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft

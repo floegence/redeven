@@ -64,7 +64,11 @@ describe('Flower reasoning settings authority', () => {
     expect(drafts.read('__new_thread__').value.reasoning_selection).toEqual({ level });
     disposeRenderedSurface(surface);
     surface.remove();
+    const reloadedSettings = deferred<ReturnType<typeof settings>>();
+    base.loadSettings = vi.fn(() => reloadedSettings.promise);
     surface = renderSurfaceWithDraftCoordinator(base, drafts);
+    expect(drafts.read('__new_thread__').value.reasoning_selection).toEqual({ level });
+    reloadedSettings.resolve(settings(cap));
     await waitFor(() => control(surface)?.textContent?.includes(choice) === true);
     const textarea = surface.querySelector<HTMLTextAreaElement>('textarea')!;
     textarea.value = 'Use the selected reasoning mode';

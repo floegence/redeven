@@ -16,12 +16,20 @@ import {
 import type { FlowerThreadSwitcherCopy } from '../../../../flower_ui/src/threads/FlowerThreadSwitcher';
 
 const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => {
-  const legacy = props.adapter as TestFlowerSurfaceAdapter;
-  const adapter = props.adapter.connectLiveStream
-    ? props.adapter
-    : { ...props.adapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(legacy, input) };
-  return <FlowerSurfaceComponent {...props} adapter={{ ...adapter, loadSettings: async () => withModelDirectoryFixture(await adapter.loadSettings()) }} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
+  return <FlowerSurfaceComponent {...props} adapter={fixtureAdapter(props.adapter)} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
 };
+
+function fixtureAdapter(adapter: TestFlowerSurfaceAdapter): FlowerSurfaceAdapter {
+  return {
+    ...adapter,
+    connectLiveStream: adapter.connectLiveStream ?? ((input) => testLiveStreamFromLegacyFixture(adapter, input)),
+    loadSettings: async () => withModelDirectoryFixture(await adapter.loadSettings()),
+    loadModelDirectory: adapter.loadModelDirectory ?? (async () => withModelDirectoryFixture(await adapter.loadSettings()).model_directory!),
+    saveDefaultPermission: async (permission) => withModelDirectoryFixture(await adapter.saveDefaultPermission(permission)),
+    saveModelProfile: async (profile) => withModelDirectoryFixture(await adapter.saveModelProfile(profile)),
+    persistDefaultModel: async (modelID) => withModelDirectoryFixture(await adapter.persistDefaultModel(modelID)),
+  };
+}
 
 const TestProviders: Component<{ children: JSX.Element; mobileQuery?: string }> = (props) => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return props.children;
@@ -1067,11 +1075,7 @@ export function renderSurfaceWithDraftCoordinator(
   document.body.appendChild(runtime);
   const dispose = render(() => (
     <FlowerSurfaceComponent
-      adapter={{ ...(surfaceAdapter.connectLiveStream
-        ? surfaceAdapter
-        : { ...surfaceAdapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(surfaceAdapter, input) }),
-        loadSettings: async () => withModelDirectoryFixture(await surfaceAdapter.loadSettings()),
-      }}
+      adapter={fixtureAdapter(surfaceAdapter)}
       draftCoordinator={draftCoordinator}
       notify={(notification) => notifications.push(notification)}
     />

@@ -120,7 +120,7 @@ describe('Flower setup browser presentation', () => {
     await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('custom') === true);
   });
 
-  it('keeps the ordinary empty state with setup guidance confined to the composer footer', async () => {
+  it('keeps the ordinary empty state with unavailable-model guidance confined to the composer footer', async () => {
     await page.viewport(1440, 900);
     document.documentElement.classList.add('dark');
 
@@ -133,7 +133,7 @@ describe('Flower setup browser presentation', () => {
     const iconStyle = getComputedStyle(icon);
 
     expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
-    expect(setupInline.textContent).toContain('Set up a model provider to start chatting.');
+    expect(setupInline.textContent).toContain('This model is unavailable. Refresh the list, select another model, or open settings.');
     expect(emptyState.querySelector('.redeven-flower-soft-aura-glow')).toBeNull();
     expect(iconStyle.filter).toBe('none');
     expect(iconStyle.animationName).toBe('none');

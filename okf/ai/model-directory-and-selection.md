@@ -53,6 +53,10 @@ Candidate rows in both provider dialogs use model identity independently of meta
 
 ## Chat presentation
 
+Explicit new-thread reasoning choices survive remounting while the model
+directory is loading. Only a loaded model capability can clear an incompatible
+choice; a temporary thread-snapshot placeholder cannot change the draft.
+
 The composer initially shows at most eight selected models, prioritized by the current identity and recent thread models, grouped by provider/source. Search covers the complete selected set, including aliases. Users explicitly expand all selected models or open model management. Keyboard opening focuses search; arrows navigate enabled rows, Home/End navigate the list, and Escape returns focus to the trigger. The scrollable list keeps search and management controls visible on narrow screens.
 
 Ollama aliases fold only when digest, provider connection, and effective parameters agree. The current alias is the representative when selected. Quantization and other aliases remain visible; different quantizations or overrides remain separate choices. Folding is presentation only: saved defaults, wire names, and thread model identities are never rewritten. An unavailable current model remains identifiable and disabled, with a request to choose another model.

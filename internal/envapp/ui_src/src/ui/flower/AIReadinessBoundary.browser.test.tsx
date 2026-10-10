@@ -406,6 +406,7 @@ describe('AIReadinessBoundary browser layout', () => {
 it('keeps an embedded canvas visible during readiness and confines recovery to the bottom card', async () => {
   await page.viewport(1200, 800);
   const runtime = mountHarness(blocked(), false, undefined, { presentation: 'companion', embedded: true });
+  await sizeReadinessSurface(1200, 800);
   const root = runtime.host.querySelector<HTMLElement>('.ai-readiness-boundary')!;
   expect(getComputedStyle(root).backgroundColor).toBe('rgba(0, 0, 0, 0)');
   const recovery = runtime.host.querySelector<HTMLElement>('.ai-readiness-surface')!;
