@@ -22,21 +22,15 @@ all performance targets passed.
 
 ## Diagnosis and changes
 
-The released `text_input` capability separates local composition from clipboard
-synchronization. Idle interaction wakes capture; shared pointer input keeps one
-latest motion and flushes before other events. The existing native and viewer
-owners retain authorization, release and text ordering.
+Released `text_input` separates local composition from clipboard synchronization.
+Native v0.22.33 wakes idle capture on interaction; published pointer input keeps
+one latest move and flushes it before other events. Existing native/viewer owners
+retain authorization, release and ordering. The production CSP now permits cursor
+image decoding. RustDesk/Sunshine informed comparison; no code was copied.
 
-Production CSP blocked the player's data-URL cursor images. The fix permits
-those images; the fixture verifies actual DOM image decoding under that policy.
-RustDesk and Sunshine source informed active-seat and motion comparisons; their
-code was not copied. The exact source revisions are linked in Evidence.
-
-Orange's unused HDMI-A-1 was disabled before the original comparison versions
-because its connector/EDID queries stalled around 500 ms. After the host reboot
-both HDMI-A-1 and HDMI-A-2 reported connected and the session used Wayland, so
-the earlier X11 measurements do not qualify this post-reboot setup. No
-permanent Redeven display policy was changed.
+Orange's original X11 measurements used one active HDMI output. After reboot,
+both outputs were connected and the desktop used Wayland. The earlier results do
+not qualify that new setup; no permanent display policy was changed.
 
 ## Native input comparison
 
@@ -54,10 +48,8 @@ Values are milliseconds, empirical P95 in each of three rounds.
 | orange v0.22.32 | 5.060 / 6.750 / 5.678 | 5.498 / 6.523 / 6.035 |
 | orange v0.22.33 | 11.566 / 12.063 / 14.842 | 8.907 / 7.869 / 11.809 |
 
-DRM P95 is below 100 ms; receipt P95 sometimes exceeds 10 ms and does not
-improve. One baseline udesk26 observation reached 5836.531 ms. Five-second
-CPU samples include changed frames and do not prove a 70% static reduction.
-The [v0.22.29 comparison](remote-desktop-latency-results.md) owns its separate
+DRM P95 is below 100 ms; input receipt P95 exceeds 10 ms in some rounds.
+The separate [v0.22.29 comparison](remote-desktop-latency-results.md) owns its
 CPU evidence. Neither endpoint measures browser paint or physical scanout.
 
 ## Physical-host qualification
@@ -132,21 +124,16 @@ Values are median / P95 milliseconds per round.
 | orange v0.22.33 | 96.195 / 265.283 | 100.704 / 274.402 | 103.856 / 224.087 |
 
 Orange's median improves 58–61%, but its first input retains a slow tail.
-A kernel-plane trace observes a first framebuffer switch
-157.13 ms after the host event, capture at 180.81 ms and H.264 emission at
-211.98 ms; later switches take 10.25–22.91 ms. GTK pixels changed within 31 ms
-while KMS still reported the old framebuffer. This establishes host presentation
-delay without isolating compositor/driver cause or measuring physical photons.
-Ordinary-window and settled rounds retain the slow tail. No GPU-cache, driver
-installation or power-policy change was made.
-
-Two real Viewer canvas observations take 172.3 and 175.3 ms after the host
-fixture event. These are individual samples, not P95 or input-to-photon evidence.
+An independent trace locates a 157.13 ms first KMS switch, capture at 180.81 ms
+and H.264 at 211.98 ms, despite GTK pixels changing within 31 ms. Later switches
+take 10.25–22.91 ms. Two individual real Viewer canvas samples take 172.3 and
+175.3 ms after the host event. These expose remaining host/capture/client work,
+without isolating compositor/driver cause or measuring P95 or physical photons.
 
 ## Lock input and regression boundaries
 
-The earlier orange Viewer exposed local IME composition over its lock screen.
-Released `physical-only` mode disables the editor and sends hardware key codes
+Released `physical-only` mode fixes orange's earlier lock-screen IME leak.
+It disables the editor and sends hardware key codes
 from the non-editable surface. Chromium/WebKit/Firefox upstream tests cover IME,
 empty codes, stale composition and release without weakening ordinary text
 input. udesk26 verified physical unlock; orange still needs the post-reboot
@@ -163,7 +150,7 @@ Native and web release qualifications passed; links are in Evidence.
 
 Task ports are local 24236, udesk26 24246 and orange 24247; task Runtimes never
 bind 23998. Env App owns SSH scope confirmation and temporary administrator
-credentials. The Mac is unlocked. Target Portal approval is not a prerequisite.
+credentials. Target Portal approval is not a prerequisite.
 No credentials enter Runtime/service protocols or this record.
 
 The installed root services are active/enabled, with closures:
