@@ -428,7 +428,9 @@ describe('main routing', () => {
     expect(helperSrc).toContain('theme: desktopRendererThemeSnapshot(desktopThemeState().getSnapshot())');
     expect(helperSrc).toContain('locale: desktopLanguageState().getSnapshot().resolved_locale');
     expect(helperSrc).toContain('refreshHostAppearance();');
-    expect(helperSrc).toContain('const contentViewIdentity = snapshotWebContentsIdentity(contentView.webContents);');
+    expect(helperSrc).toContain('const contentWebContents = contentView.webContents;');
+    expect(helperSrc).toContain('const contentViewIdentity = snapshotWebContentsIdentity(contentWebContents);');
+    expect(helperSrc).toContain('if (!contentWebContents.isDestroyed()) contentWebContents.close();');
     expect(helperSrc).toContain(
       'sessionKeyByWebContentsID.set(contentViewIdentity.webContentsID, sessionRecord.session_key);',
     );
@@ -1584,7 +1586,7 @@ describe('main routing', () => {
     expect(routeSrc).not.toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live$/u');
     expect(routeSrc).not.toContain('live\\/updates');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/approvals$/u');
-    expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/context\\/compact$/u');
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/context\\/compact$/u, methods: ['POST']");
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/order$/u');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/[^/]+$/u');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/[^/]+\\/promote$/u');
