@@ -106,6 +106,12 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        recordCanvasScale: async (_context, metric: { count: number; grouped: boolean; [key: string]: unknown }) => {
+          if (![100, 500, 1000].includes(metric.count)) throw new Error('Unknown canvas scale fixture');
+          const output = path.resolve(__dirname, '.vitest-attachments');
+          await mkdir(output, { recursive: true });
+          await writeFile(path.join(output, `tessiven-scale-${metric.count}-${metric.grouped ? 'grouped' : 'flat'}.json`), JSON.stringify(metric, null, 2));
+        },
         pasteFilePreviewSource: async ({ page }, source: string) => {
           const host = await frameForSelector(page, '.monaco-editor');
           await host.locator('.monaco-editor .view-lines').click();

@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createResource, createSignal, createUniqueId, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { graphSectionPath, type GraphLayoutEngine, type GraphLayoutNode } from '@floegence/floe-webapp-core/graph';
 import { ArrowRight, Link, Refresh } from '@floegence/floe-webapp-core/icons';
 import type { InternalRelation } from './projection';
@@ -24,7 +24,10 @@ export function TessivenServiceRelations(props: {
   const [focused, setFocused] = createSignal<string>();
   const [rows, setRows] = createSignal<GraphLayoutNode[]>([]);
   const active = createMemo(() => props.relations.find(item => item.relation.id === (hovered() ?? focused())));
-  onMount(() => {
+  createEffect(() => {
+    // Row geometry is needed only while a local relationship is inspected.
+    // Measuring every mounted inventory forces layout during large graph paint.
+    if (!active()) { setRows([]); return; }
     // Retained hidden canvases have zero-size rows, not routable geometry.
     const measure = () => setRows([...inventory.querySelectorAll<HTMLElement>('[data-service-id]')].map(row => ({
       id: row.dataset.serviceId!, label: '', x: row.offsetLeft, y: row.offsetTop,

@@ -12,6 +12,7 @@ import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Version } from '../../../../tessiven_ui/src/types';
 import hadoopDocument from './fixtures/tessiven-hadoop.json';
 import { projectCanvas, projectLayoutLayers } from '../../../../tessiven_ui/src/projection';
+import { sharedHostsVersion } from './tessiven-shared-hosts.fixture';
 function fixture(count = 2): Version {
   const nodes = Array.from({ length: count }, (_, i) => ({
     id: `node-${i}`,
@@ -133,7 +134,8 @@ function mount(count = 2, version = fixture(count), browseState?: GraphBrowseSta
   host.className = 'tessiven';
   document.body.append(host);
   const ask = vi.fn(),
-    inspect = vi.fn();
+    inspect = vi.fn(),
+    browse = vi.fn();
   const [visible, setVisible] = createSignal(true);
   dispose = render(
     () => (
@@ -145,11 +147,12 @@ function mount(count = 2, version = fixture(count), browseState?: GraphBrowseSta
         onInspect={inspect}
         visible={visible()}
         browseState={browseState}
+        onBrowseState={browse}
       />
     ),
     host,
   );
-  return { ask, inspect, setVisible };
+  return { ask, inspect, browse, setVisible };
 }
 
 function routeMetrics() {
@@ -186,6 +189,59 @@ afterEach(() => {
   document.documentElement.classList.remove('dark', 'light');
 });
 describe('Tessiven real graph interactions', () => {
+  it('changes all group visibility and service scope from the canvas without editing the document', async () => {
+    const version = sharedHostsVersion();
+    const original = JSON.stringify(version.document);
+    mount(3, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(5);
+    await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(0);
+    expect(host.querySelectorAll('.tessiven-group[data-expanded="false"]')).toHaveLength(2);
+    await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(5);
+    const scope = host.querySelector<HTMLSelectElement>('[aria-label="Node services"]')!;
+    scope.value = 'group';
+    scope.dispatchEvent(new Event('change', { bubbles: true }));
+    await expect.poll(() => host.querySelector('[data-group-id="hdfs"][data-node-id="node-1"]')?.querySelectorAll('.tessiven-service').length).toBe(1);
+    expect(host.querySelector('[data-group-id="zk"][data-node-id="node-1"] [data-service-id="zookeeper"]')).not.toBeNull();
+    scope.value = 'all';
+    scope.dispatchEvent(new Event('change', { bubbles: true }));
+    await expect.poll(() => host.querySelector('[data-group-id="hdfs"][data-node-id="node-1"]')?.querySelectorAll('.tessiven-service').length).toBe(2);
+    expect(JSON.stringify(version.document)).toBe(original);
+    await expect.poll(() => host.querySelector('[aria-label="Arranging canvas"]')).toBeNull();
+    expect(host.querySelectorAll('[role="alert"]')).toHaveLength(0);
+  });
+  it('navigates the main graph with a keyboard-accessible draggable overview', async () => {
+    mount();
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(2);
+    const overview = page.getByRole('region', { name: 'Canvas overview', exact: true });
+    const indicator = host.querySelector<SVGRectElement>('.floe-graph__minimap-viewport')!;
+    const before = Number(indicator.getAttribute('x'));
+    await overview.element().focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(Number(indicator.getAttribute('x'))).toBeGreaterThan(before);
+    const moved = Number(indicator.getAttribute('x'));
+    await userEvent.keyboard('{Home}');
+    expect(Number(indicator.getAttribute('x'))).not.toBe(moved);
+    expect(host.querySelector('.floe-graph__minimap')?.querySelectorAll('path')).toHaveLength(3);
+    expect(host.querySelectorAll('[role="alert"]')).toHaveLength(0);
+  });
+  it('restores the selected service scope when returning to a canvas', async () => {
+    const version = sharedHostsVersion();
+    const { browse } = mount(3, version);
+    await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(5);
+    const scope = host.querySelector<HTMLSelectElement>('[aria-label="Node services"]')!;
+    scope.value = 'group';
+    scope.dispatchEvent(new Event('change', { bubbles: true }));
+    await expect.poll(() => host.querySelector('[data-group-id="hdfs"][data-node-id="node-1"]')?.querySelectorAll('.tessiven-service').length).toBe(1);
+    dispose?.(); dispose = undefined;
+    const state = browse.mock.calls.at(-1)![0] as GraphBrowseState;
+    expect(state.serviceScope).toBe('group');
+    host.remove();
+    mount(3, version, state);
+    await expect.poll(() => host.querySelector('[data-group-id="hdfs"][data-node-id="node-1"]')?.querySelectorAll('.tessiven-service').length).toBe(1);
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="Node services"]')?.value).toBe('group');
+  });
   it('uses identical preview and main geometry including expanded group relation rows', async () => {
     const version = fixture();
     version.document.presentation!.layers = [['application'], ['cdn', 'bucket']];
@@ -198,8 +254,10 @@ describe('Tessiven real graph interactions', () => {
     try {
       await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(2);
       await expect.poll(() => preview.querySelectorAll('[data-preview-object]').length).toBe(5);
+      await page.getByRole('button', { name: 'Fit canvas', exact: true }).click();
       // Pointer isolation hides unrelated main routes; compare the full geometry.
       await page.getByRole('button', { name: 'Fit canvas', exact: true }).hover();
+      await expect.poll(() => host.querySelectorAll('.floe-graph__edge').length).toBe(preview.querySelectorAll('[data-preview-edge]').length);
       for (const node of preview.querySelectorAll<SVGForeignObjectElement>('[data-preview-object]')) {
         const main = host.querySelector<HTMLElement>(`[data-graph-object="${node.dataset.previewObject}"]`)!;
         expect([node.x.baseVal.value, node.y.baseVal.value, node.width.baseVal.value, node.height.baseVal.value])
@@ -288,7 +346,9 @@ describe('Tessiven real graph interactions', () => {
       viewport: { x: 520, y: 420, scale: 0.65 } });
     host.style.width = '1540px';
     host.style.height = '920px';
-    await expect.poll(() => host.querySelectorAll('.floe-graph__edge').length).toBe(25);
+    await expect.poll(() => host.querySelectorAll('.floe-graph__edge').length).toBeGreaterThan(0);
+    // Inspection zoom keeps only routes intersecting the visible viewport.
+    expect(host.querySelectorAll('.floe-graph__edge').length).toBeLessThan(25);
     for (const theme of builtInShellThemePresets.filter(theme => ['porcelain-light', 'porcelain-dark'].includes(theme.name))) {
       document.documentElement.classList.toggle('dark', theme.mode === 'dark');
       for (const [name, value] of Object.entries(theme.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);

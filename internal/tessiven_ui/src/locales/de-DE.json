@@ -220,5 +220,12 @@
   "restoreReplies": "Größe wiederherstellen",
   "newConversation": "Neue Unterhaltung",
   "flowerWelcome": "Ihre Dienste auf dieser Arbeitsfläche",
-  "flowerWelcomeHint": "Bitten Sie Flower, Dienste abzubilden, Verbindungen zu erklären oder die Arbeitsfläche zu aktualisieren."
+  "flowerWelcomeHint": "Bitten Sie Flower, Dienste abzubilden, Verbindungen zu erklären oder die Arbeitsfläche zu aktualisieren.",
+  "canvasOverview": "Canvas-Übersicht",
+  "expandAllGroups": "Alle aufklappen",
+  "collapseAllGroups": "Alle zuklappen",
+  "nodeServiceScope": "Knotendienste",
+  "allNodeServices": "Alle Host-Dienste",
+  "groupNodeServices": "Dienste der aktuellen Gruppe",
+  "layoutUpdating": "Canvas wird angeordnet"
 }

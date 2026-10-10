@@ -220,5 +220,12 @@
   "restoreReplies": "Restore size",
   "newConversation": "New conversation",
   "flowerWelcome": "Make this canvas yours",
-  "flowerWelcomeHint": "Ask Flower to map your services, explain a connection, or update this canvas."
+  "flowerWelcomeHint": "Ask Flower to map your services, explain a connection, or update this canvas.",
+  "canvasOverview": "Canvas overview",
+  "expandAllGroups": "Expand all",
+  "collapseAllGroups": "Collapse all",
+  "nodeServiceScope": "Node services",
+  "allNodeServices": "All host services",
+  "groupNodeServices": "Current group services",
+  "layoutUpdating": "Arranging canvas"
 }

@@ -45,6 +45,7 @@ export type InternalRelation = {
 };
 
 const internalRelationHeight = (count: number) => count ? 36 + count * 30 : 0;
+export type NodeServiceScope = 'all' | 'group';
 
 // Rendering identities are derived from stable DSL IDs. Grouping never changes
 // the stored graph or turns a group into a service-operation target.
@@ -52,6 +53,7 @@ export function projectCanvas(
   document: CanvasDocument,
   expanded: ReadonlySet<string>,
   selectedNodes: Readonly<Record<string, string>>,
+  serviceScope: NodeServiceScope = 'all',
 ): Projection {
   const nodes: GraphNode[] = [],
     cards = new Map<string, Card>(),
@@ -74,6 +76,7 @@ export function projectCanvas(
   }
   const groups = document.groups ?? [];
   const groupInstances = new Map<string, Instance[]>();
+  const instancesByGroupHost = new Map<string, Map<string, Instance[]>>();
   for (const group of groups) {
     for (const id of group.nodeRefs) {
       const member = memberships.get(id) ?? [];
@@ -84,6 +87,13 @@ export function projectCanvas(
       ? group.instanceRefs.flatMap(id => byID.has(id) ? [byID.get(id)!] : [])
       : group.nodeRefs.flatMap(id => byNode.get(id) ?? []);
     groupInstances.set(group.id, members);
+    const groupedHosts = new Map<string, Instance[]>();
+    for (const instance of members) {
+      const hosted = groupedHosts.get(instance.nodeRef) ?? [];
+      hosted.push(instance);
+      groupedHosts.set(instance.nodeRef, hosted);
+    }
+    instancesByGroupHost.set(group.id, groupedHosts);
     for (const instance of members) {
       const member = instanceGroups.get(instance.id) ?? [];
       member.push(group);
@@ -95,7 +105,9 @@ export function projectCanvas(
   const viewID = (id: string, group?: Group) =>
     group && (memberships.get(id)?.length ?? 0) > 1 ? `${group.id}::${id}` : id;
   const addHost = (node: CanvasNode, group?: Group) => {
-    const hosted = byNode.get(node.id) ?? [];
+    const hosted = serviceScope === 'group' && group
+      ? instancesByGroupHost.get(group.id)?.get(node.id) ?? []
+      : byNode.get(node.id) ?? [];
     const serviceCount = new Set(hosted.map((instance) => instance.serviceRef))
       .size;
     nodes.push({
@@ -226,9 +238,17 @@ export function projectCanvas(
     return objectNames.get(instance?.serviceRef ?? id) ?? id;
   };
   const addInternalRelation = (target: string, relation: Relation) => {
+    const serviceRef = (id: string) => byID.get(id)?.serviceRef ?? (byService.has(id) ? id : undefined);
+    const card = cards.get(target);
+    if (serviceScope === 'group' && card?.kind === 'node' && card.group) {
+      const visible = new Set(card.instances.map(instance => instance.serviceRef));
+      if ([relation.from, relation.to].some(id => {
+        const service = serviceRef(id);
+        return service && !visible.has(service);
+      })) return;
+    }
     const values = internalRelations.get(target) ?? [];
     if (!values.some(value => value.relation.id === relation.id)) {
-      const serviceRef = (id: string) => byID.get(id)?.serviceRef ?? (byService.has(id) ? id : undefined);
       values.push({ relation, fromLabel: endpointLabel(relation.from), toLabel: endpointLabel(relation.to),
         fromServiceRef: serviceRef(relation.from), toServiceRef: serviceRef(relation.to) });
       internalRelations.set(target, values);

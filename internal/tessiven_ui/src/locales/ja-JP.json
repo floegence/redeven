@@ -220,5 +220,12 @@
   "restoreReplies": "サイズを戻す",
   "newConversation": "新しい会話",
   "flowerWelcome": "サービスをこのキャンバスに",
-  "flowerWelcomeHint": "Flower にサービスの整理、関係の説明、キャンバスの更新を依頼できます。"
+  "flowerWelcomeHint": "Flower にサービスの整理、関係の説明、キャンバスの更新を依頼できます。",
+  "canvasOverview": "キャンバスの概要",
+  "expandAllGroups": "すべて展開",
+  "collapseAllGroups": "すべて折りたたむ",
+  "nodeServiceScope": "ノードのサービス",
+  "allNodeServices": "ホストの全サービス",
+  "groupNodeServices": "現在のグループのサービス",
+  "layoutUpdating": "キャンバスを配置中"
 }

@@ -220,5 +220,12 @@
   "restoreReplies": "还原大小",
   "newConversation": "新对话",
   "flowerWelcome": "让画布呈现你的业务",
-  "flowerWelcomeHint": "让 Flower 梳理服务、解释关系，或直接修改这张画布。"
+  "flowerWelcomeHint": "让 Flower 梳理服务、解释关系，或直接修改这张画布。",
+  "canvasOverview": "画布缩略图",
+  "expandAllGroups": "全部展开",
+  "collapseAllGroups": "全部折叠",
+  "nodeServiceScope": "节点服务",
+  "allNodeServices": "主机全部服务",
+  "groupNodeServices": "当前分组服务",
+  "layoutUpdating": "正在排布画布"
 }

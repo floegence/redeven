@@ -412,7 +412,7 @@ async function verifyLayeredCanvas(page, name) {
   await until(async () => await viewportTransform() !== panStart, 'canvas drag changes the viewport');
   assert.equal(await page.evaluate(() => globalThis.getSelection()?.toString() ?? ''), '', 'Dragging never selects canvas text');
   const beforeZoom = await viewportTransform();
-  const zoomLabel = surface.locator('.tessiven-canvas-tools span');
+  const zoomLabel = surface.locator('.tessiven-canvas-tools > span:not([role="status"])');
   const beforeZoomLabel = await zoomLabel.innerText();
   await page.mouse.wheel(0, -200);
   await until(async () => await viewportTransform() !== beforeZoom, 'canvas wheel zoom');
@@ -466,10 +466,50 @@ async function verifyLayeredCanvas(page, name) {
   }
   assert.equal(await surface.locator('.tessiven-node').count(), 10);
   await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+  const anchorBeforeBulk = (await geometry()).find(node => node.id === anchorId);
+  const viewportBeforeBulk = await viewportTransform();
+  await surface.getByRole('button', { name: 'Collapse all', exact: true }).click();
+  await until(async () => await surface.locator('.tessiven-node').count() === 0, 'bulk compact collapse');
+  const anchorAfterBulk = (await geometry()).find(node => node.id === anchorId);
+  assert.equal(anchorAfterBulk.x, anchorBeforeBulk.x);
+  assert.equal(anchorAfterBulk.y, anchorBeforeBulk.y);
+  assert.equal(await viewportTransform(), viewportBeforeBulk);
+  assert.ok(await surface.getByRole('button', { name: 'Collapse all', exact: true }).isDisabled());
+  await surface.getByRole('button', { name: 'Expand all', exact: true }).click();
+  await until(async () => await surface.locator('.tessiven-node').count() === 10, 'bulk expand restores all hosts');
+  const scope = surface.getByRole('combobox', { name: 'Node services', exact: true });
+  await scope.selectOption('group');
+  await until(async () => await surface.getByRole('status', { name: 'Arranging canvas', exact: true }).count() === 0, 'group service scope');
+  assert.equal(await scope.inputValue(), 'group');
+  await scope.selectOption('all');
+  await until(async () => await surface.getByRole('status', { name: 'Arranging canvas', exact: true }).count() === 0, 'all host service scope');
+  await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+  const overview = surface.getByRole('region', { name: 'Canvas overview', exact: true });
+  assert.equal(await overview.locator('path').count(), 3);
+  const mini = await overview.boundingBox();
+  const indicator = await overview.locator('rect').boundingBox();
+  const dragX = (Math.max(mini.x, indicator.x) + Math.min(mini.x + mini.width, indicator.x + indicator.width)) / 2;
+  const dragY = (Math.max(mini.y, indicator.y) + Math.min(mini.y + mini.height, indicator.y + indicator.height)) / 2;
+  const beforeMiniDrag = await viewportTransform();
+  await page.mouse.move(dragX, dragY);
+  await page.mouse.down();
+  assert.equal(await viewportTransform(), beforeMiniDrag, 'Dragging the overview viewport does not jump on press');
+  await page.mouse.move(dragX - 16, dragY - 6, { steps: 8 });
+  await page.mouse.up();
+  await until(async () => await viewportTransform() !== beforeMiniDrag, 'overview pointer drag pans the main graph');
+  assert.equal(await page.evaluate(() => globalThis.getSelection()?.toString() ?? ''), '');
+  await overview.focus();
+  await page.keyboard.press('Home');
+  report.scenarios.push(`${name}-bulk-groups-service-scope-draggable-overview`);
   const viewport = page.viewportSize();
   for (const size of [{ width: 480, height: 360 }, viewport]) {
     await page.setViewportSize(size);
     await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+    const tools = await surface.locator('.tessiven-canvas-tools').boundingBox();
+    const navigator = await overview.boundingBox();
+    assert.ok(tools.x + tools.width <= navigator.x || navigator.x + navigator.width <= tools.x
+      || tools.y + tools.height <= navigator.y || navigator.y + navigator.height <= tools.y,
+    'Canvas controls and overview never overlap in a narrow low-height window');
     await page.screenshot({ path: path.join(output, `${name}-${size.width}.png`), animations: 'disabled' });
   }
   await page.emulateMedia({ forcedColors: 'active' });

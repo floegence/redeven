@@ -220,5 +220,12 @@
   "restoreReplies": "Restaurar tamanho",
   "newConversation": "Nova conversa",
   "flowerWelcome": "Seus serviços nesta tela",
-  "flowerWelcomeHint": "Peça ao Flower para mapear seus serviços, explicar uma conexão ou atualizar esta tela."
+  "flowerWelcomeHint": "Peça ao Flower para mapear seus serviços, explicar uma conexão ou atualizar esta tela.",
+  "canvasOverview": "Visão geral do canvas",
+  "expandAllGroups": "Expandir tudo",
+  "collapseAllGroups": "Recolher tudo",
+  "nodeServiceScope": "Serviços do nó",
+  "allNodeServices": "Todos os serviços do host",
+  "groupNodeServices": "Serviços do grupo atual",
+  "layoutUpdating": "Organizando o canvas"
 }
