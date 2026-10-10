@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-10: Unified Go toolchain and cleanup
+
+- Use Go 1.27.2 in both upstream and downstream module builds, CI, and maintained instructions.
+- Adopt released Floret v7.27.2 and enforce matching module Go patch versions at the published dependency boundary.
+- Resolve the staged module's installed toolchain for [offline notice checks](release/ci-and-release-gates.md), preserving partial staging and rejecting missing toolchains without downloads.
+- Keep task worktrees on named branches until final removal; resolve cleanup blockers instead of retaining detached checkouts.
+
 ## 2026-10-10: Complete compaction input
 
 - Adopt released Floret v7.27.1 for complete canonical compaction input and one ordered, budgeted summary loop; retain the [upstream context owner](ai/model-context-usage-and-compaction.md).

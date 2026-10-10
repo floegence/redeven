@@ -32,6 +32,7 @@ Goals:
 ## Git Workflow (Worktree, Required)
 
 - Never develop directly on `main`.
+- Do not leave task-owned worktrees in detached HEAD state as a substitute for cleanup. Keep work on a named feature branch, resolve cleanup blockers, and remove the merged task worktree and branch.
 - Every change must be done in a dedicated worktree plus feature branch.
 - `main` is only for `pull --ff-only` and final integration.
 - Do not leave uncommitted changes in the `main` worktree.

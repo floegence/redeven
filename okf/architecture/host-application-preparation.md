@@ -22,7 +22,7 @@ Closing a pending viewer prevents automatic application opening.
 ## Component ownership and admission
 
 Redeven consumes `github.com/floegence/floe-native-apps` v0.22.19 as a published Go
-module, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original
+module, built with the same Go 1.27.2 toolchain. Its embedded catalog pins original
 publisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, artifact specification,
 catalog, executable, or install destination. The upstream acquires original Alpine
 APK archives and Xpra HTML5 source, retaining archives in a private cache. Native
