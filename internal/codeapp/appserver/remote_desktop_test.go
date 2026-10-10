@@ -95,6 +95,9 @@ func TestRemoteDesktopDocumentKeepsCredentialsOutOfURLAndEscapesIdentity(t *test
 	if strings.Contains(html, `"token"`) || !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") {
 		t.Fatal("bootstrap leaked credentials or allowed framing")
 	}
+	if !strings.Contains(w.Header().Get("Content-Security-Policy"), "img-src blob: data:;") {
+		t.Fatal("viewer policy blocks the published player's inline cursor image")
+	}
 }
 
 func TestRemoteDesktopApprovalSettingsRequireExplicitChoiceAndSurviveReload(t *testing.T) {

@@ -25,7 +25,7 @@ func (g *Server) serveRemoteDesktop(w http.ResponseWriter, r *http.Request, s re
 	nonce := base64.RawStdEncoding.EncodeToString(random[:])
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; connect-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self'; img-src blob:; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; connect-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self'; img-src blob: data:; base-uri 'none'; frame-ancestors 'none'")
 	configuration, _ := json.Marshal(map[string]any{"transport": graphicalWindowTransport(r, s.ForwardID, base), "session": s, "base": base + remotedesktop.ViewerPath})
 	source, _ := remoteDesktopAssets.ReadFile("remote_desktop_viewer/viewer.html")
 	page, err := template.New("desktop").Parse(string(source))

@@ -58,6 +58,11 @@ separate control frames, applying the host shape and hotspot through
 there is exactly one cursor source. Cursor packets alone cannot change pixel
 ownership. Retired generations cannot change the current pointer.
 
+The viewer response policy permits the published player's `blob:` and `data:`
+cursor images while restricting scripts, connections and framing to the session
+boundary. Browser qualification uses this production policy and verifies cursor
+image decoding, not just the overlay's visibility.
+
 X11 supports separate shapes. Wayland can select portal cursor metadata when
 advertised, keeping control pixels cursor-free and compositing remote cursor
 position for view-only capture. Embedded-only Wayland and macOS display capture
