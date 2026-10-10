@@ -682,7 +682,7 @@ export function TessivenGraph(props: {
         onInteractionStart={() => close()}
         minimap={layout().nodes.length ? { ariaLabel: props.t('canvasOverview') } : undefined}
       />
-      <Show when={props.tools !== 'hidden'}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
+      <Show when={props.tools !== 'hidden' && (props.tools !== 'groups' || props.version.document.groups?.length || layoutPending())}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
         <Show when={props.tools !== 'groups'}>
           <button onClick={fit}>{props.t('fit')}</button>
           <span>{Math.round(viewport().scale * 100)}%</span>

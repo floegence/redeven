@@ -234,7 +234,8 @@ code download or a native JIT.
 
 The host supplies saved-version data and theme through one update function.
 Native hosts retain their own zoom toolbar and expose shared group/service
-controls at the upper left, with the shared minimap at the upper right.
+controls at the upper left, with the shared minimap at the upper right. The
+group toolbar is absent when the canvas has no groups and layout has settled.
 The data-only bridge reports loading, rendered, failure, or an immutable object
 selection; iOS validates the canvas, version and referenced objects before
 opening native details or Flower. Library, history, document export and API
