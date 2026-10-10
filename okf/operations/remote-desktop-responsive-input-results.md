@@ -7,7 +7,7 @@ timestamp: 2026-10-09T20:40:52Z
 ---
 # Summary
 
-Floe Native Apps v0.22.33 and the pending Floe Webapp v0.86.15 release add idle capture wakeup,
+Floe Native Apps v0.22.33 and Floe Webapp v0.86.15 add idle capture wakeup,
 bounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md)
 owns privileged authority; the [viewer contract](../architecture/remote-desktop-viewer.md)
 owns input modes. Locks remain physical-only, and mode changes revoke input.
