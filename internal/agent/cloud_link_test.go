@@ -301,7 +301,7 @@ type cloudLinkRuntimeLinkPool struct {
 	ResponseDigestB64u            string                          `json:"response_digest_b64u"`
 }
 
-func writeCloudRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelPrefix string) {
+func writeCloudRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelPrefix string, endpointURLs ...string) {
 	t.Helper()
 	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
 		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -322,8 +322,12 @@ func writeCloudRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.
 	if payload.ProtocolVersion != "rcpp-v4" || payload.CloudOrigin == "" {
 		t.Fatalf("CloudOrigin is empty")
 	}
+	endpointURL := "wss://example.com/flowersec/v3/direct"
+	if len(endpointURLs) != 0 {
+		endpointURL = endpointURLs[0]
+	}
 	endpoints, err := flowercontrol.NewEndpointSet(flowercontrol.EndpointConfig{
-		ID: "websocket", URL: "wss://example.com/flowersec/v3/direct", TLS: flowercontrol.CAPolicy(),
+		ID: "websocket", URL: endpointURL, TLS: flowercontrol.CAPolicy(),
 	})
 	if err != nil {
 		t.Fatal(err)

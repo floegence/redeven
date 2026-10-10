@@ -11,6 +11,7 @@ export function runtimeConnectionFixture(options: {
   cloudManagement?: boolean;
   gatewayWindow?: boolean;
   gatewayAvailable?: boolean;
+  cloudDirectoryAccessPointOrigin?: string;
 } = {}) {
   const fixture = mixedEnvironmentFixture({ linkKind: options.kind });
   const memberships = ['Office', 'Lab'].map((gateway_name, index) => ({
@@ -42,6 +43,11 @@ export function runtimeConnectionFixture(options: {
   const openSessions: DesktopSessionSummary[] = options.gatewayWindow ? [{
     session_key: target.session_key, target, lifecycle: 'open', entry_url: 'http://127.0.0.1:34567/',
   }] : [];
-  const inputs = { ...fixture.inputs, managedRuntimePresenceByTargetID: presences, gatewaySources, openSessions };
+  const controlPlanes = options.cloudDirectoryAccessPointOrigin
+    ? fixture.inputs.controlPlanes.map(source => ({ ...source, environments: source.environments.map(environment => ({
+      ...environment, access_point_origin: options.cloudDirectoryAccessPointOrigin!,
+    })) }))
+    : fixture.inputs.controlPlanes;
+  const inputs = { ...fixture.inputs, controlPlanes, managedRuntimePresenceByTargetID: presences, gatewaySources, openSessions };
   return { inputs, memberships, gatewaySources, snapshot: buildDesktopWelcomeSnapshot(inputs) };
 }

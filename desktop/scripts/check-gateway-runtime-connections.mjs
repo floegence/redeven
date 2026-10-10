@@ -17,7 +17,8 @@ try {
  for(const locale of ['en-US','zh-CN','zh-TW','ja-JP','ko-KR','de-DE','fr-FR','es-ES','pt-BR','ru-RU']) {
   const i18n=createDesktopI18n(locale);
   for(const width of [430,1280]) {
-   const {snapshot,memberships}=runtimeConnectionFixture({cloudManagement:false,gatewayWindow:true});
+   const {snapshot,memberships}=runtimeConnectionFixture({cloudManagement:false,gatewayWindow:true,
+    cloudDirectoryAccessPointOrigin:'https://rotated-region.example.invalid'});
    const runtime=snapshot.environments.find(entry=>entry.kind==='local_environment');
    const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce'});
    try {
