@@ -7,7 +7,7 @@ timestamp: 2026-10-09T20:40:52Z
 ---
 # Summary
 
-Floe Native Apps v0.22.33 and Floe Webapp v0.86.11 add idle capture wakeup,
+Floe Native Apps v0.22.33 and the pending Floe Webapp v0.86.15 release add idle capture wakeup,
 bounded pointer submission and local text mode. The [media contract](../architecture/remote-desktop-media.md)
 owns privileged authority; the [viewer contract](../architecture/remote-desktop-viewer.md)
 owns input modes. Locks remain physical-only, and mode changes revoke input.
@@ -68,15 +68,24 @@ candidate udesk26 frames. They do not establish a 70% static CPU reduction.
 ## Functional verification
 
 Both hosts passed a real, unprivileged native attachment, current-frame admission,
-retired-generation rejection and input teardown. Both passed rapid ASCII,
+retired-generation rejection and input teardown. udesk26 passed rapid ASCII,
 Chinese, emoji and following Enter against a task-owned GTK document; the target
 checks document contents rather than accepting a clipboard receipt as success.
+Orange completed the same native qualification before its later Flowersec
+transport disconnect; that disconnect prevents treating the current live Viewer
+session as a complete client qualification.
 
-The final orange and udesk26 GNOME-locker tests captured the lock screen, rejected ordinary
-input, kept an invalid physical credential locked, accepted the correct physical
-credential, retired the old generation, rejected unpainted successor input and
-restored control after a new frame receipt. Credentials arrive through a pipe
-and are absent from arguments, environment and diagnostic output.
+The published native qualification passed the GNOME-locker path on both hosts:
+it captured the lock screen, rejected ordinary input, kept an invalid physical
+credential locked, accepted the correct physical credential, retired the old
+generation, rejected unpainted successor input and restored control after a new
+frame receipt. In the current live udesk26 Viewer, the lock screen, cancel path,
+ordinary-input fencing and invalid credential retention passed. The final valid
+credential attempt remains unresolved because the host's `cn`/IBus layout maps
+the physical `$` path differently; the password is known correct through an
+independent `su` check, but this run must not be reported as a successful Viewer
+unlock. Credentials arrive through a pipe and are absent from arguments,
+environment and diagnostic output.
 
 ## Idle desktop response
 
@@ -127,7 +136,8 @@ synchronization remained disabled. No target-side Portal action was performed.
 
 Browser/Electron Viewer, Wayland and macOS focused qualification, localized panel
 coverage, Go package/race/vet and OKF checks cover the changed contract. They do
-not replace a real client-presentation performance sample.
+not replace a real client-presentation performance sample or the unresolved live
+udesk26 valid-credential attempt.
 
 After rebasing onto local main, Go package/race/vet, the X11/Wayland/macOS browser
 Viewer fixtures, 96 panel/localization tests, UI lint/typecheck, Desktop typecheck,
@@ -135,9 +145,9 @@ published dependency locks/notices and the Env App build passed. After preservin
 local main's Floe Webapp v0.86.12 Env App dependency, its typecheck, 96 panel and
 localization tests, build, X11 Viewer fixture, OKF and notice verification passed
 again. The three affected Go packages and all 46 Desktop SSH/runtime deployment
-tests also passed on that combined dependency tip. The new Electron
-fixture run timed out at native fullscreen while the Mac was locked; it must pass
-again after manual unlock. This failure was not hidden by a retry or weakened test.
+tests also passed on that combined dependency tip. The Electron fixture was
+rerun after the Mac was unlocked and passed; its log is the current viewer
+evidence. This does not replace a real client-presentation latency sample.
 
 The upstream v0.22.33 release qualification passed source, native amd64/arm64,
 host-desktop media amd64/arm64, macOS library and private desktop amd64/arm64 jobs,
@@ -146,15 +156,18 @@ twice during component download, at approximately 31 MB of 142.8 MB. Rerunning
 the failed job against the same immutable tag completed acquisition and all
 graphical checks; no downloader change or new release was used to recover it.
 
-Further real Viewer typing, pointer, lifecycle and presentation measurements
-were interrupted when the local Mac locked and the computer-control tool required
-manual unlock. This is a retained verification boundary, not successful acceptance.
+The orange live Viewer later disconnected with Flowersec `operation_failed` while
+the host's measured network RTT varied from 21 to 184 ms. The current orange
+session therefore cannot support a stable end-to-end latency claim. The udesk26
+Viewer has complete local-text, pointer, cursor, lock-screen UI, cancel and
+invalid-credential evidence, while valid-credential entry remains the layout
+boundary described above. Client-to-photon latency was not measured.
 
 # Evidence
 
 - Published Floe Native Apps `host_desktop_drm.py`, `hostdesktop/login_service_linux.go`, `hostdesktop/login_seat_linux.go`: capture wakeup and physical-seat authority.
 - Published Floe Native Apps `hostdesktop/login_latency_qualification_linux_test.go`, `hostdesktop/login_text_qualification_linux_test.go`, `hostdesktop/login_unlock_qualification_linux_test.go`: opt-in physical-host measurement and document assertions.
-- Published Floe Webapp `createRemotePointer` and `createRemoteInput`: bounded motion and explicit physical/text modes.
+- Published Floe Webapp `createRemotePointer` and `createRemoteInput`: bounded motion, explicit physical/text modes and modifier preservation when the remote surface gains focus.
 - `internal/codeapp/appserver/remote_desktop_viewer/viewer.js` and `internal/envapp/ui_src/scripts/checkRemoteDesktopViewer.mjs`: product capability integration and local/physical input regression assertions.
 - [Native release qualification](https://github.com/floegence/floe-native-apps/actions/runs/37976652415): successful release gate and owning jobs, including recovery of the component-download interruption.
 - [RustDesk active-session reads](https://github.com/rustdesk/rustdesk/blob/001b0e96173cea4e49f9f7a67bea95a177dd1de3/src/platform/linux.rs) and [Sunshine ordered input dispatch](https://github.com/LizardByte/Sunshine/blob/899095522a9ed50bb511d6f1fd103b8ad716d527/src/input.cpp): pinned reference implementations used for architectural comparison.
