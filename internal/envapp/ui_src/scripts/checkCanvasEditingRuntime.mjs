@@ -16,6 +16,7 @@ const [binary, output, providerType = 'openai', desktopBundle] = process.argv.sl
 assert(binary && output, 'Usage: checkCanvasEditingRuntime.mjs <Runtime bundle binary> <evidence directory> [openai|deepseek] [Desktop bundle]');
 assert(['openai', 'deepseek'].includes(providerType), 'Unknown fixture provider');
 const modelName = providerType === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-5-mini';
+const initialTitle = 'Commerce / Example', updatedTitle = 'Commerce / Updated';
 const root = path.resolve(import.meta.dirname, '../../../..');
 const temp = await mkdtemp(path.join(os.tmpdir(), 'redeven-canvas-editing-'));
 const state = path.join(temp, 'state');
@@ -87,7 +88,7 @@ const provider = http.createServer(async (request, response) => {
     }
     const actions = [
       ['read', 'tessiven_read', { canvas_id: canvasID, start_line: 1, line_count: 10 }],
-      ['edit', 'tessiven_edit', { canvas_id: canvasID, expected_version: 1, request_id: 'runtime-title-edit', summary: 'Rename the canvas', edits: [{ old_string: 'Editing / Acceptance', new_string: 'Editing / Updated' }] }],
+      ['edit', 'tessiven_edit', { canvas_id: canvasID, expected_version: 1, request_id: 'runtime-title-edit', summary: 'Rename the canvas', edits: [{ old_string: initialTitle, new_string: updatedTitle }] }],
       ['terminal', 'terminal_exec', { command: "printf 'Canvas verification complete\\n'", description: 'Verify the saved change' }],
     ];
     const action = actions[calls - 2];
@@ -108,8 +109,12 @@ try {
   if (desktopBundle) {
     const require = createRequire(path.join(root, 'desktop/package.json'));
     const manifest = JSON.parse(await readFile(path.join(desktopBundle, 'desktop-bundle-manifest.json'), 'utf8'));
+    await require(path.join(root, 'desktop/dist/main/desktopBundle.js')).loadDesktopBundle({
+      root: desktopBundle, expectedPlatform: 'darwin', expectedArchitecture: 'arm64',
+      expectedVersion: manifest.version, expectedCommit: report.commit,
+    });
     app = await _electron.launch({ executablePath: require('electron'), cwd: temp,
-      args: [path.join(root, 'desktop'), `--user-data-dir=${temp}/profile`],
+      args: [path.join(root, 'desktop'), `--user-data-dir=${temp}/profile`, `--redeven-test-launch-id=${path.basename(temp)}`],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, REDEVEN_STATE_ROOT: state,
         REDEVEN_DESKTOP_USER_DATA_ROOT: `${temp}/profile`, REDEVEN_DESKTOP_CACHE_ROOT: `${temp}/cache`, REDEVEN_DESKTOP_TEMP_ROOT: `${temp}/temp`,
         REDEVEN_DESKTOP_AUTO_START_RUNTIME: '1', REDEVEN_DESKTOP_OPEN_DEVTOOLS: '0', REDEVEN_DESKTOP_LOCAL_UI_BIND: '127.0.0.1:0',
@@ -121,7 +126,7 @@ try {
       const result = await welcome.evaluate(() => window.redevenDesktopSettings.requestRuntimeFlower({ method: 'GET', path: '/_redeven_proxy/api/ai/threads' }));
       return result.ok;
     }, 'Desktop Flower readiness', 60000);
-    report.runtime = { desktop_pid: app.process().pid, state, bundle: desktopBundle };
+    report.runtime = { desktop_pid: app.process().pid, state, bundle: desktopBundle, commit: manifest.commit };
   } else {
     const staged = path.join(temp, 'redeven'); await copyFile(binary, staged);
     for (const name of ['redevplugin-runtime', '.redevplugin-release-artifacts-verified.json', 'REDEVPLUGIN_RUNTIME.spdx.json', 'REDEVPLUGIN_THIRD_PARTY_NOTICES.md', 'redevplugin-runtime.provenance.json', 'redevplugin-runtime.sig', 'redevplugin-runtime.pem']) await copyFile(path.join(path.dirname(binary), name), path.join(temp, name));
@@ -134,13 +139,16 @@ try {
   }
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
   await api('/_redeven_proxy/api/ai/provider_bundle', 'PUT', { model_profile: { current_model_id: `fixture/${modelName}`, providers: [{ id: 'fixture', name: 'Acceptance', type: providerType, base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: modelName, input_modalities: ['text'], context_window: 400000, max_output_tokens: 8192 }] }] }, provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'fixture-only' }], web_search_provider_key_patches: [] });
-  canvasID = (await api('/_redeven_proxy/api/tessiven/canvases', 'POST', { request_id: 'acceptance-canvas', title: 'Editing / Acceptance' })).canvas.id;
+  // Exercise a populated canvas, including group geometry and the refresh after an edit.
+  canvasID = (await api('/_redeven_proxy/api/tessiven/canvases')).canvases.find(canvas => canvas.title === initialTitle).id;
+  const original = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/latest`);
+  assert(original.document.nodes.length && original.document.groups.length && original.document.relations.length);
   const errors = [];
   if (welcome) {
     page = welcome;
     page.on('pageerror', error => errors.push(error.message));
     await page.getByRole('button', { name: 'Tessiven', exact: true }).click();
-    await page.getByRole('button', { name: 'Editing / Acceptance', exact: true }).click();
+    await page.getByRole('button', { name: initialTitle, exact: true }).click();
   } else {
     browser = await chromium.launch({ headless: true }); page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     page.on('pageerror', error => errors.push(error.message));
@@ -181,7 +189,10 @@ try {
   }, 'edit completed', 20000);
   report.tool_statuses = Object.fromEntries([...toolResults].map(([id, result]) => [id, JSON.parse(result.replace(/^ERROR: /, '')).status]));
   for (const id of ['read', 'edit']) assert.equal(JSON.parse(toolResults.get(id).replace(/^ERROR: /, '')).status, 'success', id);
-  assert.equal((await api('/_redeven_proxy/api/tessiven/canvases')).canvases.find(canvas => canvas.id === canvasID).title, 'Editing / Updated');
+  assert.equal((await api('/_redeven_proxy/api/tessiven/canvases')).canvases.find(canvas => canvas.id === canvasID).title, updatedTitle);
+  const saved = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/latest`);
+  assert.equal(saved.document_yaml, original.document_yaml.replace(initialTitle, updatedTitle));
+  await page.getByRole('heading', { name: updatedTitle, exact: true }).waitFor();
   const row = page.locator('[data-flower-activity-item-id]').filter({ hasText: 'Read canvas' }).first();
   await row.locator('button[aria-expanded]').first().click();
   await until(async () => (await row.innerText()).includes('apiVersion: redeven.io/tessiven/v1'), 'literal YAML read result');
@@ -193,8 +204,8 @@ try {
   await editRow.locator('button[aria-expanded]').first().click();
   await editRow.locator('.flower-activity-script-toggle').click();
   await editRow.locator('pre').first().waitFor({ state: 'visible' });
-  assert((await editRow.innerText()).includes('-Editing / Acceptance'));
-  assert((await editRow.innerText()).includes('+Editing / Updated'));
+  assert((await editRow.innerText()).includes(`-${initialTitle}`));
+  assert((await editRow.innerText()).includes(`+${updatedTitle}`));
   await page.screenshot({ path: path.join(output, 'edit-fragments.png'), animations: 'disabled' });
   if (app) {
     await welcome.evaluate(() => window.redevenDesktopTheme.setSource('dark'));
@@ -207,6 +218,10 @@ try {
     await page.waitForFunction(() => innerHeight <= 420);
     await page.screenshot({ path: path.join(output, 'edit-fragments-short.png'), animations: 'disabled' });
     assert(await page.locator('.flower-composer textarea').isVisible());
+    const composer = await page.locator('.flower-composer').boundingBox();
+    const viewportHeight = await page.evaluate(() => innerHeight);
+    assert(composer.y >= 0 && composer.y + composer.height <= viewportHeight, 'Short window keeps the complete composer in view');
+    report.scenarios.push('short-window-composer-visible');
   }
   assert.deepEqual(errors, []); report.scenarios.push('bounded-read', 'exact-edit', 'visible-tool-details', 'no-local-runtime-suffix'); report.status = 'passed';
 } catch (error) {
