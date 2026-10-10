@@ -69,7 +69,7 @@ function NativeCanvas() {
     version={value.version} historical={value.historical} t={t} visible={true}
     onAsk={selection => notify('ask', selection)} onDetails={selection => notify('details', selection)}
     onInspect={() => undefined} onViewportControl={value => { control = value; }}
-    showTools={false} onZoomChange={setScale}
+    tools="groups" onZoomChange={setScale}
     onRenderState={state => notify(state)}
     browseState={browsing.get(value.version.canvas_id)}
     onBrowseState={state => browsing.set(value.version.canvas_id, state)}

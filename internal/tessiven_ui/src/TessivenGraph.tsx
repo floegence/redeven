@@ -66,7 +66,7 @@ export function TessivenGraph(props: {
   onDetails?: (selection: Selection) => void;
   onViewportControl?: (control: TessivenViewportControl) => void;
   onRenderState?: (state: 'loading' | 'rendered' | 'error') => void;
-  showTools?: boolean;
+  tools?: 'all' | 'groups' | 'hidden';
   onZoomChange?: (scale: number) => void;
 }) {
   const [expanded, setExpanded] = createSignal(
@@ -682,9 +682,11 @@ export function TessivenGraph(props: {
         onInteractionStart={() => close()}
         minimap={layout().nodes.length ? { ariaLabel: props.t('canvasOverview') } : undefined}
       />
-      <Show when={props.showTools !== false}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
-        <button onClick={fit}>{props.t('fit')}</button>
-        <span>{Math.round(viewport().scale * 100)}%</span>
+      <Show when={props.tools !== 'hidden'}><div class="tessiven-canvas-tools" title={props.t('canvasHint')}>
+        <Show when={props.tools !== 'groups'}>
+          <button onClick={fit}>{props.t('fit')}</button>
+          <span>{Math.round(viewport().scale * 100)}%</span>
+        </Show>
         <Show when={props.version.document.groups?.length}>
           <button onClick={() => toggleAll(true)} disabled={props.version.document.groups!.every(group => expanded().has(group.id))}>{props.t('expandAllGroups')}</button>
           <button onClick={() => toggleAll(false)} disabled={!props.version.document.groups!.some(group => expanded().has(group.id))}>{props.t('collapseAllGroups')}</button>
@@ -694,7 +696,7 @@ export function TessivenGraph(props: {
             <option value="group">{props.t('groupNodeServices')}</option>
           </select>
         </Show>
-        <button
+        <Show when={props.tools !== 'groups'}><button
           onClick={(event) =>
             show(
               {
@@ -709,7 +711,7 @@ export function TessivenGraph(props: {
           aria-label={props.t('canvasMenu')}
         >
           ⋯
-        </button>
+        </button></Show>
         <Show when={layoutPending()}><span class="tessiven-layout-pending" role="status" aria-label={props.t('layoutUpdating')} /></Show>
       </div></Show>
       <Show when={popup()} keyed>
