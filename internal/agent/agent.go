@@ -979,7 +979,7 @@ func (a *Agent) remoteConfigSnapshot() *config.Config {
 		return nil
 	}
 	cfg := *a.cfg
-	cfg.Gateway = a.cfg.Gateway.Clone()
+	cfg.Gateways = a.cfg.CloneGateways()
 	cfg.GatewayPublication = a.cfg.GatewayPublication.Clone()
 	cfg.GatewayMigrationEvidence = a.cfg.GatewayMigrationEvidence.Clone()
 	if a.cfg.Direct != nil {

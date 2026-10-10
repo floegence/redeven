@@ -15,13 +15,13 @@ import (
 // returns no access authority, and session closure is still confirmed locally.
 func (a *Agent) observeGatewayClosure(ctx context.Context) {
 	cfg := a.remoteConfigSnapshot()
-	if cfg == nil || cfg.GatewayPublication == nil || cfg.GatewayPublication.Binding == nil || cfg.Gateway == nil || cfg.Gateway.Leaving {
+	if cfg == nil || cfg.GatewayPublication == nil || cfg.GatewayPublication.Binding == nil || cfg.CloudGateway() == nil || cfg.CloudGateway().Leaving {
 		return
 	}
 	route := cfg.GatewayPublication
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	result, err := route.ObserveClosure(ctx, cfg.Gateway)
+	result, err := route.ObserveClosure(ctx, cfg.CloudGateway())
 	if err != nil || result.Closure == nil {
 		return
 	}

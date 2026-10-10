@@ -444,7 +444,7 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(enUS.gatewayCloud.configure).toBe('Connect to Cloud');
     expect(zhCN.gatewayJoin.title).toBe('添加 Gateway 访问');
     expect(zhCN.gatewayJoin.approve).toBe('启用 Gateway 访问');
-    expect(zhCN.gatewayJoin.accessImpact).toContain('Gateway 无权管理此运行时');
+    expect(zhCN.gatewayJoin.accessImpact).toContain('Cloud 和其他配对保持不变');
     expect(zhCN.gatewayCloud.title).toBe('接入 Cloud');
     expect(zhCN.gatewayCloud.configure).toBe('接入 Cloud');
     expect(zhCN.gatewayCloud.pending).toBe('等待 Cloud 批准。');

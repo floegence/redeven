@@ -16,15 +16,15 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 47 {
-		t.Fatalf("CompatibilityEpoch = %d, want Gateway network-settings contract epoch 47", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 48 {
+		t.Fatalf("CompatibilityEpoch = %d, want Gateway multiple-members contract epoch 48", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 38 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 46", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 39 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 47", contract.UpgradeFromRuntimeEpochs)
 	}
 	for index, epoch := range contract.UpgradeFromRuntimeEpochs {
 		if epoch != index+9 {
-			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 46", contract.UpgradeFromRuntimeEpochs)
+			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 47", contract.UpgradeFromRuntimeEpochs)
 		}
 	}
 	if contract.MinimumDesktopVersion != "v0.13.0" || contract.MinimumRuntimeVersion != "v0.13.0" {

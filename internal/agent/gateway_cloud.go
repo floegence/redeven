@@ -17,12 +17,12 @@ func gatewayProxy(cfg *config.Config) (*egress.HTTPSProxy, error) {
 		return nil, errors.New("missing runtime configuration")
 	}
 	if cfg.GatewayPublication == nil {
-		if cfg.Gateway != nil || cfg.GatewayMigrationEvidence != nil || cfg.GatewayRejoinRequired {
+		if cfg.CloudGateway() != nil || cfg.GatewayMigrationEvidence != nil || cfg.GatewayRejoinRequired {
 			return nil, gatewaycloud.ErrState
 		}
 		return nil, nil
 	}
-	return cfg.GatewayPublication.Proxy(cfg.Gateway)
+	return cfg.GatewayPublication.Proxy(cfg.CloudGateway())
 }
 func gatewayFence(cfg *config.Config) *gc.BindingFence {
 	if cfg == nil || cfg.GatewayPublication == nil {
@@ -140,7 +140,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 		}
 		a.mu.Unlock()
 		cfg = a.remoteConfigSnapshot()
-		if cfg.GatewayPublication == nil || cfg.Gateway == nil || cfg.Gateway.Leaving {
+		if cfg.GatewayPublication == nil || cfg.CloudGateway() == nil || cfg.CloudGateway().Leaving {
 			select {
 			case <-ctx.Done():
 				return
@@ -150,7 +150,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 		}
 		r := *cfg.GatewayPublication
 		if r.PreviousBinding != nil && r.PreviousBinding.Binding != nil && !r.Revoked && a.closeGatewaySessions(r.PreviousBinding.Binding.PublicID, r.PreviousBinding.Binding.Generation) {
-			if err := r.AcknowledgePreviousBinding(ctx, cfg.Gateway); err == nil {
+			if err := r.AcknowledgePreviousBinding(ctx, cfg.CloudGateway()); err == nil {
 				a.mu.Lock()
 				if a.cfg.GatewayPublication != nil && a.cfg.GatewayPublication.RequestPublicID == r.RequestPublicID {
 					next := *a.cfg
@@ -172,7 +172,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 		// A revoked binding may still attempt its signed acknowledgement. It cannot
 		// obtain control artifacts, which remain fenced by the canonical authority.
 		r.Revoked = false
-		status, err := r.StatusPage(ctx, cfg.Gateway, closureCursor)
+		status, err := r.StatusPage(ctx, cfg.CloudGateway(), closureCursor)
 		if err == nil {
 			closureCursor = status.NextClosureCursor
 			for _, closure := range status.Closures {
@@ -218,7 +218,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 				}
 				identity.BindingPublicID = closure.BindingPublicID
 				identity.BindingGeneration = closure.Generation
-				client, clientErr := r.Client(cfg.Gateway)
+				client, clientErr := r.Client(cfg.CloudGateway())
 				if clientErr != nil {
 					continue
 				}
@@ -279,7 +279,7 @@ func (a *Agent) adoptGatewayReapproval(status *gc.RuntimeStatus) error {
 	}
 	current := a.cfg.GatewayPublication
 	b := status.Candidate.Binding
-	if a.cfg.Gateway == nil || a.cfg.Gateway.Leaving || current.ValidateMember(a.cfg.Gateway) != nil || b != nil && (b.MemberID != current.MemberID || b.MemberVersion != current.MemberVersion) || !current.Revoked || current.Binding == nil || status.Candidate.State != "published" || status.Candidate.RequestPublicID != current.RequestPublicID || b == nil || b.State != "active" || b.PublicID != current.Binding.PublicID || b.EnvPublicID != current.Binding.EnvPublicID || b.Region != current.Binding.Region || b.GatewayPublicID != current.GatewayPublicID || b.NamespacePublicID != current.NamespacePublicID || b.RuntimePublicID != current.RuntimePublicID || b.Generation <= current.Binding.Generation {
+	if a.cfg.CloudGateway() == nil || a.cfg.CloudGateway().Leaving || current.ValidateMember(a.cfg.CloudGateway()) != nil || b != nil && (b.MemberID != current.MemberID || b.MemberVersion != current.MemberVersion) || !current.Revoked || current.Binding == nil || status.Candidate.State != "published" || status.Candidate.RequestPublicID != current.RequestPublicID || b == nil || b.State != "active" || b.PublicID != current.Binding.PublicID || b.EnvPublicID != current.Binding.EnvPublicID || b.Region != current.Binding.Region || b.GatewayPublicID != current.GatewayPublicID || b.NamespacePublicID != current.NamespacePublicID || b.RuntimePublicID != current.RuntimePublicID || b.Generation <= current.Binding.Generation {
 		return gatewaycloud.ErrState
 	}
 	for _, session := range a.sessions {
@@ -320,7 +320,7 @@ func (a *Agent) rotateGatewayIdentity(ctx context.Context) error {
 		return gatewaycloud.ErrState
 	}
 	current := *cfg.GatewayPublication
-	return current.RotateIdentity(ctx, cfg.Gateway, func(next *gatewaycloud.RuntimeConfig) error {
+	return current.RotateIdentity(ctx, cfg.CloudGateway(), func(next *gatewaycloud.RuntimeConfig) error {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		if a.cfg.GatewayPublication == nil || a.cfg.GatewayPublication.Revoked || a.cfg.GatewayPublication.RequestPublicID != next.RequestPublicID {

@@ -7,7 +7,7 @@ describe('Gateway verification and consent IPC', () => {
   expect(normalizeDesktopLauncherActionRequest(request)).toEqual(request);
  });
  it('confirms only opaque Runtime preview IDs and rejects file material', () => {
-  const request = { kind: 'manage_runtime_gateway', runtime_target_id: 'local:chosen', operation: 'join', preview_id: 'a'.repeat(43), environment_choice: 'preserve' };
+  const request = { kind: 'manage_runtime_gateway', runtime_target_id: 'local:chosen', operation: 'join', preview_id: 'a'.repeat(43) };
   expect(normalizeDesktopLauncherActionRequest(request)).toEqual(request);
   expect(normalizeDesktopLauncherActionRequest({ ...request, invitation: {} })).toBeNull();
   expect(normalizeDesktopLauncherActionRequest({ ...request, preview_id: undefined })).toBeNull();

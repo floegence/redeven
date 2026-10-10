@@ -3149,7 +3149,7 @@
     "verifying": "Wird geprüft…",
     "verified": "Gateway geprüft. Prüfen Sie die Angaben vor der Aktivierung.",
     "confirmEnable": "Bestätigen und aktivieren",
-    "accessImpact": "Der Zugriff auf diese Laufzeitumgebung erfolgt über das Gateway. Desktop-Zugriff und Cloud-Veröffentlichung erfordern weiterhin separate Genehmigungen. Das Gateway kann diese Laufzeitumgebung nicht verwalten.",
+    "accessImpact": "Fügt Zugriff über dieses Gateway hinzu. Cloud-Zugriff und andere Kopplungen bleiben bestehen. Desktop benötigt eine eigene Autorisierung.",
     "expired": "Der Code oder die Prüfung ist abgelaufen. Bitten Sie den Administrator um einen neuen Code und prüfen Sie erneut.",
     "used": "Dieser Code wurde bereits verwendet. Bitten Sie den Administrator um einen neuen Code.",
     "identityFailed": "Die Gateway-Identität konnte nicht geprüft werden. Bestätigen Sie die Adresse mit dem Administrator.",
@@ -3281,5 +3281,19 @@
     "saving": "Wird gespeichert…",
     "saved": "Netzwerkeinstellungen gespeichert.",
     "restartRequired": "Gateway neu starten, um die gespeicherten Bind-Adressen anzuwenden."
+  },
+  "gatewayConnections": {
+    "unpairTitle": "Gateway-Kopplung aufheben",
+    "unpair": "Kopplung aufheben",
+    "select": "Gateway auswählen",
+    "unpairImpact": "Der Zugriff über dieses Gateway endet. Andere Verbindungen bleiben verfügbar.",
+    "cloudImpact": "Auch der Redeven Cloud-Zugriff über dieses Gateway wird unterbrochen.",
+    "cloudChanged": "Der Cloud-Zugriff hat sich geändert. Öffnen Sie den Dialog erneut, um die Auswirkungen zu prüfen.",
+    "publishTitle": "Über Gateway veröffentlichen",
+    "publish": "Veröffentlichung bestätigen",
+    "publishHelp": "Diese Laufzeitumgebung über dieses Gateway in Redeven Cloud veröffentlichen. Eine Cloud-Genehmigung ist erforderlich.",
+    "empty": "Kein Gateway gekoppelt.",
+    "unavailable": "Autorisieren Sie Desktop an diesem Gateway, um Env App zu öffnen.",
+    "tab": "Gateway"
   }
 }

@@ -5,6 +5,9 @@ export type GatewayMembershipStatus = Readonly<{
   joined: boolean;
   phase: GatewayMembershipPhase;
   gateway_id?: string;
+  gateway_name?: string;
+  cloud_publication?: boolean;
+  memberships?: readonly GatewayMembershipStatus[];
   endpoints?: readonly GatewayEndpoint[];
   last_endpoint_id?: string;
   member_id?: string;
@@ -13,7 +16,7 @@ export type GatewayMembershipStatus = Readonly<{
   publication_error_code?: string;
 }>;
 export type GatewayEnvironmentChoice = 'preserve' | 'new';
-export type GatewayMembershipOperation = 'join' | 'replace' | 'update-endpoints' | 'status' | 'retry' | 'leave';
+export type GatewayMembershipOperation = 'join' | 'replace' | 'update-endpoints' | 'status' | 'retry' | 'leave' | 'publish';
 
 export type GatewayEnrollmentPurpose = 'join' | 'replace' | 'update-endpoints';
 export type GatewayPreviewInput = Readonly<{ address: string; code: string; purpose: GatewayEnrollmentPurpose }>;

@@ -2,7 +2,10 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
@@ -21,7 +24,7 @@ func TestGatewayConnectionChangesInvalidateOnlyTheControlOwner(t *testing.T) {
 			defer cancel()
 			data, closeData := context.WithCancel(t.Context())
 			defer closeData()
-			a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateway: member, LocalEnvironmentPublicID: "runtime"}, controlCancel: cancel, sessions: map[string]*activeSession{"data": {cancel: closeData}}}
+			a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, LocalEnvironmentPublicID: "runtime"}, controlCancel: cancel, sessions: map[string]*activeSession{"data": {cancel: closeData}}}
 			before := a.remoteConfigSnapshot()
 			next := member.Clone()
 			switch field {
@@ -39,7 +42,7 @@ func TestGatewayConnectionChangesInvalidateOnlyTheControlOwner(t *testing.T) {
 			if err := a.persistGatewayMember(next); err != nil {
 				t.Fatal(err)
 			}
-			changed := field != "bookkeeping"
+			changed := false
 			if (control.Err() != nil) != changed {
 				t.Fatal("control owner does not match the saved connection configuration")
 			}
@@ -65,19 +68,25 @@ func TestGatewayLeaveFencesCloudBeforeRemovalDelivery(t *testing.T) {
 	local, cancelLocal := context.WithCancel(t.Context())
 	defer cancelRemote()
 	defer cancelLocal()
-	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateway: member, GatewayPublication: publication, LocalEnvironmentPublicID: "runtime", ControlArtifactPool: config.NewControlArtifactPool(1)}, sessions: map[string]*activeSession{
+	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, GatewayPublication: publication, LocalEnvironmentPublicID: "runtime", ControlArtifactPool: config.NewControlArtifactPool(1)}, sessions: map[string]*activeSession{
 		"cloud": {cancel: cancelRemote, gatewayBindingPublicID: "binding", gatewayBindingGeneration: 1},
 		"local": {cancel: cancelLocal},
 	}}
 	previous := a.remoteConfigSnapshot()
-	if err := a.LeaveGateway(); err != nil {
+	if err := a.UnpairGateway(member.GatewayID, false); !errors.Is(err, ErrGatewayCloudImpactRequired) {
+		t.Fatal("Cloud interruption bypassed explicit consent", err)
+	}
+	if remote.Err() != nil || !reflect.DeepEqual(previous, a.remoteConfigSnapshot()) {
+		t.Fatal("rejected removal changed Cloud authority")
+	}
+	if err := a.UnpairGateway(member.GatewayID, true); err != nil {
 		t.Fatal(err)
 	}
 	saved, err := config.Load(a.configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !saved.Gateway.Leaving || saved.GatewayPublication != nil || saved.ControlArtifactPool != nil || saved.GatewayMigrationEvidence == nil {
+	if !saved.GatewayMember("").Leaving || saved.GatewayPublication != nil || saved.ControlArtifactPool != nil || saved.GatewayMigrationEvidence == nil {
 		t.Fatal("leaving membership retained executable Cloud authority")
 	}
 	if remote.Err() == nil || local.Err() != nil {
@@ -96,7 +105,7 @@ func TestGatewayLeaveFencesCloudBeforeRemovalDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Gateway != nil || saved.GatewayMigrationEvidence.Binding.EnvPublicID != "environment" {
+	if saved.GatewayMember("") != nil || saved.GatewayMigrationEvidence.Binding.EnvPublicID != "environment" {
 		t.Fatal("removal lost original ownership evidence")
 	}
 	if _, err := gatewayProxy(saved); err == nil {
@@ -112,11 +121,25 @@ func TestGatewaySelectionFencesExistingDirectController(t *testing.T) {
 	}
 	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{EnvironmentID: "existing", LocalEnvironmentPublicID: "runtime", BindingGeneration: 2}}
 	previous := a.remoteConfigSnapshot()
-	if err := a.changeGateway(invitation, "preserve", false); err != nil {
+	if err := a.changeGateway(invitation, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if !sameControlBinding(previous, a.remoteConfigSnapshot()) {
+		t.Fatal("pairing stopped direct Cloud control")
+	}
+	member := a.GatewayMembership()
+	response, err := store.Join(t.Context(), *member.PendingJoin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member.MemberVersion, member.ClientCertificatePEM, member.ClientExpiresAtUnixMS = response.MemberVersion, response.ClientCertificatePEM, response.ClientExpiresAtUnixMS
+	member.PendingJoin = nil
+	a.cfg.SetGatewayMember(member.GatewayID, member)
+	if err := a.PublishGateway(member.GatewayID, "preserve"); err != nil {
 		t.Fatal(err)
 	}
 	if sameControlBinding(previous, a.remoteConfigSnapshot()) {
-		t.Fatal("direct controller remained authorized after path selection")
+		t.Fatal("explicit publication did not fence direct control")
 	}
 	if _, err := gatewayProxy(a.remoteConfigSnapshot()); err == nil {
 		t.Fatal("pending membership silently uses public egress")
@@ -131,22 +154,22 @@ func TestGatewayReplacementFencesOfflineOldPathAndRetainsOnlyRemoval(t *testing.
 		t.Fatal(err)
 	}
 	route.Binding = &gc.Binding{MemberID: member.MemberID, MemberVersion: member.MemberVersion, PublicID: "binding", EnvPublicID: "env", NamespacePublicID: "namespace", GatewayPublicID: "cloud_gateway", RuntimePublicID: "runtime", Region: "sg", Generation: 1, State: "active"}
-	nextStore, _ := gatewayfixture.New(t, "https://next.internal:7443", "127.0.0.1:8443")
+	nextStore, _ := gatewayfixture.NewWithID(t, "gateway_next", "https://next.internal:7443", "127.0.0.1:8443")
 	invitation, err := nextStore.Invite("admin")
 	if err != nil {
 		t.Fatal(err)
 	}
 	oldSession, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateway: member, GatewayPublication: route, EnvironmentID: "env", LocalEnvironmentPublicID: "runtime"}, sessions: map[string]*activeSession{"old": {cancel: cancel, gatewayBindingPublicID: "binding", gatewayBindingGeneration: 1}}}
-	if err := a.changeGateway(invitation, "preserve", true); err != nil {
+	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, GatewayPublication: route, EnvironmentID: "env", LocalEnvironmentPublicID: "runtime"}, sessions: map[string]*activeSession{"old": {cancel: cancel, gatewayBindingPublicID: "binding", gatewayBindingGeneration: 1}}}
+	if err := a.changeGateway(invitation, "", true); err != nil {
 		t.Fatal(err)
 	}
 	saved, err := config.Load(a.configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Gateway.GatewayID != invitation.GatewayID || saved.GatewayPublication != nil || saved.Gateway.PendingJoin == nil || saved.GatewayMigrationEvidence.Binding.EnvPublicID != "env" {
+	if saved.GatewayMember("").GatewayID != invitation.GatewayID || saved.GatewayPublication != nil || saved.GatewayMember("").PendingJoin == nil || saved.GatewayMigrationEvidence.Binding.EnvPublicID != "env" {
 		t.Fatal("replacement did not select one route and preserve original proof")
 	}
 	if oldSession.Err() == nil || len(saved.GatewayRemovalOutbox) != 1 || len(saved.GatewayClosureOutbox) != 1 {

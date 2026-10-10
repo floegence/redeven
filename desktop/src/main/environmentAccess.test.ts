@@ -74,3 +74,18 @@ describe('access preference persistence', () => {
     } finally { await fs.rm(dir, { recursive: true, force: true }); }
   });
 });
+
+it('groups only membership proven by the trusted Runtime and the paired Gateway key',()=>{
+ const runtime={...direct,kind:'ssh_environment',runtime_service:{gateway_memberships:[{gateway_id:'remote-server-id',gateway_name:'Office',identity_fingerprint:'fingerprint',member_id:'member',runtime_public_id:memberFixture.runtime_public_id,phase:'joined',cloud_publication:false,endpoints:[]}]}} as unknown as DesktopEnvironmentEntry;
+ const preferences=rememberEnvironmentIdentity(defaultDesktopPreferences(),runtime,identity);
+ expect(decorateEnvironmentAccess([runtime,gateway],preferences)[1]?.access_group_id).toBe(runtime.id);
+ expect(decorateEnvironmentAccess([runtime,gateway],defaultDesktopPreferences())[1]?.access_group_id).toBe(runtime.id);
+ expect(decorateEnvironmentAccess([runtime,gateway],defaultDesktopPreferences())[1]?.verified_runtime_identity).toBeUndefined();
+ let drafts = selectEnvironmentAccessRoute(defaultDesktopPreferences(), decorateEnvironmentAccess([runtime,gateway],defaultDesktopPreferences()), runtime.id, `${gateway.id}:member`);
+ drafts = rememberEnvironmentIdentity(drafts, runtime, identity);
+ expect(decorateEnvironmentAccess([runtime,gateway],drafts)[0]?.default_access_route_id).toBe(`${gateway.id}:member`);
+ for(const patch of [{gateway_identity_fingerprint:'other'},{gateway_env_id:'other'},{gateway_member:{...memberFixture,runtime_public_id:'other'}}]) {
+  expect(decorateEnvironmentAccess([runtime,{...gateway,...patch}],preferences)[1]?.access_group_id).toBe(gateway.id);
+ }
+ expect(decorateEnvironmentAccess([{...runtime,runtime_service:undefined},gateway],preferences)[1]?.access_group_id).toBe(gateway.id);
+});

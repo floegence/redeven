@@ -11,12 +11,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	flowercontrol "github.com/floegence/flowersec/flowersec-go/v5/controlplane"
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 )
 
 func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
@@ -49,7 +52,10 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
+	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
+	member := gatewayfixture.Enroll(t, store, "le_existing")
 	if err := Save(layout.ConfigPath, &Config{
+		Gateways:                 []*gatewaymembership.RuntimeConfig{member},
 		CloudOrigin:              server.URL,
 		AccessPointOrigin:        "https://old.example.invalid",
 		EnvironmentID:            "env_old",
@@ -85,6 +91,9 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	}
 	if cfg.LogLevel != "info" {
 		t.Fatalf("LogLevel = %q, want %q", cfg.LogLevel, "info")
+	}
+	if len(cfg.Gateways) != 1 || !reflect.DeepEqual(cfg.Gateways[0], member) {
+		t.Fatal("Cloud bootstrap discarded independent Gateway access")
 	}
 	if cfg.CloudOrigin != server.URL {
 		t.Fatalf("CloudOrigin = %q, want %q", cfg.CloudOrigin, "https://redeven.test")

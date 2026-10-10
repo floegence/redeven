@@ -10,8 +10,8 @@ import (
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-// advanceGatewayPublication follows the sole locally approved membership. It
-// has no separate invitation or local consent entry point for Cloud access.
+// advanceGatewayPublication follows the separately selected publication member.
+// It never publishes a pairing without the Runtime owner's publication choice.
 func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 	a.cloudLinkMu.Lock()
 	defer a.cloudLinkMu.Unlock()
@@ -27,7 +27,7 @@ func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 		}
 	}()
 	cfg := a.remoteConfigSnapshot()
-	member := cfg.Gateway
+	member := cfg.CloudGateway()
 	if member == nil || member.Leaving || member.PendingJoin != nil {
 		return gatewaycloud.ErrState
 	}
@@ -36,7 +36,7 @@ func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 		return err
 	}
 	a.mu.Lock()
-	if a.cfg.Gateway == nil || a.cfg.Gateway.MemberID != member.MemberID || a.cfg.Gateway.MemberVersion != member.MemberVersion {
+	if a.cfg.CloudGateway() == nil || a.cfg.CloudGateway().MemberID != member.MemberID || a.cfg.CloudGateway().MemberVersion != member.MemberVersion {
 		a.mu.Unlock()
 		return gatewaycloud.ErrState
 	}
@@ -76,7 +76,7 @@ func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 	persist := func(delivery *gatewaycloud.CredentialDelivery) error {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if a.cfg.Gateway == nil || a.cfg.Gateway.Leaving || a.cfg.Gateway.MemberID != member.MemberID || a.cfg.Gateway.MemberVersion != member.MemberVersion {
+		if a.cfg.CloudGateway() == nil || a.cfg.CloudGateway().Leaving || a.cfg.CloudGateway().MemberID != member.MemberID || a.cfg.CloudGateway().MemberVersion != member.MemberVersion {
 			return gatewaycloud.ErrState
 		}
 		if current := a.cfg.GatewayPublication; current != nil && (current.RequestPublicID != route.RequestPublicID || current.Revoked) {

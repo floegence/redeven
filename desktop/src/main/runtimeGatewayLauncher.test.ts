@@ -25,6 +25,11 @@ function fixture() {
 }
 
 describe('Runtime Gateway launcher ownership', () => {
+  it.each(['join','retry','update-endpoints','leave'] as const)('preserves Cloud recovery during %s', async operation => {
+   const f=fixture();f.targets.add('ssh:runtime');
+   expect((await f.run({kind:'manage_runtime_gateway',runtime_target_id:'ssh:runtime',operation, ...(['join','update-endpoints'].includes(operation)?{preview_id:'a'.repeat(43)}:{gateway_id:'gateway'})})).ok).toBe(true);
+   expect(f.recovery.forget).not.toHaveBeenCalled();expect(f.versions.get('ssh:runtime')).toBe(7);expect(f.targets.has('ssh:runtime')).toBe(true);
+  });
   it.each([false, true])('reads status without acquiring or releasing a Cloud operation owner (already owned: %s)', async owned => {
     const f = fixture();
     if (owned) f.targets.add('ssh:runtime');
@@ -35,9 +40,9 @@ describe('Runtime Gateway launcher ownership', () => {
     expect(f.recovery.forget).not.toHaveBeenCalled();
     expect(f.release).toHaveBeenCalledOnce();
   });
-  it('fences recovery for an explicit membership mutation and releases its owner', async () => {
+  it('fences recovery for an acknowledged Cloud interruption and releases its owner', async () => {
     const f = fixture();
-    expect((await f.run({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:runtime', operation: 'leave' })).ok).toBe(true);
+    expect((await f.run({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:runtime', operation: 'leave', cloud_impact_acknowledged:true })).ok).toBe(true);
     expect(f.versions.get('ssh:runtime')).toBe(8);
     expect(f.recovery.settled).toHaveBeenCalledWith('ssh:runtime');
     expect(f.recovery.forget).toHaveBeenCalledWith('ssh:runtime');

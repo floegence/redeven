@@ -3144,7 +3144,7 @@
     "verifying": "正在驗證…",
     "verified": "Gateway 已驗證。請確認連線資訊後啟用。",
     "confirmEnable": "確認並啟用",
-    "accessImpact": "此執行階段將透過 Gateway 提供存取。Desktop 存取授權和 Cloud 發佈核准仍須分別完成。Gateway 無權管理此執行階段。",
+    "accessImpact": "新增此 Gateway 的存取通道，Cloud 與其他配對維持不變。Desktop 存取須另行授權。",
     "expired": "邀請碼或驗證結果已到期。請向管理員取得新碼並重新驗證。",
     "used": "此邀請碼已使用。請向管理員取得新碼。",
     "identityFailed": "無法驗證 Gateway 身分。請與管理員核對位址。",
@@ -3276,5 +3276,19 @@
     "saving": "正在儲存…",
     "saved": "網路設定已儲存。",
     "restartRequired": "請重新啟動 Gateway，使已儲存的綁定位址生效。"
+  },
+  "gatewayConnections": {
+    "unpairTitle": "取消 Gateway 配對",
+    "unpair": "取消配對",
+    "select": "選擇 Gateway",
+    "unpairImpact": "將停止透過此 Gateway 存取，其他連線不受影響。",
+    "cloudImpact": "透過此 Gateway 的 Redeven Cloud 存取也將中斷。",
+    "cloudChanged": "Cloud 存取已變更，請重新開啟以確認影響。",
+    "publishTitle": "透過 Gateway 發布至 Cloud",
+    "publish": "確認發布",
+    "publishHelp": "透過此 Gateway 將執行階段發布至 Redeven Cloud，需要 Cloud 核准。",
+    "empty": "尚未配對 Gateway。",
+    "unavailable": "授權 Desktop 存取此 Gateway 後，即可開啟 Env App。",
+    "tab": "Gateway"
   }
 }

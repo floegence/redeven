@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"path/filepath"
 	"testing"
 
@@ -17,7 +18,8 @@ func TestGatewayDesktopJoinRejectsImplicitBindingReplacement(t *testing.T) {
 		{GatewayPublication: &gatewaycloud.RuntimeConfig{RequestPublicID: "existing", Revoked: true}},
 	} {
 		store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
-		cfg.Gateway = gatewayfixture.Enroll(t, store, "runtime")
+		cfg.Gateways = []*gatewaymembership.RuntimeConfig{gatewayfixture.Enroll(t, store, "runtime")}
+		cfg.GatewayCloudMemberID = cfg.Gateways[0].MemberID
 		a := &Agent{cfg: cfg, configPath: filepath.Join(t.TempDir(), "config.json")}
 		if err := a.advanceGatewayPublication(context.Background()); err == nil {
 			t.Fatal("replaced an existing binding without migration")

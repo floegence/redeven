@@ -301,8 +301,10 @@ func newRuntimeHealthTestAgent(t *testing.T, cfgPath string, gate *accessgate.Ga
 	}
 	a, err := agent.New(agent.Options{
 		Config: &config.Config{
-			AgentHomeDir:     t.TempDir(),
-			PermissionPolicy: policy,
+			LocalEnvironmentPublicID: "runtime_local_ui_test",
+			AgentInstanceID:          "agent_local_ui_test",
+			AgentHomeDir:             t.TempDir(),
+			PermissionPolicy:         policy,
 		},
 		ConfigPath:             cfgPath,
 		AccessGate:             gate,

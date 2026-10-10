@@ -275,7 +275,8 @@ func (c *RemoteDesktopConfig) RememberApproval() bool {
 type Config struct {
 	GatewayRemovalOutbox     []gatewaymembership.RemovalDelivery `json:"gateway_removal_outbox,omitempty"`
 	GatewayClosureOutbox     []gatewaycloud.ClosureDelivery      `json:"gateway_closure_outbox,omitempty"`
-	Gateway                  *gatewaymembership.RuntimeConfig    `json:"gateway,omitempty"`
+	Gateways                 []*gatewaymembership.RuntimeConfig  `json:"gateways,omitempty"`
+	GatewayCloudMemberID     string                              `json:"gateway_cloud_member_id,omitempty"`
 	GatewayMigrationEvidence *gatewaycloud.MigrationEvidence     `json:"gateway_migration_evidence,omitempty"`
 	GatewayEnvironmentChoice string                              `json:"gateway_environment_choice,omitempty"`
 	GatewayRejoinRequired    bool                                `json:"gateway_rejoin_required,omitempty"`
@@ -337,11 +338,24 @@ func (c *Config) ValidateLocalMinimal() error {
 	if c == nil {
 		return errors.New("nil config")
 	}
-	if c.Gateway != nil {
-		if err := c.Gateway.Validate(c.LocalEnvironmentPublicID); err != nil {
+	seenGateways := map[string]bool{}
+	seenMembers := map[string]bool{}
+	if len(c.Gateways) > 16 {
+		return errors.New("too many Gateway memberships")
+	}
+	for _, member := range c.Gateways {
+		if member == nil || seenGateways[member.GatewayID] || seenMembers[member.MemberID] {
+			return errors.New("duplicate or missing Gateway membership")
+		}
+		seenGateways[member.GatewayID], seenMembers[member.MemberID] = true, true
+		if err := member.Validate(c.LocalEnvironmentPublicID); err != nil {
 			return fmt.Errorf("invalid Gateway membership: %w", err)
 		}
 	}
+	if c.GatewayCloudMemberID != "" && (!seenMembers[c.GatewayCloudMemberID] || c.GatewayPublication != nil && c.GatewayPublication.MemberID != c.GatewayCloudMemberID) {
+		return errors.New("invalid Gateway Cloud publication owner")
+	}
+
 	if c.GatewayEnvironmentChoice != "" && c.GatewayEnvironmentChoice != "preserve" && c.GatewayEnvironmentChoice != "new" {
 		return errors.New("invalid Gateway environment choice")
 	}

@@ -3,11 +3,11 @@ type: Protocol Contract
 title: Gateway v5 protocol
 description: Define signed pairing, member invitations, policy, reverse access and versioned Cloud association.
 tags: [gateway, protocol, security, identity]
-timestamp: 2026-10-07T00:00:00Z
+timestamp: 2026-10-10T00:00:00Z
 ---
 # Summary
 
-`redeven-gateway-v5` is the only served Gateway membership protocol. Its machine-readable authority is `spec/openapi/gateway-v5.yaml`. A signed invitation carries administrator-confirmed Runtime connection endpoints, not a single Gateway URL or Cloud origin. Gateway owns paired Desktop permissions and Runtime-initiated membership. Protocol mismatch fails explicitly; old URL-profile routes and HTTP forwarding are absent. Gateway Cloud v2 is a separate, shared business contract referring to these same members.
+`redeven-gateway-v5` is the only served Gateway membership protocol. Its machine-readable authority is `spec/openapi/gateway-v5.yaml`. A signed invitation-code delivery carries administrator-confirmed share addresses. The authenticated exchange returns the signed internal enrollment descriptor with all confirmed Runtime connection endpoints. Gateway owns paired Desktop permissions and Runtime-initiated membership. Protocol mismatch fails explicitly; old URL-profile routes and HTTP forwarding are absent. Gateway Cloud v2 is a separate, shared business contract referring to these same members.
 
 # Contract
 
@@ -23,7 +23,7 @@ Gateway ID derives from the persisted machine key, not a URL audience. Address c
 
 Member version controls removal and replacement. Cloud binding generation controls publication and recovery. Network connection generation only distinguishes live observations. Directory and policy revisions prevent stale messages from restoring permissions. None of these versions substitutes for another.
 
-Gateway Cloud v2 DTOs are maintained in Portal shared contracts and mirrored with common fixtures in Runtime. The legacy wire protocol is not served during migration. Historical local readers migrate one stored v4 route into one v5 endpoint without changing Gateway or Runtime identity; old v4 invitations are rejected and must be recreated. Runtime Service epoch 42 identifies the matching Runtime management contract.
+Gateway Cloud v2 DTOs are maintained in Portal shared contracts and mirrored with common fixtures in Runtime. The legacy wire protocol is not served during migration. Historical local readers migrate one stored v4 route into one v5 endpoint without changing Gateway or Runtime identity; old v4 invitations are rejected and must be recreated. Runtime Service epoch 48 defines `preview` plus preview-bound `join`, `replace` and `update-endpoints`, explicit member-targeted `retry`/`leave`, and separate `publish`. Pairing confirmations reject Cloud choice fields. `leave` checks Cloud interruption consent against the current selected member. Trusted snapshots expose only nonsecret membership summaries. Runtime membership schema v1 migrates atomically into the v2 collection; Gateway directory and Portal Cloud wire contracts are unchanged.
 
 [Gateway service](../gateway/gateway-service.md) owns membership and policy. [Gateway access sessions](../gateway/gateway-access-sessions.md) owns stream and TLS behavior. [Gateway Cloud access](../gateway/gateway-cloud-access.md) owns publication, recovery and revocation.
 

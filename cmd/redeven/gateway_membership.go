@@ -26,15 +26,16 @@ import (
 	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
-const gatewayMembershipHelp = `Usage: redeven gateway <join|replace|update-endpoints|status|retry|leave> [flags]
+const gatewayMembershipHelp = `Usage: redeven gateway <join|replace|update-endpoints|status|retry|leave|publish> [flags]
 
   --state-root PATH        Runtime state root
   --gateway ADDRESS       Administrator-confirmed HTTPS Gateway address
   --code-stdin --yes       Read the invitation code from stdin and confirm for automation
-  --environment-choice preserve|new  Explicit choice for an existing Cloud environment
+  --gateway-id ID         Select a paired Gateway for retry, leave or publish
+  --environment-choice preserve|new  Cloud publication only
 
-Joining delegates LAN access and later Cloud publication to this Gateway.
-A Runtime belongs to one Gateway. Ordinary startup reconnects the saved member.
+Joining adds Gateway access without changing Cloud ownership.
+A Runtime can pair with multiple Gateways. Startup reconnects each saved member.
 Cloud publication remains subject to Gateway policy and Namespace authorization.
 Leave disables local access first and durably retries Gateway removal.
 `
@@ -45,12 +46,13 @@ func (c *cli) gatewayCmd(args []string) int {
 		return 0
 	}
 	action := args[0]
-	if action != "join" && action != "replace" && action != "update-endpoints" && action != "status" && action != "retry" && action != "leave" {
+	if action != "join" && action != "replace" && action != "update-endpoints" && action != "status" && action != "retry" && action != "leave" && action != "publish" {
 		writeText(c.stderr, gatewayMembershipHelp)
 		return 2
 	}
 	flags := newCLIFlagSet("gateway " + action)
 	root := flags.String("state-root", "", "Runtime state root")
+	gatewayID := flags.String("gateway-id", "", "Gateway identity for retry or leave")
 	choice := flags.String("environment-choice", "", "Preserve the existing Cloud environment or create a new one")
 	address := flags.String("gateway", "", "Gateway HTTPS address")
 	codeStdin := flags.Bool("code-stdin", false, "Read the invitation code from stdin")
@@ -62,7 +64,7 @@ func (c *cli) gatewayCmd(args []string) int {
 		}
 		return 2
 	}
-	if (action != "join" && action != "replace" && *choice != "") || flags.NArg() != 0 || (action == "join" || action == "replace" || action == "update-endpoints") != (*address != "") || (*codeStdin && !*yes) || ((action != "join" && action != "replace" && action != "update-endpoints") && (*codeStdin || *yes)) {
+	if (action != "publish" && *choice != "") || flags.NArg() != 0 || (action == "join" || action == "replace" || action == "update-endpoints") != (*address != "") || (*codeStdin && !*yes) || ((action != "join" && action != "replace" && action != "update-endpoints") && *codeStdin) {
 		writeText(c.stderr, gatewayMembershipHelp)
 		return 2
 	}
@@ -82,7 +84,7 @@ func (c *cli) gatewayCmd(args []string) int {
 	ctx := context.Background()
 	_, err = runtimemanagement.LoadStatus(ctx, layout.RuntimeControlSocketPath, 2*time.Second)
 	if err == nil {
-		return c.gatewayRunningCommand(ctx, layout.RuntimeControlSocketPath, action, *address, code, *choice, *yes)
+		return c.gatewayRunningCommand(ctx, layout.RuntimeControlSocketPath, action, *address, code, *choice, *gatewayID, *yes)
 	}
 	if err := os.MkdirAll(layout.StateDir, 0700); err != nil {
 		fmt.Fprintln(c.stderr, "Cannot open Runtime state.")
@@ -104,8 +106,14 @@ func (c *cli) gatewayCmd(args []string) int {
 	}
 	persist := func(member *gatewaymembership.RuntimeConfig) error {
 		next := *cfg
-		next.Gateway = member.Clone()
-		if member == nil || member.Leaving {
+		id := *gatewayID
+		if member != nil {
+			id = member.GatewayID
+		} else if current := cfg.GatewayMember(id); current != nil {
+			id = current.GatewayID
+		}
+		next.SetGatewayMember(id, member)
+		if (member == nil || member.Leaving) && cfg.CloudGateway() != nil && cfg.CloudGateway().GatewayID == id {
 			if err := next.RetireGatewayPublication(); err != nil {
 				return err
 			}
@@ -124,7 +132,7 @@ func (c *cli) gatewayCmd(args []string) int {
 			fmt.Fprintln(c.stderr, "Gateway verification failed:", err)
 			return 1
 		}
-		*choice, err = c.confirmGatewayEnrollment(invitation.GatewayName, cfg.LocalEnvironmentPublicID, invitation.ExpiresAtUnixMS, cfg.EnvironmentID, action, *choice, *yes)
+		*choice, err = c.confirmGatewayEnrollment(invitation.GatewayName, cfg.LocalEnvironmentPublicID, invitation.ExpiresAtUnixMS, "", action, *choice, *yes)
 		if err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
@@ -148,7 +156,12 @@ func (c *cli) gatewayCmd(args []string) int {
 		cfg = next
 	}
 	if action == "update-endpoints" {
-		next, err := cfg.Gateway.PrepareConnectionEndpoints(invitation)
+		current := cfg.GatewayMember(invitation.GatewayID)
+		if current == nil {
+			fmt.Fprintln(c.stderr, "Select an invitation from a paired Gateway.")
+			return 1
+		}
+		next, err := current.PrepareConnectionEndpoints(invitation)
 		if err == nil {
 			err = persist(next)
 		}
@@ -157,8 +170,41 @@ func (c *cli) gatewayCmd(args []string) int {
 			return 1
 		}
 	}
-	member := cfg.Gateway.Clone()
+	id := *gatewayID
+	if invitation.GatewayID != "" {
+		id = invitation.GatewayID
+	}
+	member := cfg.GatewayMember(id).Clone()
+	if member != nil {
+		*gatewayID = member.GatewayID
+	}
+	if action != "status" && member == nil {
+		fmt.Fprintln(c.stderr, "Select --gateway-id when multiple Gateways are paired.")
+		return 1
+	}
+	if action == "publish" {
+		next, err := cfg.PrepareGatewayPublication(member.GatewayID, *choice)
+		if err != nil {
+			fmt.Fprintln(c.stderr, err)
+			return 1
+		}
+		if !*yes && !c.confirmGatewayAction("Publish this Runtime to Redeven Cloud through "+member.GatewayID+"?") {
+			return 1
+		}
+		if err := config.Save(layout.ConfigPath, next); err != nil {
+			fmt.Fprintln(c.stderr, "Cannot save Cloud publication.")
+			return 1
+		}
+		cfg = next
+	}
 	if action == "leave" && member != nil {
+		impact := "Cancel pairing with " + member.GatewayID + "?"
+		if cfg.CloudGateway() != nil && cfg.CloudGateway().MemberID == member.MemberID {
+			impact += " Cloud access through this Gateway will be interrupted."
+		}
+		if !*yes && !c.confirmGatewayAction(impact) {
+			return 1
+		}
 		member.Leaving = true
 		if err := persist(member); err != nil {
 			fmt.Fprintln(c.stderr, "Cannot save Gateway removal.")
@@ -180,14 +226,19 @@ func (c *cli) gatewayCmd(args []string) int {
 		}
 	}
 	result := agent.GatewayMembershipStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID, RejoinRequired: cfg.GatewayRejoinRequired}
-	if member := cfg.Gateway; member != nil {
-		result = agent.GatewayMembershipStatus{Joined: member.PendingJoin == nil && !member.Leaving, GatewayID: member.GatewayID, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, MemberID: member.MemberID, Phase: "gateway_offline"}
+	for _, member := range cfg.Gateways {
+		item := agent.GatewayMembershipStatus{Joined: member.PendingJoin == nil && !member.Leaving, GatewayID: member.GatewayID, GatewayName: member.GatewayName, CloudPublication: cfg.CloudGateway() != nil && cfg.CloudGateway().MemberID == member.MemberID, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, MemberID: member.MemberID, Phase: "gateway_offline"}
 		if member.PendingJoin != nil {
-			result.Phase = "joining"
+			item.Phase = "joining"
 		}
 		if member.Leaving {
-			result.Phase = "removal_pending"
+			item.Phase = "removal_pending"
 		}
+		result.Memberships = append(result.Memberships, item)
+	}
+	if len(result.Memberships) > 0 {
+		result.Joined = true
+		result.Phase = "joined"
 	}
 	_ = json.NewEncoder(c.stdout).Encode(result)
 	return 0
@@ -218,17 +269,10 @@ func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, envir
 	fmt.Fprintf(c.stdout, "Gateway: %s\nTarget Runtime: %s\nExpires: %s\n", name, target, time.UnixMilli(expires).Format(time.RFC3339))
 	if action == "update-endpoints" {
 		fmt.Fprintln(c.stdout, "Update this Gateway's endpoints while preserving member identity.")
+	} else if action == "replace" {
+		fmt.Fprintln(c.stdout, "Replace the current Gateway and interrupt its connections, including any Cloud access through it. Cloud publication requires a separate gateway publish action.")
 	} else {
-		fmt.Fprintln(c.stdout, "Enable Gateway-managed local access and later Cloud publication. Desktop access and Cloud approval remain separate.")
-		if action == "replace" {
-			fmt.Fprintln(c.stdout, "Replace the current Gateway and interrupt its connections.")
-		}
-	}
-	if environment != "" && action != "update-endpoints" {
-		fmt.Fprintf(c.stdout, "Existing Cloud environment: %s\nPreserve keeps its identity and permissions after Cloud approval; new creates a separate environment.\n", environment)
-		if choice == "" && yes {
-			return "", errors.New("choose --environment-choice preserve or new for the existing Cloud environment")
-		}
+		fmt.Fprintln(c.stdout, "Add Gateway access. Cloud ownership and other Gateway pairings stay unchanged.")
 	}
 	if yes {
 		return choice, nil
@@ -241,17 +285,6 @@ func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, envir
 		defer tty.file.Close()
 	}
 	reader := bufio.NewReader(tty.file)
-	if environment != "" && action != "update-endpoints" && choice == "" {
-		fmt.Fprint(tty.file, "Cloud environment [preserve/new]: ")
-		answer, err := reader.ReadString('\n')
-		if err != nil {
-			return "", err
-		}
-		choice = strings.TrimSpace(answer)
-		if choice != "preserve" && choice != "new" {
-			return "", errors.New("choose preserve or new explicitly")
-		}
-	}
 	fmt.Fprint(tty.file, "Confirm and enable? [y/N]: ")
 	answer, err := reader.ReadString('\n')
 	if err != nil {
@@ -266,8 +299,41 @@ func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, envir
 	return choice, nil
 }
 
-func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, address, code, choice string, yes bool) int {
+func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, address, code, choice, gatewayID string, yes bool) int {
 	var body any = struct{}{}
+	if action == "retry" || action == "leave" || action == "publish" {
+		var status agent.GatewayMembershipStatus
+		if err := gatewayRuntimeRequest(ctx, socketPath, "status", struct{}{}, &status); err != nil {
+			fmt.Fprintln(c.stderr, err)
+			return 1
+		}
+		var target *agent.GatewayMembershipStatus
+		for i := range status.Memberships {
+			if status.Memberships[i].GatewayID == gatewayID || gatewayID == "" && len(status.Memberships) == 1 {
+				target = &status.Memberships[i]
+			}
+		}
+		if target == nil {
+			fmt.Fprintln(c.stderr, "Select --gateway-id from gateway status.")
+			return 1
+		}
+		if action != "retry" && !yes {
+			impact := "Confirm " + action + " for " + target.GatewayID + "?"
+			if action == "leave" && target.CloudPublication {
+				impact += " Cloud access through this Gateway will be interrupted."
+			}
+			if !c.confirmGatewayAction(impact) {
+				return 1
+			}
+		}
+		body = map[string]any{"gateway_id": target.GatewayID}
+		if action == "leave" {
+			body.(map[string]any)["cloud_impact_acknowledged"] = target.CloudPublication
+		}
+		if action == "publish" && choice != "" {
+			body.(map[string]any)["environment_choice"] = choice
+		}
+	}
 	if address != "" {
 		var preview agent.GatewayPreview
 		if err := gatewayRuntimeRequest(ctx, socketPath, "preview", map[string]string{"address": address, "code": code, "purpose": action}, &preview); err != nil {
@@ -276,7 +342,7 @@ func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, add
 		}
 		code = ""
 		var err error
-		choice, err = c.confirmGatewayEnrollment(preview.GatewayName, preview.TargetRuntimeID, preview.ExpiresAtUnixMS, preview.ExistingEnvironmentID, action, choice, yes)
+		choice, err = c.confirmGatewayEnrollment(preview.GatewayName, preview.TargetRuntimeID, preview.ExpiresAtUnixMS, "", action, choice, yes)
 		if err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
@@ -336,4 +402,19 @@ func gatewayRuntimeRequest(ctx context.Context, socketPath, action string, body,
 		return errors.New("Runtime rejected the Gateway operation: " + envelope.Error.Code)
 	}
 	return json.Unmarshal(envelope.Data, output)
+}
+
+func (c *cli) confirmGatewayAction(message string) bool {
+	fmt.Fprintln(c.stdout, message)
+	tty, err := openTTYForPasswordPrompt()
+	if err != nil {
+		fmt.Fprintln(c.stderr, "Use --yes to confirm this operation in automation.")
+		return false
+	}
+	if tty.shouldClose {
+		defer tty.file.Close()
+	}
+	fmt.Fprint(tty.file, "Confirm? [y/N]: ")
+	answer, err := bufio.NewReader(tty.file).ReadString('\n')
+	return err == nil && strings.EqualFold(strings.TrimSpace(answer), "y")
 }

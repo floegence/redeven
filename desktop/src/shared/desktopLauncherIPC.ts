@@ -685,7 +685,7 @@ export type DesktopLauncherOperationNextAction = Readonly<
 
 export type DesktopLauncherActionRequest = Readonly<
   | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: 'preview'; address: string; code: string; purpose: GatewayEnrollmentPurpose }
-  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: GatewayMembershipOperation; preview_id?: string; environment_choice?: 'preserve' | 'new' }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: GatewayMembershipOperation; preview_id?: string; environment_choice?: 'preserve' | 'new'; gateway_id?: string; cloud_impact_acknowledged?: boolean }
   | { kind: 'configure_gateway_cloud'; gateway_id: string; configuration: GatewayCloudConfiguration }
   | { kind: 'inspect_gateway_cloud'; gateway_id: string }
   | {
@@ -1600,12 +1600,16 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation, address: input.address, code: input.code, purpose: input.purpose as GatewayEnrollmentPurpose };
       }
       const confirming = operation === 'join' || operation === 'replace' || operation === 'update-endpoints';
-      if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','preview_id','environment_choice'].includes(key))
-        || !['join','replace','update-endpoints','status','retry','leave'].includes(operation)
+      if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','preview_id','environment_choice','gateway_id','cloud_impact_acknowledged'].includes(key))
+        || !['join','replace','update-endpoints','status','retry','leave','publish'].includes(operation)
         || (confirming ? typeof input.preview_id !== 'string' || !/^[a-zA-Z0-9_-]{43}$/u.test(input.preview_id) : input.preview_id !== undefined)) return null;
       const choice = input.environment_choice;
-      if (choice !== undefined && ((operation !== 'join' && operation !== 'replace') || (choice !== 'preserve' && choice !== 'new'))) return null;
-      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation: operation as GatewayMembershipOperation, ...(confirming ? { preview_id: input.preview_id as string } : {}), ...(choice ? { environment_choice: choice } : {}) };
+      if (choice !== undefined && ((operation !== 'publish') || (choice !== 'preserve' && choice !== 'new'))) return null;
+      const gatewayID = compact(input.gateway_id);
+      if (input.gateway_id !== undefined && (!['retry','leave','publish'].includes(operation) || !gatewayID || gatewayID.length > 256)) return null;
+      if (operation === 'publish' && !gatewayID) return null;
+      if (input.cloud_impact_acknowledged !== undefined && (operation !== 'leave' || typeof input.cloud_impact_acknowledged !== 'boolean')) return null;
+      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation: operation as GatewayMembershipOperation, ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(input.cloud_impact_acknowledged === true ? {cloud_impact_acknowledged: true} : {}), ...(confirming ? { preview_id: input.preview_id as string } : {}), ...(choice ? { environment_choice: choice } : {}) };
     }
     case 'configure_gateway_cloud': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);

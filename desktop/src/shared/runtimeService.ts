@@ -1,3 +1,4 @@
+import type { GatewayMembershipPhase } from './gatewayJoin';
 import { normalizeRuntimeGatewayPublication, type RuntimeGatewayPublication } from './runtimeGatewayPublication';
 
 export type RuntimeServiceCompatibility =
@@ -114,7 +115,24 @@ export type RuntimeServiceCloudLinkBinding = Readonly<{
   last_error_message?: string;
 }>;
 
+export type RuntimeGatewayMembership = Readonly<{
+ gateway_id: string; gateway_name: string; identity_fingerprint: string; member_id: string;
+ runtime_public_id: string; phase: GatewayMembershipPhase; cloud_publication: boolean; endpoints: readonly Readonly<{address: string}>[];
+}>;
+function normalizeGatewayMemberships(value: unknown): readonly RuntimeGatewayMembership[] {
+ if (!Array.isArray(value) || value.length > 16) return [];
+ return value.filter((item): item is RuntimeGatewayMembership => !!item && typeof item === 'object'
+   && ['gateway_id','member_id','runtime_public_id','identity_fingerprint','phase'].every(key => typeof item[key] === 'string' && item[key].length > 0 && item[key].length <= 256)
+   && ['joining','joined','gateway_offline','reauthorization_required','removal_pending','cloud_denied','cloud_pending','cloud_control_offline','accessible','migration_pending'].includes(item.phase)
+   && /^SHA256:[A-Za-z0-9_-]{43}$/u.test(item.identity_fingerprint)
+   && typeof item.gateway_name === 'string' && typeof item.cloud_publication === 'boolean'
+   && Array.isArray(item.endpoints) && item.endpoints.length <= 16 && item.endpoints.every((endpoint: unknown) => {
+    if (!endpoint || typeof endpoint !== 'object' || typeof (endpoint as {address?: unknown}).address !== 'string') return false;
+    try { const url = new URL((endpoint as {address: string}).address); return url.protocol === 'https:' && !url.username && !url.password && url.pathname === '/' && !url.search && !url.hash; } catch { return false; }
+   }));
+}
 export type RuntimeServiceSnapshot = Readonly<{
+  gateway_memberships?: readonly RuntimeGatewayMembership[];
   gateway_publication?: RuntimeGatewayPublication;
   runtime_version?: string;
   runtime_commit?: string;
@@ -142,7 +160,7 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 47;
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 48;
 export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
@@ -381,6 +399,7 @@ export function normalizeRuntimeServiceSnapshot(
   const gatewayCloud = normalizeRuntimeGatewayPublication(record.gateway_publication);
   return {
     ...(gatewayCloud ? { gateway_publication: gatewayCloud } : {}),
+    gateway_memberships: normalizeGatewayMemberships(record.gateway_memberships),
     runtime_version: compact(record.runtime_version) || undefined,
     runtime_commit: compact(record.runtime_commit) || undefined,
     runtime_build_time: compact(record.runtime_build_time) || undefined,

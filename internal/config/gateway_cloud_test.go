@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestGatewayManagementCanRestartWithoutAuthorizingControl(t *testing.T) {
 	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
 	member := gatewayfixture.Enroll(t, store, "runtime")
 	path := &gatewaycloud.RuntimeConfig{MemberID: member.MemberID, MemberVersion: member.MemberVersion, ProtocolVersion: gc.ProtocolVersion, CloudOrigin: "https://cloud.example", RegionOrigin: "https://sg.cloud.example", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", RequestPublicID: gc.CandidateID("gateway", member.MemberID), PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), Binding: &gc.Binding{MemberID: member.MemberID, MemberVersion: member.MemberVersion, PublicID: "binding", EnvPublicID: "env", Region: "sg", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Generation: 2, State: "active"}}
-	cfg := &Config{Gateway: member, GatewayPublication: path, CloudOrigin: path.CloudOrigin, AccessPointOrigin: path.RegionOrigin, CloudID: "redeven", EnvironmentID: "env", LocalEnvironmentPublicID: "runtime", AgentInstanceID: "instance", BindingGeneration: 2}
+	cfg := &Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, GatewayPublication: path, CloudOrigin: path.CloudOrigin, AccessPointOrigin: path.RegionOrigin, CloudID: "redeven", EnvironmentID: "env", LocalEnvironmentPublicID: "runtime", AgentInstanceID: "instance", BindingGeneration: 2}
 	for _, revoked := range []bool{false, true} {
 		path.Revoked = revoked
 		if err := cfg.ValidateGatewayManagement(); err != nil {

@@ -7,7 +7,7 @@ timestamp: 2026-10-10T00:00:00Z
 ---
 # Summary
 
-Desktop presents Gateway members, invitations, permissions, policy and optional Redeven Cloud association. A member appears after Runtime joins; there is no form for adding a Runtime URL. The Runtime connection panel is the single local consent and recovery surface. Failures retain input and previously loaded data. Shared launcher operations own cancellation, progress and focus; UI state cannot expand authority.
+Desktop presents Gateway members, invitations, permissions, policy and optional Redeven Cloud association. A member appears after Runtime joins; there is no form for adding a Runtime URL. Adding Gateway access uses address/code verification and confirmation; targeted unpairing and Cloud publication have separate concise confirmations. Failures retain input and previously loaded data. Shared launcher operations own cancellation, progress and focus; UI state cannot expand authority.
 
 # Contract
 
@@ -15,13 +15,13 @@ Desktop presents Gateway members, invitations, permissions, policy and optional 
 
 Creating a managed Runtime offers Not now or After setup, add Gateway access. Joining starts only through the explicit trusted Runtime start action. A user who manages a Gateway can select it and issue a signed address-and-code delivery; the Runtime owner enters those two values and verifies them. Issuing a delivery does not silently consent or join.
 
-Gateway access provides an approved network path; Runtime administration and optional Cloud access retain separate authority. Existing Cloud environments require an explicit preserve/new choice. Replace explains interruption and fences the old path; endpoint updates prove the same Gateway and preserve membership. Normal startup reconnects without this dialog. Polling displays publication diagnostics, recovers from transient failures and never resets Cloud credential recovery or interaction state.
+Gateway access provides an approved network path; Runtime administration and optional Cloud access retain separate authority. Adding another Gateway does not show migration or Cloud ownership choices. The existing Environment card gains one Gateway tab using its original tab styling, facts area and split action footer. Multiple pairings use a compact selector inside that tab. Cloud remains its independent tab. Endpoint updates prove the same Gateway and preserve membership. Normal startup reconnects every member without this dialog; snapshots never reset Cloud recovery or interaction state.
 
 Compact buttons below the address input show a local marker, Gateway name and Use action, with a checkmark derived from the filled address. Multiple endpoints include host and port; accessible names and tooltips retain full addresses. They use confirmed endpoints from enabled, paired, online local-host inventory only, never scan or guess addresses, and exclude loopback for remote Runtimes. Selection invalidates verification, retains and focuses the code. Discovery never overwrites drafts, consumes invitations or grants access. The target uses an inline Runtime identity.
 
-The panel exposes current membership, retry, leave and replace. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending are distinct states. Address, code and target changes invalidate a preview; refresh preserves drafts. Local Runtime management remains available only through its trusted owner, never through a Gateway member card.
+The existing upward action menu retains Runtime and Cloud actions and adds Cancel Gateway pairing. Multiple members require an explicit target; a single member is shown directly. Only the selected Cloud owner shows a Cloud interruption warning. Runtime rechecks that impact at commit, so a changed owner cannot bypass consent. Publish through Gateway is separate and alone offers preserve/new when Cloud identity exists. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending remain distinct states. Address, code and target changes invalidate a preview; refresh preserves drafts. Local Runtime management remains available only through its trusted owner, never through a Gateway member card.
 
-Drafts belong to the panel session. Same-target snapshots with unchanged invitation seeds preserve address, code, pending verification, preview, Cloud choice, operation purpose, leave confirmation and focus. Scalar target/address/code changes initialize the session and fence old responses; parent object identity cannot reset it. Closing clears the secret and consent but retains the address on the same panel. Success clears the consumed code, which refresh cannot restore. Reopening a closed setup dialog starts a fresh draft.
+Drafts belong to the panel session. Same-target snapshots with unchanged invitation seeds preserve address, code, pending verification, preview and focus. Unpairing and publication keep their own selected target and confirmation state. Scalar target/address/code changes initialize the session and fence old responses; parent object identity cannot reset it. Closing clears the secret and consent but retains the address on the same panel. Success clears the consumed code, which refresh cannot restore. Reopening a closed setup dialog starts a fresh draft.
 
 ## Members and policy
 
@@ -62,7 +62,9 @@ This surface presents current Gateway state and starts explicit user-authorized 
 - `redeven:desktop/src/welcome/GatewayClientsPanel.tsx` — Client enrollment, countdown and confirmed revocation.
 
 - `redeven:desktop/src/welcome/GatewayMembersDialog.tsx` — Invitations, policies, partial results and reevaluation.
-- `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.tsx` — One consent and recovery form.
+- `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.tsx` — Retained address/code verification and confirmation.
+- `redeven:desktop/src/welcome/RuntimeGatewayConnectionsDialog.tsx` — Explicit target, Cloud impact and separate publication consent.
+- `redeven:desktop/scripts/check-gateway-runtime-connections.mjs` — Twenty locale/viewport cases for original tabs, upward menus, target consent and retained drafts.
 - `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.client.test.tsx` — Snapshot/polling draft retention and target/secret/async-response lifecycle boundaries.
 - `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` — Typed and quick-filled drafts survive real launcher snapshot updates through the environment card.
 - `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.tsx` — Managed creation and explicit start.

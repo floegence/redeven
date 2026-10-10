@@ -173,6 +173,7 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v2/gateway/join", s.handleGatewayJoin)
 	mux.HandleFunc("/v2/gateway/replace", s.handleGatewayJoin)
 	mux.HandleFunc("/v2/gateway/update-endpoints", s.handleGatewayJoin)
+	mux.HandleFunc("/v2/gateway/publish", s.handleGatewayPublish)
 	mux.HandleFunc("/v2/gateway/status", s.handleGatewayStatus)
 	mux.HandleFunc("/v2/gateway/retry", s.handleGatewayRetry)
 	mux.HandleFunc("/v2/gateway/leave", s.handleGatewayLeave)

@@ -1,4 +1,5 @@
 import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
+import { memberFixture } from '../testSupport/gatewayMembershipFixture';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from './App';
@@ -89,6 +90,43 @@ describe('linked environment owner interactions', () => {
     expect(inputs.map(input => input.value)).toEqual([expected, 'draft-code']);
     expect(document.activeElement).toBe(inputs[1]);
     expect(perform).toHaveBeenCalledOnce();expect(harness.performAction).not.toHaveBeenCalled();
+  });
+
+  it('keeps Runtime, Cloud and multiple Gateway routes in the original card and exposes targeted unpairing in its upward menu',async()=>{
+   const fixture=linkedEnvironmentFixture();
+   const memberships=[{gateway_id:'one',gateway_name:'Office',identity_fingerprint:'SHA256:'+'a'.repeat(43),member_id:'one-member',runtime_public_id:'runtime',phase:'joined' as const,cloud_publication:false,endpoints:[{address:'https://office.internal:7443'}]},
+    {gateway_id:'two',gateway_name:'Lab',identity_fingerprint:'SHA256:'+'b'.repeat(43),member_id:'two-member',runtime_public_id:'runtime',phase:'joined' as const,cloud_publication:false,endpoints:[{address:'https://lab.internal:7443'}]}];
+   const service=mixedEnvironmentFixture().snapshot.environments.find(entry=>entry.kind==='local_environment')!.runtime_service!;
+   const runtime={...fixture.runtime,runtime_service:{...service,gateway_memberships:memberships,capabilities:{...service.capabilities!,runtime_gateway:{supported:true}}}};
+   const gateway={...runtime,id:'gateway:one:env:one-member',kind:'gateway_environment' as const,provider_runtime_link_target:undefined,runtime_service:undefined,
+    gateway_id:'one',gateway_env_id:'one-member',gateway_identity_fingerprint:memberships[0].identity_fingerprint,
+    gateway_member:{...memberFixture,member_id:'one-member',runtime_public_id:'runtime'},gateway_status:'online' as const,gateway_label:'Office',access_group_id:runtime.id,
+    can_open:true,can_edit:true,can_delete:false,default_access_route_id:`${runtime.id}:direct`};
+   const perform=vi.fn(async()=>({ok:true,gateway_membership:{joined:true,phase:'joined',memberships:memberships.map(member=>({...member,joined:true}))}}));
+   vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
+   const h=await mount({...fixture.snapshot,environments:[runtime,fixture.cloud,gateway]});
+   const card=document.querySelector('[data-environment-group]')!;
+   expect(document.querySelectorAll('[data-environment-group]')).toHaveLength(1);
+   const tabs=[...card.querySelectorAll<HTMLButtonElement>('[role="tab"]')];expect(tabs).toHaveLength(3);
+   expect(tabs[2].textContent).toContain('Gateway');expect(card.querySelector('.redeven-environment-owner-tablist')).not.toBeNull();
+   tabs[2].click();await settle();
+   const panel=card.querySelector('[aria-label="Gateway"][role="tabpanel"]')!;
+   expect(panel.getAttribute('aria-hidden')).not.toBe('true');
+   const select=panel.querySelector<HTMLSelectElement>('select')!;expect(select.value).toBe('one');
+   button(panel,'Open Env App').click();await settle();
+   expect(h.performAction).toHaveBeenCalledWith(expect.objectContaining({kind:'open_gateway_environment',gateway_id:'one',gateway_env_id:'one-member'}));
+   h.performAction.mockClear();
+   select.value='two';select.dispatchEvent(new Event('change',{bubbles:true}));await settle();expect(panel.textContent).toContain('https://lab.internal:7443');
+   expect(button(panel,'Open Env App').disabled).toBe(true);
+   expect(panel.querySelector<HTMLButtonElement>('.redeven-environment-card__flower-button')?.disabled).toBe(true);
+   h.publish({...fixture.snapshot,environments:[structuredClone(runtime),fixture.cloud]});await settle();expect(select.value).toBe('two');
+   button(panel,'Actions').click();await settle();
+   const menu=document.querySelector('[role="menu"]')!;
+   expect([...menu.querySelectorAll('[role="menuitem"]')].map(item=>item.textContent?.trim())).toContain('Cancel Gateway pairing…');
+   button(menu,'Cancel Gateway pairing…').click();await settle();
+   const dialog=document.querySelector('[role="dialog"]')!;
+   expect(dialog.querySelector<HTMLSelectElement>('select')?.value).toBe('');
+   expect(h.performAction).not.toHaveBeenCalled();
   });
 
   it.each(['connected', 'authorization_required', 'unlinked'] as const)(

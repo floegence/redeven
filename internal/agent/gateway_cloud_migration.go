@@ -22,11 +22,11 @@ func (a *Agent) consentGatewayUserMigration(ctx context.Context, target *gateway
 		return gatewaycloud.ErrState
 	}
 	original := *cfg
-	original.Gateway, original.GatewayPublication = nil, nil
+	original.GatewayCloudMemberID, original.GatewayPublication = "", nil
 	if err := original.ValidateRemoteStrict(); err != nil {
 		return errGatewayBindingProofRequired
 	}
-	client, err := target.Client(cfg.Gateway)
+	client, err := target.Client(cfg.CloudGateway())
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (a *Agent) consentGatewayUserMigration(ctx context.Context, target *gateway
 	if err != nil {
 		return err
 	}
-	proxy, err := target.Proxy(cfg.Gateway)
+	proxy, err := target.Proxy(cfg.CloudGateway())
 	if err != nil {
 		return err
 	}

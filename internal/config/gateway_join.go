@@ -6,28 +6,20 @@ import (
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-// PrepareGatewayJoin records local membership and any explicit ownership choice
-// in one transaction. It never spends or restores the previous Cloud authority.
+// PrepareGatewayJoin adds local access only. Cloud authority is unchanged.
 func (c *Config) PrepareGatewayJoin(invitation gp.EnrollmentDescriptor, metadata gp.MemberMetadata, choice string) (*Config, error) {
-	if c == nil || (choice != "" && choice != "preserve" && choice != "new") {
+	if c == nil || choice != "" {
 		return nil, gatewaymembership.ErrState
 	}
-	if c.Gateway != nil {
-		if c.Gateway.Leaving || c.Gateway.GatewayID != invitation.GatewayID || c.Gateway.Delegation.InvitationID != invitation.InvitationID || c.GatewayEnvironmentChoice != choice {
+	if current := c.GatewayMember(invitation.GatewayID); current != nil {
+		if current.Leaving || current.Delegation.InvitationID != invitation.InvitationID {
 			return nil, gatewaymembership.ErrConflict
 		}
 		next := *c
 		return &next, nil
 	}
-	existing := c.EnvironmentID != "" || c.GatewayMigrationEvidence != nil
-	if existing && choice == "" {
-		return nil, errors.New("choose preserve or new for the existing Cloud environment")
-	}
-	if !existing && choice != "" {
-		return nil, errors.New("no existing Cloud environment to migrate")
-	}
-	if choice == "preserve" && c.GatewayRejoinRequired && c.GatewayMigrationEvidence == nil {
-		return nil, errors.New("the original binding proof is unavailable; reauthorize the environment or choose new")
+	if len(c.Gateways) >= 16 {
+		return nil, gatewaymembership.ErrCapacity
 	}
 	next := *c
 	if err := next.EnsureRuntimeIDs(); err != nil {
@@ -37,30 +29,52 @@ func (c *Config) PrepareGatewayJoin(invitation gp.EnrollmentDescriptor, metadata
 	if err != nil {
 		return nil, err
 	}
-	next.Gateway, next.GatewayEnvironmentChoice = member, choice
+	next.SetGatewayMember(invitation.GatewayID, member)
+	return &next, nil
+}
+
+// PrepareGatewayPublication is a separate explicit Cloud settings transaction.
+func (c *Config) PrepareGatewayPublication(gatewayID, choice string) (*Config, error) {
+	member := c.GatewayMember(gatewayID)
+	if member == nil || member.Leaving || member.PendingJoin != nil || c.GatewayPublication != nil {
+		return nil, gatewaymembership.ErrState
+	}
+	existing := c.EnvironmentID != "" || c.GatewayMigrationEvidence != nil
+	if existing && choice != "preserve" && choice != "new" {
+		return nil, errors.New("choose preserve or new for the existing Cloud environment")
+	}
+	if !existing && choice != "" {
+		return nil, errors.New("no existing Cloud environment to migrate")
+	}
+	if choice == "preserve" && c.GatewayRejoinRequired && c.GatewayMigrationEvidence == nil {
+		return nil, errors.New("the original binding proof is unavailable; reauthorize the environment or choose new")
+	}
+	next := *c
+	next.GatewayCloudMemberID, next.GatewayEnvironmentChoice = member.MemberID, choice
 	if choice == "new" {
 		next.Direct, next.ControlArtifactPool = nil, nil
 	}
 	return &next, nil
 }
 
-// PrepareGatewayReplacement selects one new path and retains only removal work
-// for the previous member. A stopped old Gateway cannot force a direct fallback.
+// Replacement is retained only as an explicit single-member operation.
 func (c *Config) PrepareGatewayReplacement(invitation gp.EnrollmentDescriptor, metadata gp.MemberMetadata, choice string) (*Config, error) {
-	if c != nil && c.Gateway != nil && c.Gateway.Delegation.InvitationID == invitation.InvitationID {
-		return c.PrepareGatewayJoin(invitation, metadata, choice)
-	}
-	if c == nil || c.Gateway == nil {
+	if c == nil || len(c.Gateways) != 1 || choice != "" {
 		return nil, gatewaymembership.ErrConflict
 	}
+	if c.Gateways[0].Delegation.InvitationID == invitation.InvitationID {
+		return c.PrepareGatewayJoin(invitation, metadata, choice)
+	}
 	if len(c.GatewayRemovalOutbox) >= 16 {
-		return nil, errors.New("deliver pending Gateway removals before replacing more memberships")
+		return nil, gatewaymembership.ErrCapacity
 	}
 	next := *c
-	if err := next.RetireGatewayPublication(); err != nil {
-		return nil, err
+	if next.CloudGateway() != nil {
+		if err := next.RetireGatewayPublication(); err != nil {
+			return nil, err
+		}
 	}
-	next.GatewayRemovalOutbox = append(append([]gatewaymembership.RemovalDelivery(nil), c.GatewayRemovalOutbox...), c.Gateway.RemovalDelivery())
-	next.Gateway = nil
-	return next.PrepareGatewayJoin(invitation, metadata, choice)
+	next.GatewayRemovalOutbox = append(append([]gatewaymembership.RemovalDelivery(nil), c.GatewayRemovalOutbox...), c.Gateways[0].RemovalDelivery())
+	next.Gateways = nil
+	return next.PrepareGatewayJoin(invitation, metadata, "")
 }

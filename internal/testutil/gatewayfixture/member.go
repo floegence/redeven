@@ -14,6 +14,11 @@ import (
 
 func New(t testing.TB, origin, listen string) (*gatewaymembership.Store, gatewaymembership.GatewayIdentity) {
 	t.Helper()
+	return NewWithID(t, "gateway_test", origin, listen)
+}
+
+func NewWithID(t testing.TB, id, origin, listen string) (*gatewaymembership.Store, gatewaymembership.GatewayIdentity) {
+	t.Helper()
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +27,7 @@ func New(t testing.TB, origin, listen string) (*gatewaymembership.Store, gateway
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := gatewaymembership.GatewayIdentity{ID: "gateway_test", PrivateKey: key}
+	identity := gatewaymembership.GatewayIdentity{ID: id, PrivateKey: key}
 	store, err := gatewaymembership.NewStore(filepath.Join(t.TempDir(), "members.json"), identity, origin, listen, hooks)
 	if err != nil {
 		t.Fatal(err)

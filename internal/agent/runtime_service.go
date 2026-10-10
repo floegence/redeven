@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"strings"
 
 	"github.com/floegence/redeven/internal/runtimeservice"
@@ -41,7 +43,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 	gatewayCloud := a.gatewayPublicationSnapshot()
 	cfg := a.remoteConfigSnapshot()
-	if gatewayCloud != nil || (cfg != nil && (cfg.Gateway != nil || cfg.GatewayRejoinRequired)) {
+	if gatewayCloud != nil || (cfg != nil && (cfg.CloudGateway() != nil || cfg.GatewayRejoinRequired)) {
 		capabilities.CloudLink = runtimeservice.Capability{ReasonCode: "gateway_managed", Message: "Manage the Gateway connection in Runtime settings and its publication in Redeven Cloud."}
 	}
 	bindings := runtimeservice.Bindings{
@@ -70,6 +72,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 
 	return runtimeservice.ApplyCompatibilityContract(runtimeservice.Snapshot{
 		GatewayPublication: gatewayCloud,
+		GatewayMemberships: a.gatewayMembershipSummaries(),
 		RuntimeVersion:     strings.TrimSpace(a.version),
 		RuntimeCommit:      strings.TrimSpace(a.commit),
 		RuntimeBuildTime:   strings.TrimSpace(a.buildTime),
@@ -111,4 +114,22 @@ func (a *Agent) gatewayPublicationSnapshot() *runtimeservice.GatewayPublication 
 
 func (a *Agent) CurrentRuntimeServiceSnapshot() runtimeservice.Snapshot {
 	return a.RuntimeServiceSnapshot()
+}
+
+func (a *Agent) gatewayMembershipSummaries() []runtimeservice.GatewayMembership {
+	status := a.GatewayMembershipStatus()
+	out := make([]runtimeservice.GatewayMembership, 0, len(status.Memberships))
+	for _, item := range status.Memberships {
+		member := a.GatewayMembership(item.GatewayID)
+		if member == nil || member.Leaving {
+			continue
+		}
+		digest := sha256.Sum256([]byte(member.GatewayPublicKey))
+		summary := runtimeservice.GatewayMembership{GatewayID: member.GatewayID, GatewayName: member.GatewayName, IdentityFingerprint: "SHA256:" + base64.RawURLEncoding.EncodeToString(digest[:]), MemberID: member.MemberID, RuntimePublicID: member.RuntimePublicID, Phase: item.Phase, CloudPublication: item.CloudPublication}
+		for _, endpoint := range member.ConnectionEndpoints() {
+			summary.Endpoints = append(summary.Endpoints, runtimeservice.GatewayAddress{Address: endpoint.Address})
+		}
+		out = append(out, summary)
+	}
+	return out
 }

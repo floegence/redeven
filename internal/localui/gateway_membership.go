@@ -25,8 +25,7 @@ func (s *runtimeControlServer) handleGatewayJoin(w http.ResponseWriter, r *http.
 		return
 	}
 	var body struct {
-		PreviewID         string `json:"preview_id"`
-		EnvironmentChoice string `json:"environment_choice,omitempty"`
+		PreviewID string `json:"preview_id"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 	dec.DisallowUnknownFields()
@@ -41,7 +40,7 @@ func (s *runtimeControlServer) handleGatewayJoin(w http.ResponseWriter, r *http.
 	case "/v2/gateway/replace":
 		purpose = "replace"
 	}
-	if err := s.agent.ConfirmGatewayPreview(body.PreviewID, purpose, body.EnvironmentChoice); err != nil {
+	if err := s.agent.ConfirmGatewayPreview(body.PreviewID, purpose, ""); err != nil {
 		code := gatewayEnrollmentErrorCode(err)
 		writeRuntimeControlError(w, http.StatusConflict, code, "Gateway confirmation failed. Verify the address and a fresh invitation code, then confirm again.")
 		return
@@ -77,7 +76,18 @@ func (s *runtimeControlServer) handleGatewayRetry(w http.ResponseWriter, r *http
 		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
 		return
 	}
-	if err := s.agent.RetryGatewayMembership(); err != nil {
+	var body struct {
+		GatewayID string `json:"gateway_id"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&body) != nil || dec.Decode(new(any)) != io.EOF {
+			writeRuntimeControlError(w, http.StatusBadRequest, "GATEWAY_RETRY_INVALID", "Select a Gateway connection.")
+			return
+		}
+	}
+	if err := s.agent.RetryGatewayMembership(body.GatewayID); err != nil {
 		writeRuntimeControlError(w, http.StatusConflict, "GATEWAY_RETRY_FAILED", "Gateway reconnection could not start.")
 		return
 	}
@@ -96,10 +106,27 @@ func (s *runtimeControlServer) handleGatewayLeave(w http.ResponseWriter, r *http
 		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
 		return
 	}
-	if err := s.agent.LeaveGateway(); err != nil {
-		writeRuntimeControlError(w, http.StatusConflict, "GATEWAY_LEAVE_FAILED", "Gateway removal could not be saved. Retry the operation.")
+	var body struct {
+		GatewayID               string `json:"gateway_id"`
+		CloudImpactAcknowledged bool   `json:"cloud_impact_acknowledged"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&body) != nil || dec.Decode(new(any)) != io.EOF {
+			writeRuntimeControlError(w, http.StatusBadRequest, "GATEWAY_LEAVE_INVALID", "Select a Gateway connection.")
+			return
+		}
+	}
+	if err := s.agent.UnpairGateway(body.GatewayID, body.CloudImpactAcknowledged); err != nil {
+		code := "GATEWAY_LEAVE_FAILED"
+		if errors.Is(err, agent.ErrGatewayCloudImpactRequired) {
+			code = "GATEWAY_CLOUD_IMPACT_REQUIRED"
+		}
+		writeRuntimeControlError(w, http.StatusConflict, code, "Gateway removal requires the selected member and confirmation of any Cloud interruption.")
 		return
 	}
+
 	s.notifyRuntimeServiceChanged()
 	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayMembershipStatus()})
 }
@@ -156,4 +183,34 @@ func (s *runtimeControlServer) handleGatewayPreview(w http.ResponseWriter, r *ht
 		return
 	}
 	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: preview})
+}
+
+func (s *runtimeControlServer) handleGatewayPublish(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	if r.Header.Get("Origin") != "" {
+		writeRuntimeControlError(w, http.StatusForbidden, "GATEWAY_TRUSTED_CHANNEL_REQUIRED", "Cloud publication requires trusted Runtime management.")
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
+		return
+	}
+	var body struct {
+		GatewayID         string `json:"gateway_id"`
+		EnvironmentChoice string `json:"environment_choice,omitempty"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
+	dec.DisallowUnknownFields()
+	if dec.Decode(&body) != nil || dec.Decode(new(any)) != io.EOF || body.GatewayID == "" {
+		writeRuntimeControlError(w, http.StatusBadRequest, "GATEWAY_PUBLICATION_INVALID", "Select a Gateway and a Cloud publication choice.")
+		return
+	}
+	if err := s.agent.PublishGateway(body.GatewayID, body.EnvironmentChoice); err != nil {
+		writeRuntimeControlError(w, http.StatusConflict, "GATEWAY_PUBLICATION_FAILED", "Cloud publication could not be saved. Check the selected Gateway and ownership choice.")
+		return
+	}
+	s.notifyRuntimeServiceChanged()
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayMembershipStatus()})
 }
