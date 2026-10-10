@@ -1,7 +1,8 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -13,6 +14,7 @@ import type {
 import {
   adapter,
   renderSurfaceWithAdapter,
+  renderSurfaceWithAdapterProps,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 import {
@@ -20,13 +22,168 @@ import {
   type FlowerAttachmentLaneCopy,
 } from '../../../../flower_ui/src/attachments/FlowerAttachmentLane';
 import type { FlowerAttachmentItem } from '../../../../flower_ui/src/attachments/createFlowerAttachmentController';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 
 function expectHorizontallyContained(child: DOMRect, parent: DOMRect): void {
   expect(child.left).toBeGreaterThanOrEqual(parent.left - 1);
   expect(child.right).toBeLessThanOrEqual(parent.right + 1);
 }
 
+async function imageFile(name: string): Promise<File> {
+  const canvas = document.createElement('canvas');
+  canvas.width = 400;
+  canvas.height = 240;
+  const paint = canvas.getContext('2d')!;
+  paint.fillStyle = '#f5f7fa';
+  paint.fillRect(0, 0, 400, 240);
+  paint.strokeStyle = '#667085';
+  paint.lineWidth = 3;
+  paint.beginPath();
+  paint.moveTo(120, 120);
+  paint.lineTo(280, 120);
+  paint.stroke();
+  for (const [x, color] of [[24, '#23816d'], [152, '#d78c36'], [280, '#795c9b']] as const) {
+    paint.fillStyle = color;
+    paint.fillRect(x, 84, 96, 72);
+  }
+  const blob = await new Promise<Blob>((resolve) => canvas.toBlob((result) => resolve(result!), 'image/png'));
+  return new File([blob], name, { type: 'image/png' });
+}
+
 describe('Flower composer attachment browser presentation', () => {
+  it('keeps image lifecycle feedback and touch actions inside a stationary thumbnail', async () => {
+    await page.viewport(320, 720);
+    const host = document.createElement('div');
+    host.className = 'flower-surface';
+    document.body.append(host);
+    const previewURL = URL.createObjectURL(await imageFile('diagram.png'));
+    const image: FlowerAttachmentItem = {
+      local_id: 'image-lifecycle', request_id: 'request-image', attempt_id: 'attempt-image',
+      source: 'file', name: 'diagram.png', mime_type: 'image/png', size_bytes: 100,
+      status: 'uploading', preview_url: previewURL,
+      loaded_bytes: 25, total_bytes: 100, progress_indeterminate: false,
+    };
+    const [items, setItems] = createSignal<readonly FlowerAttachmentItem[]>([image]);
+    const copy = DEFAULT_FLOWER_SURFACE_COPY.attachments!;
+    const onRetry = vi.fn();
+    const onReselect = vi.fn();
+    const dispose = render(() => <FlowerAttachmentLane
+      items={items()} copy={copy} onRetry={onRetry} onReselect={onReselect}
+      onCancel={vi.fn()} onRemove={vi.fn()} onRestore={vi.fn()} onPreview={vi.fn()}
+    />, host);
+    try {
+      const item = host.querySelector<HTMLElement>('.flower-attachment-item')!;
+      const before = item.getBoundingClientRect();
+      for (const state of [
+        image,
+        { ...image, progress_indeterminate: true },
+        { ...image, status: 'upload_error', error_code: 'attachment_upload_failed' },
+        { ...image, status: 'reselect_required' },
+        { ...image, status: 'incompatible' },
+        { ...image, status: 'staged_ready' },
+      ] as const) {
+        setItems([state]);
+        const bounds = item.getBoundingClientRect();
+        expect(bounds.width).toBe(before.width);
+        expect(bounds.height).toBe(before.height);
+        expect(item.scrollWidth).toBeLessThanOrEqual(item.clientWidth + 1);
+        for (const button of item.querySelectorAll<HTMLElement>('.flower-attachment-actions button')) {
+          const actionBounds = button.getBoundingClientRect();
+          expect(actionBounds.width).toBeGreaterThanOrEqual(44);
+          expectHorizontallyContained(actionBounds, bounds);
+        }
+        const feedback = item.querySelector<HTMLElement>('.flower-attachment-feedback');
+        if (feedback) {
+          expectHorizontallyContained(feedback.getBoundingClientRect(), bounds);
+          expect(feedback.scrollWidth).toBeLessThanOrEqual(feedback.clientWidth + 1);
+          expect(feedback.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+            item.querySelector('.flower-attachment-actions')!.getBoundingClientRect().bottom,
+          );
+        }
+        if (state.status === 'upload_error') await userEvent.click(item.querySelector(`button[aria-label="${copy.retry}"]`)!);
+        if (state.status === 'reselect_required') await userEvent.click(item.querySelector(`button[aria-label="${copy.reselect}"]`)!);
+      }
+      expect(onRetry).toHaveBeenCalledWith(image.local_id);
+      expect(onReselect).toHaveBeenCalledWith(image.local_id);
+      expect(item.querySelector('.flower-attachment-feedback')).toBeNull();
+    } finally {
+      dispose(); host.remove(); URL.revokeObjectURL(previewURL);
+    }
+  });
+
+  it.each([
+    { presentation: 'full', width: 1280, surfaceWidth: 1200, theme: 'light' },
+    { presentation: 'companion', width: 1280, surfaceWidth: 434, theme: 'light' },
+    { presentation: 'full', width: 320, surfaceWidth: 320, theme: 'light' },
+    { presentation: 'companion', width: 1280, surfaceWidth: 434, theme: 'dark' },
+  ] as const)('shows compact image thumbnails in $presentation at $surfaceWidth px ($theme)', async ({ presentation, width, surfaceWidth, theme }) => {
+    await page.viewport(width, 800);
+    document.documentElement.classList.add(theme);
+    const capability: FlowerAttachmentCapability = {
+      model_id: 'openai/gpt-5.2', revision: 'image-browser-capability', enabled: true,
+      supports_long_text: true, max_attachments: 4,
+      max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+      routes: { 'image/png': 'native_full_content', 'text/plain': 'tool_read' },
+    };
+    const previewStagedAttachment = vi.fn(async () => undefined);
+    const runtime = renderSurfaceWithAdapterProps({
+      ...adapter(true),
+      loadAttachmentCapability: vi.fn(async () => capability),
+      uploadAttachment: vi.fn(async (input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> => ({
+        attachment_id: `upl_${input.file.name}`, name: input.file.name,
+        mime_type: input.file.type, size_bytes: input.file.size, digest_sha256: 'e'.repeat(64),
+        locator: `attachment://v1/upl_${input.file.name}/${input.file.name}`,
+        source: input.source, capability_revision: capability.revision,
+      })),
+      previewStagedAttachment,
+    }, { presentation, companionOpen: true });
+    Object.assign(runtime.style, { width: `${surfaceWidth}px`, height: '760px' });
+    try {
+      await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
+      const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+      await userEvent.fill(textarea, 'Review these diagrams');
+      const picker = runtime.querySelector('input[type="file"]') as HTMLInputElement;
+      const transfer = new DataTransfer();
+      for (const name of ['overview.png', 'services.png', 'storage.png']) transfer.items.add(await imageFile(name));
+      transfer.items.add(new File(['Deployment notes'], 'notes.txt', { type: 'text/plain' }));
+      Object.defineProperty(picker, 'files', { configurable: true, value: transfer.files });
+      picker.dispatchEvent(new Event('change', { bubbles: true }));
+      await waitFor(() => runtime.querySelectorAll('[data-attachment-status="staged_ready"]').length === 4);
+      const lane = runtime.querySelector('.flower-attachment-lane') as HTMLElement;
+      const images = [...lane.querySelectorAll<HTMLElement>('[data-attachment-kind="image"]')];
+      expect(images).toHaveLength(3);
+      expect(lane.scrollWidth).toBeLessThanOrEqual(lane.clientWidth + 1);
+      for (const item of images) {
+        const image = item.querySelector('img')!;
+        await waitFor(() => image.complete && image.naturalWidth === 400);
+        const bounds = item.getBoundingClientRect();
+        expect(bounds.width).toBe(96);
+        expect(bounds.height).toBe(80);
+        expectHorizontallyContained(bounds, lane.getBoundingClientRect());
+        expect(item.querySelector('.flower-attachment-name, .flower-attachment-meta, .flower-attachment-feedback')).toBeNull();
+        expect(item.textContent).toBe('');
+        const remove = item.querySelector<HTMLButtonElement>('.flower-attachment-actions button')!;
+        expect(remove.getAttribute('aria-label')).toBe('Remove attachment');
+        expect(getComputedStyle(remove).cursor).toBe('pointer');
+        const removeBounds = remove.getBoundingClientRect();
+        expect(Math.abs(removeBounds.top - bounds.top)).toBeLessThanOrEqual(1);
+        expect(Math.abs(removeBounds.right - bounds.right)).toBeLessThanOrEqual(1);
+        if (width === 320) expect(removeBounds.width).toBeGreaterThanOrEqual(44);
+      }
+      expect(lane.querySelector('[data-attachment-kind="file"] .flower-attachment-name')?.textContent).toBe('notes.txt');
+      await page.screenshot({ element: runtime.querySelector('.flower-composer')!, path: `__screenshots__/image-thumbnails-${presentation}-${surfaceWidth}-${theme}.png` });
+      await userEvent.click(images[0].querySelector('button.flower-attachment-preview-trigger')!);
+      await waitFor(() => previewStagedAttachment.mock.calls.length === 1);
+      await userEvent.click(images[0].querySelector('.flower-attachment-actions button')!);
+      await waitFor(() => lane.querySelectorAll('[data-attachment-kind="image"]').length === 2);
+      expect(previewStagedAttachment).toHaveBeenCalledOnce();
+      expect(textarea.value).toBe('Review these diagrams');
+      expect(runtime.querySelectorAll('[data-attachment-status="staged_ready"]')).toHaveLength(3);
+    } finally {
+      document.documentElement.classList.remove(theme);
+    }
+  });
+
   it('contains reselect-required actions at 400-percent equivalent width with long German copy', async () => {
     await page.viewport(320, 720);
     const host = document.createElement('div');
