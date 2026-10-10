@@ -259,9 +259,16 @@ try {
     report.scenarios.push('short-window-composer-visible');
   }
   await page.reload();
+  if (welcome) {
+    // Desktop reload restores Welcome; re-enter through its normal navigation.
+    await page.getByRole('button', { name: 'Tessiven', exact: true }).click();
+    await page.getByRole('button', { name: updatedTitle, exact: true }).click();
+  }
   await page.getByRole('heading', { name: updatedTitle, exact: true }).waitFor();
   await until(() => page.locator('[data-node-id]').count(), 'Reload preserves rendered placements');
-  report.scenarios.push('reload-current-canvas');
+  await page.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+  await page.screenshot({ path: path.join(output, 'dsl-reopened.png'), animations: 'disabled' });
+  report.scenarios.push('reload-and-reenter-current-canvas');
   if (runtime) {
     await browser.close(); browser = undefined;
     const stopped = new Promise(resolve => runtime.once('exit', resolve));
