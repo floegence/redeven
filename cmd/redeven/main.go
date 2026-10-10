@@ -684,6 +684,17 @@ func (c *cli) runCmd(args []string) int {
 		Phase: runtimepresentation.PhaseLoadConfig,
 		Title: "runtime config loaded",
 	})
+	// Allocate the local Runtime identity before exposing the trusted management
+	// channel. Gateway preview binds to this stable identity but does not perform
+	// any membership or Cloud mutation itself.
+	if (mode == runModeLocal || mode == runModeDesktop) && (cfg.LocalEnvironmentPublicID == "" || cfg.AgentInstanceID == "") {
+		if err := cfg.EnsureRuntimeIDs(); err != nil {
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to initialize Runtime identity: %v", err))
+		}
+		if err := config.Save(stateLayout.ConfigPath, cfg); err != nil {
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to persist Runtime identity: %v", err))
+		}
+	}
 	remoteErr := cfg.ValidateRemoteStrict()
 	// An explicitly configured Gateway path may need to recover an empty pool
 	// or observe a new approval after restart. Strict validation still gates the

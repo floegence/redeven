@@ -449,6 +449,13 @@ func (a *Agent) clearCloudLinkBindingLocked(snapshot providerDisconnectSnapshot)
 	if strings.TrimSpace(next.AgentInstanceID) == "" {
 		next.AgentInstanceID = a.cfg.AgentInstanceID
 	}
+	if err := next.EnsureRuntimeIDs(); err != nil {
+		return runtimeservice.CloudLinkBinding{}, &CloudLinkError{
+			Code:    CloudLinkErrorDisconnectFailed,
+			Message: "Could not initialize the detached Runtime identity. Retry disconnecting.",
+			Err:     err,
+		}
+	}
 	if err := config.Save(a.configPath, &next); err != nil {
 		return runtimeservice.CloudLinkBinding{}, &CloudLinkError{
 			Code:    CloudLinkErrorDisconnectFailed,
