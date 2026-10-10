@@ -32,7 +32,7 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer library.Close()
-			document := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Commerce}\nnodes: [{id: host, name: Fixture, runtimeRef: 'ssh:fixture'}]\nservices: [{id: api, name: Orders, kind: api}]\ninstances: [{id: orders, nodeRef: host, serviceRef: api, role: standalone, binding: {owner: managed_service, resourceId: fixture}}]\n"
+			document := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Commerce}\nnodes: [{id: host, name: Fixture, runtimeRef: 'ssh:fixture'}]\nservices: [{id: api, name: Orders, kind: api}]\ninstances: [{id: orders, nodeRef: host, serviceRef: api, role: standalone, binding: {owner: managed_service, resourceId: fixture}}]\n"
 			var effects, providerCalls atomic.Int32
 			resources := &tessiven.ResourceBackend{Library: library, Remote: func(_ context.Context, meta *session.Meta, req tessiven.ResourceRequest) (tessiven.ResourceResult, error) {
 				if req.RuntimeRef != "ssh:fixture" || req.Binding.ResourceID != "fixture" || !meta.CanExecute {

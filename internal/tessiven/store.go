@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
+	tessivenspec "github.com/floegence/redeven/spec/tessiven"
 	"github.com/google/uuid"
 )
 
@@ -38,15 +39,17 @@ type Canvas struct {
 	FlowerThreadID string `json:"flower_thread_id,omitempty"`
 }
 type Version struct {
-	CanvasID     string       `json:"canvas_id"`
-	Number       int64        `json:"number"`
-	DocumentYAML string       `json:"document_yaml"`
-	Digest       string       `json:"digest"`
-	CreatedAt    int64        `json:"created_at"`
-	Source       string       `json:"source"`
-	Summary      string       `json:"summary"`
-	Document     *Document    `json:"document,omitempty"`
-	Diagnostics  []Diagnostic `json:"diagnostics,omitempty"`
+	CanvasID     string         `json:"canvas_id"`
+	Number       int64          `json:"number"`
+	DocumentYAML string         `json:"document_yaml"`
+	Digest       string         `json:"digest"`
+	CreatedAt    int64          `json:"created_at"`
+	Source       string         `json:"source"`
+	Summary      string         `json:"summary"`
+	Document     *Document      `json:"document,omitempty"`
+	Diagnostics  []Diagnostic   `json:"diagnostics,omitempty"`
+	DSLVersion   string         `json:"dsl_version,omitempty"`
+	Migrations   []DSLMigration `json:"migrations,omitempty"`
 }
 type SaveRequest struct {
 	RequestID       string `json:"request_id"`
@@ -106,7 +109,7 @@ func (s *Service) Create(ctx context.Context, requestID, title string) (SaveResu
 	if strings.TrimSpace(title) == "" {
 		return SaveResult{}, ErrInvalidRequest
 	}
-	source, err := documentYAML(&Document{APIVersion: "redeven.io/tessiven/v1", Kind: "ServiceCanvas", Metadata: Metadata{Title: title}})
+	source, err := documentYAML(&Document{APIVersion: tessivenspec.CurrentAPIVersion, Kind: "ServiceCanvas", Metadata: Metadata{Title: title}})
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -203,12 +206,17 @@ func readVersion(ctx context.Context, q interface {
 	if err != nil {
 		return v, notFound(err)
 	}
-	validation := validateDocument(v.DocumentYAML, true)
-	if !validation.Valid || digest(v.DocumentYAML) != v.Digest {
+	if digest(v.DocumentYAML) != v.Digest {
 		return v, errors.New("tessiven stored version failed integrity validation")
+	}
+	validation := validateDocument(v.DocumentYAML, true)
+	if !validation.Valid {
+		return v, fmt.Errorf("tessiven stored version cannot be read: %w", &ValidationError{Diagnostics: validation.Diagnostics})
 	}
 	v.Document = validation.Document
 	v.Diagnostics = validation.Diagnostics
+	v.DSLVersion = validation.DSLVersion
+	v.Migrations = validation.Migrations
 	return v, nil
 }
 func (s *Service) Version(ctx context.Context, id string, number int64) (Version, error) {
@@ -269,10 +277,6 @@ func (s *Service) save(ctx context.Context, req SaveRequest, source, fingerprint
 	default:
 		return SaveResult{}, ErrInvalidRequest
 	}
-	validation := Validate(req.DocumentYAML)
-	if !validation.Valid {
-		return SaveResult{}, &ValidationError{Diagnostics: validation.Diagnostics}
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return SaveResult{}, err
@@ -286,11 +290,28 @@ func (s *Service) save(ctx context.Context, req SaveRequest, source, fingerprint
 		}
 		var result SaveResult
 		err = json.Unmarshal([]byte(oldResult), &result)
+		if err == nil {
+			projection := validateDocument(result.Version.DocumentYAML, true)
+			if !projection.Valid || result.Version.Digest != digest(result.Version.DocumentYAML) {
+				return SaveResult{}, errors.New("tessiven stored request result failed integrity validation")
+			}
+			result.Version.Document = projection.Document
+			result.Version.DSLVersion = projection.DSLVersion
+			result.Version.Migrations = projection.Migrations
+			result.Version.Diagnostics = projection.Diagnostics
+		}
 		return result, err
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return SaveResult{}, err
 	}
+	validation := Validate(req.DocumentYAML)
+	if !validation.Valid {
+		return SaveResult{}, &ValidationError{Diagnostics: validation.Diagnostics}
+	}
+	// The request fingerprint is based on the original arguments. Only the new
+	// immutable snapshot is upgraded; reads never rewrite existing history.
+	req.DocumentYAML = validation.documentYAML
 	now := time.Now().UnixMilli()
 	c := Canvas{ID: req.CanvasID, CreatedAt: now}
 	if c.ID == "" {
@@ -314,7 +335,7 @@ func (s *Service) save(ctx context.Context, req SaveRequest, source, fingerprint
 	c.Description = validation.Document.Metadata.Description
 	c.LatestVersion++
 	c.UpdatedAt = now
-	v := Version{CanvasID: c.ID, Number: c.LatestVersion, DocumentYAML: req.DocumentYAML, Digest: digest(req.DocumentYAML), CreatedAt: now, Source: source, Summary: req.Summary, Document: validation.Document}
+	v := Version{CanvasID: c.ID, Number: c.LatestVersion, DocumentYAML: req.DocumentYAML, Digest: digest(req.DocumentYAML), CreatedAt: now, Source: source, Summary: req.Summary, Document: validation.Document, DSLVersion: tessivenspec.CurrentVersion}
 	if req.CanvasID == "" {
 		_, err = tx.ExecContext(ctx, `INSERT INTO canvases(id,title,description,latest_version,archived,created_at,updated_at,flower_thread_id) VALUES(?,?,?,?,0,?,?,?)`, c.ID, c.Title, c.Description, c.LatestVersion, c.CreatedAt, now, "")
 	} else {

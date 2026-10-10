@@ -37,6 +37,17 @@ such nodes unbound; an explicitly requested observation may be recorded as
   prefixes, so it can be used as exact edit text. Preserve stable IDs, names,
   evidence, and intentional presentation choices. Do not load the entire graph
   for a small change or regenerate unrelated sections.
+- New documents use `apiVersion: redeven.io/tessiven/v1.0.0`. DSL versions
+  use exact `vMAJOR.MINOR.PATCH` identities, independently of canvas revision
+  numbers. `tessiven.schema` defaults to the current schema; its optional
+  `version` selects a supported historical schema. Read results identify the
+  original `dsl_version` and the reviewed `migrations`. Literal YAML remains
+  the immutable source, so use its exact text for edits. The Runtime upgrades
+  supported legacy `v1` input when saving a new snapshot; do not rewrite the
+  version header yourself or relabel an unknown/future document. Unknown
+  versions require a compatible Runtime. Migration never invents placements,
+  evidence or management bindings; repair historical placement diagnostics
+  from actual evidence before saving.
 - Inspect code and configuration with available file tools. Use
   `tessiven.inspect` with an explicit valid `runtime_ref` to obtain actual
   management bindings. A remote failure must remain a remote failure; never

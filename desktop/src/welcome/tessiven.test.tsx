@@ -14,7 +14,7 @@ function fixture(count: number): CanvasDocument {
     runtimeRef: `ssh:target-${index}`,
   }));
   return {
-    apiVersion: 'redeven.io/tessiven/v1',
+    apiVersion: 'redeven.io/tessiven/v1.0.0',
     kind: 'ServiceCanvas',
     metadata: { title: 'Commerce' },
     nodes,

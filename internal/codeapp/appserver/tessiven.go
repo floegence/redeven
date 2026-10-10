@@ -54,7 +54,8 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 		return true
 	}
 	if r.Method == http.MethodGet && path == "/schema" {
-		writeJSON(w, 200, apiResp{OK: true, Data: tessiven.Schema()})
+		result, err := tessiven.SchemaForVersion(r.URL.Query().Get("version"))
+		writeTessivenResult(w, result, err)
 		return true
 	}
 	if r.Method == http.MethodGet && path == "/events" {
@@ -291,6 +292,10 @@ func tessivenQueryAllowed(method, path, raw string) bool {
 					return false
 				}
 			default:
+				return false
+			}
+		} else if path == "/schema" && key == "version" {
+			if list[0] == "" || len(list[0]) > 64 {
 				return false
 			}
 		} else if strings.HasSuffix(path, "/versions") && key == "before" {

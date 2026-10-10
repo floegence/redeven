@@ -11,9 +11,12 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, _electron } from 'playwright';
 import { createRequire } from 'node:module';
+import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
 
-const [binary, output, providerType = 'openai', desktopBundle] = process.argv.slice(2);
-assert(binary && output, 'Usage: checkCanvasEditingRuntime.mjs <Runtime bundle binary> <evidence directory> [openai|deepseek] [Desktop bundle]');
+const legacyDSL = process.argv.includes('--legacy-dsl');
+const [binary, output, providerType = 'openai', desktopBundle] = process.argv.slice(2).filter(argument => argument !== '--legacy-dsl');
+assert(binary && output, 'Usage: checkCanvasEditingRuntime.mjs <Runtime bundle binary> <evidence directory> [openai|deepseek] [Desktop bundle] [--legacy-dsl]');
 assert(['openai', 'deepseek'].includes(providerType), 'Unknown fixture provider');
 const modelName = providerType === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-5-mini';
 const initialTitle = 'Commerce / Example', updatedTitle = 'Commerce / Updated';
@@ -44,6 +47,16 @@ async function api(route, method = 'GET', body) {
   const response = await fetch(new URL(route, origin), { method, headers: { 'Content-Type': 'application/json', Origin: new URL(origin).origin }, ...(body ? { body: JSON.stringify(body) } : {}) });
   assert.equal(response.status, 200, route);
   const data = await response.json(); assert.notEqual(data.ok, false, JSON.stringify(data)); return data.data ?? data;
+}
+async function startRuntime(staged) {
+  const startup = path.join(temp, 'startup.json');
+  await rm(startup, { force: true });
+  runtime = spawn(staged, ['run', '--mode', 'local', '--state-root', state, '--local-ui-bind', '127.0.0.1:0', '--presentation', 'machine', '--startup-report-file', startup], { cwd: temp, env: { ...process.env, GOWORK: 'off' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  runtime.stdout.on('data', chunk => { runtimeLog += chunk; }); runtime.stderr.on('data', chunk => { runtimeLog += chunk; });
+  origin = (await until(async () => { try { return JSON.parse(await readFile(startup, 'utf8')); } catch { return null; } }, 'Runtime readiness', 60000)).local_ui_url;
+  report.runtime ??= { pid: runtime.pid, origin, state };
+  report.runtime.starts ??= []; report.runtime.starts.push({ pid: runtime.pid, origin });
+  await until(async () => ['ready', 'degraded'].includes((await api('/api/local/runtime')).runtime_service.ai_readiness.state), 'Flower readiness', 60000);
 }
 const provider = http.createServer(async (request, response) => {
   try {
@@ -106,6 +119,18 @@ const provider = http.createServer(async (request, response) => {
 });
 try {
   await mkdir(output, { recursive: true });
+  if (legacyDSL) {
+    // Seed only this run's isolated library, using the frozen distributed formats.
+    const source = await readFile(path.join(root, 'internal/tessiven/testdata/dsl_v1.yaml'), 'utf8');
+    const library = path.join(state, 'local-environment/apps/tessiven/canvases.sqlite');
+    await mkdir(path.dirname(library), { recursive: true });
+    const db = new DatabaseSync(library);
+    try {
+      db.exec(await readFile(path.join(root, 'internal/tessiven/testdata/schema_v1.sql'), 'utf8'));
+      db.prepare('INSERT INTO canvases VALUES(?,?,?,1,0,100,100)').run('legacy-canvas', initialTitle, '');
+      db.prepare('INSERT INTO versions VALUES(?,1,?,?,100,?,?)').run('legacy-canvas', source, createHash('sha256').update(source).digest('hex'), 'import', 'Legacy DSL fixture');
+    } finally { db.close(); }
+  }
   if (desktopBundle) {
     const require = createRequire(path.join(root, 'desktop/package.json'));
     const manifest = JSON.parse(await readFile(path.join(desktopBundle, 'desktop-bundle-manifest.json'), 'utf8'));
@@ -130,12 +155,7 @@ try {
   } else {
     const staged = path.join(temp, 'redeven'); await copyFile(binary, staged);
     for (const name of ['redevplugin-runtime', '.redevplugin-release-artifacts-verified.json', 'REDEVPLUGIN_RUNTIME.spdx.json', 'REDEVPLUGIN_THIRD_PARTY_NOTICES.md', 'redevplugin-runtime.provenance.json', 'redevplugin-runtime.sig', 'redevplugin-runtime.pem']) await copyFile(path.join(path.dirname(binary), name), path.join(temp, name));
-    const startup = path.join(temp, 'startup.json');
-    runtime = spawn(staged, ['run', '--mode', 'local', '--state-root', state, '--local-ui-bind', '127.0.0.1:0', '--presentation', 'machine', '--startup-report-file', startup], { cwd: temp, env: { ...process.env, GOWORK: 'off' }, stdio: ['ignore', 'pipe', 'pipe'] });
-    runtime.stdout.on('data', chunk => { runtimeLog += chunk; }); runtime.stderr.on('data', chunk => { runtimeLog += chunk; });
-    origin = (await until(async () => { try { return JSON.parse(await readFile(startup, 'utf8')); } catch { return null; } }, 'Runtime readiness', 60000)).local_ui_url;
-    report.runtime = { pid: runtime.pid, origin, state };
-    await until(async () => ['ready', 'degraded'].includes((await api('/api/local/runtime')).runtime_service.ai_readiness.state), 'Flower readiness', 60000);
+    await startRuntime(staged);
   }
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
   await api('/_redeven_proxy/api/ai/provider_bundle', 'PUT', { model_profile: { current_model_id: `fixture/${modelName}`, providers: [{ id: 'fixture', name: 'Acceptance', type: providerType, base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: modelName, input_modalities: ['text'], context_window: 400000, max_output_tokens: 8192 }] }] }, provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'fixture-only' }], web_search_provider_key_patches: [] });
@@ -143,6 +163,14 @@ try {
   canvasID = (await api('/_redeven_proxy/api/tessiven/canvases')).canvases.find(canvas => canvas.title === initialTitle).id;
   const original = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/latest`);
   assert(original.document.nodes.length && original.document.groups.length && original.document.relations.length);
+  assert.equal(original.document.apiVersion, 'redeven.io/tessiven/v1.0.0');
+  assert.equal(original.dsl_version, legacyDSL ? 'v1' : 'v1.0.0');
+  const currentSchema = await api('/_redeven_proxy/api/tessiven/schema');
+  const legacySchema = await api('/_redeven_proxy/api/tessiven/schema?version=v1');
+  assert.equal(currentSchema.properties.apiVersion.const, 'redeven.io/tessiven/v1.0.0');
+  assert.equal(legacySchema.properties.apiVersion.const, 'redeven.io/tessiven/v1');
+  if (legacyDSL) assert.deepEqual(original.migrations, [{ from: 'v1', to: 'v1.0.0' }]);
+  report.scenarios.push(legacyDSL ? 'legacy-schema-projected-at-startup' : 'current-semver-schema-at-startup');
   const errors = [];
   if (welcome) {
     page = welcome;
@@ -191,7 +219,14 @@ try {
   for (const id of ['read', 'edit']) assert.equal(JSON.parse(toolResults.get(id).replace(/^ERROR: /, '')).status, 'success', id);
   assert.equal((await api('/_redeven_proxy/api/tessiven/canvases')).canvases.find(canvas => canvas.id === canvasID).title, updatedTitle);
   const saved = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/latest`);
-  assert.equal(saved.document_yaml, original.document_yaml.replace(initialTitle, updatedTitle));
+  assert.equal(saved.document_yaml, original.document_yaml.replace(initialTitle, updatedTitle).replace('apiVersion: redeven.io/tessiven/v1\n', 'apiVersion: redeven.io/tessiven/v1.0.0\n'));
+  assert.equal(saved.dsl_version, 'v1.0.0');
+  assert.equal(saved.document.apiVersion, 'redeven.io/tessiven/v1.0.0');
+  const history = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/1`);
+  assert.equal(history.document_yaml, original.document_yaml);
+  assert.equal(history.digest, original.digest);
+  assert.equal(history.document.apiVersion, 'redeven.io/tessiven/v1.0.0');
+  report.scenarios.push('current-snapshot-after-exact-edit', 'immutable-original-yaml-and-digest');
   await page.getByRole('heading', { name: updatedTitle, exact: true }).waitFor();
   const row = page.locator('[data-flower-activity-item-id]').filter({ hasText: 'Read canvas' }).first();
   await row.locator('button[aria-expanded]').first().click();
@@ -222,6 +257,30 @@ try {
     const viewportHeight = await page.evaluate(() => innerHeight);
     assert(composer.y >= 0 && composer.y + composer.height <= viewportHeight, 'Short window keeps the complete composer in view');
     report.scenarios.push('short-window-composer-visible');
+  }
+  await page.reload();
+  await page.getByRole('heading', { name: updatedTitle, exact: true }).waitFor();
+  await until(() => page.locator('[data-node-id]').count(), 'Reload preserves rendered placements');
+  report.scenarios.push('reload-current-canvas');
+  if (runtime) {
+    await browser.close(); browser = undefined;
+    const stopped = new Promise(resolve => runtime.once('exit', resolve));
+    runtime.kill('SIGTERM'); await stopped;
+    await startRuntime(path.join(temp, 'redeven'));
+    const restarted = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/latest`);
+    assert.equal(restarted.document_yaml, saved.document_yaml);
+    assert.equal(restarted.digest, saved.digest);
+    assert.equal(restarted.document.apiVersion, 'redeven.io/tessiven/v1.0.0');
+    const originalAfterRestart = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/1`);
+    assert.equal(originalAfterRestart.document_yaml, original.document_yaml);
+    assert.equal(originalAfterRestart.digest, original.digest);
+    browser = await chromium.launch({ headless: true }); page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(new URL(`/_redeven_proxy/env/?surface=tessiven&window=service-canvas&canvas=${canvasID}`, origin).href);
+    await page.getByRole('heading', { name: updatedTitle, exact: true }).waitFor();
+    await until(() => page.locator('[data-node-id]').count(), 'Restart preserves rendered placements');
+    await page.screenshot({ path: path.join(output, 'dsl-after-restart.png'), animations: 'disabled' });
+    report.scenarios.push('runtime-restart-preserves-current-and-legacy-history');
   }
   assert.deepEqual(errors, []); report.scenarios.push('bounded-read', 'exact-edit', 'visible-tool-details', 'no-local-runtime-suffix'); report.status = 'passed';
 } catch (error) {

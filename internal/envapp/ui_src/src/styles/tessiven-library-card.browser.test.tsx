@@ -49,7 +49,7 @@ const version: Version = {
   canvas_id: canvas.id, number: 3, document_yaml: '', digest: 'fixture',
   created_at: 1, source: 'flower', summary: '',
   document: {
-    apiVersion: 'redeven.io/tessiven/v1', kind: 'ServiceCanvas',
+    apiVersion: 'redeven.io/tessiven/v1.0.0', kind: 'ServiceCanvas',
     metadata: { title: canvas.title, description: canvas.description },
     nodes: [
       { id: 'app', name: 'app-01', runtimeRef: 'local:app' },

@@ -69,7 +69,7 @@ func TestBoundedEditingLargeCanvas(t *testing.T) {
 	}
 	defer s.Close()
 	var document strings.Builder
-	document.WriteString("apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata:\n  title: Large canvas\nnodes:\n")
+	document.WriteString("apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata:\n  title: Large canvas\nnodes:\n")
 	for i := 0; i < 1000; i++ {
 		fmt.Fprintf(&document, "  - {id: host-%d, name: '主机 %d', runtimeRef: 'demo:host-%d'}\n", i, i, i)
 	}

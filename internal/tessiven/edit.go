@@ -34,7 +34,8 @@ func (e *EditMatchError) InvalidArgumentsMeta() map[string]any {
 
 // Edit applies exact replacements to an immutable base. Save remains the only
 // write boundary, so validation, version conflicts, retries and publication use
-// the same transaction as a full save. Unchanged YAML is preserved byte for byte.
+// the same transaction as a full save. Unchanged YAML is preserved byte for
+// byte, except for a reviewed DSL upgrade.
 func (s *Service) Edit(ctx context.Context, req EditRequest) (SaveResult, error) {
 	if !requestIDPattern.MatchString(req.RequestID) || req.CanvasID == "" || req.ExpectedVersion <= 0 || len(req.Edits) == 0 || len(req.Edits) > 50 || len(req.Summary) > 2000 {
 		return SaveResult{}, ErrInvalidRequest
@@ -74,17 +75,19 @@ type ReadRequest struct {
 	LineCount int    `json:"line_count,omitempty"`
 }
 type ReadResult struct {
-	CanvasID     string       `json:"canvas_id"`
-	Title        string       `json:"title"`
-	Version      int64        `json:"version"`
-	Digest       string       `json:"digest"`
-	Summary      string       `json:"summary"`
-	DocumentYAML string       `json:"document_yaml"`
-	StartLine    int          `json:"start_line"`
-	EndLine      int          `json:"end_line"`
-	TotalLines   int          `json:"total_lines"`
-	HasMore      bool         `json:"has_more"`
-	Diagnostics  []Diagnostic `json:"diagnostics,omitempty"`
+	DSLVersion   string         `json:"dsl_version"`
+	Migrations   []DSLMigration `json:"migrations,omitempty"`
+	CanvasID     string         `json:"canvas_id"`
+	Title        string         `json:"title"`
+	Version      int64          `json:"version"`
+	Digest       string         `json:"digest"`
+	Summary      string         `json:"summary"`
+	DocumentYAML string         `json:"document_yaml"`
+	StartLine    int            `json:"start_line"`
+	EndLine      int            `json:"end_line"`
+	TotalLines   int            `json:"total_lines"`
+	HasMore      bool           `json:"has_more"`
+	Diagnostics  []Diagnostic   `json:"diagnostics,omitempty"`
 }
 
 func (s *Service) Read(ctx context.Context, req ReadRequest) (ReadResult, error) {
@@ -113,7 +116,7 @@ func (s *Service) Read(ctx context.Context, req ReadRequest) (ReadResult, error)
 	if len(text) > 65536 {
 		return ReadResult{}, fmt.Errorf("%w: requested range exceeds 65536 bytes; read fewer lines or use tessiven.search for a bounded excerpt", ErrInvalidRequest)
 	}
-	return ReadResult{CanvasID: version.CanvasID, Title: version.Document.Metadata.Title, Version: version.Number, Digest: version.Digest, Summary: version.Summary, DocumentYAML: text, StartLine: req.StartLine, EndLine: end, TotalLines: len(lines), HasMore: end < len(lines), Diagnostics: version.Diagnostics}, nil
+	return ReadResult{DSLVersion: version.DSLVersion, Migrations: version.Migrations, CanvasID: version.CanvasID, Title: version.Document.Metadata.Title, Version: version.Number, Digest: version.Digest, Summary: version.Summary, DocumentYAML: text, StartLine: req.StartLine, EndLine: end, TotalLines: len(lines), HasMore: end < len(lines), Diagnostics: version.Diagnostics}, nil
 }
 
 type SearchRequest struct {

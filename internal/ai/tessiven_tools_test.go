@@ -19,7 +19,7 @@ func TestTessivenToolCanvasLifecycleWithoutModel(t *testing.T) {
 	defer library.Close()
 	r := &run{host: runHostCapabilities{tessiven: library}}
 	meta := &session.Meta{CanRead: true, CanWrite: true}
-	document := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Commerce}\n"
+	document := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Commerce}\n"
 	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven.schema", map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestTessivenContextPreservesHistoryAndBoundedReferenceParts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer library.Close()
-	document := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Original}\nnodes: [{id: host, name: Reference host, runtimeRef: 'conceptual:host'}]\nservices:\n"
+	document := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Original}\nnodes: [{id: host, name: Reference host, runtimeRef: 'conceptual:host'}]\nservices:\n"
 	refs := []string{}
 	for i := 0; i < 100; i++ {
 		id := strings.Repeat("a", 125) + string(rune('A'+i/26)) + string(rune('A'+i%26))
@@ -138,7 +138,7 @@ func TestTessivenToolsRejectUnplacedServicesWithoutCreatingVersions(t *testing.T
 	defer library.Close()
 	r := &run{host: runHostCapabilities{tessiven: library}}
 	meta := &session.Meta{CanRead: true, CanWrite: true}
-	document := "apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Reference architecture}\nservices: [{id: api, name: API, kind: api}]\n"
+	document := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Reference architecture}\nservices: [{id: api, name: API, kind: api}]\n"
 	result, err := r.execTessivenTool(t.Context(), meta, "tessiven.validate", map[string]any{"document_yaml": document})
 	if err != nil {
 		t.Fatal(err)
@@ -185,6 +185,41 @@ func TestTessivenComposerFileReferences(t *testing.T) {
 		}
 		if extra != "" && err == nil {
 			t.Fatal("forged file metadata accepted")
+		}
+	}
+}
+
+func TestTessivenSchemaToolSelectsExactDSLVersion(t *testing.T) {
+	library, err := tessiven.Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	r := &run{host: runHostCapabilities{tessiven: library}}
+	for _, version := range []string{"", "v1", "v1.0.0"} {
+		args := map[string]any{}
+		if version != "" {
+			args["version"] = version
+		}
+		raw, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.schema", args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(raw.(json.RawMessage), &schema); err != nil {
+			t.Fatal(err)
+		}
+		expected := version
+		if expected == "" {
+			expected = "v1.0.0"
+		}
+		if schema["properties"].(map[string]any)["apiVersion"].(map[string]any)["const"] != "redeven.io/tessiven/"+expected {
+			t.Fatal("tool returned another DSL schema")
+		}
+	}
+	for _, args := range []map[string]any{{"version": "v9.0.0"}, {"version": 1}, {"other": "v1"}} {
+		if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.schema", args); err == nil {
+			t.Fatal("unsupported selector accepted")
 		}
 	}
 }

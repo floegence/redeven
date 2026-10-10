@@ -38,9 +38,9 @@ const version = (number: number): Version => ({
   canvas_id: 'commerce',
   number,
   document_yaml:
-    'apiVersion: redeven.io/tessiven/v1\nkind: ServiceCanvas\nmetadata: {title: Commerce}\n',
+    'apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Commerce}\n',
   document: {
-    apiVersion: 'redeven.io/tessiven/v1',
+    apiVersion: 'redeven.io/tessiven/v1.0.0',
     kind: 'ServiceCanvas',
     metadata: { title: 'Commerce' },
   },

@@ -387,7 +387,7 @@ async function saveLayeredCanvas(page, origin) {
 async function seedHistoricalPlacementFixture() {
   // Only the isolated qualification library is written. The two immutable
   // versions model a document that the former contract admitted.
-  const document = loadYAML(await readFile(path.join(root, 'internal/tessiven/example.yaml'), 'utf8'));
+  const document = loadYAML(await readFile(path.join(root, 'internal/tessiven/testdata/dsl_v1.yaml'), 'utf8'));
   document.metadata.title = 'Placement / Reference';
   const complete = JSON.stringify(document);
   document.instances = document.instances.filter(instance => instance.serviceRef !== 'demo-worker');
