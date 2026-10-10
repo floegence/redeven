@@ -12,7 +12,7 @@ declare global {
   interface Window {
     webkit?: { messageHandlers?: { canvas?: { postMessage: (message: unknown) => void } } };
     serviceCanvas?: {
-      update: (input: { version: Version; historical: boolean; dark: boolean; contrast: boolean }) => void;
+      update: (input: { version: Version; historical: boolean; dark: boolean; contrast: boolean; bottomInset?: number }) => void;
       command: (input: { canvas_id: string; version_id: number; action: 'expand' | 'collapse' | 'all' | 'group' }) => void;
     };
   }
@@ -30,7 +30,7 @@ function NativeCanvas() {
   const [scale, setScale] = createSignal(1);
   const browsing = new Map<string, GraphBrowseState>();
   let control: TessivenViewportControl | undefined;
-  const zoom = (factor: number) => control?.zoom(factor, window.innerWidth / 2, window.innerHeight / 2);
+  const zoom = (factor: number) => { touch?.reset(); control?.zoom(factor, window.innerWidth / 2, window.innerHeight / 2); };
   let host: HTMLElement | undefined;
   let touch: ReturnType<typeof attachTouchViewport> | undefined;
   onMount(() => {
@@ -46,6 +46,7 @@ function NativeCanvas() {
     command(value) {
       const version = input()?.version;
       if (!control || value.canvas_id !== version?.canvas_id || value.version_id !== version.number) return;
+      touch?.reset();
       switch (value.action) {
         case 'expand': control.expandAll(); break;
         case 'collapse': control.collapseAll(); break;
@@ -53,6 +54,8 @@ function NativeCanvas() {
       }
     },
     update(value) {
+      const inset = Number.isFinite(value.bottomInset) ? Math.max(0, Math.min(window.innerHeight / 2, value.bottomInset!)) : 0;
+      document.documentElement.style.setProperty('--native-bottom-inset', `${inset}px`);
       document.documentElement.dataset.theme = value.dark ? 'dark' : 'light';
       document.documentElement.classList.toggle('dark', value.dark);
       document.documentElement.classList.toggle('high-contrast', value.contrast);
@@ -73,10 +76,10 @@ function NativeCanvas() {
     browseState={browsing.get(value.version.canvas_id)}
     onBrowseState={state => browsing.set(value.version.canvas_id, state)}
   />}</Show><nav class="native-canvas-tools" aria-label="Canvas view">
-    <button aria-label="Zoom out" title="Zoom out" disabled={scale() <= 0.15} onClick={() => zoom(0.8)}><Minus /></button>
+    <button aria-label="Zoom out" title="Zoom out" disabled={scale() <= 0.1} onClick={() => zoom(0.8)}><Minus /></button>
     <output aria-label="Zoom level">{Math.round(scale() * 100)}%</output>
-    <button aria-label="Zoom in" title="Zoom in" disabled={scale() >= 2.5} onClick={() => zoom(1.25)}><Plus /></button>
-    <button aria-label="Fit canvas" title="Fit canvas" onClick={() => control?.fit()}><Maximize /></button>
+    <button aria-label="Zoom in" title="Zoom in" disabled={scale() >= 3} onClick={() => zoom(1.25)}><Plus /></button>
+    <button aria-label="Fit canvas" title="Fit canvas" onClick={() => { touch?.reset(); control?.fit(); }}><Maximize /></button>
   </nav></main>;
 }
 
