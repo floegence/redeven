@@ -3254,10 +3254,10 @@
     "codeHelpTitle": "アクセスコードの使い方"
   },
   "gatewayDiscovery": {
-    "title": "このコンピューターの Gateway",
-    "useAddress": "アドレスを入力",
-    "useNamed": "{name} のアドレスを使用：{address}",
-    "help": "続行すると、選択したランタイムがこのアドレスへの接続を確認します。"
+    "local": "ローカル",
+    "useAddress": "使用",
+    "filled": "入力済み",
+    "useNamed": "ローカル Gateway {name} を使用：{address}"
   },
   "gatewayNetwork": {
     "listenTitle": "ローカルリスナー",

@@ -3254,10 +3254,10 @@
     "codeHelpTitle": "如何使用存取碼"
   },
   "gatewayDiscovery": {
-    "title": "這台電腦上的 Gateway",
-    "useAddress": "填入位址",
-    "useNamed": "填入 {name} 的位址：{address}",
-    "help": "繼續後，由所選執行階段驗證此位址是否可連線。"
+    "local": "本機",
+    "useAddress": "使用",
+    "filled": "已填入",
+    "useNamed": "使用本機 Gateway {name}：{address}"
   },
   "gatewayNetwork": {
     "listenTitle": "本機監聽",

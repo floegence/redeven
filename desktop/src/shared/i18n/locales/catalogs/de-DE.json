@@ -3259,10 +3259,10 @@
     "codeHelpTitle": "So verwenden Sie diesen Code"
   },
   "gatewayDiscovery": {
-    "title": "Gateway auf diesem Computer",
-    "useAddress": "Adresse übernehmen",
-    "useNamed": "Adresse von {name} übernehmen: {address}",
-    "help": "Beim Fortfahren prüft die gewählte Laufzeit, ob diese Adresse erreichbar ist."
+    "local": "Lokal",
+    "useAddress": "Verwenden",
+    "filled": "Übernommen",
+    "useNamed": "Lokales Gateway {name} verwenden: {address}"
   },
   "gatewayNetwork": {
     "listenTitle": "Lokaler Listener",

@@ -3,11 +3,11 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   gatewayDiscovery: {
-    "title": "Gateway on this computer",
-    "useAddress": "Use address",
-    "useNamed": "Use {name}: {address}",
-    "help": "The selected Runtime will verify this address when you continue."
-},
+    local: "Local",
+    useAddress: "Use",
+    filled: "Filled",
+    useNamed: "Use local Gateway {name}: {address}",
+  },
   gatewayNetwork: {
     "listenTitle": "Local listener",
     "listenHelp": "Choose the local IP addresses and ports Gateway binds to. Separate multiple bindings with commas.",

@@ -1,6 +1,6 @@
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { localGatewaySuggestions } from './localGatewaySuggestions';
-import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
+import { Monitor, ArrowRight, Check } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input, StableText } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
@@ -97,17 +97,23 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         <Show when={leaving()}><p role="alert" class="text-warning">{text('gatewayMembers.leaveImpact')}</p></Show>
       </section>}>
         <section class="redeven-gateway-join-section">
-          <div class="redeven-gateway-join-target"><Monitor class="h-4 w-4 shrink-0 text-muted-foreground" /><div class="min-w-0"><p class="text-xs text-muted-foreground">{text('gatewayJoin.targetRuntime')}</p><p class="break-words font-medium">{props.targetLabel ?? props.targetID}</p></div></div>
-          <label class="block space-y-2 text-sm"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
-            onInput={event => { invalidate(); setAddress(event.currentTarget.value); }} /></label>
-          <Show when={suggestions().length}><section class="redeven-gateway-local-suggestions" aria-label={text('gatewayDiscovery.title')}>
-            <p class="text-xs font-medium text-muted-foreground">{text('gatewayDiscovery.title')}</p>
-            <For each={suggestions()}>{suggestion => <div class="redeven-gateway-local-suggestion">
-              <div class="min-w-0"><p class="truncate text-sm font-medium" title={suggestion.name}>{suggestion.name}</p><p class="break-all font-mono text-xs text-muted-foreground">{suggestion.address}</p></div>
-              <Button data-gateway-suggestion={suggestion.gatewayID} class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" disabled={busy()} aria-label={text('gatewayDiscovery.useNamed',{name:suggestion.name,address:suggestion.address})} onClick={() => fillAddress(suggestion.address)}>{text('gatewayDiscovery.useAddress')}<ArrowRight class="h-3.5 w-3.5" /></Button>
-            </div>}</For>
-            <p class="text-xs text-muted-foreground">{text('gatewayDiscovery.help')}</p>
-          </section></Show>
+          <div class="redeven-gateway-join-target"><Monitor class="h-4 w-4 shrink-0" /><span class="shrink-0 text-muted-foreground">{text('gatewayJoin.targetRuntime')}</span><strong class="truncate font-medium" title={props.targetLabel ?? props.targetID}>{props.targetLabel ?? props.targetID}</strong></div>
+          <div class="redeven-gateway-join-address">
+            <label class="block space-y-2 text-sm"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
+              onInput={event => { invalidate(); setAddress(event.currentTarget.value); }} /></label>
+            <Show when={suggestions().length}><div class="redeven-gateway-local-suggestions">
+              <For each={suggestions()}>{suggestion => {
+                const selected = () => address().trim() === suggestion.address;
+                const multipleEndpoints = () => suggestions().filter(item => item.gatewayID === suggestion.gatewayID).length > 1;
+                return <Button data-gateway-suggestion={suggestion.gatewayID} class="redeven-gateway-local-suggestion min-w-0 cursor-pointer" variant="ghost" disabled={busy()} aria-pressed={selected()} aria-label={text('gatewayDiscovery.useNamed',{name:suggestion.name,address:suggestion.address})} title={`${suggestion.name}\n${suggestion.address}`} onClick={() => fillAddress(suggestion.address)}>
+                  <Monitor class="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span data-gateway-local-label class="redeven-gateway-local-label">{text('gatewayDiscovery.local')}</span>
+                  <span class="redeven-gateway-local-name truncate" classList={{'font-mono':multipleEndpoints()}}>{multipleEndpoints() ? new URL(suggestion.address).host : suggestion.name}</span>
+                  <span class="redeven-gateway-local-action"><StableText reserve={[text('gatewayDiscovery.useAddress'),text('gatewayDiscovery.filled')]}>{text(selected() ? 'gatewayDiscovery.filled' : 'gatewayDiscovery.useAddress')}</StableText><Show when={selected()} fallback={<ArrowRight class="h-3.5 w-3.5" aria-hidden="true" />}><Check class="h-3.5 w-3.5" aria-hidden="true" /></Show></span>
+                </Button>;
+              }}</For>
+            </div></Show>
+          </div>
           <label class="block space-y-2 text-sm"><span>{text('gatewayJoin.code')}</span><Input ref={codeInput} value={code()} autocomplete="off" spellcheck={false} disabled={busy()}
             onInput={event => { invalidate(); setCode(event.currentTarget.value); }} onKeyDown={event => { if (event.key === 'Enter' && !busy() && address().trim() && code().trim()) { event.preventDefault(); void verify(); } }} /></label>
         </section>
