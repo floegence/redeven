@@ -51,10 +51,12 @@ type aiReadinessController struct {
 	closeDone   chan struct{}
 	closeResult error
 
-	maxStartupRetries int
-	startupRetryDelay func(int) time.Duration
-	startupTraceID    string
-	startupPhase      string
+	maxStartupRetries     int
+	startupRetryDelay     func(int) time.Duration
+	startupTraceID        string
+	startupPhase          string
+	startupStartedAt      time.Time
+	startupPhaseStartedAt time.Time
 }
 
 var readinessTraceSequence uint64
@@ -265,6 +267,8 @@ func (c *aiReadinessController) startAttemptWithRestore(restoreID string) error 
 	}
 	c.startupTraceID = newReadinessTraceID()
 	c.startupPhase = ""
+	c.startupStartedAt = time.Now()
+	c.startupPhaseStartedAt = c.startupStartedAt
 	c.workers.Add(1)
 	c.mu.Unlock()
 
@@ -355,6 +359,10 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration, restor
 				drained: make(chan struct{}),
 			}
 			c.snapshot = aiReadinessSnapshotForIssueCount(service.OrphanCanonicalRootIssueCount())
+			c.logStartupPhaseLocked(string(c.snapshot.State))
+			if c.opts.Logger != nil {
+				c.opts.Logger.Info("ai: service startup complete", "trace_id", c.startupTraceID, "state", c.snapshot.State, "duration_ms", time.Since(c.startupStartedAt).Milliseconds())
+			}
 			c.running = false
 			c.mu.Unlock()
 			return
@@ -410,7 +418,7 @@ func (c *aiReadinessController) setTransientState(state appserver.AIReadinessSta
 	if c.closed || !c.running {
 		return
 	}
-	c.startupPhase = string(state)
+	c.logStartupPhaseLocked(string(state))
 	c.snapshot = appserver.AIReadinessSnapshot{
 		State: state, TraceID: c.startupTraceID, StartupPhase: c.startupPhase,
 	}
@@ -422,7 +430,7 @@ func (c *aiReadinessController) setRecovering(startupErr *ai.FloretStoreStartupE
 	if c.closed || !c.running {
 		return
 	}
-	c.startupPhase = string(ai.FloretStoreStartupRecovering)
+	c.logStartupPhaseLocked(string(ai.FloretStoreStartupRecovering))
 	snapshot := appserver.AIReadinessSnapshot{
 		State: appserver.AIReadinessRecovering, TraceID: c.startupTraceID,
 		StartupPhase: string(ai.FloretStoreStartupRecovering), RetryReason: "temporary_store_open",
@@ -433,6 +441,21 @@ func (c *aiReadinessController) setRecovering(startupErr *ai.FloretStoreStartupE
 		snapshot.SafeToRetry = startupErr.SafeToRetry
 	}
 	c.snapshot = snapshot
+}
+
+// Timings follow the existing phase transitions; no timer or parallel lifecycle
+// advances readiness independently of the controller.
+func (c *aiReadinessController) logStartupPhaseLocked(next string) {
+	if next == c.startupPhase {
+		return
+	}
+	now := time.Now()
+	if c.startupPhase != "" && c.opts.Logger != nil {
+		c.opts.Logger.Info("ai: service startup phase complete", "trace_id", c.startupTraceID, "startup_phase", c.startupPhase,
+			"duration_ms", now.Sub(c.startupPhaseStartedAt).Milliseconds(), "elapsed_ms", now.Sub(c.startupStartedAt).Milliseconds())
+	}
+	c.startupPhase = next
+	c.startupPhaseStartedAt = now
 }
 
 func (c *aiReadinessController) logStartupRetry(startupErr *ai.FloretStoreStartupError, attempt int, delay time.Duration) {
@@ -483,6 +506,8 @@ func (c *aiReadinessController) finishFailure(err error) {
 	c.mu.Lock()
 	snapshot.TraceID = c.startupTraceID
 	snapshot.StartupPhase = c.startupPhase
+	elapsed := time.Since(c.startupStartedAt).Milliseconds()
+	phaseElapsed := time.Since(c.startupPhaseStartedAt).Milliseconds()
 	c.mu.Unlock()
 	var startupErr *ai.FloretStoreStartupError
 	if errors.As(err, &startupErr) {
@@ -511,6 +536,8 @@ func (c *aiReadinessController) finishFailure(err error) {
 			"startup_phase", logsafe.Text(snapshot.StartupPhase, 256),
 			"classification", logsafe.Text(snapshot.ReasonCode, 256),
 			"retry_reason", logsafe.Text(snapshot.RetryReason, 256),
+			"duration_ms", elapsed,
+			"phase_duration_ms", phaseElapsed,
 			"error", logsafe.Error(cause),
 		)
 	}

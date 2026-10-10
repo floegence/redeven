@@ -574,7 +574,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v7"
-		floretVersion = "v7.26.0"
+		floretVersion = "v7.27.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")

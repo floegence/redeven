@@ -3009,7 +3009,16 @@
     "certificateRefreshFailed": "HTTPS 인증서를 갱신할 수 없습니다. 현재 인증서에 포함된 주소만 사용할 수 있습니다. 런타임이 자동으로 다시 시도합니다."
   },
   "flowerRuntime": {
-    "preparingDetail": "Flower의 AI 서비스를 준비하고 있습니다. 준비가 완료되면 대화가 자동으로 표시됩니다. 언제든지 환경 목록으로 돌아갈 수 있습니다.",
+    "startupPhase": {
+      "starting": "AI 서비스를 시작하고 있습니다...",
+      "inspecting": "저장된 대화를 확인하고 있습니다...",
+      "backing_up": "업그레이드 전에 대화를 백업하고 있습니다...",
+      "optimizing": "대화 저장소를 최적화하고 있습니다...",
+      "migrating": "대화 저장소를 업그레이드하고 있습니다...",
+      "verifying": "대화 데이터를 검증하고 있습니다...",
+      "recovering": "대화 저장소를 사용할 수 있을 때까지 기다리고 있습니다...",
+      "restoring": "선택한 백업에서 대화를 복원하고 있습니다..."
+    },
     "unavailableTitle": "Flower를 사용할 수 없습니다",
     "unavailableDetail": "Flower의 AI 서비스가 현재 요청을 처리할 수 없습니다. 환경 목록으로 돌아가 런타임 상태를 확인하세요. 대화와 보내지 않은 초안은 유지됩니다.",
     "runtimeTitle": "Flower를 사용하려면 런타임을 업데이트하세요",

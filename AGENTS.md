@@ -1111,6 +1111,11 @@ programmer, storage, and unknown-effect errors retain their terminal boundaries.
 
 Outside temporary Local Fast Debugging, Redeven must use the released v7 module with `GOWORK=off`; local sibling wiring is never a committed integration boundary.
 
+Flower storage startup uses the published Floret incremental prompt-record and
+atomic SQLite upgrade contract. Readiness phases drive Welcome feedback and
+controller timing logs; Redeven must not decode cache records, keep a parallel
+migration lifecycle, or substitute cache deletion for an upstream migration.
+
 ## UI Interaction Affordance
 
 - Button labels must always remain on one line, including localized, loading, and completion states. Reserve transient label widths through the published `StableText`; let action groups reflow whole controls at narrow widths. Keep explanatory paragraphs outside buttons. Constrained selection labels may truncate with their complete text available; never solve overflow by wrapping action text or changing its height during a request.

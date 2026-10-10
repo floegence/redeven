@@ -3009,7 +3009,16 @@
     "certificateRefreshFailed": "无法刷新 HTTPS 证书。目前仅提供现有证书覆盖的地址，运行时将自动重试。"
   },
   "flowerRuntime": {
-    "preparingDetail": "Flower 正在准备 AI 服务，就绪后会自动显示会话。你可以随时返回环境列表。",
+    "startupPhase": {
+      "starting": "正在启动 AI 服务...",
+      "inspecting": "正在检查已保存的会话...",
+      "backing_up": "正在备份会话，准备升级...",
+      "optimizing": "正在优化会话存储...",
+      "migrating": "正在升级会话存储...",
+      "verifying": "正在校验会话数据...",
+      "recovering": "正在等待会话存储恢复可用...",
+      "restoring": "正在从选定的备份恢复会话..."
+    },
     "unavailableTitle": "Flower 暂不可用",
     "unavailableDetail": "Flower 的 AI 服务目前无法处理请求。请返回环境列表检查运行时状态。你的会话和未发送的草稿会保留。",
     "runtimeTitle": "更新运行时后使用 Flower",

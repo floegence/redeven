@@ -38,6 +38,19 @@ export function DesktopFlowerRuntimeBoundary(props: {
     setPending(true);
     try { await props.onRecover(code); } finally { setPending(false); }
   };
+  const startupDetail = createMemo(() => {
+    const state = props.snapshot?.ai_readiness?.state;
+    switch (state) {
+      case 'inspecting': return props.i18n.t('flowerRuntime.startupPhase.inspecting');
+      case 'backing_up': return props.i18n.t('flowerRuntime.startupPhase.backing_up');
+      case 'optimizing': return props.i18n.t('flowerRuntime.startupPhase.optimizing');
+      case 'migrating': return props.i18n.t('flowerRuntime.startupPhase.migrating');
+      case 'verifying': return props.i18n.t('flowerRuntime.startupPhase.verifying');
+      case 'recovering': return props.i18n.t('flowerRuntime.startupPhase.recovering');
+      case 'restoring': return props.i18n.t('flowerRuntime.startupPhase.restoring');
+      default: return props.i18n.t('flowerRuntime.startupPhase.starting');
+    }
+  });
   return <Show when={blocker()} fallback={(
     <Show when={availability() === 'ready'} fallback={(
       <div class="flower-warmup h-full" data-flower-runtime-availability={availability()} data-flower-runtime-embedded={props.embedded ? 'true' : undefined}>
@@ -45,7 +58,7 @@ export function DesktopFlowerRuntimeBoundary(props: {
           <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14" />
           <div class="flower-warmup-copy" role="status" aria-live="polite" aria-busy={availability() === 'preparing'}>
             <h2>{props.i18n.t(availability() === 'preparing' ? 'flowerSurface.chat.warmupTitle' : 'flowerRuntime.unavailableTitle')}</h2>
-            <p>{props.i18n.t(availability() === 'preparing' ? 'flowerRuntime.preparingDetail' : 'flowerRuntime.unavailableDetail')}</p>
+            <p data-flower-startup-phase={availability() === 'preparing' ? props.snapshot?.ai_readiness?.state : undefined}>{availability() === 'preparing' ? startupDetail() : props.i18n.t('flowerRuntime.unavailableDetail')}</p>
           </div>
           <Show when={availability() === 'preparing'}>
             <div class="flower-warmup-indicator" aria-hidden="true"><div class="flower-warmup-indicator-bar" /></div>

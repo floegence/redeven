@@ -3015,7 +3015,16 @@
     "certificateRefreshFailed": "Não foi possível atualizar o certificado HTTPS. Apenas os endereços cobertos pelo certificado atual estão disponíveis. O ambiente de execução tentará novamente automaticamente."
   },
   "flowerRuntime": {
-    "preparingDetail": "O Flower está preparando o serviço de IA. As conversas aparecerão automaticamente quando ele estiver pronto. Você pode voltar à lista de ambientes a qualquer momento.",
+    "startupPhase": {
+      "starting": "Iniciando o serviço de IA...",
+      "inspecting": "Verificando as conversas salvas...",
+      "backing_up": "Fazendo backup das conversas antes da atualização...",
+      "optimizing": "Otimizando o armazenamento de conversas...",
+      "migrating": "Atualizando o armazenamento de conversas...",
+      "verifying": "Validando os dados das conversas...",
+      "recovering": "Aguardando a disponibilidade do armazenamento de conversas...",
+      "restoring": "Restaurando as conversas do backup selecionado..."
+    },
     "unavailableTitle": "O Flower está indisponível",
     "unavailableDetail": "O serviço de IA do Flower não pode processar solicitações no momento. Volte à lista de ambientes para verificar o status do ambiente de execução. Suas conversas e o rascunho não enviado serão preservados.",
     "runtimeTitle": "Atualize o ambiente de execução para usar o Flower",

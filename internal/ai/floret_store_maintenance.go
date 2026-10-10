@@ -112,7 +112,7 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 		if logger != nil {
 			logger.Error("ai: Floret SQLite maintenance failed closed", append(attrs, "error_class", classifyFloretMaintenanceError(maintenanceErr))...)
 		}
-		return nil, classifyFloretStorageOpenError(maintenanceErr)
+		return nil, flowerStorageError("floret", string(FloretStoreStartupOptimizing), maintenanceErr)
 	}
 	if logger != nil {
 		logger.Info("ai: Floret SQLite maintenance complete", attrs...)
@@ -121,27 +121,30 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 		return nil, floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
 	}
 	source := flstorage.SQLite(path)
+	openPhase := "opening"
 	host, err := open(ctx, flruntime.Options{
 		Storage:        source,
 		DeferExecution: true,
 		StartupProgress: flruntime.StartupProgressFunc(func(phase flruntime.StartupPhase) {
 			switch phase {
 			case flruntime.StartupPhaseMigrating:
+				openPhase = string(FloretStoreStartupMigrating)
 				reportFloretStorePhase(progress, FloretStoreStartupMigrating)
 			case flruntime.StartupPhaseVerifying:
+				openPhase = string(FloretStoreStartupVerifying)
 				reportFloretStorePhase(progress, FloretStoreStartupVerifying)
 			}
 		}),
 	})
 	var classified error
 	if err != nil {
-		classified = classifyFloretStorageOpenError(err)
+		classified = flowerStorageError("floret", openPhase, err)
 	} else if host == nil {
 		classified = floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("floret storage source returned no runtime host"))
 	}
 	if classified != nil {
 		if logger != nil {
-			logger.Error("ai: Floret runtime open failed", "startup_phase", FloretStoreStartupVerifying, "error_class", floretStoreStartupClassOf(classified))
+			logger.Error("ai: Floret runtime open failed", "startup_phase", openPhase, "error_class", floretStoreStartupClassOf(classified))
 		}
 		return nil, classified
 	}

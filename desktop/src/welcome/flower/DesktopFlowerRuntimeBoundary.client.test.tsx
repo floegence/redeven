@@ -21,6 +21,7 @@ it.each(['starting', 'inspecting', 'backing_up', 'optimizing', 'migrating', 'ver
     await settle();
     expect(load).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('Preparing Flower');
+    expect(document.querySelector('[data-flower-startup-phase]')?.textContent).toBe(createDesktopI18n('en-US').t(`flowerRuntime.startupPhase.${state}`));
     (document.querySelector('button') as HTMLButtonElement).click();
     expect(back).toHaveBeenCalledOnce();
     setSnapshot(runtime(epoch));
@@ -33,6 +34,28 @@ it.each(['starting', 'inspecting', 'backing_up', 'optimizing', 'migrating', 'ver
     expect(load).toHaveBeenCalledOnce();
   },
 );
+
+it('updates each observed startup phase without mounting the client or changing the draft', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  disposers.push(() => coordinator.dispose());
+  coordinator.open('').mutate(value => ({ ...value, text: 'Keep my draft' }));
+  const [snapshot, setSnapshot] = createSignal({ ...runtime(epoch), ai_readiness: { state: 'inspecting' as const } } as ReturnType<typeof runtime>);
+  const load = vi.fn();
+  const Child = () => { onMount(load); return <textarea value={coordinator.read('').value.text} />; };
+  const i18n = createDesktopI18n('zh-CN');
+  disposers.push(render(() => <DesktopFlowerRuntimeBoundary snapshot={snapshot()} i18n={i18n} onRecover={vi.fn()} onBack={vi.fn()}><Child /></DesktopFlowerRuntimeBoundary>, document.body));
+  for (const state of ['backing_up', 'optimizing', 'migrating', 'verifying', 'recovering', 'restoring'] as const) {
+    setSnapshot({ ...runtime(epoch), ai_readiness: { state } });
+    await settle();
+    expect(document.querySelector('[data-flower-startup-phase]')?.textContent).toBe(i18n.t(`flowerRuntime.startupPhase.${state}`));
+    expect(load).not.toHaveBeenCalled();
+    expect(coordinator.read('').value.text).toBe('Keep my draft');
+  }
+  setSnapshot(runtime(epoch));
+  await settle();
+  expect(load).toHaveBeenCalledOnce();
+  expect(document.querySelector('textarea')?.value).toBe('Keep my draft');
+});
 
 it.each(['blocked', 'unavailable', undefined] as const)('keeps nonoperational AI explicit and never admits requests: %s', async state => {
   const snapshot = { ...runtime(epoch), ai_readiness: state ? { state } : undefined };

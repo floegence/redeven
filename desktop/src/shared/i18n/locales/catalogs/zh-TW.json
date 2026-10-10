@@ -3009,7 +3009,16 @@
     "certificateRefreshFailed": "無法更新 HTTPS 憑證。目前僅提供現有憑證涵蓋的位址，執行階段將自動重試。"
   },
   "flowerRuntime": {
-    "preparingDetail": "Flower 正在準備 AI 服務，就緒後會自動顯示對話。你可以隨時返回環境清單。",
+    "startupPhase": {
+      "starting": "正在啟動 AI 服務...",
+      "inspecting": "正在檢查已儲存的對話...",
+      "backing_up": "正在備份對話，準備升級...",
+      "optimizing": "正在最佳化對話儲存空間...",
+      "migrating": "正在升級對話儲存格式...",
+      "verifying": "正在驗證對話資料...",
+      "recovering": "正在等待對話儲存恢復可用...",
+      "restoring": "正在從選取的備份還原對話..."
+    },
     "unavailableTitle": "Flower 暫時無法使用",
     "unavailableDetail": "Flower 的 AI 服務目前無法處理請求。請返回環境清單檢查執行階段狀態。你的對話和未傳送的草稿會保留。",
     "runtimeTitle": "更新執行階段後使用 Flower",

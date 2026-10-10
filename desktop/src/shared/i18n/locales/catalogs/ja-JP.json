@@ -3009,7 +3009,16 @@
     "certificateRefreshFailed": "HTTPS 証明書を更新できませんでした。現在の証明書が対象とするアドレスのみ利用できます。ランタイムが自動的に再試行します。"
   },
   "flowerRuntime": {
-    "preparingDetail": "Flower の AI サービスを準備しています。準備が整うと会話が自動的に表示されます。環境一覧にはいつでも戻れます。",
+    "startupPhase": {
+      "starting": "AI サービスを起動しています...",
+      "inspecting": "保存済みの会話を確認しています...",
+      "backing_up": "更新前に会話をバックアップしています...",
+      "optimizing": "会話ストレージを最適化しています...",
+      "migrating": "会話ストレージを更新しています...",
+      "verifying": "会話データを検証しています...",
+      "recovering": "会話ストレージが利用可能になるまで待機しています...",
+      "restoring": "選択したバックアップから会話を復元しています..."
+    },
     "unavailableTitle": "Flower を利用できません",
     "unavailableDetail": "Flower の AI サービスは現在リクエストを処理できません。環境一覧に戻り、ランタイムの状態を確認してください。会話と未送信の下書きは保持されます。",
     "runtimeTitle": "Flower を使うにはランタイムを更新してください",
