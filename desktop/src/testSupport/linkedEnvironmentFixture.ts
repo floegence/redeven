@@ -1,3 +1,4 @@
+import { decorateEnvironmentAccess } from '../main/environmentAccess';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { testDesktopPreferences, testCloudEnvironment } from './desktopTestHelpers';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
@@ -8,7 +9,7 @@ export function linkedEnvironmentFixture(kind: DesktopCloudRuntimeLinkTargetKind
   const initial = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences({ cloud_environments: [provider] }) });
   const local = initial.environments.find(entry => entry.kind === 'local_environment')!;
   const targetID: DesktopCloudRuntimeLinkTargetID = kind === 'ssh_environment' ? 'ssh:fixture' : kind === 'wsl_environment' ? 'wsl:fixture' : 'local:local';
-  const runtime: DesktopEnvironmentEntry = {
+  const rawRuntime: DesktopEnvironmentEntry = {
     ...local, kind, label: 'Development runtime', pinned: false,
     local_ui_url: 'http://localhost:23998/', local_ui_urls: ['http://localhost:23998/'],
     runtime_health: { ...local.runtime_health, status: 'online', freshness: 'fresh' },
@@ -19,13 +20,14 @@ export function linkedEnvironmentFixture(kind: DesktopCloudRuntimeLinkTargetKind
       cloud_origin: provider.cloud_origin, cloud_id: provider.cloud_id, env_public_id: provider.env_public_id,
     },
   };
-  const cloud: DesktopEnvironmentEntry = {
+  const rawCloud: DesktopEnvironmentEntry = {
     ...initial.environments.find(entry => entry.kind === 'provider_environment')!,
     remote_environment_url: 'https://cloud.example.invalid/environments/env_linked',
     remote_route_state: 'ready', control_plane_sync_state: 'ready',
     cloud_linked_runtime_summary: { runtime_target_id: targetID, runtime_kind: kind,
-      label: runtime.label, provider_connection_state: 'connected' },
+      label: rawRuntime.label, provider_connection_state: 'connected' },
   };
+  const [runtime, cloud] = decorateEnvironmentAccess([rawRuntime, rawCloud], testDesktopPreferences());
   const snapshot = { ...initial, environments: [runtime, cloud] };
   return { runtime, cloud, snapshot };
 }

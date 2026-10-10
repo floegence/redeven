@@ -96,7 +96,17 @@ export function decorateEnvironmentAccess(entries: readonly DesktopEnvironmentEn
       default_access_route_missing: !accessRoutes.some(route => route.id === selected),
     });
   }
-  return entries.map(entry => ({ ...entry, ...projections.get(entry.id) }));
+  return entries.map(entry => {
+    if (entry.kind !== 'provider_environment') return { ...entry, ...projections.get(entry.id) };
+    const targetID = entry.cloud_linked_runtime_summary?.runtime_target_id;
+    const runtime = targetID ? entries.find(candidate => candidate.provider_runtime_link_target?.id === targetID) : undefined;
+    const target = runtime?.provider_runtime_link_target;
+    const matches = target && ['linked', 'linking', 'disconnecting'].includes(target.cloud_link_state)
+      && target.cloud_origin && target.cloud_id && target.env_public_id
+      && target.cloud_origin === entry.cloud_origin && target.cloud_id === entry.cloud_id
+      && target.env_public_id === entry.env_public_id;
+    return { ...entry, access_group_id: matches ? runtime!.id : entry.id };
+  });
 }
 
 export function selectEnvironmentAccessRoute(preferences: DesktopPreferences, entries: readonly DesktopEnvironmentEntry[], environmentID: string, routeID: string): DesktopPreferences {

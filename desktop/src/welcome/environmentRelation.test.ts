@@ -1,3 +1,5 @@
+import { decorateEnvironmentAccess } from '../main/environmentAccess';
+import { testDesktopPreferences } from '../testSupport/desktopTestHelpers';
 import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
 import { describe, expect, it } from 'vitest';
 import { linkedEnvironmentFixture } from '../testSupport/linkedEnvironmentFixture';
@@ -74,14 +76,14 @@ describe('environment relationship contract', () => {
     const { runtime, cloud } = linkedEnvironmentFixture();
     expect(buildEnvironmentLibraryDisplayGroups([runtime])[0].provider_entry).toBeUndefined();
     expect(buildEnvironmentLibraryDisplayGroups([cloud])[0].primary_entry).toBe(cloud);
-    expect(buildEnvironmentLibraryDisplayGroups([runtime, { ...cloud, cloud_linked_runtime_summary: undefined }])).toHaveLength(2);
+    expect(buildEnvironmentLibraryDisplayGroups(decorateEnvironmentAccess([runtime, { ...cloud, cloud_linked_runtime_summary: undefined }], testDesktopPreferences()))).toHaveLength(2);
     const unbound = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' as const } };
-    expect(buildEnvironmentLibraryDisplayGroups([unbound, { ...cloud, cloud_linked_runtime_summary: undefined }])).toHaveLength(2);
+    expect(buildEnvironmentLibraryDisplayGroups(decorateEnvironmentAccess([unbound, { ...cloud, cloud_linked_runtime_summary: undefined }], testDesktopPreferences()))).toHaveLength(2);
   });
   it('does not retain a stale pair after unlinking', () => {
     const { runtime, cloud } = linkedEnvironmentFixture();
     const unlinked = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' as const } };
-    expect(buildEnvironmentLibraryDisplayGroups([unlinked, cloud])).toHaveLength(2);
+    expect(buildEnvironmentLibraryDisplayGroups(decorateEnvironmentAccess([unlinked, cloud], testDesktopPreferences()))).toHaveLength(2);
   });
 });
 

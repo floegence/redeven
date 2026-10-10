@@ -16,6 +16,7 @@ import {
   normalizeGatewayBaseURL,
   normalizeGatewayStoreSnapshot,
   stableGatewayID,
+  retireGatewayMemberObservation,
   type GatewayRecord,
 } from './gatewayStore';
 
@@ -31,6 +32,21 @@ describe('GatewayStore', () => {
       await fs.rm(root, { recursive: true, force: true });
       cleanupRoots.delete(root);
     }));
+  });
+
+  it('retires only the confirmed member from the same pinned Gateway directory', () => {
+    const record = normalizeGatewayStoreSnapshot({ gateways: [{ gateway_id: 'registration', display_name: 'Office',
+      connection: { kind: 'url', base_url: 'https://office.example' },
+      trust_profile: { trust_profile_id: 'trust', paired_client_key_id: 'client', paired_client_private_key_ref: 'secret-ref',
+        gateway_id: 'machine', gateway_public_key: 'PUBLIC KEY', gateway_public_key_fingerprint: 'SHA256:pinned',
+        binding_audience: 'https://office.example/', created_at_unix_ms: 1 },
+    }] }).gateways[0]!;
+    const source = gatewayRecordToSourceWithCatalog(record, { environments: [memberFixture, { ...memberFixture, member_id: 'other' }] });
+    const member = { gateway_id: 'machine', member_id: memberFixture.member_id };
+    expect(retireGatewayMemberObservation(record, source, member).environments.map(item => item.member_id)).toEqual(['other']);
+    expect(retireGatewayMemberObservation(record, source, { ...member, gateway_id: 'another-machine' })).toBe(source);
+    expect(retireGatewayMemberObservation(record, { ...source, identity_fingerprint: 'SHA256:changed' }, member).environments).toHaveLength(2);
+    expect(retireGatewayMemberObservation(record, source, { ...member, member_id: 'unknown' })).toBe(source);
   });
 
   it('does not reuse a retained secret after the user clears the configured credential', () => {

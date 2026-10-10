@@ -386,13 +386,38 @@ func (c *Config) ValidateLocalMinimal() error {
 //
 // This is the standard mode requirements: the runtime must be fully bootstrapped.
 func (c *Config) ValidateRemoteStrict() error {
+	if err := c.validateRemoteBinding(false); err != nil {
+		return err
+	}
+	if c.ControlArtifactPool != nil {
+		if err := c.ControlArtifactPool.Validate(time.Now().Unix()); err != nil {
+			return err
+		}
+	} else {
+		if c.Direct == nil || len(c.Direct.ArtifactJSON) == 0 || c.Direct.ExpiresAtUnixS <= 0 {
+			return errors.New("missing direct connect info")
+		}
+		if _, err := flowersec.ParseArtifact(c.Direct.ArtifactJSON); err != nil {
+			return fmt.Errorf("invalid direct connect artifact: %w", err)
+		}
+	}
+	return nil
+}
+
+// ValidateRemoteBinding checks persisted association, without authorizing a connection.
+// Revoked Gateway bindings retain their identity for explicit recovery and removal.
+func (c *Config) ValidateRemoteBinding() error {
+	return c.validateRemoteBinding(true)
+}
+
+func (c *Config) validateRemoteBinding(allowRevoked bool) error {
 	if c == nil {
 		return errors.New("nil config")
 	}
 	if err := c.ValidateLocalMinimal(); err != nil {
 		return err
 	}
-	if err := c.validateGatewayBinding(); err != nil {
+	if err := c.validateGatewayPath(allowRevoked); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.AccessPointOrigin) == "" {
@@ -418,18 +443,6 @@ func (c *Config) ValidateRemoteStrict() error {
 	}
 	if strings.TrimSpace(c.AgentInstanceID) == "" {
 		return errors.New("missing agent_instance_id")
-	}
-	if c.ControlArtifactPool != nil {
-		if err := c.ControlArtifactPool.Validate(time.Now().Unix()); err != nil {
-			return err
-		}
-	} else {
-		if c.Direct == nil || len(c.Direct.ArtifactJSON) == 0 || c.Direct.ExpiresAtUnixS <= 0 {
-			return errors.New("missing direct connect info")
-		}
-		if _, err := flowersec.ParseArtifact(c.Direct.ArtifactJSON); err != nil {
-			return fmt.Errorf("invalid direct connect artifact: %w", err)
-		}
 	}
 	return nil
 }

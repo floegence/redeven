@@ -12,17 +12,13 @@ const browser=await chromium.launch({headless:true});
 const report={cases:[],errors:[]};
 try {
  const load=relative=>server.ssrLoadModule(fileURLToPath(new URL(relative,import.meta.url)));
- const {mixedEnvironmentFixture}=await load('../src/testSupport/mixedEnvironmentFixture.ts');
+ const {runtimeConnectionFixture}=await load('../src/testSupport/runtimeConnectionFixture.ts');
  const {createDesktopI18n}=await load('../src/shared/i18n/index.ts');
  for(const locale of ['en-US','zh-CN','zh-TW','ja-JP','ko-KR','de-DE','fr-FR','es-ES','pt-BR','ru-RU']) {
   const i18n=createDesktopI18n(locale);
   for(const width of [430,1280]) {
-   const {snapshot}=mixedEnvironmentFixture();
+   const {snapshot,memberships}=runtimeConnectionFixture({cloudManagement:false,gatewayWindow:true});
    const runtime=snapshot.environments.find(entry=>entry.kind==='local_environment');
-   const memberships=[{gateway_id:'office',gateway_name:'Office',member_id:'office-member',runtime_public_id:'runtime',identity_fingerprint:`SHA256:${'a'.repeat(43)}`,phase:'joined',cloud_publication:false,endpoints:[{address:'https://office.internal:7443'}]},
-    {gateway_id:'lab',gateway_name:'Lab',member_id:'lab-member',runtime_public_id:'runtime',identity_fingerprint:`SHA256:${'b'.repeat(43)}`,phase:'joined',cloud_publication:true,endpoints:[{address:'https://lab.internal:7443'}]}];
-   runtime.runtime_service.gateway_memberships=memberships;
-   runtime.runtime_service.capabilities.runtime_gateway={supported:true};
    const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce'});
    try {
     const page=await context.newPage();page.on('pageerror',error=>report.errors.push(error.message));
@@ -42,10 +38,25 @@ try {
      window.gatewayAcceptanceRuntime=runtime;
     },{memberships,runtime});
     const card=page.locator(`[data-environment-group="${runtime.id}"]`);
+    assert.equal(await page.locator('[data-environment-group]:visible').count(),8);
     assert.equal(await card.getByRole('tab').count(),3);
-    await card.getByRole('tab',{name:i18n.t('gatewayConnections.tab'),exact:true}).click();
+    const icons=await card.locator('[role="tab"] .redeven-owner-tab-icon > svg').evaluateAll(elements=>{
+     const rem=parseFloat(getComputedStyle(document.documentElement).fontSize);
+     return elements.map(element=>({width:element.getBoundingClientRect().width,height:element.getBoundingClientRect().height,rem}));
+    });
+    assert.equal(icons.length,3);
+    assert.ok(icons.every(icon=>Math.abs(icon.width-icon.rem)<.5 && Math.abs(icon.height-icon.rem)<.5),JSON.stringify(icons));
+    const bounds=await card.boundingBox();
+    for(const tab of await card.getByRole('tab').all()) {
+     await tab.click();
+     const title=card.locator('[role="tabpanel"]:visible .redeven-environment-owner-heading').first();
+     assert.ok((await title.textContent()).includes(runtime.label),'Runtime title survives connection selection');
+     assert.ok(Math.abs((await card.boundingBox()).height-bounds.height)<1,'tabs retain original card geometry');
+    }
+    await page.screenshot({path:`${output}/${locale}-${width}-card.png`});
+    await card.getByRole('tab').nth(2).click();
     const panel=card.getByRole('tabpanel',{name:i18n.t('gatewayConnections.tab'),exact:true});
-    await panel.getByRole('combobox').selectOption('lab');
+    await panel.getByRole('combobox').selectOption('service-1');
     await panel.getByText('https://lab.internal:7443',{exact:true}).waitFor();
     const toggle=panel.getByRole('button',{name:i18n.t('environmentAction.runtimeActions'),exact:true});
     await toggle.focus();await page.keyboard.press('Enter');const menu=page.getByRole('menu');await menu.waitFor();
@@ -56,7 +67,7 @@ try {
     assert.ok(menuBounds.y+menuBounds.height<=toggleBounds.y+2,`split menu must open upward: ${JSON.stringify({menuBounds,toggleBounds})}`);
     assert.ok(menuBounds.x>=0 && menuBounds.x+menuBounds.width<=width+1);
     await menu.getByRole('menuitem',{name:`${i18n.t('gatewayConnections.unpairTitle')}…`,exact:true}).waitFor();
-    assert.equal(await menu.getByRole('separator').count(),0);
+    assert.equal(await menu.getByRole('separator').count(),1);
     await page.keyboard.press('End');
     assert.equal(await menu.getByRole('menuitem').last().evaluate(element => element === document.activeElement),true);
     await page.keyboard.press('Home');
@@ -66,11 +77,10 @@ try {
     assert.equal(await toggle.evaluate(element => element === document.activeElement),true);
     await toggle.click();await page.getByRole('menu').getByRole('menuitem',{name:`${i18n.t('gatewayConnections.unpairTitle')}…`,exact:true}).click();
     const dialog=page.getByRole('dialog');await dialog.waitFor();
-    assert.equal(await dialog.getByRole('combobox').inputValue(),'');
-    const confirm=dialog.getByRole('button',{name:i18n.t('gatewayConnections.unpair'),exact:true});assert.equal(await confirm.isDisabled(),true);
-    await dialog.getByRole('combobox').selectOption('office');
-    assert.equal(await dialog.getByText(i18n.t('gatewayConnections.cloudImpact'),{exact:true}).count(),0);
-    await dialog.getByRole('combobox').selectOption('lab');await dialog.getByText(i18n.t('gatewayConnections.cloudImpact'),{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('combobox').count(),0);
+    await dialog.getByText('Lab',{exact:true}).waitFor();
+    const confirm=dialog.getByRole('button',{name:i18n.t('gatewayConnections.unpair'),exact:true});assert.equal(await confirm.isDisabled(),false);
+    await dialog.getByText(i18n.t('gatewayConnections.cloudImpact'),{exact:true}).waitFor();
     await page.screenshot({path:`${output}/${locale}-${width}-unpair.png`});
     await dialog.getByRole('button',{name:i18n.t('common.cancel'),exact:true}).click();await dialog.waitFor({state:'detached'});
     await toggle.click();await page.getByRole('menu').getByRole('menuitem',{name:i18n.t('gatewayJoin.menuAction'),exact:true}).click();

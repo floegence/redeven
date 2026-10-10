@@ -7,7 +7,23 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
+
+func TestCloudBindingSurvivesMissingConnectionCredentials(t *testing.T) {
+	cfg := cloudLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
+	cfg.ControlArtifactPool = nil
+	cfg.Direct = nil
+	a := &Agent{cfg: cfg, remoteEnabled: true, controlChannelEnabled: true}
+	binding := a.CloudLinkBinding()
+	if binding.State != runtimeservice.CloudLinkStateLinked || binding.EnvPublicID != cfg.EnvironmentID || binding.ConnectionState != "authorization_required" {
+		t.Fatalf("connection failure must preserve saved identity: %+v", binding)
+	}
+	if cfg.ValidateRemoteStrict() == nil {
+		t.Fatal("display association must not authorize a connection without credentials")
+	}
+}
 
 func TestProviderConnectionDoesNotInferOnlineFromSavedBinding(t *testing.T) {
 	cfg := cloudLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))

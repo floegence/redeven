@@ -2,10 +2,13 @@ package agent
 
 import (
 	"context"
-	"crypto/sha256"
+	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"strings"
 
+	"github.com/floegence/redeven/internal/runtimegateway/security"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
@@ -124,8 +127,20 @@ func (a *Agent) gatewayMembershipSummaries() []runtimeservice.GatewayMembership 
 		if member == nil || member.Leaving {
 			continue
 		}
-		digest := sha256.Sum256([]byte(member.GatewayPublicKey))
-		summary := runtimeservice.GatewayMembership{GatewayID: member.GatewayID, GatewayName: member.GatewayName, IdentityFingerprint: "SHA256:" + base64.RawURLEncoding.EncodeToString(digest[:]), MemberID: member.MemberID, RuntimePublicID: member.RuntimePublicID, Phase: item.Phase, CloudPublication: item.CloudPublication}
+		publicKey, err := base64.RawURLEncoding.DecodeString(member.GatewayPublicKey)
+		if err != nil || len(publicKey) != ed25519.PublicKeySize {
+			continue
+		}
+		publicDER, err := x509.MarshalPKIXPublicKey(ed25519.PublicKey(publicKey))
+		if err != nil {
+			continue
+		}
+		publicPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER}))
+		fingerprint, err := security.PublicKeyFingerprint(publicPEM)
+		if err != nil {
+			continue
+		}
+		summary := runtimeservice.GatewayMembership{GatewayID: member.GatewayID, GatewayName: member.GatewayName, IdentityFingerprint: fingerprint, MemberID: member.MemberID, RuntimePublicID: member.RuntimePublicID, Phase: item.Phase, CloudPublication: item.CloudPublication}
 		for _, endpoint := range member.ConnectionEndpoints() {
 			summary.Endpoints = append(summary.Endpoints, runtimeservice.GatewayAddress{Address: endpoint.Address})
 		}

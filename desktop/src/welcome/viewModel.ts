@@ -2389,7 +2389,8 @@ export function filterEnvironmentLibraryDisplayGroups(
 ): readonly EnvironmentLibraryDisplayGroup[] {
   const search = query.trim().toLowerCase();
   return groups.filter(group => group.search_text.includes(search)
-      && group.member_entries.some(entry => environmentMatchesProviderFilter(entry, providerFilter)));
+      && (providerFilter === GATEWAY_ENVIRONMENT_LIBRARY_FILTER && group.gateway_tab_id
+        || group.member_entries.some(entry => environmentMatchesProviderFilter(entry, providerFilter))));
 }
 
 export type GatewaySourceFilterOption = Readonly<{

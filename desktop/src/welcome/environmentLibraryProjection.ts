@@ -26,73 +26,39 @@ export function environmentLibrarySearchText(entry: DesktopEnvironmentEntry): st
   ].filter(Boolean).join('\n').toLowerCase();
 }
 
-function providerIdentityMatches(runtime: DesktopEnvironmentEntry, provider: DesktopEnvironmentEntry): boolean {
-  const target = runtime.provider_runtime_link_target;
-  return Boolean(target
-    && ['linked', 'linking', 'disconnecting'].includes(target.cloud_link_state)
-    && target.cloud_origin && target.cloud_id && target.env_public_id
-    && target.id === provider.cloud_linked_runtime_summary?.runtime_target_id
-    && target.cloud_origin === provider.cloud_origin
-    && target.cloud_id === provider.cloud_id
-    && target.env_public_id === provider.env_public_id);
-}
-
-/** One visual group, separate original entries and action owners. */
+/** Main-process ownership is authoritative; the renderer only arranges its connections. */
 export function buildEnvironmentLibraryDisplayGroups(
   entries: readonly DesktopEnvironmentEntry[],
 ): readonly EnvironmentLibraryDisplayGroup[] {
-  const runtimes = entries.filter(entry => entry.provider_runtime_link_target
-    && ['local_environment', 'ssh_environment', 'wsl_environment'].includes(entry.kind));
-  const pairs = new Map<string, DesktopEnvironmentEntry>();
-  for (const provider of entries.filter(entry => entry.kind === 'provider_environment')) {
-    const runtime = runtimes.find(entry => !pairs.has(entry.id) && providerIdentityMatches(entry, provider));
-    if (runtime) {
-      pairs.set(runtime.id, provider);
-      pairs.set(provider.id, runtime);
-    }
-  }
-
-  const consumed = new Set<string>();
-  const groups: EnvironmentLibraryDisplayGroup[] = [];
+  const byID = new Map(entries.map(entry => [entry.id, entry]));
+  const membersByOwner = new Map<string, DesktopEnvironmentEntry[]>();
   for (const entry of entries) {
-    if (consumed.has(entry.id)) continue;
-    const partner = pairs.get(entry.id);
-    const primary = partner && entry.kind === 'provider_environment' ? partner : entry;
-    const provider = partner ? (entry.kind === 'provider_environment' ? entry : partner) : undefined;
-    const members = provider ? [primary, provider] : [primary];
-    for (const member of members) consumed.add(member.id);
-    groups.push({
-      id: primary.id,
-      primary_entry: primary,
-      ...(provider ? { provider_entry: provider } : {}),
-      member_entries: members,
-      member_ids: members.map(member => member.id),
-      search_text: members.map(environmentLibrarySearchText).join('\n'),
-      pinned: members.some(member => member.pinned),
+    const candidate = entry.access_group_id ? byID.get(entry.access_group_id) : undefined;
+    const attached = (entry.kind === 'provider_environment' || entry.kind === 'gateway_environment')
+      && candidate && ['local_environment', 'ssh_environment', 'wsl_environment'].includes(candidate.kind);
+    const ownerID = attached ? candidate.id : entry.id;
+    membersByOwner.set(ownerID, [...(membersByOwner.get(ownerID) ?? []), entry]);
+  }
+  return [...membersByOwner].map(([id, members]) => {
+    const primary = byID.get(id)!;
+    const provider = members.find(entry => entry.kind === 'provider_environment' && entry.id !== id);
+    const gateways = members.filter(entry => entry.kind === 'gateway_environment' && entry.id !== id);
+    const ordered = [primary, ...(provider ? [provider] : []), ...gateways];
+    const hasGateway = ['local_environment', 'ssh_environment', 'wsl_environment'].includes(primary.kind)
+      && Boolean(primary.runtime_service?.gateway_memberships?.length);
+    const gatewayTabID = hasGateway ? `${id}:gateway-access` : undefined;
+    return {
+      id, primary_entry: primary, provider_entry: provider,
+      member_entries: ordered, member_ids: ordered.map(entry => entry.id),
+      owner_ids: [primary.id, ...(provider ? [provider.id] : []), ...(gatewayTabID ? [gatewayTabID] : [])],
+      gateway_entries: gateways.length ? gateways : undefined, gateway_tab_id: gatewayTabID,
+      search_text: [ordered.map(environmentLibrarySearchText).join('\n'),
+        ...(primary.runtime_service?.gateway_memberships ?? []).map(member =>
+          [member.gateway_name, ...member.endpoints.map(endpoint => endpoint.address)].join('\n')),
+      ].join('\n').toLowerCase(),
+      pinned: ordered.some(entry => entry.pinned),
       cloud_source_id: environmentCloudSourceID(provider ?? primary),
-    });
-  }
-  // Trusted member routes extend the Runtime group without changing action authority.
-  const byID = new Map(groups.map(group => [group.id, group]));
-  const merged = new Set<string>();
-  for (const group of groups) {
-    const ownerID = group.primary_entry.access_group_id;
-    if (!ownerID || ownerID === group.id || group.primary_entry.kind !== 'gateway_environment') continue;
-    const owner = byID.get(ownerID);
-    if (!owner || !['local_environment','ssh_environment','wsl_environment'].includes(owner.primary_entry.kind)) continue;
-    byID.set(ownerID, { ...owner, owner_ids: owner.owner_ids ?? owner.member_ids,
-      gateway_entries: [...(owner.gateway_entries ?? []), ...group.member_entries],
-      member_entries: [...owner.member_entries, ...group.member_entries],
-      member_ids: [...owner.member_ids, ...group.member_ids],
-      search_text: `${owner.search_text}\n${group.search_text}`, pinned: owner.pinned || group.pinned });
-    merged.add(group.id);
-  }
-  return groups.filter(group => !merged.has(group.id)).map(group => {
-    const current = byID.get(group.id)!;
-    if (!['local_environment','ssh_environment','wsl_environment'].includes(current.primary_entry.kind)
-      || !current.primary_entry.runtime_service?.gateway_memberships?.length) return current;
-    const gatewayTabID = `${current.id}:gateway-access`;
-    return {...current, gateway_tab_id:gatewayTabID, owner_ids:[...(current.owner_ids ?? current.member_ids),gatewayTabID]};
+    };
   });
 }
 

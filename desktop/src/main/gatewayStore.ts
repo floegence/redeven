@@ -604,6 +604,19 @@ export function gatewayRecordToSourceWithCatalog(
   };
 }
 
+/** A confirmed Runtime leave invalidates its exact cached directory observation. */
+export function retireGatewayMemberObservation(
+  record: GatewayRecord,
+  source: DesktopGatewaySource,
+  member: Readonly<{ gateway_id?: string; member_id?: string }>,
+): DesktopGatewaySource {
+  if (!member.member_id || !record.trust_profile || source.gateway_id !== record.gateway_id
+    || record.trust_profile.gateway_id !== member.gateway_id
+    || source.identity_fingerprint !== record.trust_profile.gateway_public_key_fingerprint
+    || !source.environments.some(item => item.member_id === member.member_id)) return source;
+  return { ...source, environments: source.environments.filter(item => item.member_id !== member.member_id) };
+}
+
 export function gatewayRecordToSourceWithError(record: GatewayRecord, message: string, code = ''): DesktopGatewaySource {
   const base = gatewayRecordToSource(record);
   if (base.trust_state !== 'paired') {

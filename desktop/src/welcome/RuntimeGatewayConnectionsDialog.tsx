@@ -9,6 +9,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   targetID: DesktopCloudRuntimeLinkTargetID;
   i18n: DesktopI18n;
   mode?: 'leave' | 'publish';
+  gatewayID?: string;
   onClose: () => void;
   onChanged: () => void;
   focusOwner?: () => void;
@@ -20,6 +21,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   const [error, setError] = createSignal('');
   const targetID = createMemo(() => props.targetID);
   const mode = createMemo(() => props.mode);
+  const gatewayID = createMemo(() => props.gatewayID);
   const members = () => status()?.memberships ?? [];
   const member = () => members().find(item => item.gateway_id === selected());
   const text = props.i18n.t;
@@ -35,7 +37,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   onCleanup(() => { generation++; });
 
   // Equivalent snapshots do not reinitialize a target's confirmation session.
-  createEffect(on([targetID, mode], ([target, operation]) => {
+  createEffect(on([targetID, mode, gatewayID], ([target, operation, requestedGateway]) => {
     const current = ++generation;
     setChoice(undefined);
     setError('');
@@ -55,8 +57,9 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
         }
         setStatus(result.gateway_membership);
         const available = result.gateway_membership.memberships ?? [];
-        if (available.length === 1) setSelected(available[0]!.gateway_id!);
-        queueMicrotask(() => available.length > 1 ? select?.focus() : confirm?.focus());
+        if (requestedGateway && available.some(item => item.gateway_id === requestedGateway)) setSelected(requestedGateway);
+        else if (!requestedGateway && available.length === 1) setSelected(available[0]!.gateway_id!);
+        queueMicrotask(() => available.length > 1 && !requestedGateway ? select?.focus() : confirm?.focus());
       } catch {
         if (current === generation) setError(text('gatewayJoin.failed'));
       }
@@ -102,7 +105,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
       title={text(mode() === 'publish' ? 'gatewayConnections.publishTitle' : 'gatewayConnections.unpairTitle')}
       closeLabel={text('common.close')} class="redeven-gateway-dialog">
       <div class="space-y-4">
-        <Show when={members().length > 1}>
+        <Show when={members().length > 1 && !gatewayID()}>
           <label class="block space-y-2 text-sm">
             <span>{text('gatewayConnections.select')}</span>
             <select ref={select} class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5"
@@ -140,6 +143,9 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
           </fieldset>
         </Show>
         <Show when={status() && !members().length}>
+          <p class="text-sm text-muted-foreground">{text('gatewayConnections.empty')}</p>
+        </Show>
+        <Show when={status() && gatewayID() && !member() && members().length}>
           <p class="text-sm text-muted-foreground">{text('gatewayConnections.empty')}</p>
         </Show>
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>

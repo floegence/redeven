@@ -16,15 +16,15 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 48 {
-		t.Fatalf("CompatibilityEpoch = %d, want Gateway multiple-members contract epoch 48", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 49 {
+		t.Fatalf("CompatibilityEpoch = %d, want connection ownership contract epoch 49", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 39 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 47", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 40 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 48", contract.UpgradeFromRuntimeEpochs)
 	}
 	for index, epoch := range contract.UpgradeFromRuntimeEpochs {
 		if epoch != index+9 {
-			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 47", contract.UpgradeFromRuntimeEpochs)
+			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 48", contract.UpgradeFromRuntimeEpochs)
 		}
 	}
 	if contract.MinimumDesktopVersion != "v0.13.0" || contract.MinimumRuntimeVersion != "v0.13.0" {
@@ -265,7 +265,7 @@ func TestNormalizeSnapshotPreservesCloudLinkRemoteEnabledFact(t *testing.T) {
 	}
 }
 
-func TestNormalizeSnapshotMarksCloudLinkUnsupportedWithoutCapability(t *testing.T) {
+func TestNormalizeSnapshotPreservesCloudBindingWithoutManagementCapability(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
 		Compatibility:   CompatibilityCompatible,
@@ -279,10 +279,13 @@ func TestNormalizeSnapshotMarksCloudLinkUnsupportedWithoutCapability(t *testing.
 			},
 		},
 	})
-	if snapshot.Bindings.CloudLink.State != CloudLinkStateUnsupported {
-		t.Fatalf("State = %q, want %q", snapshot.Bindings.CloudLink.State, CloudLinkStateUnsupported)
+	if snapshot.Bindings.CloudLink.State != CloudLinkStateLinked || snapshot.Bindings.CloudLink.EnvPublicID != "env_demo" {
+		t.Fatalf("saved Cloud identity was lost: %+v", snapshot.Bindings.CloudLink)
 	}
-	if snapshot.Bindings.CloudLink.RemoteEnabled {
-		t.Fatalf("RemoteEnabled = true, want false")
+	if !snapshot.Bindings.CloudLink.RemoteEnabled || snapshot.Capabilities.CloudLink.Supported {
+		t.Fatal("binding facts and management capability must remain independent")
+	}
+	if NormalizeSnapshot(Snapshot{}).Bindings.CloudLink.State != CloudLinkStateUnsupported {
+		t.Fatal("an absent binding and capability must remain unsupported")
 	}
 }
