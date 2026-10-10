@@ -56,15 +56,25 @@ function routes(entry: DesktopEnvironmentEntry): readonly EnvironmentAccessRoute
 }
 
 export function decorateEnvironmentAccess(entries: readonly DesktopEnvironmentEntry[], preferences: DesktopPreferences): DesktopEnvironmentEntry[] {
+  const runtimeIdentity = (entry: DesktopEnvironmentEntry) => {
+    const observed=preferences.environment_access?.observations[entry.id];
+    if (observed?.binding===environmentAccessBinding(entry)) return observed.identity;
+    return undefined;
+  };
+  // Management proof groups routes; it does not fabricate a public health identity.
+  const runtimeOwner = (entry: DesktopEnvironmentEntry) => entry.kind !== 'gateway_environment' ? entry
+    : entries.find(runtime => ['local_environment','ssh_environment','wsl_environment'].includes(runtime.kind)
+      && runtime.runtime_service?.gateway_memberships?.some(member => member.member_id === entry.gateway_env_id
+        && member.runtime_public_id === entry.gateway_member?.runtime_public_id
+        && member.identity_fingerprint === entry.gateway_identity_fingerprint));
   const identityFor = (entry: DesktopEnvironmentEntry) => {
-    if (entry.kind === 'gateway_environment') return undefined;
-    const observed = preferences.environment_access?.observations[entry.id];
-    return observed?.binding === environmentAccessBinding(entry) ? observed.identity : undefined;
+    const owner = runtimeOwner(entry);
+    return owner ? runtimeIdentity(owner) : undefined;
   };
   const groups = new Map<string, DesktopEnvironmentEntry[]>();
   for (const entry of entries) {
     if (entry.kind === 'provider_environment') continue;
-    const key = identityFor(entry) ?? entry.id;
+    const key = identityFor(entry) ?? runtimeOwner(entry)?.id ?? entry.id;
     groups.set(key, [...(groups.get(key) ?? []), entry]);
   }
   const projections = new Map<string, Partial<DesktopEnvironmentEntry>>();

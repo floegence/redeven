@@ -18,7 +18,7 @@ import (
 
 var ErrState = errors.New("Gateway Cloud state is invalid or unavailable")
 
-// RuntimeConfig is an optional Cloud association of the sole Gateway member.
+// RuntimeConfig is the optional Cloud association of the selected Gateway member.
 // It stores no Gateway address, CA, client certificate, invitation or join token.
 type RuntimeConfig struct {
 	ProtocolVersion          int                `json:"protocol_version"`

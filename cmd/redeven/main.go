@@ -840,7 +840,7 @@ func (c *cli) runCmd(args []string) int {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	var localUIServer *localui.Server
-	if !localUIEnabled && cfg.Gateway != nil {
+	if !localUIEnabled && len(cfg.Gateways) > 0 {
 		// Gateway membership is independent of the optional public Local UI
 		// listener. Inner TLS uses the member's signed service identity.
 		srv, err := localui.New(localui.Options{

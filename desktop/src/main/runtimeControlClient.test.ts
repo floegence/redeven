@@ -113,6 +113,26 @@ afterEach(async () => {
 });
 
 describe('runtimeControlClient', () => {
+  it('sends explicit Gateway targets and isolates Cloud consent from pairing confirmation', async () => {
+    const membership = { joined: true, phase: 'joined', gateway_id: 'one', member_id: 'member-one', cloud_publication: false };
+    const server = await startServer((_request, _body, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: { joined: true, phase: 'joined', memberships: [membership] } }));
+    });
+    const control = endpoint(server.origin);
+    expect((await manageRuntimeGateway(control, 'status')).memberships).toEqual([membership]);
+    await manageRuntimeGateway(control, 'leave', undefined, undefined, 'one', false);
+    await manageRuntimeGateway(control, 'leave', undefined, undefined, 'one', true);
+    await manageRuntimeGateway(control, 'publish', undefined, 'preserve', 'one');
+    await manageRuntimeGateway(control, 'join', 'a'.repeat(43));
+    expect(server.requests.map(request => request.url)).toEqual(['/v2/gateway/status', '/v2/gateway/leave', '/v2/gateway/leave', '/v2/gateway/publish', '/v2/gateway/join']);
+    expect(server.bodies.slice(1).map(body => JSON.parse(body))).toEqual([
+      { gateway_id: 'one' }, { gateway_id: 'one', cloud_impact_acknowledged: true },
+      { gateway_id: 'one', environment_choice: 'preserve' }, { preview_id: 'a'.repeat(43) },
+    ]);
+    await expect(manageRuntimeGateway(control, 'join', 'a'.repeat(43), 'preserve')).rejects.toMatchObject({ code: 'GATEWAY_JOIN_INVALID' });
+    expect(server.requests).toHaveLength(5);
+  });
   it.each(['BINDING_PROOF_REQUIRED', 'CLOUD_UNAVAILABLE'])('preserves Gateway publication diagnostic %s', async code => {
     const server = await startServer((_request, _body, response) => {
       response.setHeader('Content-Type', 'application/json');

@@ -8,6 +8,8 @@ export type EnvironmentLibraryDisplayGroup = Readonly<{
   member_entries: readonly DesktopEnvironmentEntry[];
   member_ids: readonly string[];
   owner_ids?: readonly string[];
+  gateway_entries?: readonly DesktopEnvironmentEntry[];
+  gateway_tab_id?: string;
   search_text: string;
   pinned: boolean;
   cloud_source_id?: string;
@@ -70,22 +72,28 @@ export function buildEnvironmentLibraryDisplayGroups(
       cloud_source_id: environmentCloudSourceID(provider ?? primary),
     });
   }
-  // Cloud owners retain their established tabs. Access routes only extend the
-  // original group's menu/settings; they never become additional owner tabs.
+  // Trusted member routes extend the Runtime group without changing action authority.
   const byID = new Map(groups.map(group => [group.id, group]));
   const merged = new Set<string>();
   for (const group of groups) {
     const ownerID = group.primary_entry.access_group_id;
-    if (!ownerID || ownerID === group.id || group.primary_entry.kind !== 'gateway_environment' || !group.primary_entry.verified_runtime_identity) continue;
+    if (!ownerID || ownerID === group.id || group.primary_entry.kind !== 'gateway_environment') continue;
     const owner = byID.get(ownerID);
-    if (!owner || owner.primary_entry.verified_runtime_identity !== group.primary_entry.verified_runtime_identity) continue;
+    if (!owner || !['local_environment','ssh_environment','wsl_environment'].includes(owner.primary_entry.kind)) continue;
     byID.set(ownerID, { ...owner, owner_ids: owner.owner_ids ?? owner.member_ids,
+      gateway_entries: [...(owner.gateway_entries ?? []), ...group.member_entries],
       member_entries: [...owner.member_entries, ...group.member_entries],
       member_ids: [...owner.member_ids, ...group.member_ids],
       search_text: `${owner.search_text}\n${group.search_text}`, pinned: owner.pinned || group.pinned });
     merged.add(group.id);
   }
-  return groups.filter(group => !merged.has(group.id)).map(group => byID.get(group.id)!);
+  return groups.filter(group => !merged.has(group.id)).map(group => {
+    const current = byID.get(group.id)!;
+    if (!['local_environment','ssh_environment','wsl_environment'].includes(current.primary_entry.kind)
+      || !current.primary_entry.runtime_service?.gateway_memberships?.length) return current;
+    const gatewayTabID = `${current.id}:gateway-access`;
+    return {...current, gateway_tab_id:gatewayTabID, owner_ids:[...(current.owner_ids ?? current.member_ids),gatewayTabID]};
+  });
 }
 
 export function splitPinnedEnvironmentGroupIDs(groups: readonly EnvironmentLibraryDisplayGroup[]) {

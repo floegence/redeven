@@ -21,7 +21,7 @@ func (c *Config) retireLegacyGateway(raw map[string]json.RawMessage) error {
 	if (!present || !nonnull(legacy)) && (!hasPending || !nonnull(pending)) {
 		return nil
 	}
-	if c.GatewayPublication != nil || c.Gateway != nil {
+	if c.GatewayPublication != nil || nonnull(raw["gateway"]) || nonnull(raw["gateways"]) {
 		return errors.New("mixed legacy and current Gateway configuration")
 	}
 	if nonnull(legacy) {
@@ -36,6 +36,7 @@ func (c *Config) retireLegacyGateway(raw map[string]json.RawMessage) error {
 	c.gatewayConfigMigrated = true
 	c.GatewayRejoinRequired = true
 	c.GatewayPublication = nil
+	c.GatewayCloudMemberID = ""
 	c.Direct, c.ControlArtifactPool = nil, nil
 	return nil
 }
@@ -43,7 +44,11 @@ func (c *Config) retireLegacyGateway(raw map[string]json.RawMessage) error {
 // RetireGatewayPublication preserves only the previous binding proof. The
 // caller persists this fence before delivering leave or starting another route.
 func (c *Config) RetireGatewayPublication() error {
-	if c == nil || c.GatewayPublication == nil {
+	if c == nil {
+		return nil
+	}
+	if c.GatewayPublication == nil {
+		c.GatewayCloudMemberID, c.GatewayEnvironmentChoice = "", ""
 		return nil
 	}
 	if err := c.QueueGatewayClosure(); err != nil {
@@ -53,6 +58,7 @@ func (c *Config) RetireGatewayPublication() error {
 		c.GatewayMigrationEvidence = evidence
 	}
 	c.GatewayPublication = nil
+	c.GatewayCloudMemberID = ""
 	c.GatewayEnvironmentChoice = ""
 	c.GatewayRejoinRequired = true
 	c.Direct, c.ControlArtifactPool = nil, nil
@@ -74,7 +80,7 @@ func (c *Config) QueueGatewayClosure() error {
 	if len(c.GatewayClosureOutbox) >= 16 {
 		return errors.New("gateway closure receipts must be delivered before changing more bindings")
 	}
-	delivery, err := gatewaycloud.NewClosureDelivery(c.GatewayPublication, c.Gateway)
+	delivery, err := gatewaycloud.NewClosureDelivery(c.GatewayPublication, c.CloudGateway())
 	if err != nil {
 		return err
 	}

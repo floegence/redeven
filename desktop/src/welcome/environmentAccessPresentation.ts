@@ -10,7 +10,7 @@ export function environmentAccessRouteLabel(route: EnvironmentAccessRoute, i18n:
 
 /** Access choices extend the existing split button without changing lifecycle owners. */
 export function environmentAccessPresentation(entry: DesktopEnvironmentEntry, presentation: EnvironmentActionPresentation, i18n: DesktopI18n): EnvironmentActionPresentation {
-  if (entry.kind === 'provider_environment' || !entry.access_routes?.length) return presentation;
+  if (entry.kind === 'provider_environment' || entry.kind === 'gateway_environment' || !entry.access_routes?.length) return presentation;
   const routes = entry.access_routes;
   const selected = routes.find(route => route.id === entry.default_access_route_id);
   const open = (route: EnvironmentAccessRoute) => ({ intent: 'open' as const, enabled: true, variant: 'outline' as const,

@@ -29,15 +29,15 @@ func sameControlBinding(expected, current *config.Config) bool {
 	if expected == nil || current == nil || expected.EnvironmentID != current.EnvironmentID || expected.BindingGeneration != current.BindingGeneration || expected.AccessPointOrigin != current.AccessPointOrigin {
 		return false
 	}
-	if expected.GatewayRejoinRequired != current.GatewayRejoinRequired {
+	if expected.GatewayRejoinRequired != current.GatewayRejoinRequired || expected.GatewayCloudMemberID != current.GatewayCloudMemberID {
 		return false
 	}
-	if (expected.Gateway == nil) != (current.Gateway == nil) {
+	if (expected.GatewayPublication != nil || current.GatewayPublication != nil) && (expected.CloudGateway() == nil) != (current.CloudGateway() == nil) {
 		return false
 	}
-	if current.Gateway != nil && (current.Gateway.Leaving || expected.Gateway.MemberID != current.Gateway.MemberID || expected.Gateway.MemberVersion != current.Gateway.MemberVersion || expected.Gateway.GatewayID != current.Gateway.GatewayID ||
-		!slices.Equal(expected.Gateway.ConnectionEndpoints(), current.Gateway.ConnectionEndpoints()) || expected.Gateway.GatewayTLSRootPEM != current.Gateway.GatewayTLSRootPEM ||
-		expected.Gateway.ClientCertificatePEM != current.Gateway.ClientCertificatePEM || expected.Gateway.ClientPrivateKeyPEM != current.Gateway.ClientPrivateKeyPEM) {
+	if current.GatewayPublication != nil && current.CloudGateway() != nil && (current.CloudGateway().Leaving || expected.CloudGateway().MemberID != current.CloudGateway().MemberID || expected.CloudGateway().MemberVersion != current.CloudGateway().MemberVersion || expected.CloudGateway().GatewayID != current.CloudGateway().GatewayID ||
+		!slices.Equal(expected.CloudGateway().ConnectionEndpoints(), current.CloudGateway().ConnectionEndpoints()) || expected.CloudGateway().GatewayTLSRootPEM != current.CloudGateway().GatewayTLSRootPEM ||
+		expected.CloudGateway().ClientCertificatePEM != current.CloudGateway().ClientCertificatePEM || expected.CloudGateway().ClientPrivateKeyPEM != current.CloudGateway().ClientPrivateKeyPEM) {
 		return false
 	}
 	left, right := gatewayFence(expected), gatewayFence(current)

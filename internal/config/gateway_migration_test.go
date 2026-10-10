@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +52,7 @@ func TestLegacyGatewayMigrationRetainsOnlyBindingEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Gateway != nil || cfg.GatewayPublication != nil || cfg.Direct != nil || cfg.ControlArtifactPool != nil || !cfg.GatewayRejoinRequired {
+	if cfg.GatewayMember("") != nil || cfg.GatewayPublication != nil || cfg.Direct != nil || cfg.ControlArtifactPool != nil || !cfg.GatewayRejoinRequired {
 		t.Fatal("legacy route remains executable")
 	}
 	evidence := cfg.GatewayMigrationEvidence
@@ -97,11 +98,11 @@ func TestRetiringGatewayPublicationNeverLeavesControlCredentials(t *testing.T) {
 	evidence := cfg.GatewayMigrationEvidence.Clone()
 	cfg.GatewayPublication = &gatewaycloud.RuntimeConfig{CloudOrigin: evidence.CloudOrigin, RegionOrigin: evidence.RegionOrigin, NamespacePublicID: evidence.NamespacePublicID, GatewayPublicID: evidence.GatewayPublicID, RuntimePublicID: evidence.RuntimePublicID, RequestPublicID: evidence.RequestPublicID, PrivateKeyB64u: evidence.PrivateKeyB64u, Binding: evidence.Binding}
 	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
-	cfg.Gateway = gatewayfixture.Enroll(t, store, evidence.RuntimePublicID)
+	cfg.Gateways = []*gatewaymembership.RuntimeConfig{gatewayfixture.Enroll(t, store, evidence.RuntimePublicID)}
 	cfg.GatewayPublication.ProtocolVersion = gc.ProtocolVersion
-	cfg.GatewayPublication.MemberID, cfg.GatewayPublication.MemberVersion = cfg.Gateway.MemberID, cfg.Gateway.MemberVersion
-	cfg.GatewayPublication.RequestPublicID = gc.CandidateID(evidence.GatewayPublicID, cfg.Gateway.MemberID)
-	cfg.GatewayPublication.Binding.MemberID, cfg.GatewayPublication.Binding.MemberVersion = cfg.Gateway.MemberID, cfg.Gateway.MemberVersion
+	cfg.GatewayPublication.MemberID, cfg.GatewayPublication.MemberVersion = cfg.GatewayMember("").MemberID, cfg.GatewayMember("").MemberVersion
+	cfg.GatewayPublication.RequestPublicID = gc.CandidateID(evidence.GatewayPublicID, cfg.GatewayMember("").MemberID)
+	cfg.GatewayPublication.Binding.MemberID, cfg.GatewayPublication.Binding.MemberVersion = cfg.GatewayMember("").MemberID, cfg.GatewayMember("").MemberVersion
 	cfg.Direct, cfg.ControlArtifactPool = &DirectConnectInfo{}, NewControlArtifactPool(4)
 	if err := cfg.RetireGatewayPublication(); err != nil {
 		t.Fatal(err)

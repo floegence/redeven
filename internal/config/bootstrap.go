@@ -20,6 +20,7 @@ import (
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 )
 
 type BootstrapArgs struct {
@@ -345,7 +346,7 @@ func resolveCloudLinkConfig(ctx context.Context, args cloudLinkResolveArgs) (*Co
 	} else if !errors.Is(loadErr, os.ErrNotExist) {
 		return nil, fmt.Errorf("load existing runtime configuration: %w", loadErr)
 	}
-	if prev != nil && (prev.Gateway != nil || prev.GatewayPublication != nil || prev.GatewayMigrationEvidence != nil || prev.GatewayRejoinRequired) {
+	if prev != nil && (prev.CloudGateway() != nil || prev.GatewayPublication != nil || prev.GatewayMigrationEvidence != nil || prev.GatewayRejoinRequired) {
 		return nil, errors.New("gateway Cloud access requires explicit migration before changing the provider binding")
 	}
 	if args.ExpectedBindingGeneration > 0 && (prev == nil ||
@@ -470,6 +471,8 @@ func resolveCloudLinkConfig(ctx context.Context, args cloudLinkResolveArgs) (*Co
 
 	// Preserve Code App port range tweaks (Settings UI).
 	if prev != nil {
+		cfg.Gateways = prev.CloneGateways()
+		cfg.GatewayRemovalOutbox = append([]gatewaymembership.RemovalDelivery(nil), prev.GatewayRemovalOutbox...)
 		cfg.CodeServerPortMin = prev.CodeServerPortMin
 		cfg.CodeServerPortMax = prev.CodeServerPortMax
 	}

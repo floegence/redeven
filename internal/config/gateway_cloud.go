@@ -76,20 +76,17 @@ func (c *Config) validateGatewayBinding() error {
 // ValidateGatewayManagement permits the process to observe revocation or retry
 // authenticated credential recovery. It does not authorize control or sessions.
 func (c *Config) ValidateGatewayManagement() error {
-	if c == nil || c.Gateway == nil || c.AgentInstanceID == "" {
+	if c == nil || len(c.Gateways) == 0 || c.AgentInstanceID == "" {
 		return errors.New("gateway management is not configured")
 	}
 	if err := c.ValidateLocalMinimal(); err != nil {
-		return err
-	}
-	if err := c.Gateway.Validate(c.LocalEnvironmentPublicID); err != nil {
 		return err
 	}
 	if c.GatewayPublication == nil {
 		return nil
 	}
 	if c.GatewayPublication.Binding == nil {
-		if err := c.GatewayPublication.ValidateMember(c.Gateway); err != nil {
+		if err := c.GatewayPublication.ValidateMember(c.CloudGateway()); err != nil {
 			return err
 		}
 		_, err := c.GatewayPublication.Identity()
@@ -100,16 +97,16 @@ func (c *Config) ValidateGatewayManagement() error {
 
 func (c *Config) validateGatewayPath(allowRevoked bool) error {
 	if c.GatewayPublication == nil {
-		if c.Gateway != nil || c.GatewayMigrationEvidence != nil || c.GatewayRejoinRequired {
+		if c.CloudGateway() != nil || c.GatewayMigrationEvidence != nil || c.GatewayRejoinRequired {
 			return errors.New("gateway publication requires explicit binding approval")
 		}
 		return nil
 	}
 	r := c.GatewayPublication
-	if err := r.ValidateMember(c.Gateway); err != nil {
+	if err := r.ValidateMember(c.CloudGateway()); err != nil {
 		return err
 	}
-	if c.Gateway.Leaving && !allowRevoked {
+	if c.CloudGateway().Leaving && !allowRevoked {
 		return errors.New("gateway membership is leaving")
 	}
 	if _, err := r.Identity(); err != nil {

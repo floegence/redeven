@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
-    "reviewed_at": "2026-10-09",
-    "review_id": "release-candidate-release-workflow-v1",
-    "summary": "Epoch 47 adds atomic Gateway network settings with separate next-start bind addresses, confirmed Runtime share endpoints and default-unrestricted request Host admission. Desktop offers trusted local Gateway address suggestions without automatic enrollment. Existing identities, members, permissions, Cloud associations and enrollment consent remain preserved.",
-    "same_window_rationale": "RCPP v4 removes old network protocols and unifies Cloud assignment and Runtime link. Desktop also consumes the typed model directory and strict baseline query. Older Runtime peers upgrade through the retained epoch window.",
+    "reviewed_at": "2026-10-10",
+    "review_id": "runtime-gateway-multiple-members-v2",
+    "summary": "Epoch 48 supports independent Runtime Gateway memberships, explicit Cloud publication and targeted unpairing with Cloud impact consent. Trusted Runtime membership summaries group Gateway routes into the existing Env card without granting Desktop authorization. The singleton membership schema migrates atomically to a collection while preserving identities and approved Cloud ownership.",
+    "same_window_rationale": "The compatibility window advances to epoch 48 because Gateway management bodies and trusted membership summaries changed. Earlier supported epochs retain the upgrade path; ordinary Runtime transport, Cloud v2 approval and Gateway v5 cryptography remain unchanged.",
     "checked_surfaces": [
+      "Epoch 48: independent Runtime Gateway reconnect controllers, atomic singleton-to-collection migration, preview confirmation without Cloud choices, separate Cloud publication, targeted removal and Cloud interruption consent. Desktop Local/SSH Runtime management, original Env card Gateway tab, multi-member selection, input/focus retention, Local UI health, startup reports, sys.ping, Env App and SSH bootstrap consume the current contract.",
       "Epoch 47: host-authorized Gateway network settings, v3-to-v4 member-state migration, active listener/restart status, exact Host restriction on member HTTP and Flowersec upgrades, and local Gateway quick fill with Runtime verification.",
       "Epoch 46: Runtime Gateway address and one-time invitation-code preview/confirmation, single-use exchange, endpoint updates and file-invitation retirement. Epoch 45 Cloud identity migration, single-address Runtime bootstrap, Desktop Runtime link and credential renewal, pool contract v2, Local UI health, startup reports, sys.ping, Env App and SSH Runtime compatibility remain preserved.",
       "Epoch 44 covers baseline and bounded full model-directory reads, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, source isolation, and independently loaded Tessiven-bound Flower history. No database migration.",
@@ -93,7 +94,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 47,
+  "compatibility_epoch": 48,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -132,7 +133,8 @@
     43,
     44,
     45,
-    46
+    46,
+    47
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

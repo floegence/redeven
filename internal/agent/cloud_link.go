@@ -15,6 +15,7 @@ import (
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
@@ -248,7 +249,7 @@ func providerDisconnectSnapshotFromConfig(cfg *config.Config) (providerDisconnec
 }
 
 func (a *Agent) cloudLinkCanReplaceCurrentLocked(req CloudLinkRequest) *CloudLinkError {
-	if a.cfg != nil && (a.cfg.Gateway != nil || a.cfg.GatewayPublication != nil || a.cfg.GatewayMigrationEvidence != nil || a.cfg.GatewayRejoinRequired) {
+	if a.cfg != nil && (a.cfg.CloudGateway() != nil || a.cfg.GatewayPublication != nil || a.cfg.GatewayMigrationEvidence != nil || a.cfg.GatewayRejoinRequired) {
 		return &CloudLinkError{Code: CloudLinkErrorAlreadyLinked, Message: "Gateway Cloud access requires explicit migration before changing the provider binding."}
 	}
 	current := a.cloudLinkBindingLocked("")
@@ -382,6 +383,11 @@ func (a *Agent) ConnectCloud(ctx context.Context, req CloudLinkRequest) (*CloudL
 		a.mu.Unlock()
 		return nil, linkErr
 	}
+	// Independent reconnect progress may advance during the Cloud exchange.
+	if a.cfg != nil {
+		cfg.Gateways = a.cfg.CloneGateways()
+		cfg.GatewayRemovalOutbox = append([]gatewaymembership.RemovalDelivery(nil), a.cfg.GatewayRemovalOutbox...)
+	}
 	if err := config.SaveCloudLinkConfig(a.configPath, cfg); err != nil {
 		a.mu.Unlock()
 		return nil, &CloudLinkError{
@@ -442,7 +448,9 @@ func (a *Agent) clearCloudLinkBindingLocked(snapshot providerDisconnectSnapshot)
 	next.AccessPointOrigin = ""
 	next.CloudID = ""
 	next.EnvironmentID = ""
-	next.LocalEnvironmentPublicID = ""
+	if len(next.Gateways) == 0 {
+		next.LocalEnvironmentPublicID = ""
+	}
 	next.BindingGeneration = 0
 	next.Direct = nil
 	next.ControlArtifactPool = nil

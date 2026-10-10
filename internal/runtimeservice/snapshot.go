@@ -118,7 +118,23 @@ type CloudLinkBinding struct {
 	LastErrorMessage         string         `json:"last_error_message,omitempty"`
 }
 
+// GatewayMembership is trusted presentation metadata, never member credentials.
+type GatewayMembership struct {
+	GatewayID           string           `json:"gateway_id"`
+	GatewayName         string           `json:"gateway_name"`
+	IdentityFingerprint string           `json:"identity_fingerprint"`
+	MemberID            string           `json:"member_id"`
+	RuntimePublicID     string           `json:"runtime_public_id"`
+	Phase               string           `json:"phase"`
+	CloudPublication    bool             `json:"cloud_publication"`
+	Endpoints           []GatewayAddress `json:"endpoints"`
+}
+type GatewayAddress struct {
+	Address string `json:"address"`
+}
+
 type Snapshot struct {
+	GatewayMemberships    []GatewayMembership `json:"gateway_memberships,omitempty"`
 	GatewayPublication    *GatewayPublication `json:"gateway_publication,omitempty"`
 	RuntimeVersion        string              `json:"runtime_version,omitempty"`
 	RuntimeCommit         string              `json:"runtime_commit,omitempty"`

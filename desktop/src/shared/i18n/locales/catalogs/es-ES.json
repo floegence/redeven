@@ -3150,7 +3150,7 @@
     "verifying": "Verificando…",
     "verified": "Gateway verificado. Revisa los datos antes de habilitar el acceso.",
     "confirmEnable": "Confirmar y habilitar",
-    "accessImpact": "El acceso a este entorno de ejecución se realizará a través del Gateway. La autorización de acceso Desktop y la aprobación de publicación Cloud siguen siendo independientes. El Gateway no puede administrar este entorno de ejecución.",
+    "accessImpact": "Añade acceso a través de este Gateway. El acceso a Cloud y los demás vínculos se mantienen. Desktop requiere autorización independiente.",
     "expired": "El código o la verificación ha caducado. Solicita un código nuevo al administrador y vuelve a verificar.",
     "used": "Este código ya se ha utilizado. Solicita un código nuevo al administrador.",
     "identityFailed": "No se pudo verificar la identidad del Gateway. Confirma la dirección con su administrador.",
@@ -3282,5 +3282,19 @@
     "saving": "Guardando…",
     "saved": "Ajustes de red guardados.",
     "restartRequired": "Reinicia Gateway para aplicar las direcciones de escucha guardadas."
+  },
+  "gatewayConnections": {
+    "unpairTitle": "Desvincular Gateway",
+    "unpair": "Desvincular",
+    "select": "Seleccionar Gateway",
+    "unpairImpact": "El acceso a través de este Gateway finalizará. Las demás conexiones seguirán disponibles.",
+    "cloudImpact": "También se interrumpirá el acceso a Redeven Cloud a través de este Gateway.",
+    "cloudChanged": "El acceso a Cloud ha cambiado. Vuelva a abrir el diálogo para revisar el efecto.",
+    "publishTitle": "Publicar mediante Gateway",
+    "publish": "Confirmar publicación",
+    "publishHelp": "Publicar este entorno de ejecución en Redeven Cloud a través de este Gateway. Requiere aprobación de Cloud.",
+    "empty": "No hay ningún Gateway vinculado.",
+    "unavailable": "Autorice Desktop en este Gateway para abrir Env App.",
+    "tab": "Gateway"
   }
 }

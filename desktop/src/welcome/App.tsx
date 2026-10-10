@@ -24,6 +24,7 @@ import {
   SegmentedControl,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
+import { handleMenuKeyboardNavigation } from '@floegence/floe-webapp-core/ui';
 import { GatewayMark } from './GatewayMark';
 import { GatewayEnvironmentList } from './GatewayEnvironmentList';
 import { GatewayClientsPanel } from './GatewayClientsPanel';
@@ -9449,24 +9450,25 @@ export function EnvironmentSplitActionButton(
     runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
     onRunAction: (action: EnvironmentActionModel) => void;
     onRunGuidanceAction: (action: EnvironmentActionModel) => void;
-    gatewayAction?: Readonly<{
+    gatewayActions?: readonly Readonly<{
       label: string;
       disabled?: boolean;
+      tone?: 'primary' | 'danger';
       onRun: () => void;
-    }>;
+    }>[];
   }>,
 ) {
-  const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0 || !!props.gatewayAction);
+  const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0 || !!props.gatewayActions?.length);
   const menuGroups = createMemo(() => {
     const actions = props.presentation.menu_actions;
-    if (!props.gatewayAction) return [{ actions, gatewayAction: undefined }];
+    if (!props.gatewayActions?.length) return [{ actions, gatewayActions: [] }];
     const cloudIndex = actions.findIndex(item => item.action.intent === 'connect_cloud_runtime'
       || item.action.intent === 'disconnect_cloud_runtime');
     const accessIndex = cloudIndex < 0 ? actions.length : cloudIndex;
     return [
-      { actions: actions.slice(0, accessIndex), gatewayAction: undefined },
-      { actions: actions.slice(accessIndex), gatewayAction: props.gatewayAction },
-    ].filter(group => group.actions.length > 0 || group.gatewayAction);
+      { actions: actions.slice(0, accessIndex), gatewayActions: [] },
+      { actions: actions.slice(accessIndex), gatewayActions: props.gatewayActions },
+    ].filter(group => group.actions.length > 0 || group.gatewayActions.length);
   });
   const guidanceNotice = createMemo(() => guidanceSessionNotice(props.guidanceSession));
   const sessionPopoverOverlay = createMemo<
@@ -9649,6 +9651,12 @@ export function EnvironmentSplitActionButton(
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (menuContainsTarget(event.target) && event.key !== 'Tab' && handleMenuKeyboardNavigation(event, {
+        onDismiss: () => {
+          closeMenu();
+          rootRef?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
+        },
+      })) return;
       if (event.key === 'Escape') {
         closeMenu();
       }
@@ -9974,25 +9982,25 @@ export function EnvironmentSplitActionButton(
                 <Show when={index() > 0}>
                   <div class="my-1 border-t border-border/60" role="separator" />
                 </Show>
-                <Show when={group.gatewayAction}>
+                <For each={group.gatewayActions}>
                   {(action) => (
                     <button
                       type="button"
                       role="menuitem"
                       class="redeven-split-menu-item"
-                      data-tone="primary"
-                      disabled={action().disabled}
+                      data-tone={action.tone ?? "primary"}
+                      disabled={action.disabled}
                       onClick={() => {
-                        if (action().disabled) return;
+                        if (action.disabled) return;
                         closeMenu();
-                        action().onRun();
+                        action.onRun();
                       }}
                     >
                       <span class="redeven-split-menu-item-icon"><Link /></span>
-                      <span class="redeven-control-label">{action().label}</span>
+                      <span class="redeven-control-label">{action.label}</span>
                     </button>
                   )}
-                </Show>
+                </For>
                 <For each={group.actions}>
                   {(item: EnvironmentActionMenuItemModel) => {
                     const icon = () => splitMenuIcon(item.action.intent);

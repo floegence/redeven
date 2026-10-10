@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -56,7 +57,7 @@ func TestGatewayClosureOutboxSurvivesRemovalAndWaitsForActualSessionClosure(t *t
 	member.GatewayTLSRootPEM = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: relay.Certificate().Raw}))
 	remote, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateway: member, GatewayPublication: route, LocalEnvironmentPublicID: "runtime"}, sessions: map[string]*activeSession{"remote": {cancel: cancel, gatewayBindingPublicID: "binding", gatewayBindingGeneration: 1}}}
+	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, GatewayPublication: route, LocalEnvironmentPublicID: "runtime"}, sessions: map[string]*activeSession{"remote": {cancel: cancel, gatewayBindingPublicID: "binding", gatewayBindingGeneration: 1}}}
 	if err := a.LeaveGateway(); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,7 @@ func TestGatewayClosureOutboxSurvivesRemovalAndWaitsForActualSessionClosure(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Gateway != nil || saved.GatewayPublication != nil || saved.GatewayClosureOutbox[0].Receipt.Signature == "" {
+	if saved.GatewayMember("") != nil || saved.GatewayPublication != nil || saved.GatewayClosureOutbox[0].Receipt.Signature == "" {
 		t.Fatal("receipt restart restored access authority or lost delivery")
 	}
 	a.cfg = saved
@@ -106,7 +107,7 @@ func TestGatewayClosureFencesProcessWhenPersistenceFails(t *testing.T) {
 	remote, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	// An existing directory cannot be atomically replaced with a config file.
-	a := &Agent{configPath: t.TempDir(), cfg: &config.Config{Gateway: member, GatewayPublication: route, LocalEnvironmentPublicID: "runtime"}, sessions: map[string]*activeSession{"remote": {cancel: cancel, gatewayBindingPublicID: "binding", gatewayBindingGeneration: 1}}}
+	a := &Agent{configPath: t.TempDir(), cfg: &config.Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, GatewayPublication: route, LocalEnvironmentPublicID: "runtime"}, sessions: map[string]*activeSession{"remote": {cancel: cancel, gatewayBindingPublicID: "binding", gatewayBindingGeneration: 1}}}
 	a.observeGatewayClosure(t.Context())
 	if !a.cfg.GatewayPublication.Revoked || !a.controlBusinessRejected || remote.Err() == nil {
 		t.Fatal("disk failure retained live access authority")

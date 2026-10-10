@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -22,9 +23,55 @@ import (
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	flowercontrol "github.com/floegence/flowersec/flowersec-go/v5/controlplane"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 )
+
+func TestDirectCloudChangesPreserveGatewayMembers(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := cloudLinkRemoteConfig(t, "")
+	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
+	member := gatewayfixture.Enroll(t, store, cfg.LocalEnvironmentPublicID)
+	cfg.Gateways = []*gatewaymembership.RuntimeConfig{member}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	a := newCloudLinkTestAgent(t, cfgPath, cfg)
+	if _, err := a.DisconnectCloud(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	detached := a.remoteConfigSnapshot()
+	if detached.LocalEnvironmentPublicID != member.RuntimePublicID || !reflect.DeepEqual(detached.Gateways, cfg.Gateways) {
+		t.Fatal("disconnect changed paired Runtime identity")
+	}
+	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// An independent reconnect may rotate credentials during the Cloud exchange.
+		a.mu.Lock()
+		next := *a.cfg
+		rotated := next.GatewayMember(member.GatewayID).Clone()
+		rotated.Revision++
+		next.SetGatewayMember(member.GatewayID, rotated)
+		if err := config.Save(cfgPath, &next); err != nil {
+			t.Error(err)
+		}
+		a.cfg = &next
+		a.mu.Unlock()
+		writeCloudRuntimeLinkResponse(t, w, r, "paired-runtime")
+	})
+	defer server.Close()
+	if _, err := a.ConnectCloud(t.Context(), CloudLinkRequest{CloudOrigin: server.URL, CloudID: "example_control_plane", EnvPublicID: "env_demo", RuntimeLinkTicket: "ticket-123", runtimeLinkHTTPClient: server.Client()}); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Gateways) != 1 || saved.Gateways[0].MemberID != member.MemberID || saved.Gateways[0].Revision != member.Revision+1 {
+		t.Fatal("Cloud connection overwrote concurrent Gateway progress")
+	}
+}
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 

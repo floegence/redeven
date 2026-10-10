@@ -38,7 +38,7 @@ type RuntimeControlServiceRoute =
   | 'v2/gateway/update-endpoints'
   | 'v2/gateway/status'
   | 'v2/gateway/retry'
-  | 'v2/gateway/leave'
+  | 'v2/gateway/leave' | 'v2/gateway/publish'
   | 'v2/tessiven/host'
   | 'v2/tessiven/resources'
 	| 'v2/cloud-link'
@@ -309,23 +309,27 @@ export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpo
   return (await requestRuntimeControl(endpoint, 'v2/tessiven/resources', { method: 'POST', body: payload, signal, timeoutMs: 30000 })).data;
 }
 
-export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, previewID?: string, choice?: 'preserve' | 'new'): Promise<GatewayMembershipStatus> {
-  if ((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') !== Boolean(previewID)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Confirmation requires a verified preview.');
+export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, previewID?: string, choice?: 'preserve' | 'new', gatewayID?: string, cloudImpactAcknowledged?: boolean): Promise<GatewayMembershipStatus> {
+  const confirming = ['join','replace','update-endpoints'].includes(operation);
+  if (confirming !== Boolean(previewID) || choice && operation !== 'publish') throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Confirmation requires a verified preview.');
   const result = (await requestRuntimeControl(endpoint, `v2/gateway/${operation}`, {
-    method: operation === 'status' ? 'GET' : 'POST', ...((operation === 'join' || operation === 'replace' || operation === 'update-endpoints') ? { body: { preview_id: previewID, ...(choice ? { environment_choice: choice } : {}) } } : {}), timeoutMs: 30_000,
-  })).data as Record<string, unknown> | undefined;
-  if (!result || !['not_joined', 'joining', 'gateway_offline', 'joined', 'reauthorization_required', 'removal_pending', 'cloud_denied', 'cloud_pending', 'cloud_control_offline', 'accessible', 'migration_pending'].includes(String(result.phase))
-    || typeof result.joined !== 'boolean') throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE', 'The Runtime did not return Gateway membership status.');
-  return { joined: result.joined, phase: result.phase as GatewayMembershipStatus['phase'],
-    ...(typeof result.gateway_id === 'string' ? { gateway_id: result.gateway_id } : {}),
-    ...(Array.isArray(result.endpoints) ? { endpoints: result.endpoints as GatewayMembershipStatus['endpoints'] } : {}),
-    ...(typeof result.last_endpoint_id === 'string' ? { last_endpoint_id: result.last_endpoint_id } : {}),
-    ...(typeof result.last_endpoint_id === 'string' ? { last_endpoint_id: result.last_endpoint_id } : {}),
-    ...(typeof result.member_id === 'string' ? { member_id: result.member_id } : {}),
-    ...(typeof result.existing_environment_id === 'string' ? { existing_environment_id: result.existing_environment_id } : {}),
-    ...(typeof result.publication_error_code === 'string' ? { publication_error_code: result.publication_error_code } : {}),
-    ...(typeof result.rejoin_required === 'boolean' ? { rejoin_required: result.rejoin_required } : {}),
-  };
+    method: operation === 'status' ? 'GET' : 'POST',
+    ...(operation === 'status' ? {} : {body: { ...(confirming ? {preview_id: previewID} : {}), ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(choice ? {environment_choice: choice} : {}), ...(cloudImpactAcknowledged ? {cloud_impact_acknowledged: true} : {}) }}), timeoutMs: 30_000,
+  })).data;
+  function parse(value: unknown, child = false): GatewayMembershipStatus {
+    const data = value as Record<string, unknown> | undefined;
+    if (!data || !['not_joined','joining','gateway_offline','joined','reauthorization_required','removal_pending','cloud_denied','cloud_pending','cloud_control_offline','accessible','migration_pending'].includes(String(data.phase)) || typeof data.joined !== 'boolean'
+      || child && (typeof data.gateway_id !== 'string' || typeof data.member_id !== 'string' || data.memberships !== undefined)
+      || data.memberships !== undefined && (!Array.isArray(data.memberships) || data.memberships.length > 16)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE','The Runtime did not return Gateway membership status.');
+    return {joined: data.joined, phase: data.phase as GatewayMembershipStatus['phase'],
+      ...Object.fromEntries(['gateway_id','gateway_name','last_endpoint_id','member_id','existing_environment_id','publication_error_code'].filter(key => typeof data[key] === 'string').map(key => [key,data[key]])),
+      ...(Array.isArray(data.endpoints) ? {endpoints: data.endpoints as GatewayMembershipStatus['endpoints']} : {}),
+      ...(typeof data.cloud_publication === 'boolean' ? {cloud_publication:data.cloud_publication} : {}),
+      ...(typeof data.rejoin_required === 'boolean' ? {rejoin_required:data.rejoin_required} : {}),
+      ...(Array.isArray(data.memberships) ? {memberships:data.memberships.map(item => parse(item,true))} : {}),
+    };
+  }
+  return parse(result);
 }
 
 export async function previewRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, input: GatewayPreviewInput): Promise<GatewayJoinPreview> {

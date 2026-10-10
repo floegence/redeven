@@ -2,6 +2,20 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  gatewayConnections: {
+    "unpairTitle": "Cancel Gateway pairing",
+    "unpair": "Cancel pairing",
+    "select": "Select Gateway",
+    "unpairImpact": "Access through this Gateway will end. Other connections stay available.",
+    "cloudImpact": "Redeven Cloud access through this Gateway will also be interrupted.",
+    "cloudChanged": "Cloud access changed. Close and reopen to review the impact.",
+    "publishTitle": "Publish through Gateway",
+    "publish": "Confirm publication",
+    "publishHelp": "Publish this Runtime to Redeven Cloud through this Gateway. Cloud approval is required.",
+    "empty": "No Gateway is paired.",
+    "unavailable": "Authorize Desktop on this Gateway to open Env App.",
+    "tab": "Gateway"
+},
   gatewayDiscovery: {
     local: "Local",
     useAddress: "Use",
@@ -57,7 +71,7 @@ export const enUS = {
     verifying: "Verifying…",
     verified: "Gateway verified. Review before enabling access.",
     confirmEnable: "Confirm and enable",
-    accessImpact: "This Runtime will route access through the Gateway. Desktop access authorization and Cloud publication approval remain separate. The Gateway cannot manage this Runtime.",
+    accessImpact: "Adds access through this Gateway. Cloud access and other pairings stay unchanged. Desktop authorization remains separate.",
     expired: "This code or verification has expired. Ask the administrator for a new code and verify again.",
     used: "This code has already been used. Ask the administrator for a new code.",
     identityFailed: "Gateway identity could not be verified. Check the address with its administrator.",

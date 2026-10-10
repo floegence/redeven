@@ -22,13 +22,14 @@ import (
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-// RuntimeConfig is the sole local Gateway membership. Optional Cloud binding
-// state must refer to this member instead of carrying a second Gateway route.
+// RuntimeConfig owns one independent Gateway membership. Optional Cloud binding
+// state refers to a selected member instead of carrying a second Gateway route.
 type RuntimeConfig struct {
 	Revision         uint64               `json:"revision"`
 	Leaving          bool                 `json:"leaving"`
 	ProtocolVersion  string               `json:"protocol_version"`
 	GatewayID        string               `json:"gateway_id"`
+	GatewayName      string               `json:"gateway_name,omitempty"`
 	GatewayEndpoints []gp.GatewayEndpoint `json:"gateway_endpoints,omitempty"`
 	LastEndpointID   string               `json:"last_endpoint_id,omitempty"`
 	// GatewayURL is read only during one-time v4 state migration.
@@ -134,7 +135,7 @@ func PrepareRuntime(invitation gp.EnrollmentDescriptor, runtimeID string, metada
 	if err := SignJoin(&request, key); err != nil {
 		return nil, err
 	}
-	return &RuntimeConfig{Revision: 1, ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, GatewayEndpoints: append([]gp.GatewayEndpoint(nil), invitation.Endpoints...), GatewayPublicKey: invitation.GatewayPublicKey, GatewayTLSRootPEM: invitation.GatewayTLSRootPEM, MemberID: memberID, RuntimePublicID: runtimeID, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), ClientPrivateKeyPEM: clientKey, Service: service, ServicePrivateKeyPEM: serviceKey, Delegation: delegation, PendingJoin: &request}, nil
+	return &RuntimeConfig{Revision: 1, ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, GatewayName: invitation.GatewayName, GatewayEndpoints: append([]gp.GatewayEndpoint(nil), invitation.Endpoints...), GatewayPublicKey: invitation.GatewayPublicKey, GatewayTLSRootPEM: invitation.GatewayTLSRootPEM, MemberID: memberID, RuntimePublicID: runtimeID, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), ClientPrivateKeyPEM: clientKey, Service: service, ServicePrivateKeyPEM: serviceKey, Delegation: delegation, PendingJoin: &request}, nil
 }
 
 // MigrateLegacyState converts one persisted v4 route into the v5 endpoint

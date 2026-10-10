@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/floegence/redeven/internal/gatewaymembership"
@@ -26,9 +27,11 @@ type GatewayPreview struct {
 
 type gatewayPreview struct {
 	GatewayPreview
-	descriptor gp.EnrollmentDescriptor
-	memberID   string
-	revision   uint64
+	descriptor        gp.EnrollmentDescriptor
+	memberID          string
+	revision          uint64
+	previousGatewayID string
+	confirmed         bool
 }
 
 // PreviewGateway leaves configuration, running transports and Cloud credentials
@@ -43,16 +46,19 @@ func (a *Agent) PreviewGateway(ctx context.Context, address, code, purpose strin
 		return GatewayPreview{}, gatewaymembership.ErrState
 	}
 	runtimeID, environmentID := a.cfg.LocalEnvironmentPublicID, a.cfg.EnvironmentID
-	current := a.cfg.Gateway.Clone()
+	current := a.cfg.GatewayMember("").Clone()
 	a.mu.Unlock()
-	if runtimeID == "" || purpose == "join" && current != nil || purpose != "join" && current == nil {
+	if runtimeID == "" || purpose == "replace" && current == nil {
 		return GatewayPreview{}, gatewaymembership.ErrConflict
 	}
 	descriptor, err := gatewaymembership.PreviewInvitation(ctx, address, code)
 	if err != nil {
 		return GatewayPreview{}, err
 	}
-	if purpose == "update-endpoints" && (descriptor.GatewayID != current.GatewayID || descriptor.GatewayPublicKey != current.GatewayPublicKey || descriptor.GatewayTLSRootPEM != current.GatewayTLSRootPEM) {
+	if purpose != "replace" {
+		current = a.GatewayMembership(descriptor.GatewayID)
+	}
+	if purpose == "update-endpoints" && (current == nil || descriptor.GatewayID != current.GatewayID || descriptor.GatewayPublicKey != current.GatewayPublicKey || descriptor.GatewayTLSRootPEM != current.GatewayTLSRootPEM) {
 		return GatewayPreview{}, gatewaymembership.ErrInvalidProof
 	}
 	raw := make([]byte, 32)
@@ -62,7 +68,7 @@ func (a *Agent) PreviewGateway(ctx context.Context, address, code, purpose strin
 	expires := min(descriptor.ExpiresAtUnixMS, time.Now().Add(5*time.Minute).UnixMilli())
 	preview := gatewayPreview{GatewayPreview: GatewayPreview{PreviewID: base64.RawURLEncoding.EncodeToString(raw), Purpose: purpose, GatewayID: descriptor.GatewayID, GatewayName: descriptor.GatewayName, TargetRuntimeID: runtimeID, ExpiresAtUnixMS: expires, ExistingEnvironmentID: environmentID}, descriptor: descriptor}
 	if current != nil {
-		preview.memberID, preview.revision = current.MemberID, current.Revision
+		preview.memberID, preview.revision, preview.previousGatewayID = current.MemberID, current.Revision, current.GatewayID
 	}
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
@@ -98,14 +104,34 @@ func (a *Agent) ConfirmGatewayPreview(previewID, purpose, choice string) error {
 		a.mu.Unlock()
 		return ErrGatewayPreviewChanged
 	}
-	current := a.cfg.Gateway.Clone()
-	sameEnvironment := a.cfg.EnvironmentID == preview.ExistingEnvironmentID
-	choiceMatches := a.cfg.GatewayEnvironmentChoice == choice
+	id := preview.GatewayID
+	if purpose == "replace" {
+		id = preview.previousGatewayID
+		if len(a.cfg.Gateways) != 1 {
+			a.mu.Unlock()
+			return ErrGatewayPreviewChanged
+		}
+		if committed := a.cfg.GatewayMember(preview.GatewayID); committed != nil && committed.Delegation.InvitationID == preview.descriptor.InvitationID && choice == "" {
+			a.mu.Unlock()
+			return nil
+		}
+	}
+	current := a.cfg.GatewayMember(id).Clone()
+	if choice != "" {
+		a.mu.Unlock()
+		return gatewaymembership.ErrState
+	}
 	a.mu.Unlock()
-	if purpose != "update-endpoints" && current != nil && current.Delegation.InvitationID == preview.descriptor.InvitationID && choiceMatches {
+	if purpose != "update-endpoints" && current != nil && current.Delegation.InvitationID == preview.descriptor.InvitationID {
 		return nil
 	}
-	if !sameEnvironment || current == nil && preview.memberID != "" || current != nil && (current.MemberID != preview.memberID || current.Revision != preview.revision) {
+	if purpose == "update-endpoints" && preview.confirmed {
+		if current != nil && !current.Leaving && current.MemberID == preview.memberID && slices.Equal(current.GatewayEndpoints, preview.descriptor.Endpoints) {
+			return nil
+		}
+		return ErrGatewayPreviewChanged
+	}
+	if current == nil && preview.memberID != "" || current != nil && (current.MemberID != preview.memberID || current.Revision != preview.revision) {
 		return ErrGatewayPreviewChanged
 	}
 	switch purpose {
@@ -114,10 +140,12 @@ func (a *Agent) ConfirmGatewayPreview(previewID, purpose, choice string) error {
 	case "replace":
 		return a.changeGateway(preview.descriptor, choice, true)
 	case "update-endpoints":
-		if choice != "" {
-			return gatewaymembership.ErrState
+		if err := a.updateGatewayEndpoints(preview.descriptor); err != nil {
+			return err
 		}
-		return a.updateGatewayEndpoints(preview.descriptor)
+		preview.confirmed = true
+		a.gatewayMember.previews[previewID] = preview
+		return nil
 	default:
 		return gatewaymembership.ErrState
 	}

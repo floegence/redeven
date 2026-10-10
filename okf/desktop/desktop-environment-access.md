@@ -3,13 +3,14 @@ type: Desktop Contract
 title: Verified Environment access routes
 description: Associate Gateway routes with a known Runtime without combining Cloud ownership, management rights or login sessions.
 tags: [desktop, gateway, runtime, identity, access]
-timestamp: 2026-10-05T00:00:00Z
+timestamp: 2026-10-10T00:00:00Z
 ---
 # Summary
 
 Desktop owns display association and default access selection. A Gateway member route
-joins an existing Runtime card only after the main process verifies possession
-of the same Runtime state identity over the selected transport. Names, URLs,
+joins an existing Runtime card only after the main process matches its member ID,
+Runtime public ID and paired Gateway key against the trusted Runtime management
+snapshot. Public health observations remain independently verified. Names, URLs,
 catalog availability and renderer claims never establish this relationship.
 Existing Local / Redeven Cloud binding and ownership remain independent.
 An unverified or changed route stays separate; a missing saved default requires
@@ -56,8 +57,10 @@ not inferred from a retained identity observation.
 Gateway access members attach to the chosen original Runtime card, preferring
 an owner already linked to Cloud. Original registrations, lifecycle owners and
 Cloud perspectives remain intact. Independently registered direct management
-owners keep their cards and settings. Gateway members extend the existing split
-menu and connection settings; they never add owner tabs or a new card row.
+owners keep their cards and settings. Gateway members share one Gateway tab inside the original card, extending its
+existing split menu and connection settings without adding a duplicate card.
+The trusted association is available before public health probing and does not
+fabricate or persist a public health identity.
 Without a verified counterpart, the Gateway entry retains its own card.
 [Environment library](desktop-environment-library.md) owns Local / Cloud exact
 binding, card layout, search and perspective selection.
@@ -94,10 +97,10 @@ owns transport isolation and same-route session reuse.
 
 ## Membership discovery and migration
 
-Members are discovered from the signed v4 directory. Desktop can verify public
+Members are discovered from the signed v5 directory and matched to trusted Runtime membership summaries. Desktop can verify public
 Runtime health only through an authorized reverse connection with the signed
 member TLS identity. No draft URL probe or target enrollment form exists.
-Public health proof continues to associate display cards only; it cannot merge
+Public health proof remains an observation; neither it nor the management display association can merge
 Cloud environments, approve publication, or grant Runtime management.
 
 The one-time Gateway schema migration removes legacy URL entries, observations

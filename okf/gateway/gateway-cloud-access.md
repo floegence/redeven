@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway Cloud access
 description: Publish unified members with Namespace authorization and independent Runtime credentials.
 tags: [gateway, cloud, security, networking, identity]
-timestamp: 2026-10-07T00:00:00Z
+timestamp: 2026-10-10T00:00:00Z
 ---
 # Summary
 
@@ -13,6 +13,8 @@ Gateway Cloud v2 projects the single local member directory into Cloud. Runtime 
 
 ## Publish a member
 
+Runtime pairing and Cloud publication are separate local actions. `join` adds only Gateway access. `publish` selects one paired member as the Cloud path; existing Cloud identity requires an explicit preserve/new decision in this publication flow. Adding or removing another member leaves this selection and credential recovery intact. Direct Cloud connection and disconnection also preserve independent Gateway members and their Runtime identity. Only removal of the selected member requires explicit Cloud interruption consent, checked atomically by Runtime against current ownership.
+
 Gateway binds to one Cloud and Namespace using a stable machine claim and a separate rotating Cloud identity. The local member delegation permits later publication without a second local Cloud enrollment. Gateway policy, independent Runtime proof and versioned directory observation must all agree. Cloud challenges bind purpose, Cloud, Namespace, Gateway, Runtime, expiry and binding generation. Only an authenticated Gateway directory observation allocates a candidate member slot. Initial Runtime proof waits for that observation; retries do not allocate unobserved candidates. Historical unobserved proofs retain their evidence but consume no member or egress capacity. Directory metadata alone cannot create an environment or obtain Runtime credentials.
 
 Manual mode exposes eligible candidates to Namespace administrators. Automatic mode also requires an explicit Namespace grant for that Gateway; a local mode switch cannot grant it. Both modes use the same idempotent publication and credential delivery business logic. Explicit unpublication is never automatically reversed. Cloud-generated invitations are commands to an online Gateway; Cloud cannot mint a second local membership credential.
@@ -21,7 +23,7 @@ Formal environment identity and display names remain Metaserver-owned. Gateway m
 
 ## Required network path
 
-Runtime control registration, credential recovery, data transport and enabled official-platform AI requests use the sole member's explicit proxy path. Gateway resolves approved Cloud, Region and Tunnel destinations. Runtime validates the inner destination TLS certificate. Unsupported transport candidates are removed before dialing; Gateway failure never falls back to direct Internet or global proxy environment variables. Custom Tunnel destinations require existing authoritative approval and billing rules. User programs' general egress is outside this contract.
+Runtime control registration, credential recovery, data transport and enabled official-platform AI requests use the explicitly selected Cloud member's proxy path. Gateway resolves approved Cloud, Region and Tunnel destinations. Runtime validates the inner destination TLS certificate. Unsupported transport candidates are removed before dialing; Gateway failure never falls back to direct Internet or global proxy environment variables. Custom Tunnel destinations require existing authoritative approval and billing rules. User programs' general egress is outside this contract.
 
 ## Recovery, replacement and migration
 
@@ -29,7 +31,7 @@ Control credentials are replenished normally. After depletion the dedicated Runt
 
 Changing Gateway is explicit. Preserving `env_public_id` requires proof of the original binding and a new locally confirmed member delegation. Ordinary user-to-Namespace conversion additionally requires current user binding confirmation and displays ownership transfer. Cross-Namespace name, address or public-health matches never merge environments. A successful transition advances generation and disables old-path recovery.
 
-The cutover fences old Cloud-only configurations and marks retained Cloud records as requiring rejoin. Old proof can remain only as migration evidence; it cannot start the retired access path. Without valid evidence, use explicit reauthorization or a new environment. Runtime Service compatibility epoch 42 and v2 Cloud contracts require matching clients.
+The cutover fences old Cloud-only configurations and marks retained Cloud records as requiring rejoin. Old proof can remain only as migration evidence; it cannot start the retired access path. Without valid evidence, use explicit reauthorization or a new environment. Runtime Service compatibility epoch 48 adds member collections, explicit publication and targeted removal; v2 Cloud approval and identity contracts remain unchanged.
 
 ## Revocation and truthful receipts
 
@@ -49,7 +51,8 @@ Namespace and Cloud own publication approval and formal environment identity; Ga
 - `redeven:internal/gatewaycloud/protocol/testdata/wire-v2.json` — Shared cross-repository wire fixture.
 - `redeven:internal/gatewaycloud/gateway_denial_test.go` — Denial ordering, lost readback and explicit republication boundary.
 - `redeven:internal/gatewaycloud/gateway.go` — Machine association and directory synchronization.
-- `redeven:internal/agent/gateway_cloud_join.go` — Independent Runtime proof and credential delivery.
+- `redeven:internal/agent/gateway_cloud_join.go` — Independent Runtime proof and credential delivery for the selected member.
+- `redeven:internal/agent/gateway_membership.go` — Targeted unpairing with atomic Cloud impact consent.
 - `redeven:internal/agent/gateway_closure_delivery_test.go` — Durable receipts and disk-failure fencing.
 - `redeven:internal/gatewaycloud/closure_relay_test.go` — Historical receipt destination confinement.
 - `redeven:internal/config/gateway_migration.go` — One-time retired-state migration.

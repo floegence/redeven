@@ -19447,7 +19447,7 @@ async function runGatewayCloudActionFromLauncher(request: Extract<DesktopLaunche
 }
 
 async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'manage_runtime_gateway' }>): Promise<DesktopLauncherActionResult> {
-  const mutating = request.operation !== 'status' && request.operation !== 'preview';
+  const mutating = request.operation === 'publish' || request.operation === 'replace' || request.operation === 'leave' && request.cloud_impact_acknowledged === true;
   if (mutating && explicitCloudLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('cloud_link_failed', 'environment', 'A Cloud connection action is already in progress.');
   if (mutating) {
     explicitCloudLinkTargets.add(request.runtime_target_id);
@@ -19467,7 +19467,7 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
       if (!providerRuntimeTargetIsCurrent(target)) return { ...launcherActionFailure('cloud_link_failed','environment','The Runtime connection changed. Verify again.'), gateway_error_code: 'GATEWAY_PREVIEW_CHANGED' };
       return { ...launcherActionSuccess('gateway_membership_updated'), gateway_preview: preview };
     }
-    const result = await manageRuntimeGateway(endpoint, request.operation, request.preview_id, request.environment_choice);
+    const result = await manageRuntimeGateway(endpoint, request.operation, request.preview_id, request.environment_choice, request.gateway_id, request.cloud_impact_acknowledged);
     if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');
     return { ...launcherActionSuccess('gateway_membership_updated'), gateway_membership: result };
   } catch (error) {

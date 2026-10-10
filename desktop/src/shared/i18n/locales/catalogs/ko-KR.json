@@ -3144,7 +3144,7 @@
     "verifying": "검증 중…",
     "verified": "Gateway를 검증했습니다. 접속 정보를 확인한 후 활성화하세요.",
     "confirmEnable": "확인 후 활성화",
-    "accessImpact": "이 런타임에 대한 접근은 Gateway를 통해 이루어집니다. Desktop 접근 권한과 Cloud 게시 승인은 각각 필요합니다. Gateway는 이 런타임을 관리할 수 없습니다.",
+    "accessImpact": "이 Gateway를 통한 접근을 추가합니다. Cloud와 다른 페어링은 유지됩니다. Desktop 접근은 별도 승인이 필요합니다.",
     "expired": "코드 또는 검증 결과가 만료되었습니다. 관리자에게 새 코드를 요청하고 다시 검증하세요.",
     "used": "이미 사용된 코드입니다. 관리자에게 새 코드를 요청하세요.",
     "identityFailed": "Gateway 신원을 검증할 수 없습니다. 관리자에게 주소를 확인하세요.",
@@ -3276,5 +3276,19 @@
     "saving": "저장 중…",
     "saved": "네트워크 설정을 저장했습니다.",
     "restartRequired": "저장된 바인딩 주소를 적용하려면 Gateway를 재시작하세요."
+  },
+  "gatewayConnections": {
+    "unpairTitle": "Gateway 페어링 해제",
+    "unpair": "페어링 해제",
+    "select": "Gateway 선택",
+    "unpairImpact": "이 Gateway를 통한 접근이 종료됩니다. 다른 연결은 유지됩니다.",
+    "cloudImpact": "이 Gateway를 통한 Redeven Cloud 접근도 중단됩니다.",
+    "cloudChanged": "Cloud 접근이 변경되었습니다. 다시 열어 영향을 확인하세요.",
+    "publishTitle": "Gateway를 통해 게시",
+    "publish": "게시 확인",
+    "publishHelp": "이 Gateway를 통해 런타임을 Redeven Cloud에 게시합니다. Cloud 승인이 필요합니다.",
+    "empty": "페어링된 Gateway가 없습니다.",
+    "unavailable": "Env App을 열려면 이 Gateway에서 Desktop 접근을 승인하세요.",
+    "tab": "Gateway"
   }
 }

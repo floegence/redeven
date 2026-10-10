@@ -3144,7 +3144,7 @@
     "verifying": "検証中…",
     "verified": "Gateway を検証しました。接続情報を確認してから有効にしてください。",
     "confirmEnable": "確認して有効化",
-    "accessImpact": "このランタイムへのアクセスは Gateway を経由します。Desktop のアクセス認可と Cloud の公開承認はそれぞれ必要です。Gateway はこのランタイムを管理できません。",
+    "accessImpact": "この Gateway 経由のアクセスを追加します。Cloud と他のペアリングは維持されます。Desktop の認可は別途必要です。",
     "expired": "コードまたは検証結果の有効期限が切れました。管理者から新しいコードを入手して再検証してください。",
     "used": "このコードは使用済みです。管理者から新しいコードを入手してください。",
     "identityFailed": "Gateway の身元を検証できません。管理者にアドレスを確認してください。",
@@ -3276,5 +3276,19 @@
     "saving": "保存中…",
     "saved": "ネットワーク設定を保存しました。",
     "restartRequired": "保存したバインドアドレスを適用するには Gateway を再起動してください。"
+  },
+  "gatewayConnections": {
+    "unpairTitle": "Gateway のペアリングを解除",
+    "unpair": "ペアリングを解除",
+    "select": "Gateway を選択",
+    "unpairImpact": "この Gateway 経由のアクセスを終了します。他の接続は維持されます。",
+    "cloudImpact": "この Gateway 経由の Redeven Cloud アクセスも中断されます。",
+    "cloudChanged": "Cloud アクセスが変更されました。開き直して影響を確認してください。",
+    "publishTitle": "Gateway 経由で公開",
+    "publish": "公開を確認",
+    "publishHelp": "この Gateway 経由でランタイムを Redeven Cloud に公開します。Cloud の承認が必要です。",
+    "empty": "ペアリング済みの Gateway はありません。",
+    "unavailable": "Env App を開くには、この Gateway で Desktop を認可してください。",
+    "tab": "Gateway"
   }
 }

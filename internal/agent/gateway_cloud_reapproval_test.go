@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 	"path/filepath"
 	"testing"
@@ -19,7 +20,7 @@ func TestGatewayReapprovalAdoptsOnlySamePathAndRetiresOldCredentials(t *testing.
 	member := gatewayfixture.Enroll(t, store, "runtime")
 	requestID := gc.CandidateID("gateway", member.MemberID)
 	binding := gc.Binding{MemberID: member.MemberID, MemberVersion: member.MemberVersion, PublicID: "binding", EnvPublicID: "env", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Region: "sg", Generation: 1, State: "active"}
-	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateway: member, LocalEnvironmentPublicID: member.RuntimePublicID, BindingGeneration: 1, ControlArtifactPool: config.NewControlArtifactPool(1), GatewayPublication: &gatewaycloud.RuntimeConfig{MemberID: member.MemberID, MemberVersion: member.MemberVersion, RequestPublicID: requestID, GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Binding: &binding, Revoked: true, DeliveryRequestID: "retired"}}}
+	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, LocalEnvironmentPublicID: member.RuntimePublicID, BindingGeneration: 1, ControlArtifactPool: config.NewControlArtifactPool(1), GatewayPublication: &gatewaycloud.RuntimeConfig{MemberID: member.MemberID, MemberVersion: member.MemberVersion, RequestPublicID: requestID, GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Binding: &binding, Revoked: true, DeliveryRequestID: "retired"}}}
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)

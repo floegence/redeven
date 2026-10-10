@@ -7,32 +7,35 @@ import (
 )
 
 var configKnownJSONFields = map[string]struct{}{
-	"remote_desktop":              {},
-	"cloud_origin":                {},
-	"access_point_origin":         {},
-	"cloud_id":                    {},
-	"environment_id":              {},
-	"local_environment_public_id": {},
-	"binding_generation":          {},
-	"agent_instance_id":           {},
-	"direct":                      {},
-	"gateway":                     {},
-	"gateway_migration_evidence":  {},
-	"gateway_rejoin_required":     {},
-	"gateway_removal_outbox":      {},
-	"gateway_closure_outbox":      {},
-	"gateway_environment_choice":  {},
-	"gateway_publication":         {},
-	"control_artifact_pool":       {},
-	"ai":                          {},
-	"permission_policy":           {},
-	"agent_home_dir":              {},
-	"filesystem_scope":            {},
-	"shell":                       {},
-	"log_format":                  {},
-	"log_level":                   {},
-	"code_server_port_min":        {},
-	"code_server_port_max":        {},
+	"remote_desktop":                    {},
+	"cloud_origin":                      {},
+	"access_point_origin":               {},
+	"cloud_id":                          {},
+	"environment_id":                    {},
+	"local_environment_public_id":       {},
+	"binding_generation":                {},
+	"agent_instance_id":                 {},
+	"direct":                            {},
+	"gateway":                           {},
+	"gateways":                          {},
+	"gateway_membership_schema_version": {},
+	"gateway_cloud_member_id":           {},
+	"gateway_migration_evidence":        {},
+	"gateway_rejoin_required":           {},
+	"gateway_removal_outbox":            {},
+	"gateway_closure_outbox":            {},
+	"gateway_environment_choice":        {},
+	"gateway_publication":               {},
+	"control_artifact_pool":             {},
+	"ai":                                {},
+	"permission_policy":                 {},
+	"agent_home_dir":                    {},
+	"filesystem_scope":                  {},
+	"shell":                             {},
+	"log_format":                        {},
+	"log_level":                         {},
+	"code_server_port_min":              {},
+	"code_server_port_max":              {},
 }
 
 type configJSON Config
@@ -48,6 +51,10 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if err := (*Config)(&retired).retireLegacyGateway(raw); err != nil {
+		return err
+	}
+	memberMigrated, err := migrateGatewayMembers(raw)
+	if err != nil {
 		return err
 	}
 	if retired.gatewayConfigMigrated {
@@ -77,8 +84,14 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	}
 
 	*c = Config(decoded)
-	if c.Gateway != nil && c.Gateway.MigrateLegacyState() {
-		c.gatewayConfigMigrated = true
+	c.gatewayConfigMigrated = c.gatewayConfigMigrated || memberMigrated
+	for _, member := range c.Gateways {
+		if member == nil {
+			return fmt.Errorf("missing Gateway membership")
+		}
+		if member.MigrateLegacyState() {
+			c.gatewayConfigMigrated = true
+		}
 	}
 	// json.RawMessage encodes a nil value as the literal `null`. Keep terminal
 	// artifact tombstones truly byte-empty after a restart so validation cannot
@@ -194,5 +207,40 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		}
 		out[key] = value
 	}
+	out["gateway_membership_schema_version"] = json.RawMessage("2")
 	return json.Marshal(out)
+}
+
+// The v1 singleton becomes the v2 collection without changing credentials,
+// pending deliveries, or the already approved Cloud publication owner.
+func migrateGatewayMembers(raw map[string]json.RawMessage) (bool, error) {
+	version := 1
+	if encoded, ok := raw["gateway_membership_schema_version"]; ok {
+		if json.Unmarshal(encoded, &version) != nil || version < 1 || version > 2 {
+			return false, fmt.Errorf("unsupported Gateway membership schema")
+		}
+	}
+	legacy, old := raw["gateway"]
+	if version == 2 {
+		if old {
+			return false, fmt.Errorf("singleton Gateway in current membership schema")
+		}
+		return false, nil
+	}
+	if _, exists := raw["gateways"]; exists {
+		return false, fmt.Errorf("Gateway membership schema drift")
+	}
+	if old && !bytes.Equal(bytes.TrimSpace(legacy), []byte("null")) {
+		var member struct {
+			MemberID string `json:"member_id"`
+		}
+		if err := json.Unmarshal(legacy, &member); err != nil || member.MemberID == "" {
+			return false, fmt.Errorf("invalid legacy Gateway member")
+		}
+		raw["gateways"] = append(append([]byte("["), legacy...), ']')
+		raw["gateway_cloud_member_id"], _ = json.Marshal(member.MemberID)
+	}
+	delete(raw, "gateway")
+	raw["gateway_membership_schema_version"] = json.RawMessage("2")
+	return old, nil
 }

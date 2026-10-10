@@ -26,3 +26,11 @@ describe('access routes in the existing Env split button', () => {
   expect(result.primary_action.enabled).toBe(false);
  });
 });
+
+it('keeps a Gateway perspective on its own member route despite the Runtime default',()=>{
+ const {runtime}=linkedEnvironmentFixture();
+ const entry={...runtime,kind:'gateway_environment' as const,default_access_route_id:'direct',access_routes:[{id:'direct',environment_id:runtime.id,kind:'direct' as const,label:'Local',is_open:false}]};
+ const presentation=buildProviderBackedEnvironmentActionModel(entry).action_presentation;
+ expect(environmentAccessPresentation(entry,presentation,i18n)).toBe(presentation);
+ expect(presentation.primary_action.access_route_id).toBeUndefined();
+});
