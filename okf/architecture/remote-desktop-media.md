@@ -102,6 +102,19 @@ a separate host condition and never trigger a silent capture-backend switch.
 Disconnect, session/VT transition, service stop and attachment replacement also
 release held input before the next owner is admitted.
 
+## Physical Scanout Formats
+
+The unprivileged DRM converter retains the producer's DMA-BUF descriptor.
+For the qualified legacy Rockchip SDR layout only, it imports single-plane XR24
+with modifier `0x0800000000000051` as canonical AB24 and labels the validated
+linear result XB24. The existing pixel owner restores BGRx exactly once. This
+does not alter the exported descriptor or introduce another capture backend.
+Other drivers, modifiers, HDR and multiplane buffers keep their native format.
+Failed imports retain their real errno; a successful but invalid output fails
+with `ENOTSUP`. Converter-owned output remains owned by its context.
+The [orange AFBC record](../operations/remote-desktop-orange-afbc-results.md)
+owns producer-source, pixel and physical-host evidence for this narrow mapping.
+
 # Boundaries
 
 Synthetic encoder probes and browser preferences are capabilities, not hardware
@@ -115,5 +128,6 @@ belongs upstream; the host must not add a duplicate implementation.
 - Published `floe-native-apps` `host_desktop_media.py`, `host_desktop_pipewire.py` and `host_desktop_portal.py`: capture, refinement admission, cursor metadata and bounded input.
 - Published `floe-native-apps` `host_desktop_drm.py`, `hostdesktop/login_seat_linux.go`, `hostdesktop/login_service_linux.go` and `hostdesktop/login_media_linux.go`: separate DRM cursor capture, live logind/compositor checks, uinput authority ownership and bounded media attachment.
 - Published `floe-native-apps` `host_desktop_player.mjs` and `native/host-desktop/nvenc.c`: player queues and NVIDIA worker.
+- Published `floe-native-apps` `native/host-desktop/drm/worker.c`, `scanout_format.h` and `host_desktop_drm_native_test.py`: bounded scanout normalization, conversion errors and descriptor cleanup.
 - `internal/remotedesktop/socket_test.go`: transport preserves current-frame cursor presentation and attachment authority.
 - `internal/envapp/ui_src/scripts/checkRemoteDesktopViewer.mjs`: published-player cursor and input behavior.

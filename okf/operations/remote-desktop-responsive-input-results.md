@@ -13,10 +13,10 @@ bounded pointer submission and local text mode. The
 authority; the [viewer contract](../architecture/remote-desktop-viewer.md) owns
 input modes. Locks remain physical-only; generation and mode changes revoke
 input. This record qualifies document contents, DRM feedback and encoded-frame
-arrival separately. The supported udesk26 path passes functional qualification. Orange's current
-Wayland scanout cannot be imported by either installed EGL driver. Its functional
-and latency qualification remains incomplete; this record does not claim that
-all performance targets passed.
+arrival separately. The udesk26 path passes functional qualification. The
+[orange AFBC record](remote-desktop-orange-afbc-results.md) owns the later
+Wayland import repair and native lock/unlock qualification. Native qualification
+does not establish complete Viewer or performance acceptance.
 
 # Contract
 
@@ -75,28 +75,15 @@ HTTP/2 stream teardown. The fix closes composed stdio before HTTP/2 and lets
 connection destruction own stream cleanup. The deterministic active-stream test
 failed before the fix; the subsequent real Env App update succeeded.
 
-Orange now uses Wayland. Its exporter passes one DMA-BUF successfully, but the
-UID-1000 converter returns `-ENOTSUP`. Independent GBM probes initialize both
-installed Mesa and Mali EGL drivers; both reject the actual XR24 scanout modifier
-`0x800000000000051` with `EGL_BAD_MATCH`. Neither advertises that modifier. This
-establishes the current driver/scanout boundary, not permanent hardware
-impossibility. No drivers, compositor policy, Portal approval or private desktop
-were changed. Env App shows this precise reason in its current step and offers
-Refresh. Connect appears only after capability becomes available. Orange's
-post-reboot input, lock/unlock and latency remain unqualified; earlier X11
-measurements apply only to that setup.
-
-After a physical monitor was attached, a fresh SSH probe confirmed an active
-1920x1080 Wayland CRTC on HDMI-A-2; its XR24 framebuffer still uses modifier
-`0x800000000000051`. The root exporter transferred its DMA-BUF, while the
-UID-1000 Mesa/Rockchip converter returned `-ENOTSUP` and EGL import returned
-`EGL_BAD_MATCH`. A separate UID-1000 probe imported the same buffer through the
-host's installed RGA library, but RGA3 and RGA2 submission both failed with
-`Invalid argument`; the kernel logged `invalid function policy`. Thus the
-connected display fixes the inactive-output condition but does not make this
-scanout convertible. No full desktop frame or input session could be qualified
-on orange in this configuration. No display content was retained by the RGA
-probe.
+Orange's post-reboot Wayland exporter transferred its XR24 AFBC DMA-BUF, but
+both installed EGL drivers rejected the original import format. Subsequent
+source inspection and real pixels proved that canonical AB24 import succeeds
+with a bounded component-order normalization. The earlier conclusion that the
+scanout was not convertible was incomplete. The
+[orange AFBC record](remote-desktop-orange-afbc-results.md) owns the exact layout,
+repair and current physical-host evidence; these older X11 measurements do not
+qualify that Wayland setup. No driver, display policy or target Portal consent
+was changed.
 
 The stalled-ticket/control fixture fails before the Viewer timeout fix and
 passes afterward. Initial connection and frame recovery share a ten-second
@@ -148,8 +135,9 @@ Released `physical-only` mode fixes orange's earlier lock-screen IME leak.
 It disables the editor and sends hardware key codes
 from the non-editable surface. Chromium/WebKit/Firefox upstream tests cover IME,
 empty codes, stale composition and release without weakening ordinary text
-input. udesk26 verified physical unlock; orange still needs the post-reboot
-invalid/valid unlock round once capture is supported.
+input. udesk26 verified physical unlock. Orange's subsequent native invalid/valid
+unlock and successor-generation round is recorded in the AFBC qualification;
+its complete Desktop SSH Viewer acceptance remains a separate requirement.
 
 # Boundaries
 
