@@ -3,7 +3,7 @@ type: Qualification Record
 title: Physical desktop responsiveness and local input
 description: Assess physical-seat input and DRM capture on orange and udesk26, distinguishing host feedback from client presentation.
 tags: [desktop, input, drm, latency, qualification]
-timestamp: 2026-10-10T11:00:00Z
+timestamp: 2026-10-10T11:33:00Z
 ---
 # Summary
 
@@ -85,6 +85,18 @@ were changed. Env App shows this precise reason in its current step and offers
 Refresh. Connect appears only after capability becomes available. Orange's
 post-reboot input, lock/unlock and latency remain unqualified; earlier X11
 measurements apply only to that setup.
+
+After a physical monitor was attached, a fresh SSH probe confirmed an active
+1920x1080 Wayland CRTC on HDMI-A-2; its XR24 framebuffer still uses modifier
+`0x800000000000051`. The root exporter transferred its DMA-BUF, while the
+UID-1000 Mesa/Rockchip converter returned `-ENOTSUP` and EGL import returned
+`EGL_BAD_MATCH`. A separate UID-1000 probe imported the same buffer through the
+host's installed RGA library, but RGA3 and RGA2 submission both failed with
+`Invalid argument`; the kernel logged `invalid function policy`. Thus the
+connected display fixes the inactive-output condition but does not make this
+scanout convertible. No full desktop frame or input session could be qualified
+on orange in this configuration. No display content was retained by the RGA
+probe.
 
 The stalled-ticket/control fixture fails before the Viewer timeout fix and
 passes afterward. Initial connection and frame recovery share a ten-second
