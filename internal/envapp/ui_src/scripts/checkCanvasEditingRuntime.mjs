@@ -257,6 +257,11 @@ try {
     const viewportHeight = await page.evaluate(() => innerHeight);
     assert(composer.y >= 0 && composer.y + composer.height <= viewportHeight, 'Short window keeps the complete composer in view');
     report.scenarios.push('short-window-composer-visible');
+    await app.evaluate(({ BrowserWindow }, url) => {
+      const window = BrowserWindow.getAllWindows().find(window => window.webContents.getURL() === url);
+      window.setContentSize(1280, 800);
+    }, page.url());
+    await page.waitForFunction(() => innerHeight >= 800);
   }
   await page.reload();
   if (welcome) {
