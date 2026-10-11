@@ -65,6 +65,8 @@ async function setTheme(page, mode, preset) {
 const routingThemes = [['light', 'porcelain-light'], ['dark', 'porcelain-dark'], ['light', 'hc-light']];
 async function verifyCanvasNavigation(page, name) {
   const count = await page.locator('.tessiven-node').count();
+  const palettePaths = await page.locator('.floe-graph__minimap path').count();
+  assert.ok(palettePaths > 1, 'The overview distinguishes topology colors');
   await page.getByRole('button', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Collapse all', exact: true }).click();
   await until(async () => await page.locator('.tessiven-node').count() === 0, 'native bulk collapse');
@@ -81,7 +83,7 @@ async function verifyCanvasNavigation(page, name) {
     await page.keyboard.press('Escape');
   }
   const overview = page.getByRole('region', { name: 'Canvas overview', exact: true });
-  assert.equal(await overview.locator('path').count(), 3);
+  assert.equal(await overview.locator('path').count(), palettePaths, 'Restored inventory retains its overview palette');
   const transform = () => page.locator('.floe-infinite-canvas__viewport').evaluate(node => node.style.transform);
   const before = await transform();
   const box = await overview.boundingBox();
