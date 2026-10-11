@@ -19334,7 +19334,7 @@
         "title": "Tessiven DSL versioning",
         "type": "Architecture Contract"
       },
-      "body_length": 6641,
+      "body_length": 6954,
       "summary": "The Runtime owns Tessiven DSL schema selection and explicit forward migrations.\nNew documents use `apiVersion: redeven.io/tessiven/v1.1.0`. Supported legacy\n`redeven.io/tessiven/v1` and `v1.0.0` remain readable through the reviewed\n`v1 -\u003e v1.0.0 -\u003e v1.1.0` chain. Each edge updates only the version scalar;\nnew group packing rules are opt-in and older documents retain automatic layout. Reads project current structured data while preserving historical YAML,\ndigest and revision identity. Authorized edits save a new current snapshot.\nUnknown versions, invalid source/target documents or migration failures leave\nstored data intact; users need a compatible Runtime or a valid repair.",
       "sections": [
         {
@@ -19355,8 +19355,8 @@
           "id": "schema-and-flower-contract",
           "title": "Schema And Flower Contract",
           "level": 1,
-          "body": "`tessiven.schema` and `GET /schema` default to the current frozen schema. The\noptional tool `version` or HTTP `?version=` requests an exact supported DSL\nschema; unknown versions are errors. Existing read permissions still apply.\nFlower creates current DSL documents and edits exact historical YAML; it relies\non Runtime migration instead of manually relabeling versions. Unsupported\nversions require an upgraded compatible Runtime. Historical placement repairs\nmust be evidence-backed under the\n[Flower contract](../ai/tessiven-flower-and-operations.md).",
-          "char_count": 555
+          "body": "`tessiven.schema` and `GET /schema` default to the current frozen schema. The\noptional tool `version` or HTTP `?version=` requests an exact supported DSL\nschema; unknown versions are errors. Existing read permissions still apply.\nFlower creates current DSL documents and edits exact historical YAML; it relies\non Runtime migration for edits valid under their source schema. Unsupported\nversions require an upgraded compatible Runtime. Historical placement repairs\nmust be evidence-backed under the\n[Flower contract](../ai/tessiven-flower-and-operations.md).\n\nNew vocabulary must be validated under its defining schema. An exact edit that\nadds `groupLayouts` to a historical source includes the reviewed version-header\nupgrade in the same atomic edit batch. Ordinary edits valid in the original\nschema continue to upgrade automatically; no historical YAML is rewritten.",
+          "char_count": 868
         }
       ],
       "evidence": [
@@ -36386,5 +36386,5 @@
       ]
     }
   ],
-  "source_sha256": "0b76c2bc1c497ac5cc3d63effa64c73a14a5e3c90593080efacdfe222b0f5adf"
+  "source_sha256": "d36517288c4d3a6ced1ed51f9f99e2fe82d9ac71f5f32eba6985773c4f985df8"
 }

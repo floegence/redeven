@@ -1,4 +1,4 @@
-apiVersion: redeven.io/tessiven/v1.0.0
+apiVersion: redeven.io/tessiven/v1.1.0
 kind: ServiceCanvas
 metadata:
   title: Commerce / Example

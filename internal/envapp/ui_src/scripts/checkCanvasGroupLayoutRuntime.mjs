@@ -49,6 +49,9 @@ const provider = http.createServer(async (request, response) => {
   try {
     let raw = ''; for await (const chunk of request) raw += chunk;
     const input = JSON.parse(raw);
+    report.tool_results ??= [];
+    for (const item of input.input ?? []) if (item.type === 'function_call_output')
+      if (!report.tool_results.some(result => result.call_id === item.call_id)) report.tool_results.push(item);
     response.setHeader('Content-Type', 'text/event-stream');
     const send = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
     const command = input.tools?.some(tool => tool.name === 'tessiven_edit') ? commands.shift() : undefined;
@@ -90,11 +93,18 @@ async function geometry(flow, limit = 3) {
 async function edit(oldString, newString, version, flow, limit) {
   commands = [
     { name: 'tessiven_read', arguments: { canvas_id: canvasID, start_line: 1, line_count: 20 } },
-    { name: 'tessiven_edit', arguments: { canvas_id: canvasID, expected_version: version, request_id: `layout-${version}`, summary: `Use ${flow} packing`, edits: [{ old_string: oldString, new_string: newString }] } },
+    { name: 'tessiven_edit', arguments: { canvas_id: canvasID, expected_version: version, request_id: `layout-${version}`, summary: `Use ${flow} packing`, edits: [
+      ...(version === 1 ? [{ old_string: 'apiVersion: redeven.io/tessiven/v1.0.0', new_string: 'apiVersion: redeven.io/tessiven/v1.1.0' }] : []),
+      { old_string: oldString, new_string: newString },
+    ] } },
   ];
   await page.locator('.flower-composer textarea').fill(`Arrange the etcd node pool in ${flow} flow, with at most ${limit} members per line. Preserve all peer relationships.`);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  const current = await until(async () => { const value = await latest(); return value.number === version + 1 ? value : null; }, 'saved partial layout edit');
+  const current = await until(async () => {
+    const approval = page.locator('.flower-approval-decision-approve:not([disabled])').first();
+    if (await approval.count() && await approval.isVisible()) await approval.click();
+    const value = await latest(); return value.number === version + 1 ? value : null;
+  }, 'saved partial layout edit');
   await until(() => page.locator('[data-flower-selected-thread-status="success"]').count(), 'completed Flower turn');
   assert.equal(commands.length, 0, 'Flower used Read and Edit');
   assert.deepEqual(current.document.relations, fixture.relations);
@@ -129,7 +139,10 @@ try {
     await welcome.waitForFunction(() => Boolean(window.redevenDesktopSettings && window.redevenDesktopLanguage));
     await welcome.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
     await until(async () => (await welcome.evaluate(() => window.redevenDesktopSettings.requestRuntimeFlower({ method: 'GET', path: '/_redeven_proxy/api/ai/threads' }))).ok, 'Desktop runtime ready', 60000);
-    await welcome.evaluate(request => window.redevenDesktopShell.openServiceCanvasWindow(request), { canvas_id: canvasID });
+    await welcome.getByRole('button', { name: /^(Open|Show) Env App$/ }).first().click({ timeout: 60000 });
+    const environment = await until(() => app.context().pages().find(candidate => candidate.url().includes('/_redeven_proxy/env/')), 'owned Env App');
+    const opened = await environment.evaluate(request => window.redevenDesktopShell.openServiceCanvasWindow(request), { canvas_id: canvasID });
+    assert.deepEqual(opened, { ok: true }, 'Session-authorized standalone window');
     page = await until(() => app.context().pages().find(candidate => new URL(candidate.url()).searchParams.get('canvas') === canvasID), 'owned standalone canvas');
   } else {
     const staged = path.join(temp, 'redeven'); await copyFile(binary, staged);
@@ -150,6 +163,7 @@ try {
   report.scenarios.push('historical-v1.0.0-startup-with-immutable-yaml');
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
   await api('/_redeven_proxy/api/ai/provider_bundle', 'PUT', { model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Acceptance', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text'], context_window: 400000, max_output_tokens: 8192 }] }] }, provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'fixture-only' }], web_search_provider_key_patches: [] });
+  await page.reload(); await ready();
   const rule = '  groupLayouts:\n    g-etcd:\n      flow: row\n      maxPerLine: 3\n';
   await edit('    - [res-registry, res-storage]\n', `    - [res-registry, res-storage]\n${rule}`, 1, 'row', 3);
   await page.screenshot({ path: path.join(output, 'kubernetes-row.png'), animations: 'disabled' });
@@ -158,6 +172,7 @@ try {
   await page.screenshot({ path: path.join(output, 'kubernetes-wrap.png'), animations: 'disabled' });
   await edit('maxPerLine: 2', 'maxPerLine: 3', 4, 'row', 3);
   report.scenarios.push('flower-read-edit-row-column-wrap-preserves-peer-cycle');
+  await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
   const visible = await page.locator('.tessiven-node').count();
   for (let i = 0; i < 3; i++) {
     await page.getByRole('button', { name: 'View', exact: true }).click(); await page.getByRole('menuitem', { name: 'Collapse all', exact: true }).click();
