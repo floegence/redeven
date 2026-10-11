@@ -78,7 +78,7 @@ func TestTessivenSchemaUsesExactDSLVersion(t *testing.T) {
 	defer svc.Close()
 	cap := config.PermissionSet{Read: true}
 	srv := &Server{tessiven: svc, localPermissionCap: &cap}
-	for query, version := range map[string]string{"": "v1.0.0", "?version=v1": "v1", "?version=v1.0.0": "v1.0.0"} {
+	for query, version := range map[string]string{"": "v1.1.0", "?version=v1": "v1", "?version=v1.0.0": "v1.0.0", "?version=v1.1.0": "v1.1.0"} {
 		response := performWorkbenchLayoutRequest(t, srv, http.MethodGet, tessivenAPIBase+"/schema"+query, "")
 		if response.Code != 200 {
 			t.Fatal(response.Body.String())

@@ -69,6 +69,9 @@ outcome, so the user must inspect the original manager before trying again.
 - Generation defaults to automatic layout without positions or layers. For
   explicit spatial intent, Flower expresses direction and ordered root layers
   through the [document layout contract](../architecture/tessiven-canvas-contract.md).
+  Explicit node-pool arrangement uses `presentation.groupLayouts` independently
+  of the global direction: `row`/`column`, optionally bounded by `maxPerLine`.
+  Flower edits only the requested rule, keeping memberships and peer relations.
   It preserves existing choices during ordinary updates and replaces obsolete
   coordinates only for an explicitly requested reorganization. It never guesses
   compact card geometry or generates edge paths. Schema validation and saving prove document validity

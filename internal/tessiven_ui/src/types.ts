@@ -70,6 +70,7 @@ export type CanvasDocument = {
   relations?: Relation[];
   evidence?: Evidence[];
   presentation?: {
+    groupLayouts?: Record<string, { flow: 'row' | 'column'; maxPerLine?: number }>;
     initiallyExpanded?: string[];
     order?: string[];
     direction?: LayoutDirection;

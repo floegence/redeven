@@ -8,7 +8,7 @@ timestamp: 2026-10-08T00:00:00Z
 # Summary
 
 Tessiven is the Runtime-owned library of immutable service canvases. Each
-canvas stores a complete `redeven.io/tessiven/v1.0.0` YAML document and every save
+canvas stores a complete `redeven.io/tessiven/v1.1.0` YAML document and every save
 creates a new version. The Runtime is the single owner of canvas data; the
 Desktop Welcome surface and the local Env App render that same library. A
 failed validation or version conflict leaves the last saved document intact.
@@ -55,6 +55,14 @@ failed validation or version conflict leaves the last saved document intact.
   components after the declared layers. Layer rank takes precedence over
   preferred coordinates; `presentation.order` is a stable tie-breaker within a
   rank. With no declared layers, automatic layout remains the default.
+  Optional `presentation.groupLayouts` keys existing group IDs and declares
+  `flow: row` (left to right, wrapping down) or `column` (top to bottom,
+  wrapping right). `maxPerLine` is a positive safe integer; omission means
+  one row/column. These explicit rules govern direct visible members
+  independently of global direction, layers, and relationships. They preserve
+  `presentation.order` then `nodeRefs` order and override member preferred
+  coordinates without changing saved hints. Unspecified groups retain automatic
+  layout. Rules never change membership, placements, or relationships.
   Validation and save success confirm valid persisted data, not visual
   acceptance. Layout and collision resolution belong to the published renderer
   under the [canvas UI contract](../ui/tessiven-canvas.md).
@@ -106,7 +114,7 @@ background, or synchronize libraries between devices.
 
 # Evidence
 
-- `spec/tessiven/v1.0.0.schema.json`
+- `spec/tessiven/v1.1.0.schema.json`
 - `internal/tessiven/document.go`
 - `internal/tessiven/document_test.go` - Shared-node membership validation and YAML round-trip.
 - `internal/tessiven/store.go`

@@ -13,7 +13,7 @@ import (
 )
 
 func TestSemanticDSLVersionAndLegacyUpgrade(t *testing.T) {
-	const current = "redeven.io/tessiven/v1.0.0"
+	const current = "redeven.io/tessiven/v1.1.0"
 	legacy := strings.Replace(exampleDocument, current, "redeven.io/tessiven/v1", 1)
 	for name, source := range map[string]string{
 		"current": strings.Replace(legacy, "redeven.io/tessiven/v1", current, 1),
@@ -41,13 +41,13 @@ func TestLegacyWriteUpgradesOnlyTheDSLHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	source := strings.Replace(exampleDocument, "redeven.io/tessiven/v1.0.0", "redeven.io/tessiven/v1", 1)
+	source := strings.Replace(exampleDocument, "redeven.io/tessiven/v1.1.0", "redeven.io/tessiven/v1", 1)
 	source = "# Preserve formatting and comments\n" + source
 	first, err := s.Save(t.Context(), SaveRequest{RequestID: "legacy", DocumentYAML: source}, "import")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := strings.Replace(source, "apiVersion: redeven.io/tessiven/v1\n", "apiVersion: redeven.io/tessiven/v1.0.0\n", 1)
+	want := strings.Replace(source, "apiVersion: redeven.io/tessiven/v1\n", "apiVersion: redeven.io/tessiven/v1.1.0\n", 1)
 	if first.Version.DocumentYAML != want || first.Version.Digest != digest(want) {
 		t.Fatal("a legacy write must upgrade its header without rewriting unrelated YAML")
 	}
@@ -62,7 +62,7 @@ func TestLegacyWriteUpgradesOnlyTheDSLHeader(t *testing.T) {
 
 func TestLegacyMigrationPreservesScalarStyles(t *testing.T) {
 	const old = "redeven.io/tessiven/v1"
-	const current = "redeven.io/tessiven/v1.0.0"
+	const current = "redeven.io/tessiven/v1.1.0"
 	cases := []struct{ name, source, want string }{
 		{"bom", "\ufeffapiVersion: " + old + "\n", "\ufeffapiVersion: " + current + "\n"},
 		{"plain", "apiVersion: " + old + " # keep\n", "apiVersion: " + current + " # keep\n"},
@@ -76,7 +76,7 @@ func TestLegacyMigrationPreservesScalarStyles(t *testing.T) {
 		{"nel", "# preface\u0085apiVersion: " + old + "\n", "# preface\u0085apiVersion: " + current + "\n"},
 		{"crlf", "apiVersion: " + old + "\r\n", "apiVersion: " + current + "\r\n"},
 		{"unicode-flow", "{metadata: {title: '版本'}, apiVersion: '" + old + "', kind: ServiceCanvas}\n", "{metadata: {title: '版本'}, apiVersion: '" + current + "', kind: ServiceCanvas}\n"},
-		{"json", `{"kind":"ServiceCanvas","apiVersion":"redeven.io/tessiven/v1","metadata":{"title":"Example"}}`, `{"kind":"ServiceCanvas","apiVersion":"redeven.io/tessiven/v1.0.0","metadata":{"title":"Example"}}`},
+		{"json", `{"kind":"ServiceCanvas","apiVersion":"redeven.io/tessiven/v1","metadata":{"title":"Example"}}`, `{"kind":"ServiceCanvas","apiVersion":"redeven.io/tessiven/v1.1.0","metadata":{"title":"Example"}}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -139,6 +139,10 @@ func TestDSLRegistryHasFrozenSchemasAndCompleteUpgradePaths(t *testing.T) {
 		t.Fatal("the published legacy schema must never be edited")
 	}
 	legacy[0] = '!'
+	baseline, _ := SchemaForVersion("v1.0.0")
+	if fmt.Sprintf("%x", sha256.Sum256(baseline)) != "d292a7cf065ad46530ebb7f5cd23ca1837d3d12e8611d7928bcea1e16ebdfce0" {
+		t.Fatal("the published semantic baseline schema must never be edited")
+	}
 	intact, _ := SchemaForVersion("v1")
 	if !json.Valid(intact) {
 		t.Fatal("schema callers must not mutate the registry")
@@ -155,9 +159,9 @@ func TestUnsupportedDSLVersionsFailWithLocationsAndNoWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index, version := range []string{"v1.0.1", "v1.1.0", "v2.0.0", "v1.2", "v01.0.0", "v1.0.0-beta", "", "tessiven/v1.0.0"} {
+	for index, version := range []string{"v1.1.1", "v1.2.0", "v2.0.0", "v1.2", "v01.0.0", "v1.1.0-beta", "", "tessiven/v1.1.0"} {
 		t.Run(version, func(t *testing.T) {
-			source := strings.Replace(exampleDocument, "redeven.io/tessiven/v1.0.0", tessivenspec.Namespace+version, 1)
+			source := strings.Replace(exampleDocument, "redeven.io/tessiven/v1.1.0", tessivenspec.Namespace+version, 1)
 			result := Validate(source)
 			if result.Valid || len(result.Diagnostics) != 1 || result.Diagnostics[0].Path != "/apiVersion" || result.Diagnostics[0].Line != 1 || result.Diagnostics[0].Column <= 1 || !strings.Contains(result.Diagnostics[0].Message, "supported versions") {
 				t.Fatalf("version error must be located and actionable: %+v", result)
@@ -193,14 +197,14 @@ func TestLegacyHistoryUpgradesOnEditWithoutRewritingHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	read, err := s.Read(t.Context(), ReadRequest{CanvasID: request.CanvasID, Version: 1})
-	if err != nil || read.DSLVersion != "v1" || len(read.Migrations) != 1 {
+	if err != nil || read.DSLVersion != "v1" || len(read.Migrations) != 2 {
 		t.Fatalf("legacy read: %+v %v", read, err)
 	}
 	edited, err := s.Edit(t.Context(), EditRequest{RequestID: "upgrade-edit", CanvasID: request.CanvasID, ExpectedVersion: 2, Summary: "Upgrade with a title edit", Edits: []TextEdit{{OldString: "Commerce / Production", NewString: "Upgraded commerce"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if edited.Version.DSLVersion != "v1.0.0" || edited.Version.Document.APIVersion != tessivenspec.CurrentAPIVersion {
+	if edited.Version.DSLVersion != "v1.1.0" || edited.Version.Document.APIVersion != tessivenspec.CurrentAPIVersion {
 		t.Fatal("new snapshot was not upgraded")
 	}
 	legacy, err := s.Version(t.Context(), request.CanvasID, 1)
@@ -229,11 +233,11 @@ func TestLegacyHistoryUpgradesOnEditWithoutRewritingHistory(t *testing.T) {
 }
 
 func TestCurrentDSLDoesNotInheritLegacyPlacementTolerance(t *testing.T) {
-	unplaced := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Invalid}\nservices: [{id: api, name: API, kind: api}]\n"
+	unplaced := "apiVersion: redeven.io/tessiven/v1.1.0\nkind: ServiceCanvas\nmetadata: {title: Invalid}\nservices: [{id: api, name: API, kind: api}]\n"
 	if result := validateDocument(unplaced, true); result.Valid {
 		t.Fatal("current stored documents must satisfy current placement rules")
 	}
-	if result := validateDocument(strings.Replace(unplaced, "v1.0.0", "v1", 1), true); !result.Valid || len(result.Diagnostics) != 1 || len(result.Migrations) != 1 {
+	if result := validateDocument(strings.Replace(unplaced, "v1.1.0", "v1", 1), true); !result.Valid || len(result.Diagnostics) != 1 || len(result.Migrations) != 2 {
 		t.Fatalf("legacy repair compatibility: %+v", result)
 	}
 }
@@ -274,7 +278,7 @@ func TestFutureStoredDSLIsRejectedWithoutChangingOriginalRecords(t *testing.T) {
 }
 
 func TestLegacyUpgradeCannotPersistAnOversizedTarget(t *testing.T) {
-	legacy := strings.Replace(exampleDocument, "v1.0.0", "v1", 1)
+	legacy := strings.Replace(exampleDocument, "v1.1.0", "v1", 1)
 	source := legacy + "#" + strings.Repeat(" ", MaxDocumentBytes-len(legacy)-1)
 	if result := validateDocument(source, true); !result.Valid {
 		t.Fatalf("supported original history must remain readable: %+v", result.Diagnostics)

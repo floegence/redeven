@@ -60,7 +60,7 @@ func TestServicesRequireHostPlacements(t *testing.T) {
 	if result := Validate(unbound); !result.Valid {
 		t.Fatalf("unmanaged reference placement rejected: %+v", result.Diagnostics)
 	}
-	external := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: External dependencies}\nresources:\n  - {id: api, name: External API, kind: external}\n"
+	external := "apiVersion: redeven.io/tessiven/v1.1.0\nkind: ServiceCanvas\nmetadata: {title: External dependencies}\nresources:\n  - {id: api, name: External API, kind: external}\n"
 	if result := Validate(external); !result.Valid {
 		t.Fatalf("external resource should not require a host: %+v", result.Diagnostics)
 	}
@@ -163,7 +163,7 @@ func TestPresentationLayers(t *testing.T) {
 	}
 }
 
-const exampleDocument = `apiVersion: redeven.io/tessiven/v1.0.0
+const exampleDocument = `apiVersion: redeven.io/tessiven/v1.1.0
 kind: ServiceCanvas
 metadata:
   title: Commerce / Production

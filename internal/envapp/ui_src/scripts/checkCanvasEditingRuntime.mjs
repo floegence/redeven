@@ -163,13 +163,13 @@ try {
   canvasID = (await api('/_redeven_proxy/api/tessiven/canvases')).canvases.find(canvas => canvas.title === initialTitle).id;
   const original = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/latest`);
   assert(original.document.nodes.length && original.document.groups.length && original.document.relations.length);
-  assert.equal(original.document.apiVersion, 'redeven.io/tessiven/v1.0.0');
-  assert.equal(original.dsl_version, legacyDSL ? 'v1' : 'v1.0.0');
+  assert.equal(original.document.apiVersion, 'redeven.io/tessiven/v1.1.0');
+  assert.equal(original.dsl_version, legacyDSL ? 'v1' : 'v1.1.0');
   const currentSchema = await api('/_redeven_proxy/api/tessiven/schema');
   const legacySchema = await api('/_redeven_proxy/api/tessiven/schema?version=v1');
-  assert.equal(currentSchema.properties.apiVersion.const, 'redeven.io/tessiven/v1.0.0');
+  assert.equal(currentSchema.properties.apiVersion.const, 'redeven.io/tessiven/v1.1.0');
   assert.equal(legacySchema.properties.apiVersion.const, 'redeven.io/tessiven/v1');
-  if (legacyDSL) assert.deepEqual(original.migrations, [{ from: 'v1', to: 'v1.0.0' }]);
+  if (legacyDSL) assert.deepEqual(original.migrations, [{ from: 'v1', to: 'v1.0.0' }, { from: 'v1.0.0', to: 'v1.1.0' }]);
   report.scenarios.push(legacyDSL ? 'legacy-schema-projected-at-startup' : 'current-semver-schema-at-startup');
   const errors = [];
   if (welcome) {
@@ -219,13 +219,13 @@ try {
   for (const id of ['read', 'edit']) assert.equal(JSON.parse(toolResults.get(id).replace(/^ERROR: /, '')).status, 'success', id);
   assert.equal((await api('/_redeven_proxy/api/tessiven/canvases')).canvases.find(canvas => canvas.id === canvasID).title, updatedTitle);
   const saved = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/latest`);
-  assert.equal(saved.document_yaml, original.document_yaml.replace(initialTitle, updatedTitle).replace('apiVersion: redeven.io/tessiven/v1\n', 'apiVersion: redeven.io/tessiven/v1.0.0\n'));
-  assert.equal(saved.dsl_version, 'v1.0.0');
-  assert.equal(saved.document.apiVersion, 'redeven.io/tessiven/v1.0.0');
+  assert.equal(saved.document_yaml, original.document_yaml.replace(initialTitle, updatedTitle).replace('apiVersion: redeven.io/tessiven/v1\n', 'apiVersion: redeven.io/tessiven/v1.1.0\n'));
+  assert.equal(saved.dsl_version, 'v1.1.0');
+  assert.equal(saved.document.apiVersion, 'redeven.io/tessiven/v1.1.0');
   const history = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/1`);
   assert.equal(history.document_yaml, original.document_yaml);
   assert.equal(history.digest, original.digest);
-  assert.equal(history.document.apiVersion, 'redeven.io/tessiven/v1.0.0');
+  assert.equal(history.document.apiVersion, 'redeven.io/tessiven/v1.1.0');
   report.scenarios.push('current-snapshot-after-exact-edit', 'immutable-original-yaml-and-digest');
   await page.getByRole('heading', { name: updatedTitle, exact: true }).waitFor();
   const row = page.locator('[data-flower-activity-item-id]').filter({ hasText: 'Read canvas' }).first();
@@ -282,7 +282,7 @@ try {
     const restarted = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/latest`);
     assert.equal(restarted.document_yaml, saved.document_yaml);
     assert.equal(restarted.digest, saved.digest);
-    assert.equal(restarted.document.apiVersion, 'redeven.io/tessiven/v1.0.0');
+    assert.equal(restarted.document.apiVersion, 'redeven.io/tessiven/v1.1.0');
     const originalAfterRestart = await api(`/_redeven_proxy/api/tessiven/canvases/${canvasID}/versions/1`);
     assert.equal(originalAfterRestart.document_yaml, original.document_yaml);
     assert.equal(originalAfterRestart.digest, original.digest);

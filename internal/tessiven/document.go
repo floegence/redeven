@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -91,12 +92,18 @@ type Position struct {
 }
 type LayoutDirection string
 
+type GroupLayout struct {
+	Flow       string `json:"flow"`
+	MaxPerLine int64  `json:"maxPerLine,omitempty"`
+}
+
 type Presentation struct {
-	InitiallyExpanded []string        `json:"initiallyExpanded,omitempty"`
-	Order             []string        `json:"order,omitempty"`
-	Direction         LayoutDirection `json:"direction,omitempty"`
-	Layers            [][]string      `json:"layers,omitempty"`
-	Positions         []Position      `json:"positions,omitempty"`
+	GroupLayouts      map[string]GroupLayout `json:"groupLayouts,omitempty"`
+	InitiallyExpanded []string               `json:"initiallyExpanded,omitempty"`
+	Order             []string               `json:"order,omitempty"`
+	Direction         LayoutDirection        `json:"direction,omitempty"`
+	Layers            [][]string             `json:"layers,omitempty"`
+	Positions         []Position             `json:"positions,omitempty"`
 }
 type Document struct {
 	APIVersion   string            `json:"apiVersion"`
@@ -345,17 +352,18 @@ func validateDocument(source string, storedVersion bool) Validation {
 		return result
 	}
 	result.documentYAML = source
+	versionNode := *locations["/apiVersion"]
 	for format.UpgradeTo != "" {
 		next, exists := dslFormat(format.UpgradeTo)
 		if !exists {
 			add("/apiVersion", "The DSL upgrade chain is incomplete.")
 			return result
 		}
-		if format.Version != "v1" || next.Version != "v1.0.0" {
+		if !(format.Version == "v1" && next.Version == "v1.0.0") && !(format.Version == "v1.0.0" && next.Version == "v1.1.0") {
 			add("/apiVersion", "The DSL migration is not implemented.")
 			return result
 		}
-		upgraded, err := upgradeLegacyDSLHeader(result.documentYAML, locations["/apiVersion"], tessivenspec.Namespace+next.Version)
+		upgraded, err := upgradeDSLHeader(result.documentYAML, &versionNode, tessivenspec.Namespace+format.Version, tessivenspec.Namespace+next.Version)
 		if err != nil {
 			add("/apiVersion", err.Error())
 			return result
@@ -366,6 +374,7 @@ func validateDocument(source string, storedVersion bool) Validation {
 		}
 		result.documentYAML = upgraded
 		object["apiVersion"] = tessivenspec.Namespace + next.Version
+		versionNode.Value = tessivenspec.Namespace + next.Version
 		result.Migrations = append(result.Migrations, DSLMigration{From: format.Version, To: next.Version})
 		format = next
 		if !validateSchema(format.Version) {
@@ -485,6 +494,14 @@ func validateDocument(source string, storedVersion bool) Validation {
 		}
 	}
 	if p := document.Presentation; p != nil {
+		groupIDs := make([]string, 0, len(p.GroupLayouts))
+		for id := range p.GroupLayouts {
+			groupIDs = append(groupIDs, id)
+		}
+		sort.Strings(groupIDs)
+		for _, id := range groupIDs {
+			check(id, "/presentation/groupLayouts/"+id, "group")
+		}
 		for i, id := range p.InitiallyExpanded {
 			check(id, fmt.Sprintf("/presentation/initiallyExpanded/%d", i), "node", "group")
 		}

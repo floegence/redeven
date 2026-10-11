@@ -44,12 +44,12 @@ func SchemaForVersion(version string) (json.RawMessage, error) {
 	return json.RawMessage(format.Schema), nil
 }
 
-// This reviewed v1 -> v1.0.0 edge changes only the root version scalar. In
+// The reviewed v1 -> v1.0.0 and v1.0.0 -> v1.1.0 edges change only the root version scalar. In
 // particular, names, references, bindings, evidence and layout hints remain
 // byte-for-byte unchanged. Later migrations must have their own explicit edge.
-func upgradeLegacyDSLHeader(source string, node *yaml.Node, target string) (string, error) {
-	if node == nil || node.Kind != yaml.ScalarNode || node.Value != tessivenspec.Namespace+"v1" {
-		return "", fmt.Errorf("the legacy DSL version scalar is invalid")
+func upgradeDSLHeader(source string, node *yaml.Node, from, target string) (string, error) {
+	if node == nil || node.Kind != yaml.ScalarNode || node.Value != from {
+		return "", fmt.Errorf("the source DSL version scalar is invalid")
 	}
 	// Match yaml.v3's line/column convention, retaining every original byte.
 	lines := []string{}

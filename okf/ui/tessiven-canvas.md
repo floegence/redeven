@@ -227,6 +227,16 @@ without introducing independent topology state. Selecting a node, group, or
 historical version cannot change its management permissions. Ask Flower focuses
 the canvas composer and never sends a message automatically.
 
+## Explicit Group Packing
+
+The shared document-to-graph mapper passes only visible container rules from
+`presentation.groupLayouts` to the published Floe layout API. Main canvas and
+thumbnail use the same mapper. Preferred and compact reflows preserve row/column
+packing, selection anchors and complete relationships. Collapsed groups and
+hidden members do not contribute child geometry. Shared host appearances follow
+their respective groups; the existing large-pool aggregation remains in effect.
+No additional menu or local layout engine owns these rules.
+
 # Evidence
 
 - `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts` - Identity-only native window request and explicit acknowledgement.
@@ -243,6 +253,8 @@ the canvas composer and never sends a message automatically.
 - `scripts/check_native_service_canvas.mjs` - Offline custom-scheme WebKit qualification for shared group controls, service scope, minimap geometry and explicit renderer failure.
 - `internal/tessiven_ui/src/TessivenServiceRelations.tsx`
 - `internal/tessiven_ui/src/projection.ts`
+- `internal/envapp/ui_src/src/styles/tessiven-group-layout.browser.test.tsx` - Explicit packing, compact reflows, authored order, thumbnail parity and themes.
+- `internal/envapp/ui_src/scripts/checkCanvasGroupLayoutRuntime.mjs` - Isolated Kubernetes Read/Edit regression through the real Runtime and standalone Desktop window.
 - `internal/tessiven_ui/src/tessiven.css`
 - `internal/tessiven_ui/src/TessivenIcon.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-icons.browser.test.tsx` - Distinct silhouettes, graph/thumbnail parity, theme and high-contrast rendering.

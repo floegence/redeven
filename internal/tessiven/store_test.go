@@ -118,7 +118,7 @@ func TestHistoricalUnplacedServicesRemainReadableButRequireRepairToSave(t *testi
 		t.Fatal(err)
 	}
 	unplaced := strings.Replace(exampleDocument, "instances:\n  - {id: orders-01, nodeRef: core-01, serviceRef: orders, role: standalone, binding: {owner: managed_service, resourceId: example-service-id}}\n", "", 1)
-	historical := strings.Replace(unplaced, "redeven.io/tessiven/v1.0.0", "redeven.io/tessiven/v1", 1) + "presentation:\n  layers:\n    - [orders]\n  positions:\n    - {objectRef: orders, x: 100, y: 100}\n"
+	historical := strings.Replace(unplaced, "redeven.io/tessiven/v1.1.0", "redeven.io/tessiven/v1", 1) + "presentation:\n  layers:\n    - [orders]\n  positions:\n    - {objectRef: orders, x: 100, y: 100}\n"
 	// Simulate an immutable version admitted by the previous document contract.
 	if _, err := s.db.Exec(`INSERT INTO versions(canvas_id,number,document_yaml,digest,created_at,source,summary) VALUES(?,2,?,?,0,'flower','Historical unplaced services')`, first.Canvas.ID, historical, digest(historical)); err != nil {
 		t.Fatal(err)
