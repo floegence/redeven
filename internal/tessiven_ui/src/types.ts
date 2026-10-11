@@ -1,3 +1,4 @@
+import type { RenderableAPIVersion } from './native/contract';
 export type Observation = {
   state: 'healthy' | 'degraded' | 'unavailable' | 'unknown';
   observedAt: string;
@@ -58,7 +59,7 @@ export type Evidence = {
 };
 export type LayoutDirection = 'RIGHT' | 'DOWN' | 'LEFT' | 'UP';
 export type CanvasDocument = {
-  apiVersion: 'redeven.io/tessiven/v1.0.0';
+  apiVersion: RenderableAPIVersion;
   kind: 'ServiceCanvas';
   metadata: { title: string; description?: string };
   nodes?: CanvasNode[];

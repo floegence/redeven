@@ -4,6 +4,7 @@ import { Plus, Minus, Maximize } from '@floegence/floe-webapp-core/icons';
 import { TessivenGraph, type TessivenViewportControl, type GraphBrowseState, type TessivenViewOptions } from '../TessivenGraph';
 import { attachTouchViewport } from './touchViewport';
 import type { Version, Selection } from '../types';
+import { supportedAPIVersions, canvasKind } from './contract';
 import enUS from '../locales/en-US.json';
 import '../tessiven.css';
 import '../../native/native.css';
@@ -12,13 +13,18 @@ declare global {
   interface Window {
     webkit?: { messageHandlers?: { canvas?: { postMessage: (message: unknown) => void } } };
     serviceCanvas?: {
-      update: (input: { version: Version; historical: boolean; dark: boolean; contrast: boolean; bottomInset?: number }) => void;
+      update: (input: { render_id: string; version: Version; historical: boolean; dark: boolean; contrast: boolean; bottomInset?: number }) => void;
       command: (input: { canvas_id: string; version_id: number; action: 'expand' | 'collapse' | 'all' | 'group' }) => void;
     };
   }
 }
 
-const notify = (type: string, selection?: Selection) => window.webkit?.messageHandlers?.canvas?.postMessage({ type, selection });
+const renderID = new URLSearchParams(location.hash.slice(1)).get('render_id');
+const notify = (type: string, version?: Version, selection?: Selection, options?: TessivenViewOptions) =>
+  window.webkit?.messageHandlers?.canvas?.postMessage({
+    type, render_id: renderID, canvas_id: version?.canvas_id, version_id: version?.number, selection, ...options,
+  });
+let currentVersion: Version | undefined;
 const t = (key: string, values?: Record<string, string | number>) => {
   const template = enUS[key as keyof typeof enUS];
   if (template === undefined) throw new Error(`Unknown Tessiven message: ${key}`);
@@ -39,9 +45,6 @@ function NativeCanvas() {
       onCleanup(touch.dispose);
     }
   });
-  const viewOptions = (options: TessivenViewOptions) => window.webkit?.messageHandlers?.canvas?.postMessage({
-    type: 'viewOptions', canvas_id: input()?.version.canvas_id, version_id: input()?.version.number, ...options,
-  });
   window.serviceCanvas = {
     command(value) {
       const version = input()?.version;
@@ -54,6 +57,12 @@ function NativeCanvas() {
       }
     },
     update(value) {
+      if (!renderID || value.render_id !== renderID) return;
+      currentVersion = value.version;
+      if (!supportedAPIVersions.includes(value.version.document.apiVersion) || value.version.document.kind !== canvasKind) {
+        notify('error', value.version);
+        return;
+      }
       const inset = Number.isFinite(value.bottomInset) ? Math.max(0, Math.min(window.innerHeight / 2, value.bottomInset!)) : 0;
       document.documentElement.style.setProperty('--native-bottom-inset', `${inset}px`);
       document.documentElement.dataset.theme = value.dark ? 'dark' : 'light';
@@ -69,10 +78,10 @@ function NativeCanvas() {
   notify('ready');
   return <main class="tessiven" ref={host}><Show when={input()} keyed>{value => <TessivenGraph
     version={value.version} historical={value.historical} t={t} visible={true}
-    onAsk={selection => notify('ask', selection)} onDetails={selection => notify('details', selection)}
+    onAsk={selection => notify('ask', value.version, selection)} onDetails={selection => notify('details', value.version, selection)}
     onInspect={() => undefined} onViewportControl={value => { control = value; }}
-    tools="hidden" onZoomChange={setScale} onViewOptions={viewOptions}
-    onRenderState={state => notify(state)}
+    tools="hidden" onZoomChange={setScale} onViewOptions={options => notify('viewOptions', value.version, undefined, options)}
+    onRenderState={state => notify(state, value.version)}
     browseState={browsing.get(value.version.canvas_id)}
     onBrowseState={state => browsing.set(value.version.canvas_id, state)}
   />}</Show><nav class="native-canvas-tools" aria-label="Canvas view">
@@ -83,6 +92,6 @@ function NativeCanvas() {
   </nav></main>;
 }
 
-window.addEventListener('error', () => notify('error'));
-window.addEventListener('unhandledrejection', () => notify('error'));
+window.addEventListener('error', () => notify('error', currentVersion));
+window.addEventListener('unhandledrejection', () => notify('error', currentVersion));
 render(() => <NativeCanvas />, document.getElementById('root')!);

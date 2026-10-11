@@ -17,7 +17,7 @@ document.presentation.initiallyExpanded = document.groups.map(group => group.id)
 document.groups.find(group => group.id === 'g-master').instanceRefs = ['inst-nn-a', 'inst-nn-b'];
 const input = {
   version: { canvas_id: 'qualification', number: 1, document_yaml: '', document, digest: 'fixture', created_at: 0, source: 'example', summary: '' },
-  historical: false, dark: false, contrast: false,
+  render_id: 'qualification', historical: false, dark: false, contrast: false,
 };
 const fixture = path.resolve(output, 'input.json');
 await writeFile(fixture, JSON.stringify(input));
