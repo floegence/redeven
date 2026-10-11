@@ -65,15 +65,20 @@ async function setTheme(page, mode, preset) {
 const routingThemes = [['light', 'porcelain-light'], ['dark', 'porcelain-dark'], ['light', 'hc-light']];
 async function verifyCanvasNavigation(page, name) {
   const count = await page.locator('.tessiven-node').count();
-  await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Collapse all', exact: true }).click();
   await until(async () => await page.locator('.tessiven-node').count() === 0, 'native bulk collapse');
-  await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Expand all', exact: true }).click();
   await until(async () => await page.locator('.tessiven-node').count() === count, 'native bulk expand');
-  const scope = page.getByRole('combobox', { name: 'Node services', exact: true });
+  const chooseScope = async label => { await page.getByRole('button', { name: 'View', exact: true }).click(); await page.getByRole('menuitem', { name: label, exact: true }).click(); };
   for (const value of ['group', 'all']) {
-    await scope.selectOption(value);
+    const label = value === 'group' ? 'Current group services' : 'All host services';
+    await chooseScope(label);
     await until(async () => await page.getByRole('status', { name: 'Arranging canvas', exact: true }).count() === 0, 'native service scope');
-    assert.equal(await scope.inputValue(), value);
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    assert.equal(await page.getByRole('menuitem', { name: label, exact: true }).locator('svg').count(), 1);
+    await page.keyboard.press('Escape');
   }
   const overview = page.getByRole('region', { name: 'Canvas overview', exact: true });
   assert.equal(await overview.locator('path').count(), 3);
@@ -98,9 +103,9 @@ async function verifyLocalRoute(page, name, selector = '.tessiven-node .tessiven
   assert.equal(await preview.count(), 0, 'Local links stay hidden until hover');
   await call.hover();
   if (zoom) {
-    const percentage = await page.locator('.tessiven-canvas-tools > span').innerText();
+    const percentage = await page.locator('.tessiven-canvas-zoom output').innerText();
     await page.mouse.wheel(0, -700);
-    await until(async () => await page.locator('.tessiven-canvas-tools > span').innerText() !== percentage, 'canvas wheel zoom');
+    await until(async () => await page.locator('.tessiven-canvas-zoom output').innerText() !== percentage, 'canvas wheel zoom');
     await call.hover();
   }
   await preview.waitFor();
@@ -177,9 +182,9 @@ async function verifyObservedCanvas(page, saved, name) {
     const box = await group.boundingBox();
     assert.ok(box);
     await page.mouse.move(box.x + box.width / 2, box.y + box.height - 2);
-    const percentage = await page.locator('.tessiven-canvas-tools > span').innerText();
+    const percentage = await page.locator('.tessiven-canvas-zoom output').innerText();
     await page.mouse.wheel(0, -700);
-    await until(async () => await page.locator('.tessiven-canvas-tools > span').innerText() !== percentage, 'fan-in close view');
+    await until(async () => await page.locator('.tessiven-canvas-zoom output').innerText() !== percentage, 'fan-in close view');
     for (const [mode, preset] of routingThemes) {
       await setTheme(page, mode, preset);
       const zoomed = await group.boundingBox();

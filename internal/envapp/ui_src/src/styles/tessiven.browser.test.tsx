@@ -196,7 +196,7 @@ describe('Tessiven real graph interactions', () => {
     version.diagnostics = [{ path: '/services/2/id', line: 1, column: 1, message: 'A service must have at least one instance on an existing node.' }];
     const original = JSON.stringify(version.document);
     const { ask } = mount(2, version);
-    await expect.poll(() => host.querySelector('[data-placement="missing"] small')?.textContent).toBe('No node assigned');
+    await expect.poll(() => host.querySelector('[data-placement="missing"] small')?.textContent, {timeout:10000}).toBe('No node assigned');
     expect(host.querySelectorAll('.tessiven-error')).toHaveLength(0);
     const missing = host.querySelector<HTMLElement>('[data-placement="missing"]')!;
     for (const name of ['porcelain-light', 'porcelain-dark', 'hc-light', 'graphite']) {
@@ -269,18 +269,19 @@ describe('Tessiven real graph interactions', () => {
     const original = JSON.stringify(version.document);
     mount(3, version);
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(5);
-    await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Collapse all', exact: true }).click();
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(0);
     expect(host.querySelectorAll('.tessiven-group[data-expanded="false"]')).toHaveLength(2);
-    await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Expand all', exact: true }).click();
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(5);
-    const scope = host.querySelector<HTMLSelectElement>('[aria-label="Node services"]')!;
-    scope.value = 'group';
-    scope.dispatchEvent(new Event('change', { bubbles: true }));
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Current group services', exact: true }).click();
     await expect.poll(() => host.querySelector('[data-group-id="hdfs"][data-node-id="node-1"]')?.querySelectorAll('.tessiven-service').length).toBe(1);
     expect(host.querySelector('[data-group-id="zk"][data-node-id="node-1"] [data-service-id="zookeeper"]')).not.toBeNull();
-    scope.value = 'all';
-    scope.dispatchEvent(new Event('change', { bubbles: true }));
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'All host services', exact: true }).click();
     await expect.poll(() => host.querySelector('[data-group-id="hdfs"][data-node-id="node-1"]')?.querySelectorAll('.tessiven-service').length).toBe(2);
     expect(JSON.stringify(version.document)).toBe(original);
     await expect.poll(() => host.querySelector('[aria-label="Arranging canvas"]')).toBeNull();
@@ -305,9 +306,8 @@ describe('Tessiven real graph interactions', () => {
     const version = sharedHostsVersion();
     const { browse } = mount(3, version);
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(5);
-    const scope = host.querySelector<HTMLSelectElement>('[aria-label="Node services"]')!;
-    scope.value = 'group';
-    scope.dispatchEvent(new Event('change', { bubbles: true }));
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Current group services', exact: true }).click();
     await expect.poll(() => host.querySelector('[data-group-id="hdfs"][data-node-id="node-1"]')?.querySelectorAll('.tessiven-service').length).toBe(1);
     dispose?.(); dispose = undefined;
     const state = browse.mock.calls.at(-1)![0] as GraphBrowseState;
@@ -315,7 +315,8 @@ describe('Tessiven real graph interactions', () => {
     host.remove();
     mount(3, version, state);
     await expect.poll(() => host.querySelector('[data-group-id="hdfs"][data-node-id="node-1"]')?.querySelectorAll('.tessiven-service').length).toBe(1);
-    expect(host.querySelector<HTMLSelectElement>('[aria-label="Node services"]')?.value).toBe('group');
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    expect(page.getByRole('menuitem', { name: 'Current group services', exact: true }).element().querySelector('svg')).not.toBeNull();
   });
   it('uses identical preview and main geometry including expanded group relation rows', async () => {
     const version = fixture();

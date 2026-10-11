@@ -227,5 +227,9 @@
   "nodeServiceScope": "ノードのサービス",
   "allNodeServices": "ホストの全サービス",
   "groupNodeServices": "現在のグループのサービス",
-  "layoutUpdating": "キャンバスを配置中"
+  "layoutUpdating": "キャンバスを配置中",
+  "canvasView": "表示",
+  "zoomIn": "拡大",
+  "zoomOut": "縮小",
+  "zoomLevel": "ズーム倍率"
 }

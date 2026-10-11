@@ -227,5 +227,9 @@
   "nodeServiceScope": "Servicios del nodo",
   "allNodeServices": "Todos los servicios del host",
   "groupNodeServices": "Servicios del grupo actual",
-  "layoutUpdating": "Organizando el lienzo"
+  "layoutUpdating": "Organizando el lienzo",
+  "canvasView": "Vista",
+  "zoomIn": "Acercar",
+  "zoomOut": "Alejar",
+  "zoomLevel": "Nivel de zoom"
 }

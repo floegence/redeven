@@ -227,5 +227,9 @@
   "nodeServiceScope": "Node services",
   "allNodeServices": "All host services",
   "groupNodeServices": "Current group services",
-  "layoutUpdating": "Arranging canvas"
+  "layoutUpdating": "Arranging canvas",
+  "canvasView": "View",
+  "zoomIn": "Zoom in",
+  "zoomOut": "Zoom out",
+  "zoomLevel": "Zoom level"
 }

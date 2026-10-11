@@ -30,33 +30,8 @@ ready, so an initial saved-version request uses the session HTTP owner. First
 connection failures show the existing session recovery actions. Once mounted,
 transient connection recovery retains the existing canvas view.
 
-Automatic layout and library thumbnails use the same published Floe layout
-engine, direction, layers, and visibility projection. Documents may declare
-ordered root layers for stable left-to-right, right-to-left, top-to-bottom, or
-bottom-to-top structure; unassigned roots join the nearest related layer, and
-disconnected components follow deterministically. Independent members remain
-readable peers inside their dashed logical group. Saved positions guide ordering
-within a layer and never override its rank. Folding and expanding compact only
-the visible subgraph, retain a visible selection and its world-coordinate anchor,
-and anchor its containing group when the selection becomes hidden. Subsequent
-host selection stays compact for that mounted canvas. The viewport center stays
-unchanged, and hidden members do not contribute to bounds. Browsing
-never rewrites saved hints or creates document versions. Relations retain their
-original endpoints and ports; grouping never invents a relationship. Invalid
-graph data and actual worker/routing failures remain visible errors.
-Published Floe jointly routes packed and positioned relationships orthogonally.
-Free anchors can use the available spans of all four node and dashed-group
-borders, favor nearby facing spans, and separate parallel paths into lanes.
-Automatic anchors include corridors alongside obstacles; the published router
-chooses their borders jointly so independent calls can reach unused group spans
-without being forced across each other. Automatic endpoint lanes separate
-shared segments without changing explicit port or self-loop constraints.
-Routes avoid intervening cards and unrelated group frames. Explicit port sides,
-relationship identities, and canonical endpoints remain unchanged. Dense
-cross-layer topologies can still require crossings; hover and focus isolate
-related routes without hiding relationships from the saved document.
-Positioned objects without relationships still contribute their actual world
-bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
+Layout, routing, view controls and large-graph rendering follow the
+[canvas navigation and rendering contract](tessiven-canvas-navigation.md).
 
 - The library uses one toolbar with search, direct creation, and a secondary
   menu for archived canvases. It has no extra heading, archive tab, or status
@@ -151,30 +126,6 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   another appearance expands its group when necessary and preserves the current
   object reference; closing restores focus. Service-row clicks continue to open
   exact instance details and bound-service inspection.
-- Canvas controls expand or collapse all logical groups in one compact reflow.
-  They preserve the selected visible object, or its enclosing group when hidden,
-  and never create a document version. The default inventory remains all host
-  services; an explicit canvas selector can show only the current group's exact
-  instance membership. Ungrouped hosts retain all services. Local relationship
-  rows whose service endpoints are filtered out are hidden in that view only;
-  canonical references and external relationships remain unchanged. This scope
-  is retained with the current canvas browse state, not persisted in its DSL.
-- The interactive overview uses the exact current layout and viewport, including
-  collapse and service filtering. Drag its viewport rectangle to pan, click the
-  overview to center, or use arrow keys and Home. The overview shares the main
-  canvas's four logical-group tones, host fill, and network/storage resource
-  colors through the published node-style callback. Theme variables update both
-  surfaces together, including attribute-only native dark themes. Equal styles
-  share SVG paths, so overview DOM size depends on the palette rather than the
-  number of hosts. Forced colors use system fills and outlines. Floe owns
-  navigation and compact SVG rendering; Tessiven supplies its localized
-  accessible name and product palette.
-- Complete packing and routing run off the renderer thread. Nodes and routes
-  outside the viewport are culled without discarding canonical graph records.
-  Production qualification serves built assets and verifies the complete layout
-  worker, child ELK worker and raw WASM resource closure. Large-graph
-  qualification measures actual host counts, including groups of ten
-  so a thousand-host fixture never silently measures only aggregate cards.
 - Every logical group exposes a visible, labeled expand or collapse action with
   a directional icon. The action remains in the group header in both states and
   uses the same state as the projected group contents.
@@ -300,7 +251,6 @@ the canvas composer and never sends a message automatically.
 - `internal/tessiven/store_test.go`
 - `internal/codeapp/appserver/tessiven.go`
 - `internal/envapp/ui_src/src/styles/tessiven.browser.test.tsx`
-- `internal/envapp/ui_src/src/styles/tessiven-scale.browser.test.tsx` - Explicit 100, 500 and 1,000 physical host qualification, renderer long tasks, navigation frame time and compact visibility.
 - `internal/envapp/ui_src/src/styles/tessiven-shared-hosts.browser.test.tsx` - Complete host inventory, linked hover/focus, original details, membership navigation, themes and projected placement.
 - `internal/envapp/ui_src/src/styles/fixtures/tessiven-hadoop.json`
 - `internal/envapp/ui_src/src/styles/tessiven-library.browser.test.tsx`

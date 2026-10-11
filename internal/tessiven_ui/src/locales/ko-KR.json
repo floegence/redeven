@@ -227,5 +227,9 @@
   "nodeServiceScope": "노드 서비스",
   "allNodeServices": "호스트의 모든 서비스",
   "groupNodeServices": "현재 그룹 서비스",
-  "layoutUpdating": "캔버스 배치 중"
+  "layoutUpdating": "캔버스 배치 중",
+  "canvasView": "보기",
+  "zoomIn": "확대",
+  "zoomOut": "축소",
+  "zoomLevel": "확대 비율"
 }
