@@ -687,7 +687,8 @@
       "askFlowerUnavailableTitle": "Flower에 묻기를 사용할 수 없음",
       "downloadUnavailableTitle": "다운로드를 사용할 수 없음",
       "onlyFilesDownloaded": "파일만 다운로드할 수 있습니다."
-    }
+    },
+    "tessivenLabel": "Tessiven 서비스 캔버스"
   },
   "accessGate": {
     "invalidFactorError": "유효하지 않거나 이미 사용한 코드입니다. 새 코드를 입력하세요.",

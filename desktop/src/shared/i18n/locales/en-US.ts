@@ -2,6 +2,17 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  tessivenRuntime: {
+  "confirmTitle": "Confirm {action}",
+  "confirmDetail": "Desktop will operate the exact registered Runtime after confirmation. Existing workload protection and progress apply.",
+  "selfDetail": "This Runtime runs the current Flower conversation. This action can interrupt the conversation. The operation has not started.",
+  "continue": "Continue",
+  "changed": "The source or target changed. Refresh and review the operation again.",
+  "start": "start",
+  "stop": "stop",
+  "restart": "restart",
+  "update": "update"
+},
   gatewayConnections: {
     "unpairTitle": "Cancel Gateway pairing",
     "unpair": "Cancel pairing",

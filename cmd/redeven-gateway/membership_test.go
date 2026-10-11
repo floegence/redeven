@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
+	"github.com/floegence/redeven/internal/gatewayhost"
 	"github.com/floegence/redeven/internal/gatewayservice"
+	"github.com/floegence/redeven/internal/gatewaystate"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
@@ -21,8 +22,16 @@ func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 	}
 	server := httptest.NewServer(owner.Handler())
 	defer server.Close()
-	client := hostAdminClient{endpoint: server.URL, token: token, transport: &http.Transport{Proxy: nil}}
-	defer client.transport.CloseIdleConnections()
+	root := t.TempDir()
+	if err := gatewaystate.Write(gatewayhost.TokenPath(root), token); err != nil {
+		t.Fatal(err)
+	}
+	shared, err := gatewayhost.New(root, strings.TrimPrefix(server.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shared.Close()
+	client := hostAdminClient{client: shared}
 	var invitation gc.InvitationCodeDelivery
 	if err := client.request(context.Background(), "/gateway/v5/invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation); err != nil {
 		t.Fatal(err)

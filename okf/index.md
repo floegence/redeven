@@ -231,6 +231,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## AI
 
+- [Tessiven Runtime discovery and operations](ai/tessiven-runtime-operations.md) - Discover exact device and host Gateway paths, authenticate through native owners and delegate scoped service or process actions.
 - [Tessiven Flower and service operations](ai/tessiven-flower-and-operations.md) - Generate evidence-backed canvas versions and route exact service actions through existing authority.
 
 - [Authorized platform model gateway](ai/platform-model-gateway.md) - Session-scoped catalogs, credential isolation, and stable streamed execution.

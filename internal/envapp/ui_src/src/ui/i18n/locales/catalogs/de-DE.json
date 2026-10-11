@@ -687,7 +687,8 @@
       "askFlowerUnavailableTitle": "„Flower fragen“ ist nicht verfügbar",
       "downloadUnavailableTitle": "Download nicht verfügbar",
       "onlyFilesDownloaded": "Nur Dateien können heruntergeladen werden."
-    }
+    },
+    "tessivenLabel": "Tessiven-Dienstübersicht"
   },
   "accessGate": {
     "invalidFactorError": "Code ungültig oder bereits verwendet. Versuchen Sie einen neuen Code.",

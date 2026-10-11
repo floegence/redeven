@@ -54,3 +54,25 @@ func TestTessivenHostRejectsCrossOriginUpgrade(t *testing.T) {
 		t.Fatalf("cross-origin owner bridge admitted: %d", response.Code)
 	}
 }
+
+func TestTessivenPreflightCannotUsePublicTransportOrUntrustedPayload(t *testing.T) {
+	control := &runtimeControlServer{token: "fixture-owner", appServer: &appserver.Server{}}
+	for _, tc := range []struct {
+		remote, token, body string
+		status              int
+	}{
+		{"198.51.100.2:5000", "fixture-owner", `{}`, 403},
+		{"127.0.0.1:5000", "", `{}`, 401},
+		{"127.0.0.1:5000", "fixture-owner", `{"source":"guessed","url":"https://arbitrary.example"}`, 400},
+		{"127.0.0.1:5000", "fixture-owner", `{"source":"guessed","scope":{"user_public_id":"user_local","floe_app":"com.floegence.redeven.agent"},"permissions":{"read":true,"write":true,"execute":true,"admin":true},"effect":"lifecycle"}`, 409},
+	} {
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/v2/tessiven/preflight", strings.NewReader(tc.body))
+		req.RemoteAddr = tc.remote
+		req.Header.Set("Authorization", "Bearer "+tc.token)
+		result := httptest.NewRecorder()
+		control.handleTessivenPreflight(result, req)
+		if result.Code != tc.status {
+			t.Fatalf("preflight widened authority: %d %s", result.Code, result.Body.String())
+		}
+	}
+}

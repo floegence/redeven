@@ -32,12 +32,47 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 		return true
 	}
 	permission := requiredPermissionRead
-	if r.Method != http.MethodGet && path != "/validate" && path != "/resources" {
+	if r.Method != http.MethodGet && path != "/validate" && path != "/resources" && path != "/business" && path != "/runtimes/inspect" {
 		permission = requiredPermissionWrite
 	}
 	meta, ok := g.requirePermission(w, r, permission)
 	if !ok {
 		return true
+	}
+	if g.tessivenResources != nil {
+		if r.Method == http.MethodGet && path == "/runtimes" {
+			result, err := g.tessivenResources.Runtimes(r.Context(), meta)
+			writeTessivenResult(w, result, err)
+			return true
+		}
+		if r.Method == http.MethodPost && (path == "/runtimes/inspect" || path == "/runtimes/actions") {
+			var req tessiven.RuntimeRequest
+			if err := decodeTessivenJSON(r, &req); err != nil {
+				writeTessivenError(w, err)
+				return true
+			}
+			mutation := req.Action == "connect" || req.Action == "start" || req.Action == "stop" || req.Action == "restart" || req.Action == "update"
+			if mutation != (path == "/runtimes/actions") {
+				writeTessivenError(w, tessiven.ErrInvalidRequest)
+				return true
+			}
+			result, err := g.tessivenResources.Runtime(r.Context(), meta, req)
+			writeTessivenResult(w, result, err)
+			return true
+		}
+		if r.Method == http.MethodPost && path == "/business" {
+			var req struct {
+				Identity string                   `json:"identity"`
+				Request  tessiven.ResourceRequest `json:"request"`
+			}
+			if err := decodeTessivenJSON(r, &req); err != nil {
+				writeTessivenError(w, err)
+				return true
+			}
+			result, err := g.tessivenResources.ExecuteBusiness(r.Context(), meta, req.Identity, req.Request)
+			writeTessivenResult(w, result, err)
+			return true
+		}
 	}
 	if r.Method == http.MethodPost && path == "/resources" {
 		var req tessiven.ResourceRequest

@@ -5,8 +5,10 @@ import {
   runtimeControlServiceURL,
 } from './runtimeControlClient';
 
-type HostMessage = {
+export type HostMessage = {
+  kind: 'resource' | 'runtime';
   id: string;
+  scope: { user_public_id: string; floe_app: string };
   request: { runtime_ref: string; action: string; [key: string]: unknown };
   permissions: {
     read: boolean;
@@ -17,6 +19,7 @@ type HostMessage = {
 };
 export type TessivenHost = {
   ready: Promise<void>;
+  source: () => string;
   active: () => boolean;
   close: () => void;
 };
@@ -36,10 +39,22 @@ export function connectTessivenHost(
     perMessageDeflate: false,
     agent: false,
   });
+  let source = '';
+  socket.once('upgrade', (response) => {
+    source = String(response.headers['x-redeven-tessiven-source'] ?? '');
+  });
   const controller = new AbortController();
   const inflight = new Set<string>();
   const ready = new Promise<void>((resolve, reject) => {
-    socket.once('open', resolve);
+    socket.once('open', () => {
+      if (/^[a-f0-9-]{72}$/.test(source)) resolve();
+      else {
+        reject(
+          new Error('Update Runtime to support scoped Tessiven connections.'),
+        );
+        socket.close();
+      }
+    });
     socket.once('error', reject);
     socket.once('close', () =>
       reject(new Error('Tessiven host connection ended')),
@@ -57,6 +72,12 @@ export function connectTessivenHost(
         !/^[a-f0-9-]{36}$/.test(message.id) ||
         !message.request ||
         typeof message.request.runtime_ref !== 'string' ||
+        !['resource', 'runtime'].includes(message.kind) ||
+        !message.scope ||
+        message.scope.user_public_id !== 'user_local' ||
+        !['com.floegence.redeven.agent', 'com.floegence.redeven.code'].includes(
+          message.scope.floe_app,
+        ) ||
         !message.permissions ||
         !['read', 'write', 'execute', 'admin'].every(
           (key) =>
@@ -73,6 +94,9 @@ export function connectTessivenHost(
           'start',
           'stop',
           'restart',
+          ...(message.kind === 'runtime'
+            ? ['directory', 'connect', 'status', 'diagnose', 'update']
+            : []),
         ].includes(message.request.action)
       )
         throw new Error('Invalid Tessiven host request');
@@ -109,6 +133,7 @@ export function connectTessivenHost(
   });
   return {
     ready,
+    source: () => source,
     active: () =>
       !controller.signal.aborted &&
       (socket.readyState === WebSocket.OPEN ||

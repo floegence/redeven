@@ -10,6 +10,7 @@ import (
 	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/containerresource"
 	"github.com/floegence/redeven/internal/managedwebservice"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -23,6 +24,7 @@ var (
 )
 
 type ResourceRequest struct {
+	Generation  string   `json:"generation,omitempty"`
 	CanvasID    string   `json:"canvas_id,omitempty"`
 	VersionID   int64    `json:"version_id,omitempty"`
 	InstanceID  string   `json:"instance_id,omitempty"`
@@ -34,6 +36,7 @@ type ResourceRequest struct {
 	OperationID string   `json:"operation_id,omitempty"`
 }
 type ResourceInspection struct {
+	Generation string   `json:"generation,omitempty"`
 	RuntimeRef string   `json:"runtime_ref"`
 	Binding    *Binding `json:"binding,omitempty"`
 	Name       string   `json:"name"`
@@ -55,17 +58,21 @@ type ResourceResult struct {
 // ResourceBackend routes only explicit product operations. It is not an HTTP
 // proxy or a second management state machine.
 type ResourceBackend struct {
-	Broker     *Broker
-	Library    *Service
-	Managed    managedwebservice.Backend
-	Containers *containerresource.Service
-	Remote     func(context.Context, *session.Meta, ResourceRequest) (ResourceResult, error)
+	Authorize       func(*session.Meta) *session.Meta
+	RuntimeIdentity func() string
+	GatewayCatalog  func(context.Context) (gp.CatalogResponse, error)
+	Broker          *Broker
+	Library         *Service
+	Managed         managedwebservice.Backend
+	Containers      *containerresource.Service
+	Remote          func(context.Context, *session.Meta, ResourceRequest) (ResourceResult, error)
 }
 
 func isResourceMutation(action string) bool {
 	return action == "start" || action == "stop" || action == "restart" || action == "open"
 }
 func (b *ResourceBackend) Execute(ctx context.Context, meta *session.Meta, req ResourceRequest) (ResourceResult, error) {
+	meta = b.authorize(meta)
 	if meta == nil || !meta.CanRead {
 		return ResourceResult{}, ErrPermissionDenied
 	}
@@ -162,6 +169,7 @@ func isTargetUnavailable(err error) bool {
 // ExecuteLocal is used after the target connection has been selected and
 // authorized by its owning adapter. It never follows a remote reference.
 func (b *ResourceBackend) ExecuteLocal(ctx context.Context, meta *session.Meta, req ResourceRequest) (ResourceResult, error) {
+	meta = b.authorize(meta)
 	out := ResourceResult{RuntimeRef: req.RuntimeRef}
 	if meta == nil || !meta.CanRead {
 		return out, ErrPermissionDenied
@@ -388,4 +396,11 @@ func ResourceErrorDetails(err error) (int, string, string) {
 	default:
 		return 500, "TESSIVEN_RESOURCE_FAILED", "The resource manager could not complete the request"
 	}
+}
+
+func (b *ResourceBackend) authorize(meta *session.Meta) *session.Meta {
+	if b.Authorize != nil {
+		return b.Authorize(meta)
+	}
+	return meta
 }

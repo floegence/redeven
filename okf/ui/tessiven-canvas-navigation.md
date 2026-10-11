@@ -14,7 +14,9 @@ Complete paths remain inspectable while offscreen geometry cannot expand the
 painted SVG layer. Invalid graph data or actual worker failures stay visible;
 view changes retain the last valid scene until the next layout is ready.
 
-# Layout and routing
+# Contract
+
+## Layout and routing
 
 Automatic layout and library thumbnails use the same published Floe layout
 engine, direction, layers, and visibility projection. Documents may declare
@@ -44,7 +46,7 @@ related routes without hiding relationships from the saved document.
 Positioned objects without relationships still contribute their actual world
 bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
 
-# Controls and rendering
+## Controls and rendering
 
 - Canvas controls expand or collapse all logical groups in one compact reflow.
   They preserve the selected visible object, or its enclosing group when hidden,
@@ -80,6 +82,13 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
   worker, child ELK worker and raw WASM resource closure. Large-graph
   qualification measures actual host counts, including groups of ten
   so a thousand-host fixture never silently measures only aggregate cards.
+
+# Boundaries
+
+The saved canvas contract owns topology and versions; these browsing controls
+change only the visible scene. Published Floe owns geometric execution.
+Tessiven does not replace worker failures with guessed routes or use viewport
+culling to alter the complete inspectable model.
 
 # Evidence
 

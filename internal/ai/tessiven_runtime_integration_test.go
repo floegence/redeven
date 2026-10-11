@@ -131,7 +131,7 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 			}
 			terminal, runErr := runTypedTurnForTest(t, t.Context(), svc, meta, "tessiven-fixture", RunStartRequest{ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Map the fixture and save the canvas; use the authorized instance for a service action when requested."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}})
 			if providerCalls.Load() == 0 {
-				t.Fatal("Tessiven tool was not exposed to the provider")
+				t.Fatalf("Tessiven tool was not exposed to the provider: %v", runErr)
 			}
 			if action {
 				if effects.Load() != 1 || runErr == nil || terminal.Failure == nil || terminal.Failure.Code != flruntime.ThreadTurnFailureEffectOutcomeUnknown {

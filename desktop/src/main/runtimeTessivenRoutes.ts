@@ -11,6 +11,9 @@ const query =
         allowed[key]!(url.searchParams.get(key)!),
     );
 export const TESSIVEN_RUNTIME_ROUTES = [
+ {path:`${TESSIVEN_RUNTIME_BASE}/runtimes`,methods:['GET'],allowsQuery:noQuery},
+ {path:`${TESSIVEN_RUNTIME_BASE}/runtimes/inspect`,methods:['POST'],allowsQuery:noQuery},
+ {path:`${TESSIVEN_RUNTIME_BASE}/runtimes/actions`,methods:['POST'],allowsQuery:noQuery},
   {
     path: `${TESSIVEN_RUNTIME_BASE}/schema`,
     methods: ['GET'],

@@ -17,6 +17,7 @@ type Operation = {
   [key: string]: unknown;
 };
 type Inspection = {
+ generation?:string;
   name: string;
   runtime_ref: string;
   binding?: Binding;
@@ -84,6 +85,7 @@ export function TessivenResourceDialog(props: {
       instance_id: props.instance.id,
       runtime_ref: runtime(),
       action,
+      ...(result()?.inspection?.generation?{generation:result()!.inspection!.generation}:{}),
       ...extra,
     });
   async function observe(value: Operation) {

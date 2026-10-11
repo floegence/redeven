@@ -167,6 +167,7 @@ func (s *runtimeControlServer) StartOnListener(ctx context.Context, ln net.Liste
 func (s *runtimeControlServer) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/tessiven/host", s.handleTessivenHost)
+	mux.HandleFunc("/v2/tessiven/preflight", s.handleTessivenPreflight)
 	mux.HandleFunc("/v2/tessiven/resources", s.handleTessivenTarget)
 	mux.HandleFunc("/v2/cloud-link", s.handleCloudLink)
 	mux.HandleFunc("/v2/gateway/preview", s.handleGatewayPreview)

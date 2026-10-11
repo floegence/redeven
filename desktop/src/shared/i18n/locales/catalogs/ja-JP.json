@@ -3307,5 +3307,16 @@
     "empty": "ペアリング済みの Gateway はありません。",
     "unavailable": "Env App を開くには、この Gateway で Desktop を認可してください。",
     "tab": "Gateway"
+  },
+  "tessivenRuntime": {
+    "confirmTitle": "{action}を確認",
+    "confirmDetail": "確認後、Desktop が登録された正確なランタイムを操作します。既存のワークロード保護と進捗表示が適用されます。",
+    "selfDetail": "このランタイムは現在の Flower の会話を実行しています。この操作で会話が中断される場合があります。操作はまだ開始されていません。",
+    "continue": "続行",
+    "changed": "ソースまたは対象が変更されました。更新して操作を再確認してください。",
+    "start": "起動",
+    "stop": "停止",
+    "restart": "再起動",
+    "update": "アップグレード"
   }
 }

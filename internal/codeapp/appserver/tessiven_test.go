@@ -100,3 +100,27 @@ func TestTessivenSchemaUsesExactDSLVersion(t *testing.T) {
 		t.Fatal("version selector bypassed read permission")
 	}
 }
+
+func TestTessivenBusinessRejectsSelfDeclaredAuthorityAndRemoteTarget(t *testing.T) {
+	svc, err := tessiven.Open(filepath.Join(t.TempDir(), "canvas.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	cap := config.PermissionSet{Read: true, Write: true, Execute: true}
+	srv := &Server{tessiven: svc, localPermissionCap: &cap, tessivenResources: &tessiven.ResourceBackend{RuntimeIdentity: func() string { return "actual" }}}
+	for _, body := range []string{
+		`{"identity":"actual","permissions":{"read":true,"write":true,"execute":true},"request":{"runtime_ref":"local:local","action":"list"}}`,
+		`{"identity":"actual","request":{"runtime_ref":"ssh:other","action":"list"}}`,
+		`{"identity":"actual","request":{"runtime_ref":"local:local","action":"update"}}`,
+	} {
+		response := performWorkbenchLayoutRequest(t, srv, http.MethodPost, tessivenAPIBase+"/business", body)
+		if response.Code != 400 {
+			t.Fatalf("untrusted business payload accepted: %d %s", response.Code, response.Body.String())
+		}
+	}
+	response := performWorkbenchLayoutRequest(t, srv, http.MethodPost, tessivenAPIBase+"/business", `{"identity":"actual","request":{"runtime_ref":"local:local","action":"list"}}`)
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+}

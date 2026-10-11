@@ -729,9 +729,9 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 		return []fltools.Effect{fltools.EffectWrite}
 	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate":
 		return []fltools.Effect{fltools.EffectShell}
-	case "tessiven.inspect":
+	case "tessiven.inspect", "tessiven.runtimes", "tessiven.runtime.inspect":
 		return []fltools.Effect{fltools.EffectRead, fltools.EffectNetwork}
-	case "tessiven.action":
+	case "tessiven.action", "tessiven.runtime.action":
 		return []fltools.Effect{fltools.EffectWrite, fltools.EffectNetwork}
 	case "tessiven.save", "tessiven.edit":
 		return []fltools.Effect{fltools.EffectWrite}

@@ -687,7 +687,8 @@
       "askFlowerUnavailableTitle": "Impossible de demander à Flower",
       "downloadUnavailableTitle": "Téléchargement indisponible",
       "onlyFilesDownloaded": "Seuls les fichiers peuvent être téléchargés."
-    }
+    },
+    "tessivenLabel": "Canevas de services Tessiven"
   },
   "accessGate": {
     "invalidFactorError": "Code invalide ou déjà utilisé. Essayez un nouveau code.",

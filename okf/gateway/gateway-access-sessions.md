@@ -25,6 +25,10 @@ A reverse stream enters the original public Runtime handler. It never acquires a
 
 The Gateway provides no separate HTTP webpage forwarding URL. LAN applications are opened by Desktop, including browser applications it owns. Independently registered direct URL, SSH or container access remains separate from Gateway membership.
 
+Tessiven uses this same authenticated application session for its fixed local
+business endpoint, under the [scoped Runtime operations contract](../ai/tessiven-runtime-operations.md).
+The catalog alone does not authorize service or Runtime process operations.
+
 ## Limits and revocation
 
 The shared budget admits at most 32 business connections per member and 1,024 in total, including pending opens. Reverse access and Cloud CONNECT use the same budget. One member exceeding a limit cannot consume another member's allocation. Capacity, member state and version are checked before opening; removal closes live member streams.

@@ -28,6 +28,9 @@ export type DesktopRequestHeaders = Record<string, string | string[]>;
 export type DesktopPrivateBridgeRequestScope = Readonly<{
   webServiceForwardID?: string;
   graphicalWindow?: boolean;
+  // Main-process facts, never renderer request fields.
+  tessivenSource?: string;
+  trustedEnvAppFrame?: boolean;
 }>;
 
 export function desktopPrivateBridgeRequestHeaders(
@@ -37,6 +40,9 @@ export function desktopPrivateBridgeRequestHeaders(
   requestHeaders: DesktopRequestHeaders,
   scope: DesktopPrivateBridgeRequestScope = {},
 ): DesktopRequestHeaders {
+  requestHeaders = Object.fromEntries(Object.entries(requestHeaders).filter(
+    ([name]) => name.toLowerCase() !== 'x-redeven-tessiven-source',
+  ));
   if (transport.kind !== 'native_local_bridge' && transport.kind !== 'placement_bridge') {
     return requestHeaders;
   }
@@ -67,6 +73,13 @@ export function desktopPrivateBridgeRequestHeaders(
     Object.entries(requestHeaders).filter(([name]) => name.toLowerCase() !== normalizedHeaderName),
   ) as DesktopRequestHeaders;
   authorizedHeaders[DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER] = token;
+  const pathname = new URL(requestURL).pathname;
+  if (scope.trustedEnvAppFrame && !scope.webServiceForwardID
+      && /^[a-f0-9-]{72}$/.test(scope.tessivenSource ?? '')
+      && (pathname === '/api/local/direct/connect_artifact'
+        || pathname.startsWith('/_redeven_proxy/api/'))) {
+    authorizedHeaders['X-Redeven-Tessiven-Source'] = scope.tessivenSource!;
+  }
   return authorizedHeaders;
 }
 

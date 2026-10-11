@@ -3313,5 +3313,16 @@
     "empty": "Nenhum Gateway vinculado.",
     "unavailable": "Autorize o Desktop neste Gateway para abrir o Env App.",
     "tab": "Gateway"
+  },
+  "tessivenRuntime": {
+    "confirmTitle": "Confirmar {action}",
+    "confirmDetail": "Após a confirmação, o Desktop operará o runtime exato registrado. A proteção de cargas de trabalho e o progresso existentes serão aplicados.",
+    "selfDetail": "Este runtime executa a conversa atual do Flower. Esta ação pode interromper a conversa. A operação ainda não começou.",
+    "continue": "Continuar",
+    "changed": "A origem ou o destino mudou. Atualize e revise a operação novamente.",
+    "start": "início",
+    "stop": "parada",
+    "restart": "reinício",
+    "update": "atualização"
   }
 }

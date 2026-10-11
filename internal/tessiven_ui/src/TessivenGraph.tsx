@@ -69,6 +69,7 @@ export function TessivenGraph(props: {
   t: TessivenText;
   onAsk: (selection: Selection) => void;
   onInspect: (instance: Instance) => void;
+  onInspectRuntime?: (runtimeRef:string)=>void;
   locate?: string;
   visible?: boolean;
   browseState?: GraphBrowseState;
@@ -645,7 +646,8 @@ export function TessivenGraph(props: {
               }}
               onClick={(event) => {
                 event.stopPropagation();
-                show(rowEvent(event, node.id), [card.node.id]);
+                if (props.onInspectRuntime) props.onInspectRuntime(card.node.runtimeRef);
+                else show(rowEvent(event, node.id), [card.node.id]);
               }}
             >
               <span class="tessiven-runtime-mark">r.</span>

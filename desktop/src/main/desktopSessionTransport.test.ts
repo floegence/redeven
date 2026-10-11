@@ -303,3 +303,32 @@ describe('desktopPrivateBridgeRequestHeaders', () => {
     }
   });
 });
+
+
+describe('Tessiven native source attribution', () => {
+  const source = 'a'.repeat(72);
+  const header = 'X-Redeven-Tessiven-Source';
+  it('binds only a trusted Env App request to its exact private origin', () => {
+    const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+    const scope = { tessivenSource: source, trustedEnvAppFrame: true };
+    for (const path of ['/api/local/direct/connect_artifact', '/_redeven_proxy/api/tessiven/runtimes']) {
+      expect(desktopPrivateBridgeRequestHeaders(transport, localStartup,
+        `http://127.0.0.1:43123${path}`, { [header]: 'spoofed' }, scope)[header]).toBe(source);
+    }
+  });
+  it('strips renderer declarations from unrelated origins, frames and transports', () => {
+    const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+    for (const [url, scope] of [
+      ['http://127.0.0.1:43124/api/local/direct/connect_artifact', { tessivenSource: source, trustedEnvAppFrame: true }],
+      ['http://127.0.0.1:43123/api/local/direct/connect_artifact', { tessivenSource: source }],
+      ['http://pf-demo.localhost:43123/', { tessivenSource: source, trustedEnvAppFrame: true, webServiceForwardID: 'demo' }],
+      ['http://127.0.0.1:43123/pf/demo/', { tessivenSource: source, trustedEnvAppFrame: true }],
+    ] as const) {
+      const headers = desktopPrivateBridgeRequestHeaders(transport, localStartup, url, { [header]: 'spoofed' }, scope);
+      expect(Object.keys(headers).some(key => key.toLowerCase() === header.toLowerCase())).toBe(false);
+    }
+    const external = { ...transport, kind: 'external_local_ui' as const };
+    expect(desktopPrivateBridgeRequestHeaders(external, localStartup, transport.entryURL,
+      { [header]: 'spoofed' }, { tessivenSource: source, trustedEnvAppFrame: true })[header]).toBeUndefined();
+  });
+});

@@ -6,6 +6,9 @@ import "encoding/json"
 //
 // Agents must NOT trust any permissions or app identifiers claimed by the browser on the data plane.
 type Meta struct {
+	// DesktopSource is server-confirmed, ephemeral private-channel attribution.
+	// It is never accepted from a session DTO or persisted as execution authority.
+	DesktopSource     string `json:"-"`
 	ChannelID         string `json:"channel_id"`
 	EndpointID        string `json:"endpoint_id"`
 	FloeApp           string `json:"floe_app"`

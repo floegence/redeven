@@ -284,9 +284,32 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		}
 	}()
 
-	tessivenBroker := &tessiven.Broker{}
+	authorizeTessiven := func(meta *session.Meta) *session.Meta {
+		if meta == nil {
+			return nil
+		}
+		copy := *meta
+		cfg, err := config.Load(opts.ConfigPath)
+		if err != nil || cfg == nil {
+			return nil
+		}
+		cap := cfg.PermissionPolicy.ResolveCap(meta.UserPublicID, meta.FloeApp)
+		copy.CanRead = copy.CanRead && cap.Read
+		copy.CanWrite = copy.CanWrite && cap.Write
+		copy.CanExecute = copy.CanExecute && cap.Execute
+		return &copy
+	}
+	tessivenBroker := &tessiven.Broker{Authorize: authorizeTessiven}
 	svc.tessivenBroker = tessivenBroker
-	tessivenResources := &tessiven.ResourceBackend{Broker: tessivenBroker, Library: tessivenSvc, Managed: managedSvc, Containers: containerResourceSvc}
+	tessivenResources := &tessiven.ResourceBackend{Authorize: authorizeTessiven, Broker: tessivenBroker, Library: tessivenSvc, Managed: managedSvc, Containers: containerResourceSvc,
+		RuntimeIdentity: func() string {
+			cfg, err := config.Load(opts.ConfigPath)
+			if err != nil {
+				return ""
+			}
+			return cfg.LocalEnvironmentPublicID
+		},
+	}
 
 	aiReady := newAIReadinessController(ctx, ai.Options{
 		PlatformHTTPTransport: opts.PlatformHTTPTransport,

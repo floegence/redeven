@@ -300,6 +300,10 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 		}
 		trustedRequest := withTrustedLocalUIBridge(r)
 		trustedRequest.Header.Del(localDesktopBridgeTokenHeader)
+		if bridgeAuthorized && !portForwardOrigin && s.appServer != nil {
+			trustedRequest = s.appServer.WithTessivenDesktopSource(trustedRequest, r.Header.Get("X-Redeven-Tessiven-Source"))
+		}
+		trustedRequest.Header.Del("X-Redeven-Tessiven-Source")
 		if portForwardOrigin {
 			if s.appServer == nil {
 				http.NotFound(w, trustedRequest)
@@ -531,8 +535,12 @@ func (s *Server) configureAcceptor() error {
 			// Authority comes from the store; only the in-memory lifecycle owns
 			// the settlement signal shared with OnSession. It is not persisted.
 			s.pendingMu.Lock()
-			ready := s.pending[channelID].settled
+			livePending := s.pending[channelID]
+			ready := livePending.settled
 			s.pendingMu.Unlock()
+			// The store remains authorization authority; the private source is
+			// an ephemeral attribution from this exact fresh acquisition only.
+			pending.meta.DesktopSource = livePending.meta.DesktopSource
 			if ready == nil {
 				return nil, errors.New("local session lifecycle is unavailable")
 			}
@@ -2223,6 +2231,9 @@ func (s *Server) handleConnectArtifactWithMeta(w http.ResponseWriter, r *http.Re
 		meta.ChannelID = ""
 	}
 
+	if windowMeta == nil && privateLoopback && s.appServer != nil {
+		meta.DesktopSource = s.appServer.TessivenDesktopSource(r)
+	}
 	traceID := localUITraceID(r)
 	accessSessionID, accessExpiresAt, ok := s.activeLocalAccessSession(r)
 	if !ok {

@@ -2177,6 +2177,9 @@ func (g *Server) requirePermission(w http.ResponseWriter, r *http.Request, perm 
 	// without the env-/ch- origin labels used in Standard Mode.
 	if route, ok := localUIRouteFromRequest(r); ok {
 		meta := g.localSessionMeta(route)
+		if meta != nil {
+			meta.DesktopSource = desktopSourceFromRequest(r)
+		}
 		if meta == nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "app server not ready"})
 			return nil, false

@@ -703,7 +703,8 @@
       "askFlowerUnavailableTitle": "Ask Flower недоступен",
       "downloadUnavailableTitle": "Скачивание недоступно",
       "onlyFilesDownloaded": "Скачивать можно только файлы."
-    }
+    },
+    "tessivenLabel": "Холст сервисов Tessiven"
   },
   "accessGate": {
     "invalidFactorError": "Код неверен или уже использован. Введите новый код.",

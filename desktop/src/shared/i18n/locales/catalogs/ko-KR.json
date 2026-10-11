@@ -3307,5 +3307,16 @@
     "empty": "페어링된 Gateway가 없습니다.",
     "unavailable": "Env App을 열려면 이 Gateway에서 Desktop 접근을 승인하세요.",
     "tab": "Gateway"
+  },
+  "tessivenRuntime": {
+    "confirmTitle": "{action} 확인",
+    "confirmDetail": "확인 후 Desktop이 정확히 등록된 런타임을 조작합니다. 기존 워크로드 보호 및 진행 상태가 적용됩니다.",
+    "selfDetail": "이 런타임은 현재 Flower 대화를 실행합니다. 이 작업으로 대화가 중단될 수 있습니다. 작업은 아직 시작되지 않았습니다.",
+    "continue": "계속",
+    "changed": "출처 또는 대상이 변경되었습니다. 새로 고친 후 작업을 다시 확인하세요.",
+    "start": "시작",
+    "stop": "중지",
+    "restart": "다시 시작",
+    "update": "업그레이드"
   }
 }
