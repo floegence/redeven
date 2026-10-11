@@ -687,7 +687,8 @@
       "askFlowerUnavailableTitle": "詢問 Flower 無法使用",
       "downloadUnavailableTitle": "下載不可用",
       "onlyFilesDownloaded": "只能下載檔案。"
-    }
+    },
+    "tessivenLabel": "Tessiven 服務畫布"
   },
   "accessGate": {
     "invalidFactorError": "驗證碼無效或已使用，請使用新的驗證碼。",

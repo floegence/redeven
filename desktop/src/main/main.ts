@@ -1,7 +1,9 @@
+import { completeTessivenRuntimeHandoff } from './tessivenRuntimeHandoff';
+import { TessivenRuntimes, type TessivenRuntimeInventory, type TessivenRuntimePath, type TessivenRuntimeTarget } from './tessivenRuntimes';
 import { prepareGatewayMemberPartition, clearGatewayMemberPartition, closeGatewayMemberTransport } from './gatewayMemberPartition';
 import { manageRuntimeGateway, previewRuntimeGateway } from './runtimeControlClient';
-import { connectTessivenHost, type TessivenHost } from './tessivenHost';
-import { requestTessivenTarget } from './runtimeControlClient';
+import { connectTessivenHost, type TessivenHost, type HostMessage } from './tessivenHost';
+import { preflightTessivenSource, requestTessivenTarget } from './runtimeControlClient';
 import { isTessivenRuntimePath } from './runtimeTessivenRoutes';
 import { environmentAccessBinding, rememberEnvironmentIdentity, selectEnvironmentAccessRoute, removalNeedsAccessReplacement } from './environmentAccess';
 import { gatewayServiceStepProgress, finishGatewayServiceStepProgress } from './gatewayServiceProgress';
@@ -225,6 +227,7 @@ import {
 import {
   GatewayClientError,
   GatewayClient,
+  type GatewayCatalogResponse,
   redactGatewayDiagnosticValue,
 } from './gatewayClient';
 import {
@@ -734,6 +737,7 @@ import {
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 import {
   desktopRuntimeControlStatusAvailable,
+  defaultRuntimeControlStatusForRunningState,
   desktopRuntimeControlStatusMissing,
   type DesktopRuntimePresence,
   type DesktopRuntimeControlStatus,
@@ -9659,6 +9663,21 @@ async function createSessionRecord(
       if (snapshot.state === 'failed') failGatewaySessionTransport(sessionRecord, new GatewayClientError('GATEWAY_UNREACHABLE', 'Gateway member access requires attention.'));
     });
   }
+  // Register the native owner before the Env App acquires its business session.
+  // Opening an unrelated Gateway or public transport must not establish it.
+  if (transport.kind === 'native_local_bridge' || transport.kind === 'placement_bridge') {
+    const localRecord = localEnvironmentRuntimeRecord;
+    const bridgeRecord = runtimePlacementBridgeRegistry.values().find(record =>
+      record.startup.runtime_control?.base_url === startup.runtime_control?.base_url
+      && record.startup.runtime_control?.token === startup.runtime_control?.token);
+    const record = bridgeRecord ?? (localRecord?.startup.runtime_control?.base_url === startup.runtime_control?.base_url
+      && localRecord?.startup.runtime_control?.token === startup.runtime_control?.token ? localRecord : null);
+    if (record) {
+      const preferences = await loadDesktopPreferencesCached();
+      await ensureTessivenHost({ record, local_environment: record === localRecord ? preferences.local_environment : null })
+        .catch(() => console.warn('Tessiven Desktop source is unavailable for this Runtime.'));
+    }
+  }
   void rootWindow.browserWindow.loadURL(entryURL).catch(error => failOpeningSession(sessionRecord, error));
   if (options.transportRecovery) {
     attachSessionTransportRecovery(sessionRecord, options.transportRecovery);
@@ -10331,31 +10350,970 @@ async function ensureRuntimeFlowerRecordUncoalesced(preferences: DesktopPreferen
   );
 }
 
-let tessivenHost: { endpoint: string; token: string; host: TessivenHost } | undefined;
+// Tessiven borrows existing connection leases; the registry remains their owner.
+const tessivenConnectionLeases = new Map<string, RuntimePlacementBridgeLease>();
+function tessivenRuntimeGeneration(value: unknown): string {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(value))
+    .digest('hex');
+}
+function tessivenRuntimeIdentity(
+  startup: StartupReport | undefined,
+): string | undefined {
+  return (
+    startup?.runtime_service?.bindings?.cloud_link
+      ?.local_environment_public_id || undefined
+  );
+}
+async function tessivenRuntimeInventory(
+  source: RuntimeFlowerTarget,
+  signal: AbortSignal,
+  directOnly = false,
+): Promise<TessivenRuntimeInventory> {
+  const preferences = await loadDesktopPreferencesCached();
+  const paths: TessivenRuntimePath[] = [];
+  const sources: TessivenRuntimeInventory['sources'] = [
+    { source: 'desktop', location: 'current_device', state: 'available' },
+  ];
+  const direct = [
+    {
+      id: preferences.local_environment.id,
+      label: preferences.local_environment.label,
+      host_access: { kind: 'local_host' } as DesktopRuntimeHostAccess,
+      placement: localHostRuntimeLifecyclePlacement(
+        preferences.local_environment,
+      ),
+      updated: 0,
+      local: true,
+    },
+    ...preferences.saved_runtime_targets.map((target) => ({
+      ...target,
+      updated: target.updated_at_ms,
+      local: false,
+    })),
+  ];
+  for (const saved of direct) {
+    const runtimeRef = saved.local
+      ? desktopCloudRuntimeLinkTargetID('local_environment', saved.id)
+      : providerRuntimeLinkTargetIDForRuntimeTarget(
+          saved.host_access,
+          saved.id as DesktopRuntimeTargetID,
+        );
+    const bridge = runtimePlacementBridgeRegistry.get(
+      saved.id as DesktopRuntimeTargetID,
+    );
+    const local = saved.local
+      ? currentLocalEnvironmentRuntimeRecord(preferences.local_environment)
+      : null;
+    const record = bridge ?? local;
+    const presence =
+      welcomeRuntimeHealthStore.snapshot().managedRuntimePresenceByTargetID[
+        runtimeRef
+      ] ??
+      managedRuntimePresence({
+        targetID: runtimeRef,
+        placementTargetID: saved.id as DesktopRuntimeTargetID,
+        kind: providerRuntimeLinkKindForHostAccess(saved.host_access),
+        environmentID: saved.id,
+        label: saved.label,
+        runtimeKey: saved.id,
+        hostAccess: saved.host_access,
+        placement: saved.placement,
+        running: !!record,
+        localUIURL: record?.startup.local_ui_url ?? '',
+        runtimeService: record?.startup.runtime_service,
+        runtimeControlStatus: record?.startup.runtime_control
+          ? desktopRuntimeControlStatusAvailable()
+          : defaultRuntimeControlStatusForRunningState(!!record),
+      });
+    const target: TessivenRuntimeTarget = {
+      runtime_ref: runtimeRef,
+      generation: tessivenRuntimeGeneration([
+        saved.id,
+        saved.host_access,
+        saved.placement,
+        saved.updated,
+        record?.startup.pid,
+        record?.startup.started_at_unix_ms,
+        bridge?.session.getRecoverySnapshot().generation,
+      ]),
+      identity: tessivenRuntimeIdentity(record?.startup),
+      name: saved.label,
+      source: 'desktop',
+      location: 'current_device',
+      observed_at: new Date(presence.checked_at_unix_ms).toISOString(),
+      registered: true,
+      online: record
+        ? true
+        : (welcomeRuntimeHealthStore.snapshot()
+            .managedRuntimePresenceByTargetID[runtimeRef]?.running ?? null),
+      connected: !!record,
+      authenticated:
+        !!record && presence.runtime_control_status.state === 'available',
+      actions: [
+        'status',
+        'diagnose',
+        'operation',
+        'connect',
+        ...(['start', 'stop', 'restart', 'update'] as const).filter(
+          (action) => presence.operations[action].availability === 'available',
+        ),
+      ],
+      ...(!record ? { reason: 'direct_disconnected' } : {}),
+    };
+    const path: TessivenRuntimePath = {
+      target,
+      connect: async (connectSignal, message) => {
+        await preflightTessivenHostEffect(source, message, connectSignal);
+        if (saved.local) {
+          const attached = currentLocalEnvironmentRuntimeRecord(
+            preferences.local_environment,
+          );
+          if (!attached)
+            throw new RuntimeControlError(
+              'TESSIVEN_TARGET_UNAVAILABLE',
+              'Start this registered Runtime in Desktop before connecting.',
+              409,
+            );
+          return { runtime_ref: runtimeRef, status: 'connected' };
+        }
+        const lease = await acquireEnvironmentManagementConnection(
+          saved.id,
+          'tessiven-runtime',
+          connectSignal,
+        ).catch(async (error) => {
+          if (
+            !(error instanceof RuntimeControlError) ||
+            ![
+              'RUNTIME_CONTROL_UNREACHABLE',
+              'SETTINGS_RUNTIME_INCOMPATIBLE',
+              'SECURITY_RESTART_REQUIRED',
+            ].includes(error.code)
+          )
+            throw error;
+          return null;
+        });
+        if (!lease) {
+          await openDesktopWelcomeWindow({
+            surface: 'connect_environment',
+            selectedEnvironmentID: saved.id,
+          });
+          return { runtime_ref: runtimeRef, status: 'recovery_required' };
+        }
+        const previous = tessivenConnectionLeases.get(runtimeRef);
+        tessivenConnectionLeases.set(runtimeRef, lease);
+        await previous?.release();
+        return { runtime_ref: runtimeRef, status: 'connected' };
+      },
+      inspect: async (request) => {
+        if (request.action === 'operation') {
+          const operation = launcherOperations.get(
+            String(request.operation_id ?? ''),
+          );
+          const targetID = desktopRuntimeTargetID(
+            saved.host_access,
+            saved.placement,
+            saved.id,
+          );
+          if (
+            !operation ||
+            operation.subject_kind !== 'runtime_target' ||
+            operation.subject_id !== targetID
+          )
+            throw new RuntimeControlError(
+              'TESSIVEN_OPERATION_UNAVAILABLE',
+              'The original Runtime operation is unavailable.',
+              409,
+            );
+          return {
+            runtime_ref: runtimeRef,
+            status: operation.status,
+            operation_id: operation.operation_key,
+            operation: { status: operation.status, phase: operation.phase },
+          };
+        }
+        return {
+          runtime_ref: runtimeRef,
+          status: target.connected ? 'connected' : 'disconnected',
+          target,
+          ...(request.action === 'diagnose'
+            ? {
+                diagnostics: {
+                  runtime_version:
+                    record?.startup.runtime_service?.runtime_version,
+                  compatibility_epoch:
+                    record?.startup.runtime_service?.compatibility_epoch,
+                  control_state: presence.runtime_control_status.state,
+                  control_reason:
+                    presence.runtime_control_status.state === 'missing'
+                      ? presence.runtime_control_status.reason_code
+                      : undefined,
+                },
+              }
+            : {}),
+        };
+      },
+      lifecycle: async (request, lifecycleSignal, permissions, scope) => {
+        const action = request.action as
+          | 'start'
+          | 'stop'
+          | 'restart'
+          | 'update';
+        const kind =
+          action === 'start'
+            ? 'start_environment_runtime'
+            : action === 'stop'
+              ? 'stop_environment_runtime'
+              : action === 'restart'
+                ? 'restart_environment_runtime'
+                : 'update_environment_runtime';
+        const operationKey = `tessiven:${request.request_id}`;
+        const targetID = desktopRuntimeTargetID(
+          saved.host_access,
+          saved.placement,
+          saved.id,
+        );
+        const existing = launcherOperations.get(operationKey);
+        if (existing) {
+          if (existing.subject_id !== targetID || existing.action !== kind)
+            throw new RuntimeControlError(
+              'TESSIVEN_RESOURCE_CONFLICT',
+              'The request ID belongs to a different operation.',
+              409,
+            );
+          return {
+            runtime_ref: runtimeRef,
+            status: existing.status,
+            operation_id: operationKey,
+          };
+        }
+        const sourceHost = tessivenHostFor(source.record.startup);
+        const sourceID = sourceHost?.host.source();
+        const endpoint = source.record.startup.runtime_control;
+        if (!sourceHost || !sourceID || !endpoint)
+          throw new RuntimeControlError(
+            'TESSIVEN_TARGET_UNAVAILABLE',
+            'The Desktop source ended.',
+            409,
+          );
+        const i18n = createDesktopI18n(
+          desktopLanguageState().getSnapshot().resolved_locale,
+        );
+        const self = source.record.environment_id === saved.id;
+        launcherOperations.create({
+          operation_key: operationKey,
+          action: kind,
+          subject_kind: 'runtime_target',
+          subject_id: targetID,
+          environment_id: saved.id,
+          environment_label: saved.label,
+          status: 'needs_confirmation',
+          phase: 'confirmation_required',
+          title: i18n.t('tessivenRuntime.confirmTitle', {
+            action: i18n.t(`tessivenRuntime.${action}`),
+          }),
+          detail: i18n.t(
+            self
+              ? 'tessivenRuntime.selfDetail'
+              : 'tessivenRuntime.confirmDetail',
+          ),
+          active_progress_surface: 'runtime_lifecycle',
+          cancelable: true,
+        });
+        // Native confirmation is presentation only. Do not hand off/close the
+        // active Flower session until the user has explicitly confirmed.
+        void completeTessivenRuntimeHandoff({
+          confirm: async () =>
+            (
+              await dialog.showMessageBox({
+                type: 'warning',
+                title: i18n.t('tessivenRuntime.confirmTitle', {
+                  action: i18n.t(`tessivenRuntime.${action}`),
+                }),
+                message: saved.label,
+                detail: i18n.t(
+                  self
+                    ? 'tessivenRuntime.selfDetail'
+                    : 'tessivenRuntime.confirmDetail',
+                ),
+                buttons: [
+                  i18n.t('common.cancel'),
+                  i18n.t('tessivenRuntime.continue'),
+                ],
+                defaultId: 0,
+                cancelId: 0,
+                noLink: true,
+              })
+            ).response === 1,
+          pending: () =>
+            !lifecycleSignal.aborted &&
+            launcherOperations.get(operationKey)?.status ===
+              'needs_confirmation',
+          validate: async () => {
+            if (tessivenHostFor(source.record.startup) !== sourceHost || !sourceHost.host.active())
+              throw new Error('The Desktop source changed.');
+            await preflightTessivenSource(
+              endpoint,
+              sourceID,
+              scope,
+              permissions,
+              'lifecycle',
+              lifecycleSignal,
+            );
+            const fresh = await tessivenRuntimeInventory(
+              source,
+              lifecycleSignal,
+              true,
+            );
+            const matches = fresh.paths.filter(
+              (candidate) => candidate.target.runtime_ref === runtimeRef,
+            );
+            const current =
+              matches.length === 1 ? matches[0]?.target : undefined;
+            if (
+              !current ||
+              current.generation !== target.generation ||
+              current.identity !== target.identity ||
+              !current.actions.includes(action)
+            )
+              throw new Error('The Runtime target changed.');
+          },
+          execute: async () => {
+            await openDesktopWelcomeWindow({
+              surface: 'connect_environment',
+              selectedEnvironmentID: saved.id,
+            });
+            await preflightTessivenSource(
+              endpoint,
+              sourceID,
+              scope,
+              permissions,
+              'lifecycle',
+              lifecycleSignal,
+            );
+            const result = await runEnvironmentRuntimeLifecycleFromLauncher(
+              {
+                kind,
+                environment_id: saved.id,
+                label: saved.label,
+                runtime_target_id: saved.id as DesktopRuntimeTargetID,
+                host_access: saved.host_access,
+                placement: saved.placement,
+                operation_key: operationKey,
+              },
+              {
+                beforeExecution: async () => {
+                  await preflightTessivenSource(
+                    endpoint,
+                    sourceID,
+                    scope,
+                    permissions,
+                    'lifecycle',
+                    lifecycleSignal,
+                  );
+                  const fresh = await tessivenRuntimeInventory(
+                    source,
+                    lifecycleSignal,
+                    true,
+                  );
+                  const matches = fresh.paths.filter(
+                    (path) => path.target.runtime_ref === runtimeRef,
+                  );
+                  if (
+                    matches.length !== 1 ||
+                    matches[0]?.target.generation !== target.generation ||
+                    matches[0]?.target.identity !== target.identity
+                  )
+                    throw new Error(
+                      'The Runtime target changed before admission.',
+                    );
+                },
+              },
+            );
+            requireSuccessfulRuntimeFlowerLifecycle(result);
+          },
+          canceled: () => {
+            launcherOperations.finish(operationKey, 'canceled', {
+              phase: 'canceled',
+              detail: i18n.t('common.cancel'),
+            });
+          },
+          failed: () => {
+            launcherOperations.finish(operationKey, 'failed', {
+              phase: 'failed',
+              detail: i18n.t('tessivenRuntime.changed'),
+            });
+          },
+        });
+        return {
+          runtime_ref: runtimeRef,
+          status: 'handoff_required',
+          operation_id: operationKey,
+        };
+      },
+    };
+    if (source.record.environment_id === saved.id)
+      paths.push({
+        ...path,
+        target: {
+          ...target,
+          runtime_ref: 'local:local',
+          location: 'execution_machine',
+        },
+        connect: async (connectSignal, message) => ({
+          ...((await path.connect(connectSignal, message)) as object),
+          runtime_ref: 'local:local',
+        }),
+        inspect: async (request, inspectSignal) => ({
+          ...((await path.inspect(request, inspectSignal)) as object),
+          runtime_ref: 'local:local',
+        }),
+        lifecycle: async (request, lifecycleSignal, permissions, scope) => ({
+          ...((await path.lifecycle!(
+            request,
+            lifecycleSignal,
+            permissions,
+            scope,
+          )) as object),
+          runtime_ref: 'local:local',
+        }),
+      });
+    paths.push(path);
+  }
+  if (directOnly) return { paths, sources };
+  const gatewayCatalogs = await Promise.all(
+    (await gatewayStore().list()).map(async (gateway) => {
+      const catalogSignal = AbortSignal.any([
+        signal,
+        AbortSignal.timeout(5000),
+      ]);
+      try {
+        const client = await gatewayLifecycleManager().client(gateway, {
+          startPolicy: 'require_ready',
+          signal: catalogSignal,
+        });
+        return {
+          gateway,
+          catalog: await client.catalog(gateway, { signal: catalogSignal }),
+        };
+      } catch {
+        return { gateway, catalog: null };
+      }
+    }),
+  );
+  const authenticatedSessions = new Map(
+    await Promise.all(
+      gatewayCatalogs.flatMap(({ gateway, catalog }) =>
+        (catalog?.members ?? []).flatMap((member) => {
+          const owner = liveGatewayEnvironmentSessions(
+            gateway.gateway_id,
+            member.member_id,
+          ).find(
+            (value) =>
+              value.gateway_member_version === member.member_version &&
+              !sessionTransportRecoveryFailed(value),
+          );
+          return owner
+            ? [
+                tessivenGatewayAuthenticated(
+                  owner,
+                  AbortSignal.any([signal, AbortSignal.timeout(3000)]),
+                ).then(
+                  (authenticated) =>
+                    [owner.session_key, authenticated] as const,
+                ),
+              ]
+            : [];
+        }),
+      ),
+    ),
+  );
+  signal.throwIfAborted();
+  for (const { gateway, catalog } of gatewayCatalogs) {
+    if (!catalog) {
+      sources.push({
+        source: `gateway:${gateway.gateway_id}`,
+        name: gateway.display_name,
+        location: 'current_device',
+        state: 'unavailable',
+        reason: 'gateway_unavailable',
+      });
+      continue;
+    }
+    sources.push({
+      source: `gateway:${gateway.gateway_id}`,
+      name: gateway.display_name,
+      location: 'current_device',
+      state: 'available',
+    });
+    for (const member of catalog.members.filter(
+      (member) => member.state === 'active',
+    )) {
+      const runtimeRef = `gateway:${gateway.gateway_id}:member:${member.member_id}`;
+      const sessions = liveGatewayEnvironmentSessions(
+        gateway.gateway_id,
+        member.member_id,
+      ).filter(
+        (value) =>
+          value.gateway_member_version === member.member_version &&
+          !sessionTransportRecoveryFailed(value),
+      );
+      const owner = sessions[0];
+      const authenticated = owner
+        ? authenticatedSessions.get(owner.session_key) === true
+        : false;
+      const target: TessivenRuntimeTarget = {
+        runtime_ref: runtimeRef,
+        generation: tessivenRuntimeGeneration([
+          gateway.updated_at_ms,
+          catalog.gateway.gateway_public_key_fingerprint,
+          member.member_version,
+          owner?.session_key,
+          owner?.document_generation,
+        ]),
+        identity: member.runtime_public_id,
+        name: member.display_name,
+        source: `gateway:${gateway.gateway_id}`,
+        location: 'current_device',
+        observed_at: new Date().toISOString(),
+        registered: true,
+        online: member.connected,
+        connected: sessions.length > 0,
+        authenticated,
+        actions: [
+          'status',
+          'diagnose',
+          ...(catalog.gateway.permissions.access && member.connected
+            ? ['connect']
+            : []),
+        ],
+        reason: 'gateway_business_only',
+      };
+      const gatewayPath: TessivenRuntimePath = {
+        target,
+        business: (message, businessSignal) =>
+          executeTessivenGatewayBusiness(
+            source,
+            gateway,
+            member,
+            target,
+            owner,
+            message,
+            businessSignal,
+          ),
+        connect: async (connectSignal, message) => {
+          await preflightTessivenHostEffect(source, message, connectSignal);
+          const result = await openGatewayEnvironmentFromLauncher({
+            kind: 'open_gateway_environment',
+            gateway_id: gateway.gateway_id,
+            gateway_env_id: member.member_id,
+            environment_id: member.runtime_public_id,
+            label: member.display_name,
+          });
+          if (!result.ok)
+            throw new RuntimeControlError(
+              'TESSIVEN_TARGET_UNAVAILABLE',
+              result.message,
+              409,
+            );
+          return { runtime_ref: runtimeRef, status: 'authentication_required' };
+        },
+        inspect: async () => ({
+          runtime_ref: runtimeRef,
+          status: target.connected ? 'connected' : 'disconnected',
+          target,
+        }),
+      };
+      paths.push(gatewayPath);
+      const alias = `gateway-host:${catalog.gateway.gateway_id}:member:${member.member_id}`;
+      paths.push({
+        ...gatewayPath,
+        target: { ...target, runtime_ref: alias, source: 'gateway_host' },
+        connect: async (connectSignal, message) => ({
+          ...((await gatewayPath.connect(connectSignal, message)) as object),
+          runtime_ref: alias,
+        }),
+        inspect: async (request, inspectSignal) => ({
+          ...((await gatewayPath.inspect(request, inspectSignal)) as object),
+          runtime_ref: alias,
+        }),
+      });
+    }
+  }
+  return { paths, sources };
+}
+
+async function executeTessivenGatewayResource(
+  source: RuntimeFlowerTarget,
+  message: HostMessage,
+  signal: AbortSignal,
+): Promise<unknown> {
+  if (
+    !message.permissions.read ||
+    (['open', 'start', 'stop', 'restart'].includes(message.request.action) &&
+      (!message.permissions.write || !message.permissions.execute))
+  )
+    throw new RuntimeControlError(
+      'TESSIVEN_PERMISSION_DENIED',
+      'Service operation permission denied.',
+      403,
+    );
+  const inventory = await tessivenRuntimeInventory(source, signal);
+  const paths = inventory.paths.filter(
+    (path) => path.target.runtime_ref === message.request.runtime_ref,
+  );
+  if (paths.length !== 1)
+    throw new RuntimeControlError(
+      'TESSIVEN_TARGET_UNAVAILABLE',
+      'The exact Gateway path is unavailable or ambiguous.',
+      409,
+    );
+  const path = paths[0]!;
+  const mutation = ['open', 'start', 'stop', 'restart'].includes(
+    message.request.action,
+  );
+  if (mutation && message.request.generation !== path.target.generation)
+    throw new RuntimeControlError(
+      'TESSIVEN_RESOURCE_CONFLICT',
+      'The Gateway path changed. Inspect it before acting.',
+      409,
+    );
+  if (!path.business)
+    throw new RuntimeControlError(
+      'TESSIVEN_TARGET_UNAVAILABLE',
+      'The selected business path is unavailable.',
+      409,
+    );
+  return path.business(message, signal);
+}
+
+async function tessivenGatewayAuthenticated(
+  owner: DesktopSessionRecord,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const transport = owner.gateway_member_transport;
+  if (!transport) return false;
+  try {
+    const cookies = await session
+      .fromPartition(owner.session_partition)
+      .cookies.get({ url: transport.origin });
+    const response = await runtimeFlowerRequestHTTP(
+      new URL('/api/local/access/status', transport.origin),
+      { method: 'GET', path: '/api/local/access/status' },
+      {
+        agent: transport.agent,
+        signal,
+        headers: {
+          Cookie: cookies
+            .map((cookie) => `${cookie.name}=${cookie.value}`)
+            .join('; '),
+        },
+        timeoutMs: 3000,
+        maxBytes: 65536,
+      },
+    );
+    const result = parseRuntimeFlowerJSON(response.body) as {
+      ok?: boolean;
+      data?: { unlocked?: boolean };
+    };
+    return (
+      response.status === 200 &&
+      result?.ok === true &&
+      result.data?.unlocked === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function executeTessivenGatewayBusiness(
+  source: RuntimeFlowerTarget,
+  gateway: GatewayRecord,
+  observedMember: GatewayCatalogResponse['members'][number],
+  target: TessivenRuntimeTarget,
+  owner: DesktopSessionRecord | undefined,
+  message: HostMessage,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const currentGateway = (await gatewayStore().list()).find(
+    (value) => value.gateway_id === gateway.gateway_id,
+  );
+  if (!currentGateway || currentGateway.updated_at_ms !== gateway.updated_at_ms)
+    throw new RuntimeControlError(
+      'TESSIVEN_RESOURCE_CONFLICT',
+      'The registered Gateway changed.',
+      409,
+    );
+  const client = await gatewayLifecycleManager().client(currentGateway, {
+    startPolicy: 'require_ready',
+    signal,
+  });
+  const catalog = await client.catalog(currentGateway, { signal });
+  const member = catalog.members.find(
+    (value) =>
+      value.state === 'active' && value.member_id === observedMember.member_id,
+  );
+  if (
+    !catalog.gateway.permissions.access ||
+    !member?.connected ||
+    member.member_version !== observedMember.member_version ||
+    member.runtime_public_id !== target.identity
+  )
+    throw new RuntimeControlError(
+      'TESSIVEN_RESOURCE_CONFLICT',
+      'The Gateway member identity or generation changed.',
+      409,
+    );
+  if (
+    !owner?.gateway_member_transport ||
+    sessionsByKey.get(owner.session_key) !== owner ||
+    owner.gateway_member_version !== member.member_version ||
+    sessionTransportRecoveryFailed(owner) ||
+    !(await tessivenGatewayAuthenticated(owner, signal))
+  )
+    throw new RuntimeControlError(
+      'TESSIVEN_TARGET_UNAVAILABLE',
+      'Connect and authenticate this exact Runtime through Tessiven.',
+      409,
+    );
+  assertRuntimeFlowerCompatible(owner.startup.runtime_service);
+  const transport = owner.gateway_member_transport;
+  const documentGeneration = owner.document_generation;
+  const cookies = await session
+    .fromPartition(owner.session_partition)
+    .cookies.get({ url: transport.origin });
+  signal.throwIfAborted();
+  if (
+    sessionsByKey.get(owner.session_key) !== owner ||
+    owner.document_generation !== documentGeneration ||
+    sessionTransportRecoveryFailed(owner)
+  )
+    throw new RuntimeControlError(
+      'TESSIVEN_RESOURCE_CONFLICT',
+      'The authenticated Runtime session changed.',
+      409,
+    );
+  await preflightTessivenHostEffect(source, message, signal);
+  const response = await runtimeFlowerRequestHTTP(
+    new URL('/_redeven_proxy/api/tessiven/business', transport.origin),
+    {
+      method: 'POST',
+      path: '/_redeven_proxy/api/tessiven/business',
+      body: {
+        identity: member.runtime_public_id,
+        request: { ...message.request, runtime_ref: 'local:local' },
+      },
+    },
+    {
+      agent: transport.agent,
+      signal,
+      headers: {
+        Cookie: cookies
+          .map((cookie) => `${cookie.name}=${cookie.value}`)
+          .join('; '),
+      },
+      timeoutMs: 25000,
+      maxBytes: 4 << 20,
+    },
+  );
+  const parsed = parseRuntimeFlowerJSON(response.body);
+  const error = runtimeFlowerEnvelopeError(parsed, response.status);
+  if (error)
+    throw new RuntimeControlError(
+      error.code ?? 'TESSIVEN_TARGET_REQUEST_FAILED',
+      error.message,
+      response.status,
+    );
+  const result = (
+    parsed as {
+      data?: {
+        runtime_ref: string;
+        inspection?: Record<string, unknown>;
+        resources?: Record<string, unknown>[];
+        opening?: Record<string, unknown>;
+      };
+    }
+  )?.data;
+  if (!result || result.runtime_ref !== 'local:local')
+    throw new Error('The target did not return a verified business result.');
+  result.runtime_ref = message.request.runtime_ref;
+  for (const item of [
+    ...(result.resources ?? []),
+    ...(result.inspection ? [result.inspection] : []),
+  ]) {
+    item.runtime_ref = message.request.runtime_ref;
+    item.generation = target.generation;
+  }
+  if (message.request.action === 'open' && result.opening?.state === 'ready') {
+    const opening = result.opening as {
+      app_path?: string;
+      forward?: {
+        forward_id?: string;
+        target_url?: string;
+        access_mode?: string;
+      };
+    };
+    const request = normalizeDesktopShellOpenWebServiceWindowRequest({
+      url: new URL(opening.app_path ?? '', transport.origin).toString(),
+      forward_id: opening.forward?.forward_id,
+      target_url: opening.forward?.target_url,
+      access_mode: opening.forward?.access_mode,
+    });
+    if (!request)
+      throw new Error('The target returned an invalid service opening.');
+    const opened = await openWebServiceWindowFromShell(owner, request);
+    if (!opened.ok) throw new Error(opened.message);
+    result.opening.opened_by_host = true;
+  }
+  return result;
+}
+
+async function preflightTessivenHostEffect(
+  source: RuntimeFlowerTarget,
+  message: HostMessage,
+  signal: AbortSignal,
+): Promise<void> {
+  signal.throwIfAborted();
+  const endpoint = source.record.startup.runtime_control;
+  const host = tessivenHostFor(source.record.startup);
+  if (
+    !endpoint ||
+    !host?.host.active() ||
+    host.endpoint !== endpoint.base_url ||
+    host.token !== endpoint.token
+  )
+    throw new RuntimeControlError(
+      'TESSIVEN_TARGET_UNAVAILABLE',
+      'The Desktop source ended.',
+      409,
+    );
+  const mutation = ['connect', 'open', 'start', 'stop', 'restart'].includes(
+    message.request.action,
+  );
+  const effect =
+    message.request.action === 'connect'
+      ? 'connect'
+      : mutation
+        ? 'resource'
+        : 'read';
+  await preflightTessivenSource(
+    endpoint,
+    host.host.source(),
+    message.scope,
+    message.permissions,
+    effect,
+    signal,
+  );
+}
+
+type TessivenHostRecord = { endpoint: string; token: string; host: TessivenHost; pending: boolean };
+const tessivenHosts = new Map<string, TessivenHostRecord>();
+function tessivenHostFor(startup: StartupReport): TessivenHostRecord | undefined {
+  const endpoint = startup.runtime_control;
+  const record = endpoint ? tessivenHosts.get(endpoint.base_url) : undefined;
+  return record?.token === endpoint?.token && record?.host.active() ? record : undefined;
+}
 async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
   const endpoint = target.record.startup.runtime_control;
   if (!endpoint) return;
-  if (tessivenHost?.endpoint === endpoint.base_url && tessivenHost.token === endpoint.token && tessivenHost.host.active()) { await tessivenHost.host.ready; return; }
-  tessivenHost?.host.close();
+  const existing = tessivenHosts.get(endpoint.base_url);
+  if (existing?.token === endpoint.token && (existing.pending || existing.host.active())) {
+    await existing.host.ready;
+    return;
+  }
+  tessivenHosts.get(endpoint.base_url)?.host.close();
   const host = connectTessivenHost(endpoint, async (message, signal) => {
+    if (message.kind === 'runtime') {
+      return new TessivenRuntimes((signal) =>
+        tessivenRuntimeInventory(target, signal),
+      ).execute(message, signal);
+    }
     const runtime = message.request.runtime_ref;
+    if (runtime.startsWith('gateway:') || runtime.startsWith('gateway-host:'))
+      return executeTessivenGatewayResource(target, message, signal);
     // The registry is the authority. No discovery, acquisition factory, target
     // name lookup, or local substitute can create a connection here.
-    const record = runtimePlacementBridgeRegistry.values().find(value => value.target_id === runtime);
-    if (!record || !record.startup.runtime_control) throw new RuntimeControlError('TESSIVEN_TARGET_UNAVAILABLE', 'The exact Runtime target has no available authorized connection.', 409);
-    const lease = await runtimePlacementBridgeRegistry.acquire(record.session.placement_target_id, 'tessiven-resource', async () => { throw new Error('The Tessiven target connection ended.'); }, signal);
+    const inventory = await tessivenRuntimeInventory(target, signal);
+    const observed = inventory.paths.find(
+      (path) => path.target.runtime_ref === runtime,
+    )?.target;
+    if (
+      ['open', 'start', 'stop', 'restart'].includes(message.request.action) &&
+      (!observed || message.request.generation !== observed.generation)
+    )
+      throw new RuntimeControlError(
+        'TESSIVEN_RESOURCE_CONFLICT',
+        'The target connection changed. Inspect it before acting.',
+        409,
+      );
+    const record = runtimePlacementBridgeRegistry
+      .values()
+      .find((value) => value.target_id === runtime);
+    if (record) assertRuntimeFlowerCompatible(record.startup.runtime_service);
+    if (!record || !record.startup.runtime_control)
+      throw new RuntimeControlError(
+        'TESSIVEN_TARGET_UNAVAILABLE',
+        'The exact Runtime target has no available authorized connection.',
+        409,
+      );
+    const lease = await runtimePlacementBridgeRegistry.acquire(
+      record.session.placement_target_id,
+      'tessiven-resource',
+      async () => {
+        throw new Error('The Tessiven target connection ended.');
+      },
+      signal,
+    );
     try {
-      if (lease.record.session !== record.session || !lease.active) throw new Error('The Tessiven target connection changed.');
-      const result = await requestTessivenTarget(record.startup.runtime_control, { request: message.request, permissions: message.permissions }, signal);
-      if (!lease.active || runtimePlacementBridgeRegistry.get(record.session.placement_target_id)?.session !== record.session) throw new Error('The target connection ended; inspect the operation before retrying.');
-      if (message.request.action === 'open' && await openTessivenManagedService(target, result)) {
-        const opening = (result as { opening: Record<string, unknown> }).opening; opening.opened_by_host = true;
+      if (lease.record.session !== record.session || !lease.active)
+        throw new Error('The Tessiven target connection changed.');
+      await preflightTessivenHostEffect(target, message, signal);
+      const result = await requestTessivenTarget(
+        record.startup.runtime_control,
+        { request: message.request, permissions: message.permissions },
+        signal,
+      );
+      if (
+        !lease.active ||
+        runtimePlacementBridgeRegistry.get(record.session.placement_target_id)
+          ?.session !== record.session
+      )
+        throw new Error(
+          'The target connection ended; inspect the operation before retrying.',
+        );
+      if (observed && result && typeof result === 'object') {
+        const data = result as {
+          inspection?: Record<string, unknown>;
+          resources?: Record<string, unknown>[];
+        };
+        for (const item of [
+          ...(data.resources ?? []),
+          ...(data.inspection ? [data.inspection] : []),
+        ])
+          item.generation = observed.generation;
+      }
+      if (
+        message.request.action === 'open' &&
+        (await openTessivenManagedService(target, result))
+      ) {
+        const opening = (result as { opening: Record<string, unknown> })
+          .opening;
+        opening.opened_by_host = true;
       }
       return result;
-    } finally { await lease.release(); }
+    } finally {
+      await lease.release();
+    }
   });
-  tessivenHost = { endpoint: endpoint.base_url, token: endpoint.token, host };
-  await host.ready;
+  const registration = { endpoint: endpoint.base_url, token: endpoint.token, host, pending: true };
+  tessivenHosts.set(endpoint.base_url, registration);
+  try { await host.ready; }
+  catch (error) {
+    if (tessivenHosts.get(endpoint.base_url) === registration) tessivenHosts.delete(endpoint.base_url);
+    host.close();
+    throw error;
+  } finally { registration.pending = false; }
 }
 
 async function ensureRuntimeFlowerRecord(prepareModels = true): Promise<RuntimeFlowerTarget> {
@@ -10458,7 +11416,9 @@ async function runtimeFlowerAccessHeaders(
   record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord,
   environment: DesktopLocalEnvironmentState | null,
 ): Promise<Record<string, string>> {
-  const bridgeHeaders = runtimeFlowerPrivateBridgeHeaders(record.startup);
+  const bridgeHeaders = { ...runtimeFlowerPrivateBridgeHeaders(record.startup),
+    ...(tessivenHostFor(record.startup) ? { 'X-Redeven-Tessiven-Source': tessivenHostFor(record.startup)!.host.source() } : {}),
+  };
   if (record.startup.password_required !== true) {
     return bridgeHeaders;
   }
@@ -15395,6 +16355,7 @@ async function openRuntimePlacementBridgeFromLauncher(
 }
 
 type EnvironmentRuntimeLifecycleExecutionOptions = Readonly<{
+  beforeExecution?: () => Promise<void>;
   openRecovery?: Readonly<{
     operationKey: string;
     confirmationContinuation: () => Promise<DesktopLauncherActionResult>;
@@ -16074,6 +17035,8 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
     options.openRecovery?.operationKey ?? (compact(request.operation_key) || `${environmentID}:${requestedOperation}`);
   const targetID = desktopRuntimeTargetID(hostAccess, placement, environmentID);
   const executeAcceptedOperation = async (lifecycleSignal: AbortSignal): Promise<DesktopLauncherActionResult> => {
+    await options.beforeExecution?.();
+    lifecycleSignal.throwIfAborted();
     if (requestedOperation !== 'start') await browserPackages.cancelEnvironment(environmentID);
     launcherOperations.create({
       operation_key: operationKey,
@@ -17983,7 +18946,14 @@ function installDesktopDiagnosticsHooks(
       sessionRecord.startup,
       details.url,
       diagnosticHeaders ?? details.requestHeaders as Record<string, string | string[]>,
-      webServiceForwardID ? { webServiceForwardID, graphicalWindow } : {},
+      {
+        webServiceForwardID, graphicalWindow,
+        tessivenSource: tessivenHostFor(sessionRecord.startup)?.host.source(),
+        trustedEnvAppFrame: (contentsID === sessionRecord.root_window.webContentsID
+          || [...sessionRecord.child_windows.values()].some(window => window.webContentsID === contentsID))
+          && details.frame?.parent === null
+          && details.frame.url.startsWith(new URL('/_redeven_proxy/env/', sessionRecord.transport.baseURL).toString()),
+      },
     );
     for (const name of Object.keys(requestHeaders)) {
       if (name.toLowerCase() === loopbackGateway?.authorization_header.toLowerCase()) delete requestHeaders[name];
@@ -19426,7 +20396,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('will-quit', () => {
-    tessivenHost?.host.close();
+    for (const record of tessivenHosts.values()) record.host.close();
+    tessivenHosts.clear();
     desktopUpdateCoordinatorCache?.dispose();
     linuxPackageUpdateAdapterCache?.dispose();
   });

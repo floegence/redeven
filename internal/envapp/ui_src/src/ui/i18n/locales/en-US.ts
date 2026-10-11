@@ -1655,6 +1655,7 @@ export const enUS = defineDictionary({
     waiting: 'Waiting for connection…',
   },
   shell: {
+    tessivenLabel: "Tessiven service canvas",
     mobileTools: { more: 'More', search: 'Search and commands', back: 'Back to tools' },
 
     loadingPage: 'Loading page…',

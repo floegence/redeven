@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
-    "reviewed_at": "2026-10-10",
-    "review_id": "runtime-connection-ownership-v1",
-    "summary": "Epoch 49 preserves Cloud binding facts independently of direct-management capability and connection credentials. Runtime member summaries use the existing Gateway pairing-key fingerprint. Desktop projects trusted Runtime, Cloud and Gateway ownership once and merges catalog/session observations without duplicating cards or changing authorization.",
-    "same_window_rationale": "The compatibility window advances to epoch 49 because Cloud binding presentation now retains established identity when management is unsupported or connection credentials need recovery. Connection authorization, Gateway v5 and Cloud approval remain unchanged; all prior upgrade epochs remain supported.",
+    "reviewed_at": "2026-10-11",
+    "review_id": "tessiven-scoped-runtime-operations-v1",
+    "summary": "Epoch 50 binds Tessiven Desktop tools to a private, server-confirmed source generation; adds registered Runtime discovery, official connection and native process-operation handoff; and permits normally authenticated local business resource requests through Gateway v5 without process control.",
+    "same_window_rationale": "The compatibility epoch advances because older Desktop brokers accept unattributed sessions and older Runtime targets lack the fixed business endpoint and connection-generation checks. Gateway v5, Tessiven DSL and database shapes remain unchanged.",
     "checked_surfaces": [
+      "Epoch 50: private Desktop source admission and revocation, exact Runtime discovery/action routes, Gateway authenticated business authorization, resource/path identity, native lifecycle handoff, normal password/MFA access, no mutation replay and original operation queries.",
       "Epoch 49: Runtime Service Cloud binding normalization and saved-binding validation, canonical Gateway pairing fingerprint for real enrolled members, Desktop Local/SSH/WSL snapshot ownership, Gateway catalog/window merging, stable Runtime card titles, existing tabs and upward menus, exact Gateway unpair selection, source filters and counts. No persistent schema or external protocol change.",
       "Epoch 48: independent Runtime Gateway reconnect controllers, atomic singleton-to-collection migration, preview confirmation without Cloud choices, separate Cloud publication, targeted removal and Cloud interruption consent. Desktop Local/SSH Runtime management, original Env card Gateway tab, multi-member selection, input/focus retention, Local UI health, startup reports, sys.ping, Env App and SSH bootstrap consume the current contract.",
       "Epoch 47: host-authorized Gateway network settings, v3-to-v4 member-state migration, active listener/restart status, exact Host restriction on member HTTP and Flowersec upgrades, and local Gateway quick fill with Runtime verification.",
@@ -95,7 +96,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 49,
+  "compatibility_epoch": 50,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -136,7 +137,8 @@
     45,
     46,
     47,
-    48
+    48,
+    49
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

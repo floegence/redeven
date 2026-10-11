@@ -10,6 +10,9 @@ it('keeps typed target requests on the owner-authenticated existing control root
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const ws = new WebSocketServer({ server });
+  ws.on('headers', (headers) =>
+    headers.push('X-Redeven-Tessiven-Source: ' + 'a'.repeat(72)),
+  );
   const execute = vi.fn(
     async (message: { request: { runtime_ref: string; action: string } }) => {
       if (message.request.action === 'restart')
@@ -42,6 +45,11 @@ it('keeps typed target requests on the owner-authenticated existing control root
       socket.send(
         JSON.stringify({
           id: crypto.randomUUID(),
+          kind: 'resource',
+          scope: {
+            user_public_id: 'user_local',
+            floe_app: 'com.floegence.redeven.agent',
+          },
           request: { runtime_ref: 'ssh:exact-fixture', action },
           permissions: {
             read: true,
@@ -70,6 +78,11 @@ it('keeps typed target requests on the owner-authenticated existing control root
     socket.send(
       JSON.stringify({
         id: crypto.randomUUID(),
+        kind: 'resource',
+        scope: {
+          user_public_id: 'user_local',
+          floe_app: 'com.floegence.redeven.agent',
+        },
         request: { runtime_ref: 'ssh:exact-fixture', action: 'shell' },
         permissions: { read: true, write: true, execute: true, admin: true },
       }),

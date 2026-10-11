@@ -134,7 +134,7 @@ func (c *cli) cloudConnectCmd(args []string) int {
 		writeError(c.stderr, err.Error())
 		return 1
 	}
-	defer client.transport.CloseIdleConnections()
+	defer client.client.Close()
 	var response gc.Gateway
 	err = client.request(ctx, "/gateway/v5/cloud/configure", gp.ConfigureCloudRequest{ProtocolVersion: gp.Version, CloudOrigin: origin, Reauthorize: *reauthorize}, &response)
 	gateway := &response
@@ -209,7 +209,7 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 		writeError(c.stderr, "desktop-bridge failed: Gateway host management credential is unavailable")
 		return 1
 	}
-	defer hostClient.transport.CloseIdleConnections()
+	defer hostClient.client.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	executablePath, err := os.Executable()
@@ -217,9 +217,8 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 		writeError(c.stderr, fmt.Sprintf("desktop-bridge failed: resolve Gateway executable: %v", err))
 		return 1
 	}
-	gatewayURL := hostClient.endpoint + "/"
 	bridge := desktopbridge.Server{
-		DialSurface: desktopbridge.NewGatewaySurfaceDialer(gatewayURL, "https://"+status.MemberListen, hostClient.token),
+		DialSurface: hostClient.client.SurfaceDialer("https://" + status.MemberListen),
 		Hello: desktopbridge.Hello{
 			RuntimeVersion:  Version,
 			RuntimeCommit:   Commit,
@@ -845,7 +844,7 @@ func (c *cli) cloudStatusCmd(args []string) int {
 		writeError(c.stderr, err.Error())
 		return 1
 	}
-	defer client.transport.CloseIdleConnections()
+	defer client.client.Close()
 	var status gatewaycloud.Summary
 	err = client.request(ctx, "/gateway/v5/cloud/status", gp.CatalogRequest{ProtocolVersion: gp.Version}, &status)
 	if err != nil {

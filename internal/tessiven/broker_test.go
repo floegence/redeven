@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,7 +35,7 @@ func connectedBroker(t *testing.T) (*Broker, *websocket.Conn) {
 				time.Sleep(time.Millisecond)
 			}
 		}()
-		_ = broker.Serve(r.Context(), ws)
+		_ = broker.Serve(r.Context(), ws, "test-desktop-source")
 	}))
 	t.Cleanup(server.Close)
 	t.Cleanup(broker.Close)
@@ -54,7 +55,7 @@ func connectedBroker(t *testing.T) (*Broker, *websocket.Conn) {
 func TestBrokerPreservesExactTargetAndPermissions(t *testing.T) {
 	broker, ws := connectedBroker(t)
 	req := ResourceRequest{RuntimeRef: "ssh:authorized", Action: "inspect", Binding: &Binding{Owner: "managed_service", ResourceID: "actual-id"}}
-	meta := &session.Meta{CanRead: true}
+	meta := &session.Meta{DesktopSource: "test-desktop-source", CanRead: true}
 	go func() {
 		var message struct {
 			ID string `json:"id"`
@@ -79,7 +80,7 @@ func TestBrokerPreservesExactTargetAndPermissions(t *testing.T) {
 func TestBrokerDisconnectMakesDispatchedMutationUnknown(t *testing.T) {
 	broker, ws := connectedBroker(t)
 	go func() { var message any; _ = ws.ReadJSON(&message); _ = ws.Close() }()
-	_, err := broker.Execute(t.Context(), &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}, ResourceRequest{RuntimeRef: "ssh:authorized", Action: "restart"})
+	_, err := broker.Execute(t.Context(), &session.Meta{DesktopSource: "test-desktop-source", CanRead: true, CanWrite: true, CanExecute: true}, ResourceRequest{RuntimeRef: "ssh:authorized", Action: "restart"})
 	if !errors.Is(err, ErrOutcomeUnknown) {
 		t.Fatal("ambiguous action became retryable", err)
 	}
@@ -93,16 +94,26 @@ func TestBrokerRejectsSubstitutedTarget(t *testing.T) {
 		_ = ws.ReadJSON(&message)
 		_ = ws.WriteJSON(brokerResponse{ID: message.ID, Result: ResourceResult{RuntimeRef: "local:local"}})
 	}()
-	_, err := broker.Execute(t.Context(), &session.Meta{CanRead: true}, ResourceRequest{RuntimeRef: "ssh:authorized", Action: "inspect"})
+	_, err := broker.Execute(t.Context(), &session.Meta{DesktopSource: "test-desktop-source", CanRead: true}, ResourceRequest{RuntimeRef: "ssh:authorized", Action: "inspect"})
 	if !errors.Is(err, ErrResourceChanged) {
 		t.Fatal("target substitution accepted", err)
 	}
 }
 func TestBrokerNeverReconnectsOrRetries(t *testing.T) {
 	broker := &Broker{}
-	_, err := broker.Execute(context.Background(), &session.Meta{CanRead: true}, ResourceRequest{RuntimeRef: "ssh:missing", Action: "start"})
+	_, err := broker.Execute(context.Background(), &session.Meta{DesktopSource: "test-desktop-source", CanRead: true}, ResourceRequest{RuntimeRef: "ssh:missing", Action: "start"})
 	if !errors.Is(err, ErrTargetUnavailable) {
 		t.Fatal(err)
+	}
+}
+
+func TestBrokerRejectsUnattributedDesktopAccess(t *testing.T) {
+	broker, _ := connectedBroker(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	_, err := broker.Execute(ctx, &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}, ResourceRequest{RuntimeRef: "ssh:authorized", Action: "inspect"})
+	if err != ErrTargetUnavailable {
+		t.Fatalf("unattributed session reached the Desktop host: %v", err)
 	}
 }
 
@@ -117,8 +128,59 @@ func TestBrokerMapsUnavailableTargetResponse(t *testing.T) {
 		}
 		_ = ws.WriteJSON(brokerResponse{ID: message.ID, Error: "target unavailable", Code: "TESSIVEN_TARGET_UNAVAILABLE", Status: 409})
 	}()
-	_, err := broker.Execute(t.Context(), &session.Meta{CanRead: true}, ResourceRequest{RuntimeRef: "demo:application", Action: "inspect"})
+	_, err := broker.Execute(t.Context(), &session.Meta{DesktopSource: "test-desktop-source", CanRead: true}, ResourceRequest{RuntimeRef: "demo:application", Action: "inspect"})
 	if !errors.Is(err, ErrTargetUnavailable) {
 		t.Fatalf("target unavailable response was not classified: %v", err)
+	}
+}
+
+func TestBrokerRejectsAnotherDesktopGeneration(t *testing.T) {
+	broker, _ := connectedBroker(t)
+	_, err := broker.Execute(t.Context(), &session.Meta{DesktopSource: "another-desktop-generation", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}, ResourceRequest{RuntimeRef: "ssh:authorized", Action: "inspect"})
+	if err != ErrTargetUnavailable {
+		t.Fatalf("another Desktop generation was admitted: %v", err)
+	}
+}
+func TestBrokerRechecksSourcePermissionsBeforeDispatch(t *testing.T) {
+	broker, _ := connectedBroker(t)
+	broker.Authorize = func(meta *session.Meta) *session.Meta { copy := *meta; copy.CanWrite = false; return &copy }
+	_, err := broker.Execute(t.Context(), &session.Meta{DesktopSource: "test-desktop-source", CanRead: true, CanWrite: true, CanExecute: true}, ResourceRequest{RuntimeRef: "ssh:authorized", Action: "stop"})
+	if err != ErrPermissionDenied {
+		t.Fatalf("revoked write permission was admitted: %v", err)
+	}
+}
+
+func TestBrokerRevocationDuringReplyDoesNotExposeReadOrConfirmEffect(t *testing.T) {
+	for _, action := range []string{"inspect", "stop"} {
+		t.Run(action, func(t *testing.T) {
+			broker, ws := connectedBroker(t)
+			var revoked atomic.Bool
+			broker.Authorize = func(meta *session.Meta) *session.Meta {
+				copy := *meta
+				if revoked.Load() {
+					copy.CanRead = false
+					copy.CanWrite = false
+				}
+				return &copy
+			}
+			go func() {
+				var message struct {
+					ID string `json:"id"`
+				}
+				if ws.ReadJSON(&message) != nil {
+					return
+				}
+				revoked.Store(true)
+				_ = ws.WriteJSON(brokerResponse{ID: message.ID, Result: ResourceResult{RuntimeRef: "ssh:exact"}})
+			}()
+			_, err := broker.Execute(t.Context(), &session.Meta{DesktopSource: "test-desktop-source", CanRead: true, CanWrite: true, CanExecute: true}, ResourceRequest{RuntimeRef: "ssh:exact", Action: action})
+			expected := ErrPermissionDenied
+			if action == "stop" {
+				expected = ErrOutcomeUnknown
+			}
+			if !errors.Is(err, expected) {
+				t.Fatal("revocation boundary lost", err)
+			}
+		})
 	}
 }

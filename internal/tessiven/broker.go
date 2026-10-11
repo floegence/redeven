@@ -2,6 +2,7 @@ package tessiven
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -15,10 +16,13 @@ import (
 // Broker is a bounded request bridge to Desktop's already-authorized connections.
 // It owns no inventory, reconnect loop, operation progress, or mutation retries.
 type Broker struct {
-	mu   sync.Mutex
-	conn *brokerConnection
+	// Authorize rechecks the current source policy at every effect boundary.
+	Authorize func(*session.Meta) *session.Meta
+	mu        sync.Mutex
+	conn      *brokerConnection
 }
 type brokerConnection struct {
+	source  string
 	ws      *websocket.Conn
 	write   sync.Mutex
 	mu      sync.Mutex
@@ -32,16 +36,21 @@ type ResourcePermissions struct {
 	Execute bool `json:"execute"`
 	Admin   bool `json:"admin"`
 }
+type DesktopSourceScope struct {
+	UserPublicID string `json:"user_public_id"`
+	FloeApp      string `json:"floe_app"`
+}
+
 type TargetResourceRequest struct {
 	Request     ResourceRequest     `json:"request"`
 	Permissions ResourcePermissions `json:"permissions"`
 }
 type brokerResponse struct {
-	ID     string         `json:"id"`
-	Result ResourceResult `json:"result"`
-	Error  string         `json:"error,omitempty"`
-	Code   string         `json:"code,omitempty"`
-	Status int            `json:"status,omitempty"`
+	ID     string `json:"id"`
+	Result any    `json:"result"`
+	Error  string `json:"error,omitempty"`
+	Code   string `json:"code,omitempty"`
+	Status int    `json:"status,omitempty"`
 }
 
 func (b *Broker) Close() {
@@ -54,8 +63,11 @@ func (b *Broker) Close() {
 	}
 }
 func (c *brokerConnection) close() { c.once.Do(func() { close(c.done); _ = c.ws.Close() }) }
-func (b *Broker) Serve(ctx context.Context, ws *websocket.Conn) error {
-	c := &brokerConnection{ws: ws, pending: map[string]chan brokerResponse{}, done: make(chan struct{})}
+func (b *Broker) Serve(ctx context.Context, ws *websocket.Conn, source string) error {
+	if source == "" {
+		return ErrTargetUnavailable
+	}
+	c := &brokerConnection{source: source, ws: ws, pending: map[string]chan brokerResponse{}, done: make(chan struct{})}
 	b.mu.Lock()
 	if b.conn != nil {
 		b.mu.Unlock()
@@ -113,73 +125,119 @@ func (b *Broker) Execute(ctx context.Context, meta *session.Meta, req ResourceRe
 	if meta == nil || !meta.CanRead {
 		return ResourceResult{}, ErrPermissionDenied
 	}
+	var result ResourceResult
+	err := b.call(ctx, meta, req, "resource", isResourceMutation(req.Action), &result)
+	if err == nil && result.RuntimeRef != req.RuntimeRef {
+		err = ErrResourceChanged
+		if isResourceMutation(req.Action) {
+			err = ErrOutcomeUnknown
+		}
+	}
+	return result, err
+}
+
+func (b *Broker) SourceActive(source string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if source == "" || b.conn == nil || b.conn.source != source {
+		return false
+	}
+	select {
+	case <-b.conn.done:
+		return false
+	default:
+		return true
+	}
+}
+
+func (b *Broker) call(ctx context.Context, meta *session.Meta, req any, kind string, mutation bool, out any) error {
+	if meta == nil || !meta.CanRead {
+		return ErrPermissionDenied
+	}
 	b.mu.Lock()
 	c := b.conn
 	b.mu.Unlock()
-	if c == nil {
-		return ResourceResult{}, ErrTargetUnavailable
+	if c == nil || !b.SourceActive(meta.DesktopSource) {
+		return ErrTargetUnavailable
+	}
+	if ctx.Err() != nil {
+		return ErrTargetUnavailable
+	}
+	if b.Authorize != nil {
+		meta = b.Authorize(meta)
+		if meta == nil || !meta.CanRead || mutation && (!meta.CanWrite || !meta.CanExecute) {
+			return ErrPermissionDenied
+		}
+	}
+	transportError := func(cause error) error {
+		if mutation {
+			return fmt.Errorf("%w: %v", ErrOutcomeUnknown, cause)
+		}
+		return fmt.Errorf("%w: %v", ErrTargetUnavailable, cause)
 	}
 	id := uuid.NewString()
 	reply := make(chan brokerResponse, 1)
 	c.mu.Lock()
 	if len(c.pending) >= 32 {
 		c.mu.Unlock()
-		return ResourceResult{}, errors.New("tessiven host request capacity reached")
+		return errors.New("tessiven host request capacity reached")
 	}
 	c.pending[id] = reply
 	c.mu.Unlock()
 	defer func() { c.mu.Lock(); delete(c.pending, id); c.mu.Unlock() }()
 	payload := struct {
-		ID string `json:"id"`
-		TargetResourceRequest
-	}{id, TargetResourceRequest{req, ResourcePermissions{meta.CanRead, meta.CanWrite, meta.CanExecute, meta.CanAdmin}}}
+		ID          string              `json:"id"`
+		Kind        string              `json:"kind"`
+		Request     any                 `json:"request"`
+		Permissions ResourcePermissions `json:"permissions"`
+		Scope       DesktopSourceScope  `json:"scope"`
+	}{id, kind, req, ResourcePermissions{meta.CanRead, meta.CanWrite, meta.CanExecute, meta.CanAdmin}, DesktopSourceScope{meta.UserPublicID, meta.FloeApp}}
 	c.write.Lock()
 	_ = c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	err := c.ws.WriteJSON(payload)
 	c.write.Unlock()
 	if err != nil {
 		c.close()
-		return ResourceResult{}, brokerTransportError(req, err)
+		return transportError(err)
 	}
 	timer := time.NewTimer(35 * time.Second)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return ResourceResult{}, brokerTransportError(req, ctx.Err())
+		return transportError(ctx.Err())
 	case <-c.done:
-		return ResourceResult{}, brokerTransportError(req, ErrTargetUnavailable)
+		return transportError(ErrTargetUnavailable)
 	case <-timer.C:
-		return ResourceResult{}, brokerTransportError(req, context.DeadlineExceeded)
+		return transportError(context.DeadlineExceeded)
 	case response := <-reply:
 		if response.Error != "" {
 			if response.Code == "TESSIVEN_OUTCOME_UNKNOWN" {
-				return ResourceResult{}, ErrOutcomeUnknown
+				return ErrOutcomeUnknown
 			}
 			if response.Code == "TESSIVEN_TARGET_UNAVAILABLE" {
-				return ResourceResult{}, ErrTargetUnavailable
+				return ErrTargetUnavailable
 			}
 			if response.Status >= 400 && response.Status < 500 && response.Code != "" {
-				return ResourceResult{}, &ResourceError{Code: response.Code, Message: response.Error, Status: response.Status}
+				return &ResourceError{Code: response.Code, Message: response.Error, Status: response.Status}
 			}
-			return ResourceResult{}, brokerTransportError(req, ErrTargetUnavailable)
+			return transportError(ErrTargetUnavailable)
 		}
-		if response.Result.RuntimeRef != req.RuntimeRef {
-			if isResourceMutation(req.Action) {
-				return ResourceResult{}, brokerTransportError(req, ErrResourceChanged)
+		if !b.SourceActive(meta.DesktopSource) {
+			return transportError(ErrTargetUnavailable)
+		}
+		if b.Authorize != nil {
+			current := b.Authorize(meta)
+			if current == nil || !current.CanRead || mutation && (!current.CanWrite || !current.CanExecute) {
+				if mutation {
+					return ErrOutcomeUnknown
+				}
+				return ErrPermissionDenied
 			}
-			return ResourceResult{}, ErrResourceChanged
 		}
-		return response.Result, nil
+		raw, err := json.Marshal(response.Result)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(raw, out)
 	}
-}
-func (p ResourcePermissions) Meta() *session.Meta {
-	return &session.Meta{CanRead: p.Read, CanWrite: p.Write, CanExecute: p.Execute, CanAdmin: p.Admin}
-}
-
-// A failed delivery can be ambiguous even when WriteJSON itself fails.
-func brokerTransportError(req ResourceRequest, cause error) error {
-	if isResourceMutation(req.Action) {
-		return fmt.Errorf("%w: %v", ErrOutcomeUnknown, cause)
-	}
-	return fmt.Errorf("%w: %v", ErrTargetUnavailable, cause)
 }

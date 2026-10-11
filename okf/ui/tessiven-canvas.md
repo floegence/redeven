@@ -17,6 +17,10 @@ text. Flower is the editing surface; the canvas has no manual content editor.
 
 # Contract
 
+The Connected environments panel and Runtime node details follow the
+[scoped Runtime operations contract](../ai/tessiven-runtime-operations.md).
+They share the official service with Flower and preserve reading state on refresh.
+
 Workbench opens Service Canvas as a standalone window. In Desktop, the renderer
 sends only an optional canvas and saved-version identity through the typed shell
 bridge. Main authorizes the owning Env App main frame, builds the address from

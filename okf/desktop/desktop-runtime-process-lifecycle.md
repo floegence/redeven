@@ -7,7 +7,7 @@ timestamp: 2026-08-28T00:00:00Z
 ---
 # Summary
 
-Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, WSL-host, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLifecycleCoordinator` before creating any Launcher Operation, then use the saved direct channel. The first accepted operation owns the target until terminal; a conflicting request neither preempts nor queues work and returns the current operation identity. Gateway and Provider are access-only; Runtime does not expose a second external lifecycle protocol. A direct-channel or filesystem failure can end an operation, while old Runtime, Gateway, data, process, or renderer state cannot create another owner or fallback path.
+Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, WSL-host, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLifecycleCoordinator` before creating an active Launcher Operation, then use the saved direct channel. The first accepted operation owns the target until terminal; a conflicting request neither preempts nor queues work and returns the current operation identity. Gateway and Provider are access-only; Runtime does not expose a second external lifecycle protocol. A direct-channel or filesystem failure can end an operation, while old Runtime, Gateway, data, process, or renderer state cannot create another owner or fallback path.
 
 # Contract
 
@@ -22,6 +22,12 @@ Open is a lifecycle owner and never waits behind Start, Restart, or Update. If O
 Desktop-initiated Restart also owns restoration of every open Env App window for its normalized Runtime target. It captures unsent user state before stopping the process, retires old transport authority, verifies the new Runtime, then initializes a new session in the original window before completing the same Restart operation. A failed restore retains a local status document and its in-memory handoff; Reopen environment admits only a new session Open against the already running Runtime. It never repeats the Restart or joins an old transport-recovery loop. Closing the window discards that handoff. Stop, Update, and Reinstall retain their destructive window behavior.
 
 Every direct command receives the coordinator cancellation signal and a bounded command deadline. A lifecycle operation also has an overall deadline; timeout releases the in-process owner after preserving the failure and retry state.
+
+Tessiven can present a pending native confirmation in the Launcher registry
+before coordinator admission. This request has no process owner or shutdown
+side effect. Its accepted handoff rechecks source and target authority before
+entering this same coordinator; [scoped Runtime operations](../ai/tessiven-runtime-operations.md)
+owns that confirmation boundary.
 
 ## Direct execution
 

@@ -687,7 +687,8 @@
       "askFlowerUnavailableTitle": "Ask Flower indisponivel",
       "downloadUnavailableTitle": "Download indisponivel",
       "onlyFilesDownloaded": "Somente arquivos podem ser baixados."
-    }
+    },
+    "tessivenLabel": "Tela de serviços Tessiven"
   },
   "accessGate": {
     "invalidFactorError": "Código inválido ou já utilizado. Tente um novo código.",

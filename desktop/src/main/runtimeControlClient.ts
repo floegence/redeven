@@ -40,6 +40,7 @@ type RuntimeControlServiceRoute =
   | 'v2/gateway/retry'
   | 'v2/gateway/leave' | 'v2/gateway/publish'
   | 'v2/tessiven/host'
+  | 'v2/tessiven/preflight'
   | 'v2/tessiven/resources'
 	| 'v2/cloud-link'
 	| 'v2/cloud-link/connect'
@@ -337,4 +338,8 @@ export async function previewRuntimeGateway(endpoint: DesktopRuntimeControlEndpo
  const preview = normalizeGatewayJoinPreview(result.data);
  if (!preview || preview.purpose !== input.purpose) throw new RuntimeControlError('GATEWAY_PREVIEW_INVALID_RESPONSE', 'The Runtime did not return a valid Gateway preview.');
  return preview;
+}
+
+export async function preflightTessivenSource(endpoint: DesktopRuntimeControlEndpoint, source: string, scope: {user_public_id:string;floe_app:string}, permissions: {read:boolean;write:boolean;execute:boolean;admin:boolean}, effect: 'read'|'resource'|'connect'|'lifecycle', signal?: AbortSignal): Promise<void> {
+  await requestRuntimeControl(endpoint, 'v2/tessiven/preflight', {method:'POST',body:{source,scope,permissions,effect},signal,timeoutMs:5000});
 }

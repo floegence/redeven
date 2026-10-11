@@ -3307,5 +3307,16 @@
     "empty": "尚未配對 Gateway。",
     "unavailable": "授權 Desktop 存取此 Gateway 後，即可開啟 Env App。",
     "tab": "Gateway"
+  },
+  "tessivenRuntime": {
+    "confirmTitle": "確認{action}",
+    "confirmDetail": "確認後，Desktop 將操作此精確登錄的執行階段，並保留現有工作負載保護及進度顯示。",
+    "selfDetail": "此執行階段承載目前的 Flower 對話。本操作可能中斷對話，操作尚未開始。",
+    "continue": "繼續",
+    "changed": "來源或目標已變更。請重新整理並再次檢查操作。",
+    "start": "啟動",
+    "stop": "停止",
+    "restart": "重新啟動",
+    "update": "升級"
   }
 }

@@ -1,23 +1,17 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
-	"github.com/floegence/redeven/internal/gatewayservice"
-	"github.com/floegence/redeven/internal/gatewaystate"
+	"github.com/floegence/redeven/internal/gatewayhost"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
@@ -42,7 +36,7 @@ Automatic publication still requires Namespace authorization in Redeven Cloud.
 Host commands require the running Gateway's private local administrator credential.
 `
 
-func hostAdminTokenPath(root string) string { return filepath.Join(root, "gateway-host-admin.json") }
+func hostAdminTokenPath(root string) string { return gatewayhost.TokenPath(root) }
 
 func (c *cli) membershipCmd(args []string) int {
 	command, action, rest := args[0], "", args[1:]
@@ -99,7 +93,7 @@ func (c *cli) membershipCmd(args []string) int {
 		writeError(c.stderr, err.Error())
 		return 1
 	}
-	defer client.transport.CloseIdleConnections()
+	defer client.client.Close()
 	var result any
 	switch command + "/" + action {
 	case "clients/access-code":
@@ -197,75 +191,19 @@ func (c *cli) membershipCmd(args []string) int {
 	return 0
 }
 
-type hostAdminClient struct {
-	endpoint, token string
-	transport       *http.Transport
-}
+type hostAdminClient struct{ client *gatewayhost.Client }
 
 func newHostAdminClient(root string) (*hostAdminClient, error) {
 	status := readServiceStatus(root)
 	if status.Status != "running" {
 		return nil, errors.New("gateway is not running; start it before managing members")
 	}
-	host, port, err := net.SplitHostPort(status.Listen)
+	client, err := gatewayhost.New(root, status.Listen)
 	if err != nil {
-		return nil, errors.New("invalid Gateway administration endpoint")
+		return nil, err
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return nil, errors.New("gateway administration requires a local IP endpoint")
-	}
-	if ip.IsUnspecified() {
-		if ip.To4() == nil {
-			host = "::1"
-		} else {
-			host = "127.0.0.1"
-		}
-	} else if !ip.IsLoopback() {
-		return nil, errors.New("gateway administration listener must include loopback")
-	}
-	var token string
-	if err := gatewaystate.Read(hostAdminTokenPath(root), &token); err != nil || len(token) < 32 {
-		return nil, errors.New("gateway host administrator credential is unavailable")
-	}
-	return &hostAdminClient{endpoint: "http://" + net.JoinHostPort(host, port), token: token, transport: &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext, MaxResponseHeaderBytes: 16 << 10}}, nil
+	return &hostAdminClient{client}, nil
 }
-
 func (c *hostAdminClient) request(ctx context.Context, route string, input, output any) error {
-	raw, err := json.Marshal(input)
-	if err != nil {
-		return err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+route, bytes.NewReader(raw))
-	if err != nil {
-		return err
-	}
-	request.Header.Set(gatewayservice.HostAdminHeader, c.token)
-	request.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Transport: c.transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	response, err := client.Do(request)
-	if err != nil {
-		return errors.New("gateway administration is unavailable")
-	}
-	defer response.Body.Close()
-	var envelope struct {
-		OK    bool            `json:"ok"`
-		Data  json.RawMessage `json:"data"`
-		Error *struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	if json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&envelope) != nil {
-		return errors.New("invalid Gateway administration response")
-	}
-	if response.StatusCode != http.StatusOK || !envelope.OK {
-		if envelope.Error != nil {
-			return fmt.Errorf("gateway operation failed (%s)", envelope.Error.Code)
-		}
-		return errors.New("gateway operation failed")
-	}
-	if output != nil {
-		return json.Unmarshal(envelope.Data, output)
-	}
-	return nil
+	return c.client.Request(ctx, route, input, output)
 }

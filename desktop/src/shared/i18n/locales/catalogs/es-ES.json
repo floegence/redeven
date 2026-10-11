@@ -3313,5 +3313,16 @@
     "empty": "No hay ningún Gateway vinculado.",
     "unavailable": "Autorice Desktop en este Gateway para abrir Env App.",
     "tab": "Gateway"
+  },
+  "tessivenRuntime": {
+    "confirmTitle": "Confirmar {action}",
+    "confirmDetail": "Tras confirmar, Desktop operará el entorno de ejecución exacto registrado. Se mantienen la protección de cargas de trabajo y el progreso existentes.",
+    "selfDetail": "Este entorno ejecuta la conversación actual de Flower. Esta acción puede interrumpirla. La operación aún no ha comenzado.",
+    "continue": "Continuar",
+    "changed": "El origen o el destino ha cambiado. Actualice y revise la operación de nuevo.",
+    "start": "inicio",
+    "stop": "detención",
+    "restart": "reinicio",
+    "update": "actualización"
   }
 }

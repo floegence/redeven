@@ -2,6 +2,7 @@ import type { JSX } from 'solid-js';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import {
   For,
+  lazy,
   Show,
   createEffect,
   createMemo,
@@ -43,6 +44,8 @@ import type {
 } from './types';
 import './tessiven.css';
 
+const TessivenRuntimesDialog = lazy(() => import('./TessivenRuntimesDialog').then(module => ({default:module.TessivenRuntimesDialog})));
+
 type Library = { canvases: Canvas[]; next_cursor?: string };
 
 export function TessivenPage(props: {
@@ -74,6 +77,8 @@ export function TessivenPage(props: {
   const [sourceOpen, setSourceOpen] = createSignal(false);
   const [differences, setDifferences] = createSignal<Difference[] | null>(null);
   const [locate, setLocate] = createSignal<string>();
+  const [runtimesOpen,setRuntimesOpen]=createSignal(false);
+  const [runtimeRef,setRuntimeRef]=createSignal<string>();
   const [instance, setInstance] = createSignal<Instance>();
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -487,6 +492,7 @@ export function TessivenPage(props: {
           </Show>
         </div>
         <div class="tessiven-actions">
+ <Button size="sm" variant="ghost" onClick={()=>{setRuntimeRef(undefined);setRuntimesOpen(true);}}>{props.t('runtimePanel')}</Button>
           <Show when={!canvas()}>
             <label class="tessiven-search" data-floe-input-surface>
               <Search />
@@ -613,6 +619,7 @@ export function TessivenPage(props: {
                       t={props.t}
                       onAsk={askSelection}
                       onInspect={setInstance}
+ onInspectRuntime={ref=>{setRuntimeRef(ref);setRuntimesOpen(true);}}
                       locate={locate()}
                     />
                   )}
@@ -850,6 +857,7 @@ export function TessivenPage(props: {
           </Show>
         </div>
       </Dialog>
+      <Show when={props.visible !== false && runtimesOpen()}><TessivenRuntimesDialog transport={props.transport} t={props.t} canWrite={props.canWrite} runtimeRef={runtimeRef()} onClose={()=>setRuntimesOpen(false)}/></Show>
       <Show when={props.visible !== false && instance()} keyed>
         {(value) => (
           <TessivenResourceDialog

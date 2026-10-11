@@ -3,7 +3,7 @@ type: AI Product Contract
 title: Tessiven Flower and operations
 description: Generate canvas versions and route service actions through their original owners.
 tags: [ai, tessiven, flower]
-timestamp: 2026-10-06T00:00:00Z
+timestamp: 2026-10-11T00:00:00Z
 ---
 # Summary
 
@@ -103,10 +103,11 @@ outcome, so the user must inspect the original manager before trying again.
 
 Flower and the UI call the same Tessiven service; neither writes its database
 directly. Runtime and resource references identify targets without granting
-permission or creating a connection. Remote requests require an existing
-authorized Desktop placement connection exposing Runtime control. A target
-without that connection remains unavailable in read-only results and cannot be
-mutated; Tessiven never connects implicitly or substitutes a local target.
+permission or creating a connection. Remote service requests use the exact authorized direct Desktop or normally
+authenticated Gateway path under the
+[scoped Runtime operations contract](tessiven-runtime-operations.md). Discovery
+does not connect implicitly. Explicit connection uses the original native owner;
+missing authority never substitutes a local target.
 Managed Services and Containers retain execution and progress ownership.
 External and unmanaged resources support inspection and explanation only.
 

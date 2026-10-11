@@ -109,13 +109,15 @@ export function readRuntimeFlowerHTTPResponse(response: IncomingMessage, maxByte
 export function requestRuntimeFlowerHTTP(
   url: URL,
   request: RuntimeFlowerRequest,
-  options: Readonly<{ headers?: Readonly<Record<string, string>>; accept?: string; timeoutMs?: number }> = {},
+  options: Readonly<{ headers?: Readonly<Record<string, string>>; accept?: string; timeoutMs?: number; agent?: https.Agent | http.Agent; signal?: AbortSignal; maxBytes?: number }> = {},
 ): Promise<RuntimeFlowerHTTPResponse> {
   return new Promise((resolve, reject) => {
     const body = request.body === undefined ? '' : JSON.stringify(request.body);
     const client = url.protocol === 'https:' ? https : http;
     const req = client.request(url, {
       method: request.method,
+      agent: options.agent,
+      signal: options.signal,
       timeout: Math.max(1, Math.floor(options.timeoutMs ?? 120_000)),
       headers: {
         Accept: options.accept ?? 'application/json',
@@ -128,7 +130,7 @@ export function requestRuntimeFlowerHTTP(
     }, (response) => {
       const maxBytes = url.pathname === '/_redeven_proxy/api/fs/file' ? 64 << 20
         : /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(url.pathname) ? 10 << 20 : Infinity;
-      void readRuntimeFlowerHTTPResponse(response, maxBytes).then(resolve, reject);
+      void readRuntimeFlowerHTTPResponse(response, options.maxBytes ?? maxBytes).then(resolve, reject);
     });
     req.on('timeout', () => {
       const error = new Error('Flower runtime request timed out.');

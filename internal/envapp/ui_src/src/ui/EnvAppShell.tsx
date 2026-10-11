@@ -1,7 +1,6 @@
 import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiven_ui/src/navigation';
 import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
-import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
 import { EnvironmentAccessGate, type AccessGatePhase, type AccessGateFeedback } from './EnvironmentAccessGate';
 import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './services/envResourceCache';
@@ -744,7 +743,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);
   const [tessivenOpenRequest, setTessivenOpenRequest] = createSignal<TessivenOpenRequest | null>(null);
-  const tessivenCopy = createMemo(() => tessivenText(i18n.locale()));
   const tessivenVisible = () => viewMode() === 'activity' && layout.sidebarActiveTab() === ENV_TESSIVEN_ACTIVITY_ID && isLocalMode();
   const TessivenNavigationIcon = () => <TessivenIcon kind="tessiven"/>;
   const initialAccessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
@@ -1290,7 +1288,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (isLocalMode()) {
       actions.push({
         id: ENV_TESSIVEN_ACTIVITY_ID,
-        label: tessivenCopy()('canvasLabel'),
+        label: i18n.t('shell.tessivenLabel'),
         icon: TessivenWorkbenchIcon,
         active: false,
         onActivate: () => openTessivenWindow(),
@@ -3925,7 +3923,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
     list.push({
       id: ENV_TESSIVEN_ACTIVITY_ID,
-      name: tessivenCopy()('canvasLabel'),
+      name: i18n.t('shell.tessivenLabel'),
       icon: TessivenNavigationIcon,
       component: () => <EnvTessivenPage openRequest={tessivenOpenRequest()} visible={tessivenVisible()} />,
       sidebar: { order: 97, fullScreen: true },
@@ -3998,7 +3996,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       } catch {
         // Native failures retain the same localized command feedback.
       }
-      notify.error(i18n.t('shell.notifications.failedToOpenDesktopCommandTitle', { action: tessivenCopy()('canvasLabel') }));
+      notify.error(i18n.t('shell.notifications.failedToOpenDesktopCommandTitle', { action: i18n.t('shell.tessivenLabel') }));
       return;
     }
     const url = new URL(window.location.href);
@@ -4381,7 +4379,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       items.push({
         id: ENV_TESSIVEN_ACTIVITY_ID,
         icon: TessivenNavigationIcon,
-        label: tessivenCopy()('canvasLabel'),
+        label: i18n.t('shell.tessivenLabel'),
         collapseBehavior: 'preserve',
         onClick: () => openTessiven(),
       });
