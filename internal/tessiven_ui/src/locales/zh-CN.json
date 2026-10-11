@@ -266,5 +266,7 @@
   "runtimeGatewayBusinessOnly": "Gateway 连接支持服务访问。运行时进程操作需要 Desktop 直连。",
   "runtimeRecoveryRequired": "请在 Desktop 中继续认证或恢复所选环境。",
   "runtimeLoadFailed": "无法刷新环境。当前选择已保留。",
-  "runtimeActionFailed": "操作无法继续。请检查环境，或在 Desktop 中恢复连接。"
+  "runtimeActionFailed": "操作无法继续。请检查环境，或在 Desktop 中恢复连接。",
+  "runtimeAuthenticationUnknown": "尚未检查认证状态",
+  "runtimeRegisteredApplicationOnly": "通过此连接的 Desktop 窗口访问环境并完成认证。进程操作需要已登记的运行时直连。"
 }

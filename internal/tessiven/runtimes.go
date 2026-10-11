@@ -24,7 +24,7 @@ type RuntimeTarget struct {
 	Registered    bool     `json:"registered"`
 	Online        *bool    `json:"online"`
 	Connected     bool     `json:"connected"`
-	Authenticated bool     `json:"authenticated"`
+	Authenticated *bool    `json:"authenticated"`
 	Actions       []string `json:"actions"`
 	Reason        string   `json:"reason,omitempty"`
 }

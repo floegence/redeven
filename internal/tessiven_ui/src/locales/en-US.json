@@ -266,5 +266,7 @@
   "runtimeGatewayBusinessOnly": "Gateway connections provide service access. Runtime process operations require a direct Desktop connection.",
   "runtimeRecoveryRequired": "Continue in Desktop to authenticate or restore the selected environment.",
   "runtimeLoadFailed": "Could not refresh environments. Your current selection is preserved.",
-  "runtimeActionFailed": "The action could not proceed. Inspect the environment or restore its connection in Desktop."
+  "runtimeActionFailed": "The action could not proceed. Inspect the environment or restore its connection in Desktop.",
+  "runtimeAuthenticationUnknown": "Authentication not checked",
+  "runtimeRegisteredApplicationOnly": "Use this connection’s Desktop window for access and authentication. Process operations require a registered direct Runtime connection."
 }

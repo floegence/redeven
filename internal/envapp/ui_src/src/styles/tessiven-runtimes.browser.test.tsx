@@ -26,8 +26,9 @@ function directory() {
       registered: true,
       online: true,
       connected: true,
-      authenticated: true,
-      actions: ['status', 'connect', 'start', 'stop', 'restart', 'update'],
+      authenticated: index === 1 ? null : true,
+      actions: index === 1 ? ['status', 'connect'] : ['status', 'connect', 'start', 'stop', 'restart', 'update'],
+      ...(index === 1 ? { reason: 'registered_application_only' } : {}),
     })),
     sources: [
       {

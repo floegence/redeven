@@ -58,7 +58,7 @@ func TestRuntimeGatewayCatalogRemainsInspectableWithoutDesktop(t *testing.T) {
 		t.Fatalf("independent source lost: %+v %v", directory, err)
 	}
 	target := directory.Targets[0]
-	if target.Connected || target.Authenticated || target.Online == nil || *target.Online || len(target.Actions) != 1 || target.Actions[0] != "status" {
+	if target.Connected || target.Authenticated != nil && *target.Authenticated || target.Online == nil || *target.Online || len(target.Actions) != 1 || target.Actions[0] != "status" {
 		t.Fatalf("catalog invented a business session: %+v", target)
 	}
 	request := RuntimeRequest{RuntimeRef: target.RuntimeRef, Generation: target.Generation, Identity: target.Identity, Action: "status"}

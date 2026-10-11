@@ -22,7 +22,7 @@ type Target = {
   registered: boolean;
   online: boolean | null;
   connected: boolean;
-  authenticated: boolean;
+  authenticated: boolean | null;
   actions: string[];
   reason?: string;
 };
@@ -52,6 +52,7 @@ const reasonKeys: Record<string, string> = {
   desktop_gateway_required: 'runtimeGatewayConnectionRequired',
   direct_disconnected: 'runtimeDirectDisconnected',
   gateway_business_only: 'runtimeGatewayBusinessOnly',
+  registered_application_only: 'runtimeRegisteredApplicationOnly',
 };
 const statusKeys: Record<string, string> = {
   handoff_required: 'runtimeHandoff',
@@ -301,7 +302,9 @@ export function TessivenRuntimesDialog(props: {
                   </span>
                   <span>
                     {props.t(
-                      target.authenticated
+                      target.authenticated === null
+                        ? 'runtimeAuthenticationUnknown'
+                        : target.authenticated
                         ? 'runtimeAuthenticated'
                         : 'runtimeAuthenticationRequired',
                     )}
