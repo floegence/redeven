@@ -1,9 +1,9 @@
 ---
 type: Qualification Record
 title: Physical-device remote desktop Viewer qualification
-description: Assess deployed udesk26 Viewer behavior and bounded recovery timing while preserving orange, IME, cursor and comparison limits.
+description: Assess deployed udesk26 Viewer behavior and bounded recovery timing while preserving IME, cursor and comparison limits.
 tags: [desktop, input, deployment, latency, qualification]
-timestamp: 2026-10-11T14:10:00Z
+timestamp: 2026-10-11T15:54:39Z
 ---
 # Summary
 
@@ -13,10 +13,10 @@ owns physical-seat input and lock authority. This run consumes native
 commit, physical unlock, window switching, disconnect and Electron fullscreen.
 Ordinary input stays disabled while locked or disconnected. Ten injected
 control-channel interruptions recover to a new Viewer paint confirmation.
-Orange deployment, real IME composition, matching cursor feedback, command RTT
-and RustDesk/NoMachine parity remain unqualified. Restore stable SSH transport
-and complete the product update before retrying orange acceptance; an active
-service alone does not establish compatibility.
+The [Orange follow-up](remote-desktop-orange-viewer-results.md) owns recovered
+connection and Runtime update evidence; its Env App service update and Viewer
+acceptance remain pending. Real IME composition, matching cursor feedback,
+command RTT and RustDesk/NoMachine parity remain unqualified.
 
 # Contract
 
@@ -123,11 +123,11 @@ binary still reports `8c4f56144a2e`, digest
 The existing service PID `9439` remains active with its older closure and
 admitted Runtime digest. No successful current-version deployment is claimed.
 
-Retry orange acceptance after stable SSH, card Runtime update and Env App
-service deployment. The open-error shape needs focused diagnosis; EPIPE has no
-established network or product owner here. User IME, matched cursor feedback
-and competitor measurements remain incomplete. Orange's native AFBC and
-lock/input evidence is preserved.
+The operator later reports Wi-Fi loss and restored connectivity. The
+[Orange follow-up](remote-desktop-orange-viewer-results.md) records the repaired
+package preparation and successful Runtime update, with remaining service and
+Viewer acceptance. EPIPE's precise owner and the prior open-error shape remain
+unresolved. Orange's native AFBC and lock/input evidence is preserved.
 
 # Evidence
 
