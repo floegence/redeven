@@ -3401,6 +3401,13 @@ describe('buildEnvironmentCardModel', () => {
       container_width_px: 1392, root_font_size_px: 20 })).toMatchObject({ column_count: 4 });
   });
 
+  it('caps a wide environment library at five columns and keeps the same columns while filtering', () => {
+    for (const visibleCount of [1, 12]) {
+      expect(buildEnvironmentLibraryLayoutModel({ visible_card_count: visibleCount, layout_reference_count: 12,
+        container_width_px: 2400, root_font_size_px: 16 })).toMatchObject({ column_count: 5 });
+    }
+  });
+
   it('falls back to a single shared environment column before the library width is measured', () => {
     expect(buildEnvironmentLibraryLayoutModel({
       visible_card_count: 5,

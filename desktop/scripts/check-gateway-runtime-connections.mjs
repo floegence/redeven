@@ -46,7 +46,7 @@ try {
      return elements.map(element=>({width:element.getBoundingClientRect().width,height:element.getBoundingClientRect().height,rem}));
     });
     assert.equal(icons.length,3);
-    assert.ok(icons.every(icon=>Math.abs(icon.width-icon.rem)<.5 && Math.abs(icon.height-icon.rem)<.5),JSON.stringify(icons));
+    assert.ok(icons.every(icon=>Math.abs(icon.width-icon.rem*.875)<.5 && Math.abs(icon.height-icon.rem*.875)<.5),JSON.stringify(icons));
     const bounds=await card.boundingBox();
     for(const tab of await card.getByRole('tab').all()) {
      await tab.click();

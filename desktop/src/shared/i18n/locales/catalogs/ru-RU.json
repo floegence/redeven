@@ -1688,6 +1688,13 @@
     "pinnedThroughOwner": "Закреплено через {owner}",
     "ownerOperationRunning": "Операция выполняется",
     "accessPerspective": "Доступ к среде",
+    "accessTabs": {
+      "local": "Локально",
+      "cloud": "Облако",
+      "gateway": "Шлюз",
+      "ssh": "SSH"
+    },
+    "accessTabStatus": "{name} · {status}",
     "gatewayFilter": "Шлюзы",
     "redevenUrlFilter": "Redeven URL",
     "sshHostFilter": "SSH Хост",

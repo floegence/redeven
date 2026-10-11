@@ -1679,6 +1679,13 @@
     "pinnedThroughOwner": "{owner} でピン留めされています",
     "ownerOperationRunning": "操作を実行中",
     "accessPerspective": "環境へのアクセス",
+    "accessTabs": {
+      "local": "ローカル",
+      "cloud": "クラウド",
+      "gateway": "ゲートウェイ",
+      "ssh": "SSH"
+    },
+    "accessTabStatus": "{name} · {status}",
     "gatewayFilter": "ゲートウェイ",
     "redevenUrlFilter": "Redeven URL",
     "sshHostFilter": "SSH ホスト",

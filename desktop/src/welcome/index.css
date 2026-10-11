@@ -4222,14 +4222,21 @@ pre,
   padding: .375rem .75rem 0;
 }
 .redeven-environment-owner-tabs {
-  width: fit-content;
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   border: 1px solid var(--border);
   border-radius: .4375rem;
   background: color-mix(in srgb, var(--background) 85%, var(--card));
   padding: .125rem;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
 }
 .redeven-environment-owner-tablist {
+  display: flex;
+  width: 100%;
+  min-width: 0;
   gap: .125rem;
   align-items: stretch;
 }
@@ -4238,16 +4245,21 @@ pre,
   cursor: pointer;
   min-width: 0;
   height: 1.875rem;
-  flex: 0 1 auto;
-  padding: .1875rem .375rem;
+  min-inline-size: 0;
+  flex: 1 1 auto;
+  justify-content: center;
+  gap: .1875rem;
+  padding: .1875rem .125rem;
   border: 1px solid transparent;
   border-radius: .3125rem;
   white-space: nowrap;
-  font-size: .75rem;
+  font-size: .6875rem;
   font-weight: 600;
   line-height: 1rem;
   color: var(--muted-foreground);
   background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .redeven-environment-owner-tab[aria-selected="true"] {
   border-color: color-mix(in srgb, var(--foreground) 6%, var(--border));
@@ -4258,6 +4270,20 @@ pre,
 .redeven-environment-owner-tab[aria-selected="false"]:hover {
   background: color-mix(in srgb, var(--foreground) 5%, var(--card));
   color: var(--foreground);
+}
+.redeven-environment-owner-tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+@media (forced-colors: active) {
+  .redeven-environment-owner-tab[aria-selected="true"] {
+    background: Highlight;
+    color: HighlightText;
+    forced-color-adjust: none;
+  }
+}
+@media (pointer: coarse) {
+  .redeven-environment-owner-tab { min-height: 44px; }
 }
 .redeven-environment-owner-stack { display: grid; flex: 1; min-width: 0; }
 .redeven-environment-owner-panel {
@@ -4280,27 +4306,26 @@ pre,
 }
 .redeven-environment-owner-footer { min-height: 3rem; }
 .redeven-owner-tab-icon {
+  position: relative;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: .875rem;
+  height: .875rem;
 }
-.redeven-owner-tab-icon > svg { width: 1rem; height: 1rem; }
-.redeven-environment-owner-tab:has(.redeven-owner-tab-status) { padding-inline-end: 1.125rem; }
+.redeven-owner-tab-icon > svg { width: .875rem; height: .875rem; }
 .redeven-owner-tab-status {
   position: absolute;
-  inset-inline-end: .4375rem;
-  top: 50%;
-  transform: translateY(-50%);
+  inset-inline-end: -.125rem;
+  top: -.125rem;
   display: inline-flex;
   width: .3125rem;
   height: .3125rem;
   border-radius: 50%;
   background: var(--warning);
+  box-shadow: 0 0 0 1px var(--card);
 }
-.redeven-owner-tab-status[data-tone="primary"] { width: .625rem; height: .625rem; background: transparent; color: var(--muted-foreground); }
-.redeven-owner-tab-status > svg { width: .625rem; height: .625rem; }
 /* Cloud and Gateway share the overview shell; each owns its inventory and status semantics. */
 .redeven-cloud-source-header, .redeven-gateway-card {
   min-width: 0;
@@ -4354,7 +4379,14 @@ pre,
 }
 
 .redeven-other-owner-pin { display: flex; align-items: center; gap: .375rem; padding: 0 1rem .5rem; font-size: .6875rem; color: var(--muted-foreground); }
-.redeven-environment-owner-tab > span:last-child { min-width: 0; max-width: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.redeven-environment-owner-tab > span:last-child {
+  min-width: 0;
+  max-width: none;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .redeven-center-actions { width: 100%; justify-content: flex-end; }
 .redeven-center-search { flex: 1 1 14.5rem; min-width: 0; }

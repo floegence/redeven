@@ -21,7 +21,7 @@ try {
     const next = structuredClone(snapshot);
     const local = next.environments.find(entry => entry.id === runtime.id);
     Object.assign(local.provider_runtime_link_target, {
-      provider_connection_state: 'authorization_required', can_connect_provider: true,
+      provider_connection_state: 'authorization_required', can_connect_cloud: true,
       credential_recovery: recovery,
       credential_recovery_details: { last_error_code: code, last_attempt_at_unix_ms: 1_800_000_000_000,
         next_retry_at_unix_ms: recovery === 'waiting_for_service' ? 1_800_000_060_000 : undefined, attempt_count: 3 },
@@ -75,8 +75,9 @@ try {
     assert.ok(await cloudTab.evaluate(tab => {
       const dot = tab.querySelector('.redeven-owner-tab-status').getBoundingClientRect();
       const icon = tab.querySelector('.redeven-owner-tab-icon > svg').getBoundingClientRect();
-      return dot.left > icon.right && dot.right <= tab.getBoundingClientRect().right;
-    }), 'warning dot trails the Cloud label without covering its icon');
+      const label = tab.lastElementChild.getBoundingClientRect();
+      return dot.right <= label.left && dot.bottom <= icon.top + icon.height / 2;
+    }), 'warning dot occupies the icon corner without covering the Cloud label');
     await cloudTab.click();
     sameGeometry(healthyGeometry, await geometry(), 'perspective switch preserves the grid');
     await openDetails();
@@ -91,7 +92,7 @@ try {
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
     assert.ok((await dialog.innerText()).includes(runtime.label), 'restore reviews the original Runtime');
-    assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(request => request.kind === 'connect_provider_runtime')), false);
+    assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(request => request.kind === 'connect_cloud_runtime')), false);
     await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
     await cloudTab.click();
     await openDetails();
@@ -178,7 +179,7 @@ try {
     await details.getByText(i18n.t('providerRecovery.connectedDetail'), { exact: true }).waitFor();
     await publish({ ...snapshot, environments: snapshot.environments.filter(entry => entry.id !== runtime.id) });
     await details.waitFor({ state: 'detached' });
-    report.cases.push(`${locale}:compact-grid-trailing-dot-exact-owner-review-local-open-stable-diagnostics-focus-terminal-states-sign-in-recovered-narrow-large-text`);
+    report.cases.push(`${locale}:compact-grid-icon-corner-dot-exact-owner-review-local-open-stable-diagnostics-focus-terminal-states-sign-in-recovered-narrow-large-text`);
     await context.close();
   }
   assert.deepEqual(report.errors, []);

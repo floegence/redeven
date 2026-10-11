@@ -519,6 +519,7 @@ export function EnvironmentCardsPanel(
     const memberIDs = createMemo(() => group().owner_ids ?? group().member_ids, undefined, {
       equals: (left, right) => left.length === right.length && left.every((id, index) => id === right[index]),
     });
+    const gatewayTabID = createMemo(() => group().gateway_tab_id);
     const [selectedGateway,setSelectedGateway] = createSignal('');
     const gatewayMembers = () => group().primary_entry.runtime_service?.gateway_memberships ?? [];
     const gatewayMember = () => gatewayMembers().find(item => item.gateway_id === selectedGateway()) ?? gatewayMembers()[0];
@@ -534,8 +535,8 @@ export function EnvironmentCardsPanel(
       && entry.gateway_member?.runtime_public_id === gatewayMember()?.runtime_public_id) ?? group().primary_entry;
     const gatewaySelector = <Show when={gatewayMembers().length > 1}><label class="mb-2 flex min-w-0 items-center gap-2 text-xs"><span class="shrink-0 text-muted-foreground">{props.i18n.t('gatewayConnections.tab')}</span><select class="min-w-0 flex-1 cursor-pointer rounded-md border border-border bg-background px-2 py-1 text-xs" aria-label={props.i18n.t('gatewayConnections.select')} value={gatewayMember()?.gateway_id} onChange={event => {setSelectedGateway(event.currentTarget.value);setActiveEnvironmentOverlayState(closedEnvironmentLibraryOverlayState());}}><For each={gatewayMembers()}>{member => <option value={member.gateway_id}>{member.gateway_name || member.gateway_id}</option>}</For></select></label></Show>;
     const items = createMemo(() => memberIDs().map(ownerID => {
-      if (ownerID === group().gateway_tab_id) return {id:ownerID, label:props.i18n.t('gatewayConnections.tab'), icon:(
-        <span class="redeven-owner-tab-icon" role="img" title={props.i18n.t(`gatewayMembership.${gatewayMember()?.phase ?? 'not_joined'}`)}>
+      if (ownerID === gatewayTabID()) return {id:ownerID, label:props.i18n.t('environmentCenter.accessTabs.gateway'), fullName:props.i18n.t('gatewayConnections.tab'), icon:(
+        <span class="redeven-owner-tab-icon" role="img" title={props.i18n.t('gatewayConnections.tab')} aria-label={props.i18n.t('environmentCenter.accessTabStatus', { name: props.i18n.t('gatewayConnections.tab'), status: props.i18n.t(`gatewayMembership.${gatewayMember()?.phase ?? 'not_joined'}`) })}>
           <Link aria-hidden="true" />
         </span>
       )};
@@ -547,26 +548,30 @@ export function EnvironmentCardsPanel(
       const warning = () => model().status_tone === 'warning' || (cloudState() !== undefined && cloudState() !== 'connected');
       const status = () => busy() ? props.i18n.t('environmentCenter.ownerOperationRunning')
         : cloudState() !== undefined && cloudState() !== 'connected' ? props.i18n.t(cloudConnectionTitleKey(group().primary_entry, entry())) : model().status_label;
+      const fullName = () => entry().kind === 'provider_environment' ? props.i18n.t('environmentCenter.providerFilter') : model().kind_label;
       return { id: ownerID,
         get label() {
-          const name = entry().kind === 'provider_environment' ? props.i18n.t('environmentCenter.providerFilter') : model().kind_label;
-          return name;
+          if (entry().kind === 'provider_environment') return props.i18n.t('environmentCenter.accessTabs.cloud');
+          if (entry().kind === 'local_environment') return props.i18n.t('environmentCenter.accessTabs.local');
+          if (entry().kind === 'ssh_environment') return props.i18n.t('environmentCenter.accessTabs.ssh');
+          return model().kind_label;
         },
+        get fullName() { return fullName(); },
         icon: (
-          <span class="redeven-owner-tab-icon" role="img" title={status()} aria-label={status()}>
-            <Show when={entry().kind === 'provider_environment'} fallback={
-              <Show when={entry().kind === 'local_environment'} fallback={<Terminal aria-hidden="true" />}>
-                <MonitorPointer aria-hidden="true" />
+          <span class="redeven-owner-tab-icon" role="img" title={props.i18n.t('environmentCenter.accessTabStatus', { name: fullName(), status: status() })} aria-label={props.i18n.t('environmentCenter.accessTabStatus', { name: fullName(), status: status() })}>
+            <Show when={progressing()} fallback={
+              <Show when={entry().kind === 'provider_environment'} fallback={
+                <Show when={entry().kind === 'local_environment'} fallback={<Terminal aria-hidden="true" />}>
+                  <MonitorPointer aria-hidden="true" />
+                </Show>
+              }>
+                <Cloud aria-hidden="true" />
               </Show>
             }>
-              <Cloud aria-hidden="true" />
+              <Refresh aria-hidden="true" class="motion-safe:animate-spin" />
             </Show>
-            <Show when={progressing() || warning()}>
-              <span class="redeven-owner-tab-status" data-tone={progressing() ? 'primary' : 'warning'} aria-hidden="true">
-                <Show when={progressing()}>
-                  <Refresh class="motion-safe:animate-spin" />
-                </Show>
-              </span>
+            <Show when={!progressing() && warning()}>
+              <span class="redeven-owner-tab-status" aria-hidden="true" />
             </Show>
           </span>
         ),
@@ -589,7 +594,7 @@ export function EnvironmentCardsPanel(
               size="sm"
               features={{ indicator: { mode: 'none' }, containerBorder: false, scrollButtons: 'never' }}
               class="redeven-environment-owner-tabs"
-              title={items().map(item => item.label).join(' / ')}
+              title={items().map(item => item.fullName).join(' / ')}
               slotClassNames={{ scrollContainer: 'redeven-environment-owner-tablist', tab: 'redeven-environment-owner-tab' }}
             />
           </Show>

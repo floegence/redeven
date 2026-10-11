@@ -108,7 +108,8 @@ describe('linked environment owner interactions', () => {
     expect(document.querySelectorAll('[data-environment-group]')).toHaveLength(8);
     const tabs = [...card.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     expect(tabs).toHaveLength(3);
-    expect(tabs.map(tab => tab.textContent?.trim())).toEqual(['Local', 'Redeven Cloud', 'Gateway']);
+    expect(tabs.map(tab => tab.textContent?.trim())).toEqual(['Local', 'Cloud', 'Gateway']);
+    expect(tabs[1].querySelector('[role="img"]')?.getAttribute('aria-label')).toContain('Redeven Cloud');
     expect(tabs.every(tab => tab.querySelector('.redeven-owner-tab-icon > svg'))).toBe(true);
     for (const tab of tabs) {
       tab.click(); await settle();
