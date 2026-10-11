@@ -219,7 +219,7 @@ describe('FlowerTurnLauncherPanel', () => {
 
   it('projects submission errors and honors disabled initial autofocus', async () => {
     const onSubmit = vi.fn(async () => {
-      throw new Error('runtime unavailable');
+      throw flowerTurnAdmissionError('rejected', new Error('invalid context action'));
     });
     renderPanel({ onSubmit, autoFocus: false });
 
@@ -230,7 +230,11 @@ describe('FlowerTurnLauncherPanel', () => {
     (host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement).click();
     await flushAsync();
 
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('runtime unavailable');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('invalid context action');
+    expect(textarea.value).toBe('Inspect this file');
+    expect(textarea.disabled).toBe(false);
+    expect(host.querySelector('.flower-composer-context-references')?.textContent).toContain('main.go');
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Remove reference main.go"]')?.disabled).toBe(false);
   });
 
   it('reuses one client request identity when an unresolved submission is retried', async () => {

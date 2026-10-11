@@ -154,7 +154,7 @@ func TestFloretContextProjectionKeepsEnvironmentRoutingMetadataWithoutResourceAu
 			}},
 			Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 		},
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
@@ -204,11 +204,11 @@ func TestFloretContextProjectionKeepsFileReferencesBoundToServerAuthority(t *tes
 		}
 	}
 
-	if _, err := floretContextProjectionForInputWithAuthority(RunInput{ContextAction: newFileAction("target_forged")}, &authority); !errors.Is(err, ErrInvalidContextAction) {
+	if _, err := floretContextProjectionForInput(RunInput{ContextAction: newFileAction("target_forged")}, &authority, nil); !errors.Is(err, ErrInvalidContextAction) {
 		t.Fatalf("forged file target error=%v, want invalid context action", err)
 	}
 
-	projection, err := floretContextProjectionForInputWithAuthority(RunInput{ContextAction: newFileAction("local:local")}, &authority)
+	projection, err := floretContextProjectionForInput(RunInput{ContextAction: newFileAction("local:local")}, &authority, nil)
 	if err != nil {
 		t.Fatalf("local alias projection: %v", err)
 	}
@@ -221,6 +221,21 @@ func TestFloretContextProjectionKeepsFileReferencesBoundToServerAuthority(t *tes
 	}
 	if !flowerCanonicalReferenceLocatorMatchesAuthority(locator, authority) {
 		t.Fatalf("locator=%#v, want authority %#v", locator, authority)
+	}
+}
+
+func TestFloretContextProjectionRejectsClientSuppliedResourceAuthority(t *testing.T) {
+	t.Parallel()
+	input := RunInput{ContextAction: &ContextActionEnvelope{
+		SchemaVersion: ContextActionSchemaVersion, ActionID: contextActionAskFlowerID, Provider: contextActionFlowerProvider,
+		Target:           ContextActionTarget{TargetID: "env_demo", Locality: contextActionLocalityCurrent},
+		Source:           ContextActionSource{Surface: contextActionSurfaceFile},
+		ExecutionContext: &ContextActionExecutionHint{CurrentTargetID: "env_demo", SourceEnvPublicID: "env_demo"},
+		Context:          []ContextActionContextItem{{Kind: contextActionKindFilePath, Path: "/workspace/changsha.jpg"}},
+		Presentation:     ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+	}}
+	if projection, err := floretContextProjectionForInput(input, nil, nil); !errors.Is(err, ErrInvalidContextAction) || len(projection.References) != 0 {
+		t.Fatalf("projection=%#v error=%v, want rejection without server authority", projection, err)
 	}
 }
 
@@ -247,7 +262,7 @@ func TestFloretDurableContextFormatsProcessSnapshot(t *testing.T) {
 			}},
 			Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 		},
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
@@ -279,6 +294,10 @@ func TestFloretDurableContextFormatsProcessSnapshot(t *testing.T) {
 
 func TestFloretDurableContextKeepsFileContextOnly(t *testing.T) {
 	t.Parallel()
+	authority, err := resolveFlowerCanonicalReferenceTargetAuthority("env_demo", ToolTargetPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	projection, err := floretContextProjectionForInput(RunInput{
 		Text:        "review this",
@@ -294,7 +313,7 @@ func TestFloretDurableContextKeepsFileContextOnly(t *testing.T) {
 			Presentation:        ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 			SuggestedWorkingDir: "/workspace",
 		},
-	})
+	}, &authority, nil)
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
@@ -327,7 +346,7 @@ func TestFloretDurableContextTruncatesLargeTerminalSelection(t *testing.T) {
 			Context:       []ContextActionContextItem{{Kind: "terminal_selection", WorkingDir: "/workspace", SelectionChars: floretTerminalSelectionInlineChars + 1}},
 			Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 		},
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
@@ -353,7 +372,7 @@ func TestFloretContextProjectionOmitsUnverifiedTerminalWorkingDirectory(t *testi
 			Context:       []ContextActionContextItem{{Kind: "terminal_selection", SelectionChars: 0}},
 			Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 		},
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
@@ -396,6 +415,7 @@ func TestFloretContextProjectionBuildsCanonicalReferencesAndDurableContextTogeth
 	}{
 		{name: "text", surface: "git_browser", item: ContextActionContextItem{Kind: "text_snapshot", Title: "Quoted text", Content: "selected lines"}, wantKind: flruntime.MessageReferenceText, wantText: "selected lines"},
 		{name: "file", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src/main.ts"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
+		{name: "image", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/changsha.jpg"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
 		{name: "directory", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src", IsDirectory: true}, wantKind: flruntime.MessageReferenceDirectory, wantLocator: true},
 		{name: "composer file", surface: "flower_composer", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src/main.ts"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
 		{name: "composer directory", surface: "flower_composer", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src", IsDirectory: true}, wantKind: flruntime.MessageReferenceDirectory, wantLocator: true},
@@ -404,10 +424,18 @@ func TestFloretContextProjectionBuildsCanonicalReferencesAndDurableContextTogeth
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			var authority *flowerCanonicalReferenceTargetAuthority
+			if test.wantLocator {
+				resolved, err := resolveFlowerCanonicalReferenceTargetAuthority("env_demo", ToolTargetPolicy{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				authority = &resolved
+			}
 			projection, err := floretContextProjectionForInput(RunInput{
 				Text:          "review this reference",
 				ContextAction: newAction(test.surface, test.item),
-			})
+			}, authority, nil)
 			if err != nil {
 				t.Fatalf("floretContextProjectionForInput: %v", err)
 			}
@@ -427,45 +455,66 @@ func TestFloretContextProjectionBuildsCanonicalReferencesAndDurableContextTogeth
 			if test.wantLocator && ref.ResourceRef == "" {
 				t.Fatalf("reference=%#v, want self-contained host locator", ref)
 			}
+			if test.wantLocator {
+				locator, err := decodeFlowerCanonicalReferenceLocator(ref.ResourceRef)
+				if err != nil || !flowerCanonicalReferenceLocatorMatchesAuthority(locator, *authority) || locator.Path != test.item.Path || locator.Directory != test.item.IsDirectory {
+					t.Fatalf("locator=%#v error=%v, want server-bound resource", locator, err)
+				}
+			}
 		})
 	}
 }
 
-func TestFloretContextResourceRefRequiresEndpointBoundTargetIdentity(t *testing.T) {
+func TestFloretContextProjectionRequiresEndpointBoundTargetIdentity(t *testing.T) {
 	t.Parallel()
 
-	base := &ContextActionEnvelope{
-		Target: ContextActionTarget{TargetID: "runtime-target", Locality: contextActionLocalityAuto},
-		ExecutionContext: &ContextActionExecutionHint{
-			CurrentTargetID:   "runtime-target",
-			SourceEnvPublicID: "env_demo",
-		},
+	authority := flowerCanonicalReferenceTargetAuthority{
+		TargetID: "env_demo", TargetLocality: contextActionLocalityCurrent, SourceEnvPublicID: "env_demo",
 	}
-	resourceRef, err := floretContextResourceRef(base, ContextActionContextItem{Path: "/workspace/main.go"})
-	if err != nil {
-		t.Fatalf("floretContextResourceRef: %v", err)
+	base := ContextActionEnvelope{
+		SchemaVersion: ContextActionSchemaVersion, ActionID: contextActionAskFlowerID, Provider: contextActionFlowerProvider,
+		Target:           ContextActionTarget{TargetID: "current", Locality: contextActionLocalityAuto},
+		Source:           ContextActionSource{Surface: contextActionSurfaceFile},
+		ExecutionContext: &ContextActionExecutionHint{CurrentTargetID: "env_demo", SourceEnvPublicID: "env_demo"},
+		Context:          []ContextActionContextItem{{Kind: contextActionKindFilePath, Path: "/workspace/main.go"}},
+		Presentation:     ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 	}
-	locator, err := decodeFlowerCanonicalReferenceLocator(resourceRef)
-	if err != nil {
-		t.Fatalf("decode locator: %v", err)
-	}
-	if locator.CurrentTargetID != "runtime-target" || locator.SourceEnvPublicID != "env_demo" || !flowerCanonicalReferenceLocatorBelongsToEndpoint(locator, "env_demo") {
-		t.Fatalf("locator=%#v, want exact endpoint-bound current target", locator)
-	}
-
-	for _, mutate := range []func(*ContextActionEnvelope){
-		func(action *ContextActionEnvelope) { action.ExecutionContext = nil },
-		func(action *ContextActionEnvelope) { action.ExecutionContext.SourceEnvPublicID = "" },
-		func(action *ContextActionEnvelope) { action.ExecutionContext.CurrentTargetID = "runtime-other" },
-		func(action *ContextActionEnvelope) { action.Target.Locality = contextActionLocalityRemote },
+	for _, test := range []struct {
+		name       string
+		mutate     func(*ContextActionEnvelope)
+		wantReject bool
+	}{
+		{name: "matching hints", mutate: func(*ContextActionEnvelope) {}},
+		{name: "no hints", mutate: func(action *ContextActionEnvelope) { action.ExecutionContext = nil }},
+		{name: "no source hint", mutate: func(action *ContextActionEnvelope) { action.ExecutionContext.SourceEnvPublicID = "" }},
+		{name: "forged source", mutate: func(action *ContextActionEnvelope) { action.ExecutionContext.SourceEnvPublicID = "env_cloud" }, wantReject: true},
+		{name: "forged current target", mutate: func(action *ContextActionEnvelope) { action.ExecutionContext.CurrentTargetID = "runtime-other" }, wantReject: true},
+		{name: "forged target and hint", mutate: func(action *ContextActionEnvelope) {
+			action.Target.TargetID = "runtime-other"
+			action.ExecutionContext.CurrentTargetID = "runtime-other"
+		}, wantReject: true},
+		{name: "incompatible locality", mutate: func(action *ContextActionEnvelope) { action.Target.Locality = contextActionLocalityRemote }, wantReject: true},
 	} {
-		action := *base
-		hint := *base.ExecutionContext
-		action.ExecutionContext = &hint
-		mutate(&action)
-		if resourceRef, err := floretContextResourceRef(&action, ContextActionContextItem{Path: "/workspace/main.go"}); !errors.Is(err, ErrInvalidContextAction) || resourceRef != "" {
-			t.Fatalf("floretContextResourceRef()=(%q, %v), want invalid empty locator", resourceRef, err)
-		}
+		t.Run(test.name, func(t *testing.T) {
+			action := base
+			hint := *base.ExecutionContext
+			action.ExecutionContext = &hint
+			test.mutate(&action)
+			projection, err := floretContextProjectionForInput(RunInput{ContextAction: &action}, &authority, nil)
+			if test.wantReject {
+				if !errors.Is(err, ErrInvalidContextAction) || len(projection.References) != 0 {
+					t.Fatalf("projection=%#v error=%v, want rejected resource", projection, err)
+				}
+				return
+			}
+			if err != nil || len(projection.References) != 1 {
+				t.Fatalf("projection=%#v error=%v, want authorized resource", projection, err)
+			}
+			locator, err := decodeFlowerCanonicalReferenceLocator(projection.References[0].ResourceRef)
+			if err != nil || !flowerCanonicalReferenceLocatorMatchesAuthority(locator, authority) {
+				t.Fatalf("locator=%#v error=%v, want server authority", locator, err)
+			}
+		})
 	}
 }
 
@@ -484,7 +533,7 @@ func TestFloretTurnInputAdmitsReferencesWithoutPersistingContextAction(t *testin
 			Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 		},
 	}
-	projection, err := floretContextProjectionForInput(input)
+	projection, err := floretContextProjectionForInput(input, nil, nil)
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}

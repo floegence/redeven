@@ -2206,8 +2206,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         : isLocalMode()
           ? 'local_runtime'
           : 'region_sandbox';
-    const sourceEnvPublicID = String(desktopCtx?.env_public_id ?? envId() ?? '').trim()
-      || (isLocalMode() ? String(localRuntime()?.env_public_id ?? '').trim() : '');
+    // Desktop Cloud identity describes the selected device; the connected
+    // resource endpoint supplies the identity used for context admission.
+    const sourceEnvPublicID = String((isLocalMode() ? localRuntime()?.env_public_id : envId()) ?? '').trim();
     return {
       current_target_id: sourceEnvPublicID || 'current',
       source_env_public_id: sourceEnvPublicID || undefined,
