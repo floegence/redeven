@@ -53,6 +53,9 @@ staging files, and stop before Rust preparation. A successful transfer still
 passes the strict manifest/version and crate-digest checks; malformed or
 mismatched documents are rejected without retrying validation. An explicitly
 supplied `--manifest-file` follows the same manifest checks without downloading.
+The Node 26 contract CLI executes through symlinked checkout paths as well as
+canonical paths. It must write requested verification evidence and reject
+invalid manifests in both cases; a successful no-op is not validation.
 
 For every native Linux and Darwin target, staging prepares Rust 1.88.0 and the
 exact published `redevplugin-runtime` version with its packaged lockfile. The
@@ -173,6 +176,7 @@ This concept owns ReDevPlugin release provenance and package assembly. The main 
 
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact upstream publication and registry readbacks.
 - `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs each native Linux or Darwin runtime from the exact published crate graph.
+- `redeven:scripts/redevplugin_release_contract.test.mjs` - Verifies linked CLI execution, manifest rejection, and bound runtime evidence.
 - `redeven:scripts/redevplugin_manifest_download.test.mjs` - Exercises real curl against controlled TLS disconnects, retry exhaustion, certificate and redirect rejection, and strict manifest admission.
 - `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Verifies runtime markers, evidence, target identity, and signatures.
 - `redeven:scripts/check_desktop_redevplugin_package.sh:1` - Verifies native installer contents and writes target-bound receipts.

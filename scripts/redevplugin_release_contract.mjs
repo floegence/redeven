@@ -12,7 +12,6 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 export const releaseManifestAssetName = 'platform-release-manifest.json';
 export const runtimeMarkerName = '.redevplugin-release-artifacts-verified.json';
@@ -751,7 +750,7 @@ async function main(args) {
   process.exitCode = 2;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+if (import.meta.main) {
   main(process.argv.slice(2)).catch((error) => {
     console.error(`[redevplugin-release-contract] ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;

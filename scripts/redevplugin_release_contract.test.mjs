@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -175,6 +175,28 @@ const manifest = {
 function clone(value) {
   return structuredClone(value);
 }
+
+test('release CLI writes verification and rejects invalid manifests through a symlinked checkout', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-release-cli-link-'));
+  try {
+    const scripts = path.join(root, 'scripts');
+    symlinkSync(import.meta.dirname, scripts, 'dir');
+    const cli = path.join(scripts, 'redevplugin_release_contract.mjs');
+    const manifestPath = path.join(root, 'manifest.json');
+    const output = path.join(root, 'verification.json');
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    const result = spawnSync(process.execPath, [cli, 'write-release-verification', manifestPath, `v${version}`, output], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(readFileSync(output, 'utf8')), createReleaseVerification(manifest, `v${version}`, manifestPath));
+
+    writeFileSync(manifestPath, '{}');
+    const invalid = spawnSync(process.execPath, [cli, 'verify-release-manifest', manifestPath, `v${version}`], { encoding: 'utf8' });
+    assert.equal(invalid.status, 1, 'invalid manifest must fail through the linked CLI');
+    assert.match(invalid.stderr, /redevplugin-release-contract/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('strict JSON rejects duplicate fields and trailing data', () => {
   assert.deepEqual(parseStrictJSON('{"a":[true,null,-1.2e3]}'), { a: [true, null, -1200] });
