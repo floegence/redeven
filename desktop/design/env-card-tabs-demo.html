@@ -107,7 +107,7 @@
       transition: border-color .18s ease, background .18s ease, transform .18s ease;
     }
     .icon-btn { width: 38px; color: var(--muted-strong); }
-    .primary-btn { padding: 0 16px; border-color: var(--navy); background: var(--navy); color: white; font-weight: 650; }
+    .primary-btn { min-width: 84px; padding: 0 12px; border-color: var(--navy); background: var(--navy); color: white; font-weight: 650; white-space: nowrap; }
     .icon-btn:hover, .primary-btn:hover { transform: translateY(-1px); }
     .icon-btn:hover { border-color: #a9b7c2; background: #f3f7f8; }
     .primary-btn:hover { background: #29445f; }
@@ -130,14 +130,14 @@
     .design-note strong { color: #244c4d; }
     .design-note svg { width: 16px; height: 16px; flex: none; }
 
-    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: 12px; align-items: stretch; }
     .card {
-      display: flex; min-width: 0; min-height: 354px; flex-direction: column; overflow: hidden;
+      display: flex; min-width: 0; min-height: 332px; flex-direction: column; overflow: hidden;
       border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-strong);
       box-shadow: 0 1px 0 rgba(255,255,255,.8) inset; transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
     }
     .card:hover { border-color: #c5c5bc; box-shadow: 0 10px 25px rgba(45, 56, 64, .08); transform: translateY(-2px); }
-    .access-head { min-width: 0; padding: 12px 12px 10px; border-bottom: 1px solid var(--line-soft); background: #f9f7f2; }
+    .access-head { min-width: 0; padding: 10px 10px 9px; border-bottom: 1px solid var(--line-soft); background: #f9f7f2; }
     .access-head__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
     .kind-tag { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: #4e6d70; font-size: 11px; font-weight: 750; letter-spacing: .04em; }
     .kind-tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .7; }
@@ -146,25 +146,24 @@
 
     /* The key interaction: the switcher is a single no-select control with a readable floor for each label. */
     .access-switcher {
-      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; width: 100%; min-width: 0; margin-top: 10px;
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; width: 100%; min-width: 0; margin-top: 8px;
       padding: 3px; border: 1px solid #d8d4cb; border-radius: 10px; background: #efede8;
       user-select: none; -webkit-user-select: none; touch-action: manipulation;
     }
     .access-tab {
       position: relative; display: inline-flex; min-width: 0; min-height: 32px; align-items: center; justify-content: center; gap: 6px;
-      padding: 5px 7px; overflow: hidden; border: 0; border-radius: 7px; background: transparent; color: #71808b;
-      cursor: pointer; font-size: 12px; font-weight: 650; line-height: 1; white-space: nowrap;
+      padding: 5px 5px; overflow: hidden; border: 0; border-radius: 7px; background: transparent; color: #71808b;
+      cursor: pointer; font-size: 11.5px; font-weight: 650; line-height: 1; white-space: nowrap;
       transition: background .18s ease, color .18s ease, box-shadow .18s ease;
     }
-    .access-tab svg { width: 14px; height: 14px; flex: none; }
+    .access-tab svg { width: 13px; height: 13px; flex: none; }
     .access-tab__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .access-tab:hover { color: var(--ink); background: rgba(255,255,255,.55); }
     .access-tab[aria-selected="true"] { color: var(--navy); background: var(--surface-strong); box-shadow: 0 1px 4px rgba(32, 43, 53, .12); }
-    .access-tab[aria-selected="true"]::after { content: ""; position: absolute; inset-inline: 28%; bottom: 2px; height: 2px; border-radius: 2px; background: var(--teal); }
     .access-tab:focus-visible { outline: 2px solid #6da6ae; outline-offset: -2px; }
-    .access-tab__status { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--amber); }
+    .access-tab__status { position: absolute; top: 6px; right: 6px; width: 4px; height: 4px; flex: none; border-radius: 50%; background: var(--amber); }
 
-    .body { display: flex; min-width: 0; flex: 1; flex-direction: column; padding: 15px 16px 13px; }
+    .body { display: flex; min-width: 0; flex: 1; flex-direction: column; padding: 12px 12px 10px; }
     .identity { display: flex; align-items: start; justify-content: space-between; gap: 12px; min-width: 0; }
     .identity h2 { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; letter-spacing: -.015em; }
     .refresh { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #849098; cursor: pointer; }
@@ -185,8 +184,8 @@
     .fact dd code { font: 600 11px/1.2 var(--font-mono); }
     .fact dd a { color: var(--teal); text-decoration: none; }
     .fact dd a:hover { text-decoration: underline; text-underline-offset: 3px; }
-    .card-footer { display: flex; align-items: center; gap: 8px; min-height: 59px; padding: 10px 12px; border-top: 1px solid var(--line); background: #fbfaf7; }
-    .open-btn { display: inline-flex; min-width: 0; flex: 1; align-items: center; justify-content: center; gap: 8px; height: 35px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--navy); color: white; cursor: pointer; font-size: 12px; font-weight: 700; transition: background .18s ease; }
+    .card-footer { display: flex; align-items: center; gap: 6px; min-height: 51px; padding: 8px 10px; border-top: 1px solid var(--line); background: #fbfaf7; }
+    .open-btn { display: inline-flex; min-width: 0; flex: 1; align-items: center; justify-content: center; gap: 5px; height: 33px; overflow: hidden; padding: 0 8px; border: 0; border-radius: 8px; background: var(--navy); color: white; cursor: pointer; font-size: 11px; font-weight: 700; white-space: nowrap; transition: background .18s ease; }
     .open-btn:hover { background: #29445f; }
     .open-btn svg { width: 15px; height: 15px; }
     .footer-icon { display: inline-flex; align-items: center; justify-content: center; width: 31px; height: 31px; flex: none; border: 0; border-radius: 7px; background: transparent; color: #859098; cursor: pointer; }
@@ -208,7 +207,7 @@
       .page-head { align-items: start; flex-direction: column; }
       .head-actions { width: 100%; }
       .search { width: 100%; }
-      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 660px) {
       .window { width: 100%; min-height: 100vh; margin: 0; border: 0; border-radius: 0; }
@@ -218,7 +217,7 @@
       .content { padding: 26px 16px 34px; }
       .filterbar { align-items: start; flex-direction: column; gap: 9px; }
       .grid, .review-strip { grid-template-columns: 1fr; }
-      .card { min-height: 342px; }
+      .card { min-height: 332px; }
       .statusbar { padding: 0 16px; }
       .statusbar__right { display: none; }
     }
@@ -269,11 +268,11 @@
       <section class="grid" aria-label="环境卡片示例">
         <article class="card" data-card="local">
           <div class="access-head">
-            <div class="access-head__row"><span class="kind-tag">Local Environment</span><button class="card-menu" type="button" aria-label="Local Environment 更多操作">•••</button></div>
+            <div class="access-head__row"><span class="kind-tag">本机入口</span><button class="card-menu" type="button" aria-label="Local Environment 更多操作">•••</button></div>
             <div class="access-switcher" role="tablist" aria-label="Local Environment 访问方式">
               <button class="access-tab" role="tab" type="button" aria-selected="true" tabindex="0" data-owner="local" title="本地环境"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="11" rx="1.7"></rect><path d="M8 20h8M12 16v4"></path></svg><span class="access-tab__label">本地</span></button>
-              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="cloud" title="Redeven Cloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg><span class="access-tab__label">Cloud</span><span class="access-tab__status" aria-label="同步失败"></span></button>
-              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="gateway" title="Gateway"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="18" cy="18" r="2"></circle><path d="m8 11 7.8-4M8 13l7.8 4"></path></svg><span class="access-tab__label">Gateway</span></button>
+              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="cloud" title="Redeven Cloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg><span class="access-tab__label">云端</span><span class="access-tab__status" aria-label="同步失败"></span></button>
+              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="gateway" title="Gateway"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="18" cy="18" r="2"></circle><path d="m8 11 7.8-4M8 13l7.8 4"></path></svg><span class="access-tab__label">网关</span></button>
             </div>
           </div>
           <div class="body" data-panel="local">
@@ -281,7 +280,7 @@
             <div class="status-line"><span class="status" data-tone="warning">同步失败</span><span>刚刚检查</span></div>
             <dl class="facts"><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 18h16M6.5 18V7.5h11V18M9 7.5V5h6v2.5"></path></svg>运行于</dt><dd>本机</dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 11.5 12 4l8 7.5v7H4v-7Z"></path><path d="M9 18v-4h6v4"></path></svg>来源</dt><dd><a href="#">Redeven Cloud</a></dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="7.2"></circle><path d="M12 8v4l2.6 1.6"></path></svg>最后同步</dt><dd>今天 09:42</dd></div></dl>
           </div>
-          <div class="card-footer"><button class="open-btn" type="button">通过 Redeven Cloud 打开 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 6 6 6-6 6"></path></svg></button><button class="footer-icon" type="button" aria-label="固定环境"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m8 4 8 0-1 6 3 3-4 1v6l-2 1v-7l-4-1 3-3-1-6Z"></path></svg></button><button class="footer-icon" type="button" aria-label="环境设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"></circle><path d="M19 13.5v-3l-2-.6a6 6 0 0 0-.7-1.6l.9-1.9-2.2-2.1-1.8.9a6 6 0 0 0-1.7-.7L11 2.5H8l-.5 2a6 6 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6 6 0 0 0-.7 1.6l-2 .6v3l2 .6a6 6 0 0 0 .7 1.6l-.9 1.9 2.1 2.1 1.9-.9a6 6 0 0 0 1.6.7l.5 2h3l.5-2a6 6 0 0 0 1.7-.7l1.8.9 2.2-2.1-.9-1.9a6 6 0 0 0 .7-1.6l2-.6Z"></path></svg></button></div>
+          <div class="card-footer"><button class="open-btn" type="button">打开 Cloud <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 6 6 6-6 6"></path></svg></button><button class="footer-icon" type="button" aria-label="固定环境"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m8 4 8 0-1 6 3 3-4 1v6l-2 1v-7l-4-1 3-3-1-6Z"></path></svg></button><button class="footer-icon" type="button" aria-label="环境设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"></circle><path d="M19 13.5v-3l-2-.6a6 6 0 0 0-.7-1.6l.9-1.9-2.2-2.1-1.8.9a6 6 0 0 0-1.7-.7L11 2.5H8l-.5 2a6 6 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6 6 0 0 0-.7 1.6l-2 .6v3l2 .6a6 6 0 0 0 .7 1.6l-.9 1.9 2.1 2.1 1.9-.9a6 6 0 0 0 1.6.7l.5 2h3l.5-2a6 6 0 0 0 1.7-.7l1.8.9 2.2-2.1-.9-1.9a6 6 0 0 0 .7-1.6l2-.6Z"></path></svg></button></div>
         </article>
 
         <article class="card" data-card="ssh">
@@ -289,20 +288,44 @@
             <div class="access-head__row"><span class="kind-tag">SSH 主机</span><button class="card-menu" type="button" aria-label="gzcom 更多操作">•••</button></div>
             <div class="access-switcher" role="tablist" aria-label="gzcom 访问方式">
               <button class="access-tab" role="tab" type="button" aria-selected="true" tabindex="0" data-owner="ssh" title="SSH 主机"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m7 8 4 4-4 4M13 16h4"></path><rect x="3.5" y="4" width="17" height="16" rx="2"></rect></svg><span class="access-tab__label">SSH</span></button>
-              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="cloud" title="Redeven Cloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg><span class="access-tab__label">Cloud</span></button>
-              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="gateway" title="Gateway"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="18" cy="18" r="2"></circle><path d="m8 11 7.8-4M8 13l7.8 4"></path></svg><span class="access-tab__label">Gateway</span></button>
+              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="cloud" title="Redeven Cloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg><span class="access-tab__label">云端</span></button>
+              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="gateway" title="Gateway"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="18" cy="18" r="2"></circle><path d="m8 11 7.8-4M8 13l7.8 4"></path></svg><span class="access-tab__label">网关</span></button>
             </div>
           </div>
           <div class="body" data-panel="ssh"><div class="identity"><h2>gzcom</h2><button class="refresh" type="button" aria-label="刷新 gzcom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8.5 8.5 0 0 0-14.5-5.8L4 6.7"></path><path d="M4 3.5v3.2h3.2"></path><path d="M4 13a8.5 8.5 0 0 0 14.5 5.8l1.5-1.5"></path><path d="M20 20.5v-3.2h-3.2"></path></svg></button></div><div class="status-line"><span class="status">就绪</span><span>已启动 1天前</span></div><dl class="facts"><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="6" width="16" height="11" rx="1.5"></rect><path d="M8 20h8M12 17v3"></path></svg>运行于</dt><dd>gzcom <code>:22</code></dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5 7 4 4-4 4M11 15h7"></path></svg>版本</dt><dd>v0.0.0-dev</dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 18h14M7 18V7h10v11M9.5 7V4.5h5V7"></path></svg>连接</dt><dd>已验证</dd></div></dl></div><div class="card-footer"><button class="open-btn" type="button">打开 Env App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 6 6 6-6 6"></path></svg></button><button class="footer-icon" type="button" aria-label="固定环境"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m8 4 8 0-1 6 3 3-4 1v6l-2 1v-7l-4-1 3-3-1-6Z"></path></svg></button><button class="footer-icon" type="button" aria-label="环境设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"></circle><path d="M19 13.5v-3l-2-.6a6 6 0 0 0-.7-1.6l.9-1.9-2.2-2.1-1.8.9-1.7-.7L11 2.5H8l-.5 2a6 6 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6 6 0 0 0 .7 1.6l-2 .6v3l2 .6a6 6 0 0 0 .7 1.6l-.9 1.9 2.1 2.1 1.9-.9 1.6.7.5 2h3l.5-2 1.7-.7 1.8.9 2.2-2.1-.9-1.9.7-1.6 2-.6Z"></path></svg></button></div>
         </article>
 
+        <article class="card" data-card="los">
+          <div class="access-head">
+            <div class="access-head__row"><span class="kind-tag">SSH 主机</span><button class="card-menu" type="button" aria-label="los 更多操作">•••</button></div>
+            <div class="access-switcher" role="tablist" aria-label="los 访问方式">
+              <button class="access-tab" role="tab" type="button" aria-selected="true" tabindex="0" data-owner="ssh" title="SSH 主机"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m7 8 4 4-4 4M13 16h4"></path><rect x="3.5" y="4" width="17" height="16" rx="2"></rect></svg><span class="access-tab__label">SSH</span></button>
+              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="cloud" title="Redeven Cloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg><span class="access-tab__label">云端</span></button>
+              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="gateway" title="Gateway"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="18" cy="18" r="2"></circle><path d="m8 11 7.8-4M8 13l7.8 4"></path></svg><span class="access-tab__label">网关</span></button>
+            </div>
+          </div>
+          <div class="body" data-panel="ssh"><div class="identity"><h2>los</h2><button class="refresh" type="button" aria-label="刷新 los"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8.5 8.5 0 0 0-14.5-5.8L4 6.7"></path><path d="M4 3.5v3.2h3.2"></path><path d="M4 13a8.5 8.5 0 0 0 14.5 5.8l1.5-1.5"></path><path d="M20 20.5v-3.2h-3.2"></path></svg></button></div><div class="status-line"><span class="status">就绪</span><span>已启动 1天前</span></div><dl class="facts"><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="6" width="16" height="11" rx="1.5"></rect><path d="M8 20h8M12 17v3"></path></svg>运行于</dt><dd>los <code>:22</code></dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5 7 4 4-4 4M11 15h7"></path></svg>版本</dt><dd>v0.0.0-dev</dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 18h14M7 18V7h10v11M9.5 7V4.5h5V7"></path></svg>连接</dt><dd>已验证</dd></div></dl></div><div class="card-footer"><button class="open-btn" type="button">打开 Env App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 6 6 6-6 6"></path></svg></button><button class="footer-icon" type="button" aria-label="固定环境"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m8 4 8 0-1 6 3 3-4 1v6l-2 1v-7l-4-1 3-3-1-6Z"></path></svg></button><button class="footer-icon" type="button" aria-label="环境设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"></circle><path d="M19 13.5v-3l-2-.6a6 6 0 0 0-.7-1.6l.9-1.9-2.2-2.1-1.8.9-1.7-.7L11 2.5H8l-.5 2a6 6 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6 6 0 0 0 .7 1.6l-2 .6v3l2 .6a6 6 0 0 0 .7 1.6l-.9 1.9 2.1 2.1 1.9-.9 1.6.7.5 2h3l.5-2 1.7-.7 1.8.9 2.2-2.1-.9-1.9.7-1.6 2-.6Z"></path></svg></button></div>
+        </article>
+
+        <article class="card" data-card="udesk26">
+          <div class="access-head">
+            <div class="access-head__row"><span class="kind-tag">SSH 主机</span><button class="card-menu" type="button" aria-label="udesk26 更多操作">•••</button></div>
+            <div class="access-switcher" role="tablist" aria-label="udesk26 访问方式">
+              <button class="access-tab" role="tab" type="button" aria-selected="true" tabindex="0" data-owner="ssh" title="SSH 主机"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m7 8 4 4-4 4M13 16h4"></path><rect x="3.5" y="4" width="17" height="16" rx="2"></rect></svg><span class="access-tab__label">SSH</span></button>
+              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="cloud" title="Redeven Cloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg><span class="access-tab__label">云端</span></button>
+              <button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="gateway" title="Gateway"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="18" cy="18" r="2"></circle><path d="m8 11 7.8-4M8 13l7.8 4"></path></svg><span class="access-tab__label">网关</span></button>
+            </div>
+          </div>
+          <div class="body" data-panel="ssh"><div class="identity"><h2>udesk26</h2><button class="refresh" type="button" aria-label="刷新 udesk26"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8.5 8.5 0 0 0-14.5-5.8L4 6.7"></path><path d="M4 3.5v3.2h3.2"></path><path d="M4 13a8.5 8.5 0 0 0 14.5 5.8l1.5-1.5"></path><path d="M20 20.5v-3.2h-3.2"></path></svg></button></div><div class="status-line"><span class="status">就绪</span><span>已启动 1天前</span></div><dl class="facts"><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="6" width="16" height="11" rx="1.5"></rect><path d="M8 20h8M12 17v3"></path></svg>运行于</dt><dd>udesk26 <code>:22</code></dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5 7 4 4-4 4M11 15h7"></path></svg>版本</dt><dd>v0.0.0-dev</dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 18h14M7 18V7h10v11M9.5 7V4.5h5V7"></path></svg>连接</dt><dd>已验证</dd></div></dl></div><div class="card-footer"><button class="open-btn" type="button">打开 Env App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 6 6 6-6 6"></path></svg></button><button class="footer-icon" type="button" aria-label="固定环境"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m8 4 8 0-1 6 3 3-4 1v6l-2 1v-7l-4-1 3-3-1-6Z"></path></svg></button><button class="footer-icon" type="button" aria-label="环境设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"></circle><path d="M19 13.5v-3l-2-.6a6 6 0 0 0-.7-1.6l.9-1.9-2.2-2.1-1.8.9-1.7-.7L11 2.5H8l-.5 2a6 6 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6 6 0 0 0 .7 1.6l-2 .6v3l2 .6a6 6 0 0 0 .7 1.6l-.9 1.9 2.1 2.1 1.9-.9 1.6.7.5 2h3l.5-2 1.7-.7 1.8.9 2.2-2.1-.9-1.9.7-1.6 2-.6Z"></path></svg></button></div>
+        </article>
+
         <article class="card" data-card="cloud">
-          <div class="access-head"><div class="access-head__row"><span class="kind-tag">Redeven Cloud</span><button class="card-menu" type="button" aria-label="team-staging 更多操作">•••</button></div><div class="access-switcher" role="tablist" aria-label="team-staging 访问方式"><button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="ssh" title="SSH 主机"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m7 8 4 4-4 4M13 16h4"></path><rect x="3.5" y="4" width="17" height="16" rx="2"></rect></svg><span class="access-tab__label">SSH</span></button><button class="access-tab" role="tab" type="button" aria-selected="true" tabindex="0" data-owner="cloud" title="Redeven Cloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg><span class="access-tab__label">Cloud</span></button><button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="gateway" title="Gateway"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="18" cy="18" r="2"></circle><path d="m8 11 7.8-4M8 13l7.8 4"></path></svg><span class="access-tab__label">Gateway</span></button></div></div>
-          <div class="body" data-panel="cloud"><div class="identity"><h2>team-staging</h2><button class="refresh" type="button" aria-label="刷新 team-staging"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8.5 8.5 0 0 0-14.5-5.8L4 6.7"></path><path d="M4 3.5v3.2h3.2"></path><path d="M4 13a8.5 8.5 0 0 0 14.5 5.8l1.5-1.5"></path><path d="M20 20.5v-3.2h-3.2"></path></svg></button></div><div class="status-line"><span class="status" data-tone="neutral">未连接</span><span>需要重新授权</span></div><dl class="facts"><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg>来源</dt><dd>Redeven Cloud</dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5 7 4 4-4 4M11 15h7"></path></svg>版本</dt><dd>自动跟随</dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="7.2"></circle><path d="M12 8v4l2.6 1.6"></path></svg>最近活动</dt><dd>昨天 18:24</dd></div></dl></div><div class="card-footer"><button class="open-btn" type="button">重新连接并打开 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 6 6 6-6 6"></path></svg></button><button class="footer-icon" type="button" aria-label="固定环境"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m8 4 8 0-1 6 3 3-4 1v6l-2 1v-7l-4-1 3-3-1-6Z"></path></svg></button><button class="footer-icon" type="button" aria-label="环境设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"></circle><path d="M19 13.5v-3l-2-.6a6 6 0 0 0-.7-1.6l.9-1.9-2.2-2.1-1.8.9-1.7-.7L11 2.5H8l-.5 2a6 6 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6 6 0 0 0 .7 1.6l-2 .6v3l2 .6a6 6 0 0 0 .7 1.6l-.9 1.9 2.1 2.1 1.9-.9 1.6.7.5 2h3l.5-2 1.7-.7 1.8.9 2.2-2.1-.9-1.9.7-1.6 2-.6Z"></path></svg></button></div>
+          <div class="access-head"><div class="access-head__row"><span class="kind-tag">Redeven Cloud</span><button class="card-menu" type="button" aria-label="team-staging 更多操作">•••</button></div><div class="access-switcher" role="tablist" aria-label="team-staging 访问方式"><button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="ssh" title="SSH 主机"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m7 8 4 4-4 4M13 16h4"></path><rect x="3.5" y="4" width="17" height="16" rx="2"></rect></svg><span class="access-tab__label">SSH</span></button><button class="access-tab" role="tab" type="button" aria-selected="true" tabindex="0" data-owner="cloud" title="Redeven Cloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg><span class="access-tab__label">云端</span></button><button class="access-tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-owner="gateway" title="Gateway"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="18" cy="18" r="2"></circle><path d="m8 11 7.8-4M8 13l7.8 4"></path></svg><span class="access-tab__label">网关</span></button></div></div>
+          <div class="body" data-panel="cloud"><div class="identity"><h2>team-staging</h2><button class="refresh" type="button" aria-label="刷新 team-staging"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8.5 8.5 0 0 0-14.5-5.8L4 6.7"></path><path d="M4 3.5v3.2h3.2"></path><path d="M4 13a8.5 8.5 0 0 0 14.5 5.8l1.5-1.5"></path><path d="M20 20.5v-3.2h-3.2"></path></svg></button></div><div class="status-line"><span class="status" data-tone="neutral">未连接</span><span>需要重新授权</span></div><dl class="facts"><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7.1 18.2h10.3a3.6 3.6 0 0 0 .5-7.2A5.9 5.9 0 0 0 6.6 9.7a4.3 4.3 0 0 0 .5 8.5Z"></path></svg>来源</dt><dd>Redeven Cloud</dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5 7 4 4-4 4M11 15h7"></path></svg>版本</dt><dd>自动跟随</dd></div><div class="fact"><dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="7.2"></circle><path d="M12 8v4l2.6 1.6"></path></svg>最近活动</dt><dd>昨天 18:24</dd></div></dl></div><div class="card-footer"><button class="open-btn" type="button">重新连接 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 6 6 6-6 6"></path></svg></button><button class="footer-icon" type="button" aria-label="固定环境"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m8 4 8 0-1 6 3 3-4 1v6l-2 1v-7l-4-1 3-3-1-6Z"></path></svg></button><button class="footer-icon" type="button" aria-label="环境设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"></circle><path d="M19 13.5v-3l-2-.6a6 6 0 0 0-.7-1.6l.9-1.9-2.2-2.1-1.8.9-1.7-.7L11 2.5H8l-.5 2a6 6 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6 6 0 0 0 .7 1.6l-2 .6v3l2 .6a6 6 0 0 0 .7 1.6l-.9 1.9 2.1 2.1 1.9-.9 1.6.7.5 2h3l.5-2 1.7-.7 1.8.9 2.2-2.1-.9-1.9.7-1.6 2-.6Z"></path></svg></button></div>
         </article>
       </section>
 
-      <section class="review-strip" aria-label="设计说明"><div class="review-item"><span class="review-item__label">01 · interaction</span><p>整个 segmented control 禁止文本选中，点击与拖动都只触发一次切换。</p></div><div class="review-item"><span class="review-item__label">02 · hierarchy</span><p>访问方式先于卡片内容，选中态由底色、阴影和底部短线共同表达。</p></div><div class="review-item"><span class="review-item__label">03 · resilience</span><p>窄卡片仍保留图标、短标签和 title，避免长文案压缩成不可读残片。</p></div></section>
+      <section class="review-strip" aria-label="设计说明"><div class="review-item"><span class="review-item__label">01 · interaction</span><p>整个 segmented control 禁止文本选中，点击与拖动都只触发一次切换。</p></div><div class="review-item"><span class="review-item__label">02 · hierarchy</span><p>访问方式先于卡片内容，选中态由底色、阴影和边框共同表达。</p></div><div class="review-item"><span class="review-item__label">03 · resilience</span><p>窄卡片仍保留图标、短标签和 title，避免长文案压缩成不可读残片。</p></div></section>
     </main>
     <footer class="statusbar"><div class="statusbar__left"><span>9 个可见</span><span>▣ 0 个窗口</span><span class="signal"><b>2 个可打开</b></span></div><div class="statusbar__right"><span>Desktop 更新</span><span>退出</span></div></footer>
   </div>
@@ -311,19 +334,29 @@
     (() => {
       const views = {
         local: {
-          local: { title: 'Local Environment', status: '同步失败', tone: 'warning', meta: '刚刚检查', facts: ['本机', 'Redeven Cloud', '今天 09:42'], action: '通过 Redeven Cloud 打开' },
-          cloud: { title: 'Local Environment', status: '等待恢复', tone: 'warning', meta: 'Cloud 连接中断', facts: ['本机', 'Redeven Cloud', '等待恢复'], action: '查看恢复状态' },
-          gateway: { title: 'Local Environment', status: '可通过网关访问', tone: 'neutral', meta: 'Gateway 未配置', facts: ['本机', '未连接网关', '需要设置'], action: '配置 Gateway' },
+          local: { title: 'Local Environment', status: '同步失败', tone: 'warning', meta: '刚刚检查', facts: ['本机', 'Redeven Cloud', '今天 09:42'], action: '打开 Cloud' },
+          cloud: { title: 'Local Environment', status: '等待恢复', tone: 'warning', meta: 'Cloud 连接中断', facts: ['本机', 'Redeven Cloud', '等待恢复'], action: '查看状态' },
+          gateway: { title: 'Local Environment', status: '可通过网关访问', tone: 'neutral', meta: 'Gateway 未配置', facts: ['本机', '未连接网关', '需要设置'], action: '配置网关' },
         },
         ssh: {
           ssh: { title: 'gzcom', status: '就绪', tone: 'success', meta: '已启动 1天前', facts: ['gzcom :22', 'v0.0.0-dev', '已验证'], action: '打开 Env App' },
-          cloud: { title: 'gzcom', status: '已关联', tone: 'success', meta: 'Cloud 状态正常', facts: ['gzcom', 'Redeven Cloud', '刚刚同步'], action: '通过 Cloud 打开' },
-          gateway: { title: 'gzcom', status: '网关可用', tone: 'success', meta: '低延迟连接', facts: ['gzcom', 'Gateway · 24ms', '已验证'], action: '通过 Gateway 打开' },
+          cloud: { title: 'gzcom', status: '已关联', tone: 'success', meta: 'Cloud 状态正常', facts: ['gzcom', 'Redeven Cloud', '刚刚同步'], action: '打开 Cloud' },
+          gateway: { title: 'gzcom', status: '网关可用', tone: 'success', meta: '低延迟连接', facts: ['gzcom', 'Gateway · 24ms', '已验证'], action: '打开 Gateway' },
+        },
+        los: {
+          ssh: { title: 'los', status: '未检查', tone: 'neutral', meta: '尚未连接', facts: ['los :22', '版本未知', '等待检查'], action: '打开 Env App' },
+          cloud: { title: 'los', status: '未关联', tone: 'neutral', meta: '可绑定 Cloud', facts: ['los', '未关联', '等待设置'], action: '配置 Cloud' },
+          gateway: { title: 'los', status: '网关可用', tone: 'success', meta: '低延迟连接', facts: ['los', 'Gateway · 31ms', '已验证'], action: '打开网关' },
+        },
+        udesk26: {
+          ssh: { title: 'udesk26', status: '未检查', tone: 'neutral', meta: '尚未连接', facts: ['udesk26 :22', '版本未知', '等待检查'], action: '打开 Env App' },
+          cloud: { title: 'udesk26', status: '未关联', tone: 'neutral', meta: '可绑定 Cloud', facts: ['udesk26', '未关联', '等待设置'], action: '配置 Cloud' },
+          gateway: { title: 'udesk26', status: '网关可用', tone: 'success', meta: '团队共享连接', facts: ['udesk26', 'Gateway · 28ms', '已验证'], action: '打开网关' },
         },
         cloud: {
           ssh: { title: 'team-staging', status: '未配置', tone: 'neutral', meta: '可添加 SSH 入口', facts: ['未配置', 'Redeven Cloud', '等待设置'], action: '配置 SSH' },
-          cloud: { title: 'team-staging', status: '未连接', tone: 'neutral', meta: '需要重新授权', facts: ['Redeven Cloud', '自动跟随', '昨天 18:24'], action: '重新连接并打开' },
-          gateway: { title: 'team-staging', status: '网关可用', tone: 'success', meta: '团队共享连接', facts: ['Gateway', 'team-staging', '已验证'], action: '通过 Gateway 打开' },
+          cloud: { title: 'team-staging', status: '未连接', tone: 'neutral', meta: '需要重新授权', facts: ['Redeven Cloud', '自动跟随', '昨天 18:24'], action: '重新连接' },
+          gateway: { title: 'team-staging', status: '网关可用', tone: 'success', meta: '团队共享连接', facts: ['Gateway', 'team-staging', '已验证'], action: '打开 Gateway' },
         },
       };
 
@@ -366,6 +399,8 @@
             setTab(tabs[nextIndex], true);
           });
         });
+        const selected = tabs.find(tab => tab.getAttribute('aria-selected') === 'true');
+        if (selected) updateCard(selected);
       });
       document.querySelectorAll('.filter-tab').forEach(tab => {
         tab.addEventListener('click', () => {
