@@ -11047,7 +11047,7 @@
         "title": "Tessiven Runtime discovery and operations",
         "type": "AI Product Contract"
       },
-      "body_length": 9845,
+      "body_length": 9988,
       "summary": "The Runtime-owned Tessiven product service is the authority for UI and Flower\nRuntime discovery and dispatch. It composes the existing Desktop connection\nregistry, authenticated Gateway catalogs, Runtime business resource executors,\nand Desktop lifecycle coordinator. Discovery observes registered paths without\nstarting a process or acquiring a business session. A reference identifies one\npath; it grants no permission. Lost source authority, changed path generations,\nreplaced identities, and revoked permissions stop dispatch. A lost mutation\nresponse reports an unknown outcome and permits only observation of the original\noperation until its result is known.",
       "sections": [
         {
@@ -36524,5 +36524,5 @@
       ]
     }
   ],
-  "source_sha256": "33079337de2bd3b3a77b2aa08fb9e28600c74f4a6037811ed44d8a022b61287f"
+  "source_sha256": "72f1d44115a84d9d5ba2f1cc0140b55b02be3405c07474ad2f9dc61fbbe0482f"
 }
