@@ -157,7 +157,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}
 	var frozenAttachments map[string]frozenFloretAttachment
 	if req.Retry == nil && req.TurnKind != flruntime.TurnKindContextCompaction {
-		contextProjection, err := floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority, tessivenContextResolver(ctx, r.host.tessiven))
+		contextProjection, err := floretContextProjectionForInput(req.Input, r.canonicalReferenceAuthority, tessivenContextResolver(ctx, r.host.tessiven))
 		if err != nil {
 			return nil, r.failRun("Failed to prepare linked context", err)
 		}

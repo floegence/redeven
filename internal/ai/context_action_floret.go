@@ -32,11 +32,7 @@ func cloneFlowerCanonicalReferenceTargetAuthority(in *flowerCanonicalReferenceTa
 	return &out
 }
 
-func floretContextProjectionForInput(input RunInput) (floretContextProjection, error) {
-	return floretContextProjectionForInputWithAuthority(input, nil)
-}
-
-func floretContextProjectionForInputWithAuthority(input RunInput, authority *flowerCanonicalReferenceTargetAuthority, resolvers ...func(ContextActionContextItem) (string, error)) (floretContextProjection, error) {
+func floretContextProjectionForInput(input RunInput, authority *flowerCanonicalReferenceTargetAuthority, resolver func(ContextActionContextItem) (string, error)) (floretContextProjection, error) {
 	action, err := normalizeAskFlowerContextActionEnvelope(input.ContextAction)
 	if err != nil {
 		return floretContextProjection{}, err
@@ -44,7 +40,10 @@ func floretContextProjectionForInputWithAuthority(input RunInput, authority *flo
 	if action == nil {
 		return floretContextProjection{}, nil
 	}
-	if authority != nil {
+	if flowerContextActionRequiresCanonicalReferenceAuthority(action) {
+		if authority == nil {
+			return floretContextProjection{}, ErrInvalidContextAction
+		}
 		if err := authorizeFlowerContextActionTarget(action, *authority); err != nil {
 			return floretContextProjection{}, err
 		}
@@ -59,11 +58,11 @@ func floretContextProjectionForInputWithAuthority(input RunInput, authority *flo
 		instruction := "Facts supplied with this reference (routing hints do not establish execution location):"
 		switch strings.TrimSpace(item.Kind) {
 		case contextActionKindTessiven:
-			if len(resolvers) != 1 || resolvers[0] == nil {
+			if resolver == nil {
 				return floretContextProjection{}, errors.New("tessiven context resolver is unavailable")
 			}
 			var text string
-			text, err = resolvers[0](item)
+			text, err = resolver(item)
 			if err != nil {
 				return floretContextProjection{}, err
 			}
@@ -85,7 +84,7 @@ func floretContextProjectionForInputWithAuthority(input RunInput, authority *flo
 			hasReference = false
 
 		case contextActionKindFilePath:
-			reference, err = floretFilePathReferenceWithAuthority(action, item, index, authority)
+			reference, err = floretFilePathReference(item, index, *authority)
 			title = "User-selected file"
 			instruction = "The user explicitly selected the referenced file. Read it with the file tool if its contents are needed."
 			metadata = contextActionFilePathMetadata(action, item)
@@ -161,12 +160,12 @@ func tessivenContextResolver(ctx context.Context, library *tessiven.Service) fun
 	}
 }
 
-func floretFilePathReferenceWithAuthority(action *ContextActionEnvelope, item ContextActionContextItem, index int, authority *flowerCanonicalReferenceTargetAuthority) (flruntime.MessageReference, error) {
+func floretFilePathReference(item ContextActionContextItem, index int, authority flowerCanonicalReferenceTargetAuthority) (flruntime.MessageReference, error) {
 	kind := flruntime.MessageReferenceFile
 	if item.IsDirectory {
 		kind = flruntime.MessageReferenceDirectory
 	}
-	resourceRef, err := floretContextResourceRefWithAuthority(action, item, authority)
+	resourceRef, err := floretContextResourceRef(item, authority)
 	if err != nil {
 		return flruntime.MessageReference{}, err
 	}
@@ -262,46 +261,15 @@ func truncateContextReferenceText(value string) (string, bool) {
 	return string(runes[:flruntime.MaxMessageReferenceTextRunes]), true
 }
 
-func floretContextResourceRef(action *ContextActionEnvelope, item ContextActionContextItem) (string, error) {
-	return floretContextResourceRefWithAuthority(action, item, nil)
-}
-
-func floretContextResourceRefWithAuthority(action *ContextActionEnvelope, item ContextActionContextItem, authority *flowerCanonicalReferenceTargetAuthority) (string, error) {
-	if action == nil {
-		return "", ErrInvalidContextAction
-	}
-	if authority != nil {
-		if err := authorizeFlowerContextActionTarget(action, *authority); err != nil {
-			return "", err
-		}
-	} else {
-		if action.ExecutionContext == nil || strings.TrimSpace(action.Target.TargetID) == "" || strings.TrimSpace(action.ExecutionContext.CurrentTargetID) == "" || strings.TrimSpace(action.ExecutionContext.SourceEnvPublicID) == "" || (strings.TrimSpace(action.Target.TargetID) != "current" && strings.TrimSpace(action.ExecutionContext.CurrentTargetID) != strings.TrimSpace(action.Target.TargetID)) {
-			return "", ErrInvalidContextAction
-		}
-		switch strings.TrimSpace(action.Target.Locality) {
-		case contextActionLocalityAuto, contextActionLocalityCurrent:
-		default:
-			return "", ErrInvalidContextAction
-		}
-	}
+func floretContextResourceRef(item ContextActionContextItem, authority flowerCanonicalReferenceTargetAuthority) (string, error) {
 	payload := flowerCanonicalReferenceLocator{
-		Version:        1,
-		TargetID:       strings.TrimSpace(action.Target.TargetID),
-		TargetLocality: strings.TrimSpace(action.Target.Locality),
-		Path:           strings.TrimSpace(item.Path),
-		Directory:      item.IsDirectory,
-	}
-	if authority != nil {
-		payload.TargetID = authority.TargetID
-		payload.TargetLocality = authority.TargetLocality
-		payload.CurrentTargetID = authority.TargetID
-		payload.SourceEnvPublicID = authority.SourceEnvPublicID
-	}
-	if action.ExecutionContext != nil {
-		if authority == nil {
-			payload.CurrentTargetID = strings.TrimSpace(action.ExecutionContext.CurrentTargetID)
-			payload.SourceEnvPublicID = strings.TrimSpace(action.ExecutionContext.SourceEnvPublicID)
-		}
+		Version:           1,
+		TargetID:          authority.TargetID,
+		TargetLocality:    authority.TargetLocality,
+		CurrentTargetID:   authority.TargetID,
+		SourceEnvPublicID: authority.SourceEnvPublicID,
+		Path:              strings.TrimSpace(item.Path),
+		Directory:         item.IsDirectory,
 	}
 	if !flowerCanonicalReferenceLocatorBelongsToEndpoint(payload, payload.SourceEnvPublicID) {
 		return "", ErrInvalidContextAction

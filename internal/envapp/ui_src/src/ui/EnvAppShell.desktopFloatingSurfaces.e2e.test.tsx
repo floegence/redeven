@@ -6,6 +6,7 @@ vi.mock('./pages/HostApplicationsPresentation', () => ({ HostApplicationsPageSke
 import { Show, createContext, createEffect, createSignal, useContext } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildFilePathFlowerTurnLauncherIntent, type AskFlowerPathContextTarget } from './utils/filePathAskFlower';
 
 const testDiffTarget = { repoRootPath: '/workspace', workspaceSection: 'unstaged' as const, path: 'demo.txt' };
 
@@ -62,6 +63,7 @@ const [desktopSidebarRevision, setDesktopSidebarRevision] = createSignal(0);
 let layoutIsMobile = false;
 let envAIPageMountSequence = 0;
 const uiStorageItems = new Map<string, string>();
+let fileFlowerTargets: AskFlowerPathContextTarget[] = [];
 
 function testFlowerTurnIntent(sourceSurface: string) {
   return {
@@ -171,6 +173,11 @@ vi.mock('@floegence/floe-webapp-core/app', async original => ({
         >
           Ask Flower
         </button>
+        <button
+          type="button"
+          data-testid="activity-open-file-flower-launcher"
+          onClick={() => env.openFlowerTurnLauncher(buildFilePathFlowerTurnLauncherIntent({ items: fileFlowerTargets }).intent)}
+        >Ask Flower about selected files</button>
         <button
           type="button"
           data-testid="activity-switch-workbench"
@@ -336,6 +343,8 @@ vi.mock('@floegence/floe-webapp-boot', () => {
   return {
     createArtifactDirectConnectionConfig: createConfig,
     createPrivateLoopbackDirectConnectionConfig: createConfig,
+    createProxyBootstrapOwner: vi.fn(() => ({})),
+    closeProxyBootstrap: vi.fn(),
     createProxyRuntimeTunnelConnectionConfig: createConfig,
   };
 });
@@ -400,7 +409,7 @@ vi.mock('./widgets/FileBrowserSurfaceContext', () => ({
 vi.mock('./services/controlplaneApi', () => ({
   createEnvProxyArtifactSource: createEnvProxyArtifactSourceMock,
   createLocalDirectArtifactSource: createLocalDirectArtifactSourceMock,
-  getEnvPublicIDFromSession: vi.fn(() => ''),
+  getEnvPublicIDFromSession: vi.fn(() => window.sessionStorage.getItem('redeven_env_public_id') ?? ''),
   getLocalAccessStatus: getLocalAccessStatusMock,
   getLocalRuntime: getLocalRuntimeMock,
   getEnvironment: getEnvironmentMock,
@@ -639,7 +648,8 @@ vi.mock('./maintenance/createAgentVersionModel', () => ({
     refetchCurrentVersion: vi.fn(async () => undefined),
   }),
 }));
-vi.mock('./utils/askFlowerPath', () => ({
+vi.mock('./utils/askFlowerPath', async original => ({
+  ...await original<object>(),
   basenameFromAbsolutePath: (value: string) => {
     const normalized = String(value ?? '').trim().replace(/\/+$/, '');
     if (!normalized || normalized === '/') return 'File';
@@ -743,6 +753,8 @@ afterEach(() => {
   requestAnimationFrameMock?.mockRestore();
   requestAnimationFrameMock = null;
   document.body.innerHTML = '';
+  delete window.redevenDesktopSessionContext;
+  window.sessionStorage.removeItem('redeven_env_public_id');
 });
 
 beforeEach(() => {
@@ -771,6 +783,7 @@ beforeEach(() => {
   envAIPageMountSequence = 0;
   floeRegistryComponents = () => [];
   uiStorageItems.clear();
+  fileFlowerTargets = [];
   flowerLaunchTurnMock.mockReset();
   flowerLaunchTurnMock.mockResolvedValue({
     thread_id: 'thread-launched',
@@ -814,6 +827,61 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell desktop floating surfaces', () => {
+  for (const scenario of [
+    { name: 'local resource endpoint when Desktop is linked to Cloud', local: true, desktopSource: 'local_runtime', endpoint: 'env_local', displayID: 'env_cloud' },
+    { name: 'local resource endpoint when Desktop presents a Cloud environment', local: true, desktopSource: 'provider_environment', endpoint: 'env_local', displayID: 'env_cloud' },
+    { name: 'unbound local resource endpoint', local: true, desktopSource: undefined, endpoint: 'env_local', displayID: 'env_local' },
+    { name: 'connected remote resource endpoint', local: false, desktopSource: 'provider_environment', endpoint: 'env_remote', displayID: 'env_remote' },
+  ] as const) {
+    for (const resource of [
+      { path: '/workspace/changsha.jpg', isDirectory: false },
+      { path: '/workspace/main.go', isDirectory: false },
+      { path: '/workspace/src', isDirectory: true },
+    ]) {
+      it(`binds ${resource.path} to the ${scenario.name}`, async () => {
+        fileFlowerTargets = [resource];
+        if (!scenario.local) {
+          getLocalRuntimeMock.mockResolvedValue(null);
+          window.sessionStorage.setItem('redeven_env_public_id', scenario.endpoint);
+        }
+        if (scenario.desktopSource) {
+          window.redevenDesktopSessionContext = {
+            getSnapshot: () => ({
+              local_environment_id: 'local', renderer_storage_scope_id: 'local',
+              target_kind: 'local_environment',
+              target_route: scenario.local ? 'local_host' : 'remote_desktop',
+              session_source: scenario.desktopSource, label: 'Selected environment', env_public_id: 'env_cloud',
+            }),
+          };
+        }
+        const host = document.createElement('div'); document.body.append(host);
+        const { EnvAppShell } = await import('./EnvAppShell');
+        const dispose = render(() => <EnvAppShell />, host);
+        try {
+          await waitForInitialProtocolConnection();
+          host.querySelector<HTMLButtonElement>('[data-testid="activity-open-file-flower-launcher"]')!.click();
+          await flushAsync();
+          host.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-send"]')!.click();
+          await flushAsync();
+          expect(flowerLaunchTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+            context_action: expect.objectContaining({
+              target: { target_id: 'current', locality: 'auto' },
+              source: expect.objectContaining({ surface: 'file_browser' }),
+              context: [{ kind: 'file_path', path: resource.path, is_directory: resource.isDirectory, root_label: undefined }],
+              execution_context: {
+                current_target_id: scenario.endpoint, source_env_public_id: scenario.endpoint,
+                runtime_hint: 'auto', session_source: scenario.desktopSource ?? 'local_runtime',
+              },
+            }),
+          }));
+          expect(window.sessionStorage.getItem('redeven_env_public_id')).toBe(scenario.displayID);
+          expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
+          expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
+        } finally { dispose(); }
+      });
+    }
+  }
+
   it('routes diff inspection by mode and hides the Activity window while Workbench is active', async () => {
     const host = document.createElement('div'); document.body.append(host);
     const { EnvAppShell } = await import('./EnvAppShell');

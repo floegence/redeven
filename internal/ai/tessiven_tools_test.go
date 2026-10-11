@@ -103,7 +103,7 @@ func TestTessivenContextPreservesHistoryAndBoundedReferenceParts(t *testing.T) {
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	projection, err := floretContextProjectionForInputWithAuthority(RunInput{ContextAction: &envelope}, nil, tessivenContextResolver(t.Context(), library))
+	projection, err := floretContextProjectionForInput(RunInput{ContextAction: &envelope}, nil, tessivenContextResolver(t.Context(), library))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1490,10 +1490,6 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		if resolveErr != nil {
 			return nil, resolveErr
 		}
-		if err := authorizeFlowerContextActionTarget(req.Input.ContextAction, resolved); err != nil {
-			return nil, err
-		}
-		req.Input.ContextAction = canonicalizeFlowerContextActionTarget(req.Input.ContextAction, resolved)
 		referenceAuthority = &resolved
 	}
 	workingDir, err := threadWorkingDir(settings)

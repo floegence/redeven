@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-11: Runtime-bound Ask Flower references
+
+- Bind [context action admission](ai/flower-context-action-records.md) to the connected resource endpoint; Desktop Cloud binding remains display and navigation identity.
+- Use one validation, authorization, and canonicalization entry; remove client-derived resource locators while retaining the frozen historical migration decoder.
+- Cover JPG, file, and directory admission across local and remote access, replay, restart, fork, and rejection with preserved drafts.
+
 ## 2026-10-10: Authenticated message attachment previews
 
 - Route historical and queued [attachment previews](ui/flower-composer-attachments.md)

@@ -3828,7 +3828,7 @@
               "context",
               "flower"
             ],
-            "summary": "- Authority: Redeven owns a user-selected context action only before admission; Floret owns the admitted user message, ordered references, and Agent context lifecycle.\n- Outcome: one validated context-action shape is queued with the command, then one admission mapper produces ordered durable `MessageReference` values and durable `UserInput.Context` snapshots.\n- Invariants: Redeven does not persist the mapped references, runtime context, or a post-admission context-action copy.\n- Failure boundary: malformed envelopes, unknown kinds, privacy-matrix violations, forged resource targets, damaged queued JSON, and projection failures stop the turn without dropping context.",
+            "summary": "- Authority: Redeven owns a user-selected context action only before admission; Floret owns the admitted user message, ordered references, and Agent context lifecycle.\n- Outcome: one admission mapper validates and authorizes the submitted context action, then produces ordered durable `MessageReference` values and durable `UserInput.Context` snapshots.\n- Invariants: Redeven does not persist the mapped references, runtime context, or a post-admission context-action copy.\n- Failure boundary: malformed envelopes, unknown kinds, privacy-matrix violations, forged resource targets, and projection failures reject admission; the launcher preserves editable draft text and references.",
             "section_count": 2
           },
           {
@@ -8543,7 +8543,7 @@
         "context",
         "flower"
       ],
-      "timestamp": "2026-10-08T00:00:00Z",
+      "timestamp": "2026-10-11T00:00:00Z",
       "frontmatter": {
         "description": "Ask Flower context actions become Floret-owned message references and durable model-context snapshots at admission.",
         "tags": [
@@ -8551,34 +8551,34 @@
           "context",
           "flower"
         ],
-        "timestamp": "2026-10-08T00:00:00Z",
+        "timestamp": "2026-10-11T00:00:00Z",
         "title": "Flower context action admission",
         "type": "AI Context Contract"
       },
-      "body_length": 7589,
-      "summary": "- Authority: Redeven owns a user-selected context action only before admission; Floret owns the admitted user message, ordered references, and Agent context lifecycle.\n- Outcome: one validated context-action shape is queued with the command, then one admission mapper produces ordered durable `MessageReference` values and durable `UserInput.Context` snapshots.\n- Invariants: Redeven does not persist the mapped references, runtime context, or a post-admission context-action copy.\n- Failure boundary: malformed envelopes, unknown kinds, privacy-matrix violations, forged resource targets, damaged queued JSON, and projection failures stop the turn without dropping context.",
+      "body_length": 8693,
+      "summary": "- Authority: Redeven owns a user-selected context action only before admission; Floret owns the admitted user message, ordered references, and Agent context lifecycle.\n- Outcome: one admission mapper validates and authorizes the submitted context action, then produces ordered durable `MessageReference` values and durable `UserInput.Context` snapshots.\n- Invariants: Redeven does not persist the mapped references, runtime context, or a post-admission context-action copy.\n- Failure boundary: malformed envelopes, unknown kinds, privacy-matrix violations, forged resource targets, and projection failures reject admission; the launcher preserves editable draft text and references.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Clients send one `assistant.ask.flower` action with target, source, presentation, and typed context items. The runtime validates the source/kind privacy matrix: file surfaces use `file_path`, terminal uses `terminal_selection`, monitoring uses `process_snapshot`, and Git/environment producers use bounded `text_snapshot`. File/process records reject hidden text payloads; required identity, finite numeric values, Unicode counts, and capture metadata are validated.\n\nTarget fields on text, terminal, and process context are bounded durable routing hints. They identify what the user selected but do not grant permission, change tool routing, or prove remote execution authority. Only actions containing file or directory references bind server-derived canonical reference authority before admission. For those resource actions, the Desktop local-environment alias `local:local` is accepted in target and current-target fields and canonicalized to the current endpoint; unknown targets, mismatched source environments, and incompatible locality fail closed.\n\nBefore admission, the normalized action is stored only inside the unadmitted queued command. The canonical JSON writer preserves required zero values and rejects unknown kinds. Queue decode is strict; invalid JSON or an invalid item is an execution error, not a default empty action or unsupported-chip repair path. Once Floret admits the exact `TurnID`, Redeven removes the queued prompt/action record with the rest of the command.\n\nRedeven consumes published Floret v7.26.0. Before `Send`, one mapper creates\nordered references and durable `MessageContextItem` snapshots. Reference text is\nrendered once by Floret; host metadata supplies additional source and routing\nfacts. File and directory `ResourceRef` values remain opaque inside Floret and\nnever reach model text or browser DTOs. Upload attachments remain separate.\n\nEach user message admits a runtime snapshot identifying the actual tool host,\nworking directory, current facts, and available skills. A changed snapshot applies\nfrom that message onward. Environment cards separately identify the user-selected\ndevice and include the existing `redeven-environment` skill at admission, so\nrouting does not depend on the model deciding to load it. Follow-ups, tool loops,\nAsk User responses, retry, fork, restart, and compaction use Floret's one canonical\nprojection. `SupplementalContext` remains reserved for explicit temporary inputs,\nincluding secrets; missing old temporary context is never reconstructed.\n\nFloret schema v9 to v10 preserves historical journal bytes and request records.\nProjection v8 restores already saved reference content and establishes an explicit\nprefix boundary. The retired product queue importer retains its frozen migration\ninterpretation for idempotence; it is not a live context admission path.\n\nFloret validates the message text, attachments, references, durable context, and explicitly temporary inputs before returning the typed current view. During the version 4 to 5 product migration, canonical acceptance allows the old migration source to be dropped before the schema transaction commits. Redeven does not retain a current-schema queue row or emit or store `flower.context_action.received`, `flower.context_action.injected`, a mapped reference row, or a supplemental-context audit copy.\n\nCanonical Floret turn pages return the ordered public reference fields. Redeven projects only `reference_id`, kind, label, bounded text, truncation, and availability into Flower; raw `ResourceRef` never reaches the browser. Flower renders admitted references from this canonical DTO, including reference-only user messages. Queued commands continue to render their pre-admission `context_action`. The two paths are not merged or used as fallbacks for each other.",
-          "char_count": 3807
+          "body": "Clients send one `assistant.ask.flower` action with target, source, presentation, and typed context items. The runtime validates the source/kind privacy matrix: file surfaces use `file_path`, terminal uses `terminal_selection`, monitoring uses `process_snapshot`, and Git/environment producers use bounded `text_snapshot`. File/process records reject hidden text payloads; required identity, finite numeric values, Unicode counts, and capture metadata are validated.\n\nTarget fields on text, terminal, and process context are bounded durable routing hints. They identify what the user selected but do not grant permission, change tool routing, or prove remote execution authority. Only actions containing file or directory references bind server-derived canonical reference authority before admission. For those resource actions, the Desktop local-environment alias `local:local` is accepted in target and current-target fields and canonicalized to the current endpoint; unknown targets, mismatched source environments, and incompatible locality fail closed.\n\nThe connected resource endpoint supplies execution hints: Local UI uses `/api/local/runtime` identity (`env_local`), while remote access uses the connected environment endpoint. Desktop Cloud binding identifies the selected device for display and navigation; it never overrides Local UI resource identity, including when a Cloud environment is accessed through its local host. The server derives resource authority from the authenticated endpoint and current `ToolTargetPolicy`. One projection entry validates, authorizes, and canonicalizes the action; locator construction consumes only that authority and cannot infer it from client fields. Missing server authority rejects resource admission even when client hints agree with each other.\n\nThe context-action envelope exists only before typed admission. Floret queues and persists the mapped canonical input, without a product queue row or a post-admission envelope. Required zero values remain intact. The retired product queue decoder is migration-only, preserves its released interpretation, and rejects damaged JSON without fabricating an empty action.\n\nRedeven consumes published Floret v7.27.2. Before `Send`, one mapper creates\nordered references and durable `MessageContextItem` snapshots. Reference text is\nrendered once by Floret; host metadata supplies additional source and routing\nfacts. File and directory `ResourceRef` values remain opaque inside Floret and\nnever reach model text or browser DTOs. Upload attachments remain separate.\n\nEach user message admits a runtime snapshot identifying the actual tool host,\nworking directory, current facts, and available skills. A changed snapshot applies\nfrom that message onward. Environment cards separately identify the user-selected\ndevice and include the existing `redeven-environment` skill at admission, so\nrouting does not depend on the model deciding to load it. Follow-ups, tool loops,\nAsk User responses, retry, fork, restart, and compaction use Floret's one canonical\nprojection. `SupplementalContext` remains reserved for explicit temporary inputs,\nincluding secrets; missing old temporary context is never reconstructed.\n\nFloret schema v9 to v10 preserves historical journal bytes and request records.\nProjection v8 restores already saved reference content and establishes an explicit\nprefix boundary. The retired product queue importer retains its frozen migration\ninterpretation for idempotence; it is not a live context admission path.\n\nFloret validates the message text, attachments, references, durable context, and explicitly temporary inputs before returning the typed current view. During the version 4 to 5 product migration, canonical acceptance allows the old migration source to be dropped before the schema transaction commits. Redeven does not retain a current-schema queue row or emit or store `flower.context_action.received`, `flower.context_action.injected`, a mapped reference row, or a supplemental-context audit copy.\n\nCanonical Floret turn pages return the ordered public reference fields. Redeven projects only `reference_id`, kind, label, bounded text, truncation, and availability into Flower; raw `ResourceRef` never reaches the browser. Flower renders admitted references from this canonical DTO, including reference-only user messages. Queued input renders the same admitted canonical references. Neither path reconstructs references from a product context-action copy.",
+          "char_count": 4478
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Context actions and references do not alter working directory, target permission, tool routing authority, or attachment ownership. A model that acts on environment routing metadata must use the Redeven product command boundary, which resolves and authorizes the target independently. Canonical reference target identity comes only from the current `ToolTargetPolicy`; there is no persisted thread-routing fallback or dynamic policy callback. Redeven must not persist context actions as a second transcript message, replay supplemental context into later turns, repair damaged queued shapes, derive model context from Flower display state, or resolve a resource from browser-supplied path data. Resource activation re-reads the exact public Turn through `ReadThreadTurn`, selects the ordered reference by identity, and resolves its opaque host locator under current product authorization. Only `ErrTurnNotFound` maps to absence; other Floret errors remain unavailable and never trigger a history scan or product-state fallback.",
-          "char_count": 1026
+          "body": "Context actions and references do not alter working directory, target permission, tool routing authority, or attachment ownership. A model that acts on environment routing metadata must use the Redeven product command boundary, which resolves and authorizes the target independently. Canonical reference target identity comes only from the authenticated endpoint and current `ToolTargetPolicy`; there is no persisted thread-routing fallback or dynamic policy callback. Redeven must not persist context actions as a second transcript message, replay supplemental context into later turns, repair damaged queued shapes, derive model context from Flower display state, or resolve a resource from browser-supplied path data. Resource activation reads the canonical current thread view, selects the exact turn and reference by identity, and resolves its opaque host locator under current product authorization. Missing thread or reference maps to absence; other Floret errors remain unavailable and never trigger a product-state fallback.",
+          "char_count": 1033
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/ai/context_action.go:101:canonical json encoding preserves the typed queued context fields.",
+          "id": "redeven:internal/ai/context_action.go:101:typed context encoding preserves required zero values.",
           "source": "redeven:internal/ai/context_action.go",
           "line": 101,
-          "description": "Canonical JSON encoding preserves the typed queued context fields."
+          "description": "Typed context encoding preserves required zero values."
         },
         {
           "id": "redeven:internal/ai/context_action.go:185:normalization rejects damaged or unsupported context-action shapes before admission.",
@@ -8592,20 +8592,14 @@
           "description": "Migration-only queued context actions decode through the strict validator."
         },
         {
-          "id": "redeven:internal/ai/context_action_floret.go:43:one mapper produces floret message references and durable context snapshots.",
+          "id": "redeven:internal/ai/context_action_floret.go:0:one mapper validates, authorizes, and produces floret message references and durable context snapshots.",
           "source": "redeven:internal/ai/context_action_floret.go",
-          "line": 43,
-          "description": "One mapper produces Floret message references and durable context snapshots."
+          "description": "One mapper validates, authorizes, and produces Floret message references and durable context snapshots."
         },
         {
           "id": "redeven:internal/ai/canonical_reference_authority.go:0:resource-bearing actions alone receive server-derived target authority; canonical identities and the documented local alias are enforced before canonicalization.",
           "source": "redeven:internal/ai/canonical_reference_authority.go",
           "description": "Resource-bearing actions alone receive server-derived target authority; canonical identities and the documented local alias are enforced before canonicalization."
-        },
-        {
-          "id": "redeven:internal/ai/context_action_floret.go:0:references and durable context are prepared together before typed floret `send`.",
-          "source": "redeven:internal/ai/context_action_floret.go",
-          "description": "References and durable context are prepared together before typed Floret `Send`."
         },
         {
           "id": "redeven:internal/ai/send_user_turn.go:0:the typed command carries canonical user input and durable runtime context.",
@@ -8637,10 +8631,9 @@
           "description": "Admitted canonical reference chips use only the canonical-reference action path."
         },
         {
-          "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:6293:queued commands retain the separate pre-admission context-action path.",
+          "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:queued input renders canonical references from floret.",
           "source": "redeven:internal/flower_ui/src/FlowerSurface.tsx",
-          "line": 6293,
-          "description": "Queued commands retain the separate pre-admission context-action path."
+          "description": "Queued input renders canonical references from Floret."
         },
         {
           "id": "redeven:internal/ai/canonical_reference_open.go:62:reference activation rereads the exact floret thread/turn/reference and revalidates current routing, target policy, filesystem scope, and resource state.",
@@ -8653,9 +8646,24 @@
           "source": "redeven:internal/envapp/ui_src/src/ui/flower/linkedContextNavigation.ts",
           "line": 27,
           "description": "Env App revalidates linked paths before host navigation."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:0:context execution hints use the connected runtime identity independently of desktop cloud display identity.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
+          "description": "Context execution hints use the connected runtime identity independently of Desktop Cloud display identity."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx:0:jpg, file, and directory submission across cloud-linked local, unbound local, and remote access.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx",
+          "description": "JPG, file, and directory submission across Cloud-linked local, unbound local, and remote access."
+        },
+        {
+          "id": "redeven:internal/ai/flower_file_context_integration_test.go:0:endpoint-bound canonical references survive follow-up sends, exact replay, restart, and fork without leaking locators to browser dtos.",
+          "source": "redeven:internal/ai/flower_file_context_integration_test.go",
+          "description": "Endpoint-bound canonical references survive follow-up sends, exact replay, restart, and fork without leaking locators to browser DTOs."
         }
       ],
-      "snippet": "- Authority: Redeven owns a user-selected context action only before admission; Floret owns the admitted user message, ordered references, and Agent context lifecycle. - Outcome: one validated context-action shape is queued with the command",
+      "snippet": "- Authority: Redeven owns a user-selected context action only before admission; Floret owns the admitted user message, ordered references, and Agent context lifecycle. - Outcome: one admission mapper validates and authorizes the submitted c",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -36363,5 +36371,5 @@
       ]
     }
   ],
-  "source_sha256": "12427d6639f4e4be7f6d529cfffd247b4d2c6f356e7f8aaa1ea15b261d60dd10"
+  "source_sha256": "e9d84c372fcd34e6ff289c8d5b480bf58446755ebbd647cc6085e88afb57e77c"
 }
