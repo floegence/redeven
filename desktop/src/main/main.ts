@@ -11449,9 +11449,9 @@ async function runtimeFlowerAccessHeaders(
   record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord,
   environment: DesktopLocalEnvironmentState | null,
 ): Promise<Record<string, string>> {
-  const bridgeHeaders = { ...runtimeFlowerPrivateBridgeHeaders(record.startup),
-    ...(tessivenHostFor(record.startup) ? { 'X-Redeven-Tessiven-Source': tessivenHostFor(record.startup)!.host.source() } : {}),
-  };
+  const bridgeHeaders = runtimeFlowerPrivateBridgeHeaders(record.startup);
+  const host = tessivenHostFor(record.startup);
+  if (host) bridgeHeaders['X-Redeven-Tessiven-Source'] = host.host.source();
   if (record.startup.password_required !== true) {
     return bridgeHeaders;
   }
