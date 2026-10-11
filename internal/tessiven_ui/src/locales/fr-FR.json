@@ -227,5 +227,9 @@
   "nodeServiceScope": "Services du nœud",
   "allNodeServices": "Tous les services de l’hôte",
   "groupNodeServices": "Services du groupe actuel",
-  "layoutUpdating": "Disposition du canevas"
+  "layoutUpdating": "Disposition du canevas",
+  "canvasView": "Vue",
+  "zoomIn": "Zoom avant",
+  "zoomOut": "Zoom arrière",
+  "zoomLevel": "Niveau de zoom"
 }

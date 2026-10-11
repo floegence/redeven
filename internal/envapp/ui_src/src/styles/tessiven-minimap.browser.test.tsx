@@ -80,7 +80,8 @@ it('matches main canvas colors in every theme with bounded paths and visible-onl
   minimap.focus();
   await userEvent.keyboard('{ArrowRight}');
   expect(viewport.getAttribute('x')).not.toBe(before);
-  await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+  await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Collapse all', exact: true }).click();
   await expect.poll(() => host.querySelectorAll('.tessiven-node').length, { timeout: 20000 }).toBe(1);
   await expect.poll(() => host.querySelector('[aria-label="Arranging canvas"]'), { timeout: 20000 }).toBeNull();
   expect(minimap.querySelectorAll('.floe-graph__minimap-groups')).toHaveLength(0);

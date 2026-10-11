@@ -227,5 +227,9 @@
   "nodeServiceScope": "Knotendienste",
   "allNodeServices": "Alle Host-Dienste",
   "groupNodeServices": "Dienste der aktuellen Gruppe",
-  "layoutUpdating": "Canvas wird angeordnet"
+  "layoutUpdating": "Canvas wird angeordnet",
+  "canvasView": "Ansicht",
+  "zoomIn": "Vergrößern",
+  "zoomOut": "Verkleinern",
+  "zoomLevel": "Zoomstufe"
 }

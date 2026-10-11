@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { TessivenGraph } from '../../../../tessiven_ui/src/TessivenGraph';
 import { projectCanvas } from '../../../../tessiven_ui/src/projection';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
-import type { CanvasDocument, Version } from '../../../../tessiven_ui/src/types';
+import { scaleDocument } from './tessiven-scale.fixture';
+import type { Version } from '../../../../tessiven_ui/src/types';
 
 const scaleCommands = commands as unknown as {
   recordCanvasScale: (metric: { count: number; grouped: boolean; [key: string]: unknown }) => Promise<void>;
@@ -18,25 +19,6 @@ let observer: PerformanceObserver | undefined;
 let animationFrame = 0;
 afterEach(() => { cancelAnimationFrame(animationFrame); observer?.disconnect(); dispose?.(); host?.remove(); });
 
-function scaleDocument(count: number, grouped: boolean): CanvasDocument {
-  const nodes = Array.from({ length: count }, (_, index) => ({
-    id: `host-${index}`, name: `Host ${index + 1}`, runtimeRef: `conceptual:scale/host-${index}`,
-  }));
-  const services = ['api', 'worker', 'cache', 'metrics'].map(kind => ({ id: kind, name: `${kind} service`, kind }));
-  const groups = grouped ? Array.from({ length: Math.ceil(count / 10) }, (_, index) => ({
-    id: `group-${index}`, name: `Application ${index + 1}`, nodeRefs: nodes.slice(index * 10, index * 10 + 10).map(node => node.id),
-  })) : [];
-  return {
-    apiVersion: 'redeven.io/tessiven/v1.0.0', kind: 'ServiceCanvas', metadata: { title: `Scale / ${count} hosts` }, nodes, groups, services,
-    instances: nodes.flatMap(node => services.map(service => ({ id: `${node.id}-${service.id}`, nodeRef: node.id, serviceRef: service.id, role: 'peer' }))),
-    relations: [
-      ...nodes.slice(1).map((node, index) => ({ id: `link-${index}`, from: nodes[Math.floor(index / 2)].id, to: node.id, kind: 'calls', evidenceRefs: ['design'] })),
-      ...nodes.map(node => ({ id: `${node.id}-local`, from: `${node.id}-api`, to: `${node.id}-cache`, kind: 'accesses', evidenceRefs: ['design'] })),
-    ],
-    evidence: [{ id: 'design', source: 'inference', locator: 'example://scale', summary: 'Deterministic large topology qualification.' }],
-    presentation: { direction: 'RIGHT', initiallyExpanded: groups.map(group => group.id) },
-  };
-}
 
 describe('Tessiven actual host scale qualification', () => {
   for (const grouped of [false, true]) for (const count of [100, 500, 1000]) {
@@ -89,7 +71,8 @@ describe('Tessiven actual host scale qualification', () => {
       expect(host.querySelectorAll('[role="alert"]')).toHaveLength(0);
       expect(host.querySelectorAll('.floe-graph__minimap path').length).toBeLessThanOrEqual(grouped ? 6 : 2);
       if (grouped) {
-        await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+        await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Collapse all', exact: true }).click();
         await expect.poll(() => host.querySelectorAll('.tessiven-node').length, { timeout: 60000 }).toBe(0);
         await page.getByRole('button', { name: 'Fit canvas', exact: true }).click();
         await page.screenshot({ path: `../../.vitest-attachments/tessiven-scale-${count}-collapsed.png` });

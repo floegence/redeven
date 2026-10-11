@@ -637,6 +637,7 @@
   --graph-edge: color-mix(in oklab, var(--foreground) 57%, var(--background));
 }
 .tessiven-canvas {
+  container-type: inline-size;
   --graph-background: color-mix(
     in oklab,
     var(--background) 96%,
@@ -646,9 +647,6 @@
 }
 .tessiven-canvas .floe-graph__minimap-viewport {
   fill: transparent;
-}
-.tessiven-canvas-tools button {
-  padding: 2px 5px;
 }
 .tessiven-group-mark {
   width: 13px;
@@ -1477,33 +1475,57 @@
   left: 16px;
   display: flex;
   align-items: center;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  border-radius: 12px;
   background: var(--card);
-  font-size: 11px;
-  color: var(--foreground);
-  max-width: calc(100% - 32px);
-  flex-wrap: wrap;
-  gap: 6px;
+  box-shadow: 0 3px 12px rgb(0 0 0 / 8%);
+  color: var(--muted-foreground);
+  gap: 3px;
   z-index: 5;
 }
 .tessiven-canvas-tools button,
-.tessiven-canvas-tools select {
-  white-space: nowrap;
+.tessiven-canvas-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
   cursor: pointer;
-  border-radius: 4px;
-  min-height: 26px;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
 }
-.tessiven-canvas-tools button:hover:not(:disabled) { background: var(--muted); }
-.tessiven-canvas-tools button:disabled { cursor: default; opacity: 0.38; }
-.tessiven-canvas-tools select {
-  max-width: 100%;
-  padding: 2px 20px 2px 6px;
-  background-color: var(--muted);
+.tessiven-canvas-tools button { width: 30px; }
+.tessiven-canvas-tools svg { width: 15px; height: 15px; flex: none; }
+.tessiven-canvas-tools button:hover:not(:disabled),
+.tessiven-canvas-view:hover,
+.tessiven-canvas-view[aria-expanded='true'] {
+  background: var(--muted);
   color: var(--foreground);
-  border: 1px solid transparent;
+}
+.tessiven-canvas-tools button:disabled { cursor: default; opacity: 0.35; }
+.tessiven-canvas-zoom { display: flex; align-items: center; }
+.tessiven-canvas-zoom output {
+  width: 42px;
+  text-align: center;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+.tessiven-canvas-view { gap: 6px; padding: 0 9px; font-size: 11px; }
+.tessiven-canvas-view > svg:last-child { width: 11px; height: 11px; opacity: 0.65; }
+@media (pointer: coarse) {
+  .tessiven-canvas-tools button, .tessiven-canvas-view { height: 44px; }
+  .tessiven-canvas-tools button { width: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tessiven-canvas-tools button, .tessiven-canvas-view { transition: none; }
+}
+@media (forced-colors: active) {
+  .tessiven-canvas-tools { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; }
+  .tessiven-canvas-zoom output { color: CanvasText; }
 }
 .tessiven-layout-pending {
   width: 12px;
@@ -1518,7 +1540,7 @@
   .tessiven-layout-pending { animation: none; }
 }
 @media (max-width: 650px) {
-  .tessiven-canvas-tools { max-width: calc(100% - 156px); }
+  .tessiven-canvas-tools { left: 12px; bottom: 12px; }
   .tessiven-canvas .floe-graph__minimap { width: 112px; height: 76px; }
 }
 @media (max-width: 650px) {
@@ -1771,7 +1793,7 @@
   .tessiven-flower-output :is([data-floe-floating-window-control], .tessiven-icon-button) { width: 44px; height: 44px; }
 }
 @media (max-width: 850px) {
-  .tessiven-canvas-tools { top: 12px; bottom: auto; left: auto; right: 12px; }
+  .tessiven-canvas-tools { left: 12px; bottom: 12px; }
   .tessiven-flower-composer { width: calc(100% - 24px); margin-bottom: 12px; }
   .tessiven-flower-output .tessiven-flower-composer { width: 100%; margin: 0; }
 }
@@ -1784,4 +1806,11 @@
   }
   .tessiven-flower-composer--initial,
   .tessiven-flower-output--entering { animation: none; }
+}
+
+@container (max-width: 460px) {
+  .tessiven-canvas-tools { left: 8px; bottom: 8px; }
+  .tessiven-canvas-view { padding: 0 7px; }
+  .tessiven-canvas-view > span { display: none; }
+  .tessiven-canvas .floe-graph__minimap { right: 8px; top: 8px; bottom: auto; width: 96px; height: 64px; }
 }

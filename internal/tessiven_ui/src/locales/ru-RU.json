@@ -227,5 +227,9 @@
   "nodeServiceScope": "Сервисы узла",
   "allNodeServices": "Все сервисы хоста",
   "groupNodeServices": "Сервисы текущей группы",
-  "layoutUpdating": "Компоновка холста"
+  "layoutUpdating": "Компоновка холста",
+  "canvasView": "Вид",
+  "zoomIn": "Увеличить",
+  "zoomOut": "Уменьшить",
+  "zoomLevel": "Масштаб"
 }

@@ -227,5 +227,9 @@
   "nodeServiceScope": "節點服務",
   "allNodeServices": "主機全部服務",
   "groupNodeServices": "目前群組服務",
-  "layoutUpdating": "正在配置畫布"
+  "layoutUpdating": "正在配置畫布",
+  "canvasView": "檢視",
+  "zoomIn": "放大",
+  "zoomOut": "縮小",
+  "zoomLevel": "縮放比例"
 }
