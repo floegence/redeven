@@ -1679,6 +1679,13 @@
     "pinnedThroughOwner": "Fixado por {owner}",
     "ownerOperationRunning": "Operação em andamento",
     "accessPerspective": "Acesso ao ambiente",
+    "accessTabs": {
+      "local": "Local",
+      "cloud": "Nuvem",
+      "gateway": "Gateway",
+      "ssh": "SSH"
+    },
+    "accessTabStatus": "{name} · {status}",
     "gatewayFilter": "Gateway",
     "redevenUrlFilter": "Redeven URL",
     "sshHostFilter": "SSH Host",

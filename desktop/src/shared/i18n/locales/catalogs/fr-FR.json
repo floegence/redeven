@@ -1679,6 +1679,13 @@
     "pinnedThroughOwner": "Épinglé via {owner}",
     "ownerOperationRunning": "Opération en cours",
     "accessPerspective": "Accès à l’environnement",
+    "accessTabs": {
+      "local": "Local",
+      "cloud": "Cloud",
+      "gateway": "Passerelle",
+      "ssh": "SSH"
+    },
+    "accessTabStatus": "{name} · {status}",
     "gatewayFilter": "Passerelles",
     "redevenUrlFilter": "Redeven URL",
     "sshHostFilter": "SSH Hôte",

@@ -1463,11 +1463,15 @@ describe('DesktopWelcomeShell', () => {
     expect(pickerSrc).toContain('<Check');
   });
 
-  it('does not use native browser selects in the Desktop welcome surface', () => {
+  it('limits native browser selection to the paired Gateway member picker', () => {
     const appSrc = readWelcomeSource();
-
-    expect(appSrc).not.toContain('<select');
-    expect(appSrc).not.toContain('<option');
+    const gatewayPicker = appSrc.match(/const gatewaySelector = [^\n]+/g) ?? [];
+    expect(gatewayPicker).toHaveLength(1);
+    expect(gatewayPicker[0]).toContain('gatewayMembers().length > 1');
+    expect(gatewayPicker[0]).toContain("props.i18n.t('gatewayConnections.select')");
+    const rest = appSrc.replace(gatewayPicker[0] ?? '', '');
+    expect(rest.includes('<select')).toBe(false);
+    expect(rest.includes('<option')).toBe(false);
   });
 
 
@@ -1687,7 +1691,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('reconcileEnvironmentLibraryOverlayState');
     expect(appSrc).toContain('reconcileEnvironmentGuidanceSession');
     expect(appSrc).toContain('<For each={groupedGroupIDs().pinned_group_ids}>');
-    expect(appSrc).toContain('environment={projectedEntriesByID()[environmentID]!}');
+    expect(appSrc).toContain('environment={gatewayView?.entry() ?? projectedEntriesByID()[environmentID]!}');
     expect(appSrc).toContain('guidanceOpen={props.primaryActionGuidanceOpen}');
     expect(appSrc).toContain('props.presentation.menu_button_label');
     expect(appSrc).toContain('menuContainsTarget');

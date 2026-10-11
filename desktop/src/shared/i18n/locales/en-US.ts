@@ -933,6 +933,8 @@ export const enUS = {
     pinnedThroughOwner: "Pinned through {owner}",
     ownerOperationRunning: "Operation in progress",
     accessPerspective: "Environment access",
+    accessTabs: { local: "Local", cloud: "Cloud", gateway: "Gateway", ssh: "SSH" },
+    accessTabStatus: "{name} · {status}",
     gatewayFilter: 'Gateways',
     redevenUrlFilter: 'Redeven URL',
     sshHostFilter: 'SSH Host',

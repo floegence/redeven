@@ -1679,6 +1679,13 @@
     "pinnedThroughOwner": "{owner}에서 고정됨",
     "ownerOperationRunning": "작업 진행 중",
     "accessPerspective": "환경 접근 방식",
+    "accessTabs": {
+      "local": "로컬",
+      "cloud": "클라우드",
+      "gateway": "게이트웨이",
+      "ssh": "SSH"
+    },
+    "accessTabStatus": "{name} · {status}",
     "gatewayFilter": "게이트웨이",
     "redevenUrlFilter": "Redeven URL",
     "sshHostFilter": "SSH 호스트",

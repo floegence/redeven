@@ -15,7 +15,9 @@ digest and revision identity. Authorized edits save a new current snapshot.
 Unknown versions, invalid source/target documents or migration failures leave
 stored data intact; users need a compatible Runtime or a valid repair.
 
-# Version Identities And Releases
+# Contract
+
+## Version Identities And Releases
 
 DSL identities use stable `vMAJOR.MINOR.PATCH` strings, for example `v1.2.3`.
 The version is the suffix of `apiVersion`; it is independent of Runtime releases,
@@ -39,7 +41,7 @@ migration changes only the fields required by its reviewed edge; it never guesse
 hosts, management authority, credentials or observations. Do not introduce a
 schema-only registry entry without its executable migration and fixtures.
 
-# Read Compatibility
+## Read Compatibility
 
 Validation selects the exact source schema, applies the explicit upgrade chain,
 and validates the current shape and cross-object contracts. Returned `document`
@@ -61,7 +63,9 @@ placements or weaken references/security checks. Current semantic-version inputs
 receive strict placement validation even when loaded from storage. The
 [canvas contract](tessiven-canvas-contract.md) owns those semantic rules.
 
-# New Snapshots And Failure Boundary
+# Boundaries
+
+## New Snapshots And Failure Boundary
 
 Creation, imports, full save and exact edits write the current DSL. The existing
 expected-version check, permissions, idempotency and save transaction remain the

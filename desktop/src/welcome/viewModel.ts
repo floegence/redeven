@@ -279,6 +279,7 @@ export type ControlPlaneStatusModel = Readonly<{
 
 export const ENVIRONMENT_GRID_MIN_COLUMN_REM = 16.25;
 export const ENVIRONMENT_GRID_GAP_REM = 0.75;
+export const ENVIRONMENT_GRID_MAX_COLUMNS = 5;
 export const LOCAL_ENVIRONMENT_LIBRARY_FILTER = '__local__';
 export const PROVIDER_ENVIRONMENT_LIBRARY_FILTER = '__provider__';
 export const GATEWAY_ENVIRONMENT_LIBRARY_FILTER = '__gateway__';
@@ -396,7 +397,7 @@ export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
     visible_card_count: visibleCardCount,
     layout_reference_count: layoutReferenceCount,
     density,
-    column_count: Math.max(1, Math.min(layoutReferenceCount, fitColumnCount)),
+    column_count: Math.max(1, Math.min(ENVIRONMENT_GRID_MAX_COLUMNS, layoutReferenceCount, fitColumnCount)),
   };
 }
 

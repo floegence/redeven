@@ -1679,6 +1679,13 @@
     "pinnedThroughOwner": "由 {owner} 置顶",
     "ownerOperationRunning": "操作进行中",
     "accessPerspective": "环境访问方式",
+    "accessTabs": {
+      "local": "本地",
+      "cloud": "云端",
+      "gateway": "网关",
+      "ssh": "SSH"
+    },
+    "accessTabStatus": "{name} · {status}",
     "gatewayFilter": "网关",
     "redevenUrlFilter": "Redeven URL",
     "sshHostFilter": "SSH主机",
