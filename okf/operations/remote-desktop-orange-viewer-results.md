@@ -1,9 +1,9 @@
 ---
 type: Qualification Record
 title: Orange remote desktop Viewer follow-up
-description: Verify Orange Runtime update recovery and distinguish it from pending Env App service deployment and real Viewer acceptance.
+description: Verify Orange Runtime update recovery and track pending Viewer acceptance and a same-configuration RustDesk performance comparison.
 tags: [desktop, ssh, deployment, qualification]
-timestamp: 2026-10-11T15:54:39Z
+timestamp: 2026-10-11T16:10:00Z
 ---
 # Summary
 
@@ -13,7 +13,8 @@ after repairing linked-path package verification. Its existing native service
 retains the older admission; Runtime replacement alone does not qualify the
 Viewer. The controlling Mac must be unlocked to continue Env App service
 management and real Viewer acceptance. Intermittent SSH failures do not
-establish EPIPE's precise cause.
+establish EPIPE's precise cause. Final performance acceptance also requires a
+measured RustDesk comparison; native-only results cannot establish parity.
 
 # Contract
 
@@ -56,6 +57,36 @@ committed source above. Remote Runtime state is existing `/home/tang/.redeven`;
 remote state isolation was not achieved. The task GTK fixture has a bounded
 lifetime and receives only its own window's input.
 
+## RustDesk Comparison Preparation
+
+The operator requires latency and performance at least equal to RustDesk.
+The official stable baseline is RustDesk `1.5.0`, source
+`fada664df7a294d1d1a9ca3e7cd3637069122f17`. Downloaded ARM64 Linux and macOS
+artifacts match their official release SHA-256 digests. The Linux AppImage is
+also verified and prepared for a scoped test setup. No RustDesk process has
+started and no baseline has been measured.
+
+The comparison must keep the physical output, original pixel dimensions,
+refresh rate, client viewport and delivered visual quality equal. Use one
+measured Viewer at a time and alternate product order in three paired rounds.
+Record route, codec, hardware use, network conditions and all failed or
+unmatched samples. Idle response, active scrolling and static desktop work
+must be represented; lowering quality does not satisfy performance acceptance.
+
+Primary latency is test input observed on the Mac to its matching scene
+sequence visible in client-window pixels, using one client monotonic clock.
+Compare P50/P95, unique presented FPS, frame gaps and freezes, and complete host
+and client process-tree resource use. Source timecode age requires separate
+clock-offset uncertainty. Numeric client/native command-ID equality, CUA call
+duration and private native packet arrival are insufficient substitutes.
+Client-window observation excludes physical photons.
+
+Orange remains active and unlocked on Ubuntu 22.04.5, Orange Pi 5 Max, with the
+performance CPU governor. A new twelve-packet network probe loses one packet;
+received RTT ranges from 6.971 to 128.716 ms. These observations require repeated
+paired comparison, not attribution of network variation to either product.
+The controlling Mac still reports locked through desktop automation.
+
 # Boundaries
 
 The controlling Mac locks before Env App service management can continue.
@@ -65,6 +96,8 @@ required. This record does not claim successful Viewer connection, real IME
 composition, matched cursor feedback, end-to-end latency or competitor parity.
 The [native AFBC record](remote-desktop-orange-afbc-results.md) owns the separate
 native capture and physical lock/input qualification.
+RustDesk parity remains unqualified until both products complete the same
+measured workloads and any proven candidate bottlenecks are resolved.
 
 # Evidence
 
@@ -72,3 +105,4 @@ native capture and physical lock/input qualification.
 - `desktop/src/main/runtimePackageCache.ts`: source package construction and verified package reuse.
 - `desktop/src/main/sshRuntime.ts`: staged update, process identity and activation ownership.
 - `desktop/src/main/remoteDesktopDeployment.ts`: Env App-authorized native service update and executable admission.
+- [RustDesk 1.5.0 official release](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0): baseline source identity, original artifacts and SHA-256 digests.
