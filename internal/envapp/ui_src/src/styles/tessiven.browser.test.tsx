@@ -7,6 +7,7 @@ import { createGraphLayoutEngine } from '@floegence/floe-webapp-core/graph';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TessivenGraph, type GraphBrowseState, type TessivenViewportControl } from '../../../../tessiven_ui/src/TessivenGraph';
+import { attachTouchViewport } from '../../../../tessiven_ui/src/native/touchViewport';
 import { TessivenThumbnail } from '../../../../tessiven_ui/src/TessivenThumbnail';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
 import type { Version } from '../../../../tessiven_ui/src/types';
@@ -258,6 +259,15 @@ describe('Tessiven real graph interactions', () => {
     control!.clearSelection();
     expect(selection.mock.calls.at(-1)?.[0].object_refs).toEqual([]);
     expect(host.querySelector('[data-graph-object][data-selected="true"]')).toBeNull();
+    const touch = attachTouchViewport(host, () => control);
+    try {
+      await userEvent.click(host.querySelector('.tessiven-node')!);
+      const surface = host.querySelector('.floe-infinite-canvas')!;
+      surface.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 1, clientX: 10, clientY: 10 }));
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 1, clientX: 10, clientY: 10 }));
+      expect(selection.mock.calls.at(-1)?.[0].object_refs).toEqual([]);
+      expect(host.querySelector('[data-graph-object][data-selected="true"]')).toBeNull();
+    } finally { touch.dispose(); }
     expect(host.querySelector('.tessiven-object-popup')).toBeNull();
     expect(host.querySelector('.tessiven-canvas-tools [aria-label="Canvas menu"]')).toBeNull();
     expect(page.getByRole('button', { name: 'Fit canvas', exact: true }).query()).toBeNull();

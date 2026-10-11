@@ -10,6 +10,7 @@ export function attachTouchViewport(host: HTMLElement, control: () => TessivenVi
   let bounds = { left: 0, top: 0 };
   let frame: number | undefined;
   let moving = false;
+  let backgroundTap = false;
   let suppressUntil = 0;
   let velocity = { x: 0, y: 0 };
   let lastFrame = 0;
@@ -58,6 +59,7 @@ export function attachTouchViewport(host: HTMLElement, control: () => TessivenVi
       bounds = surface.getBoundingClientRect();
       origin = local(event);
       moving = false;
+      backgroundTap = !target?.closest('[data-graph-object], button, a, [data-floe-canvas-interactive]');
     }
     if (points.size >= 2) { event.stopPropagation(); return; }
     flush();
@@ -85,6 +87,7 @@ export function attachTouchViewport(host: HTMLElement, control: () => TessivenVi
     const now = performance.now();
     flush(now);
     const wasPan = points.size === 1;
+    if (wasPan && !moving && backgroundTap) control()?.clearSelection();
     points.delete(event.pointerId);
     rendered = [...points.values()];
     if (!points.size && moving) {
@@ -101,7 +104,7 @@ export function attachTouchViewport(host: HTMLElement, control: () => TessivenVi
   const reset = () => {
     stopFrame();
     if (moving) suppressUntil = performance.now() + 500;
-    points.clear(); rendered = []; origin = undefined; moving = false; velocity = { x: 0, y: 0 };
+    points.clear(); rendered = []; origin = undefined; moving = false; backgroundTap = false; velocity = { x: 0, y: 0 };
   };
   const click = (event: MouseEvent) => {
     if (performance.now() >= suppressUntil || event.detail === 0) return;
