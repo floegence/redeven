@@ -159,5 +159,6 @@ persistent database lineages retain their current shapes.
 - `desktop/src/main/tessivenRuntimeHandoff.test.ts` — No effect before acceptance, cancellation and validation failure.
 - `desktop/src/main/main.ts` — Original registry, Gateway transport, authentication and lifecycle adapters.
 - `internal/envapp/ui_src/src/styles/tessiven-runtimes.browser.test.tsx` — Narrow locale layouts, keyboard, refresh continuity and original-operation recovery.
+- `internal/ai/tessiven_runtime_integration_test.go` — Canonical provider discovery retains fresh private source metadata without exposing it.
 - `internal/ai/system_skills/redeven-tessiven/SKILL.md` — Official discovery-to-result workflow.
 - `internal/runtimeservice/compatibility_contract.json` — Reviewed epoch authority.

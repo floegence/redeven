@@ -11232,12 +11232,13 @@ async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
     const runtime = message.request.runtime_ref;
     if (runtime.startsWith('gateway:') || runtime.startsWith('gateway-host:'))
       return executeTessivenGatewayResource(target, message, signal);
-    // The registry is the authority. No discovery, acquisition factory, target
-    // name lookup, or local substitute can create a connection here.
+    // Select only an already-attached owner at the observed exact path. No
+    // acquisition factory, target-name lookup or alternate route is permitted.
     const inventory = await tessivenRuntimeInventory(target, signal);
-    const observed = inventory.paths.find(
-      (path) => path.target.runtime_ref === runtime,
-    )?.target;
+    const matchingPaths = inventory.paths.filter(path => path.target.runtime_ref === runtime);
+    const observed = matchingPaths.length === 1 ? matchingPaths[0]?.target : undefined;
+    if (!observed) throw new RuntimeControlError('TESSIVEN_TARGET_UNAVAILABLE',
+      'The exact Runtime path is unavailable or ambiguous.', 409);
     if (
       ['open', 'start', 'stop', 'restart'].includes(message.request.action) &&
       (!observed || message.request.generation !== observed.generation)
@@ -11247,37 +11248,35 @@ async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
         'The target connection changed. Inspect it before acting.',
         409,
       );
-    const record = runtimePlacementBridgeRegistry
-      .values()
-      .find((value) => value.target_id === runtime);
+    const preferences = await loadDesktopPreferencesCached();
+    const selected = attachedProviderRuntimeTargets(preferences).find(value => value.id === runtime);
+    const record = selected?.record;
     if (record) assertRuntimeFlowerCompatible(record.startup.runtime_service);
-    if (!record || !record.startup.runtime_control)
-      throw new RuntimeControlError(
-        'TESSIVEN_TARGET_UNAVAILABLE',
-        'The exact Runtime target has no available authorized connection.',
-        409,
-      );
-    const lease = await runtimePlacementBridgeRegistry.acquire(
-      record.session.placement_target_id,
-      'tessiven-resource',
-      async () => {
-        throw new Error('The Tessiven target connection ended.');
-      },
-      signal,
-    );
+    if (!selected || !record?.startup.runtime_control || !providerRuntimeTargetIsCurrent(selected))
+      throw new RuntimeControlError('TESSIVEN_TARGET_UNAVAILABLE',
+        'The exact Runtime target has no available authorized connection.', 409);
+    const executionTarget: RuntimeFlowerTarget = {
+      record, local_environment: 'session' in record ? null : preferences.local_environment,
+    };
+    const lease = await retainRuntimeFlowerTarget(executionTarget, 'tessiven-resource', false);
     try {
-      if (lease.record.session !== record.session || !lease.active)
+      signal.throwIfAborted();
+      if (!providerRuntimeTargetIsCurrent(selected) || (lease && !lease.active))
         throw new Error('The Tessiven target connection changed.');
       await preflightTessivenHostEffect(target, message, signal);
+      const refreshed = await tessivenRuntimeInventory(target, signal, true);
+      const currentPaths = refreshed.paths.filter(path => path.target.runtime_ref === runtime);
+      if (currentPaths.length !== 1 || currentPaths[0]?.target.generation !== observed.generation
+        || !providerRuntimeTargetIsCurrent(selected))
+        throw new RuntimeControlError('TESSIVEN_RESOURCE_CONFLICT', 'The selected Runtime path changed before dispatch.', 409);
+
       const result = await requestTessivenTarget(
         record.startup.runtime_control,
         { request: message.request, permissions: message.permissions },
         signal,
       );
       if (
-        !lease.active ||
-        runtimePlacementBridgeRegistry.get(record.session.placement_target_id)
-          ?.session !== record.session
+        (lease && !lease.active) || !providerRuntimeTargetIsCurrent(selected)
       )
         throw new Error(
           'The target connection ended; inspect the operation before retrying.',
@@ -11295,7 +11294,7 @@ async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
       }
       if (
         message.request.action === 'open' &&
-        (await openTessivenManagedService(target, result))
+        (await openTessivenManagedService(executionTarget, result))
       ) {
         const opening = (result as { opening: Record<string, unknown> })
           .opening;
@@ -11303,7 +11302,7 @@ async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
       }
       return result;
     } finally {
-      await lease.release();
+      await lease?.release();
     }
   });
   const registration = { endpoint: endpoint.base_url, token: endpoint.token, host, pending: true };
@@ -11488,7 +11487,10 @@ async function openTessivenManagedService(source: RuntimeFlowerTarget, data: unk
   const opening = result?.opening;
   if (opening?.opened_by_host) return true;
   if (opening?.state !== 'ready') return false;
-  const target = result?.runtime_ref === 'local:local' ? source.record : runtimePlacementBridgeRegistry.values().find(record => record.target_id === result?.runtime_ref);
+  const selected = result?.runtime_ref === 'local:local' ? undefined
+    : attachedProviderRuntimeTargets(await loadDesktopPreferencesCached()).find(record => record.id === result?.runtime_ref);
+  const target = result?.runtime_ref === 'local:local' ? source.record
+    : selected && providerRuntimeTargetIsCurrent(selected) ? selected.record : undefined;
   if (!target || !opening.forward?.forward_id || !opening.app_path || !opening.forward.target_url) throw new Error('The exact service connection is unavailable.');
   const base = runtimeFlowerBaseURL(target);
   const route = new URL(opening.app_path, base);

@@ -23,9 +23,10 @@ import (
 // Exercise provider dispatch, canonical tool execution, durable canvas writes,
 // and unknown-effect settlement together without touching a user's services.
 func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
-	for _, scenario := range []string{"save", "populate_selected_canvas", "invalid_placement", "unknown_action"} {
+	for _, scenario := range []string{"save", "populate_selected_canvas", "invalid_placement", "unknown_action", "runtime_directory"} {
 		t.Run(scenario, func(t *testing.T) {
 			action := scenario == "unknown_action"
+			directory := scenario == "runtime_directory"
 			state := t.TempDir()
 			library, err := tessiven.Open(filepath.Join(state, "canvases.sqlite"))
 			if err != nil {
@@ -41,8 +42,22 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 				effects.Add(1)
 				return tessiven.ResourceResult{}, tessiven.ErrOutcomeUnknown
 			}}
+			var observedSource atomic.Bool
+			if directory {
+				resources.Authorize = func(meta *session.Meta) *session.Meta {
+					if meta.DesktopSource != "fresh-private-source" {
+						t.Error("Flower lost fresh private source metadata")
+					}
+					observedSource.Store(true)
+					return meta
+				}
+			}
 			name := "tessiven_save"
 			args := map[string]any{"request_id": "provider-save", "expected_version": 0, "document_yaml": document, "summary": "Observed fixture"}
+			if directory {
+				name = "tessiven_runtimes"
+				args = map[string]any{}
+			}
 			if scenario == "invalid_placement" {
 				args["document_yaml"] = strings.Split(document, "instances:")[0]
 			}
@@ -109,6 +124,13 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 					writeAskUserIntegrationTextResponse(w, flush, "repair", "The service needs a node placement before it can be saved.")
 					return
 				}
+				if directory {
+					if len(outputs) != 1 || !strings.Contains(outputs[0].Output, "desktop_source_required") || strings.Contains(outputs[0].Output, "fresh-private-source") {
+						t.Error("directory result lost structured facts or leaked private source")
+					}
+					writeAskUserIntegrationTextResponse(w, flush, "done", "The authorized directory was inspected.")
+					return
+				}
 				if len(outputs) != 1 || !strings.Contains(outputs[0].Output, "surface=tessiven") {
 					t.Errorf("saved canvas link missing: %+v", outputs)
 				}
@@ -122,6 +144,9 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 			}
 			defer func() { _ = svc.Close() }()
 			meta := testSendTurnMeta()
+			if directory {
+				meta.DesktopSource = "fresh-private-source"
+			}
 			thread, err := svc.CreateThread(t.Context(), meta, "Commerce", "openai/gpt-5-mini", "", "")
 			if err != nil {
 				t.Fatal(err)
@@ -143,6 +168,12 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 			} else {
 				if runErr != nil {
 					t.Fatal(runErr)
+				}
+				if directory {
+					if !observedSource.Load() || providerCalls.Load() != 2 {
+						t.Fatal("Runtime discovery did not execute through canonical Flower tools")
+					}
+					return
 				}
 				canvases, err := library.List(t.Context(), "Commerce", "", false)
 				var generated []tessiven.Canvas
