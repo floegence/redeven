@@ -154,7 +154,8 @@ persistent database lineages retain their current shapes.
 - `internal/localui/tessiven_source_test.go` — Fresh private acquisition retains source only in memory.
 - `desktop/src/main/desktopSessionTransport.test.ts` — Exact-origin and trusted-frame source injection with spoof removal.
 - `internal/localui/tessiven_control.go` — Private source registration and lifecycle preflight.
-- `internal/gatewayhost/client.go` — Shared official host catalog client with private credential ownership.
+- `internal/gatewayhost/client.go` — Shared exact official service record and host catalog client with private credential ownership.
+- `internal/gatewayhost/client_test.go` — Real host API admission accepts the complete record and rejects stopped or unknown shapes.
 - `desktop/src/main/tessivenRuntimes.test.ts` — Exact path/identity fencing, access-only capability and ambiguity denial.
 - `desktop/src/main/tessivenRuntimeHandoff.test.ts` — No effect before acceptance, cancellation and validation failure.
 - `desktop/src/main/main.ts` — Original registry, Gateway transport, authentication and lifecycle adapters.

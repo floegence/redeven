@@ -22,6 +22,7 @@ import (
 	"github.com/floegence/redeven/internal/desktopbridge"
 	"github.com/floegence/redeven/internal/gatewaycloud"
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
+	"github.com/floegence/redeven/internal/gatewayhost"
 	"github.com/floegence/redeven/internal/gatewayservice"
 	"github.com/floegence/redeven/internal/gatewaystate"
 	"github.com/floegence/redeven/internal/lockfile"
@@ -47,16 +48,7 @@ type cli struct {
 	stderr io.Writer
 }
 
-type serviceStatus struct {
-	Status                 string `json:"status"`
-	PID                    int    `json:"pid,omitempty"`
-	Listen                 string `json:"listen,omitempty"`
-	MemberListen           string `json:"member_listen,omitempty"`
-	StateRoot              string `json:"state_root"`
-	Executable             string `json:"executable,omitempty"`
-	ProcessStartedAtUnixMS int64  `json:"process_started_at_unix_ms,omitempty"`
-	ErrorMessage           string `json:"error_message,omitempty"`
-}
+type serviceStatus = gatewayhost.ServiceRecord
 
 type gatewayStartupFailure struct {
 	SchemaVersion int    `json:"schema_version"`
