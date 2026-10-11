@@ -3,7 +3,7 @@ type: Qualification Record
 title: Orange AFBC capture qualification
 description: Verify the bounded legacy Rockchip scanout import repair and distinguish native qualification from deployed Viewer acceptance.
 tags: [desktop, drm, rockchip, qualification]
-timestamp: 2026-10-10T13:00:00Z
+timestamp: 2026-10-11T13:03:33Z
 ---
 # Summary
 
@@ -102,11 +102,33 @@ on orange and 19.6 / 16.0 / 19.4% on udesk26 over five-second samples
 (`USER_HZ=100`). No successful same-configuration orange AFBC baseline exists.
 These data do not establish a 70% CPU reduction or all latency targets.
 
-Env App deployment, complete Viewer acceptance, final installed closure
-identities and cleanup must be recorded after their actual execution. The
-[earlier responsiveness record](remote-desktop-responsive-input-results.md)
+## Real Desktop acceptance
+
+On 2026-10-11 the task-owned Desktop build first refreshed and then updated
+the `udesk26 v0.22.34 QA` SSH Runtime through its real Env App flow. The host
+was running an older Runtime image before that update; the service socket alone
+was therefore not sufficient evidence of compatibility. After the update,
+Env App's administrator-authorized deployment completed and the panel reached
+the real `Connect to desktop` state.
+
+The real Viewer opened at `/_redeven_desktop/` and displayed the physical
+udesk26 desktop (the Clash Verge window and panel were visible). Its toolbar
+reported `Control`, the keyboard input surface was enabled, and the Viewer
+sent the built-in `Switch application (Alt + Tab)` shortcut successfully. The
+session was then disconnected from the Viewer and showed the explicit
+`Desktop disconnected` state. This proves the deployed udesk26 path through
+capture, Viewer presentation, control-channel input, shortcut handling and
+teardown. It does not substitute for a latency measurement.
+
+The same task-owned Desktop could not complete the orange flow during this
+run: the orange SSH transport timed out while its card remained unchecked.
+No orange service or host state was changed by manual commands. Orange's native
+AFBC and lock/input evidence above remains valid, while its current Env App and
+Viewer acceptance is an external connectivity blocker for this qualification.
+
+The [earlier responsiveness record](remote-desktop-responsive-input-results.md)
 owns previous X11/client-input evidence and does not qualify this repair's
-complete product flow.
+orange product flow.
 
 # Evidence
 
