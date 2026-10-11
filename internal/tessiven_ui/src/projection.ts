@@ -352,7 +352,10 @@ export function projectLayoutOptions(
       return card?.kind === 'group' && card.expanded;
     })
     .map(([, relations]) => relations.length);
+  const visibleGroups = new Set(projection.graph.nodes.filter(node => node.kind === 'group').map(node => node.id));
   return {
+    groupLayouts: Object.fromEntries(Object.entries(document.presentation?.groupLayouts ?? {})
+      .filter(([id]) => visibleGroups.has(id))),
     direction: document.presentation?.direction ?? 'RIGHT',
     layers: projectLayoutLayers(document, projection),
     aspectRatio: 1.6,

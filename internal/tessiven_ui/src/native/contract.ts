@@ -3,6 +3,7 @@
 export const supportedAPIVersions = [
   'redeven.io/tessiven/v1',
   'redeven.io/tessiven/v1.0.0',
+  'redeven.io/tessiven/v1.1.0',
 ] as const;
 export type RenderableAPIVersion = typeof supportedAPIVersions[number];
 export const canvasKind = 'ServiceCanvas';

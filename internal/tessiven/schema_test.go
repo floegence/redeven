@@ -29,7 +29,7 @@ func createV1Library(t *testing.T) (string, SaveRequest, SaveResult) {
 	if _, err := db.Exec(string(ddl)); err != nil {
 		t.Fatal(err)
 	}
-	legacy := strings.Replace(exampleDocument, "redeven.io/tessiven/v1.0.0", "redeven.io/tessiven/v1", 1)
+	legacy := strings.Replace(exampleDocument, "redeven.io/tessiven/v1.1.0", "redeven.io/tessiven/v1", 1)
 	request := SaveRequest{RequestID: "historical-save", CanvasID: "canvas-user", ExpectedVersion: 1, DocumentYAML: legacy, Summary: "User revision"}
 	result := SaveResult{
 		Canvas:  Canvas{ID: "canvas-user", Title: "User canvas", Description: "Preserved description", LatestVersion: 2, CreatedAt: 100, UpdatedAt: 200},
@@ -116,7 +116,7 @@ func TestV1LibraryMigratesBeforeOpeningAndPreservesRecords(t *testing.T) {
 	original.Version.Document = projection.Document
 	original.Version.Diagnostics = projection.Diagnostics
 	original.Version.DSLVersion = "v1"
-	original.Version.Migrations = []DSLMigration{{From: "v1", To: "v1.0.0"}}
+	original.Version.Migrations = []DSLMigration{{From: "v1", To: "v1.0.0"}, {From: "v1.0.0", To: "v1.1.0"}}
 	retry, err := s.Save(t.Context(), request, "flower")
 	if err != nil || !reflect.DeepEqual(retry, original) {
 		t.Fatalf("historical idempotent result changed: %+v, %v", retry, err)

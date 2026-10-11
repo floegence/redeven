@@ -1,0 +1,704 @@
+{
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "const": "redeven.io/tessiven/v1.1.0"
+    },
+    "kind": {
+      "const": "ServiceCanvas"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Canvas title."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Business scope and purpose."
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      },
+      "maxItems": 20000,
+      "description": "Runtime host nodes."
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/group"
+      },
+      "maxItems": 20000,
+      "description": "Visual grouping only."
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/service"
+      },
+      "maxItems": 20000,
+      "description": "Stable logical business services. Every service must have at least one instance referencing an existing node. External dependencies belong in resources, not unplaced services."
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/instance"
+      },
+      "maxItems": 20000,
+      "description": "Service placements on nodes. Reference architectures may use inferred placements without management bindings; placement does not imply a live observation."
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/resource"
+      },
+      "maxItems": 20000,
+      "description": "Dependencies not assigned to a node in this canvas."
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation"
+      },
+      "maxItems": 20000,
+      "description": "Evidence-backed dependencies."
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      },
+      "maxItems": 20000,
+      "description": "Sources of claims and observations."
+    },
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "RIGHT",
+            "DOWN",
+            "LEFT",
+            "UP"
+          ],
+          "description": "Overall layout direction. RIGHT is the default."
+        },
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20000,
+          "description": "Optional ordered root layout layers. Objects within each layer share a rank; unassigned roots are placed near related declared layers.",
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "description": "Group, ungrouped node, or resource ID. Grouped nodes and all services inherit their group's or host's layer; services are never independent layout roots."
+            }
+          }
+        },
+        "initiallyExpanded": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Node or group IDs to expand initially."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Optional stable object order."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000
+        },
+        "positions": {
+          "type": "array",
+          "description": "Optional preferred world coordinates, not fixed constraints. When layers are present, coordinates influence ordering within a layer but never override layer rank. Omit for automatic layout. The renderer adjusts crowded positions and group bounds to keep cards and relationships visible; saved hints remain unchanged.",
+          "maxItems": 20000,
+          "items": {
+            "type": "object",
+            "properties": {
+              "objectRef": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+                "description": "Node, group, or resource ID. Services inherit their host's position."
+              },
+              "x": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "objectRef",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "groupLayouts": {
+          "type": "object",
+          "description": "Explicit direct-member packing per visual group. Omitted groups retain automatic layout; independent of overall direction and layers.",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "flow"
+            ],
+            "properties": {
+              "flow": {
+                "type": "string",
+                "enum": [
+                  "row",
+                  "column"
+                ],
+                "description": "row fills left to right then wraps down; column fills top to bottom then wraps right. Preserve presentation.order then nodeRefs order."
+              },
+              "maxPerLine": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "Maximum members per row/column. Omit for one row/column. Only visible members participate."
+              }
+            }
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://redeven.io/tessiven/v1.1.0.schema.json",
+  "title": "Tessiven ServiceCanvas DSL v1.1.0",
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "healthy",
+            "degraded",
+            "unavailable",
+            "unknown"
+          ],
+          "description": "Last observed state, never an implicit live status."
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Observation time in RFC 3339."
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Evidence supporting this observation."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "state",
+        "observedAt",
+        "evidenceRefs"
+      ],
+      "additionalProperties": false
+    },
+    "node": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Human-readable host node name."
+        },
+        "runtimeRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Runtime target reference returned by inspection, or a descriptive reference for an inferred host in a reference architecture. Descriptive references are not connection handles. This field grants no authority."
+        },
+        "observation": {
+          "$ref": "#/$defs/observation"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "runtimeRef"
+      ],
+      "additionalProperties": false
+    },
+    "group": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Visual group name; groups are not executable resources."
+        },
+        "nodeRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Member physical node ID. A node may appear in multiple logical groups; every appearance shows its complete hosted inventory."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000
+        },
+        "instanceRefs": {
+          "type": "array",
+          "description": "Optional exact logical service-instance membership. Each instance must run on a member node. Omit to include all instances on member nodes. Use this to distinguish cohosted projects or clusters without duplicating physical nodes or instances.",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "uniqueItems": true,
+          "minItems": 1,
+          "maxItems": 20000
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "nodeRefs"
+      ],
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Logical business service name."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "gateway",
+            "web",
+            "api",
+            "worker",
+            "database",
+            "cache",
+            "search",
+            "queue",
+            "scheduler",
+            "controller",
+            "runtime",
+            "network",
+            "dns",
+            "monitoring",
+            "workload",
+            "coordination",
+            "security",
+            "logging",
+            "storage",
+            "analytics",
+            "ai",
+            "cloud_controller",
+            "node_agent",
+            "container_runtime",
+            "network_plugin",
+            "service_mesh",
+            "ingress",
+            "operator",
+            "registry",
+            "metrics",
+            "tracing",
+            "alerting",
+            "identity",
+            "secrets",
+            "certificate",
+            "stream_processor",
+            "metadata",
+            "service"
+          ],
+          "description": "Primary service responsibility, used for its semantic icon. Choose the most specific matching type; use service only when the responsibility is unknown. scheduler assigns work; controller reconciles desired state; runtime executes containers or processes; network provides connectivity; dns resolves names; monitoring observes health and metrics; workload runs application replicas; coordination provides consensus or cluster membership; security handles identity, secrets or access; logging collects logs; storage serves files, blocks or objects; analytics processes data; ai serves machine-learning models. More specific responsibilities: cloud_controller reconciles cloud infrastructure; node_agent manages a host; container_runtime executes containers; network_plugin provides container networking; service_mesh manages service-to-service traffic; ingress accepts external traffic; operator automates resource lifecycle; registry stores and distributes container images; metrics collects time-series measurements; tracing records distributed request spans; alerting dispatches alerts; identity authenticates users or workloads; secrets stores credentials; certificate issues and renews certificates; stream_processor processes continuous data streams; metadata manages catalog or filesystem metadata."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Service description."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "instance": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "nodeRef": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Hosting node ID."
+        },
+        "serviceRef": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Logical service ID."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Optional instance name."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "replica",
+            "peer",
+            "standalone",
+            "unknown"
+          ],
+          "description": "Membership role, separate from shard identity."
+        },
+        "shard": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Optional shard identity."
+        },
+        "binding": {
+          "$ref": "#/$defs/binding"
+        },
+        "observation": {
+          "$ref": "#/$defs/observation"
+        }
+      },
+      "required": [
+        "id",
+        "nodeRef",
+        "serviceRef",
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "owner": {
+          "type": "string",
+          "enum": [
+            "managed_service",
+            "container"
+          ],
+          "description": "Authoritative management module."
+        },
+        "resourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Exact resource identity returned by inspection."
+        },
+        "engine": {
+          "type": "string",
+          "enum": [
+            "docker",
+            "podman"
+          ],
+          "description": "Container engine; required for container bindings."
+        },
+        "endpointId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Exact container engine endpoint identity."
+        },
+        "identity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Optional observed resource generation fingerprint; checked before mutation."
+        }
+      },
+      "required": [
+        "owner",
+        "resourceId"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "owner": {
+                "const": "container"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "engine",
+              "endpointId"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "engine"
+                  ]
+                },
+                {
+                  "required": [
+                    "endpointId"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "resource": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "External dependency name."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "domain",
+            "cdn",
+            "load_balancer",
+            "database",
+            "cache",
+            "object_store",
+            "nas",
+            "filesystem",
+            "queue",
+            "external"
+          ],
+          "description": "External dependency type."
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Descriptive endpoint without credentials; never executed or fetched automatically."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Resource description."
+        },
+        "observation": {
+          "$ref": "#/$defs/observation"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "relation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Source service, instance, or external resource ID."
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Destination service, instance, or external resource ID."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "calls",
+            "forwards",
+            "resolves",
+            "reads",
+            "writes",
+            "accesses",
+            "mounts",
+            "replicates",
+            "peers"
+          ],
+          "description": "Directed dependency semantics; cycles are allowed."
+        },
+        "protocol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Descriptive protocol."
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "description": "Supporting evidence IDs."
+          },
+          "uniqueItems": true,
+          "maxItems": 20000,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to",
+        "kind",
+        "evidenceRefs"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Stable, canvas-wide object identity. Preserve it when renaming."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "code",
+            "configuration",
+            "runtime",
+            "inference"
+          ],
+          "description": "Distinguishes declarations, observations, and inferences."
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Source locator without credentials. Descriptive only; no automatic fetch."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Bounded explanation of the supporting fact or inference."
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Time of the runtime observation; required for runtime evidence."
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "locator",
+        "summary"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "runtime"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "observedAt"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

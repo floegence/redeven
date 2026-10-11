@@ -11,13 +11,15 @@ const native = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..
 const dependencies = path.resolve(native, '../../envapp/ui_src/node_modules');
 const output = process.argv[2];
 if (!output) throw new Error('Pass the renderer output directory');
-// Both frozen formats currently have the same rendering shape. Fail the build
-// if a claimed format diverges; new support requires a deliberate renderer change.
+// The v1.1.0 renderer maps optional group packing to the released graph API.
+// All other fields must retain the frozen baseline shape; additional format
+// support requires a deliberate renderer change.
 const schemas = await Promise.all(supportedAPIVersions.map(async apiVersion => {
   const version = apiVersion.slice('redeven.io/tessiven/'.length);
   const schema = JSON.parse(await fs.readFile(path.resolve(native, `../../../spec/tessiven/${version}.schema.json`), 'utf8'));
   if (schema.properties.apiVersion.const !== apiVersion || schema.properties.kind.const !== canvasKind) throw new Error('Native format does not match its frozen schema');
   delete schema.$id; delete schema.title; delete schema.properties.apiVersion;
+  if (version === 'v1.1.0') delete schema.properties.presentation.properties.groupLayouts;
   return JSON.stringify(schema);
 }));
 if (new Set(schemas).size !== 1) throw new Error('Native formats require different rendering contracts');

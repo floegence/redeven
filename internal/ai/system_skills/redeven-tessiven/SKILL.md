@@ -37,13 +37,13 @@ such nodes unbound; an explicitly requested observation may be recorded as
   prefixes, so it can be used as exact edit text. Preserve stable IDs, names,
   evidence, and intentional presentation choices. Do not load the entire graph
   for a small change or regenerate unrelated sections.
-- New documents use `apiVersion: redeven.io/tessiven/v1.0.0`. DSL versions
+- New documents use `apiVersion: redeven.io/tessiven/v1.1.0`. DSL versions
   use exact `vMAJOR.MINOR.PATCH` identities, independently of canvas revision
   numbers. `tessiven.schema` defaults to the current schema; its optional
   `version` selects a supported historical schema. Read results identify the
   original `dsl_version` and the reviewed `migrations`. Literal YAML remains
   the immutable source, so use its exact text for edits. The Runtime upgrades
-  supported legacy `v1` input when saving a new snapshot; do not rewrite the
+  supported `v1` and `v1.0.0` input when saving a new snapshot; do not rewrite the
   version header yourself or relabel an unknown/future document. Unknown
   versions require a compatible Runtime. Migration never invents placements,
   evidence or management bindings; repair historical placement diagnostics
@@ -120,6 +120,19 @@ such nodes unbound; an explicitly requested observation may be recorded as
   reorganization, replace obsolete coordinates with declarative layers.
   Schema validation and saving
   confirm document validity and persistence, not visual verification.
+- For explicit node-pool/member arrangement, use `presentation.groupLayouts`,
+  keyed by the existing visual group ID. `flow: row` fills left to right and
+  wraps down; `flow: column` fills top to bottom and wraps right. Optional
+  positive `maxPerLine` sets the maximum members per row or column; omit it for
+  one row or column. Group rules are independent of whole-diagram direction
+  and layers, preserve `presentation.order` then `nodeRefs` order, and override
+  member position hints during preferred and compact layout. Keep all peer,
+  replication and dependency relations: never delete relationships or remove
+  nodes from their groups just to change orientation. Use bounded search/read
+  and exact edits to add or update only the requested group's rule. With no
+  member-arrangement intent, omit the rule and retain automatic layout.
+  Groups above the existing aggregation threshold still show the selected
+  member; rules arrange visible members rather than forcing full expansion.
 - Every relationship needs evidence. Distinguish code, configuration, runtime
   observations, and inference. Include observation time for runtime facts;
   absent evidence means unknown. Do not include credentials, executable commands,

@@ -196,7 +196,7 @@ func TestTessivenSchemaToolSelectsExactDSLVersion(t *testing.T) {
 	}
 	defer library.Close()
 	r := &run{host: runHostCapabilities{tessiven: library}}
-	for _, version := range []string{"", "v1", "v1.0.0"} {
+	for _, version := range []string{"", "v1", "v1.0.0", "v1.1.0"} {
 		args := map[string]any{}
 		if version != "" {
 			args["version"] = version
@@ -211,7 +211,7 @@ func TestTessivenSchemaToolSelectsExactDSLVersion(t *testing.T) {
 		}
 		expected := version
 		if expected == "" {
-			expected = "v1.0.0"
+			expected = "v1.1.0"
 		}
 		if schema["properties"].(map[string]any)["apiVersion"].(map[string]any)["const"] != "redeven.io/tessiven/"+expected {
 			t.Fatal("tool returned another DSL schema")

@@ -8,9 +8,10 @@ timestamp: 2026-10-10T00:00:00Z
 # Summary
 
 The Runtime owns Tessiven DSL schema selection and explicit forward migrations.
-New documents use `apiVersion: redeven.io/tessiven/v1.0.0`. Supported legacy
-`redeven.io/tessiven/v1` remains readable through a reviewed `v1 -> v1.0.0`
-upgrade. Reads project current structured data while preserving historical YAML,
+New documents use `apiVersion: redeven.io/tessiven/v1.1.0`. Supported legacy
+`redeven.io/tessiven/v1` and `v1.0.0` remain readable through the reviewed
+`v1 -> v1.0.0 -> v1.1.0` chain. Each edge updates only the version scalar;
+new group packing rules are opt-in and older documents retain automatic layout. Reads project current structured data while preserving historical YAML,
 digest and revision identity. Authorized edits save a new current snapshot.
 Unknown versions, invalid source/target documents or migration failures leave
 stored data intact; users need a compatible Runtime or a valid repair.
@@ -69,7 +70,7 @@ receive strict placement validation even when loaded from storage. The
 
 Creation, imports, full save and exact edits write the current DSL. The existing
 expected-version check, permissions, idempotency and save transaction remain the
-single write boundary. A legacy v1 save updates only the root version scalar,
+single write boundary. A supported older-format save updates only the root version scalar,
 retaining unrelated text, comments, quoting, IDs, bindings and layout hints.
 Restore, duplicate and rename also create current snapshots under strict
 validation. Existing history is never bulk-rewritten.
@@ -104,7 +105,8 @@ must be evidence-backed under the
 
 - `spec/tessiven/schema.go` - Exact formats, current identity and forward edges.
 - `spec/tessiven/v1.schema.json` - Frozen legacy schema.
-- `spec/tessiven/v1.0.0.schema.json` - Current semantic-version schema.
+- `spec/tessiven/v1.0.0.schema.json` - Frozen semantic baseline schema.
+- `spec/tessiven/v1.1.0.schema.json` - Current schema with independent group packing.
 - `internal/tessiven/dsl.go` - Exact selection and byte-preserving legacy upgrade.
 - `internal/tessiven/document.go` - Source/target validation and canonical projection.
 - `internal/tessiven/store.go` - Immutable history, original retry identity and atomic new snapshots.

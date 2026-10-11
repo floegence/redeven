@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { projectCanvas, projectLayoutLayers, projectPositions } from '../../../../tessiven_ui/src/projection';
+import { projectCanvas, projectLayoutOptions, projectLayoutLayers, projectPositions } from '../../../../tessiven_ui/src/projection';
 import { sharedHostsDocument } from './tessiven-shared-hosts.fixture';
 
 describe('shared physical hosts in logical groups', () => {
+  it('projects independent group rules only for visible containers, including shared hosts', () => {
+    const document = sharedHostsDocument();
+    document.presentation = { direction: 'DOWN', groupLayouts: { hdfs: { flow: 'row', maxPerLine: 3 }, zk: { flow: 'column' } } };
+    const original = JSON.stringify(document);
+    for (const expanded of [new Set(['hdfs', 'zk']), new Set(['hdfs']), new Set<string>()]) {
+      const projection = projectCanvas(document, expanded, {});
+      const rules = Object.fromEntries(Object.entries(document.presentation.groupLayouts!).filter(([id]) => expanded.has(id)));
+      for (const mode of ['preferred', 'compact'] as const) {
+        expect(projectLayoutOptions(document, projection, mode)).toMatchObject({ direction: 'DOWN', groupLayouts: rules });
+      }
+      for (const id of projection.appearances.get('node-1') ?? [])
+        expect(projection.graph.nodes.find(node => node.id === id)?.parentId).toMatch(/^(hdfs|zk)$/);
+    }
+    expect(JSON.stringify(document)).toBe(original);
+  });
   it('keeps ungrouped inventory and legacy full-host group membership in group scope', () => {
     const document = sharedHostsDocument('mixed');
     delete document.groups![0].instanceRefs;
